@@ -23,6 +23,12 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # Both custom images: the API + the OCR sidecar (k8s pulls it — it can't `build ./ocr` like Compose).
+    strategy:
+      matrix:
+        include:
+          - { image: simplarchive, context: ., file: Dockerfile }
+          - { image: simplarchive-ocr, context: ./ocr, file: ./ocr/Dockerfile }
     steps:
       - uses: actions/checkout@v7
 
@@ -42,7 +48,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/hebelconsulting/simplarchive
+          images: ghcr.io/hebelconsulting/${{ matrix.image }}
           # :latest + :<sha> on a push to main; :vX.Y.Z (and :X.Y) on a v* tag.
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
@@ -53,13 +59,14 @@ jobs:
       - name: Build + push
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           push: true
           # Multi-arch so the image runs on amd64 (Hetzner/most clouds) and arm64 (Oracle Ampere A1 free tier,
-          # Hetzner CAX). The server image's only native dep is NetVips, which ships linux-musl-arm64; PDFium/Docnet
-          # is DesktopClient-only, so it isn't in this image.
+          # Hetzner CAX). The API image's only native dep is NetVips (ships linux-musl-arm64); PDFium/Docnet is
+          # DesktopClient-only. The OCR sidecar is python:slim + apt/pip — all arm64-available.
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
