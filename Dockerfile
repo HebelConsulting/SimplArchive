@@ -23,8 +23,11 @@ WORKDIR /app
 
 # icu-libs: proper globalization/culture handling for multi-tenant deployments with varying locales
 # curl: used by the container HEALTHCHECK below
+# krb5-libs: provides libgssapi_krb5.so.2, which Npgsql probes for at startup (GSSAPI/Kerberos auth); without it
+#   the app logs a harmless "Error loading shared library libgssapi_krb5.so.2" on every boot even though we use
+#   password auth. Adding it silences that noise.
 # Non-root 'app' user/group already exist in this base image; no addgroup/adduser needed.
-RUN apk add --no-cache icu-libs curl
+RUN apk add --no-cache icu-libs curl krb5-libs
 
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
     ASPNETCORE_HTTP_PORTS=8080
