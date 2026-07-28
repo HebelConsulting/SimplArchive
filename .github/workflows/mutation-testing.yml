@@ -72,7 +72,7 @@ jobs:
           --reporter html --reporter progress
       - name: Upload mutation report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mutation-report-${{ matrix.project }}
           path: stryker-out/${{ matrix.project }}/**/mutation-report.html
