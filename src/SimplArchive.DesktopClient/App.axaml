@@ -1,0 +1,30 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SimplArchive.DesktopClient.App"
+             RequestedThemeVariant="Default">
+    <Application.Resources>
+        <!-- Theme-adaptive workbench colours (light/dark), shared by MainWindow and the dialogs, replacing
+             the old hardcoded light greys that clashed in dark mode. WbChrome: status-bar surface; WbBorder:
+             1px pane/section separators; WbMuted/WbFaint: secondary/hint text. See ADR "Desktop dark-mode
+             colour pass". -->
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="WbChrome" Color="#f0f0f4" />
+                    <SolidColorBrush x:Key="WbBorder" Color="#dddde3" />
+                    <SolidColorBrush x:Key="WbMuted" Color="#555555" />
+                    <SolidColorBrush x:Key="WbFaint" Color="#888888" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="WbChrome" Color="#2b2b30" />
+                    <SolidColorBrush x:Key="WbBorder" Color="#3b3b42" />
+                    <SolidColorBrush x:Key="WbMuted" Color="#c2c2ca" />
+                    <SolidColorBrush x:Key="WbFaint" Color="#8f8f98" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+</Application>

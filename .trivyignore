@@ -1,0 +1,7 @@
+# Accepted Trivy findings (ADR 0435 "Trivy image CVE scan in CI").
+#
+# One CVE id per line to suppress it from the image scan; add a comment explaining WHY it's accepted
+# (e.g. not exploitable in our usage, no upstream fix, or a false positive), and revisit periodically.
+#
+# Example:
+#   CVE-2024-XXXXX  # not reachable — the affected code path is never invoked by the API.

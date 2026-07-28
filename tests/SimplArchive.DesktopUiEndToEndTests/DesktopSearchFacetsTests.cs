@@ -1,0 +1,89 @@
+using System.Text;
+using SimplArchive.DesktopClient;
+using SimplArchive.DesktopClient.Services;
+
+namespace SimplArchive.UiEndToEndTests;
+
+// The desktop half of search facets (ADR "Search facets"): the real DesktopClient SimplArchiveApiClient's
+// SearchWithFacetsAsync returns document-type / year facet counts, and a document-type drill-down narrows the
+// results. Uses two of the demo tenant's existing masks + a unique content word so only these docs match.
+[Collection(UiCollection.Name)]
+public class DesktopSearchFacetsTests
+{
+    private readonly SelfHostedAppFixture _app;
+
+    public DesktopSearchFacetsTests(SelfHostedAppFixture app) => _app = app;
+
+    [Fact]
+    public async Task Facets_are_returned_and_document_type_drills_down()
+    {
+        DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
+        var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var word = $"dtfacet{suffix}";
+
+        var masks = await api.GetMasksAsync();
+        var maskA = masks[0];
+        var maskB = masks.First(m => m.Id != maskA.Id);
+
+        await api.CreateRepositoryAsync($"dt-facets-{suffix}");
+        var repo = (await api.GetRepositoriesAsync()).First(r => r.Name == $"dt-facets-{suffix}");
+        var a1 = await UploadClassifiedAsync(api, repo.Id, $"a1-{suffix}", word, maskA.Id);
+        var a2 = await UploadClassifiedAsync(api, repo.Id, $"a2-{suffix}", word, maskA.Id);
+        var b1 = await UploadClassifiedAsync(api, repo.Id, $"b1-{suffix}", word, maskB.Id);
+
+        // Wait until all three are content-indexed.
+        await PollAsync(async () =>
+        {
+            var ids = (await api.SearchWithFiltersAsync($"q={word}")).Select(r => r.Id).ToHashSet();
+            return ids.Contains(a1) && ids.Contains(a2) && ids.Contains(b1);
+        });
+
+        var page = await api.SearchWithFacetsAsync($"q={word}");
+        Assert.Equal(2, page.Facets.DocumentTypes.Single(f => f.Value == maskA.Name).Count);
+        Assert.Equal(1, page.Facets.DocumentTypes.Single(f => f.Value == maskB.Name).Count);
+        Assert.NotEmpty(page.Facets.Years);
+
+        // Drill down by document type → only the two maskA documents.
+        var drilled = (await api.SearchWithFacetsAsync($"q={word}&system[documentType][eq]={Uri.EscapeDataString(maskA.Name)}")).Results.Select(r => r.Id).ToHashSet();
+        Assert.Contains(a1, drilled);
+        Assert.Contains(a2, drilled);
+        Assert.DoesNotContain(b1, drilled);
+
+        // File-type facet (ADR "Search facet refinements") — all three are .txt.
+        Assert.Equal(3, page.Facets.FileTypes.Single(f => f.Value == "txt").Count);
+
+        // Post-filter faceting: after selecting maskA, its OWN dimension stays open (maskB still shows).
+        var afterA = await api.SearchWithFacetsAsync($"q={word}&system[documentType][in]={Uri.EscapeDataString(maskA.Name)}");
+        Assert.Contains(afterA.Facets.DocumentTypes, f => f.Value == maskB.Name);
+
+        // Multi-select OR within a dimension → both types' documents.
+        var both = (await api.SearchWithFacetsAsync($"q={word}&system[documentType][in]={Uri.EscapeDataString(maskA.Name)},{Uri.EscapeDataString(maskB.Name)}")).Results.Select(r => r.Id).ToHashSet();
+        Assert.Contains(a1, both);
+        Assert.Contains(b1, both);
+    }
+
+    private static async Task<Guid> UploadClassifiedAsync(SimplArchiveApiClient api, Guid repoId, string name, string content, Guid maskId)
+    {
+        await api.UploadFileAsync(repoId, $"{name}.txt", Encoding.UTF8.GetBytes(content));
+        var doc = (await api.GetChildrenAsync(repoId)).First(c => c.Name == name);
+        await api.SetMaskAsync(doc.Id, maskId);
+        return doc.Id;
+    }
+
+    private static async Task PollAsync(Func<Task<bool>> condition, int timeoutSeconds = 90)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (await condition())
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
+
+        throw new Xunit.Sdk.XunitException($"Timed out after {timeoutSeconds}s waiting for indexing.");
+    }
+}

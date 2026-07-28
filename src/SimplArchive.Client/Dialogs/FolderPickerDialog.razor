@@ -1,0 +1,104 @@
+@inject HttpClient Http
+
+@* Folder picker for Move / Place-reference targets (real folders only, no references) — see ADR
+   "Web client move/reference/search UI". Returns the chosen folder id. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 380px; height: 360px; overflow: auto;">
+            @if (_loading)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            }
+            else if (_roots.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("NoFoldersAvailable")</MudText>
+            }
+            else
+            {
+                <MudTreeView T="PickNode" Items="_roots" ServerData="LoadChildrenAsync" Hover="true" Dense="true">
+                    <ItemTemplate Context="item">
+                        <MudTreeViewItem Value="@item.Value" Text="@item.Text" Icon="@Icons.Material.Filled.Folder"
+                                         CanExpand="@item.Expandable" Items="@item.Children"
+                                         OnClick="@(() => _selected = item.Value)" />
+                    </ItemTemplate>
+                </MudTreeView>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mr-auto ml-2">
+            @(_selected is { } s ? string.Format(Strings.Get("FolderPickerSelected"), s.Name) : Strings.Get("FolderPickerSelectPrompt"))
+        </MudText>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_selected is null)" OnClick="Select">@Strings.Get("FolderPickerConfirm")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    private IReadOnlyCollection<TreeItemData<PickNode>> _roots = [];
+    private PickNode? _selected;
+    private bool _loading = true;
+
+    private record PickNode(Guid Id, string Name, bool HasSubfolders);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var nodes = new List<TreeItemData<PickNode>>();
+        var url = "api/repositories";
+        while (url is not null)
+        {
+            var page = await Http.GetFromJsonAsync<ListResponse>(url);
+            foreach (var r in page?.Repositories ?? [])
+            {
+                nodes.Add(ToItem(new PickNode(r.Id, r.Name, r.HasSubfolders)));
+            }
+            url = Next(page?.Links);
+        }
+        _roots = nodes;
+        _loading = false;
+    }
+
+    // Real child folders only (no references) — a move/reference target is a real folder.
+    private async Task<IReadOnlyCollection<TreeItemData<PickNode>>> LoadChildrenAsync(PickNode node)
+    {
+        var children = new List<TreeItemData<PickNode>>();
+        var url = $"api/documents/{node.Id}/children";
+        while (url is not null)
+        {
+            var page = await Http.GetFromJsonAsync<ChildrenResponse>(url);
+            foreach (var c in (page?.Children ?? []).Where(c => !c.HasVersions))
+            {
+                children.Add(ToItem(new PickNode(c.Id, c.Name, c.HasSubfolders)));
+            }
+            url = Next(page?.Links);
+        }
+        return children;
+    }
+
+    private static TreeItemData<PickNode> ToItem(PickNode n) => new() { Value = n, Text = n.Name, Expandable = n.HasSubfolders };
+
+    private void Select()
+    {
+        if (_selected is { } s)
+        {
+            Dialog.Close(DialogResult.Ok(s.Id));
+        }
+    }
+
+    private void Cancel() => Dialog.Cancel();
+
+    private static string? Next(List<Link>? links)
+    {
+        var href = links?.FirstOrDefault(l => l.Rel == "next")?.Href;
+        return href is null ? null : (href.StartsWith("http") ? href : href.TrimStart('/'));
+    }
+
+    private record Link { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+    private record ListResponse { public List<Repo> Repositories { get; set; } = []; public List<Link> Links { get; set; } = []; }
+    private record Repo { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasSubfolders { get; set; } }
+    private record ChildrenResponse { public List<Child> Children { get; set; } = []; public List<Link> Links { get; set; } = []; }
+    private record Child { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } }
+}

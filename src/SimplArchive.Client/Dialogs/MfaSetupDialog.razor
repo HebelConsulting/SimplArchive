@@ -1,0 +1,122 @@
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+@* Two-factor (TOTP) enrollment (ADR "MFA (interactive login, TOTP)"): enroll on open (GET a secret + QR),
+   scan/enter the code, POST enable → show the one-time recovery codes. Both clients share this shape. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 380px; max-width: 420px;">
+            @if (_recoveryCodes is not null)
+            {
+                <MudText Typo="Typo.subtitle1" Class="mb-1">@Strings.Get("MfaOn")</MudText>
+                <MudText Typo="Typo.body2" Class="mb-3">
+                    @((MarkupString)Strings.Get("MfaRecoveryInfo"))
+                </MudText>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; font-family: monospace; font-size: 0.95rem; padding: 12px; border: 1px solid var(--mud-palette-lines-default); border-radius: 4px;">
+                    @foreach (var rc in _recoveryCodes)
+                    {
+                        <span>@rc</span>
+                    }
+                </div>
+            }
+            else if (_enroll is not null)
+            {
+                <MudText Typo="Typo.body2" Class="mb-2">
+                    @Strings.Get("MfaScanInfo")
+                </MudText>
+                <div style="text-align:center;" class="mb-2">
+                    <img src="@_enroll.QrDataUrl" alt="Authenticator QR code" width="180" height="180" />
+                </div>
+                <MudText Typo="Typo.caption" Class="mb-2">
+                    @Strings.Get("MfaManualKey") <span style="font-family:monospace;">@_enroll.Secret</span>
+                </MudText>
+                <MudTextField @bind-Value="_code" Label="@Strings.Get("MfaCode")" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Immediate="true" autocomplete="one-time-code" Class="mt-2" />
+            }
+            else
+            {
+                <div style="text-align:center; padding: 24px;"><MudProgressCircular Indeterminate="true" /></div>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        @if (_recoveryCodes is not null)
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Done">@Strings.Get("Done")</MudButton>
+        }
+        else
+        {
+            <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="EnableAsync" Disabled="@(_enroll is null || _code.Length == 0 || _busy)">@Strings.Get("MfaEnable")</MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    private EnrollResponse? _enroll;
+    private List<string>? _recoveryCodes;
+    private string _code = "";
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _enroll = await (await Http.PostAsync("api/users/me/mfa/enroll", null)).Content.ReadFromJsonAsync<EnrollResponse>();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("MfaStartError"), Severity.Error);
+            Dialog.Cancel();
+        }
+    }
+
+    private async Task EnableAsync()
+    {
+        _busy = true;
+        try
+        {
+            using var response = await Http.PostAsJsonAsync("api/users/me/mfa/enable", new { code = _code });
+            if (response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadFromJsonAsync<RecoveryCodesResponse>();
+                _recoveryCodes = body?.RecoveryCodes ?? new();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                Snackbar.Add(Strings.Get("MfaCodeWrong"), Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add(Strings.Get("MfaEnableError"), Severity.Error);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("MfaEnableError"), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Done() => Dialog.Close(DialogResult.Ok(true));
+
+    private void Cancel() => Dialog.Cancel();
+
+    private record EnrollResponse
+    {
+        public string Secret { get; set; } = "";
+        public string OtpauthUri { get; set; } = "";
+        public string QrDataUrl { get; set; } = "";
+    }
+
+    private record RecoveryCodesResponse
+    {
+        public List<string> RecoveryCodes { get; set; } = new();
+    }
+}

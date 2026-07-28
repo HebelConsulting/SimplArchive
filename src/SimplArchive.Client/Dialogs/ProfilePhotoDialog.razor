@@ -1,0 +1,112 @@
+@using Microsoft.AspNetCore.Components.Forms
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@implements IAsyncDisposable
+
+@* Profile-photo picker with a draggable/resizable square crop (ADR "User profile photo"). Pick an image,
+   position the square, Save — the crop is rasterized to a 256×256 PNG (photoCrop.js) and PUT to the target
+   (self = /users/me/photo, or a specific user for an admin). *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 380px;">
+            <MudButton HtmlTag="label" for="pp-file" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PhotoCamera">@Strings.Get("PhotoChoose")</MudButton>
+            <InputFile id="pp-file" OnChange="OnFileAsync" accept="image/*" style="display:none" />
+            <div @ref="_host" style="margin-top: 12px;"></div>
+            @if (!_hasImage)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">@Strings.Get("PhotoHint")</MudText>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="@(!_hasImage || _busy)">@Strings.Get("Save")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    // null = the current user (PUT /users/me/photo); set = that user (admin, PUT /users/{id}/photo).
+    [Parameter] public Guid? UserId { get; set; }
+
+    private ElementReference _host;
+    private IJSObjectReference? _module;
+    private bool _hasImage;
+    private bool _busy;
+
+    private string PutUrl => UserId is { } id ? $"api/users/{id}/photo" : "api/users/me/photo";
+
+    private async Task OnFileAsync(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            // Downscale client-side first (cheap, bounds the crop source); the crop then produces 256×256.
+            var resized = await e.File.RequestImageFileAsync("image/png", 1024, 1024);
+            await using var stream = resized.OpenReadStream(maxAllowedSize: 16 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var dataUrl = "data:image/png;base64," + Convert.ToBase64String(ms.ToArray());
+
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./photoCrop.js");
+            await _module.InvokeVoidAsync("load", _host, dataUrl);
+            _hasImage = true;
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("PhotoLoadError"), Severity.Error);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var base64 = await _module.InvokeAsync<string?>("crop", _host, 256);
+            if (string.IsNullOrEmpty(base64))
+            {
+                return;
+            }
+
+            var content = new ByteArrayContent(Convert.FromBase64String(base64));
+            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+            using var response = await Http.PutAsync(PutUrl, content);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add(Strings.Get("PhotoUpdated"), Severity.Success);
+                Dialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                Snackbar.Add(response.StatusCode == System.Net.HttpStatusCode.Forbidden ? Strings.Get("NoPermission") : Strings.Get("PhotoSaveError"), Severity.Warning);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("PhotoSaveError"), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Cancel() => Dialog.Cancel();
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            try { await _module.InvokeVoidAsync("dispose", _host); await _module.DisposeAsync(); }
+            catch (Exception) { /* circuit already gone */ }
+        }
+    }
+}

@@ -1,0 +1,14 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.ConfirmDialog"
+        Title="{loc:Tr Confirm}" Width="420" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="16">
+        <TextBlock x:Name="MessageBlock" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button x:Name="ConfirmButton" Content="{loc:Tr Ok}" Click="OnConfirm" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

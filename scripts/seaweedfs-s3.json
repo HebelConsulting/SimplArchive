@@ -1,0 +1,11 @@
+{
+  "identities": [
+    {
+      "name": "storageadmin",
+      "credentials": [
+        { "accessKey": "storageadmin", "secretKey": "storageadmin" }
+      ],
+      "actions": [ "Admin", "Read", "Write", "List", "Tagging" ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.HardDeleteAllDialog"
+        Title="{loc:Tr HdaTitle}" Width="440" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="12">
+        <TextBlock Text="{loc:Tr HdaWarn}" TextWrapping="Wrap" FontWeight="SemiBold" />
+        <TextBlock Text="{loc:Tr HdaConfirmType}" Foreground="{DynamicResource WbMuted}" />
+        <TextBox x:Name="ConfirmBox" Watermark="I AGREE" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button x:Name="OkButton" Content="OK" Click="OnOk" IsEnabled="False" />
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -1,0 +1,25 @@
+# Line-ending normalization (ADR "Repo-wide line-ending normalization"). Git stores every text file with LF and
+# checks it out with LF on every platform, so the `.editorconfig` `end_of_line = lf` + the CI `dotnet format`
+# whitespace gate (ADR 0439) can never be fought by a CRLF checkout. `text=auto` auto-detects binary files and
+# leaves them byte-for-byte untouched; the explicit `binary` markers below are belt-and-suspenders for the asset
+# types we ship so a line-ending conversion can never corrupt them.
+* text=auto eol=lf
+
+# Binary assets — never normalize.
+*.png   binary
+*.icns  binary
+*.ico   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.pdf   binary
+*.tif   binary
+*.tiff  binary
+*.zip   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.snk   binary
+*.dll   binary
+*.exe   binary

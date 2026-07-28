@@ -1,0 +1,508 @@
+@inherits LayoutComponentBase
+@implements IAsyncDisposable
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@using Microsoft.AspNetCore.SignalR.Client
+@using SimplArchive.Client.Dialogs
+@inject Microsoft.AspNetCore.Components.WebAssembly.Authentication.IAccessTokenProvider TokenProvider
+@inject IJSRuntime JsRuntime
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject SimplArchive.Client.Services.ImpersonationState Impersonation
+@inject SimplArchive.Client.Services.ImpersonationService ImpersonationSvc
+@inject SimplArchive.Client.Services.AppNavigationState AppNav
+
+<MudThemeProvider @ref="_themeProvider" Theme="_theme" IsDarkMode="_isDarkMode" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<style>
+    /* Full-height DMS shell: fixed top app bar, the workbench fills the rest (see ADR "Repositories
+       workbench UI"). */
+    html, body { height: 100%; margin: 0; }
+    .wb-shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    .wb-appbar {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 56px;
+        padding: 0 8px 0 16px;
+        background: var(--mud-palette-primary);
+        color: var(--mud-palette-primary-text);
+    }
+    .wb-brand { font-size: 1.15rem; font-weight: 500; }
+    .wb-spacer { flex: 1 1 auto; }
+    .wb-user { opacity: .95; font-size: .875rem; }
+    .wb-userbox { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 2px 4px; border-radius: 6px; }
+    .wb-userbox:hover { background: rgba(255,255,255,.12); }
+    /* Language flag switcher, to the right of the notifications bell. */
+    .wb-langbtn { display: flex; align-items: center; gap: 1px; cursor: pointer; padding: 4px 4px; border-radius: 6px; color: inherit; }
+    .wb-langbtn:hover { background: rgba(255,255,255,.12); }
+    .wb-flag { display: inline-flex; line-height: 0; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,.25); overflow: hidden; }
+    .wb-flag svg { display: block; height: 14px; width: auto; }
+    .wb-body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    .wb-impersonation { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 4px 16px;
+        background: #b26a00; color: #fff; font-size: .85rem; }
+</style>
+
+<div class="wb-shell">
+    <header class="wb-appbar">
+        <span class="wb-brand">SimplArchive</span>
+        <span class="wb-spacer"></span>
+        <AuthorizeView Context="auth">
+            <Authorized>
+                @* In-app notifications bell (ADR "Notifications (in-app, first slice)"). *@
+                <MudBadge Content="_unreadCount" Color="Color.Error" Overlap="true" Bordered="true" Visible="_unreadCount > 0">
+                    <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" title="@Strings.Get("AppbarNotifications")" @onclick="OpenNotificationsAsync" />
+                </MudBadge>
+                @* Same hidden-activator/programmatic-open fix as the account menu below (PositionAtCursor). *@
+                <MudMenu @ref="_notifMenu" PositionAtCursor="true" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Style="display:none;">
+                    @if (_notifications.Count == 0)
+                    {
+                        <MudMenuItem Disabled="true">@Strings.Get("NoNotifications")</MudMenuItem>
+                    }
+                    else
+                    {
+                        <MudMenuItem Icon="@Icons.Material.Filled.DoneAll" OnClick="MarkAllNotificationsReadAsync">@Strings.Get("MarkAllRead")</MudMenuItem>
+                        <MudDivider />
+                        @foreach (var n in _notifications)
+                        {
+                            <MudMenuItem OnClick="() => OpenNotificationAsync(n)">
+                                <div style="max-width:340px; white-space:normal;">
+                                    <div style="font-weight:@(n.IsRead ? "400" : "600");">@(n.IsRead ? "" : "● ")@n.Title@n.CountSuffix</div>
+                                    <div style="font-size:.8em;" class="mud-text-secondary">@n.Body</div>
+                                    <div style="font-size:.72em;" class="mud-text-secondary">@n.CreatedAt.ToLocalTime().ToString("g")</div>
+                                </div>
+                            </MudMenuItem>
+                        }
+                    }
+                </MudMenu>
+                @* Language flag switcher (ADR "Web language flag switcher"), to the right of the bell. The button
+                   shows the current UI language's flag; clicking opens a dropdown of the four languages, each with
+                   its flag. Same hidden-activator/programmatic-open pattern as the menus above. *@
+                <div class="wb-langbtn" title="@Strings.Get("LogonLanguage")" @onclick="OpenLangMenuAsync">
+                    @Flag(_currentLang, "btn")
+                    <MudIcon Icon="@Icons.Material.Filled.ArrowDropDown" Size="Size.Small" />
+                </div>
+                <MudMenu @ref="_langMenu" PositionAtCursor="true" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Style="display:none;">
+                    @foreach (var (code, name) in LanguageOptions)
+                    {
+                        <MudMenuItem OnClick="() => SetLanguageAsync(code)">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                @Flag(code, code)
+                                <span style="font-weight:@(code == _currentLang ? "600" : "400");">@name</span>
+                            </div>
+                        </MudMenuItem>
+                    }
+                </MudMenu>
+                @* Account menu on the photo-or-initials avatar + DisplayName (ADR "User profile photo" /
+                   "User password management"). The email that used to live here is gone. *@
+                @* Dark/light toggle to the LEFT of the display name (the self-service avatar stays rightmost). *@
+                <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                               Color="Color.Inherit" OnClick="ToggleDarkModeAsync" title="@Strings.Get("ToggleTheme")" />
+                @* DisplayName first, the account/self-service avatar in the corner (rightmost). *@
+                <div class="wb-userbox" title="@Strings.Get("AppbarAccount")" @onclick="OpenAccountMenuAsync">
+                    <span class="wb-user">@_displayName</span>
+                    @if (_photoDataUrl is not null)
+                    {
+                        <MudAvatar Size="Size.Small"><MudImage Src="@_photoDataUrl" /></MudAvatar>
+                    }
+                    else
+                    {
+                        <MudAvatar Size="Size.Small" Color="Color.Secondary">@Initials</MudAvatar>
+                    }
+                </div>
+                @* PositionAtCursor: the activator is hidden (display:none) and the menu is opened programmatically
+                   from the avatar's click, so without this MudBlazor has no anchor box and drops the popover at the
+                   window origin (top-left). Positioning at the click point keeps it under the avatar, and
+                   TransformOrigin=TopRight makes it open down-and-left so it stays on the right edge. *@
+                <MudMenu @ref="_accountMenu" PositionAtCursor="true" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Style="display:none;">
+                    <MudMenuItem Icon="@Icons.Material.Filled.PhotoCamera" OnClick="ChangeMyPhotoAsync">@Strings.Get("AccountChangePhoto")</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Password" OnClick="ChangeMyPasswordAsync">@Strings.Get("AccountChangePassword")</MudMenuItem>
+                    @if (_mfaEnabled)
+                    {
+                        <MudMenuItem Icon="@Icons.Material.Filled.LockReset" OnClick="DisableMfaAsync">@Strings.Get("AccountDisableTwoFactor")</MudMenuItem>
+                    }
+                    else
+                    {
+                        <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="SetUpMfaAsync">@Strings.Get("AccountEnableTwoFactor")</MudMenuItem>
+                    }
+                    <MudMenuItem Icon="@Icons.Material.Filled.Key" OnClick="ManagePasskeysAsync">@Strings.Get("AccountPasskeys")</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Storage" OnClick="ManageWebDavAsync">@Strings.Get("AccountWebDav")</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.NotificationsActive" OnClick="NotificationPreferencesAsync">@Strings.Get("AccountNotificationPrefs")</MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="BeginLogout">@Strings.Get("AccountLogout")</MudMenuItem>
+                </MudMenu>
+            </Authorized>
+            <NotAuthorized>
+                <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                               Color="Color.Inherit" OnClick="ToggleDarkModeAsync" title="@Strings.Get("ToggleTheme")" />
+                <MudButton Variant="Variant.Text" Style="color: inherit;" Href="authentication/login">@Strings.Get("LogonLogin")</MudButton>
+            </NotAuthorized>
+        </AuthorizeView>
+    </header>
+    @if (_impersonatedBy is not null)
+    {
+        <div class="wb-impersonation">
+            <MudIcon Icon="@Icons.Material.Filled.SupervisorAccount" Size="Size.Small" />
+            <span>@((MarkupString)string.Format(Strings.Get("ImpersonationBanner"), _displayName, _impersonatedBy))</span>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Warning" Class="ml-2" OnClick="StopImpersonatingAsync">@Strings.Get("StopImpersonating")</MudButton>
+        </div>
+    }
+    <main class="wb-body">
+        @Body
+    </main>
+</div>
+
+@code {
+    // Logout must go through NavigateToLogout (which sets the interactive-request navigation state) — a plain
+    // link/navigation to the logout endpoint is rejected by RemoteAuthenticatorView with "The logout was not
+    // initiated from within the page."
+    private void BeginLogout() => Navigation.NavigateToLogout("authentication/logout");
+
+    // Language flag switcher (ADR "Web language flag switcher"). The active UI culture drives which flag the
+    // button shows; the four supported languages match wwwroot/lang.js.
+    private MudMenu _langMenu = null!;
+    private static readonly (string Code, string Name)[] LanguageOptions =
+    {
+        ("en", "English"), ("de", "Deutsch"), ("it", "Italiano"), ("es", "Español"),
+    };
+    private readonly string _currentLang = LanguageOptions
+        .Select(l => l.Code)
+        .FirstOrDefault(c => c == System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName) ?? "en";
+
+    private Task OpenLangMenuAsync(MouseEventArgs e) => _langMenu.OpenMenuAsync(e);
+
+    // Persist the chosen UI language and reload so it applies (ADR "Web UI localization — shared resources") —
+    // the culture is set at startup in Program.cs, so there's no live switch.
+    private async Task SetLanguageAsync(string code)
+    {
+        await JsRuntime.InvokeVoidAsync("simplArchiveLang.set", code);
+        Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+    }
+
+    // Inline SVG flags — reliable cross-platform (emoji flags don't render on Windows). `key` makes the Union
+    // Jack's clip-path ids unique so multiple instances (button + menu items) don't collide.
+    private static MarkupString Flag(string code, string key)
+    {
+        var svg = code switch
+        {
+            "de" => "<svg viewBox='0 0 5 3'><rect width='5' height='3' fill='#000'/><rect y='1' width='5' height='2' fill='#D00'/><rect y='2' width='5' height='1' fill='#FFCE00'/></svg>",
+            "it" => "<svg viewBox='0 0 3 2'><rect width='3' height='2' fill='#fff'/><rect width='1' height='2' fill='#009246'/><rect x='2' width='1' height='2' fill='#CE2B37'/></svg>",
+            "es" => "<svg viewBox='0 0 3 2'><rect width='3' height='2' fill='#AA151B'/><rect y='0.5' width='3' height='1' fill='#F1BF00'/></svg>",
+            _ => $"<svg viewBox='0 0 60 30'><clipPath id='uks-{key}'><path d='M0,0 v30 h60 v-30 z'/></clipPath><clipPath id='ukt-{key}'><path d='M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z'/></clipPath><g clip-path='url(#uks-{key})'><path d='M0,0 v30 h60 v-30 z' fill='#012169'/><path d='M0,0 L60,30 M60,0 L0,30' stroke='#fff' stroke-width='6'/><path d='M0,0 L60,30 M60,0 L0,30' clip-path='url(#ukt-{key})' stroke='#C8102E' stroke-width='4'/><path d='M30,0 v30 M0,15 h60' stroke='#fff' stroke-width='10'/><path d='M30,0 v30 M0,15 h60' stroke='#C8102E' stroke-width='6'/></g></svg>",
+        };
+        return new MarkupString($"<span class=\"wb-flag\">{svg}</span>");
+    }
+
+    // Interim dark-mode persistence via browser localStorage, matching the "OS-default + persisted override"
+    // model in ADR 0104. Should move to a real per-user backend setting once auth/user settings exist.
+    private const string DarkModeStorageKey = "simplarchive.darkMode";
+
+    private MudThemeProvider _themeProvider = null!;
+    private bool _isDarkMode;
+    private readonly MudTheme _theme = new();
+    private MudMenu _accountMenu = null!;
+
+    // MudMenu 9.7's ActivatorContent auto-open doesn't fire reliably for a custom activator here, so open it
+    // explicitly from the avatar's click (the MudMenu's own activator is hidden via display:none).
+    private Task OpenAccountMenuAsync(MouseEventArgs e) => _accountMenu.OpenMenuAsync(e);
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private bool _meLoaded;
+    private Guid? _userId;
+    private string? _displayName;
+    private string? _photoDataUrl;
+    private bool _mfaEnabled;
+    private string? _impersonatedBy;
+
+    private async Task StopImpersonatingAsync() => await ImpersonationSvc.StopAsync();
+
+    // In-app notifications (ADR "Notifications (in-app, first slice)").
+    private MudMenu _notifMenu = null!;
+    private int _unreadCount;
+    private readonly List<NotificationDto> _notifications = new();
+
+    private Task OpenNotificationsAsync(MouseEventArgs e) => LoadNotificationsAsync().ContinueWith(_ => _notifMenu.OpenMenuAsync(e)).Unwrap();
+
+    private async Task LoadUnreadCountAsync()
+    {
+        try
+        {
+            _unreadCount = (await Http.GetFromJsonAsync<UnreadCountResponse>("api/notifications/unread-count"))?.UnreadCount ?? 0;
+        }
+        catch (Exception) { }
+    }
+
+    private async Task LoadNotificationsAsync()
+    {
+        try
+        {
+            var page = await Http.GetFromJsonAsync<NotificationsResponse>("api/notifications");
+            _notifications.Clear();
+            _notifications.AddRange(page?.Notifications ?? []);
+            _unreadCount = page?.UnreadCount ?? 0;
+            StateHasChanged();
+        }
+        catch (Exception) { }
+    }
+
+    private async Task MarkNotificationReadAsync(NotificationDto n)
+    {
+        if (!n.IsRead)
+        {
+            try { await Http.PostAsync($"api/notifications/{n.Id}/read", null); } catch (Exception) { }
+            n.IsRead = true;
+            if (_unreadCount > 0) _unreadCount--;
+        }
+    }
+
+    // Clicking a notification marks it read and, if it relates to a document, navigates to it (ADR
+    // "Notification viewer + click-through"). The workbench (Home) does the actual navigation via AppNav.
+    private async Task OpenNotificationAsync(NotificationDto n)
+    {
+        await MarkNotificationReadAsync(n);
+        if (n.DocumentId is { } documentId)
+        {
+            await AppNav.RequestOpenDocumentAsync(documentId, n.DocumentParentId);
+        }
+    }
+
+    private async Task MarkAllNotificationsReadAsync()
+    {
+        try { await Http.PostAsync("api/notifications/read-all", null); } catch (Exception) { }
+        foreach (var n in _notifications) n.IsRead = true;
+        _unreadCount = 0;
+    }
+
+    private string Initials => string.IsNullOrWhiteSpace(_displayName)
+        ? "?"
+        : string.Concat(_displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AuthState is null || _meLoaded)
+        {
+            return;
+        }
+
+        var state = await AuthState;
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            _meLoaded = true;
+            // Restore an impersonation session (if any) from sessionStorage before whoami, so it resolves the
+            // impersonated user (ADR "User impersonation").
+            await Impersonation.InitializeAsync();
+            await LoadMeAsync();
+        }
+    }
+
+    private async Task LoadMeAsync()
+    {
+        try
+        {
+            var me = await Http.GetFromJsonAsync<WhoAmI>("api/diagnostics/whoami");
+            _userId = me?.UserId;
+            _displayName = me?.UserName;
+            _impersonatedBy = me?.ImpersonatedBy;
+            _mfaEnabled = me?.MfaEnabled ?? false;
+            _photoDataUrl = me is { HasPhoto: true, UserId: { } id } ? await FetchPhotoAsync(id) : null;
+            await LoadUnreadCountAsync();
+            if (_userId is not null)
+            {
+                await StartRealtimeAsync();
+            }
+        }
+        catch (Exception)
+        {
+            // Anonymous / transient — the AuthorizeView still handles the not-authorized case.
+        }
+        StateHasChanged();
+    }
+
+    // The photo endpoint is bearer-protected, so a raw <img src> (no token) would 401 — fetch the bytes
+    // with the authenticated client and render a data URL instead.
+    private async Task<string?> FetchPhotoAsync(Guid userId)
+    {
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync($"api/users/{userId}/photo");
+            return "data:image/png;base64," + Convert.ToBase64String(bytes);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private async Task ChangeMyPhotoAsync()
+    {
+        var dialog = await DialogService.ShowAsync<ProfilePhotoDialog>("Profile photo");
+        var result = await dialog.Result;
+        if (result is { Canceled: false } && _userId is { } id)
+        {
+            _photoDataUrl = await FetchPhotoAsync(id);
+            StateHasChanged();
+        }
+    }
+
+    private async Task ChangeMyPasswordAsync()
+    {
+        await (await DialogService.ShowAsync<ChangePasswordDialog>(Strings.Get("DlgChangePassword"))).Result;
+    }
+
+    private async Task SetUpMfaAsync()
+    {
+        var result = await (await DialogService.ShowAsync<MfaSetupDialog>(Strings.Get("DlgTwoFactor"))).Result;
+        if (result is { Canceled: false })
+        {
+            _mfaEnabled = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ManagePasskeysAsync() =>
+        await (await DialogService.ShowAsync<PasskeysDialog>(Strings.Get("DlgPasskeys"))).Result;
+
+    private async Task ManageWebDavAsync() =>
+        await (await DialogService.ShowAsync<WebDavDialog>(Strings.Get("DlgWebDav"))).Result;
+
+    private async Task NotificationPreferencesAsync() =>
+        await (await DialogService.ShowAsync<NotificationPreferencesDialog>(Strings.Get("DlgNotificationPrefs"))).Result;
+
+    private async Task DisableMfaAsync()
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = Strings.Get("MfaDisableTitle"),
+            Message = Strings.Get("MfaDisableMessage"),
+            YesText = Strings.Get("MfaDisableConfirm"),
+            CancelText = Strings.Get("Cancel"),
+        });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        var response = await Http.DeleteAsync("api/users/me/mfa");
+        if (response.IsSuccessStatusCode)
+        {
+            _mfaEnabled = false;
+            Snackbar.Add(Strings.Get("MfaDisabledSuccess"), Severity.Success);
+            StateHasChanged();
+        }
+        else
+        {
+            Snackbar.Add(Strings.Get("MfaDisableError"), Severity.Error);
+        }
+    }
+
+    private record WhoAmI
+    {
+        public Guid? UserId { get; set; }
+        public string? UserName { get; set; }
+        public bool HasPhoto { get; set; }
+        public bool MfaEnabled { get; set; }
+        public string? ImpersonatedBy { get; set; }
+    }
+
+    private record NotificationsResponse
+    {
+        public List<NotificationDto> Notifications { get; set; } = new();
+        public int UnreadCount { get; set; }
+    }
+
+    private record UnreadCountResponse { public int UnreadCount { get; set; } }
+
+    private record NotificationDto
+    {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = "";
+        public string Body { get; set; } = "";
+        public int EventCount { get; set; } = 1;
+        public Guid? DocumentId { get; set; }
+        public Guid? DocumentParentId { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public bool IsRead { get; set; }
+
+        // Digest suffix "(×N)" when this notification coalesced several events (ADR "Notification digest / coalescing").
+        public string CountSuffix => EventCount > 1 ? $" (×{EventCount})" : "";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var stored = await JsRuntime.InvokeAsync<string?>("localStorage.getItem", DarkModeStorageKey);
+            _isDarkMode = stored is not null
+                ? bool.Parse(stored)
+                : await _themeProvider.GetSystemDarkModeAsync();
+
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleDarkModeAsync()
+    {
+        _isDarkMode = !_isDarkMode;
+        await JsRuntime.InvokeVoidAsync("localStorage.setItem", DarkModeStorageKey, _isDarkMode.ToString());
+    }
+
+    // Real-time notifications (ADR "Real-time notifications (SignalR)"): subscribe to the hub so a new
+    // notification updates the bell live (badge + list) and pops a toast, without a reload/poll. Best-effort —
+    // the bell still loads on login/open if the hub can't connect.
+    private HubConnection? _hub;
+
+    private async Task StartRealtimeAsync()
+    {
+        if (_hub is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            _hub = new HubConnectionBuilder()
+                .WithUrl(Navigation.ToAbsoluteUri("hubs/notifications"), options =>
+                {
+                    options.AccessTokenProvider = async () =>
+                    {
+                        var result = await TokenProvider.RequestAccessToken();
+                        return result.TryGetToken(out var token) ? token.Value : null;
+                    };
+                })
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hub.On<RealtimeNotificationDto>("notification", n => InvokeAsync(async () =>
+            {
+                Snackbar.Add(string.IsNullOrWhiteSpace(n.Title) ? n.Body : n.Title, Severity.Info);
+                await LoadUnreadCountAsync();
+                StateHasChanged();
+            }));
+
+            await _hub.StartAsync();
+        }
+        catch (Exception)
+        {
+            // Real-time is best-effort; the bell still works via load-on-open.
+        }
+    }
+
+    private sealed record RealtimeNotificationDto(string Title, string Body);
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hub is not null)
+        {
+            await _hub.DisposeAsync();
+            _hub = null;
+        }
+    }
+}

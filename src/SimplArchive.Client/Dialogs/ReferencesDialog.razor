@@ -1,0 +1,76 @@
+@inject HttpClient Http
+
+@* Lists the folders that reference an item (with full paths); Open returns the chosen folder id to navigate
+   to. See ADR "Web client move/reference/search UI" and "References-of-an-item list". *@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@string.Format(Strings.Get("ReferencesTitle"), ItemName)</MudText>
+    </TitleContent>
+    <DialogContent>
+        <div style="min-width: 460px; max-height: 400px; overflow: auto;">
+            @if (_loading)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            }
+            else if (_folders.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("NotReferenced")</MudText>
+            }
+            else
+            {
+                @foreach (var f in _folders)
+                {
+                    <div style="display:flex; align-items:center; gap:8px; padding:6px 0;">
+                        <div style="flex:1 1 auto; min-width:0;">
+                            <MudText Typo="Typo.body1">@f.Name</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@f.Path</MudText>
+                        </div>
+                        <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.FolderOpen" OnClick="@(() => Open(f.Id))">@Strings.Get("RibbonOpen")</MudButton>
+                    </div>
+                }
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Close")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public Guid ItemId { get; set; }
+    [Parameter] public string ItemName { get; set; } = "";
+
+    private List<Folder> _folders = [];
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var list = new List<Folder>();
+        var url = $"api/documents/{ItemId}/referencing-folders";
+        while (url is not null)
+        {
+            var page = await Http.GetFromJsonAsync<Resp>(url);
+            list.AddRange(page?.Folders ?? []);
+            url = Next(page?.Links);
+        }
+        _folders = list;
+        _loading = false;
+    }
+
+    private void Open(Guid folderId) => Dialog.Close(DialogResult.Ok(folderId));
+
+    private void Cancel() => Dialog.Cancel();
+
+    private static string? Next(List<Link>? links)
+    {
+        var href = links?.FirstOrDefault(l => l.Rel == "next")?.Href;
+        return href is null ? null : (href.StartsWith("http") ? href : href.TrimStart('/'));
+    }
+
+    private record Link { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+    private record Resp { public List<Folder> Folders { get; set; } = []; public List<Link> Links { get; set; } = []; }
+    private record Folder { public Guid Id { get; set; } public string Name { get; set; } = ""; public string Path { get; set; } = ""; }
+}

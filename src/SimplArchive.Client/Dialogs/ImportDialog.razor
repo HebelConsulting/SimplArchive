@@ -1,0 +1,76 @@
+@* Import-archive dialog (ADR "Idempotent re-import"): pick a .zip and choose whether re-importing should update
+   already-imported items (default off → a re-import of the same archive skips duplicates). Returns the bytes +
+   the update flag for the caller to POST. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 440px; max-width: 540px;">
+            <MudText Typo="Typo.body2" Class="mb-3">
+                @(string.Format(Strings.Get("ImportDesc"), string.IsNullOrEmpty(TargetName) ? Strings.Get("ImportAsNewRepo") : string.Format(Strings.Get("ImportUnderTarget"), TargetName)))
+            </MudText>
+
+            <MudButton HtmlTag="label" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.AttachFile" for="import-dialog-input">
+                @(_fileName ?? Strings.Get("ImportChooseArchive"))
+            </MudButton>
+            <InputFile id="import-dialog-input" OnChange="OnFileAsync" accept=".zip" style="display:none" />
+
+            <MudCheckBox @bind-Value="_updateExisting" Class="mt-4" Dense="true"
+                         Label="@Strings.Get("ImportUpdateExisting")" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                @Strings.Get("ImportUpdateCaption")
+            </MudText>
+            <MudCheckBox @bind-Value="_includePermissions" Class="mt-2" Dense="true"
+                         Label="@Strings.Get("ImportPermissions")" />
+            @if (!string.IsNullOrEmpty(TargetName))
+            {
+                <MudCheckBox @bind-Value="_merge" Class="mt-2" Dense="true"
+                             Label="@(string.Format(Strings.Get("ImportMergeLabel"), TargetName))" />
+                @if (_merge)
+                {
+                    <MudSelect @bind-Value="_leafConflict" Label="@Strings.Get("ImportLeafConflict")" Dense="true"
+                               Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2">
+                        <MudSelectItem Value="@("rename")">@Strings.Get("ImportLeafRename")</MudSelectItem>
+                        <MudSelectItem Value="@("newVersion")">@Strings.Get("ImportLeafNewVersion")</MudSelectItem>
+                        <MudSelectItem Value="@("skip")">@Strings.Get("ImportLeafSkip")</MudSelectItem>
+                    </MudSelect>
+                }
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Unarchive" Disabled="_bytes is null" OnClick="Ok">@Strings.Get("RibbonImport")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public string? TargetName { get; set; }
+
+    private string? _fileName;
+    private byte[]? _bytes;
+    private bool _updateExisting;
+    private bool _includePermissions;
+    private bool _merge;
+    private string _leafConflict = "rename";
+
+    public record Result(byte[] Bytes, string FileName, bool UpdateExisting, bool IncludePermissions, bool Merge, string LeafConflict);
+
+    private async Task OnFileAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null)
+        {
+            return;
+        }
+
+        using var ms = new MemoryStream();
+        await file.OpenReadStream(maxAllowedSize: 500L * 1024 * 1024).CopyToAsync(ms);
+        _bytes = ms.ToArray();
+        _fileName = file.Name;
+    }
+
+    private void Ok() => Dialog.Close(DialogResult.Ok(new Result(_bytes!, _fileName!, _updateExisting, _includePermissions, _merge, _merge ? _leafConflict : "rename")));
+
+    private void Cancel() => Dialog.Cancel();
+}

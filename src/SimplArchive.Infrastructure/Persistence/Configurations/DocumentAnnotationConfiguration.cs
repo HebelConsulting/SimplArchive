@@ -1,0 +1,77 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using SimplArchive.Domain.Documents;
+using SimplArchive.Domain.ServiceAccounts;
+using SimplArchive.Domain.Tenants;
+using SimplArchive.Domain.Users;
+
+namespace SimplArchive.Infrastructure.Persistence.Configurations;
+
+public class DocumentAnnotationConfiguration : IEntityTypeConfiguration<DocumentAnnotation>
+{
+    public void Configure(EntityTypeBuilder<DocumentAnnotation> builder)
+    {
+        builder.HasKey(a => a.Id);
+        builder.Property(a => a.Text).IsRequired();
+        builder.Property(a => a.Color).IsRequired();
+
+        // Lists a version's notes (per page); TenantId leads for tenant-scoped locality.
+        builder.HasIndex(a => new { a.TenantId, a.DocumentVersionId, a.PageIndex });
+
+        // Exactly one creator — same CASE WHEN "exactly one" shape as DocumentComment/DocumentVersion.
+        builder.ToTable(t =>
+        {
+            t.HasCheckConstraint(
+                "CK_DocumentAnnotations_ExactlyOneCreator",
+                "(CASE WHEN \"CreatedByUserId\" IS NOT NULL THEN 1 ELSE 0 END + " +
+                "CASE WHEN \"CreatedByServiceAccountId\" IS NOT NULL THEN 1 ELSE 0 END) = 1");
+
+            // Defense-in-depth backstops (the controller validates too): a normalized position in [0,1]
+            // and a non-negative page index.
+            t.HasCheckConstraint(
+                "CK_DocumentAnnotations_Position",
+                "\"PositionX\" >= 0 AND \"PositionX\" <= 1 AND \"PositionY\" >= 0 AND \"PositionY\" <= 1");
+            t.HasCheckConstraint(
+                "CK_DocumentAnnotations_PageIndex",
+                "\"PageIndex\" >= 0");
+
+            // Markup extent (ADR "Annotation markup: highlight + shapes"): a normalized Width/Height each in
+            // [-1,1] (signed for arrows), and a shape (Kind <> 0) must carry an extent while a Note must not.
+            t.HasCheckConstraint(
+                "CK_DocumentAnnotations_Extent",
+                "(\"Width\" IS NULL OR (\"Width\" >= -1 AND \"Width\" <= 1)) AND " +
+                "(\"Height\" IS NULL OR (\"Height\" >= -1 AND \"Height\" <= 1))");
+            t.HasCheckConstraint(
+                "CK_DocumentAnnotations_ShapeExtent",
+                "\"Kind\" = 0 OR (\"Width\" IS NOT NULL AND \"Height\" IS NOT NULL)");
+        });
+
+        builder.HasOne<Tenant>()
+            .WithMany()
+            .HasForeignKey(a => a.TenantId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Deleting a document deletes its notes, same as its versions/comments/field values.
+        builder.HasOne<Document>()
+            .WithMany()
+            .HasForeignKey(a => a.DocumentId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // The version anchor — Restrict (not Cascade): the document-delete cascade above already removes the
+        // note, and a version is never deleted on its own, so a second cascade path isn't needed.
+        builder.HasOne<DocumentVersion>()
+            .WithMany()
+            .HasForeignKey(a => a.DocumentVersionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(a => a.CreatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<ServiceAccount>()
+            .WithMany()
+            .HasForeignKey(a => a.CreatedByServiceAccountId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+}

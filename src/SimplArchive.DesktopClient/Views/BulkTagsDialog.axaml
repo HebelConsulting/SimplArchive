@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.BulkTagsDialog"
+        Title="{loc:Tr BulkTagsTitle}" Width="400" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="10">
+        <TextBlock Text="{loc:Tr BulkTagsBody}" TextWrapping="Wrap" />
+        <ItemsControl x:Name="Chips">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:CompileBindings="False">
+                    <Border Margin="0,0,4,4" Padding="7,1" Background="#33808080" CornerRadius="3">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{Binding}" FontSize="12" VerticalAlignment="Center" />
+                            <Button Content="✕" Padding="3,0" MinWidth="0" MinHeight="0" FontSize="10" Background="Transparent" Click="OnRemoveTag" />
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <AutoCompleteBox x:Name="TagBox" Watermark="{loc:Tr TagAddPlaceholder}" FilterMode="ContainsOrdinal" MinimumPrefixLength="0" Width="260" KeyUp="OnTagKeyUp" />
+            <Button Content="{loc:Tr AddBtn}" Click="OnAddTag" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button x:Name="ConfirmButton" Content="{loc:Tr BulkTagsConfirm}" Click="OnConfirm" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

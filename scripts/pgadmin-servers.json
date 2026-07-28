@@ -1,0 +1,15 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "SimplArchive (dev)",
+      "Group": "Servers",
+      "Host": "db",
+      "Port": 5432,
+      "MaintenanceDB": "simplarchive",
+      "Username": "postgres",
+      "SSLMode": "prefer",
+      "PassFile": "/tmp/pgpass",
+      "Comment": "Local dev Postgres (docker-compose). Auto-registered by pgAdmin on first start — see ADR 0437."
+    }
+  }
+}

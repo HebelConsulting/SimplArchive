@@ -1,0 +1,76 @@
+@* View / create / edit a sticky note (ADR "Document annotations"). Returns an AnnotationEditResult carrying
+   the action (Save/Delete/Cancel) + the edited text/colour. Editing is enabled only when CanEdit; the Delete
+   button shows only when CanDelete. A brand-new note (no author yet) is always editable. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 340px;">
+            @if (!string.IsNullOrEmpty(AuthorName))
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">@string.Format(Strings.Get("AnnotationBy"), AuthorName)</MudText>
+            }
+            <MudTextField @bind-Value="_text" Label="@(IsShape ? Strings.Get("AnnotationLabelOptional") : Strings.Get("AnnotationNote"))" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Lines="3" Immediate="true" ReadOnly="@(!CanEdit)" Class="mb-3" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("AnnotationColour")</MudText>
+            <div style="display:flex; gap:8px; margin-top:4px;">
+                @foreach (var c in Palette)
+                {
+                    <div class="wb-anno-swatch" @onclick="@(() => SelectColor(c))"
+                         style="width:24px; height:24px; border-radius:4px; cursor:@(CanEdit ? "pointer" : "default"); background:@c; border:2px solid @(_color == c ? "var(--mud-palette-primary)" : "rgba(0,0,0,.3)");"></div>
+                }
+            </div>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        @if (CanDelete)
+        {
+            <MudButton Color="Color.Error" OnClick="Delete">@Strings.Get("RibbonDelete")</MudButton>
+        }
+        <MudSpacer />
+        <MudButton OnClick="Cancel">@(CanEdit ? Strings.Get("Cancel") : Strings.Get("Close"))</MudButton>
+        @if (CanEdit)
+        {
+            @* A shape (highlight/rectangle/arrow) has no empty-text rule, so a colour-only save is allowed
+               (ADR "Annotation shape recolour" web parity); only a note requires text. *@
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="@(!IsShape && _text.Trim().Length == 0)">@Strings.Get("Save")</MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public string Text { get; set; } = "";
+    [Parameter] public string NoteColor { get; set; } = "#FFEB3B";
+    [Parameter] public string? AuthorName { get; set; }
+    [Parameter] public bool CanEdit { get; set; } = true;
+    [Parameter] public bool CanDelete { get; set; }
+    // A markup shape (highlight/rectangle/arrow) rather than a sticky note — its text (a label) is optional, so a
+    // colour-only save is allowed (ADR "Annotation shape recolour" web parity).
+    [Parameter] public bool IsShape { get; set; }
+
+    // A small fixed palette (hex, matches the server's #RRGGBB validation).
+    private static readonly string[] Palette = ["#FFEB3B", "#8BC34A", "#4FC3F7", "#FF8A80", "#FFB74D", "#CE93D8"];
+
+    private string _text = "";
+    private string _color = "#FFEB3B";
+
+    protected override void OnInitialized()
+    {
+        _text = Text;
+        _color = string.IsNullOrWhiteSpace(NoteColor) ? "#FFEB3B" : NoteColor;
+    }
+
+    private void SelectColor(string c)
+    {
+        if (CanEdit) _color = c;
+    }
+
+    private void Save() => Dialog.Close(DialogResult.Ok(new AnnotationEditResult("save", _text.Trim(), _color)));
+
+    private void Delete() => Dialog.Close(DialogResult.Ok(new AnnotationEditResult("delete", _text.Trim(), _color)));
+
+    private void Cancel() => Dialog.Cancel();
+
+    public record AnnotationEditResult(string Action, string Text, string Color);
+}

@@ -1,0 +1,56 @@
+using SimplArchive.Domain.Abstractions;
+
+namespace SimplArchive.Domain.Documents;
+
+// An immutable content version of a Document — see ADR "Document/DocumentVersion data shape
+// (entities-only slice)", ADR "Document storage model", and ADR "Document version upload/download
+// endpoints (pragmatic slice)" for the now-real ObjectKey/upload flow.
+public class DocumentVersion : ITenantScoped
+{
+    public Guid Id { get; set; }
+
+    public Guid TenantId { get; set; }
+
+    public Guid DocumentId { get; set; }
+
+    // Pending = uploaded to storage but not yet finalized (VersionNumber/Sha256Hash still null);
+    // Confirmed = finalized. VersionNumber is deliberately not assigned until confirmation, so an
+    // abandoned/never-finalized upload doesn't burn a version number — see ADR "DocumentVersionsController
+    // resource-oriented redesign".
+    public DocumentVersionStatus Status { get; set; } = DocumentVersionStatus.Pending;
+
+    public int? VersionNumber { get; set; }
+
+    public required string ObjectKey { get; set; }
+
+    public string? Sha256Hash { get; set; }
+
+    // Exactly one of CreatedByUserId/CreatedByServiceAccountId is set — a ServiceAccount-driven upload
+    // (the only real caller identity today, see ADR "ServiceAccount request authentication foundation")
+    // has no User row to point at. See ADR "Document version upload/download endpoints (pragmatic
+    // slice)". Document.CreatedByUserId itself is unchanged — there's no "create a Document" endpoint yet
+    // for that gap to matter to.
+    public Guid? CreatedByUserId { get; set; }
+
+    public Guid? CreatedByServiceAccountId { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    // The document's issuing date — the date printed on/associated with the document
+    // itself (e.g. an invoice date), which can be well in the past and is independent of CreatedAt (when it
+    // was filed). Lives on DocumentVersion, NOT NULL — a re-issued version can carry its own date, and only
+    // real content (not folders, which have no versions) has one. Defaults to CreatedAt's date at version
+    // creation; editable via PUT .../document-date. See ADR "System-field search (creator/dates + document
+    // date)".
+    public DateOnly DocumentDate { get; set; }
+
+    // Optional per-version OCR-language override for the TIFF → searchable-PDF conversion (ADR "Per-tenant /
+    // per-version OCR languages") — a Tesseract "+"-joined multi-select of OcrLanguages.Supported codes. Null
+    // = inherit the tenant's DefaultOcrLanguages. Set later via a mask field.
+    public string? OcrLanguages { get; set; }
+
+    // The confirmed blob's size in bytes (ADR "Per-tenant storage quota"), stamped at finalize. Feeds the
+    // tenant's maintained StorageUsedBytes counter (added at confirm, subtracted at purge). Null for a pending
+    // version or one written before the feature landed.
+    public long? SizeBytes { get; set; }
+}

@@ -1,0 +1,2607 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LogonTitle" xml:space="preserve">
+    <value>Anmelden — SimplArchive</value>
+  </data>
+  <data name="LogonUsername" xml:space="preserve">
+    <value>Benutzername (E-Mail)</value>
+  </data>
+  <data name="LogonTenant" xml:space="preserve">
+    <value>Mandant</value>
+  </data>
+  <data name="LogonLanguage" xml:space="preserve">
+    <value>Sprache</value>
+  </data>
+  <data name="LogonLogin" xml:space="preserve">
+    <value>Anmelden</value>
+  </data>
+  <data name="LogonManageTenants" xml:space="preserve">
+    <value>Mandanten mit Strg/Cmd + P verwalten</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Abbrechen</value>
+  </data>
+  <data name="Create" xml:space="preserve">
+    <value>Erstellen</value>
+  </data>
+  <data name="Ok" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="NewFolder" xml:space="preserve">
+    <value>Neuer Ordner</value>
+  </data>
+  <data name="NewFolderName" xml:space="preserve">
+    <value>Ordnername</value>
+  </data>
+  <data name="Name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="RibbonExport" xml:space="preserve">
+    <value>Dieses Archiv/diesen Ordner als .zip exportieren</value>
+  </data>
+  <data name="RibbonImport" xml:space="preserve">
+    <value>Ein .zip-Archiv importieren (in den aktuellen Ordner oder als neues Archiv)</value>
+  </data>
+  <data name="RibbonOpen" xml:space="preserve">
+    <value>Öffnen (Ordner/E-Mail öffnet sich; Dokument in nativer App)</value>
+  </data>
+  <data name="RibbonSaveAs" xml:space="preserve">
+    <value>Speichern unter…</value>
+  </data>
+  <data name="RibbonRename" xml:space="preserve">
+    <value>Umbenennen</value>
+  </data>
+  <data name="RibbonDelete" xml:space="preserve">
+    <value>Löschen (in den Papierkorb)</value>
+  </data>
+  <data name="RibbonUpload" xml:space="preserve">
+    <value>Hochladen (Dateien in die Liste ziehen)</value>
+  </data>
+  <data name="RibbonCheckOut" xml:space="preserve">
+    <value>Auschecken (Bearbeitungssperre + Arbeitskopie herunterladen)</value>
+  </data>
+  <data name="RibbonVersions" xml:space="preserve">
+    <value>Versionen</value>
+  </data>
+  <data name="RibbonStartWorkflow" xml:space="preserve">
+    <value>Workflow starten</value>
+  </data>
+  <data name="RibbonRefresh" xml:space="preserve">
+    <value>Aktualisieren</value>
+  </data>
+  <data name="RibbonResetLayout" xml:space="preserve">
+    <value>Fensterlayout zurücksetzen</value>
+  </data>
+  <data name="AppbarNotifications" xml:space="preserve">
+    <value>Benachrichtigungen</value>
+  </data>
+  <data name="AppbarAccount" xml:space="preserve">
+    <value>Konto</value>
+  </data>
+  <data name="TabRepositories" xml:space="preserve">
+    <value>Archive</value>
+  </data>
+  <data name="TabInbox" xml:space="preserve">
+    <value>Posteingang</value>
+  </data>
+  <data name="TabCheckout" xml:space="preserve">
+    <value>Ausgecheckt</value>
+  </data>
+  <data name="TabSearch" xml:space="preserve">
+    <value>Suche</value>
+  </data>
+  <data name="TabRecycleBin" xml:space="preserve">
+    <value>Papierkorb</value>
+  </data>
+  <data name="TabTasks" xml:space="preserve">
+    <value>Aufgaben</value>
+  </data>
+  <data name="TabUsersGroups" xml:space="preserve">
+    <value>Benutzer und Gruppen</value>
+  </data>
+  <data name="TabAudit" xml:space="preserve">
+    <value>Audit-Protokoll</value>
+  </data>
+  <data name="TabLegalHolds" xml:space="preserve">
+    <value>Rechtliche Sperren</value>
+  </data>
+  <data name="TabRetention" xml:space="preserve">
+    <value>Aufbewahrung</value>
+  </data>
+  <data name="TabTenant" xml:space="preserve">
+    <value>Mandant</value>
+  </data>
+  <data name="TabMyWork" xml:space="preserve">
+    <value>Meine Arbeit</value>
+  </data>
+  <data name="TabTags" xml:space="preserve">
+    <value>Schlagwörter</value>
+  </data>
+  <data name="Upload" xml:space="preserve">
+    <value>Hochladen</value>
+  </data>
+  <data name="Download" xml:space="preserve">
+    <value>Herunterladen</value>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>Speichern</value>
+  </data>
+  <data name="Edit" xml:space="preserve">
+    <value>Bearbeiten</value>
+  </data>
+  <data name="NoNotifications" xml:space="preserve">
+    <value>Keine Benachrichtigungen</value>
+  </data>
+  <data name="MarkAllRead" xml:space="preserve">
+    <value>Alle als gelesen markieren</value>
+  </data>
+  <data name="ToggleTheme" xml:space="preserve">
+    <value>Hell-/Dunkelmodus umschalten</value>
+  </data>
+  <data name="AccountChangePhoto" xml:space="preserve">
+    <value>Foto ändern…</value>
+  </data>
+  <data name="AccountChangePassword" xml:space="preserve">
+    <value>Passwort ändern…</value>
+  </data>
+  <data name="AccountDisableTwoFactor" xml:space="preserve">
+    <value>Zwei-Faktor-Authentifizierung deaktivieren…</value>
+  </data>
+  <data name="AccountEnableTwoFactor" xml:space="preserve">
+    <value>Zwei-Faktor-Authentifizierung aktivieren…</value>
+  </data>
+  <data name="AccountPasskeys" xml:space="preserve">
+    <value>Passkeys…</value>
+  </data>
+  <data name="AccountWebDav" xml:space="preserve">
+    <value>WebDAV-Zugriff…</value>
+  </data>
+  <data name="AccountNotificationPrefs" xml:space="preserve">
+    <value>Benachrichtigungseinstellungen…</value>
+  </data>
+  <data name="AccountLogout" xml:space="preserve">
+    <value>Abmelden</value>
+  </data>
+  <data name="StopImpersonating" xml:space="preserve">
+    <value>Identitätswechsel beenden</value>
+  </data>
+  <data name="ImpersonationBanner" xml:space="preserve">
+    <value>Sie geben sich als &lt;b&gt;{0}&lt;/b&gt; aus (im Auftrag von {1}).</value>
+  </data>
+  <data name="DlgChangePassword" xml:space="preserve">
+    <value>Passwort ändern</value>
+  </data>
+  <data name="DlgTwoFactor" xml:space="preserve">
+    <value>Zwei-Faktor-Authentifizierung</value>
+  </data>
+  <data name="DlgPasskeys" xml:space="preserve">
+    <value>Passkeys</value>
+  </data>
+  <data name="DlgWebDav" xml:space="preserve">
+    <value>WebDAV-Zugriff</value>
+  </data>
+  <data name="DlgNotificationPrefs" xml:space="preserve">
+    <value>Benachrichtigungseinstellungen</value>
+  </data>
+  <data name="MfaDisableTitle" xml:space="preserve">
+    <value>Zwei-Faktor-Authentifizierung deaktivieren</value>
+  </data>
+  <data name="MfaDisableMessage" xml:space="preserve">
+    <value>Beim Anmelden wird kein Code mehr abgefragt. Fortfahren?</value>
+  </data>
+  <data name="MfaDisableConfirm" xml:space="preserve">
+    <value>Deaktivieren</value>
+  </data>
+  <data name="MfaDisabledSuccess" xml:space="preserve">
+    <value>Zwei-Faktor-Authentifizierung deaktiviert.</value>
+  </data>
+  <data name="MfaDisableError" xml:space="preserve">
+    <value>Zwei-Faktor-Authentifizierung konnte nicht deaktiviert werden.</value>
+  </data>
+  <data name="HdaWarning" xml:space="preserve">
+    <value>Alle aufgeführten Dokumente werden unwiderruflich gelöscht.</value>
+  </data>
+  <data name="HdaTypeToConfirm" xml:space="preserve">
+    <value>Geben Sie zur Bestätigung &lt;b&gt;I AGREE&lt;/b&gt; ein.</value>
+  </data>
+  <data name="RetainUntilPrompt" xml:space="preserve">
+    <value>&lt;b&gt;{0}&lt;/b&gt; aufbewahren bis:</value>
+  </data>
+  <data name="RetainUntilLabel" xml:space="preserve">
+    <value>Aufbewahren bis</value>
+  </data>
+  <data name="Extend" xml:space="preserve">
+    <value>Verlängern</value>
+  </data>
+  <data name="GenPwdInfo" xml:space="preserve">
+    <value>Neues Passwort für &lt;b&gt;{0}&lt;/b&gt;. Kopieren Sie es jetzt — es wird nicht erneut angezeigt. Bitten Sie den Benutzer, es nach der Anmeldung zu ändern.</value>
+  </data>
+  <data name="Done" xml:space="preserve">
+    <value>Fertig</value>
+  </data>
+  <data name="CopiedClipboard" xml:space="preserve">
+    <value>In die Zwischenablage kopiert.</value>
+  </data>
+  <data name="ReplReviewerInfo" xml:space="preserve">
+    <value>{0} hat noch offene Prüfaufgaben. Wählen Sie einen Ersatzprüfer, an den diese vor der Deaktivierung übergeben werden.</value>
+  </data>
+  <data name="ReplReviewerLabel" xml:space="preserve">
+    <value>Ersatzprüfer</value>
+  </data>
+  <data name="ReplReviewerConfirm" xml:space="preserve">
+    <value>Neu zuweisen &amp; deaktivieren</value>
+  </data>
+  <data name="LegalHoldInfo" xml:space="preserve">
+    <value>Ein Legal Hold sperrt seine Dokumente — sie können nicht gelöscht, verschoben, neu versioniert oder bearbeitet werden, bis der Hold aufgehoben wird.</value>
+  </data>
+  <data name="LegalHoldMatterName" xml:space="preserve">
+    <value>Fallname</value>
+  </data>
+  <data name="LegalHoldReason" xml:space="preserve">
+    <value>Grund (optional)</value>
+  </data>
+  <data name="LegalHoldPlace" xml:space="preserve">
+    <value>Hold setzen</value>
+  </data>
+  <data name="NoFoldersAvailable" xml:space="preserve">
+    <value>Keine Ordner verfügbar.</value>
+  </data>
+  <data name="FolderPickerSelected" xml:space="preserve">
+    <value>Ausgewählt: {0}</value>
+  </data>
+  <data name="FolderPickerSelectPrompt" xml:space="preserve">
+    <value>Ordner auswählen</value>
+  </data>
+  <data name="FolderPickerConfirm" xml:space="preserve">
+    <value>Diesen Ordner auswählen</value>
+  </data>
+  <data name="FilingAsVersion" xml:space="preserve">
+    <value>Als neue Version des ausgewählten Dokuments ablegen</value>
+  </data>
+  <data name="FilingInFolder" xml:space="preserve">
+    <value>Im Ordner des ausgewählten Elements ablegen</value>
+  </data>
+  <data name="FilingChooseFolder" xml:space="preserve">
+    <value>Ordner auswählen…</value>
+  </data>
+  <data name="FilingChooseTarget" xml:space="preserve">
+    <value>Zielordner auswählen:</value>
+  </data>
+  <data name="FilingCommentLabel" xml:space="preserve">
+    <value>Kommentar (optional)</value>
+  </data>
+  <data name="FilingCommentPlaceholder" xml:space="preserve">
+    <value>Leer lassen für "Neues Dokument abgelegt."</value>
+  </data>
+  <data name="FilingFile" xml:space="preserve">
+    <value>Ablegen</value>
+  </data>
+  <data name="PwdCurrent" xml:space="preserve">
+    <value>Aktuelles Passwort</value>
+  </data>
+  <data name="PwdNew" xml:space="preserve">
+    <value>Neues Passwort</value>
+  </data>
+  <data name="PwdConfirm" xml:space="preserve">
+    <value>Neues Passwort bestätigen</value>
+  </data>
+  <data name="PwdMismatch" xml:space="preserve">
+    <value>Passwörter stimmen nicht überein.</value>
+  </data>
+  <data name="PwdChanged" xml:space="preserve">
+    <value>Passwort geändert.</value>
+  </data>
+  <data name="PwdIncorrect" xml:space="preserve">
+    <value>Das aktuelle Passwort ist falsch.</value>
+  </data>
+  <data name="PwdChangeError" xml:space="preserve">
+    <value>Passwort konnte nicht geändert werden.</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Schließen</value>
+  </data>
+  <data name="WebDavInfo" xml:space="preserve">
+    <value>Binden Sie das Archiv als Netzlaufwerk mit einem WebDAV-Client ein (Finder / Explorer / Nautilus). Verwenden Sie Ihre E-Mail als Benutzernamen und ein app-spezifisches Passwort unten — nicht Ihr Anmeldepasswort.</value>
+  </data>
+  <data name="WebDavMountUrl" xml:space="preserve">
+    <value>Mount-URL (alle Archive)</value>
+  </data>
+  <data name="WebDavPersonalFolder" xml:space="preserve">
+    <value>Persönlicher Ordner (Posteingang, Check-out, Archiv)</value>
+  </data>
+  <data name="WebDavUsername" xml:space="preserve">
+    <value>Benutzername</value>
+  </data>
+  <data name="WebDavCopyNow" xml:space="preserve">
+    <value>Kopieren Sie dieses Passwort jetzt — es wird nicht erneut angezeigt.</value>
+  </data>
+  <data name="WebDavPassword" xml:space="preserve">
+    <value>WebDAV-Passwort</value>
+  </data>
+  <data name="WebDavEnabled" xml:space="preserve">
+    <value>WebDAV-Zugriff ist aktiviert. Neu generieren für ein neues Passwort oder widerrufen zum Deaktivieren.</value>
+  </data>
+  <data name="WebDavNotSetUp" xml:space="preserve">
+    <value>WebDAV-Zugriff ist noch nicht eingerichtet.</value>
+  </data>
+  <data name="WebDavRevoke" xml:space="preserve">
+    <value>Widerrufen</value>
+  </data>
+  <data name="WebDavRegenerate" xml:space="preserve">
+    <value>Passwort neu generieren</value>
+  </data>
+  <data name="WebDavGenerate" xml:space="preserve">
+    <value>Passwort generieren</value>
+  </data>
+  <data name="WebDavGenError" xml:space="preserve">
+    <value>WebDAV-Passwort konnte nicht generiert werden.</value>
+  </data>
+  <data name="WebDavRevoked" xml:space="preserve">
+    <value>WebDAV-Zugriff widerrufen.</value>
+  </data>
+  <data name="WebDavRevokeError" xml:space="preserve">
+    <value>WebDAV-Zugriff konnte nicht widerrufen werden.</value>
+  </data>
+  <data name="PhotoChoose" xml:space="preserve">
+    <value>Bild auswählen…</value>
+  </data>
+  <data name="PhotoHint" xml:space="preserve">
+    <value>Wählen Sie ein Bild und ziehen Sie das Quadrat oder ändern Sie seine Größe, um den sichtbaren Bereich zu wählen.</value>
+  </data>
+  <data name="PhotoLoadError" xml:space="preserve">
+    <value>Bild konnte nicht geladen werden.</value>
+  </data>
+  <data name="PhotoUpdated" xml:space="preserve">
+    <value>Profilfoto aktualisiert.</value>
+  </data>
+  <data name="NoPermission" xml:space="preserve">
+    <value>Sie haben dazu keine Berechtigung.</value>
+  </data>
+  <data name="PhotoSaveError" xml:space="preserve">
+    <value>Foto konnte nicht gespeichert werden.</value>
+  </data>
+  <data name="ReferencesTitle" xml:space="preserve">
+    <value>Ordner, die {0} referenzieren</value>
+  </data>
+  <data name="NotReferenced" xml:space="preserve">
+    <value>Dieses Element wird nirgends referenziert.</value>
+  </data>
+  <data name="CompareTitle" xml:space="preserve">
+    <value>Versionen vergleichen — {0}</value>
+  </data>
+  <data name="CompareFrom" xml:space="preserve">
+    <value>Von</value>
+  </data>
+  <data name="CompareTo" xml:space="preserve">
+    <value>Bis</value>
+  </data>
+  <data name="CompareRestoreTooltip" xml:space="preserve">
+    <value>Die 'Von'-Version als aktuelle Version wiederherstellen (Verlauf bleibt erhalten)</value>
+  </data>
+  <data name="CompareButton" xml:space="preserve">
+    <value>Vergleichen</value>
+  </data>
+  <data name="CompareRestoreVersion" xml:space="preserve">
+    <value>v{0} wiederherstellen</value>
+  </data>
+  <data name="CompareNotAvailable" xml:space="preserve">
+    <value>Vergleich ist für dieses Format nicht verfügbar (nur Dokumente mit extrahierbarem Text können verglichen werden).</value>
+  </data>
+  <data name="CompareRestored" xml:space="preserve">
+    <value>v{0} als aktuelle Version wiederhergestellt.</value>
+  </data>
+  <data name="CompareRestoreConflict" xml:space="preserve">
+    <value>Wiederherstellung jetzt nicht möglich — das Dokument ist in einem Workflow, unter Legal Hold oder ausgecheckt.</value>
+  </data>
+  <data name="CompareRestoreError" xml:space="preserve">
+    <value>Diese Version konnte nicht wiederhergestellt werden.</value>
+  </data>
+  <data name="BulkTagsHint" xml:space="preserve">
+    <value>Diese Tags werden zu jedem ausgewählten Dokument hinzugefügt (vorhandene Tags bleiben erhalten).</value>
+  </data>
+  <data name="BulkTagsPlaceholder" xml:space="preserve">
+    <value>Tag hinzufügen…</value>
+  </data>
+  <data name="BulkTagsAdd" xml:space="preserve">
+    <value>Tags hinzufügen</value>
+  </data>
+  <data name="BulkSensHint" xml:space="preserve">
+    <value>Diese Klassifizierung für jedes ausgewählte Dokument festlegen.</value>
+  </data>
+  <data name="BulkSensLabel" xml:space="preserve">
+    <value>Vertraulichkeit</value>
+  </data>
+  <data name="Apply" xml:space="preserve">
+    <value>Anwenden</value>
+  </data>
+  <data name="DupTitle" xml:space="preserve">
+    <value>Diese Datei existiert bereits</value>
+  </data>
+  <data name="DupIntro" xml:space="preserve">
+    <value>&lt;b&gt;{0}&lt;/b&gt; ist identisch mit {1}:</value>
+  </data>
+  <data name="DupOneExisting" xml:space="preserve">
+    <value>einem vorhandenen Dokument</value>
+  </data>
+  <data name="DupManyExisting" xml:space="preserve">
+    <value>{0} vorhandenen Dokumenten</value>
+  </data>
+  <data name="DupRefHint" xml:space="preserve">
+    <value>Beim Referenzieren wird eine Verknüpfung zum vorhandenen Dokument in diesem Ordner abgelegt, ohne eine zweite Kopie zu speichern.</value>
+  </data>
+  <data name="DupFileAnyway" xml:space="preserve">
+    <value>Trotzdem erneut ablegen</value>
+  </data>
+  <data name="DupReference" xml:space="preserve">
+    <value>Hier referenzieren</value>
+  </data>
+  <data name="VersionsTitle" xml:space="preserve">
+    <value>Versionen — {0}</value>
+  </data>
+  <data name="NoVersions" xml:space="preserve">
+    <value>Keine Versionen.</value>
+  </data>
+  <data name="VerColVersion" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="VerColDocDate" xml:space="preserve">
+    <value>Dokumentdatum</value>
+  </data>
+  <data name="VerColFiled" xml:space="preserve">
+    <value>Abgelegt</value>
+  </data>
+  <data name="VerColBy" xml:space="preserve">
+    <value>Von</value>
+  </data>
+  <data name="VerColActions" xml:space="preserve">
+    <value>Aktionen</value>
+  </data>
+  <data name="VersionCurrent" xml:space="preserve">
+    <value>Aktuell</value>
+  </data>
+  <data name="VersionsCompare" xml:space="preserve">
+    <value>Vergleichen…</value>
+  </data>
+  <data name="VersionsMakeCurrent" xml:space="preserve">
+    <value>Als aktuell festlegen</value>
+  </data>
+  <data name="VerMakeCurrentTitle" xml:space="preserve">
+    <value>Als aktuell festlegen?</value>
+  </data>
+  <data name="VerMakeCurrentMessage" xml:space="preserve">
+    <value>v{0} als aktuelle Version festlegen? Eine neue aktuelle Version wird erstellt; frühere Versionen bleiben erhalten.</value>
+  </data>
+  <data name="VerIsNowCurrent" xml:space="preserve">
+    <value>v{0} ist jetzt die aktuelle Version.</value>
+  </data>
+  <data name="VerChangeConflict" xml:space="preserve">
+    <value>Änderung jetzt nicht möglich — das Dokument ist in einem Workflow, unter Legal Hold oder ausgecheckt.</value>
+  </data>
+  <data name="VerMakeCurrentError" xml:space="preserve">
+    <value>Diese Version konnte nicht als aktuell festgelegt werden.</value>
+  </data>
+  <data name="NotifPrefsDesc" xml:space="preserve">
+    <value>Wählen Sie, welche Benachrichtigungen auch an Ihre E-Mail gesendet werden. In-App-Benachrichtigungen erscheinen immer in der Glocke.</value>
+  </data>
+  <data name="NotifPrefsSaved" xml:space="preserve">
+    <value>Benachrichtigungseinstellungen gespeichert.</value>
+  </data>
+  <data name="NotifPrefsError" xml:space="preserve">
+    <value>Einstellungen konnten nicht gespeichert werden.</value>
+  </data>
+  <data name="PrincipalGroupName" xml:space="preserve">
+    <value>Gruppenname</value>
+  </data>
+  <data name="PrincipalEmail" xml:space="preserve">
+    <value>E-Mail</value>
+  </data>
+  <data name="PrincipalDisplayName" xml:space="preserve">
+    <value>Anzeigename</value>
+  </data>
+  <data name="ShareWith" xml:space="preserve">
+    <value>&lt;b&gt;{0}&lt;/b&gt; teilen mit:</value>
+  </data>
+  <data name="SharePrivate" xml:space="preserve">
+    <value>Nur ich (privat)</value>
+  </data>
+  <data name="ShareSpecific" xml:space="preserve">
+    <value>Bestimmte Personen &amp; Gruppen</value>
+  </data>
+  <data name="ShareEveryone" xml:space="preserve">
+    <value>Alle im Mandanten</value>
+  </data>
+  <data name="SharePeopleGroups" xml:space="preserve">
+    <value>Personen &amp; Gruppen</value>
+  </data>
+  <data name="ExportDesc" xml:space="preserve">
+    <value>&lt;b&gt;{0}&lt;/b&gt; und alles darunter in ein herunterladbares Archiv exportieren.</value>
+  </data>
+  <data name="ExportAllVersions" xml:space="preserve">
+    <value>Alle Versionen</value>
+  </data>
+  <data name="ExportActiveVersion" xml:space="preserve">
+    <value>Nur aktive Version</value>
+  </data>
+  <data name="ExportDocDateFrom" xml:space="preserve">
+    <value>Dokumentdatum von</value>
+  </data>
+  <data name="ExportDocDateTo" xml:space="preserve">
+    <value>Dokumentdatum bis</value>
+  </data>
+  <data name="ExportFiledFrom" xml:space="preserve">
+    <value>Abgelegt von</value>
+  </data>
+  <data name="ExportFiledTo" xml:space="preserve">
+    <value>Abgelegt bis</value>
+  </data>
+  <data name="ExportCreatedBy" xml:space="preserve">
+    <value>Erstellt von (Name enthält)</value>
+  </data>
+  <data name="ExportIncludePerms" xml:space="preserve">
+    <value>Berechtigungen (ACL) einbeziehen</value>
+  </data>
+  <data name="ImportDesc" xml:space="preserve">
+    <value>Ein Export-Archiv {0} importieren.</value>
+  </data>
+  <data name="ImportAsNewRepo" xml:space="preserve">
+    <value>als neues Archiv</value>
+  </data>
+  <data name="ImportUnderTarget" xml:space="preserve">
+    <value>unter "{0}"</value>
+  </data>
+  <data name="ImportChooseArchive" xml:space="preserve">
+    <value>Archiv auswählen (.zip)…</value>
+  </data>
+  <data name="ImportUpdateExisting" xml:space="preserve">
+    <value>Bereits importierte Elemente aktualisieren (neue Versionen hinzufügen, Metadaten auffrischen)</value>
+  </data>
+  <data name="ImportUpdateCaption" xml:space="preserve">
+    <value>Aus: Beim erneuten Import desselben Archivs werden bereits importierte Elemente übersprungen — keine Duplikate.</value>
+  </data>
+  <data name="ImportPermissions" xml:space="preserve">
+    <value>Berechtigungen (ACL) importieren, falls im Archiv enthalten</value>
+  </data>
+  <data name="ImportMergeLabel" xml:space="preserve">
+    <value>In "{0}" zusammenführen (gleichnamige Ordner wiederverwenden statt eines neuen Teilbaums)</value>
+  </data>
+  <data name="ImportLeafConflict" xml:space="preserve">
+    <value>Wenn bereits ein Dokument mit demselben Namen existiert</value>
+  </data>
+  <data name="ImportLeafRename" xml:space="preserve">
+    <value>Beide behalten (als umbenannte Kopie importieren)</value>
+  </data>
+  <data name="ImportLeafNewVersion" xml:space="preserve">
+    <value>Die eingehenden Versionen zum vorhandenen Dokument hinzufügen</value>
+  </data>
+  <data name="ImportLeafSkip" xml:space="preserve">
+    <value>Das eingehende Dokument überspringen</value>
+  </data>
+  <data name="AnnotationBy" xml:space="preserve">
+    <value>Von {0}</value>
+  </data>
+  <data name="AnnotationLabelOptional" xml:space="preserve">
+    <value>Beschriftung (optional)</value>
+  </data>
+  <data name="AnnotationNote" xml:space="preserve">
+    <value>Notiz</value>
+  </data>
+  <data name="AnnotationColour" xml:space="preserve">
+    <value>Farbe</value>
+  </data>
+  <data name="WorkflowNoVersion" xml:space="preserve">
+    <value>Dieses Dokument hat keine bestätigte Version, für die ein Workflow gestartet werden kann.</value>
+  </data>
+  <data name="WorkflowStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="WorkflowReviewer" xml:space="preserve">
+    <value>Prüfer: {0}</value>
+  </data>
+  <data name="WorkflowOverdue" xml:space="preserve">
+    <value>Überfällig {0}</value>
+  </data>
+  <data name="WorkflowDue" xml:space="preserve">
+    <value>fällig {0}</value>
+  </data>
+  <data name="WorkflowReviewerLabel" xml:space="preserve">
+    <value>Prüfer</value>
+  </data>
+  <data name="WorkflowSubmit" xml:space="preserve">
+    <value>Zur Prüfung einreichen</value>
+  </data>
+  <data name="WorkflowApprove" xml:space="preserve">
+    <value>Genehmigen</value>
+  </data>
+  <data name="WorkflowRejectReason" xml:space="preserve">
+    <value>Ablehnungsgrund</value>
+  </data>
+  <data name="WorkflowReject" xml:space="preserve">
+    <value>Ablehnen</value>
+  </data>
+  <data name="WorkflowReassignTo" xml:space="preserve">
+    <value>Neu zuweisen an</value>
+  </data>
+  <data name="WorkflowReassign" xml:space="preserve">
+    <value>Neu zuweisen</value>
+  </data>
+  <data name="WorkflowRelease" xml:space="preserve">
+    <value>Freigeben</value>
+  </data>
+  <data name="WorkflowHistory" xml:space="preserve">
+    <value>Verlauf</value>
+  </data>
+  <data name="WorkflowBy" xml:space="preserve">
+    <value>von {0}</value>
+  </data>
+  <data name="WorkflowActionFailed" xml:space="preserve">
+    <value>Die Workflow-Aktion ist fehlgeschlagen.</value>
+  </data>
+  <data name="MfaOn" xml:space="preserve">
+    <value>Zwei-Faktor-Authentifizierung ist aktiviert</value>
+  </data>
+  <data name="MfaRecoveryInfo" xml:space="preserve">
+    <value>Bewahren Sie diese Wiederherstellungscodes sicher auf. Jeder kann einmal zum Anmelden verwendet werden, falls Sie Ihren Authenticator verlieren. &lt;b&gt;Sie werden nicht erneut angezeigt.&lt;/b&gt;</value>
+  </data>
+  <data name="MfaScanInfo" xml:space="preserve">
+    <value>Scannen Sie diesen QR-Code mit einer Authenticator-App (Google Authenticator, 1Password, Authy…) und geben Sie den angezeigten 6-stelligen Code ein.</value>
+  </data>
+  <data name="MfaManualKey" xml:space="preserve">
+    <value>Oder geben Sie diesen Schlüssel manuell ein:</value>
+  </data>
+  <data name="MfaCode" xml:space="preserve">
+    <value>Authentifizierungscode</value>
+  </data>
+  <data name="MfaEnable" xml:space="preserve">
+    <value>Aktivieren</value>
+  </data>
+  <data name="MfaStartError" xml:space="preserve">
+    <value>Zwei-Faktor-Einrichtung konnte nicht gestartet werden.</value>
+  </data>
+  <data name="MfaCodeWrong" xml:space="preserve">
+    <value>Dieser Code ist nicht korrekt — versuchen Sie es erneut.</value>
+  </data>
+  <data name="MfaEnableError" xml:space="preserve">
+    <value>Zwei-Faktor-Authentifizierung konnte nicht aktiviert werden.</value>
+  </data>
+  <data name="PasskeysInfo" xml:space="preserve">
+    <value>Mit Passkeys melden Sie sich per Fingerabdruck / Gesicht / Sicherheitsschlüssel Ihres Geräts als zweitem Faktor an.</value>
+  </data>
+  <data name="NoPasskeys" xml:space="preserve">
+    <value>Noch keine Passkeys.</value>
+  </data>
+  <data name="PasskeyAddedLine" xml:space="preserve">
+    <value>Hinzugefügt {0}{1}</value>
+  </data>
+  <data name="PasskeyLastUsed" xml:space="preserve">
+    <value> · zuletzt verwendet {0}</value>
+  </data>
+  <data name="PasskeyNewName" xml:space="preserve">
+    <value>Name des neuen Passkeys</value>
+  </data>
+  <data name="PasskeyNamePlaceholder" xml:space="preserve">
+    <value>z. B. Mein Laptop</value>
+  </data>
+  <data name="PasskeyAdd" xml:space="preserve">
+    <value>Passkey hinzufügen</value>
+  </data>
+  <data name="PasskeyNameFirst" xml:space="preserve">
+    <value>Geben Sie dem Passkey zuerst einen Namen.</value>
+  </data>
+  <data name="PasskeyUnsupported" xml:space="preserve">
+    <value>Dieser Browser unterstützt keine Passkeys.</value>
+  </data>
+  <data name="PasskeyRegisterError" xml:space="preserve">
+    <value>Passkey konnte nicht registriert werden.</value>
+  </data>
+  <data name="PasskeyCancelled" xml:space="preserve">
+    <value>Passkey-Registrierung wurde abgebrochen.</value>
+  </data>
+  <data name="SensLabelsInfo" xml:space="preserve">
+    <value>Labels klassifizieren Dokumente nach Vertraulichkeit. Beim Stilllegen bleibt ein Label an bestehenden Dokumenten, wird aber nicht mehr angeboten. „Wasserzeichen" markiert die Vorschau von Dokumenten mit diesem Label.</value>
+  </data>
+  <data name="SensNewLabel" xml:space="preserve">
+    <value>neues Label…</value>
+  </data>
+  <data name="SensRank" xml:space="preserve">
+    <value>Rang</value>
+  </data>
+  <data name="SensWm" xml:space="preserve">
+    <value>WM</value>
+  </data>
+  <data name="SensColLabel" xml:space="preserve">
+    <value>Label</value>
+  </data>
+  <data name="SensNoLabels" xml:space="preserve">
+    <value>Keine Labels.</value>
+  </data>
+  <data name="Add" xml:space="preserve">
+    <value>Hinzufügen</value>
+  </data>
+  <data name="ReminderTitle" xml:space="preserve">
+    <value>Wiedervorlagen für &lt;b&gt;{0}&lt;/b&gt;</value>
+  </data>
+  <data name="ReminderRepeatsSuffix" xml:space="preserve">
+    <value> · wiederholt sich {0}</value>
+  </data>
+  <data name="ReminderForLine" xml:space="preserve">
+    <value>für {0}{1}</value>
+  </data>
+  <data name="ReminderCancelAria" xml:space="preserve">
+    <value>Wiedervorlage abbrechen</value>
+  </data>
+  <data name="ReminderDate" xml:space="preserve">
+    <value>Datum</value>
+  </data>
+  <data name="ReminderTime" xml:space="preserve">
+    <value>Uhrzeit</value>
+  </data>
+  <data name="ReminderNote" xml:space="preserve">
+    <value>Notiz (optional)</value>
+  </data>
+  <data name="ReminderRepeat" xml:space="preserve">
+    <value>Wiederholen</value>
+  </data>
+  <data name="RecurNone" xml:space="preserve">
+    <value>Keine Wiederholung</value>
+  </data>
+  <data name="RecurDaily" xml:space="preserve">
+    <value>Täglich</value>
+  </data>
+  <data name="RecurWeekly" xml:space="preserve">
+    <value>Wöchentlich</value>
+  </data>
+  <data name="RecurMonthly" xml:space="preserve">
+    <value>Monatlich</value>
+  </data>
+  <data name="ReminderRemindLabel" xml:space="preserve">
+    <value>Erinnern</value>
+  </data>
+  <data name="ReminderMyself" xml:space="preserve">
+    <value>Mich selbst</value>
+  </data>
+  <data name="ReminderSet" xml:space="preserve">
+    <value>Wiedervorlage setzen</value>
+  </data>
+  <data name="ReminderSetOk" xml:space="preserve">
+    <value>Wiedervorlage gesetzt.</value>
+  </data>
+  <data name="ReminderSetError" xml:space="preserve">
+    <value>Wiedervorlage konnte nicht gesetzt werden.</value>
+  </data>
+  <data name="ReminderCancelError" xml:space="preserve">
+    <value>Wiedervorlage konnte nicht abgebrochen werden.</value>
+  </data>
+  <data name="RibbonConvertScans" xml:space="preserve">
+    <value>Scans konvertieren</value>
+  </data>
+  <data name="HomeExport" xml:space="preserve">
+    <value>Exportieren…</value>
+  </data>
+  <data name="HomeImport" xml:space="preserve">
+    <value>Importieren…</value>
+  </data>
+  <data name="EmptyFolderDrop" xml:space="preserve">
+    <value>Dieser Ordner ist leer. Dateien hierher ziehen, um hochzuladen.</value>
+  </data>
+  <data name="CtxVersions" xml:space="preserve">
+    <value>Versionen…</value>
+  </data>
+  <data name="CtxStartWorkflow" xml:space="preserve">
+    <value>Workflow starten…</value>
+  </data>
+  <data name="CompareVersionsBtn" xml:space="preserve">
+    <value>Versionen vergleichen</value>
+  </data>
+  <data name="ConvertedPreview" xml:space="preserve">
+    <value>Konvertierte Vorschau</value>
+  </data>
+  <data name="ConvertedPreviewTooltip" xml:space="preserve">
+    <value>Dies ist eine generierte Vorschau, nicht die Originaldatei. Verwenden Sie Herunterladen für das Original.</value>
+  </data>
+  <data name="SysFileExtension" xml:space="preserve">
+    <value>Dateiendung</value>
+  </data>
+  <data name="SysOcrLanguages" xml:space="preserve">
+    <value>OCR-Sprachen</value>
+  </data>
+  <data name="SysCreated" xml:space="preserve">
+    <value>Erstellt</value>
+  </data>
+  <data name="SysCreatedBy" xml:space="preserve">
+    <value>Erstellt von</value>
+  </data>
+  <data name="SysCurrentVersion" xml:space="preserve">
+    <value>Aktuelle Version</value>
+  </data>
+  <data name="SysRetention" xml:space="preserve">
+    <value>Aufbewahrung</value>
+  </data>
+  <data name="MaskLabel" xml:space="preserve">
+    <value>Maske</value>
+  </data>
+  <data name="TagsLabel" xml:space="preserve">
+    <value>Tags</value>
+  </data>
+  <data name="FindInDocument" xml:space="preserve">
+    <value>Im Dokument suchen…</value>
+  </data>
+  <data name="AddStickyNote" xml:space="preserve">
+    <value>Haftnotiz hinzufügen</value>
+  </data>
+  <data name="CopyAnnotationsTip" xml:space="preserve">
+    <value>Ausgewählte Anmerkungen kopieren</value>
+  </data>
+  <data name="PasteAnnotationsTip" xml:space="preserve">
+    <value>Anmerkungen einfügen</value>
+  </data>
+  <data name="DeleteAnnotationsTip" xml:space="preserve">
+    <value>Ausgewählte Anmerkungen löschen</value>
+  </data>
+  <data name="RemindTooltip" xml:space="preserve">
+    <value>Mich (oder einen Kollegen) später an dieses Dokument erinnern</value>
+  </data>
+  <data name="TasksHeader" xml:space="preserve">
+    <value>Meine Prüfaufgaben</value>
+  </data>
+  <data name="TasksEmpty" xml:space="preserve">
+    <value>Sie haben keine Dokumente, die auf Ihre Prüfung warten.</value>
+  </data>
+  <data name="ColDocument" xml:space="preserve">
+    <value>Dokument</value>
+  </data>
+  <data name="ColAssigned" xml:space="preserve">
+    <value>Zugewiesen</value>
+  </data>
+  <data name="ColDue" xml:space="preserve">
+    <value>Fällig</value>
+  </data>
+  <data name="SearchPlaceholder" xml:space="preserve">
+    <value>Nach Name, Inhalt oder Indexfeld suchen…</value>
+  </data>
+  <data name="SearchAllRepos" xml:space="preserve">
+    <value>Alle Archive</value>
+  </data>
+  <data name="SearchBtn" xml:space="preserve">
+    <value>Suchen</value>
+  </data>
+  <data name="SearchSavedLabel" xml:space="preserve">
+    <value>Gespeichert</value>
+  </data>
+  <data name="SearchShareAria" xml:space="preserve">
+    <value>Gespeicherte Suche teilen</value>
+  </data>
+  <data name="SearchSharedBy" xml:space="preserve">
+    <value>Geteilt von {0}</value>
+  </data>
+  <data name="SearchFilters" xml:space="preserve">
+    <value>Filter</value>
+  </data>
+  <data name="FilterDocDate" xml:space="preserve">
+    <value>Dokumentdatum</value>
+  </data>
+  <data name="FilterCreated" xml:space="preserve">
+    <value>Erstellt</value>
+  </data>
+  <data name="FilterCreatedBy" xml:space="preserve">
+    <value>Erstellt von</value>
+  </data>
+  <data name="FilterNameContains" xml:space="preserve">
+    <value>Name enthält…</value>
+  </data>
+  <data name="FilterIndexField" xml:space="preserve">
+    <value>Indexfeld</value>
+  </data>
+  <data name="FilterYes" xml:space="preserve">
+    <value>Ja</value>
+  </data>
+  <data name="FilterNo" xml:space="preserve">
+    <value>Nein</value>
+  </data>
+  <data name="FilterValue" xml:space="preserve">
+    <value>Wert</value>
+  </data>
+  <data name="AddIndexFilter" xml:space="preserve">
+    <value>Indexfeld-Filter hinzufügen</value>
+  </data>
+  <data name="ClearFilters" xml:space="preserve">
+    <value>Filter zurücksetzen</value>
+  </data>
+  <data name="FacetType" xml:space="preserve">
+    <value>Typ</value>
+  </data>
+  <data name="FacetFileType" xml:space="preserve">
+    <value>Dateityp</value>
+  </data>
+  <data name="FacetYear" xml:space="preserve">
+    <value>Jahr</value>
+  </data>
+  <data name="PvFullscreen" xml:space="preserve">
+    <value>Vollbild</value>
+  </data>
+  <data name="PvExitFullscreen" xml:space="preserve">
+    <value>Vollbild verlassen (Esc)</value>
+  </data>
+  <data name="NoPreview" xml:space="preserve">
+    <value>Keine Vorschau verfügbar.</value>
+  </data>
+  <data name="NoDocSelected" xml:space="preserve">
+    <value>Kein Dokument ausgewählt.</value>
+  </data>
+  <data name="NoItemSelected" xml:space="preserve">
+    <value>Kein Element ausgewählt.</value>
+  </data>
+  <data name="InboxUpload" xml:space="preserve">
+    <value>In den Eingang hochladen</value>
+  </data>
+  <data name="InboxCopyDav" xml:space="preserve">
+    <value>WebDAV-URL kopieren</value>
+  </data>
+  <data name="InboxFileN" xml:space="preserve">
+    <value>{0} Elemente ablegen</value>
+  </data>
+  <data name="InboxDropHint" xml:space="preserve">
+    <value>Dateien hierher ziehen, um sie in den Eingang zu legen</value>
+  </data>
+  <data name="InboxFileToFolder" xml:space="preserve">
+    <value>In Ordner ablegen…</value>
+  </data>
+  <data name="InboxEmailAutoMask" xml:space="preserve">
+    <value>Maske wird beim Ablegen automatisch vom System zugewiesen.</value>
+  </data>
+  <data name="NoMask" xml:space="preserve">
+    <value>(Keine Maske)</value>
+  </data>
+  <data name="OneValuePerLine" xml:space="preserve">
+    <value>Ein Wert pro Zeile</value>
+  </data>
+  <data name="CoHeader" xml:space="preserve">
+    <value>Ausgecheckte Dokumente</value>
+  </data>
+  <data name="CoEmpty" xml:space="preserve">
+    <value>Nichts ist ausgecheckt. Verwenden Sie das ⋮-Menü eines Dokuments im Archiv, um es auszuchecken.</value>
+  </data>
+  <data name="CoColRepoPath" xml:space="preserve">
+    <value>Archivpfad</value>
+  </data>
+  <data name="CoColWorkingCopy" xml:space="preserve">
+    <value>Arbeitskopie</value>
+  </data>
+  <data name="CoColAutoRelease" xml:space="preserve">
+    <value>Automatische Freigabe</value>
+  </data>
+  <data name="CoInCloud" xml:space="preserve">
+    <value>In der Cloud</value>
+  </data>
+  <data name="CoNever" xml:space="preserve">
+    <value>Nie</value>
+  </data>
+  <data name="CoSoon" xml:space="preserve">
+    <value> (bald)</value>
+  </data>
+  <data name="CoDownloadStash" xml:space="preserve">
+    <value>Aus Ablage herunterladen</value>
+  </data>
+  <data name="CoUploadStash" xml:space="preserve">
+    <value>In Ablage hochladen</value>
+  </data>
+  <data name="CoExtend" xml:space="preserve">
+    <value>Verlängern</value>
+  </data>
+  <data name="CoCheckIn" xml:space="preserve">
+    <value>Einchecken</value>
+  </data>
+  <data name="CoCancel" xml:space="preserve">
+    <value>Check-out abbrechen</value>
+  </data>
+  <data name="TagsCatalogHeader" xml:space="preserve">
+    <value>Schlagwortkatalog</value>
+  </data>
+  <data name="TagsCatalogDesc" xml:space="preserve">
+    <value>Das Schlagwort-Vokabular des Mandanten. Umbenennen oder zusammenführen zum Aufräumen (Dokumente werden automatisch neu verschlagwortet); außer Betrieb nehmen, um ein Schlagwort nicht mehr für neue Verschlagwortung anzubieten (bestehende Verwendungen bleiben erhalten). Erzwingen Sie den Katalog mit „Schlagwörter auf den Katalog beschränken“ im Mandanten-Tab.</value>
+  </data>
+  <data name="TagsNewPlaceholder" xml:space="preserve">
+    <value>neues Schlagwort…</value>
+  </data>
+  <data name="TagsAdd" xml:space="preserve">
+    <value>Schlagwort hinzufügen</value>
+  </data>
+  <data name="TagsColTag" xml:space="preserve">
+    <value>Schlagwort</value>
+  </data>
+  <data name="TagsColActions" xml:space="preserve">
+    <value>Aktionen</value>
+  </data>
+  <data name="TagsSetColour" xml:space="preserve">
+    <value>Farbe festlegen</value>
+  </data>
+  <data name="TagsMergeInto" xml:space="preserve">
+    <value>Zusammenführen mit…</value>
+  </data>
+  <data name="TagsRetire" xml:space="preserve">
+    <value>Außer Betrieb nehmen</value>
+  </data>
+  <data name="TagsEmpty" xml:space="preserve">
+    <value>Noch keine Schlagwörter — verschlagworten Sie ein Dokument oder fügen Sie oben eines hinzu.</value>
+  </data>
+  <data name="MyWorkHeader" xml:space="preserve">
+    <value>Meine Arbeit</value>
+  </data>
+  <data name="MyWorkReminders" xml:space="preserve">
+    <value>Erinnerungen</value>
+  </data>
+  <data name="MyWorkNothingDue" xml:space="preserve">
+    <value>Nichts steht bald an.</value>
+  </data>
+  <data name="MyWorkWasDue" xml:space="preserve">
+    <value>war fällig </value>
+  </data>
+  <data name="MyWorkDue" xml:space="preserve">
+    <value>fällig </value>
+  </data>
+  <data name="MyWorkFollowing" xml:space="preserve">
+    <value>Gefolgt</value>
+  </data>
+  <data name="MyWorkNotFollowing" xml:space="preserve">
+    <value>Sie folgen keinen Dokumenten.</value>
+  </data>
+  <data name="MyWorkReviewTasks" xml:space="preserve">
+    <value>Prüfaufgaben</value>
+  </data>
+  <data name="MyWorkNoReview" xml:space="preserve">
+    <value>Keine Dokumente, die auf Ihre Prüfung warten.</value>
+  </data>
+  <data name="MyWorkOverdueSuffix" xml:space="preserve">
+    <value> · überfällig</value>
+  </data>
+  <data name="AuditActionLabel" xml:space="preserve">
+    <value>Aktion</value>
+  </data>
+  <data name="AuditActionPlaceholder" xml:space="preserve">
+    <value>z. B. Document.Deleted</value>
+  </data>
+  <data name="AuditFrom" xml:space="preserve">
+    <value>Von</value>
+  </data>
+  <data name="AuditTo" xml:space="preserve">
+    <value>Bis</value>
+  </data>
+  <data name="AuditApply" xml:space="preserve">
+    <value>Anwenden</value>
+  </data>
+  <data name="AuditClear" xml:space="preserve">
+    <value>Zurücksetzen</value>
+  </data>
+  <data name="AuditExport" xml:space="preserve">
+    <value>Exportieren</value>
+  </data>
+  <data name="AuditVerify" xml:space="preserve">
+    <value>Integrität prüfen</value>
+  </data>
+  <data name="AuditChainIntact" xml:space="preserve">
+    <value>Kette intakt ({0} Ereignisse)</value>
+  </data>
+  <data name="AuditTampered" xml:space="preserve">
+    <value>Manipulation erkannt bei #{0}</value>
+  </data>
+  <data name="AuditVerifyWorm" xml:space="preserve">
+    <value>WORM prüfen</value>
+  </data>
+  <data name="AuditWormIntact" xml:space="preserve">
+    <value>WORM versiegelt intakt ({0} Ereignisse, {1} Segmente)</value>
+  </data>
+  <data name="AuditWormBroken" xml:space="preserve">
+    <value>WORM {0} bei #{1}</value>
+  </data>
+  <data name="AuditRetentionLabel" xml:space="preserve">
+    <value>Aufbewahrung:</value>
+  </data>
+  <data name="AuditRetentionDaysHint" xml:space="preserve">
+    <value>Tage (0 = für immer behalten)</value>
+  </data>
+  <data name="AuditPurgeNow" xml:space="preserve">
+    <value>Jetzt bereinigen</value>
+  </data>
+  <data name="AuditKeepForever" xml:space="preserve">
+    <value>für immer behalten</value>
+  </data>
+  <data name="AuditDays" xml:space="preserve">
+    <value>{0} Tage</value>
+  </data>
+  <data name="AuditRetainedFrom" xml:space="preserve">
+    <value>Aufbewahrt ab #{0}</value>
+  </data>
+  <data name="AuditLastPurged" xml:space="preserve">
+    <value> · zuletzt bereinigt {0}</value>
+  </data>
+  <data name="AuditNoEvents" xml:space="preserve">
+    <value>Keine Audit-Ereignisse.</value>
+  </data>
+  <data name="AuditColWhen" xml:space="preserve">
+    <value>Wann</value>
+  </data>
+  <data name="AuditColActor" xml:space="preserve">
+    <value>Akteur</value>
+  </data>
+  <data name="AuditColTarget" xml:space="preserve">
+    <value>Ziel</value>
+  </data>
+  <data name="AuditColDetails" xml:space="preserve">
+    <value>Details</value>
+  </data>
+  <data name="LoadMore" xml:space="preserve">
+    <value>Mehr laden</value>
+  </data>
+  <data name="LhNewHold" xml:space="preserve">
+    <value>Neue Sperre</value>
+  </data>
+  <data name="LhReleased" xml:space="preserve">
+    <value>(aufgehoben)</value>
+  </data>
+  <data name="LhNone" xml:space="preserve">
+    <value>Keine gesetzlichen Sperren.</value>
+  </data>
+  <data name="LhPlaced" xml:space="preserve">
+    <value>Gesetzt {0} {1}</value>
+  </data>
+  <data name="LhActive" xml:space="preserve">
+    <value>· aktiv</value>
+  </data>
+  <data name="LhReleasedSuffix" xml:space="preserve">
+    <value>· aufgehoben</value>
+  </data>
+  <data name="LhRelease" xml:space="preserve">
+    <value>Sperre aufheben</value>
+  </data>
+  <data name="LhDocuments" xml:space="preserve">
+    <value>Dokumente ({0})</value>
+  </data>
+  <data name="LhRemoveFromHold" xml:space="preserve">
+    <value>Aus Sperre entfernen</value>
+  </data>
+  <data name="LhSelect" xml:space="preserve">
+    <value>Wählen Sie eine gesetzliche Sperre.</value>
+  </data>
+  <data name="RetDescReview" xml:space="preserve">
+    <value>Dokumente mit einer Aufbewahrungsfrist. Die automatische Aussonderung ist für diesen Mandanten &lt;b&gt;deaktiviert&lt;/b&gt; — prüfen Sie jeden abgelaufenen Datensatz und ordnen Sie ihn aus oder verlängern Sie ihn.</value>
+  </data>
+  <data name="RetDescAuto" xml:space="preserve">
+    <value>Dokumente mit einer Aufbewahrungsfrist und ihrem Aussonderungsdatum. Abgelaufene, nicht gesperrte Datensätze werden automatisch in den Papierkorb verschoben.</value>
+  </data>
+  <data name="RetColRetention" xml:space="preserve">
+    <value>Aufbewahrung</value>
+  </data>
+  <data name="RetColDisposition" xml:space="preserve">
+    <value>Aussonderungsdatum</value>
+  </data>
+  <data name="RetColStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="RetColActions" xml:space="preserve">
+    <value>Aktionen</value>
+  </data>
+  <data name="RetYears" xml:space="preserve">
+    <value>{0} Jahre</value>
+  </data>
+  <data name="RetRetainedUntil" xml:space="preserve">
+    <value> · aufbewahrt bis {0}</value>
+  </data>
+  <data name="RetSuspended" xml:space="preserve">
+    <value>Ausgesetzt (gesetzliche Sperre)</value>
+  </data>
+  <data name="RetDue" xml:space="preserve">
+    <value>Zur Aussonderung fällig</value>
+  </data>
+  <data name="RetScheduled" xml:space="preserve">
+    <value>Geplant</value>
+  </data>
+  <data name="RetDispose" xml:space="preserve">
+    <value>Aussondern</value>
+  </data>
+  <data name="RetExtend" xml:space="preserve">
+    <value>Verlängern…</value>
+  </data>
+  <data name="RetNone" xml:space="preserve">
+    <value>Kein Dokument hat eine Aufbewahrungsfrist.</value>
+  </data>
+  <data name="RetTruncated" xml:space="preserve">
+    <value>Zeigt die ersten 500 Dokumente.</value>
+  </data>
+  <data name="UgNew" xml:space="preserve">
+    <value>Neu</value>
+  </data>
+  <data name="UgNewUser" xml:space="preserve">
+    <value>Neuer Benutzer</value>
+  </data>
+  <data name="UgNewGroup" xml:space="preserve">
+    <value>Neue Gruppe</value>
+  </data>
+  <data name="UgCopy" xml:space="preserve">
+    <value>Kopieren</value>
+  </data>
+  <data name="UgDelete" xml:space="preserve">
+    <value>Löschen</value>
+  </data>
+  <data name="UgInactive" xml:space="preserve">
+    <value>(inaktiv)</value>
+  </data>
+  <data name="UgGroup" xml:space="preserve">
+    <value>Gruppe</value>
+  </data>
+  <data name="UgUser" xml:space="preserve">
+    <value>Benutzer</value>
+  </data>
+  <data name="UgRights" xml:space="preserve">
+    <value>{0}rechte</value>
+  </data>
+  <data name="UgChangePhoto" xml:space="preserve">
+    <value>Foto ändern…</value>
+  </data>
+  <data name="UgRemove" xml:space="preserve">
+    <value>Entfernen</value>
+  </data>
+  <data name="UgResetPassword" xml:space="preserve">
+    <value>Passwort zurücksetzen…</value>
+  </data>
+  <data name="UgTwoFactor" xml:space="preserve">
+    <value>Zwei-Faktor: {0}</value>
+  </data>
+  <data name="UgMfaEnabled" xml:space="preserve">
+    <value>aktiviert</value>
+  </data>
+  <data name="UgMfaOff" xml:space="preserve">
+    <value>aus</value>
+  </data>
+  <data name="UgResetMfa" xml:space="preserve">
+    <value>MFA zurücksetzen…</value>
+  </data>
+  <data name="UgImpersonate" xml:space="preserve">
+    <value>Identität annehmen</value>
+  </data>
+  <data name="UgGroupRightsNote" xml:space="preserve">
+    <value>Gruppenrechte gelten für die Mitgliedsbenutzer der Gruppe.</value>
+  </data>
+  <data name="UgClearanceLabel" xml:space="preserve">
+    <value>Vertraulichkeitsfreigabe</value>
+  </data>
+  <data name="UgClearanceNone" xml:space="preserve">
+    <value>0 — Keine (nur ohne Kennzeichnung)</value>
+  </data>
+  <data name="UgClearanceInfo" xml:space="preserve">
+    <value>Die höchste Vertraulichkeitsstufe, auf die dieser Prinzipal zugreifen darf — nur wirksam, wenn der Mandant die Freigabe erzwingt (Mandanten-Tab). Die effektive Freigabe eines Benutzers ist die höchste aus seiner eigenen und der seiner Gruppen. Mandanten-Administratoren umgehen die Freigabe.</value>
+  </data>
+  <data name="UgMembers" xml:space="preserve">
+    <value>Mitglieder</value>
+  </data>
+  <data name="UgAddMember" xml:space="preserve">
+    <value>Mitglied hinzufügen…</value>
+  </data>
+  <data name="UgNoMembers" xml:space="preserve">
+    <value>Noch keine Mitglieder.</value>
+  </data>
+  <data name="UgRemoveMember" xml:space="preserve">
+    <value>Mitglied entfernen</value>
+  </data>
+  <data name="UgSelectPrincipal" xml:space="preserve">
+    <value>Wählen Sie einen Benutzer oder eine Gruppe.</value>
+  </data>
+  <data name="RbDeletedItems" xml:space="preserve">
+    <value>Gelöschte Elemente über alle Archive hinweg.</value>
+  </data>
+  <data name="RbRestoreSelected" xml:space="preserve">
+    <value>Ausgewählte wiederherstellen ({0})</value>
+  </data>
+  <data name="RbPurgeSelected" xml:space="preserve">
+    <value>Ausgewählte bereinigen ({0})</value>
+  </data>
+  <data name="RbHardDeleteAll" xml:space="preserve">
+    <value>Alle endgültig löschen</value>
+  </data>
+  <data name="RbColPath" xml:space="preserve">
+    <value>Pfad</value>
+  </data>
+  <data name="RbColDeleted" xml:space="preserve">
+    <value>Gelöscht</value>
+  </data>
+  <data name="RbColDeletedBy" xml:space="preserve">
+    <value>Gelöscht von</value>
+  </data>
+  <data name="RbColActions" xml:space="preserve">
+    <value>Aktionen</value>
+  </data>
+  <data name="RbRestore" xml:space="preserve">
+    <value>Wiederherstellen</value>
+  </data>
+  <data name="RbHardDelete" xml:space="preserve">
+    <value>Endgültig löschen</value>
+  </data>
+  <data name="RbEmpty" xml:space="preserve">
+    <value>Der Papierkorb ist leer.</value>
+  </data>
+  <data name="RbSelectItem" xml:space="preserve">
+    <value>Wählen Sie ein gelöschtes Element, um es zu prüfen.</value>
+  </data>
+  <data name="RbDeletedByLine" xml:space="preserve">
+    <value>Gelöscht {0} von {1}</value>
+  </data>
+  <data name="RbMaskLine" xml:space="preserve">
+    <value>Maske: {0}</value>
+  </data>
+  <data name="RbMaskNone" xml:space="preserve">
+    <value>keine</value>
+  </data>
+  <data name="RbConvertedPreview" xml:space="preserve">
+    <value>⧉ Generierte Vorschau</value>
+  </data>
+  <data name="RbCommentsHeader" xml:space="preserve">
+    <value>Kommentare (schreibgeschützt)</value>
+  </data>
+  <data name="RbNoComments" xml:space="preserve">
+    <value>Keine Kommentare.</value>
+  </data>
+  <data name="TenantHeader" xml:space="preserve">
+    <value>Mandanteneinstellungen</value>
+  </data>
+  <data name="TenantSensitivityLabels" xml:space="preserve">
+    <value>Vertraulichkeitsstufen…</value>
+  </data>
+  <data name="TenantNewRepository" xml:space="preserve">
+    <value>Neues Archiv</value>
+  </data>
+  <data name="TenantNameLabel" xml:space="preserve">
+    <value>Mandantenname</value>
+  </data>
+  <data name="TenantNameInfo" xml:space="preserve">
+    <value>Der in der gesamten App angezeigte Organisationsname. Muss unter aktiven Mandanten eindeutig sein.</value>
+  </data>
+  <data name="TenantOcrLabel" xml:space="preserve">
+    <value>Standard-OCR-Sprachen</value>
+  </data>
+  <data name="TenantOcrInfo" xml:space="preserve">
+    <value>Sprachen für die OCR-Erkennung gescannter Dokumente (TIFFs und reine Bild-PDFs) zu durchsuchbarem Text. Wird verwendet, wenn eine Dokumentversion keine eigenen Sprachen festlegt; die Reihenfolge bestimmt die Erkennungspriorität.</value>
+  </data>
+  <data name="TenantAuditRetLabel" xml:space="preserve">
+    <value>Audit-Aufbewahrung (Tage, 0 = für immer behalten)</value>
+  </data>
+  <data name="TenantAuditRetInfo" xml:space="preserve">
+    <value>Wie viele Tage Audit-Log-Ereignisse aufbewahrt werden, bevor der Hintergrundprozess sie bereinigt. 0 = für immer behalten. Die manipulationssichere Hash-Kette bleibt über eine Bereinigung hinweg überprüfbar.</value>
+  </data>
+  <data name="TenantCoTtlLabel" xml:space="preserve">
+    <value>Check-out-Auto-Freigabe (Tage inaktiv, 0 = nie)</value>
+  </data>
+  <data name="TenantCoTtlInfo" xml:space="preserve">
+    <value>Gibt einen so viele Tage lang inaktiven Check-out automatisch frei: Die Sperre wird aufgehoben, eine nicht eingecheckte Cloud-Arbeitskopie verworfen und der Inhaber benachrichtigt. 0 = läuft nie ab.</value>
+  </data>
+  <data name="TenantCoWarnLabel" xml:space="preserve">
+    <value>Check-out-Ablaufwarnung (Tage vorher, 0 = keine)</value>
+  </data>
+  <data name="TenantCoWarnInfo" xml:space="preserve">
+    <value>Warnt den Inhaber diese Anzahl Tage, bevor ein inaktiver Check-out automatisch freigegeben wird, damit er einchecken oder weiterarbeiten kann. 0 = keine Warnung. Gilt nur, wenn die Auto-Freigabe aktiviert ist.</value>
+  </data>
+  <data name="TenantWormLabel" xml:space="preserve">
+    <value>WORM-Sperrmodus</value>
+  </data>
+  <data name="TenantWormGovernance" xml:space="preserve">
+    <value>Governance</value>
+  </data>
+  <data name="TenantWormCompliance" xml:space="preserve">
+    <value>Compliance</value>
+  </data>
+  <data name="TenantWormInfo" xml:space="preserve">
+    <value>Wie unveränderlich durch Aufbewahrung/gesetzliche Sperre gesperrte Dokumentversionen im Objektspeicher sind. Governance: Ein Admin mit Umgehungsberechtigung kann eine Sperre verkürzen oder entfernen. Compliance: absolut — niemand, auch kein Administrator, kann eine Version vor Ablauf ihrer Aufbewahrung löschen.</value>
+  </data>
+  <data name="TenantQuotaLabel" xml:space="preserve">
+    <value>Speicherkontingent (MB, leer = unbegrenzt)</value>
+  </data>
+  <data name="TenantQuotaInfo" xml:space="preserve">
+    <value>Maximaler Gesamtspeicher für die Dokumentinhalte dieses Mandanten in Megabyte. Ein Upload, der ihn überschreiten würde, wird abgelehnt. Leer lassen für kein Limit.</value>
+  </data>
+  <data name="TenantUsed" xml:space="preserve">
+    <value>Belegt: {0}</value>
+  </data>
+  <data name="TenantUsedOf" xml:space="preserve">
+    <value> von {0} ({1} %)</value>
+  </data>
+  <data name="TenantNoLimit" xml:space="preserve">
+    <value> (kein Limit)</value>
+  </data>
+  <data name="TenantApproachingQuota" xml:space="preserve">
+    <value>Kontingent fast erreicht</value>
+  </data>
+  <data name="TenantAlmostFull" xml:space="preserve">
+    <value>Fast voll</value>
+  </data>
+  <data name="TenantRecompute" xml:space="preserve">
+    <value>Neu berechnen</value>
+  </data>
+  <data name="TenantRecomputeInfo" xml:space="preserve">
+    <value>Berechnet den belegten Speicher aus den tatsächlich gespeicherten Dateien neu. Verwenden Sie es, wenn der Wert falsch aussieht — z. B. nach einem Import oder für Inhalte, die vor der Speicherabrechnung entstanden sind.</value>
+  </data>
+  <data name="TenantUploadCleanupLabel" xml:space="preserve">
+    <value>Bereinigung unvollständiger Uploads (Tage, 0 = aus)</value>
+  </data>
+  <data name="TenantUploadCleanupInfo" xml:space="preserve">
+    <value>Eine mandantenspezifische Objektspeicher-Bucket-Richtlinie: Abgebrochene mehrteilige Uploads werden nach so vielen Tagen abgebrochen. 0 = aus. Diese App lädt in einer einzigen Anfrage hoch (nicht mehrteilig), daher hat es heute keine Wirkung — es ist eine Bucket-Richtlinie, deren Wirkung auf einem lebenszyklusfähigen Backend (z. B. AWS S3) läuft.</value>
+  </data>
+  <data name="TenantRequireMfa" xml:space="preserve">
+    <value>Zwei-Faktor-Authentifizierung erzwingen</value>
+  </data>
+  <data name="TenantRequireMfaInfo" xml:space="preserve">
+    <value>Wenn aktiviert, muss jeder Benutzer dieses Mandanten die Zwei-Faktor-Authentifizierung (TOTP) eingerichtet haben, um sich anzumelden — die Anmeldeseite führt einen noch nicht eingerichteten Benutzer vor der Zugriffsgewährung durch die Einrichtung.</value>
+  </data>
+  <data name="TenantAllowPasskey" xml:space="preserve">
+    <value>Passwortlose Passkey-Anmeldung erlauben</value>
+  </data>
+  <data name="TenantAllowPasskeyInfo" xml:space="preserve">
+    <value>Wenn aktiviert, kann sich ein Benutzer dieses Mandanten, der einen Passkey registriert hat, allein damit anmelden — ohne Passwort. Ein Passkey mit Benutzerverifizierung ist phishing-resistente Mehrfaktor-Authentifizierung und erfüllt damit auch die obige Zwei-Faktor-Pflicht.</value>
+  </data>
+  <data name="TenantRequireDisposition" xml:space="preserve">
+    <value>Aufbewahrungs-Aussonderungsprüfung erzwingen</value>
+  </data>
+  <data name="TenantRequireDispositionInfo" xml:space="preserve">
+    <value>Wenn aktiviert, löscht der Aufbewahrungslauf abgelaufene Dokumente NICHT automatisch. Stattdessen warten sie im Aufbewahrungs-Tab als Prüfwarteschlange, damit ein Aktenverwalter jedes aussondert oder verlängert — eine belastbare, geprüfte Aussonderung. Wenn deaktiviert, werden abgelaufene, nicht gesperrte Datensätze automatisch in den Papierkorb ausgesondert.</value>
+  </data>
+  <data name="TenantRestrictTags" xml:space="preserve">
+    <value>Schlagwörter auf den Katalog beschränken</value>
+  </data>
+  <data name="TenantRestrictTagsInfo" xml:space="preserve">
+    <value>Wenn aktiviert, kann ein Dokument nur Schlagwörter erhalten, die bereits im Schlagwortkatalog existieren (im Schlagwörter-Tab verwaltet) — ein kontrolliertes Vokabular. Wenn deaktiviert, kann jedes Schlagwort frei eingegeben und automatisch zum Katalog hinzugefügt werden.</value>
+  </data>
+  <data name="TenantEnforceClearance" xml:space="preserve">
+    <value>Vertraulichkeitsfreigabe erzwingen</value>
+  </data>
+  <data name="TenantEnforceClearanceInfo" xml:space="preserve">
+    <value>Wenn aktiviert, kann ein Benutzer nur ein Dokument sehen oder öffnen, dessen Vertraulichkeitsstufe auf oder unter seiner Freigabe liegt (pro Benutzer/Gruppe im Benutzer-&amp;-Gruppen-Tab festgelegt). Dokumente über ihrer Freigabe sind aus Listen und Suche vollständig ausgeblendet. Mandanten-Administratoren umgehen dies. Wenn deaktiviert, sind Vertraulichkeitsstufen nur informativ. Neue Benutzer beginnen bei Freigabe 0, erteilen Sie also Freigaben, bevor Sie dies aktivieren.</value>
+  </data>
+  <data name="TenantWebhookUrlLabel" xml:space="preserve">
+    <value>Audit-Webhook-URL (SIEM-Streaming)</value>
+  </data>
+  <data name="TenantWebhookUrlInfo" xml:space="preserve">
+    <value>Jedes Audit-Ereignis wird kurz nach seiner Aufzeichnung als JSON in der richtigen Reihenfolge an diese absolute http(s)-URL gesendet, mit einem X-SimplArchive-Signature: sha256=&lt;hmac&gt;-Header, damit der Empfänger Authentizität und Integrität prüfen kann. Leer lassen, um das Streaming zu deaktivieren.</value>
+  </data>
+  <data name="TenantSecretLabelKeep" xml:space="preserve">
+    <value>Signaturgeheimnis (leer lassen, um das aktuelle zu behalten)</value>
+  </data>
+  <data name="TenantSecretLabel" xml:space="preserve">
+    <value>Signaturgeheimnis</value>
+  </data>
+  <data name="TenantSecretInfo" xml:space="preserve">
+    <value>Der HMAC-SHA256-Schlüssel zum Signieren jedes zugestellten Ereignisses. Verschlüsselt gespeichert und nach dem Speichern nie wieder angezeigt. Beim erstmaligen Aktivieren eines Webhooks erforderlich; bei späteren Änderungen leer lassen, um das bestehende Geheimnis zu behalten.</value>
+  </data>
+  <data name="TenantSecretConfigured" xml:space="preserve">
+    <value>Signaturgeheimnis: konfiguriert</value>
+  </data>
+  <data name="TenantSecretNotSet" xml:space="preserve">
+    <value>Signaturgeheimnis: nicht gesetzt</value>
+  </data>
+  <data name="TenantSendTest" xml:space="preserve">
+    <value>Testereignis senden</value>
+  </data>
+  <data name="TenantDeliveryHealthy" xml:space="preserve">
+    <value>Zustellung: fehlerfrei</value>
+  </data>
+  <data name="TenantLastSuccess" xml:space="preserve">
+    <value> — letzter Erfolg {0}</value>
+  </data>
+  <data name="TenantDeliveryFailing" xml:space="preserve">
+    <value>Zustellung: fehlerhaft —</value>
+  </data>
+  <data name="TenantConsecFailure" xml:space="preserve">
+    <value>{0} aufeinanderfolgender Fehler</value>
+  </data>
+  <data name="TenantConsecFailures" xml:space="preserve">
+    <value>{0} aufeinanderfolgende Fehler</value>
+  </data>
+  <data name="TenantNextRetry" xml:space="preserve">
+    <value>; nächster Versuch {0}</value>
+  </data>
+  <data name="TenantLastSuccessSemi" xml:space="preserve">
+    <value>; letzter Erfolg {0}</value>
+  </data>
+  <data name="TenantNeverDelivered" xml:space="preserve">
+    <value>; nie zugestellt</value>
+  </data>
+  <data name="TenantDeliveryInfo" xml:space="preserve">
+    <value>Wie der SIEM-Webhook zustellt. Bei Fehlern wiederholt der Server mit exponentiellem Backoff (bis zu ~stündlich) und heilt sich selbst, wenn der Endpunkt sich erholt; ein Erfolg setzt den Zähler zurück. Keine Ereignisse gehen verloren — nicht zugestellte Ereignisse werden am Prüfpunkt gehalten.</value>
+  </data>
+  <data name="TenantReference" xml:space="preserve">
+    <value>Referenz</value>
+  </data>
+  <data name="TenantIdLabel" xml:space="preserve">
+    <value>Mandanten-ID</value>
+  </data>
+  <data name="TenantStatusLabel" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="TenantCreatedLabel" xml:space="preserve">
+    <value>Erstellt</value>
+  </data>
+  <data name="CtxGoTo" xml:space="preserve">
+    <value>Gehe zu…</value>
+  </data>
+  <data name="CtxMoveTo" xml:space="preserve">
+    <value>Verschieben nach…</value>
+  </data>
+  <data name="CtxRename" xml:space="preserve">
+    <value>Umbenennen…</value>
+  </data>
+  <data name="CtxPlaceLegalHold" xml:space="preserve">
+    <value>Gesetzliche Sperre setzen…</value>
+  </data>
+  <data name="CtxPlaceReference" xml:space="preserve">
+    <value>Verweis ablegen in…</value>
+  </data>
+  <data name="CtxRemoveReference" xml:space="preserve">
+    <value>Verweis entfernen</value>
+  </data>
+  <data name="CtxCheckOut" xml:space="preserve">
+    <value>Auschecken</value>
+  </data>
+  <data name="CtxOverrideCheckout" xml:space="preserve">
+    <value>Check-out aufheben</value>
+  </data>
+  <data name="CtxReferences" xml:space="preserve">
+    <value>Verweise…</value>
+  </data>
+  <data name="BulkMove" xml:space="preserve">
+    <value>Verschieben</value>
+  </data>
+  <data name="BulkTag" xml:space="preserve">
+    <value>Verschlagworten</value>
+  </data>
+  <data name="BulkSelected" xml:space="preserve">
+    <value>{0} ausgewählt</value>
+  </data>
+  <data name="BulkClearSelection" xml:space="preserve">
+    <value>Auswahl aufheben</value>
+  </data>
+  <data name="CommentBtn" xml:space="preserve">
+    <value>Kommentieren</value>
+  </data>
+  <data name="ReplyBtn" xml:space="preserve">
+    <value>Antworten</value>
+  </data>
+  <data name="CommentsHeader" xml:space="preserve">
+    <value>Kommentare</value>
+  </data>
+  <data name="NoActions" xml:space="preserve">
+    <value>Keine Aktionen verfügbar.</value>
+  </data>
+  <data name="NoCommentsYet" xml:space="preserve">
+    <value>Noch keine Kommentare. Starten Sie die Unterhaltung.</value>
+  </data>
+  <data name="SelectDocDetail" xml:space="preserve">
+    <value>Wählen Sie ein Dokument, um seine Indexdaten und Vorschau zu sehen.</value>
+  </data>
+  <data name="NoRepositories" xml:space="preserve">
+    <value>Keine Archive für Sie sichtbar.</value>
+  </data>
+  <data name="SelectFolderTree" xml:space="preserve">
+    <value>Wählen Sie einen Ordner im Baum.</value>
+  </data>
+  <data name="ArchiveEmpty" xml:space="preserve">
+    <value>Dieses Archiv ist leer.</value>
+  </data>
+  <data name="SelectForComments" xml:space="preserve">
+    <value>Wählen Sie einen Ordner oder ein Dokument, um seine Kommentare anzuzeigen.</value>
+  </data>
+  <data name="CoLockedOther" xml:space="preserve">
+    <value>Von einem anderen Benutzer ausgecheckt</value>
+  </data>
+  <data name="CoLockedMine" xml:space="preserve">
+    <value>Von Ihnen ausgecheckt</value>
+  </data>
+  <data name="LhUnderHold" xml:space="preserve">
+    <value>Unter gesetzlicher Sperre</value>
+  </data>
+  <data name="CommentPlaceholder" xml:space="preserve">
+    <value>Kommentar hinzufügen…</value>
+  </data>
+  <data name="ReplyPlaceholder" xml:space="preserve">
+    <value>Antwort schreiben…</value>
+  </data>
+  <data name="TagAddPlaceholder" xml:space="preserve">
+    <value>Schlagwort hinzufügen…</value>
+  </data>
+  <data name="FollowDoc" xml:space="preserve">
+    <value>Folgen — bei Änderungen an diesem Dokument benachrichtigt werden</value>
+  </data>
+  <data name="UnfollowDoc" xml:space="preserve">
+    <value>Nicht mehr folgen — Benachrichtigungen zu diesem Dokument stoppen</value>
+  </data>
+  <data name="FollowFolder" xml:space="preserve">
+    <value>Folgen — bei jeder Änderung in diesem Ordner und seinem Inhalt benachrichtigt werden</value>
+  </data>
+  <data name="UnfollowFolder" xml:space="preserve">
+    <value>Nicht mehr folgen — Benachrichtigungen zu diesem Ordner stoppen</value>
+  </data>
+  <data name="PvHighlight" xml:space="preserve">
+    <value>Markieren (zum Zeichnen ziehen)</value>
+  </data>
+  <data name="PvRectangle" xml:space="preserve">
+    <value>Rechteck (zum Zeichnen ziehen)</value>
+  </data>
+  <data name="PvArrow" xml:space="preserve">
+    <value>Pfeil (zum Zeichnen ziehen)</value>
+  </data>
+  <data name="PvShowNotes" xml:space="preserve">
+    <value>Notizen anzeigen</value>
+  </data>
+  <data name="PvHideNotes" xml:space="preserve">
+    <value>Notizen ausblenden</value>
+  </data>
+  <data name="SortDocDate" xml:space="preserve">
+    <value>Dok.-Datum</value>
+  </data>
+  <data name="SortSize" xml:space="preserve">
+    <value>Größe</value>
+  </data>
+  <data name="FolderType" xml:space="preserve">
+    <value>Ordner</value>
+  </data>
+  <data name="ArchiveBack" xml:space="preserve">
+    <value> — zurück</value>
+  </data>
+  <data name="SensitivityTip" xml:space="preserve">
+    <value>Vertraulichkeit: {0}</value>
+  </data>
+  <data name="LoginPageTitle" xml:space="preserve">
+    <value>Anmelden · SimplArchive</value>
+  </data>
+  <data name="LoginSaveRecoveryTitle" xml:space="preserve">
+    <value>Wiederherstellungscodes speichern</value>
+  </data>
+  <data name="LoginRecoveryHint" xml:space="preserve">
+    <value>Bewahren Sie diese sicher auf. Jeder kann einmal verwendet werden, falls Sie den Zugriff auf Ihre Authenticator-App verlieren. Sie werden nicht erneut angezeigt.</value>
+  </data>
+  <data name="LoginSavedContinue" xml:space="preserve">
+    <value>Ich habe sie gespeichert — weiter</value>
+  </data>
+  <data name="LoginEnrollTitle" xml:space="preserve">
+    <value>Zwei-Faktor-Authentifizierung einrichten</value>
+  </data>
+  <data name="LoginEnrollHint" xml:space="preserve">
+    <value>Ihre Organisation erfordert Zwei-Faktor-Authentifizierung. Scannen Sie diesen QR-Code mit einer Authenticator-App und geben Sie dann den 6-stelligen Code ein, um abzuschließen.</value>
+  </data>
+  <data name="LoginQrAlt" xml:space="preserve">
+    <value>Authenticator-QR-Code</value>
+  </data>
+  <data name="LoginManualKey" xml:space="preserve">
+    <value>Können Sie nicht scannen? Geben Sie diesen Schlüssel manuell ein:</value>
+  </data>
+  <data name="LoginAuthCode" xml:space="preserve">
+    <value>Authentifizierungscode</value>
+  </data>
+  <data name="LoginVerifyEnable" xml:space="preserve">
+    <value>Überprüfen &amp; aktivieren</value>
+  </data>
+  <data name="LoginMfaTitle" xml:space="preserve">
+    <value>Zwei-Faktor-Authentifizierung</value>
+  </data>
+  <data name="LoginUsePasskey" xml:space="preserve">
+    <value>Passkey verwenden</value>
+  </data>
+  <data name="LoginOr" xml:space="preserve">
+    <value>oder</value>
+  </data>
+  <data name="LoginTotpHint" xml:space="preserve">
+    <value>Geben Sie den 6-stelligen Code aus Ihrer Authenticator-App oder einen Ihrer Wiederherstellungscodes ein.</value>
+  </data>
+  <data name="LoginVerify" xml:space="preserve">
+    <value>Überprüfen</value>
+  </data>
+  <data name="LoginPasskeyFailedAlert" xml:space="preserve">
+    <value>Passkey-Authentifizierung wurde abgebrochen oder ist fehlgeschlagen.</value>
+  </data>
+  <data name="LoginSignIn" xml:space="preserve">
+    <value>Anmelden</value>
+  </data>
+  <data name="LoginEmail" xml:space="preserve">
+    <value>E-Mail</value>
+  </data>
+  <data name="LoginPassword" xml:space="preserve">
+    <value>Passwort</value>
+  </data>
+  <data name="LoginPasswordPlaceholder" xml:space="preserve">
+    <value>Ihr Passwort</value>
+  </data>
+  <data name="LoginSignInPasskey" xml:space="preserve">
+    <value>Mit einem Passkey anmelden</value>
+  </data>
+  <data name="LoginPasskeySignInFailedAlert" xml:space="preserve">
+    <value>Passkey-Anmeldung wurde abgebrochen oder ist fehlgeschlagen.</value>
+  </data>
+  <data name="LoginErrInvalidCreds" xml:space="preserve">
+    <value>Ungültige E-Mail oder Passwort.</value>
+  </data>
+  <data name="LoginErrSessionExpiredSignIn" xml:space="preserve">
+    <value>Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.</value>
+  </data>
+  <data name="LoginErrInvalidCode" xml:space="preserve">
+    <value>Ungültiger Authentifizierungscode.</value>
+  </data>
+  <data name="LoginErrPasskeyMfaFailed" xml:space="preserve">
+    <value>Passkey-Authentifizierung fehlgeschlagen. Versuchen Sie es erneut oder verwenden Sie Ihren Authenticator-Code.</value>
+  </data>
+  <data name="LoginErrPasskeyFailed" xml:space="preserve">
+    <value>Passkey-Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.</value>
+  </data>
+  <data name="LoginErrSessionExpiredTry" xml:space="preserve">
+    <value>Ihre Sitzung ist abgelaufen. Bitte versuchen Sie es erneut.</value>
+  </data>
+  <data name="LoginErrPasskeyNotEnabled" xml:space="preserve">
+    <value>Passwortlose Passkey-Anmeldung ist für Ihr Konto nicht aktiviert.</value>
+  </data>
+  <data name="Confirm" xml:space="preserve">
+    <value>Bestätigen</value>
+  </data>
+  <data name="Copy" xml:space="preserve">
+    <value>Kopieren</value>
+  </data>
+  <data name="RenameNewName" xml:space="preserve">
+    <value>Neuer Name</value>
+  </data>
+  <data name="GenPwTitle" xml:space="preserve">
+    <value>Passwort zurücksetzen</value>
+  </data>
+  <data name="GenPwHint" xml:space="preserve">
+    <value>Kopieren Sie dieses Passwort jetzt — es wird nicht erneut angezeigt. Bitten Sie den Benutzer, es nach der Anmeldung zu ändern.</value>
+  </data>
+  <data name="HdaTitle" xml:space="preserve">
+    <value>Papierkorb leeren</value>
+  </data>
+  <data name="HdaWarn" xml:space="preserve">
+    <value>Alle aufgelisteten Dokumente werden unwiederbringlich gelöscht.</value>
+  </data>
+  <data name="HdaConfirmType" xml:space="preserve">
+    <value>Geben Sie I AGREE ein, um zu bestätigen.</value>
+  </data>
+  <data name="ExtRetTitle" xml:space="preserve">
+    <value>Aufbewahrung verlängern</value>
+  </data>
+  <data name="ExtRetPrompt" xml:space="preserve">
+    <value>Dieses Dokument aufbewahren bis:</value>
+  </data>
+  <data name="ExtRetBtn" xml:space="preserve">
+    <value>Verlängern</value>
+  </data>
+  <data name="RrTitle" xml:space="preserve">
+    <value>Ausstehende Prüfungen neu zuweisen</value>
+  </data>
+  <data name="RrHint" xml:space="preserve">
+    <value>Dieser Benutzer hat noch ausstehende Prüfaufgaben. Wählen Sie einen Ersatzprüfer, um sie vor der Deaktivierung zu übergeben.</value>
+  </data>
+  <data name="RrPlaceholder" xml:space="preserve">
+    <value>Ersatzprüfer…</value>
+  </data>
+  <data name="RrConfirm" xml:space="preserve">
+    <value>Neu zuweisen &amp; deaktivieren</value>
+  </data>
+  <data name="DropTitle" xml:space="preserve">
+    <value>Verschieben oder verweisen</value>
+  </data>
+  <data name="DropPlaceRef" xml:space="preserve">
+    <value>Verweis ablegen</value>
+  </data>
+  <data name="DropMoveHere" xml:space="preserve">
+    <value>Hierher verschieben</value>
+  </data>
+  <data name="AddBtn" xml:space="preserve">
+    <value>Hinzufügen</value>
+  </data>
+  <data name="RefDlgTitle" xml:space="preserve">
+    <value>Verweise</value>
+  </data>
+  <data name="OcrDlgTitle" xml:space="preserve">
+    <value>OCR-Sprachen</value>
+  </data>
+  <data name="OcrDlgHint" xml:space="preserve">
+    <value>Zum Auswählen in Prioritätsreihenfolge klicken — 1 ist am höchsten (zuerst versucht).</value>
+  </data>
+  <data name="ClTitle" xml:space="preserve">
+    <value>Verbindung verloren</value>
+  </data>
+  <data name="ClHeadline" xml:space="preserve">
+    <value>Verbindung zum Server verloren.</value>
+  </data>
+  <data name="ClBody" xml:space="preserve">
+    <value>Die letzte Aktion konnte nicht abgeschlossen werden. Verbinden Sie sich erneut, um neu zu laden, oder schließen Sie die App.</value>
+  </data>
+  <data name="ClTechDetails" xml:space="preserve">
+    <value>Technische Details</value>
+  </data>
+  <data name="ClReconnect" xml:space="preserve">
+    <value>Erneut verbinden</value>
+  </data>
+  <data name="BulkSensTitle" xml:space="preserve">
+    <value>Vertraulichkeit festlegen</value>
+  </data>
+  <data name="BulkSensBody" xml:space="preserve">
+    <value>Diese Klassifizierung für jedes ausgewählte Dokument festlegen.</value>
+  </data>
+  <data name="NotifPrefTitle" xml:space="preserve">
+    <value>Benachrichtigungseinstellungen</value>
+  </data>
+  <data name="NotifPrefBody" xml:space="preserve">
+    <value>Wählen Sie, welche Benachrichtigungen auch per E-Mail gesendet werden. In-App-Benachrichtigungen erscheinen immer in der Glocke.</value>
+  </data>
+  <data name="BulkTagsTitle" xml:space="preserve">
+    <value>Schlagwörter hinzufügen</value>
+  </data>
+  <data name="BulkTagsBody" xml:space="preserve">
+    <value>Diese Schlagwörter werden jedem ausgewählten Dokument hinzugefügt (bestehende Schlagwörter bleiben erhalten).</value>
+  </data>
+  <data name="BulkTagsConfirm" xml:space="preserve">
+    <value>Schlagwörter hinzufügen</value>
+  </data>
+  <data name="LhDlgTitle" xml:space="preserve">
+    <value>Neue gesetzliche Sperre</value>
+  </data>
+  <data name="LhDlgBody" xml:space="preserve">
+    <value>Eine gesetzliche Sperre friert ihre Dokumente ein — sie können nicht gelöscht, verschoben, neu versioniert oder bearbeitet werden, bis die Sperre aufgehoben wird.</value>
+  </data>
+  <data name="LhMatterName" xml:space="preserve">
+    <value>Vorgangsname</value>
+  </data>
+  <data name="LhReason" xml:space="preserve">
+    <value>Grund (optional)</value>
+  </data>
+  <data name="LhPlaceHold" xml:space="preserve">
+    <value>Sperre setzen</value>
+  </data>
+  <data name="PkTitle" xml:space="preserve">
+    <value>Passkeys</value>
+  </data>
+  <data name="PkBody" xml:space="preserve">
+    <value>Mit Passkeys können Sie sich per Fingerabdruck, Gesicht oder Sicherheitsschlüssel Ihres Geräts anmelden. Beim Hinzufügen öffnet sich Ihr Webbrowser, um die Sicherheitsprüfung abzuschließen.</value>
+  </data>
+  <data name="PkAdd" xml:space="preserve">
+    <value>Passkey hinzufügen</value>
+  </data>
+  <data name="DupHeadline" xml:space="preserve">
+    <value>Diese Datei existiert bereits</value>
+  </data>
+  <data name="DupRefExplain" xml:space="preserve">
+    <value>Beim Verweisen wird eine Verknüpfung zum bestehenden Dokument in diesem Ordner abgelegt, ohne eine zweite Kopie zu speichern.</value>
+  </data>
+  <data name="PpTitle" xml:space="preserve">
+    <value>Profilbild</value>
+  </data>
+  <data name="PpChoose" xml:space="preserve">
+    <value>Bild auswählen…</value>
+  </data>
+  <data name="PpHint" xml:space="preserve">
+    <value>Wählen Sie ein Bild, dann ziehen Sie das Quadrat oder ändern Sie seine Größe, um den sichtbaren Bereich zu wählen.</value>
+  </data>
+  <data name="CpTitle" xml:space="preserve">
+    <value>Passwort ändern</value>
+  </data>
+  <data name="CpCurrent" xml:space="preserve">
+    <value>Aktuelles Passwort</value>
+  </data>
+  <data name="CpNew" xml:space="preserve">
+    <value>Neues Passwort</value>
+  </data>
+  <data name="CpConfirm" xml:space="preserve">
+    <value>Neues Passwort bestätigen</value>
+  </data>
+  <data name="CpMismatch" xml:space="preserve">
+    <value>Passwörter stimmen nicht überein.</value>
+  </data>
+  <data name="FpTitle" xml:space="preserve">
+    <value>Element ablegen</value>
+  </data>
+  <data name="FpAsVersion" xml:space="preserve">
+    <value>Als neue Version des ausgewählten Dokuments ablegen</value>
+  </data>
+  <data name="FpInFolder" xml:space="preserve">
+    <value>Im Ordner des ausgewählten Elements ablegen</value>
+  </data>
+  <data name="FpFile" xml:space="preserve">
+    <value>Ablegen</value>
+  </data>
+  <data name="ImpTitle" xml:space="preserve">
+    <value>Archiv importieren</value>
+  </data>
+  <data name="ImpUpdate" xml:space="preserve">
+    <value>Bereits importierte Elemente aktualisieren (neue Versionen hinzufügen, Metadaten auffrischen)</value>
+  </data>
+  <data name="ImpUpdateHint" xml:space="preserve">
+    <value>Aus: Beim erneuten Import desselben Archivs werden bereits importierte Elemente übersprungen — keine Duplikate.</value>
+  </data>
+  <data name="ImpPerms" xml:space="preserve">
+    <value>Berechtigungen (ACL) importieren, falls im Archiv enthalten</value>
+  </data>
+  <data name="ImpMerge" xml:space="preserve">
+    <value>In den aktuellen Ordner zusammenführen (gleichnamige Ordner wiederverwenden)</value>
+  </data>
+  <data name="ImpLeafConflict" xml:space="preserve">
+    <value>Wenn bereits ein Dokument mit demselben Namen existiert</value>
+  </data>
+  <data name="ImportBtn" xml:space="preserve">
+    <value>Importieren</value>
+  </data>
+  <data name="WdTitle" xml:space="preserve">
+    <value>WebDAV-Zugriff</value>
+  </data>
+  <data name="WdBody" xml:space="preserve">
+    <value>Binden Sie das Archiv als Netzlaufwerk mit einem WebDAV-Client ein (Finder / Explorer / Nautilus). Verwenden Sie Ihre E-Mail als Benutzernamen und ein app-spezifisches Passwort unten — nicht Ihr Anmeldepasswort.</value>
+  </data>
+  <data name="WdMountUrl" xml:space="preserve">
+    <value>Mount-URL</value>
+  </data>
+  <data name="WdUsername" xml:space="preserve">
+    <value>Benutzername</value>
+  </data>
+  <data name="WdCopyPw" xml:space="preserve">
+    <value>Kopieren Sie dieses Passwort jetzt — es wird nicht erneut angezeigt.</value>
+  </data>
+  <data name="WdRevoke" xml:space="preserve">
+    <value>Widerrufen</value>
+  </data>
+  <data name="WdGenerate" xml:space="preserve">
+    <value>Passwort generieren</value>
+  </data>
+  <data name="SssTitle" xml:space="preserve">
+    <value>Gespeicherte Suche teilen</value>
+  </data>
+  <data name="SssPrivate" xml:space="preserve">
+    <value>Nur ich (privat)</value>
+  </data>
+  <data name="SssSpecific" xml:space="preserve">
+    <value>Bestimmte Personen &amp; Gruppen</value>
+  </data>
+  <data name="SssEveryone" xml:space="preserve">
+    <value>Alle im Mandanten</value>
+  </data>
+  <data name="SlTitle" xml:space="preserve">
+    <value>Vertraulichkeitsstufen</value>
+  </data>
+  <data name="SlBody" xml:space="preserve">
+    <value>Die Klassifizierungsstufen des Mandanten. Das Außerbetriebnehmen behält eine Stufe für bestehende Dokumente bei, bietet sie aber nicht mehr an. „Wasserzeichen“ markiert die Vorschau von Dokumenten mit dieser Stufe.</value>
+  </data>
+  <data name="AnnTitle" xml:space="preserve">
+    <value>Notiz</value>
+  </data>
+  <data name="CvTitle" xml:space="preserve">
+    <value>Versionen vergleichen</value>
+  </data>
+  <data name="CompareEllipsis" xml:space="preserve">
+    <value>Vergleichen…</value>
+  </data>
+  <data name="MakeCurrent" xml:space="preserve">
+    <value>Als aktuell festlegen</value>
+  </data>
+  <data name="VerCurrent" xml:space="preserve">
+    <value>aktuell</value>
+  </data>
+  <data name="RemTitle" xml:space="preserve">
+    <value>Erinnerungen</value>
+  </data>
+  <data name="RemDate" xml:space="preserve">
+    <value>Datum</value>
+  </data>
+  <data name="RemTime" xml:space="preserve">
+    <value>Uhrzeit</value>
+  </data>
+  <data name="RemRepeat" xml:space="preserve">
+    <value>Wiederholen</value>
+  </data>
+  <data name="RemRemind" xml:space="preserve">
+    <value>Erinnern</value>
+  </data>
+  <data name="ExportTitle" xml:space="preserve">
+    <value>Exportieren</value>
+  </data>
+  <data name="ExpAllVersions" xml:space="preserve">
+    <value>Alle Versionen</value>
+  </data>
+  <data name="ExpActiveOnly" xml:space="preserve">
+    <value>Nur aktive Version</value>
+  </data>
+  <data name="ExpDocDateFrom" xml:space="preserve">
+    <value>Dokumentdatum von</value>
+  </data>
+  <data name="ExpDocDateTo" xml:space="preserve">
+    <value>Dokumentdatum bis</value>
+  </data>
+  <data name="ExpFiledFrom" xml:space="preserve">
+    <value>Abgelegt von</value>
+  </data>
+  <data name="ExpFiledTo" xml:space="preserve">
+    <value>Abgelegt bis</value>
+  </data>
+  <data name="ExpCreatedBy" xml:space="preserve">
+    <value>Erstellt von (Name enthält)</value>
+  </data>
+  <data name="ExpInclPerms" xml:space="preserve">
+    <value>Berechtigungen (ACL) einschließen</value>
+  </data>
+  <data name="MfaScanHint" xml:space="preserve">
+    <value>Scannen Sie diesen QR-Code mit einer Authenticator-App (Google Authenticator, 1Password, Authy…) und geben Sie dann den angezeigten 6-stelligen Code ein.</value>
+  </data>
+  <data name="MfaRecoveryHint" xml:space="preserve">
+    <value>Bewahren Sie diese Wiederherstellungscodes sicher auf. Jeder kann einmal zur Anmeldung verwendet werden, falls Sie Ihren Authenticator verlieren. Sie werden nicht erneut angezeigt.</value>
+  </data>
+  <data name="TmTitle" xml:space="preserve">
+    <value>Mandanten</value>
+  </data>
+  <data name="WfTitle" xml:space="preserve">
+    <value>Workflow</value>
+  </data>
+  <data name="WfNoVersion" xml:space="preserve">
+    <value>Dieses Dokument hat keine bestätigte Version, auf der ein Workflow ausgeführt werden kann.</value>
+  </data>
+  <data name="WfStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="MwAuditActionPh" xml:space="preserve">
+    <value>Aktion (z. B. Document.Deleted)</value>
+  </data>
+  <data name="MwAddAsVersion" xml:space="preserve">
+    <value>Als neue Version hinzufügen</value>
+  </data>
+  <data name="MwAddTagsSelected" xml:space="preserve">
+    <value>Schlagwörter zu Auswahl hinzufügen</value>
+  </data>
+  <data name="MwSaveToCloudTip" xml:space="preserve">
+    <value>Sichert die Arbeitskopie, damit sie das Schließen übersteht und beim nächsten Login wiederhergestellt wird</value>
+  </data>
+  <data name="MwChooseOcr" xml:space="preserve">
+    <value>OCR-Sprachen in Prioritätsreihenfolge wählen</value>
+  </data>
+  <data name="MwCollapseExpand" xml:space="preserve">
+    <value>Ein-/ausklappen</value>
+  </data>
+  <data name="MwCompareVersions" xml:space="preserve">
+    <value>Versionen vergleichen…</value>
+  </data>
+  <data name="MwConvertScansTip" xml:space="preserve">
+    <value>Wandelt vorhandene gescannte Dokumente (TIFFs + gescannte reine Bild-PDFs) in durchsuchbare PDFs um, damit ihr Text indiziert wird. Läuft über den gesamten Mandanten; kann gefahrlos wiederholt werden.</value>
+  </data>
+  <data name="MwDeletePermanently" xml:space="preserve">
+    <value>Endgültig löschen</value>
+  </data>
+  <data name="MwDeleteSelected" xml:space="preserve">
+    <value>Auswahl löschen</value>
+  </data>
+  <data name="MwDiscard" xml:space="preserve">
+    <value>Verwerfen</value>
+  </data>
+  <data name="MwDocuments" xml:space="preserve">
+    <value>Dokumente</value>
+  </data>
+  <data name="MwRetDescAuto" xml:space="preserve">
+    <value>Dokumente mit einer Aufbewahrungsfrist + ihrem Aussonderungsdatum. Abgelaufene, nicht gesperrte Datensätze werden automatisch in den Papierkorb verschoben.</value>
+  </data>
+  <data name="MwRetDescReview" xml:space="preserve">
+    <value>Dokumente mit einer Aufbewahrungsfrist. Die automatische Aussonderung ist für diesen Mandanten AUS — prüfen Sie jeden abgelaufenen Datensatz und sondern Sie ihn aus oder verlängern Sie ihn.</value>
+  </data>
+  <data name="MwEditOcr" xml:space="preserve">
+    <value>OCR-Sprachen bearbeiten</value>
+  </data>
+  <data name="MwEditEllipsis" xml:space="preserve">
+    <value>Bearbeiten…</value>
+  </data>
+  <data name="MwFileIntoFolder" xml:space="preserve">
+    <value>In Ordner ablegen…</value>
+  </data>
+  <data name="MwFileSelected" xml:space="preserve">
+    <value>Auswahl ablegen</value>
+  </data>
+  <data name="MwFileSelectedTip" xml:space="preserve">
+    <value>Die ausgewählten Elemente in einen Ordner ablegen</value>
+  </data>
+  <data name="MwFollowFolder" xml:space="preserve">
+    <value>Diesem Ordner folgen / nicht mehr folgen</value>
+  </data>
+  <data name="MwGoTo" xml:space="preserve">
+    <value>Gehe zu …</value>
+  </data>
+  <data name="MwLoginToBrowse" xml:space="preserve">
+    <value>Melden Sie sich an, um Ihre Archive zu durchsuchen.</value>
+  </data>
+  <data name="MwMerge" xml:space="preserve">
+    <value>Zusammenführen</value>
+  </data>
+  <data name="MwOpenWebDavTip" xml:space="preserve">
+    <value>Binden Sie Ihren persönlichen WebDAV-Ordner (Eingang / Check-out / Archiv) ein und öffnen Sie ihn in Ihrem Dateimanager</value>
+  </data>
+  <data name="MwMoveSelected" xml:space="preserve">
+    <value>Auswahl verschieben</value>
+  </data>
+  <data name="MwNewSubfolder" xml:space="preserve">
+    <value>Neuer Unterordner…</value>
+  </data>
+  <data name="MwCheckoutEmpty" xml:space="preserve">
+    <value>Nichts ist ausgecheckt. Wählen Sie ein Dokument im Archiv und wählen Sie Auschecken, um eine Bearbeitungssperre zu erhalten und eine Arbeitskopie herunterzuladen.</value>
+  </data>
+  <data name="MwOpen" xml:space="preserve">
+    <value>Öffnen</value>
+  </data>
+  <data name="MwOpenInFileManager" xml:space="preserve">
+    <value>Im Dateimanager öffnen</value>
+  </data>
+  <data name="MwPostComment" xml:space="preserve">
+    <value>Kommentar senden</value>
+  </data>
+  <data name="MwPreview" xml:space="preserve">
+    <value>Vorschau</value>
+  </data>
+  <data name="MwRecomputeTip" xml:space="preserve">
+    <value>Berechnet den belegten Speicher aus den tatsächlich gespeicherten Dateien neu — verwenden Sie es, wenn der Wert falsch aussieht (z. B. nach einem Import oder für Inhalte vor der Speicherabrechnung).</value>
+  </data>
+  <data name="MwReferences" xml:space="preserve">
+    <value>Verweise …</value>
+  </data>
+  <data name="MwRemind" xml:space="preserve">
+    <value>Erinnern…</value>
+  </data>
+  <data name="MwExtendCheckoutTip" xml:space="preserve">
+    <value>Setzt den Auto-Freigabe-Timer zurück, um diesen Check-out länger zu behalten</value>
+  </data>
+  <data name="MwSaveSearch" xml:space="preserve">
+    <value>Diese Suche speichern</value>
+  </data>
+  <data name="MwSaveToCloud" xml:space="preserve">
+    <value>In Cloud speichern</value>
+  </data>
+  <data name="MwSelectDeleted" xml:space="preserve">
+    <value>Wählen Sie ein gelöschtes Element, um seine Details zu sehen.</value>
+  </data>
+  <data name="MwSelectInboxItem" xml:space="preserve">
+    <value>Wählen Sie ein Server-Eingangselement, um seine Maske festzulegen.</value>
+  </data>
+  <data name="MwSelectAll" xml:space="preserve">
+    <value>Alle auswählen</value>
+  </data>
+  <data name="MwTestWebhookTip" xml:space="preserve">
+    <value>Sendet ein einmaliges synthetisches Audit-Ereignis an den gespeicherten Webhook, damit Sie Endpunkt + Signatur prüfen können, bevor echte Ereignisse fließen.</value>
+  </data>
+  <data name="MwClearanceLabel" xml:space="preserve">
+    <value>Vertraulichkeitsfreigabe:</value>
+  </data>
+  <data name="MwSetSensSelected" xml:space="preserve">
+    <value>Vertraulichkeit für Auswahl festlegen</value>
+  </data>
+  <data name="MwWebDavSettingsTip" xml:space="preserve">
+    <value>Richten Sie Ihren WebDAV-Zugriff ein (app-spezifisches Passwort + Ordner-URL)</value>
+  </data>
+  <data name="MwSharedEveryone" xml:space="preserve">
+    <value>Mit allen geteilt</value>
+  </data>
+  <data name="MwSharedSpecific" xml:space="preserve">
+    <value>Mit bestimmten Personen geteilt</value>
+  </data>
+  <data name="MwShare" xml:space="preserve">
+    <value>Teilen…</value>
+  </data>
+  <data name="MwTagCatalogDesc" xml:space="preserve">
+    <value>Das Schlagwort-Vokabular des Mandanten. Umbenennen oder zusammenführen zum Aufräumen (Dokumente werden neu verschlagwortet); außer Betrieb nehmen, um ein Schlagwort nicht mehr anzubieten. Erzwingen mit „Schlagwörter auf den Katalog beschränken“ im Mandanten-Tab.</value>
+  </data>
+  <data name="MwOrphanCheckout" xml:space="preserve">
+    <value>Diese Dokumente wurden anderswo eingecheckt, aber Sie haben noch lokale Änderungen. Fügen Sie sie als neue Version hinzu oder verwerfen Sie sie.</value>
+  </data>
+  <data name="MwUnlock" xml:space="preserve">
+    <value>Entsperren</value>
+  </data>
+  <data name="MwVerifyWormTip" xml:space="preserve">
+    <value>Prüft die unveränderlichen versiegelten WORM-Segmente gegen die Datenbank — erkennt eine Datenbankmanipulation (selbst eine vollständige Neuverkettung), die die Hash-Ketten-Prüfung allein nicht erkennen kann.</value>
+  </data>
+  <data name="MwWebDavSettings" xml:space="preserve">
+    <value>WebDAV-Einstellungen</value>
+  </data>
+  <data name="MwEnforceClearanceTip" xml:space="preserve">
+    <value>Wenn aktiviert, kann ein Benutzer nur ein Dokument sehen oder öffnen, dessen Vertraulichkeitsstufe auf oder unter seiner Freigabe liegt (pro Benutzer/Gruppe im Benutzer-&amp;-Gruppen-Tab festgelegt). Dokumente über ihrer Freigabe sind aus Listen und Suche ausgeblendet. Mandanten-Administratoren umgehen dies. Wenn deaktiviert, sind Vertraulichkeitsstufen nur informativ. Neue Benutzer beginnen bei Freigabe 0 — erteilen Sie Freigaben, bevor Sie dies aktivieren.</value>
+  </data>
+  <data name="MwRequireDispositionTip" xml:space="preserve">
+    <value>Wenn aktiviert, löscht der Aufbewahrungslauf abgelaufene Dokumente NICHT automatisch. Stattdessen warten sie im Aufbewahrungs-Tab als Prüfwarteschlange, damit ein Aktenverwalter jedes aussondert oder verlängert. Wenn deaktiviert, werden abgelaufene, nicht gesperrte Datensätze automatisch in den Papierkorb ausgesondert.</value>
+  </data>
+  <data name="MwImpersonating" xml:space="preserve">
+    <value>Sie geben sich aus als</value>
+  </data>
+  <data name="MwMergeInto" xml:space="preserve">
+    <value>zusammenführen mit…</value>
+  </data>
+  <data name="MwOverdue" xml:space="preserve">
+    <value>überfällig</value>
+  </data>
+  <data name="StRejectReasonReq" xml:space="preserve">
+    <value>Ein Ablehnungsgrund ist erforderlich.</value>
+  </data>
+  <data name="StAuditRetUpdated" xml:space="preserve">
+    <value>Audit-Aufbewahrung aktualisiert.</value>
+  </data>
+  <data name="StComparing" xml:space="preserve">
+    <value>Vergleiche…</value>
+  </data>
+  <data name="StConnecting" xml:space="preserve">
+    <value>Verbinde…</value>
+  </data>
+  <data name="StErrAddMember" xml:space="preserve">
+    <value>Mitglied konnte nicht hinzugefügt werden.</value>
+  </data>
+  <data name="StErrCreateHold" xml:space="preserve">
+    <value>Gesetzliche Sperre konnte nicht erstellt werden.</value>
+  </data>
+  <data name="StErrCreate" xml:space="preserve">
+    <value>Konnte nicht erstellt werden.</value>
+  </data>
+  <data name="StErrDelete" xml:space="preserve">
+    <value>Konnte nicht gelöscht werden.</value>
+  </data>
+  <data name="StErrImpersonate" xml:space="preserve">
+    <value>Identität dieses Benutzers konnte nicht angenommen werden.</value>
+  </data>
+  <data name="StErrLoadMembers" xml:space="preserve">
+    <value>Gruppenmitglieder konnten nicht geladen werden.</value>
+  </data>
+  <data name="StErrLoadHolds" xml:space="preserve">
+    <value>Gesetzliche Sperren konnten nicht geladen werden.</value>
+  </data>
+  <data name="StErrLoadRetention" xml:space="preserve">
+    <value>Aufbewahrungsplan konnte nicht geladen werden.</value>
+  </data>
+  <data name="StErrLoadTenant" xml:space="preserve">
+    <value>Mandanteneinstellungen konnten nicht geladen werden.</value>
+  </data>
+  <data name="StErrLoadUsers" xml:space="preserve">
+    <value>Benutzer und Gruppen konnten nicht geladen werden.</value>
+  </data>
+  <data name="StErrReassign" xml:space="preserve">
+    <value>Prüfungen konnten nicht neu zugewiesen werden.</value>
+  </data>
+  <data name="StErrRecompute" xml:space="preserve">
+    <value>Speichernutzung konnte nicht neu berechnet werden.</value>
+  </data>
+  <data name="StErrReleaseHold" xml:space="preserve">
+    <value>Sperre konnte nicht aufgehoben werden.</value>
+  </data>
+  <data name="StErrRemoveFromHold" xml:space="preserve">
+    <value>Dokument konnte nicht aus der Sperre entfernt werden.</value>
+  </data>
+  <data name="StErrRemoveMember" xml:space="preserve">
+    <value>Mitglied konnte nicht entfernt werden.</value>
+  </data>
+  <data name="StErrRemovePhoto" xml:space="preserve">
+    <value>Foto konnte nicht entfernt werden.</value>
+  </data>
+  <data name="StErrResetPw" xml:space="preserve">
+    <value>Passwort konnte nicht zurückgesetzt werden.</value>
+  </data>
+  <data name="StErrResetMfa" xml:space="preserve">
+    <value>Zwei-Faktor-Authentifizierung konnte nicht zurückgesetzt werden.</value>
+  </data>
+  <data name="StErrSaveRights" xml:space="preserve">
+    <value>Rechte konnten nicht gespeichert werden.</value>
+  </data>
+  <data name="StErrTestEvent" xml:space="preserve">
+    <value>Testereignis konnte nicht gesendet werden.</value>
+  </data>
+  <data name="StErrUpdatePhoto" xml:space="preserve">
+    <value>Foto konnte nicht aktualisiert werden.</value>
+  </data>
+  <data name="StErrSubscription" xml:space="preserve">
+    <value>Ihr Abonnement konnte nicht aktualisiert werden.</value>
+  </data>
+  <data name="StFolderDeleted" xml:space="preserve">
+    <value>Ordner in den Papierkorb verschoben.</value>
+  </data>
+  <data name="StHoldReleased" xml:space="preserve">
+    <value>Gesetzliche Sperre aufgehoben.</value>
+  </data>
+  <data name="StLoading" xml:space="preserve">
+    <value>Lädt…</value>
+  </data>
+  <data name="StMakingCurrent" xml:space="preserve">
+    <value>Wird als aktuell festgelegt…</value>
+  </data>
+  <data name="StMaskSaved" xml:space="preserve">
+    <value>Maske am Eingangselement gespeichert.</value>
+  </data>
+  <data name="StNoConnection" xml:space="preserve">
+    <value>Keine Verbindung zum Server. Später erneut versuchen.</value>
+  </data>
+  <data name="StOpeningBc" xml:space="preserve">
+    <value>Beyond Compare wird geöffnet…</value>
+  </data>
+  <data name="StOpeningBrowser" xml:space="preserve">
+    <value>Browser zum Anmelden wird geöffnet…</value>
+  </data>
+  <data name="StPickReviewer" xml:space="preserve">
+    <value>Wählen Sie zuerst einen Prüfer.</value>
+  </data>
+  <data name="StPhotoRemoved" xml:space="preserve">
+    <value>Profilbild entfernt.</value>
+  </data>
+  <data name="StPhotoUpdated" xml:space="preserve">
+    <value>Profilbild aktualisiert.</value>
+  </data>
+  <data name="StReconnected" xml:space="preserve">
+    <value>Wieder verbunden.</value>
+  </data>
+  <data name="StRestoring" xml:space="preserve">
+    <value>Wird wiederhergestellt…</value>
+  </data>
+  <data name="StReviewsReassigned" xml:space="preserve">
+    <value>Prüfungen neu zugewiesen und Benutzer deaktiviert.</value>
+  </data>
+  <data name="StRightsSaved" xml:space="preserve">
+    <value>Rechte gespeichert.</value>
+  </data>
+  <data name="StSaved" xml:space="preserve">
+    <value>Gespeichert.</value>
+  </data>
+  <data name="StSearchSaved" xml:space="preserve">
+    <value>Suche gespeichert.</value>
+  </data>
+  <data name="StSearching" xml:space="preserve">
+    <value>Suche läuft…</value>
+  </data>
+  <data name="StSelectFolderDrop" xml:space="preserve">
+    <value>Wählen Sie einen Ordner, bevor Sie Dateien ablegen.</value>
+  </data>
+  <data name="StSignInFailed" xml:space="preserve">
+    <value>Anmeldung wurde abgebrochen oder ist fehlgeschlagen.</value>
+  </data>
+  <data name="StSignedOut" xml:space="preserve">
+    <value>Abgemeldet.</value>
+  </data>
+  <data name="StStillWaiting" xml:space="preserve">
+    <value>Warte weiter auf die Browser-Anmeldung — klicken Sie auf Anmelden, um es erneut zu versuchen.</value>
+  </data>
+  <data name="StStorageRecomputed" xml:space="preserve">
+    <value>Speichernutzung neu berechnet.</value>
+  </data>
+  <data name="StTenantSaved" xml:space="preserve">
+    <value>Mandanteneinstellungen gespeichert.</value>
+  </data>
+  <data name="StOneVersion" xml:space="preserve">
+    <value>Dieses Dokument hat nur eine Version — nichts zu vergleichen.</value>
+  </data>
+  <data name="StLayoutReset" xml:space="preserve">
+    <value>Arbeitsbereich-Layout zurückgesetzt.</value>
+  </data>
+  <data name="StErrSearch" xml:space="preserve">
+    <value>Suche fehlgeschlagen: {0}</value>
+  </data>
+  <data name="StErrBeyondCompare" xml:space="preserve">
+    <value>Beyond Compare fehlgeschlagen: {0}</value>
+  </data>
+  <data name="StErrCompare" xml:space="preserve">
+    <value>Vergleich fehlgeschlagen: {0}</value>
+  </data>
+  <data name="StErrSharing" xml:space="preserve">
+    <value>Freigabe konnte nicht geändert werden: {0}</value>
+  </data>
+  <data name="StErrCreateFolder" xml:space="preserve">
+    <value>Ordner konnte nicht erstellt werden: {0}</value>
+  </data>
+  <data name="StErrDeleteMsg" xml:space="preserve">
+    <value>Konnte nicht gelöscht werden: {0}</value>
+  </data>
+  <data name="StErrLoadAudit" xml:space="preserve">
+    <value>Audit-Log konnte nicht geladen werden: {0}</value>
+  </data>
+  <data name="StErrLoadInbox" xml:space="preserve">
+    <value>Eingang konnte nicht geladen werden: {0}</value>
+  </data>
+  <data name="StErrMove" xml:space="preserve">
+    <value>Konnte nicht verschoben werden: {0}</value>
+  </data>
+  <data name="StErrOpenFolder" xml:space="preserve">
+    <value>Ordner konnte nicht geöffnet werden: {0}</value>
+  </data>
+  <data name="StErrPlaceRef" xml:space="preserve">
+    <value>Verweis konnte nicht abgelegt werden: {0}</value>
+  </data>
+  <data name="StErrPostComment" xml:space="preserve">
+    <value>Kommentar konnte nicht gesendet werden: {0}</value>
+  </data>
+  <data name="StErrRename" xml:space="preserve">
+    <value>Konnte nicht umbenannt werden: {0}</value>
+  </data>
+  <data name="StErrSaveMask" xml:space="preserve">
+    <value>Maske konnte nicht gespeichert werden: {0}</value>
+  </data>
+  <data name="StErrStartEdit" xml:space="preserve">
+    <value>Bearbeitung konnte nicht gestartet werden: {0}</value>
+  </data>
+  <data name="StErrStartConversion" xml:space="preserve">
+    <value>Konvertierung konnte nicht gestartet werden: {0}</value>
+  </data>
+  <data name="StErrSubscriptionMsg" xml:space="preserve">
+    <value>Ihr Abonnement konnte nicht aktualisiert werden: {0}</value>
+  </data>
+  <data name="StErrVerifyWorm" xml:space="preserve">
+    <value>WORM-Segmente konnten nicht überprüft werden: {0}</value>
+  </data>
+  <data name="StErrVerifyAudit" xml:space="preserve">
+    <value>Audit-Log konnte nicht überprüft werden: {0}</value>
+  </data>
+  <data name="StErrLoad" xml:space="preserve">
+    <value>Laden fehlgeschlagen: {0}</value>
+  </data>
+  <data name="StErrSignIn" xml:space="preserve">
+    <value>Anmeldung fehlgeschlagen: {0}</value>
+  </data>
+  <data name="StErrBulk" xml:space="preserve">
+    <value>Sammelaktion fehlgeschlagen: {0}</value>
+  </data>
+  <data name="StErrFiling2" xml:space="preserve">
+    <value>„{0}“: Ablegen fehlgeschlagen — {1}</value>
+  </data>
+  <data name="StErrUpload2" xml:space="preserve">
+    <value>„{0}“: Hochladen fehlgeschlagen — {1}</value>
+  </data>
+  <data name="StErrCheckout2" xml:space="preserve">
+    <value>„{0}“ konnte nicht ausgecheckt werden: {1}</value>
+  </data>
+  <data name="StErrLoad2" xml:space="preserve">
+    <value>„{0}“ konnte nicht geladen werden: {1}</value>
+  </data>
+  <data name="StErrOpen2" xml:space="preserve">
+    <value>„{0}“ konnte nicht geöffnet werden: {1}</value>
+  </data>
+  <data name="StErrOverride2" xml:space="preserve">
+    <value>Check-out von „{0}“ konnte nicht aufgehoben werden: {1}</value>
+  </data>
+  <data name="StErrRead2" xml:space="preserve">
+    <value>„{0}“ konnte nicht gelesen werden: {1}</value>
+  </data>
+  <data name="StErrUpload2b" xml:space="preserve">
+    <value>{0} konnte nicht hochgeladen werden: {1}</value>
+  </data>
+  <data name="StLines" xml:space="preserve">
+    <value>{0} Zeile(n).</value>
+  </data>
+  <data name="StRepositories" xml:space="preserve">
+    <value>{0} Archive.</value>
+  </data>
+  <data name="StItems" xml:space="preserve">
+    <value>{0} Element(e).</value>
+  </data>
+  <data name="StErrReadArchive" xml:space="preserve">
+    <value>„{0}“ konnte nicht aus dem Archiv gelesen werden.</value>
+  </data>
+  <data name="StOpenedNative" xml:space="preserve">
+    <value>„{0}“ in der zugehörigen Anwendung geöffnet.</value>
+  </data>
+  <data name="StNoDownloadable" xml:space="preserve">
+    <value>„{0}“ hat keine herunterladbare Version.</value>
+  </data>
+  <data name="StArchiveEntries" xml:space="preserve">
+    <value>{0} Archiveinträge.</value>
+  </data>
+  <data name="StCreatedFolder" xml:space="preserve">
+    <value>Ordner „{0}“ erstellt.</value>
+  </data>
+  <data name="StRenamedTo" xml:space="preserve">
+    <value>Umbenannt in „{0}“.</value>
+  </data>
+  <data name="StRemovedRef" xml:space="preserve">
+    <value>Verweis auf „{0}“ entfernt.</value>
+  </data>
+  <data name="StDeleted" xml:space="preserve">
+    <value>„{0}“ gelöscht.</value>
+  </data>
+  <data name="StMoved" xml:space="preserve">
+    <value>„{0}“ verschoben.</value>
+  </data>
+  <data name="StBulkResult" xml:space="preserve">
+    <value>{0} Element(e) {1}</value>
+  </data>
+  <data name="StBulkSkipped" xml:space="preserve">
+    <value>, {0} übersprungen.</value>
+  </data>
+  <data name="StPlacedRef" xml:space="preserve">
+    <value>Verweis auf „{0}“ abgelegt.</value>
+  </data>
+  <data name="StCheckingOut" xml:space="preserve">
+    <value>„{0}“ wird ausgecheckt…</value>
+  </data>
+  <data name="StCheckedOut" xml:space="preserve">
+    <value>„{0}“ in den lokalen Check-out-Ordner ausgecheckt.</value>
+  </data>
+  <data name="StReleasedCheckout" xml:space="preserve">
+    <value>Check-out von „{0}“ aufgehoben.</value>
+  </data>
+  <data name="StUploadingN" xml:space="preserve">
+    <value>{0} Datei(en) werden hochgeladen…</value>
+  </data>
+  <data name="StUploadedAndItems" xml:space="preserve">
+    <value>{0} Datei(en) hochgeladen. {1} Element(e).</value>
+  </data>
+  <data name="StOpened" xml:space="preserve">
+    <value>„{0}“ geöffnet.</value>
+  </data>
+  <data name="StFiled" xml:space="preserve">
+    <value>„{0}“ abgelegt.</value>
+  </data>
+  <data name="StFiledVersion" xml:space="preserve">
+    <value>„{0}“ als neue Version abgelegt.</value>
+  </data>
+  <data name="StFiledOf" xml:space="preserve">
+    <value>{0} von {1} Element(en) abgelegt.</value>
+  </data>
+  <data name="StUploadingFile" xml:space="preserve">
+    <value>„{0}“ wird hochgeladen…</value>
+  </data>
+  <data name="StUploadedN" xml:space="preserve">
+    <value>{0} Datei(en) hochgeladen</value>
+  </data>
+  <data name="StFailedN" xml:space="preserve">
+    <value>, {0} fehlgeschlagen</value>
+  </data>
+  <data name="StFilingFile" xml:space="preserve">
+    <value>„{0}“ wird abgelegt…</value>
+  </data>
+  <data name="StAdded" xml:space="preserve">
+    <value>{0} hinzugefügt.</value>
+  </data>
+  <data name="StRemovedName" xml:space="preserve">
+    <value>{0} entfernt.</value>
+  </data>
+  <data name="StMfaResetFor" xml:space="preserve">
+    <value>Zwei-Faktor-Authentifizierung für {0} zurückgesetzt.</value>
+  </data>
+  <data name="StHoldCreated" xml:space="preserve">
+    <value>Gesetzliche Sperre „{0}“ erstellt.</value>
+  </data>
+  <data name="StDisposed" xml:space="preserve">
+    <value>„{0}“ ausgesondert.</value>
+  </data>
+  <data name="StExtendedRetention" xml:space="preserve">
+    <value>Aufbewahrung für „{0}“ verlängert.</value>
+  </data>
+  <data name="StCreatedRepo" xml:space="preserve">
+    <value>Archiv „{0}“ erstellt.</value>
+  </data>
+  <data name="StPwResetFor" xml:space="preserve">
+    <value>Passwort für {0} zurückgesetzt.</value>
+  </data>
+  <data name="StErrSaveJoin" xml:space="preserve">
+    <value>Konnte nicht gespeichert werden: {0}</value>
+  </data>
+  <data name="StPurgedAudit" xml:space="preserve">
+    <value>{0} Audit-Ereignis(se) bereinigt.</value>
+  </data>
+  <data name="StDeletedItems" xml:space="preserve">
+    <value>{0} gelöschte(s) Element(e).</value>
+  </data>
+  <data name="StVersionCurrent" xml:space="preserve">
+    <value>v{0} ist jetzt die aktuelle Version.</value>
+  </data>
+  <data name="StWorkflowStatus" xml:space="preserve">
+    <value>Workflow: {0}.</value>
+  </data>
+  <data name="StCompareUnavailable" xml:space="preserve">
+    <value>Vergleich ist für dieses Format nicht verfügbar (nur Dokumente mit extrahierbarem Text können verglichen werden).</value>
+  </data>
+  <data name="StMfaDisabled" xml:space="preserve">
+    <value>Zwei-Faktor-Authentifizierung deaktiviert.</value>
+  </data>
+  <data name="StErrDisableMfa" xml:space="preserve">
+    <value>Zwei-Faktor-Authentifizierung konnte nicht deaktiviert werden.</value>
+  </data>
+  <data name="StPwChanged" xml:space="preserve">
+    <value>Passwort geändert.</value>
+  </data>
+  <data name="StErrChangePw" xml:space="preserve">
+    <value>Passwort konnte nicht geändert werden.</value>
+  </data>
+  <data name="StReminderSet" xml:space="preserve">
+    <value>Erinnerung gesetzt.</value>
+  </data>
+</root>

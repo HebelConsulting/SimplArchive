@@ -1,0 +1,61 @@
+@* Choose the visibility of a saved search (ADR "Scoped saved-search sharing"): Private / Specific people &
+   groups / Everyone in the tenant. Returns the chosen scope + the selected principals ("user:{id}"/"group:{id}"),
+   or cancels. The parent loads the picker targets + current grants and persists the result via PUT. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 380px;">
+            <MudText Typo="Typo.body2" Class="mb-2">@((MarkupString)string.Format(Strings.Get("ShareWith"), Name))</MudText>
+            <MudRadioGroup T="int" @bind-Value="_scope">
+                <MudRadio T="int" Value="0" Dense="true">@Strings.Get("SharePrivate")</MudRadio>
+                <MudRadio T="int" Value="2" Dense="true">@Strings.Get("ShareSpecific")</MudRadio>
+                <MudRadio T="int" Value="1" Dense="true">@Strings.Get("ShareEveryone")</MudRadio>
+            </MudRadioGroup>
+
+            @if (_scope == 2)
+            {
+                <MudSelect T="string" Label="@Strings.Get("SharePeopleGroups")" MultiSelection="true" @bind-SelectedValues="_selected"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2"
+                           MultiSelectionTextFunc="@(v => $"{v.Count} selected")">
+                    @foreach (var t in Targets)
+                    {
+                        <MudSelectItem T="string" Value="@Key(t)">@Label(t)</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">@Strings.Get("Save")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public string Name { get; set; } = "";
+    [Parameter] public int InitialScope { get; set; }
+    [Parameter] public List<TargetOption> Targets { get; set; } = [];
+    [Parameter] public IEnumerable<string> InitialSelected { get; set; } = [];
+
+    private int _scope;
+    private IReadOnlyCollection<string> _selected = new HashSet<string>();
+
+    public record TargetOption(string Type, Guid Id, string Name);
+
+    public record Result(int Scope, List<string> Selected);
+
+    protected override void OnInitialized()
+    {
+        _scope = InitialScope;
+        _selected = new HashSet<string>(InitialSelected);
+    }
+
+    private static string Key(TargetOption t) => $"{t.Type}:{t.Id}";
+    private static string Label(TargetOption t) => t.Type == "group" ? $"{t.Name} (group)" : t.Name;
+
+    private void Save() => Dialog.Close(DialogResult.Ok(new Result(_scope, _selected.ToList())));
+
+    private void Cancel() => Dialog.Cancel();
+}

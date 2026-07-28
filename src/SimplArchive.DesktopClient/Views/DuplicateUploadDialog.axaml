@@ -1,0 +1,29 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:svc="using:SimplArchive.DesktopClient.Services"
+        x:Class="SimplArchive.DesktopClient.Views.DuplicateUploadDialog"
+        Title="{loc:Tr DupTitle}" Width="480" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="12">
+        <TextBlock Text="{loc:Tr DupHeadline}" FontWeight="SemiBold" FontSize="15" />
+        <TextBlock x:Name="MessageBlock" TextWrapping="Wrap" />
+        <ListBox x:Name="DuplicatesList" MaxHeight="200">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="svc:SimplArchiveApiClient+DuplicateInfo">
+                    <StackPanel Margin="0,2">
+                        <TextBlock Text="{Binding Name}" />
+                        <TextBlock Text="{Binding Path}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock Text="{loc:Tr DupRefExplain}"
+                   Foreground="{DynamicResource WbMuted}" FontSize="12" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button Content="{loc:Tr DupFileAnyway}" Click="OnFileAnyway" />
+            <Button Content="{loc:Tr DupReference}" Click="OnReference" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

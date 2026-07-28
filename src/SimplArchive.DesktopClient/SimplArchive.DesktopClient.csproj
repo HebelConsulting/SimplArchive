@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The UI end-to-end tests exercise the real Open flow (WithExtension + the api client) against a
+         self-hosted API — see tests/SimplArchive.UiEndToEndTests. -->
+    <InternalsVisibleTo Include="SimplArchive.DesktopUiEndToEndTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- App icon (a filing cabinet on a brand tile) — embedded for Window.Icon and the macOS Dock. The
+         1024 source and the .icns (for a future .app bundle) live alongside it. See ADR "Desktop app icon". -->
+    <AvaloniaResource Include="Assets/cabinet.png" />
+    <!-- Sample scanned invoice used only by the hit-overlay screenshot mode (ADR "Search hit overlay"). -->
+    <None Include="Assets/hitoverlay-sample.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.18" />
+    <!-- Headless render-to-PNG mode (Program screenshot flag), so the UI can be verified without a display. -->
+    <PackageReference Include="Avalonia.Headless" Version="11.3.18" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- Material Design icons for the ribbon/buttons (matches the web app's Material icons). Both packages
+         MIT; the bundled Material Design Icons font is Apache-2.0. See ADR "Desktop client icon buttons". -->
+    <PackageReference Include="Projektanker.Icons.Avalonia" Version="9.6.2" />
+    <PackageReference Include="Projektanker.Icons.Avalonia.MaterialDesign" Version="9.6.2" />
+    <!-- PDF -> raw-pixel rendering for the preview pane (office/email/pdf render to a first-page image).
+         Docnet.Core (MIT) bundles PDFium (BSD-3) natives for win/macOS/Linux incl. arm64, and has NO
+         SkiaSharp dependency (avoids a conflict with Avalonia's SkiaSharp 2.88). See ADR "Desktop workbench UI". -->
+    <PackageReference Include="Docnet.Core" Version="2.6.0" />
+    <!-- Real-time notifications hub client (ADR "Real-time notifications (SignalR)"). -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SimplArchive.Localization\SimplArchive.Localization.csproj" />
+  </ItemGroup>
+
+</Project>

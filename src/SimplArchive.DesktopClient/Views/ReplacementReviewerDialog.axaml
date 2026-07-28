@@ -1,0 +1,20 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.ReplacementReviewerDialog"
+        Title="{loc:Tr RrTitle}" Width="420" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="12">
+        <TextBlock x:Name="Prompt" TextWrapping="Wrap"
+                   Text="{loc:Tr RrHint}" />
+        <ComboBox x:Name="ReviewerBox" HorizontalAlignment="Stretch" PlaceholderText="{loc:Tr RrPlaceholder}">
+            <ComboBox.ItemTemplate>
+                <DataTemplate x:CompileBindings="False"><TextBlock Text="{Binding Name}" /></DataTemplate>
+            </ComboBox.ItemTemplate>
+        </ComboBox>
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button Content="{loc:Tr RrConfirm}" Click="OnConfirm" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

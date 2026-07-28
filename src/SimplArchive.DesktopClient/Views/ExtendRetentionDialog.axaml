@@ -1,0 +1,15 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.ExtendRetentionDialog"
+        Title="{loc:Tr ExtRetTitle}" Width="380" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="12">
+        <TextBlock x:Name="Prompt" TextWrapping="Wrap" Text="{loc:Tr ExtRetPrompt}" />
+        <DatePicker x:Name="UntilPicker" HorizontalAlignment="Stretch" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button Content="{loc:Tr ExtRetBtn}" Click="OnConfirm" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

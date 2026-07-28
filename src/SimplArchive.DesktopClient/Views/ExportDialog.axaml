@@ -1,0 +1,43 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.ExportDialog"
+        Title="{loc:Tr ExportTitle}" Width="440" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="10">
+        <TextBlock x:Name="IntroText" TextWrapping="Wrap" Foreground="#888" />
+        <StackPanel Spacing="2">
+            <RadioButton x:Name="AllVersionsRadio" GroupName="Versions" Content="{loc:Tr ExpAllVersions}" IsChecked="True" />
+            <RadioButton x:Name="ActiveVersionRadio" GroupName="Versions" Content="{loc:Tr ExpActiveOnly}" />
+        </StackPanel>
+        <Grid ColumnDefinitions="*,8,*" RowDefinitions="Auto,Auto">
+            <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
+                <TextBlock Text="{loc:Tr ExpDocDateFrom}" />
+                <DatePicker x:Name="DocDateFrom" />
+            </StackPanel>
+            <StackPanel Grid.Row="0" Grid.Column="2" Spacing="4">
+                <TextBlock Text="{loc:Tr ExpDocDateTo}" />
+                <DatePicker x:Name="DocDateTo" />
+            </StackPanel>
+        </Grid>
+        <Grid ColumnDefinitions="*,8,*">
+            <StackPanel Grid.Column="0" Spacing="4">
+                <TextBlock Text="{loc:Tr ExpFiledFrom}" />
+                <DatePicker x:Name="FiledFrom" />
+            </StackPanel>
+            <StackPanel Grid.Column="2" Spacing="4">
+                <TextBlock Text="{loc:Tr ExpFiledTo}" />
+                <DatePicker x:Name="FiledTo" />
+            </StackPanel>
+        </Grid>
+        <StackPanel Spacing="4">
+            <TextBlock Text="{loc:Tr ExpCreatedBy}" />
+            <TextBox x:Name="CreatedByBox" />
+        </StackPanel>
+        <CheckBox x:Name="IncludePermissionsBox" Content="{loc:Tr ExpInclPerms}" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button Content="{loc:Tr ExportTitle}" Click="OnOk" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

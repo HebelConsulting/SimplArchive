@@ -1,0 +1,65 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        x:Class="SimplArchive.DesktopClient.Views.VersionsDialog"
+        x:DataType="vm:VersionsViewModel"
+        Title="{loc:Tr VersionsTitle}" Width="680" Height="440"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="16" LastChildFill="True">
+        <TextBlock DockPanel.Dock="Top" Text="{Binding DocumentName}" FontWeight="SemiBold" FontSize="15" Margin="0,0,0,10" />
+
+        <!-- Footer: Compare launcher + Make current (on the selected row, confirmed) + status + Close. -->
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+            <Button Click="OnCompare" IsEnabled="{Binding HasMultiple}">
+                <StackPanel Orientation="Horizontal" Spacing="5"><i:Icon Value="mdi-compare" /><TextBlock Text="{loc:Tr CompareEllipsis}" /></StackPanel>
+            </Button>
+            <Button Click="OnMakeCurrent" IsEnabled="{Binding CanMakeCurrentSelected}" Margin="8,0,0,0" Classes="makecurrent">
+                <StackPanel Orientation="Horizontal" Spacing="5"><i:Icon Value="mdi-history" /><TextBlock Text="{loc:Tr MakeCurrent}" /></StackPanel>
+            </Button>
+            <TextBlock Text="{Binding Status}" Foreground="{DynamicResource WbMuted}" FontSize="12" VerticalAlignment="Center" Margin="12,0,0,0" />
+            <Button Content="{loc:Tr Close}" Click="OnClose" HorizontalAlignment="Right" Margin="0" DockPanel.Dock="Right" />
+        </StackPanel>
+
+        <!-- Header row -->
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="90,120,150,*,110" Margin="4,0,4,4">
+            <TextBlock Grid.Column="0" Text="{loc:Tr VerColVersion}" FontWeight="SemiBold" FontSize="11" />
+            <TextBlock Grid.Column="1" Text="{loc:Tr VerColDocDate}" FontWeight="SemiBold" FontSize="11" />
+            <TextBlock Grid.Column="2" Text="{loc:Tr VerColFiled}" FontWeight="SemiBold" FontSize="11" />
+            <TextBlock Grid.Column="3" Text="{loc:Tr VerColBy}" FontWeight="SemiBold" FontSize="11" />
+            <TextBlock Grid.Column="4" Text="{loc:Tr RetColActions}" FontWeight="SemiBold" FontSize="11" HorizontalAlignment="Right" />
+        </Grid>
+
+        <!-- Single-select list: pick a version, then act on it via the footer (ADR "Deliberate make-current in
+             the Versions dialog"). -->
+        <ListBox ItemsSource="{Binding Versions}" SelectedItem="{Binding SelectedVersion}" x:Name="VersionsList"
+                 SelectionMode="Single" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="4">
+            <ListBox.Styles>
+                <Style Selector="ListBoxItem">
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="Margin" Value="0" />
+                </Style>
+            </ListBox.Styles>
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:VersionRowViewModel">
+                    <Grid ColumnDefinitions="90,120,150,*,110" Margin="4,3">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                            <Border IsVisible="{Binding IsCurrent}" Background="#5b4ee5" CornerRadius="3" Padding="4,0" VerticalAlignment="Center">
+                                <TextBlock Text="{loc:Tr VerCurrent}" Foreground="White" FontSize="9" FontWeight="SemiBold" />
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{Binding DocumentDate}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                        <TextBlock Grid.Column="2" Text="{Binding Filed}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                        <TextBlock Grid.Column="3" Text="{Binding By}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                        <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                            <Button Click="OnOpen" ToolTip.Tip="Open" Padding="6,2"><i:Icon Value="mdi-open-in-app" /></Button>
+                            <Button Click="OnSaveAs" ToolTip.Tip="Save as…" Padding="6,2"><i:Icon Value="mdi-content-save-outline" /></Button>
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </DockPanel>
+</Window>

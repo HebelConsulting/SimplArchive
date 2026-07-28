@@ -1,0 +1,33 @@
+# Reverse proxy for LAN testing (ADR "Reverse proxy for LAN testing") — terminates TLS on :9443 with a
+# self-signed certificate (Caddy's internal CA) and forwards to the Api, so other devices on the same network
+# can reach the app over HTTPS at https://<PROXY_HOST>:9443. Caddy's reverse_proxy adds X-Forwarded-Proto /
+# -Host / -For and transparently proxies WebSockets (the SignalR notifications hub). Dev/test only.
+#
+# PROXY_HOST is your machine's LAN IP or hostname (e.g. 192.168.1.50 or my-mac.local); the self-signed cert is
+# issued for it so the name matches (devices still get a one-time untrusted-CA warning to accept). Defaults to
+# localhost.
+#
+# :9444 proxies the S3 object store (SeaweedFS) over HTTPS too (ADR "Proxy S3 object storage for LAN testing"),
+# so a LAN device — served the SPA over https://<host>:9443 — can reach presigned upload/download/preview URLs
+# without mixed-content blocking. Set the api's ObjectStorage:PublicServiceUrl to https://<PROXY_HOST>:9444 so
+# it signs presigned URLs against this host; Caddy v2 preserves the incoming Host header, so SeaweedFS's SigV4
+# validation matches (the AWS signature covers the host, not the scheme).
+
+{
+	# Never attempt public ACME / HTTP->HTTPS redirects — this is an internal self-signed setup.
+	auto_https disable_redirects
+	# Clients connecting to an IP address don't send TLS SNI (SNI can't be an IP), so Caddy would have no cert
+	# to present and the handshake fails with "internal error". default_sni tells Caddy which site's cert to
+	# serve when SNI is absent — set it to PROXY_HOST so an IP (or a name accessed without SNI) still works.
+	default_sni {$PROXY_HOST:localhost}
+}
+
+{$PROXY_HOST:localhost}:9443 {
+	tls internal
+	reverse_proxy api:8080
+}
+
+{$PROXY_HOST:localhost}:9444 {
+	tls internal
+	reverse_proxy seaweedfs:8333
+}

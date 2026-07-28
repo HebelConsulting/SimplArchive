@@ -1,0 +1,28 @@
+@* Pick a new "retain until" date when extending a document's retention (ADR "Retention review-before-
+   disposition"). Returns the date as "yyyy-MM-dd", or cancels. Only a future date is valid. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 320px;">
+            <MudText Typo="Typo.body2" Class="mb-2">@((MarkupString)string.Format(Strings.Get("RetainUntilPrompt"), DocumentName))</MudText>
+            <MudDatePicker @bind-Date="_until" Label="@Strings.Get("RetainUntilLabel")" MinDate="DateTime.Today.AddDays(1)"
+                           DateFormat="yyyy-MM-dd" Variant="Variant.Outlined" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_until is null)" OnClick="Save">@Strings.Get("Extend")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public string DocumentName { get; set; } = "";
+
+    private DateTime? _until = DateTime.Today.AddYears(1);
+
+    private void Save() => Dialog.Close(DialogResult.Ok(_until!.Value.ToString("yyyy-MM-dd")));
+
+    private void Cancel() => Dialog.Cancel();
+}

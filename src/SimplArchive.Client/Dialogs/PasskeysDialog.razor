@@ -1,0 +1,113 @@
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@using System.Text.Json
+
+@* WebAuthn passkey management (ADR "WebAuthn passkeys as a second factor"): list, register (browser
+   attestation ceremony via webauthn.js), and remove passkeys used as a second factor at login. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 380px; max-width: 460px;">
+            <MudText Typo="Typo.body2" Class="mb-3">
+                @Strings.Get("PasskeysInfo")
+            </MudText>
+
+            @if (_passkeys is null)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            }
+            else if (_passkeys.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">@Strings.Get("NoPasskeys")</MudText>
+            }
+            else
+            {
+                <MudList T="string" Dense="true">
+                    @foreach (var p in _passkeys)
+                    {
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.Key">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <div style="flex:1 1 auto;">
+                                    <div>@p.Name</div>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Added @p.CreatedAt.LocalDateTime.ToString("yyyy-MM-dd")@(p.LastUsedAt is { } u ? $" · last used {u.LocalDateTime:yyyy-MM-dd}" : "")</MudText>
+                                </div>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="() => RemoveAsync(p)" />
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+
+            <MudTextField @bind-Value="_newName" Label="@Strings.Get("PasskeyNewName")" Placeholder="@Strings.Get("PasskeyNamePlaceholder")" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-3" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">@Strings.Get("Close")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" Disabled="_busy" OnClick="AddAsync">@Strings.Get("PasskeyAdd")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    private List<PasskeyDto>? _passkeys;
+    private string _newName = "";
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync() =>
+        _passkeys = (await Http.GetFromJsonAsync<PasskeyListResponse>("api/users/me/passkeys"))?.Passkeys ?? [];
+
+    private async Task AddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newName)) { Snackbar.Add(Strings.Get("PasskeyNameFirst"), Severity.Info); return; }
+        if (!await JS.InvokeAsync<bool>("eval", "!!(window.simplArchiveWebAuthn && window.PublicKeyCredential)"))
+        {
+            Snackbar.Add(Strings.Get("PasskeyUnsupported"), Severity.Warning);
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var options = await Http.PostAsync("api/users/me/passkeys/register/options", null);
+            options.EnsureSuccessStatusCode();
+            var optionsBody = await options.Content.ReadFromJsonAsync<RegisterOptionsResponse>();
+
+            var attestationJson = await JS.InvokeAsync<string>("simplArchiveWebAuthn.register", optionsBody!.Options);
+            var attestation = JsonSerializer.Deserialize<JsonElement>(attestationJson);
+
+            var resp = await Http.PostAsJsonAsync("api/users/me/passkeys/register", new { attestationResponse = attestation, token = optionsBody.Token, name = _newName.Trim() });
+            if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("PasskeyRegisterError"), Severity.Error); return; }
+
+            Snackbar.Add($"Passkey '{_newName.Trim()}' added.", Severity.Success);
+            _newName = "";
+            await LoadAsync();
+        }
+        catch (JSException)
+        {
+            Snackbar.Add(Strings.Get("PasskeyCancelled"), Severity.Info);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RemoveAsync(PasskeyDto p)
+    {
+        var resp = await Http.DeleteAsync($"api/users/me/passkeys/{p.Id}");
+        if (resp.IsSuccessStatusCode)
+        {
+            Snackbar.Add($"Removed '{p.Name}'.", Severity.Success);
+            await LoadAsync();
+        }
+    }
+
+    private void Close() => Dialog.Close();
+
+    private record PasskeyListResponse { public List<PasskeyDto> Passkeys { get; set; } = []; }
+    private record PasskeyDto { public Guid Id { get; set; } public string Name { get; set; } = ""; public DateTimeOffset CreatedAt { get; set; } public DateTimeOffset? LastUsedAt { get; set; } }
+    private record RegisterOptionsResponse { public string Options { get; set; } = ""; public string Token { get; set; } = ""; }
+}

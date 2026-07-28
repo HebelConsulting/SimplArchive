@@ -1,0 +1,31 @@
+@* Bulk set-sensitivity dialog (ADR "Bulk actions on selected documents") — pick one classification label to
+   apply to every selected document; returns the int label. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 320px;">
+            <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">@Strings.Get("BulkSensHint")</MudText>
+            <MudSelect T="int" @bind-Value="_label" Label="@Strings.Get("BulkSensLabel")" Dense="true" Variant="Variant.Outlined">
+                @for (var i = 0; i < _names.Length; i++)
+                {
+                    var v = i;
+                    <MudSelectItem T="int" Value="@v">@_names[v]</MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save">@Strings.Get("Apply")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    private readonly string[] _names = ["None", "Public", "Internal", "Confidential", "Restricted"];
+    private int _label;
+
+    private void Save() => Dialog.Close(DialogResult.Ok(_label));
+    private void Cancel() => Dialog.Cancel();
+}

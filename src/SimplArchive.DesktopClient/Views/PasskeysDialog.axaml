@@ -1,0 +1,50 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        x:Class="SimplArchive.DesktopClient.Views.PasskeysDialog"
+        Title="{loc:Tr PkTitle}" Width="480" Height="440"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="16" LastChildFill="True">
+
+        <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,10">
+            <TextBlock Text="{loc:Tr PkTitle}" FontWeight="SemiBold" FontSize="16" />
+            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource WbMuted}" FontSize="12"
+                       Text="{loc:Tr PkBody}" />
+            <TextBlock x:Name="Error" Foreground="#e53935" FontSize="12" IsVisible="False" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Border DockPanel.Dock="Bottom" Margin="0,12,0,0">
+            <Grid ColumnDefinitions="*,Auto">
+                <Button Grid.Column="0" x:Name="AddButton" Click="OnAdd" HorizontalAlignment="Left">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <i:Icon Value="mdi-plus" />
+                        <TextBlock Text="{loc:Tr PkAdd}" />
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="1" Content="{loc:Tr Close}" Click="OnClose" IsCancel="True" HorizontalAlignment="Right" />
+            </Grid>
+        </Border>
+
+        <Grid>
+            <TextBlock x:Name="EmptyLabel" Text="No passkeys yet." Foreground="{DynamicResource WbFaint}"
+                       VerticalAlignment="Top" IsVisible="False" />
+            <ListBox x:Name="KeyList">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:CompileBindings="False">
+                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3">
+                            <i:Icon Grid.Column="0" Value="mdi-key-variant" VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Name}" />
+                                <TextBlock Text="{Binding Meta}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                            </StackPanel>
+                            <Button Grid.Column="2" Click="OnRemove" ToolTip.Tip="Remove this passkey">
+                                <i:Icon Value="mdi-delete-outline" />
+                            </Button>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Grid>
+    </DockPanel>
+</Window>

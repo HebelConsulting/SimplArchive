@@ -1,0 +1,30 @@
+SimplArchive API "{{ .Release.Name }}" deployed to namespace "{{ .Release.Namespace }}".
+
+Image: {{ include "simplarchive.image" . }}
+Replicas: {{ if .Values.autoscaling.enabled }}autoscaled {{ .Values.autoscaling.minReplicas }}–{{ .Values.autoscaling.maxReplicas }}{{ else }}{{ .Values.replicaCount }}{{ end }}
+
+{{- if not .Values.existingSecret }}
+
+WARNING: `existingSecret` is not set. The API needs its sensitive settings (at minimum the OpenBao AppRole
+SecretId `OpenBao__SecretId`) from a Kubernetes Secret. Create one and set `existingSecret` to its name.
+{{- end }}
+{{- if eq .Values.config.aspnetCoreEnvironment "Development" }}
+
+WARNING: ASPNETCORE_ENVIRONMENT is "Development" — OpenIddict's transport-security requirement is disabled and
+dev fallbacks apply. Set config.aspnetCoreEnvironment=Production for a real deployment.
+{{- end }}
+
+{{- if .Values.ingress.enabled }}
+
+Reachable via Ingress:
+{{- range .Values.ingress.hosts }}
+  - https://{{ .host }}
+{{- end }}
+{{- else }}
+
+Ingress is disabled. Reach the service in-cluster at:
+  {{ include "simplarchive.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+{{- end }}
+
+Health: GET /health/live (liveness), GET /health/ready (readiness).
+Docs: docs/deploy/README.md

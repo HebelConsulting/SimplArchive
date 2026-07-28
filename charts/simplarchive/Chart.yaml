@@ -1,0 +1,15 @@
+apiVersion: v2
+name: simplarchive
+description: |
+  SimplArchive — the single-deployable API that also serves the Blazor WASM client. This chart deploys the API;
+  its dependencies (PostgreSQL, S3-compatible object storage, OpenBao, OpenSearch+Tika, Gotenberg, OCR, SMTP) are
+  expected to be external/managed in production and are configured via values. See docs/deploy/README.md.
+type: application
+version: 0.1.0
+# The application version this chart deploys by default (used as the image tag when image.tag is empty).
+appVersion: "latest"
+home: https://github.com/HebelConsulting/SimplArchive
+sources:
+  - https://github.com/HebelConsulting/SimplArchive
+maintainers:
+  - name: SimplArchive

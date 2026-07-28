@@ -1,0 +1,121 @@
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+
+@* Manage the app-specific WebDAV password (ADR "WebDAV gateway") — generate/regenerate (shown once) or
+   revoke, and show the mount URL for the OS WebDAV client. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 440px;">
+            <MudText Typo="Typo.body2" Class="mb-3">
+                @Strings.Get("WebDavInfo")
+            </MudText>
+
+            <MudTextField T="string" Label="@Strings.Get("WebDavMountUrl")" Value="@_url" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy" OnAdornmentClick="() => CopyAsync(_url)" />
+            <MudTextField T="string" Label="@Strings.Get("WebDavPersonalFolder")" Value="@PersonalUrl" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2"
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy" OnAdornmentClick="() => CopyAsync(PersonalUrl)" />
+            <MudTextField T="string" Label="@Strings.Get("WebDavUsername")" Value="@_username" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2" />
+
+            @if (_generatedPassword is not null)
+            {
+                <MudAlert Severity="Severity.Success" Dense="true" Class="mt-3">@Strings.Get("WebDavCopyNow")</MudAlert>
+                <MudTextField T="string" Label="@Strings.Get("WebDavPassword")" Value="@_generatedPassword" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2"
+                              Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy" OnAdornmentClick="() => CopyAsync(_generatedPassword!)" />
+            }
+            else if (_enabled)
+            {
+                <MudText Typo="Typo.body2" Class="mt-3 mud-text-secondary">@Strings.Get("WebDavEnabled")</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="mt-3 mud-text-secondary">@Strings.Get("WebDavNotSetUp")</MudText>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        @if (_enabled)
+        {
+            <MudButton Color="Color.Error" OnClick="RevokeAsync" Disabled="_busy">@Strings.Get("WebDavRevoke")</MudButton>
+        }
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="GenerateAsync" Disabled="_busy">@(_enabled ? Strings.Get("WebDavRegenerate") : Strings.Get("WebDavGenerate"))</MudButton>
+        <MudButton OnClick="Close">@Strings.Get("Close")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    private bool _enabled;
+    private string _username = "";
+    private string _url = "";
+    private string? _generatedPassword;
+    private bool _busy;
+
+    // The Personal folder groups the Inbox, Check-out, and personal archive under one mountable path.
+    private string PersonalUrl => string.IsNullOrEmpty(_url) ? "" : $"{_url.TrimEnd('/')}/Personal";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var status = await Http.GetFromJsonAsync<StatusDto>("api/me/webdav-password");
+            _enabled = status?.Enabled ?? false;
+            _username = status?.Username ?? "";
+            _url = status?.Url ?? "";
+        }
+        catch (Exception) { /* leave defaults */ }
+    }
+
+    private async Task GenerateAsync()
+    {
+        _busy = true;
+        try
+        {
+            var response = await Http.PostAsync("api/me/webdav-password", null);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<StatusDto>();
+            _generatedPassword = result?.Password;
+            _enabled = true;
+            _username = result?.Username ?? _username;
+            _url = result?.Url ?? _url;
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("WebDavGenError"), Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RevokeAsync()
+    {
+        _busy = true;
+        try
+        {
+            (await Http.DeleteAsync("api/me/webdav-password")).EnsureSuccessStatusCode();
+            _enabled = false;
+            _generatedPassword = null;
+            Snackbar.Add(Strings.Get("WebDavRevoked"), Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("WebDavRevokeError"), Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task CopyAsync(string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value);
+            Snackbar.Add(Strings.Get("CopiedClipboard"), Severity.Info);
+        }
+        catch (Exception) { /* clipboard may be unavailable */ }
+    }
+
+    private void Close() => Dialog.Close();
+
+    private record StatusDto { public bool Enabled { get; set; } public string Username { get; set; } = ""; public string Url { get; set; } = ""; public string? Password { get; set; } }
+}

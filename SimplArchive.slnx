@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SimplArchive.Api/SimplArchive.Api.csproj" />
+    <Project Path="src/SimplArchive.Application/SimplArchive.Application.csproj" />
+    <Project Path="src/SimplArchive.Auth/SimplArchive.Auth.csproj" />
+    <Project Path="src/SimplArchive.Client/SimplArchive.Client.csproj" />
+    <Project Path="src/SimplArchive.DesktopClient/SimplArchive.DesktopClient.csproj" />
+    <Project Path="src/SimplArchive.Domain/SimplArchive.Domain.csproj" />
+    <Project Path="src/SimplArchive.Infrastructure/SimplArchive.Infrastructure.csproj" />
+    <Project Path="src/SimplArchive.Localization/SimplArchive.Localization.csproj" />
+    <Project Path="src/SimplArchive.Worker/SimplArchive.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SimplArchive.EndToEndTests/SimplArchive.EndToEndTests.csproj" />
+    <Project Path="tests/SimplArchive.UiEndToEndTests/SimplArchive.UiEndToEndTests.csproj" />
+    <Project Path="tests/SimplArchive.DesktopUiEndToEndTests/SimplArchive.DesktopUiEndToEndTests.csproj" />
+    <Project Path="tests/SimplArchive.IntegrationTests/SimplArchive.IntegrationTests.csproj" />
+    <Project Path="tests/SimplArchive.UnitTests/SimplArchive.UnitTests.csproj" />
+  </Folder>
+</Solution>

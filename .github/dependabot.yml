@@ -1,0 +1,28 @@
+# Automated dependency-update PRs (ADR "Security and dependency scanning"). Weekly; NuGet updates are grouped
+# into a single PR to keep the noise down, while the CI vulnerable-dependency gate (ci.yml) is what actually
+# blocks a CVE from merging.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      nuget-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly

@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.AnnotationDialog"
+        Title="{loc:Tr AnnTitle}" Width="380" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <!-- View / create / edit a sticky note (ADR "Document annotations"). ShowDialog<AnnotationDialog.Result?>
+         returns the action (save/delete) + edited text/colour, or null if cancelled. -->
+    <StackPanel Margin="18" Spacing="10">
+        <TextBlock x:Name="AuthorText" Foreground="#888" IsVisible="False" />
+        <StackPanel Spacing="4">
+            <TextBlock x:Name="NoteLabel" Text="{loc:Tr AnnTitle}" />
+            <TextBox x:Name="NoteBox" AcceptsReturn="True" Height="80" TextWrapping="Wrap" />
+        </StackPanel>
+        <StackPanel Spacing="4">
+            <TextBlock Text="{loc:Tr AnnotationColour}" />
+            <StackPanel x:Name="Swatches" Orientation="Horizontal" Spacing="8" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button x:Name="DeleteButton" Content="{loc:Tr UgDelete}" Click="OnDelete" IsVisible="False" />
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button x:Name="SaveButton" Content="{loc:Tr Save}" Click="OnSave" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

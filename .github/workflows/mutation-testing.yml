@@ -1,0 +1,79 @@
+# Mutation testing (Stryker.NET) — ADR "Stryker.NET mutation testing".
+#
+# Runs ONLY on the public repository (HebelConsulting/SimplArchive) and only while it is actually public: mutation
+# testing re-runs the whole suite once per mutant → thousands of runs → many CI minutes, metered on private repos
+# but free + unlimited on public ones. The `gate` job resolves the repo's visibility via the API — schedule-safe,
+# unlike the inline `github.event.repository.visibility` context, which is null on scheduled (cron) runs — so the
+# heavy `mutate` job runs only when this is the public repo AND currently public; it's a no-op (zero minutes) on
+# the private canonical. Out-of-band quality signal, never a PR gate.
+name: Mutation testing
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 4 * * 1" # weekly, Monday 04:00 UTC (only actually runs on the public repo — see the gate job)
+
+permissions:
+  contents: read
+
+# Out-of-band quality signal, never a PR gate: it measures whether the test suite would actually catch a bug
+# (killed vs. survived mutants), not just what runs (that's the coverage report, ADR 0438). Scope = the projects
+# whose logic is genuinely unit/integration-tested (Domain + Infrastructure — entities/invariants + the
+# EffectiveRights/Clearance calculators + DbContext invariants + group expansion), run by UnitTests +
+# IntegrationTests (configured in stryker-config.json). Generated EF migrations are excluded there.
+jobs:
+  # "Is this the public repo, and is it currently public?" — resolved via the API so it holds on every event type
+  # (the inline visibility context is null on cron). Name-gated, so it's skipped outright on the private canonical,
+  # which cascades to skip `mutate`.
+  gate:
+    if: ${{ github.repository == 'HebelConsulting/SimplArchive' }}
+    runs-on: ubuntu-latest
+    outputs:
+      public: ${{ steps.check.outputs.public }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          vis=$(gh api "repos/${{ github.repository }}" --jq .visibility)
+          echo "Repository visibility: $vis"
+          echo "public=$([ "$vis" = public ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  mutate:
+    name: Stryker (${{ matrix.project }})
+    needs: gate
+    if: ${{ needs.gate.outputs.public == 'true' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [SimplArchive.Domain, SimplArchive.Infrastructure]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - name: Restore
+        run: dotnet restore
+      - name: Restore local tools
+        run: dotnet tool restore
+      - name: Stryker ${{ matrix.project }}
+        run: >-
+          dotnet stryker
+          --config-file stryker-config.json
+          --project ${{ matrix.project }}.csproj
+          --output stryker-out/${{ matrix.project }}
+          --reporter html --reporter progress
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report-${{ matrix.project }}
+          path: stryker-out/${{ matrix.project }}/**/mutation-report.html
+          if-no-files-found: ignore

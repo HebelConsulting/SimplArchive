@@ -1,0 +1,38 @@
+@* Prompt to pick a replacement reviewer when deactivating a user who still holds pending review tasks
+   (ADR "Workflow review reassignment"). Returns the chosen reviewer's id, or cancels. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 380px;">
+            <MudText Typo="Typo.body2" Class="mb-3">
+                @string.Format(Strings.Get("ReplReviewerInfo"), UserName)
+            </MudText>
+            <MudSelect T="Guid?" @bind-Value="_reviewerId" Label="@Strings.Get("ReplReviewerLabel")" Dense="true"
+                       Margin="Margin.Dense" Variant="Variant.Outlined">
+                @foreach (var c in Candidates)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)c.Id)">@c.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_reviewerId is null)" OnClick="Save">@Strings.Get("ReplReviewerConfirm")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public string UserName { get; set; } = "";
+    [Parameter] public List<ReviewerCandidate> Candidates { get; set; } = [];
+
+    private Guid? _reviewerId;
+
+    private void Save() => Dialog.Close(DialogResult.Ok(_reviewerId!.Value));
+
+    private void Cancel() => Dialog.Cancel();
+
+    public record ReviewerCandidate(Guid Id, string Name);
+}

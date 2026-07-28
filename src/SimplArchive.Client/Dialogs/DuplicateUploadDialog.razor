@@ -1,0 +1,54 @@
+@* Upload-time duplicate warning (ADR "Duplicate document detection"): the file being uploaded is byte-identical
+   to one or more existing documents. Offer to reference an existing one here, file it again anyway, or cancel. *@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@Strings.Get("DupTitle")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <div style="min-width:460px;">
+            <MudText Typo="Typo.body2" Class="mb-2">
+                @((MarkupString)string.Format(Strings.Get("DupIntro"), FileName, Duplicates.Count == 1 ? Strings.Get("DupOneExisting") : string.Format(Strings.Get("DupManyExisting"), Duplicates.Count)))
+            </MudText>
+            <MudList T="Guid" @bind-SelectedValue="_selectedId" Dense="true" Class="mb-2" style="max-height:220px; overflow:auto;">
+                @foreach (var d in Duplicates)
+                {
+                    <MudListItem T="Guid" Value="@d.Id">
+                        <MudText Typo="Typo.body1">@d.Name</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@d.Path</MudText>
+                    </MudListItem>
+                }
+            </MudList>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                @Strings.Get("DupRefHint")
+            </MudText>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => Dialog.Cancel())">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Warning" OnClick="FileAnyway">@Strings.Get("DupFileAnyway")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Link" OnClick="Reference">@Strings.Get("DupReference")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public string FileName { get; set; } = "";
+    [Parameter] public List<(Guid Id, string Name, string Path)> Duplicates { get; set; } = [];
+
+    private Guid _selectedId;
+
+    protected override void OnInitialized()
+    {
+        if (Duplicates.Count > 0)
+        {
+            _selectedId = Duplicates[0].Id;
+        }
+    }
+
+    private void Reference() => Dialog.Close(DialogResult.Ok(new DuplicateUploadChoice("reference", _selectedId)));
+
+    private void FileAnyway() => Dialog.Close(DialogResult.Ok(new DuplicateUploadChoice("file", Guid.Empty)));
+
+    public record DuplicateUploadChoice(string Action, Guid TargetId);
+}

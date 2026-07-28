@@ -1,0 +1,62 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        xmlns:svc="using:SimplArchive.DesktopClient.Services"
+        xmlns:conv="using:Avalonia.Data.Converters"
+        x:Class="SimplArchive.DesktopClient.Views.ReminderDialog"
+        x:DataType="vm:ReminderDialogViewModel"
+        Title="{loc:Tr RemTitle}" Width="440" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="10">
+        <TextBlock Text="{Binding DocumentName, StringFormat='Reminders for {0}'}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+
+        <!-- Pending reminders (set by / targeted at the caller), each cancellable. Empty → nothing renders. -->
+        <ItemsControl ItemsSource="{Binding Reminders}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="svc:SimplArchiveApiClient+ReminderInfo">
+                    <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="{Binding RemindAt, StringFormat='{}{0:g}'}" FontSize="12" />
+                            <TextBlock Text="{Binding TargetName}" FontSize="11" Foreground="Gray" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="{loc:Tr Cancel}" FontSize="11"
+                                Command="{Binding $parent[Window].((vm:ReminderDialogViewModel)DataContext).CancelReminderCommand}"
+                                CommandParameter="{Binding Id}" />
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="8">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr RemDate}" VerticalAlignment="Center" />
+            <DatePicker Grid.Row="0" Grid.Column="1" SelectedDate="{Binding ReminderDate}" HorizontalAlignment="Stretch" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr RemTime}" VerticalAlignment="Center" />
+            <TimePicker Grid.Row="1" Grid.Column="1" SelectedTime="{Binding ReminderTime}" ClockIdentifier="24HourClock" HorizontalAlignment="Left" />
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr AnnTitle}" VerticalAlignment="Center" />
+            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Note}" Watermark="Optional" />
+
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr RemRepeat}" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding RecurrenceOptions}" SelectedIndex="{Binding RecurrenceIndex}" HorizontalAlignment="Stretch" />
+
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Tr RemRemind}" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}" HorizontalAlignment="Stretch">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="svc:SimplArchiveApiClient+UserOptionInfo">
+                        <TextBlock Text="{Binding DisplayName}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </Grid>
+
+        <TextBlock Text="{Binding Status}" Foreground="#c62828" FontSize="12" TextWrapping="Wrap"
+                   IsVisible="{Binding Status, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Close}" Click="OnClose" IsCancel="True" />
+            <Button Content="Set reminder" Command="{Binding CreateCommand}" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -1,0 +1,2607 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LogonTitle" xml:space="preserve">
+    <value>Sign in — SimplArchive</value>
+  </data>
+  <data name="LogonUsername" xml:space="preserve">
+    <value>Username (email)</value>
+  </data>
+  <data name="LogonTenant" xml:space="preserve">
+    <value>Tenant</value>
+  </data>
+  <data name="LogonLanguage" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="LogonLogin" xml:space="preserve">
+    <value>Log in</value>
+  </data>
+  <data name="LogonManageTenants" xml:space="preserve">
+    <value>Manage tenants with Ctrl/Cmd + P</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Create" xml:space="preserve">
+    <value>Create</value>
+  </data>
+  <data name="Ok" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="NewFolder" xml:space="preserve">
+    <value>New folder</value>
+  </data>
+  <data name="NewFolderName" xml:space="preserve">
+    <value>Folder name</value>
+  </data>
+  <data name="Name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="RibbonExport" xml:space="preserve">
+    <value>Export this repository/folder to a .zip</value>
+  </data>
+  <data name="RibbonImport" xml:space="preserve">
+    <value>Import a .zip archive (under the current folder, or as a new repository)</value>
+  </data>
+  <data name="RibbonOpen" xml:space="preserve">
+    <value>Open (folder/email drills in; document opens in its native app)</value>
+  </data>
+  <data name="RibbonSaveAs" xml:space="preserve">
+    <value>Save as…</value>
+  </data>
+  <data name="RibbonRename" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="RibbonDelete" xml:space="preserve">
+    <value>Delete (to recycle bin)</value>
+  </data>
+  <data name="RibbonUpload" xml:space="preserve">
+    <value>Upload (drop files onto the list)</value>
+  </data>
+  <data name="RibbonCheckOut" xml:space="preserve">
+    <value>Check out (take an edit lock + download a working copy)</value>
+  </data>
+  <data name="RibbonVersions" xml:space="preserve">
+    <value>Versions</value>
+  </data>
+  <data name="RibbonStartWorkflow" xml:space="preserve">
+    <value>Start workflow</value>
+  </data>
+  <data name="RibbonRefresh" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="RibbonResetLayout" xml:space="preserve">
+    <value>Reset pane layout</value>
+  </data>
+  <data name="AppbarNotifications" xml:space="preserve">
+    <value>Notifications</value>
+  </data>
+  <data name="AppbarAccount" xml:space="preserve">
+    <value>Account</value>
+  </data>
+  <data name="TabRepositories" xml:space="preserve">
+    <value>Repositories</value>
+  </data>
+  <data name="TabInbox" xml:space="preserve">
+    <value>Inbox</value>
+  </data>
+  <data name="TabCheckout" xml:space="preserve">
+    <value>Check-out</value>
+  </data>
+  <data name="TabSearch" xml:space="preserve">
+    <value>Search</value>
+  </data>
+  <data name="TabRecycleBin" xml:space="preserve">
+    <value>Recycle bin</value>
+  </data>
+  <data name="TabTasks" xml:space="preserve">
+    <value>Tasks</value>
+  </data>
+  <data name="TabUsersGroups" xml:space="preserve">
+    <value>Users &amp; groups</value>
+  </data>
+  <data name="TabAudit" xml:space="preserve">
+    <value>Audit</value>
+  </data>
+  <data name="TabLegalHolds" xml:space="preserve">
+    <value>Legal holds</value>
+  </data>
+  <data name="TabRetention" xml:space="preserve">
+    <value>Retention</value>
+  </data>
+  <data name="TabTenant" xml:space="preserve">
+    <value>Tenant</value>
+  </data>
+  <data name="TabMyWork" xml:space="preserve">
+    <value>My work</value>
+  </data>
+  <data name="TabTags" xml:space="preserve">
+    <value>Tags</value>
+  </data>
+  <data name="Upload" xml:space="preserve">
+    <value>Upload</value>
+  </data>
+  <data name="Download" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Edit" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="NoNotifications" xml:space="preserve">
+    <value>No notifications</value>
+  </data>
+  <data name="MarkAllRead" xml:space="preserve">
+    <value>Mark all read</value>
+  </data>
+  <data name="ToggleTheme" xml:space="preserve">
+    <value>Toggle light/dark mode</value>
+  </data>
+  <data name="AccountChangePhoto" xml:space="preserve">
+    <value>Change photo…</value>
+  </data>
+  <data name="AccountChangePassword" xml:space="preserve">
+    <value>Change password…</value>
+  </data>
+  <data name="AccountDisableTwoFactor" xml:space="preserve">
+    <value>Disable two-factor auth…</value>
+  </data>
+  <data name="AccountEnableTwoFactor" xml:space="preserve">
+    <value>Enable two-factor auth…</value>
+  </data>
+  <data name="AccountPasskeys" xml:space="preserve">
+    <value>Passkeys…</value>
+  </data>
+  <data name="AccountWebDav" xml:space="preserve">
+    <value>WebDAV access…</value>
+  </data>
+  <data name="AccountNotificationPrefs" xml:space="preserve">
+    <value>Notification preferences…</value>
+  </data>
+  <data name="AccountLogout" xml:space="preserve">
+    <value>Log out</value>
+  </data>
+  <data name="StopImpersonating" xml:space="preserve">
+    <value>Stop impersonating</value>
+  </data>
+  <data name="ImpersonationBanner" xml:space="preserve">
+    <value>You are impersonating &lt;b&gt;{0}&lt;/b&gt; (as {1}).</value>
+  </data>
+  <data name="DlgChangePassword" xml:space="preserve">
+    <value>Change password</value>
+  </data>
+  <data name="DlgTwoFactor" xml:space="preserve">
+    <value>Two-factor authentication</value>
+  </data>
+  <data name="DlgPasskeys" xml:space="preserve">
+    <value>Passkeys</value>
+  </data>
+  <data name="DlgWebDav" xml:space="preserve">
+    <value>WebDAV access</value>
+  </data>
+  <data name="DlgNotificationPrefs" xml:space="preserve">
+    <value>Notification preferences</value>
+  </data>
+  <data name="MfaDisableTitle" xml:space="preserve">
+    <value>Disable two-factor authentication</value>
+  </data>
+  <data name="MfaDisableMessage" xml:space="preserve">
+    <value>You'll no longer be asked for a code when you sign in. Continue?</value>
+  </data>
+  <data name="MfaDisableConfirm" xml:space="preserve">
+    <value>Disable</value>
+  </data>
+  <data name="MfaDisabledSuccess" xml:space="preserve">
+    <value>Two-factor authentication disabled.</value>
+  </data>
+  <data name="MfaDisableError" xml:space="preserve">
+    <value>Could not disable two-factor authentication.</value>
+  </data>
+  <data name="HdaWarning" xml:space="preserve">
+    <value>All listed documents will be unrecoverably deleted.</value>
+  </data>
+  <data name="HdaTypeToConfirm" xml:space="preserve">
+    <value>Type &lt;b&gt;I AGREE&lt;/b&gt; to confirm.</value>
+  </data>
+  <data name="RetainUntilPrompt" xml:space="preserve">
+    <value>Retain &lt;b&gt;{0}&lt;/b&gt; until:</value>
+  </data>
+  <data name="RetainUntilLabel" xml:space="preserve">
+    <value>Retain until</value>
+  </data>
+  <data name="Extend" xml:space="preserve">
+    <value>Extend</value>
+  </data>
+  <data name="GenPwdInfo" xml:space="preserve">
+    <value>New password for &lt;b&gt;{0}&lt;/b&gt;. Copy it now — it won't be shown again. Ask the user to change it after signing in.</value>
+  </data>
+  <data name="Done" xml:space="preserve">
+    <value>Done</value>
+  </data>
+  <data name="CopiedClipboard" xml:space="preserve">
+    <value>Copied to clipboard.</value>
+  </data>
+  <data name="ReplReviewerInfo" xml:space="preserve">
+    <value>{0} still holds pending review tasks. Choose a replacement reviewer to hand them to before deactivating.</value>
+  </data>
+  <data name="ReplReviewerLabel" xml:space="preserve">
+    <value>Replacement reviewer</value>
+  </data>
+  <data name="ReplReviewerConfirm" xml:space="preserve">
+    <value>Reassign &amp; deactivate</value>
+  </data>
+  <data name="LegalHoldInfo" xml:space="preserve">
+    <value>A legal hold freezes its documents — they can't be deleted, moved, re-versioned, or edited until the hold is released.</value>
+  </data>
+  <data name="LegalHoldMatterName" xml:space="preserve">
+    <value>Matter name</value>
+  </data>
+  <data name="LegalHoldReason" xml:space="preserve">
+    <value>Reason (optional)</value>
+  </data>
+  <data name="LegalHoldPlace" xml:space="preserve">
+    <value>Place hold</value>
+  </data>
+  <data name="NoFoldersAvailable" xml:space="preserve">
+    <value>No folders available.</value>
+  </data>
+  <data name="FolderPickerSelected" xml:space="preserve">
+    <value>Selected: {0}</value>
+  </data>
+  <data name="FolderPickerSelectPrompt" xml:space="preserve">
+    <value>Select a folder</value>
+  </data>
+  <data name="FolderPickerConfirm" xml:space="preserve">
+    <value>Select this folder</value>
+  </data>
+  <data name="FilingAsVersion" xml:space="preserve">
+    <value>File as a new version of the selected document</value>
+  </data>
+  <data name="FilingInFolder" xml:space="preserve">
+    <value>File in the folder of the selected item</value>
+  </data>
+  <data name="FilingChooseFolder" xml:space="preserve">
+    <value>Choose a folder…</value>
+  </data>
+  <data name="FilingChooseTarget" xml:space="preserve">
+    <value>Choose the target folder:</value>
+  </data>
+  <data name="FilingCommentLabel" xml:space="preserve">
+    <value>Comment (optional)</value>
+  </data>
+  <data name="FilingCommentPlaceholder" xml:space="preserve">
+    <value>Leave blank to post "Filed a new document."</value>
+  </data>
+  <data name="FilingFile" xml:space="preserve">
+    <value>File</value>
+  </data>
+  <data name="PwdCurrent" xml:space="preserve">
+    <value>Current password</value>
+  </data>
+  <data name="PwdNew" xml:space="preserve">
+    <value>New password</value>
+  </data>
+  <data name="PwdConfirm" xml:space="preserve">
+    <value>Confirm new password</value>
+  </data>
+  <data name="PwdMismatch" xml:space="preserve">
+    <value>Passwords don't match.</value>
+  </data>
+  <data name="PwdChanged" xml:space="preserve">
+    <value>Password changed.</value>
+  </data>
+  <data name="PwdIncorrect" xml:space="preserve">
+    <value>The current password is incorrect.</value>
+  </data>
+  <data name="PwdChangeError" xml:space="preserve">
+    <value>Could not change the password.</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="WebDavInfo" xml:space="preserve">
+    <value>Mount the archive as a network drive using a WebDAV client (Finder / Explorer / Nautilus). Use your email as the username and an app-specific password below — not your login password.</value>
+  </data>
+  <data name="WebDavMountUrl" xml:space="preserve">
+    <value>Mount URL (all repositories)</value>
+  </data>
+  <data name="WebDavPersonalFolder" xml:space="preserve">
+    <value>Personal folder (Inbox, Check-out, archive)</value>
+  </data>
+  <data name="WebDavUsername" xml:space="preserve">
+    <value>Username</value>
+  </data>
+  <data name="WebDavCopyNow" xml:space="preserve">
+    <value>Copy this password now — it won't be shown again.</value>
+  </data>
+  <data name="WebDavPassword" xml:space="preserve">
+    <value>WebDAV password</value>
+  </data>
+  <data name="WebDavEnabled" xml:space="preserve">
+    <value>WebDAV access is enabled. Regenerate to get a new password, or revoke to disable it.</value>
+  </data>
+  <data name="WebDavNotSetUp" xml:space="preserve">
+    <value>WebDAV access is not set up yet.</value>
+  </data>
+  <data name="WebDavRevoke" xml:space="preserve">
+    <value>Revoke</value>
+  </data>
+  <data name="WebDavRegenerate" xml:space="preserve">
+    <value>Regenerate password</value>
+  </data>
+  <data name="WebDavGenerate" xml:space="preserve">
+    <value>Generate password</value>
+  </data>
+  <data name="WebDavGenError" xml:space="preserve">
+    <value>Could not generate the WebDAV password.</value>
+  </data>
+  <data name="WebDavRevoked" xml:space="preserve">
+    <value>WebDAV access revoked.</value>
+  </data>
+  <data name="WebDavRevokeError" xml:space="preserve">
+    <value>Could not revoke WebDAV access.</value>
+  </data>
+  <data name="PhotoChoose" xml:space="preserve">
+    <value>Choose image…</value>
+  </data>
+  <data name="PhotoHint" xml:space="preserve">
+    <value>Pick an image, then drag or resize the square to choose the visible area.</value>
+  </data>
+  <data name="PhotoLoadError" xml:space="preserve">
+    <value>Could not load that image.</value>
+  </data>
+  <data name="PhotoUpdated" xml:space="preserve">
+    <value>Profile photo updated.</value>
+  </data>
+  <data name="NoPermission" xml:space="preserve">
+    <value>You don't have permission to do that.</value>
+  </data>
+  <data name="PhotoSaveError" xml:space="preserve">
+    <value>Could not save the photo.</value>
+  </data>
+  <data name="ReferencesTitle" xml:space="preserve">
+    <value>Folders that reference {0}</value>
+  </data>
+  <data name="NotReferenced" xml:space="preserve">
+    <value>This item isn't referenced anywhere.</value>
+  </data>
+  <data name="CompareTitle" xml:space="preserve">
+    <value>Compare versions — {0}</value>
+  </data>
+  <data name="CompareFrom" xml:space="preserve">
+    <value>From</value>
+  </data>
+  <data name="CompareTo" xml:space="preserve">
+    <value>To</value>
+  </data>
+  <data name="CompareRestoreTooltip" xml:space="preserve">
+    <value>Reinstate the 'From' version as the current version (keeps history)</value>
+  </data>
+  <data name="CompareButton" xml:space="preserve">
+    <value>Compare</value>
+  </data>
+  <data name="CompareRestoreVersion" xml:space="preserve">
+    <value>Restore v{0}</value>
+  </data>
+  <data name="CompareNotAvailable" xml:space="preserve">
+    <value>Comparison isn't available for this format (only text-extractable documents can be diffed).</value>
+  </data>
+  <data name="CompareRestored" xml:space="preserve">
+    <value>Restored v{0} as the current version.</value>
+  </data>
+  <data name="CompareRestoreConflict" xml:space="preserve">
+    <value>Can't restore now — the document is under a workflow, legal hold, or checked out.</value>
+  </data>
+  <data name="CompareRestoreError" xml:space="preserve">
+    <value>Could not restore this version.</value>
+  </data>
+  <data name="BulkTagsHint" xml:space="preserve">
+    <value>These tags are added to every selected document (existing tags are kept).</value>
+  </data>
+  <data name="BulkTagsPlaceholder" xml:space="preserve">
+    <value>add a tag…</value>
+  </data>
+  <data name="BulkTagsAdd" xml:space="preserve">
+    <value>Add tags</value>
+  </data>
+  <data name="BulkSensHint" xml:space="preserve">
+    <value>Set this classification on every selected document.</value>
+  </data>
+  <data name="BulkSensLabel" xml:space="preserve">
+    <value>Sensitivity</value>
+  </data>
+  <data name="Apply" xml:space="preserve">
+    <value>Apply</value>
+  </data>
+  <data name="DupTitle" xml:space="preserve">
+    <value>This file already exists</value>
+  </data>
+  <data name="DupIntro" xml:space="preserve">
+    <value>&lt;b&gt;{0}&lt;/b&gt; is identical to {1}:</value>
+  </data>
+  <data name="DupOneExisting" xml:space="preserve">
+    <value>an existing document</value>
+  </data>
+  <data name="DupManyExisting" xml:space="preserve">
+    <value>{0} existing documents</value>
+  </data>
+  <data name="DupRefHint" xml:space="preserve">
+    <value>Referencing files a shortcut to the existing document in this folder without storing a second copy.</value>
+  </data>
+  <data name="DupFileAnyway" xml:space="preserve">
+    <value>File it again anyway</value>
+  </data>
+  <data name="DupReference" xml:space="preserve">
+    <value>Reference it here</value>
+  </data>
+  <data name="VersionsTitle" xml:space="preserve">
+    <value>Versions — {0}</value>
+  </data>
+  <data name="NoVersions" xml:space="preserve">
+    <value>No versions.</value>
+  </data>
+  <data name="VerColVersion" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="VerColDocDate" xml:space="preserve">
+    <value>Document date</value>
+  </data>
+  <data name="VerColFiled" xml:space="preserve">
+    <value>Filed</value>
+  </data>
+  <data name="VerColBy" xml:space="preserve">
+    <value>By</value>
+  </data>
+  <data name="VerColActions" xml:space="preserve">
+    <value>Actions</value>
+  </data>
+  <data name="VersionCurrent" xml:space="preserve">
+    <value>Current</value>
+  </data>
+  <data name="VersionsCompare" xml:space="preserve">
+    <value>Compare…</value>
+  </data>
+  <data name="VersionsMakeCurrent" xml:space="preserve">
+    <value>Make current</value>
+  </data>
+  <data name="VerMakeCurrentTitle" xml:space="preserve">
+    <value>Make current?</value>
+  </data>
+  <data name="VerMakeCurrentMessage" xml:space="preserve">
+    <value>Make v{0} the current version? A new current version is created; earlier versions are kept.</value>
+  </data>
+  <data name="VerIsNowCurrent" xml:space="preserve">
+    <value>v{0} is now the current version.</value>
+  </data>
+  <data name="VerChangeConflict" xml:space="preserve">
+    <value>Can't change now — the document is under a workflow, legal hold, or checked out.</value>
+  </data>
+  <data name="VerMakeCurrentError" xml:space="preserve">
+    <value>Could not make that version current.</value>
+  </data>
+  <data name="NotifPrefsDesc" xml:space="preserve">
+    <value>Choose which notifications are also sent to your email. In-app notifications always appear in the bell.</value>
+  </data>
+  <data name="NotifPrefsSaved" xml:space="preserve">
+    <value>Notification preferences saved.</value>
+  </data>
+  <data name="NotifPrefsError" xml:space="preserve">
+    <value>Could not save preferences.</value>
+  </data>
+  <data name="PrincipalGroupName" xml:space="preserve">
+    <value>Group name</value>
+  </data>
+  <data name="PrincipalEmail" xml:space="preserve">
+    <value>Email</value>
+  </data>
+  <data name="PrincipalDisplayName" xml:space="preserve">
+    <value>Display name</value>
+  </data>
+  <data name="ShareWith" xml:space="preserve">
+    <value>Share &lt;b&gt;{0}&lt;/b&gt; with:</value>
+  </data>
+  <data name="SharePrivate" xml:space="preserve">
+    <value>Only me (private)</value>
+  </data>
+  <data name="ShareSpecific" xml:space="preserve">
+    <value>Specific people &amp; groups</value>
+  </data>
+  <data name="ShareEveryone" xml:space="preserve">
+    <value>Everyone in the tenant</value>
+  </data>
+  <data name="SharePeopleGroups" xml:space="preserve">
+    <value>People &amp; groups</value>
+  </data>
+  <data name="ExportDesc" xml:space="preserve">
+    <value>Export &lt;b&gt;{0}&lt;/b&gt; and everything under it to a downloadable archive.</value>
+  </data>
+  <data name="ExportAllVersions" xml:space="preserve">
+    <value>All versions</value>
+  </data>
+  <data name="ExportActiveVersion" xml:space="preserve">
+    <value>Active version only</value>
+  </data>
+  <data name="ExportDocDateFrom" xml:space="preserve">
+    <value>Document date from</value>
+  </data>
+  <data name="ExportDocDateTo" xml:space="preserve">
+    <value>Document date to</value>
+  </data>
+  <data name="ExportFiledFrom" xml:space="preserve">
+    <value>Filed from</value>
+  </data>
+  <data name="ExportFiledTo" xml:space="preserve">
+    <value>Filed to</value>
+  </data>
+  <data name="ExportCreatedBy" xml:space="preserve">
+    <value>Created by (name contains)</value>
+  </data>
+  <data name="ExportIncludePerms" xml:space="preserve">
+    <value>Include permissions (ACL)</value>
+  </data>
+  <data name="ImportDesc" xml:space="preserve">
+    <value>Import an export archive {0}.</value>
+  </data>
+  <data name="ImportAsNewRepo" xml:space="preserve">
+    <value>as a new repository</value>
+  </data>
+  <data name="ImportUnderTarget" xml:space="preserve">
+    <value>under "{0}"</value>
+  </data>
+  <data name="ImportChooseArchive" xml:space="preserve">
+    <value>Choose archive (.zip)…</value>
+  </data>
+  <data name="ImportUpdateExisting" xml:space="preserve">
+    <value>Update already-imported items (add new versions, refresh metadata)</value>
+  </data>
+  <data name="ImportUpdateCaption" xml:space="preserve">
+    <value>Off: re-importing the same archive skips items that were already imported — no duplicates.</value>
+  </data>
+  <data name="ImportPermissions" xml:space="preserve">
+    <value>Import permissions (ACL), if the archive contains them</value>
+  </data>
+  <data name="ImportMergeLabel" xml:space="preserve">
+    <value>Merge into "{0}" (reuse same-named folders instead of a new sub-tree)</value>
+  </data>
+  <data name="ImportLeafConflict" xml:space="preserve">
+    <value>When a document with the same name already exists</value>
+  </data>
+  <data name="ImportLeafRename" xml:space="preserve">
+    <value>Keep both (import as a renamed copy)</value>
+  </data>
+  <data name="ImportLeafNewVersion" xml:space="preserve">
+    <value>Add the incoming versions to the existing document</value>
+  </data>
+  <data name="ImportLeafSkip" xml:space="preserve">
+    <value>Skip the incoming document</value>
+  </data>
+  <data name="AnnotationBy" xml:space="preserve">
+    <value>By {0}</value>
+  </data>
+  <data name="AnnotationLabelOptional" xml:space="preserve">
+    <value>Label (optional)</value>
+  </data>
+  <data name="AnnotationNote" xml:space="preserve">
+    <value>Note</value>
+  </data>
+  <data name="AnnotationColour" xml:space="preserve">
+    <value>Colour</value>
+  </data>
+  <data name="WorkflowNoVersion" xml:space="preserve">
+    <value>This document has no confirmed version to run a workflow on.</value>
+  </data>
+  <data name="WorkflowStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="WorkflowReviewer" xml:space="preserve">
+    <value>reviewer: {0}</value>
+  </data>
+  <data name="WorkflowOverdue" xml:space="preserve">
+    <value>Overdue {0}</value>
+  </data>
+  <data name="WorkflowDue" xml:space="preserve">
+    <value>due {0}</value>
+  </data>
+  <data name="WorkflowReviewerLabel" xml:space="preserve">
+    <value>Reviewer</value>
+  </data>
+  <data name="WorkflowSubmit" xml:space="preserve">
+    <value>Submit for review</value>
+  </data>
+  <data name="WorkflowApprove" xml:space="preserve">
+    <value>Approve</value>
+  </data>
+  <data name="WorkflowRejectReason" xml:space="preserve">
+    <value>Rejection reason</value>
+  </data>
+  <data name="WorkflowReject" xml:space="preserve">
+    <value>Reject</value>
+  </data>
+  <data name="WorkflowReassignTo" xml:space="preserve">
+    <value>Reassign to</value>
+  </data>
+  <data name="WorkflowReassign" xml:space="preserve">
+    <value>Reassign</value>
+  </data>
+  <data name="WorkflowRelease" xml:space="preserve">
+    <value>Release</value>
+  </data>
+  <data name="WorkflowHistory" xml:space="preserve">
+    <value>History</value>
+  </data>
+  <data name="WorkflowBy" xml:space="preserve">
+    <value>by {0}</value>
+  </data>
+  <data name="WorkflowActionFailed" xml:space="preserve">
+    <value>The workflow action failed.</value>
+  </data>
+  <data name="MfaOn" xml:space="preserve">
+    <value>Two-factor authentication is on</value>
+  </data>
+  <data name="MfaRecoveryInfo" xml:space="preserve">
+    <value>Save these recovery codes somewhere safe. Each can be used once to sign in if you lose your authenticator. &lt;b&gt;They won't be shown again.&lt;/b&gt;</value>
+  </data>
+  <data name="MfaScanInfo" xml:space="preserve">
+    <value>Scan this QR code with an authenticator app (Google Authenticator, 1Password, Authy…), then enter the 6-digit code it shows.</value>
+  </data>
+  <data name="MfaManualKey" xml:space="preserve">
+    <value>Or enter this key manually:</value>
+  </data>
+  <data name="MfaCode" xml:space="preserve">
+    <value>Authentication code</value>
+  </data>
+  <data name="MfaEnable" xml:space="preserve">
+    <value>Enable</value>
+  </data>
+  <data name="MfaStartError" xml:space="preserve">
+    <value>Could not start two-factor setup.</value>
+  </data>
+  <data name="MfaCodeWrong" xml:space="preserve">
+    <value>That code isn't right — try again.</value>
+  </data>
+  <data name="MfaEnableError" xml:space="preserve">
+    <value>Could not enable two-factor authentication.</value>
+  </data>
+  <data name="PasskeysInfo" xml:space="preserve">
+    <value>Passkeys let you sign in with your device's fingerprint / face / security key as a second factor.</value>
+  </data>
+  <data name="NoPasskeys" xml:space="preserve">
+    <value>No passkeys yet.</value>
+  </data>
+  <data name="PasskeyAddedLine" xml:space="preserve">
+    <value>Added {0}{1}</value>
+  </data>
+  <data name="PasskeyLastUsed" xml:space="preserve">
+    <value> · last used {0}</value>
+  </data>
+  <data name="PasskeyNewName" xml:space="preserve">
+    <value>New passkey name</value>
+  </data>
+  <data name="PasskeyNamePlaceholder" xml:space="preserve">
+    <value>e.g. My laptop</value>
+  </data>
+  <data name="PasskeyAdd" xml:space="preserve">
+    <value>Add passkey</value>
+  </data>
+  <data name="PasskeyNameFirst" xml:space="preserve">
+    <value>Give the passkey a name first.</value>
+  </data>
+  <data name="PasskeyUnsupported" xml:space="preserve">
+    <value>This browser doesn't support passkeys.</value>
+  </data>
+  <data name="PasskeyRegisterError" xml:space="preserve">
+    <value>Could not register the passkey.</value>
+  </data>
+  <data name="PasskeyCancelled" xml:space="preserve">
+    <value>Passkey registration was cancelled.</value>
+  </data>
+  <data name="SensLabelsInfo" xml:space="preserve">
+    <value>Labels classify documents by sensitivity. Retiring keeps a label on existing documents but stops offering it. "Watermark" marks the preview of documents with that label.</value>
+  </data>
+  <data name="SensNewLabel" xml:space="preserve">
+    <value>new label…</value>
+  </data>
+  <data name="SensRank" xml:space="preserve">
+    <value>Rank</value>
+  </data>
+  <data name="SensWm" xml:space="preserve">
+    <value>WM</value>
+  </data>
+  <data name="SensColLabel" xml:space="preserve">
+    <value>Label</value>
+  </data>
+  <data name="SensNoLabels" xml:space="preserve">
+    <value>No labels.</value>
+  </data>
+  <data name="Add" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="ReminderTitle" xml:space="preserve">
+    <value>Reminders for &lt;b&gt;{0}&lt;/b&gt;</value>
+  </data>
+  <data name="ReminderRepeatsSuffix" xml:space="preserve">
+    <value> · repeats {0}</value>
+  </data>
+  <data name="ReminderForLine" xml:space="preserve">
+    <value>for {0}{1}</value>
+  </data>
+  <data name="ReminderCancelAria" xml:space="preserve">
+    <value>Cancel reminder</value>
+  </data>
+  <data name="ReminderDate" xml:space="preserve">
+    <value>Date</value>
+  </data>
+  <data name="ReminderTime" xml:space="preserve">
+    <value>Time</value>
+  </data>
+  <data name="ReminderNote" xml:space="preserve">
+    <value>Note (optional)</value>
+  </data>
+  <data name="ReminderRepeat" xml:space="preserve">
+    <value>Repeat</value>
+  </data>
+  <data name="RecurNone" xml:space="preserve">
+    <value>Doesn't repeat</value>
+  </data>
+  <data name="RecurDaily" xml:space="preserve">
+    <value>Daily</value>
+  </data>
+  <data name="RecurWeekly" xml:space="preserve">
+    <value>Weekly</value>
+  </data>
+  <data name="RecurMonthly" xml:space="preserve">
+    <value>Monthly</value>
+  </data>
+  <data name="ReminderRemindLabel" xml:space="preserve">
+    <value>Remind</value>
+  </data>
+  <data name="ReminderMyself" xml:space="preserve">
+    <value>Myself</value>
+  </data>
+  <data name="ReminderSet" xml:space="preserve">
+    <value>Set reminder</value>
+  </data>
+  <data name="ReminderSetOk" xml:space="preserve">
+    <value>Reminder set.</value>
+  </data>
+  <data name="ReminderSetError" xml:space="preserve">
+    <value>Could not set the reminder.</value>
+  </data>
+  <data name="ReminderCancelError" xml:space="preserve">
+    <value>Could not cancel the reminder.</value>
+  </data>
+  <data name="RibbonConvertScans" xml:space="preserve">
+    <value>Convert scans</value>
+  </data>
+  <data name="HomeExport" xml:space="preserve">
+    <value>Export…</value>
+  </data>
+  <data name="HomeImport" xml:space="preserve">
+    <value>Import…</value>
+  </data>
+  <data name="EmptyFolderDrop" xml:space="preserve">
+    <value>This folder is empty. Drop files here to upload.</value>
+  </data>
+  <data name="CtxVersions" xml:space="preserve">
+    <value>Versions…</value>
+  </data>
+  <data name="CtxStartWorkflow" xml:space="preserve">
+    <value>Start workflow…</value>
+  </data>
+  <data name="CompareVersionsBtn" xml:space="preserve">
+    <value>Compare versions</value>
+  </data>
+  <data name="ConvertedPreview" xml:space="preserve">
+    <value>Converted preview</value>
+  </data>
+  <data name="ConvertedPreviewTooltip" xml:space="preserve">
+    <value>This is a generated preview, not the original file. Use Download to get the original.</value>
+  </data>
+  <data name="SysFileExtension" xml:space="preserve">
+    <value>File extension</value>
+  </data>
+  <data name="SysOcrLanguages" xml:space="preserve">
+    <value>OCR languages</value>
+  </data>
+  <data name="SysCreated" xml:space="preserve">
+    <value>Created</value>
+  </data>
+  <data name="SysCreatedBy" xml:space="preserve">
+    <value>Created by</value>
+  </data>
+  <data name="SysCurrentVersion" xml:space="preserve">
+    <value>Current version</value>
+  </data>
+  <data name="SysRetention" xml:space="preserve">
+    <value>Retention</value>
+  </data>
+  <data name="MaskLabel" xml:space="preserve">
+    <value>Mask</value>
+  </data>
+  <data name="TagsLabel" xml:space="preserve">
+    <value>Tags</value>
+  </data>
+  <data name="FindInDocument" xml:space="preserve">
+    <value>Find in document…</value>
+  </data>
+  <data name="AddStickyNote" xml:space="preserve">
+    <value>Add a sticky note</value>
+  </data>
+  <data name="CopyAnnotationsTip" xml:space="preserve">
+    <value>Copy selected annotations</value>
+  </data>
+  <data name="PasteAnnotationsTip" xml:space="preserve">
+    <value>Paste annotations</value>
+  </data>
+  <data name="DeleteAnnotationsTip" xml:space="preserve">
+    <value>Delete selected annotations</value>
+  </data>
+  <data name="RemindTooltip" xml:space="preserve">
+    <value>Remind me (or a colleague) about this document later</value>
+  </data>
+  <data name="TasksHeader" xml:space="preserve">
+    <value>My review tasks</value>
+  </data>
+  <data name="TasksEmpty" xml:space="preserve">
+    <value>You have no documents awaiting your review.</value>
+  </data>
+  <data name="ColDocument" xml:space="preserve">
+    <value>Document</value>
+  </data>
+  <data name="ColAssigned" xml:space="preserve">
+    <value>Assigned</value>
+  </data>
+  <data name="ColDue" xml:space="preserve">
+    <value>Due</value>
+  </data>
+  <data name="SearchPlaceholder" xml:space="preserve">
+    <value>Search by name, content or index field…</value>
+  </data>
+  <data name="SearchAllRepos" xml:space="preserve">
+    <value>All repositories</value>
+  </data>
+  <data name="SearchBtn" xml:space="preserve">
+    <value>Search</value>
+  </data>
+  <data name="SearchSavedLabel" xml:space="preserve">
+    <value>Saved</value>
+  </data>
+  <data name="SearchShareAria" xml:space="preserve">
+    <value>Share saved search</value>
+  </data>
+  <data name="SearchSharedBy" xml:space="preserve">
+    <value>Shared by {0}</value>
+  </data>
+  <data name="SearchFilters" xml:space="preserve">
+    <value>Filters</value>
+  </data>
+  <data name="FilterDocDate" xml:space="preserve">
+    <value>Document date</value>
+  </data>
+  <data name="FilterCreated" xml:space="preserve">
+    <value>Created</value>
+  </data>
+  <data name="FilterCreatedBy" xml:space="preserve">
+    <value>Created by</value>
+  </data>
+  <data name="FilterNameContains" xml:space="preserve">
+    <value>name contains…</value>
+  </data>
+  <data name="FilterIndexField" xml:space="preserve">
+    <value>Index field</value>
+  </data>
+  <data name="FilterYes" xml:space="preserve">
+    <value>Yes</value>
+  </data>
+  <data name="FilterNo" xml:space="preserve">
+    <value>No</value>
+  </data>
+  <data name="FilterValue" xml:space="preserve">
+    <value>value</value>
+  </data>
+  <data name="AddIndexFilter" xml:space="preserve">
+    <value>Add index-field filter</value>
+  </data>
+  <data name="ClearFilters" xml:space="preserve">
+    <value>Clear filters</value>
+  </data>
+  <data name="FacetType" xml:space="preserve">
+    <value>Type</value>
+  </data>
+  <data name="FacetFileType" xml:space="preserve">
+    <value>File type</value>
+  </data>
+  <data name="FacetYear" xml:space="preserve">
+    <value>Year</value>
+  </data>
+  <data name="PvFullscreen" xml:space="preserve">
+    <value>Full screen</value>
+  </data>
+  <data name="PvExitFullscreen" xml:space="preserve">
+    <value>Exit full screen (Esc)</value>
+  </data>
+  <data name="NoPreview" xml:space="preserve">
+    <value>No preview available.</value>
+  </data>
+  <data name="NoDocSelected" xml:space="preserve">
+    <value>No document selected.</value>
+  </data>
+  <data name="NoItemSelected" xml:space="preserve">
+    <value>No item selected.</value>
+  </data>
+  <data name="InboxUpload" xml:space="preserve">
+    <value>Upload to inbox</value>
+  </data>
+  <data name="InboxCopyDav" xml:space="preserve">
+    <value>Copy WebDAV URL</value>
+  </data>
+  <data name="InboxFileN" xml:space="preserve">
+    <value>File {0} items</value>
+  </data>
+  <data name="InboxDropHint" xml:space="preserve">
+    <value>Drop files here to add them to your inbox</value>
+  </data>
+  <data name="InboxFileToFolder" xml:space="preserve">
+    <value>File to folder…</value>
+  </data>
+  <data name="InboxEmailAutoMask" xml:space="preserve">
+    <value>Mask automatically assigned by the system when filed.</value>
+  </data>
+  <data name="NoMask" xml:space="preserve">
+    <value>(No mask)</value>
+  </data>
+  <data name="OneValuePerLine" xml:space="preserve">
+    <value>One value per line</value>
+  </data>
+  <data name="CoHeader" xml:space="preserve">
+    <value>Checked-out documents</value>
+  </data>
+  <data name="CoEmpty" xml:space="preserve">
+    <value>Nothing is checked out. Use the ⋮ menu on a document in Repositories to check it out.</value>
+  </data>
+  <data name="CoColRepoPath" xml:space="preserve">
+    <value>Repository path</value>
+  </data>
+  <data name="CoColWorkingCopy" xml:space="preserve">
+    <value>Working copy</value>
+  </data>
+  <data name="CoColAutoRelease" xml:space="preserve">
+    <value>Auto-release</value>
+  </data>
+  <data name="CoInCloud" xml:space="preserve">
+    <value>In cloud</value>
+  </data>
+  <data name="CoNever" xml:space="preserve">
+    <value>Never</value>
+  </data>
+  <data name="CoSoon" xml:space="preserve">
+    <value> (soon)</value>
+  </data>
+  <data name="CoDownloadStash" xml:space="preserve">
+    <value>Download from stash</value>
+  </data>
+  <data name="CoUploadStash" xml:space="preserve">
+    <value>Upload to stash</value>
+  </data>
+  <data name="CoExtend" xml:space="preserve">
+    <value>Extend</value>
+  </data>
+  <data name="CoCheckIn" xml:space="preserve">
+    <value>Check in</value>
+  </data>
+  <data name="CoCancel" xml:space="preserve">
+    <value>Cancel check-out</value>
+  </data>
+  <data name="TagsCatalogHeader" xml:space="preserve">
+    <value>Tag catalog</value>
+  </data>
+  <data name="TagsCatalogDesc" xml:space="preserve">
+    <value>The tenant's tag vocabulary. Rename or merge to tidy up (documents are re-tagged automatically); retire to stop offering a tag for new tagging (existing usages are kept). Enforce the catalog with "Restrict tags to the catalog" on the Tenant tab.</value>
+  </data>
+  <data name="TagsNewPlaceholder" xml:space="preserve">
+    <value>new tag…</value>
+  </data>
+  <data name="TagsAdd" xml:space="preserve">
+    <value>Add tag</value>
+  </data>
+  <data name="TagsColTag" xml:space="preserve">
+    <value>Tag</value>
+  </data>
+  <data name="TagsColActions" xml:space="preserve">
+    <value>Actions</value>
+  </data>
+  <data name="TagsSetColour" xml:space="preserve">
+    <value>Set colour</value>
+  </data>
+  <data name="TagsMergeInto" xml:space="preserve">
+    <value>Merge into…</value>
+  </data>
+  <data name="TagsRetire" xml:space="preserve">
+    <value>Retire</value>
+  </data>
+  <data name="TagsEmpty" xml:space="preserve">
+    <value>No tags yet — tag a document, or add one above.</value>
+  </data>
+  <data name="MyWorkHeader" xml:space="preserve">
+    <value>My work</value>
+  </data>
+  <data name="MyWorkReminders" xml:space="preserve">
+    <value>Reminders</value>
+  </data>
+  <data name="MyWorkNothingDue" xml:space="preserve">
+    <value>Nothing due soon.</value>
+  </data>
+  <data name="MyWorkWasDue" xml:space="preserve">
+    <value>was due </value>
+  </data>
+  <data name="MyWorkDue" xml:space="preserve">
+    <value>due </value>
+  </data>
+  <data name="MyWorkFollowing" xml:space="preserve">
+    <value>Following</value>
+  </data>
+  <data name="MyWorkNotFollowing" xml:space="preserve">
+    <value>You're not following any documents.</value>
+  </data>
+  <data name="MyWorkReviewTasks" xml:space="preserve">
+    <value>Review tasks</value>
+  </data>
+  <data name="MyWorkNoReview" xml:space="preserve">
+    <value>No documents awaiting your review.</value>
+  </data>
+  <data name="MyWorkOverdueSuffix" xml:space="preserve">
+    <value> · overdue</value>
+  </data>
+  <data name="AuditActionLabel" xml:space="preserve">
+    <value>Action</value>
+  </data>
+  <data name="AuditActionPlaceholder" xml:space="preserve">
+    <value>e.g. Document.Deleted</value>
+  </data>
+  <data name="AuditFrom" xml:space="preserve">
+    <value>From</value>
+  </data>
+  <data name="AuditTo" xml:space="preserve">
+    <value>To</value>
+  </data>
+  <data name="AuditApply" xml:space="preserve">
+    <value>Apply</value>
+  </data>
+  <data name="AuditClear" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="AuditExport" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="AuditVerify" xml:space="preserve">
+    <value>Verify integrity</value>
+  </data>
+  <data name="AuditChainIntact" xml:space="preserve">
+    <value>Chain intact ({0} events)</value>
+  </data>
+  <data name="AuditTampered" xml:space="preserve">
+    <value>Tampering detected at #{0}</value>
+  </data>
+  <data name="AuditVerifyWorm" xml:space="preserve">
+    <value>Verify WORM</value>
+  </data>
+  <data name="AuditWormIntact" xml:space="preserve">
+    <value>WORM sealed intact ({0} events, {1} segments)</value>
+  </data>
+  <data name="AuditWormBroken" xml:space="preserve">
+    <value>WORM {0} at #{1}</value>
+  </data>
+  <data name="AuditRetentionLabel" xml:space="preserve">
+    <value>Retention:</value>
+  </data>
+  <data name="AuditRetentionDaysHint" xml:space="preserve">
+    <value>days (0 = keep forever)</value>
+  </data>
+  <data name="AuditPurgeNow" xml:space="preserve">
+    <value>Purge now</value>
+  </data>
+  <data name="AuditKeepForever" xml:space="preserve">
+    <value>keep forever</value>
+  </data>
+  <data name="AuditDays" xml:space="preserve">
+    <value>{0} days</value>
+  </data>
+  <data name="AuditRetainedFrom" xml:space="preserve">
+    <value>Retained from #{0}</value>
+  </data>
+  <data name="AuditLastPurged" xml:space="preserve">
+    <value> · last purged {0}</value>
+  </data>
+  <data name="AuditNoEvents" xml:space="preserve">
+    <value>No audit events.</value>
+  </data>
+  <data name="AuditColWhen" xml:space="preserve">
+    <value>When</value>
+  </data>
+  <data name="AuditColActor" xml:space="preserve">
+    <value>Actor</value>
+  </data>
+  <data name="AuditColTarget" xml:space="preserve">
+    <value>Target</value>
+  </data>
+  <data name="AuditColDetails" xml:space="preserve">
+    <value>Details</value>
+  </data>
+  <data name="LoadMore" xml:space="preserve">
+    <value>Load more</value>
+  </data>
+  <data name="LhNewHold" xml:space="preserve">
+    <value>New hold</value>
+  </data>
+  <data name="LhReleased" xml:space="preserve">
+    <value>(released)</value>
+  </data>
+  <data name="LhNone" xml:space="preserve">
+    <value>No legal holds.</value>
+  </data>
+  <data name="LhPlaced" xml:space="preserve">
+    <value>Placed {0} {1}</value>
+  </data>
+  <data name="LhActive" xml:space="preserve">
+    <value>· active</value>
+  </data>
+  <data name="LhReleasedSuffix" xml:space="preserve">
+    <value>· released</value>
+  </data>
+  <data name="LhRelease" xml:space="preserve">
+    <value>Release hold</value>
+  </data>
+  <data name="LhDocuments" xml:space="preserve">
+    <value>Documents ({0})</value>
+  </data>
+  <data name="LhRemoveFromHold" xml:space="preserve">
+    <value>Remove from hold</value>
+  </data>
+  <data name="LhSelect" xml:space="preserve">
+    <value>Select a legal hold.</value>
+  </data>
+  <data name="RetDescReview" xml:space="preserve">
+    <value>Documents with a retention period. Auto-disposition is &lt;b&gt;off&lt;/b&gt; for this tenant — review each expired record and Dispose or Extend it.</value>
+  </data>
+  <data name="RetDescAuto" xml:space="preserve">
+    <value>Documents with a retention period and their auto-disposition date. Expired, un-held records are soft-deleted to the recycle bin automatically.</value>
+  </data>
+  <data name="RetColRetention" xml:space="preserve">
+    <value>Retention</value>
+  </data>
+  <data name="RetColDisposition" xml:space="preserve">
+    <value>Disposition date</value>
+  </data>
+  <data name="RetColStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="RetColActions" xml:space="preserve">
+    <value>Actions</value>
+  </data>
+  <data name="RetYears" xml:space="preserve">
+    <value>{0} years</value>
+  </data>
+  <data name="RetRetainedUntil" xml:space="preserve">
+    <value> · retained until {0}</value>
+  </data>
+  <data name="RetSuspended" xml:space="preserve">
+    <value>Suspended (legal hold)</value>
+  </data>
+  <data name="RetDue" xml:space="preserve">
+    <value>Due for disposition</value>
+  </data>
+  <data name="RetScheduled" xml:space="preserve">
+    <value>Scheduled</value>
+  </data>
+  <data name="RetDispose" xml:space="preserve">
+    <value>Dispose</value>
+  </data>
+  <data name="RetExtend" xml:space="preserve">
+    <value>Extend…</value>
+  </data>
+  <data name="RetNone" xml:space="preserve">
+    <value>No documents have a retention period.</value>
+  </data>
+  <data name="RetTruncated" xml:space="preserve">
+    <value>Showing the first 500 documents.</value>
+  </data>
+  <data name="UgNew" xml:space="preserve">
+    <value>New</value>
+  </data>
+  <data name="UgNewUser" xml:space="preserve">
+    <value>New user</value>
+  </data>
+  <data name="UgNewGroup" xml:space="preserve">
+    <value>New group</value>
+  </data>
+  <data name="UgCopy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="UgDelete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="UgInactive" xml:space="preserve">
+    <value>(inactive)</value>
+  </data>
+  <data name="UgGroup" xml:space="preserve">
+    <value>Group</value>
+  </data>
+  <data name="UgUser" xml:space="preserve">
+    <value>User</value>
+  </data>
+  <data name="UgRights" xml:space="preserve">
+    <value>{0} rights</value>
+  </data>
+  <data name="UgChangePhoto" xml:space="preserve">
+    <value>Change photo…</value>
+  </data>
+  <data name="UgRemove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="UgResetPassword" xml:space="preserve">
+    <value>Reset password…</value>
+  </data>
+  <data name="UgTwoFactor" xml:space="preserve">
+    <value>Two-factor: {0}</value>
+  </data>
+  <data name="UgMfaEnabled" xml:space="preserve">
+    <value>enabled</value>
+  </data>
+  <data name="UgMfaOff" xml:space="preserve">
+    <value>off</value>
+  </data>
+  <data name="UgResetMfa" xml:space="preserve">
+    <value>Reset MFA…</value>
+  </data>
+  <data name="UgImpersonate" xml:space="preserve">
+    <value>Impersonate</value>
+  </data>
+  <data name="UgGroupRightsNote" xml:space="preserve">
+    <value>Group rights apply to the group's member users.</value>
+  </data>
+  <data name="UgClearanceLabel" xml:space="preserve">
+    <value>Sensitivity clearance</value>
+  </data>
+  <data name="UgClearanceNone" xml:space="preserve">
+    <value>0 — None (unlabelled only)</value>
+  </data>
+  <data name="UgClearanceInfo" xml:space="preserve">
+    <value>The highest sensitivity label this principal may access — effective only when the tenant enforces clearance (Tenant tab). A user's effective clearance is the highest of their own and their groups'. Tenant admins bypass clearance.</value>
+  </data>
+  <data name="UgMembers" xml:space="preserve">
+    <value>Members</value>
+  </data>
+  <data name="UgAddMember" xml:space="preserve">
+    <value>Add a member…</value>
+  </data>
+  <data name="UgNoMembers" xml:space="preserve">
+    <value>No members yet.</value>
+  </data>
+  <data name="UgRemoveMember" xml:space="preserve">
+    <value>Remove member</value>
+  </data>
+  <data name="UgSelectPrincipal" xml:space="preserve">
+    <value>Select a user or group.</value>
+  </data>
+  <data name="RbDeletedItems" xml:space="preserve">
+    <value>Deleted items across all repositories.</value>
+  </data>
+  <data name="RbRestoreSelected" xml:space="preserve">
+    <value>Restore selected ({0})</value>
+  </data>
+  <data name="RbPurgeSelected" xml:space="preserve">
+    <value>Purge selected ({0})</value>
+  </data>
+  <data name="RbHardDeleteAll" xml:space="preserve">
+    <value>Hard-delete all</value>
+  </data>
+  <data name="RbColPath" xml:space="preserve">
+    <value>Path</value>
+  </data>
+  <data name="RbColDeleted" xml:space="preserve">
+    <value>Deleted</value>
+  </data>
+  <data name="RbColDeletedBy" xml:space="preserve">
+    <value>Deleted by</value>
+  </data>
+  <data name="RbColActions" xml:space="preserve">
+    <value>Actions</value>
+  </data>
+  <data name="RbRestore" xml:space="preserve">
+    <value>Restore</value>
+  </data>
+  <data name="RbHardDelete" xml:space="preserve">
+    <value>Hard-delete</value>
+  </data>
+  <data name="RbEmpty" xml:space="preserve">
+    <value>The recycle bin is empty.</value>
+  </data>
+  <data name="RbSelectItem" xml:space="preserve">
+    <value>Select a deleted item to inspect it.</value>
+  </data>
+  <data name="RbDeletedByLine" xml:space="preserve">
+    <value>Deleted {0} by {1}</value>
+  </data>
+  <data name="RbMaskLine" xml:space="preserve">
+    <value>Mask: {0}</value>
+  </data>
+  <data name="RbMaskNone" xml:space="preserve">
+    <value>none</value>
+  </data>
+  <data name="RbConvertedPreview" xml:space="preserve">
+    <value>⧉ Converted preview</value>
+  </data>
+  <data name="RbCommentsHeader" xml:space="preserve">
+    <value>Comments (read-only)</value>
+  </data>
+  <data name="RbNoComments" xml:space="preserve">
+    <value>No comments.</value>
+  </data>
+  <data name="TenantHeader" xml:space="preserve">
+    <value>Tenant settings</value>
+  </data>
+  <data name="TenantSensitivityLabels" xml:space="preserve">
+    <value>Sensitivity labels…</value>
+  </data>
+  <data name="TenantNewRepository" xml:space="preserve">
+    <value>New repository</value>
+  </data>
+  <data name="TenantNameLabel" xml:space="preserve">
+    <value>Tenant name</value>
+  </data>
+  <data name="TenantNameInfo" xml:space="preserve">
+    <value>The organization name shown throughout the app. Must be unique among active tenants.</value>
+  </data>
+  <data name="TenantOcrLabel" xml:space="preserve">
+    <value>Default OCR languages</value>
+  </data>
+  <data name="TenantOcrInfo" xml:space="preserve">
+    <value>Languages used to OCR scanned documents (TIFFs and image-only PDFs) into searchable text. Used when a document version doesn't set its own languages; ordering sets recognition priority.</value>
+  </data>
+  <data name="TenantAuditRetLabel" xml:space="preserve">
+    <value>Audit retention (days, 0 = keep forever)</value>
+  </data>
+  <data name="TenantAuditRetInfo" xml:space="preserve">
+    <value>How many days audit-log events are kept before the background worker purges them. 0 = keep forever. The tamper-evident hash chain stays verifiable across a purge.</value>
+  </data>
+  <data name="TenantCoTtlLabel" xml:space="preserve">
+    <value>Check-out auto-release (days idle, 0 = never)</value>
+  </data>
+  <data name="TenantCoTtlInfo" xml:space="preserve">
+    <value>Automatically releases a check-out left idle this many days: the lock is cleared, any un-checked-in cloud working copy is discarded, and the holder is notified. 0 = never expire.</value>
+  </data>
+  <data name="TenantCoWarnLabel" xml:space="preserve">
+    <value>Check-out expiry warning (days before, 0 = none)</value>
+  </data>
+  <data name="TenantCoWarnInfo" xml:space="preserve">
+    <value>Warns the holder this many days before an idle check-out is auto-released, so they can check in or keep working. 0 = no warning. Only applies when auto-release is enabled.</value>
+  </data>
+  <data name="TenantWormLabel" xml:space="preserve">
+    <value>WORM lock mode</value>
+  </data>
+  <data name="TenantWormGovernance" xml:space="preserve">
+    <value>Governance</value>
+  </data>
+  <data name="TenantWormCompliance" xml:space="preserve">
+    <value>Compliance</value>
+  </data>
+  <data name="TenantWormInfo" xml:space="preserve">
+    <value>How immutable retention/legal-hold-locked document versions are in object storage. Governance: an admin with the bypass permission can shorten or remove a lock. Compliance: absolute — no one, not even an administrator, can delete a version before its retention expires.</value>
+  </data>
+  <data name="TenantQuotaLabel" xml:space="preserve">
+    <value>Storage quota (MB, blank = unlimited)</value>
+  </data>
+  <data name="TenantQuotaInfo" xml:space="preserve">
+    <value>Maximum total storage for this tenant's document content, in megabytes. An upload that would exceed it is rejected. Leave blank for no limit.</value>
+  </data>
+  <data name="TenantUsed" xml:space="preserve">
+    <value>Used: {0}</value>
+  </data>
+  <data name="TenantUsedOf" xml:space="preserve">
+    <value> of {0} ({1}%)</value>
+  </data>
+  <data name="TenantNoLimit" xml:space="preserve">
+    <value> (no limit)</value>
+  </data>
+  <data name="TenantApproachingQuota" xml:space="preserve">
+    <value>Approaching quota</value>
+  </data>
+  <data name="TenantAlmostFull" xml:space="preserve">
+    <value>Almost full</value>
+  </data>
+  <data name="TenantRecompute" xml:space="preserve">
+    <value>Recompute</value>
+  </data>
+  <data name="TenantRecomputeInfo" xml:space="preserve">
+    <value>Recomputes used-storage from the actual stored files. Use it if the figure looks wrong — e.g. after importing, or for content that predates storage accounting.</value>
+  </data>
+  <data name="TenantUploadCleanupLabel" xml:space="preserve">
+    <value>Incomplete-upload cleanup (days, 0 = off)</value>
+  </data>
+  <data name="TenantUploadCleanupInfo" xml:space="preserve">
+    <value>A per-tenant object-storage bucket policy: abandoned multipart uploads are aborted after this many days. 0 = off. This app uploads in a single request (not multipart), so it has no effect today — it's a bucket-policy control whose effect runs on a lifecycle-capable backend (e.g. AWS S3).</value>
+  </data>
+  <data name="TenantRequireMfa" xml:space="preserve">
+    <value>Require two-factor authentication</value>
+  </data>
+  <data name="TenantRequireMfaInfo" xml:space="preserve">
+    <value>When on, every user in this tenant must have two-factor authentication (TOTP) enrolled to sign in — the login page walks a not-yet-enrolled user through setup before granting access.</value>
+  </data>
+  <data name="TenantAllowPasskey" xml:space="preserve">
+    <value>Allow passwordless passkey sign-in</value>
+  </data>
+  <data name="TenantAllowPasskeyInfo" xml:space="preserve">
+    <value>When on, a user in this tenant who has registered a passkey can sign in with it alone — no password. A passkey with user verification is phishing-resistant multi-factor, so it also satisfies the require-two-factor policy above.</value>
+  </data>
+  <data name="TenantRequireDisposition" xml:space="preserve">
+    <value>Require retention disposition review</value>
+  </data>
+  <data name="TenantRequireDispositionInfo" xml:space="preserve">
+    <value>When on, the retention sweep does NOT auto-delete expired documents. Instead they wait in the Retention tab as a review queue for a records manager to Dispose or Extend each one — a defensible, reviewed disposition. When off, expired un-held records are auto-disposed to the recycle bin.</value>
+  </data>
+  <data name="TenantRestrictTags" xml:space="preserve">
+    <value>Restrict tags to the catalog</value>
+  </data>
+  <data name="TenantRestrictTagsInfo" xml:space="preserve">
+    <value>When on, a document can only be given tags that already exist in the tag catalog (managed on the Tags tab) — a controlled vocabulary. When off, any tag can be typed freely and is added to the catalog automatically.</value>
+  </data>
+  <data name="TenantEnforceClearance" xml:space="preserve">
+    <value>Enforce sensitivity clearance</value>
+  </data>
+  <data name="TenantEnforceClearanceInfo" xml:space="preserve">
+    <value>When on, a user can only see or open a document whose sensitivity label ranks at or below their clearance (set per user/group in the Users &amp; groups tab). Documents above their clearance are hidden from listings and search entirely. Tenant admins bypass this. When off, sensitivity labels are informational only. New users start at clearance 0, so grant clearances before turning this on.</value>
+  </data>
+  <data name="TenantWebhookUrlLabel" xml:space="preserve">
+    <value>Audit webhook URL (SIEM streaming)</value>
+  </data>
+  <data name="TenantWebhookUrlInfo" xml:space="preserve">
+    <value>Each audit event is POSTed as JSON to this absolute http(s) URL shortly after it is recorded, in order, with an X-SimplArchive-Signature: sha256=&lt;hmac&gt; header so the receiver can verify authenticity and integrity. Leave blank to disable streaming.</value>
+  </data>
+  <data name="TenantSecretLabelKeep" xml:space="preserve">
+    <value>Signing secret (leave blank to keep the current one)</value>
+  </data>
+  <data name="TenantSecretLabel" xml:space="preserve">
+    <value>Signing secret</value>
+  </data>
+  <data name="TenantSecretInfo" xml:space="preserve">
+    <value>The HMAC-SHA256 key used to sign each delivered event. Stored encrypted at rest and never shown again after saving. Required the first time you enable a webhook; leave blank on later edits to keep the existing secret.</value>
+  </data>
+  <data name="TenantSecretConfigured" xml:space="preserve">
+    <value>Signing secret: configured</value>
+  </data>
+  <data name="TenantSecretNotSet" xml:space="preserve">
+    <value>Signing secret: not set</value>
+  </data>
+  <data name="TenantSendTest" xml:space="preserve">
+    <value>Send test event</value>
+  </data>
+  <data name="TenantDeliveryHealthy" xml:space="preserve">
+    <value>Delivery: healthy</value>
+  </data>
+  <data name="TenantLastSuccess" xml:space="preserve">
+    <value> — last success {0}</value>
+  </data>
+  <data name="TenantDeliveryFailing" xml:space="preserve">
+    <value>Delivery: failing —</value>
+  </data>
+  <data name="TenantConsecFailure" xml:space="preserve">
+    <value>{0} consecutive failure</value>
+  </data>
+  <data name="TenantConsecFailures" xml:space="preserve">
+    <value>{0} consecutive failures</value>
+  </data>
+  <data name="TenantNextRetry" xml:space="preserve">
+    <value>; next retry {0}</value>
+  </data>
+  <data name="TenantLastSuccessSemi" xml:space="preserve">
+    <value>; last success {0}</value>
+  </data>
+  <data name="TenantNeverDelivered" xml:space="preserve">
+    <value>; never delivered</value>
+  </data>
+  <data name="TenantDeliveryInfo" xml:space="preserve">
+    <value>How the SIEM webhook is delivering. On failures the server retries with exponential backoff (up to ~hourly) and self-heals when the endpoint recovers; a success resets the count. No events are dropped — undelivered events are held at the checkpoint.</value>
+  </data>
+  <data name="TenantReference" xml:space="preserve">
+    <value>Reference</value>
+  </data>
+  <data name="TenantIdLabel" xml:space="preserve">
+    <value>Tenant ID</value>
+  </data>
+  <data name="TenantStatusLabel" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="TenantCreatedLabel" xml:space="preserve">
+    <value>Created</value>
+  </data>
+  <data name="CtxGoTo" xml:space="preserve">
+    <value>Go to…</value>
+  </data>
+  <data name="CtxMoveTo" xml:space="preserve">
+    <value>Move to…</value>
+  </data>
+  <data name="CtxRename" xml:space="preserve">
+    <value>Rename…</value>
+  </data>
+  <data name="CtxPlaceLegalHold" xml:space="preserve">
+    <value>Place legal hold…</value>
+  </data>
+  <data name="CtxPlaceReference" xml:space="preserve">
+    <value>Place reference in…</value>
+  </data>
+  <data name="CtxRemoveReference" xml:space="preserve">
+    <value>Remove reference</value>
+  </data>
+  <data name="CtxCheckOut" xml:space="preserve">
+    <value>Check out</value>
+  </data>
+  <data name="CtxOverrideCheckout" xml:space="preserve">
+    <value>Override check-out</value>
+  </data>
+  <data name="CtxReferences" xml:space="preserve">
+    <value>References…</value>
+  </data>
+  <data name="BulkMove" xml:space="preserve">
+    <value>Move</value>
+  </data>
+  <data name="BulkTag" xml:space="preserve">
+    <value>Tag</value>
+  </data>
+  <data name="BulkSelected" xml:space="preserve">
+    <value>{0} selected</value>
+  </data>
+  <data name="BulkClearSelection" xml:space="preserve">
+    <value>Clear selection</value>
+  </data>
+  <data name="CommentBtn" xml:space="preserve">
+    <value>Comment</value>
+  </data>
+  <data name="ReplyBtn" xml:space="preserve">
+    <value>Reply</value>
+  </data>
+  <data name="CommentsHeader" xml:space="preserve">
+    <value>Comments</value>
+  </data>
+  <data name="NoActions" xml:space="preserve">
+    <value>No actions available.</value>
+  </data>
+  <data name="NoCommentsYet" xml:space="preserve">
+    <value>No comments yet. Start the conversation.</value>
+  </data>
+  <data name="SelectDocDetail" xml:space="preserve">
+    <value>Select a document to see its index data and preview.</value>
+  </data>
+  <data name="NoRepositories" xml:space="preserve">
+    <value>No repositories visible to you.</value>
+  </data>
+  <data name="SelectFolderTree" xml:space="preserve">
+    <value>Select a folder in the tree.</value>
+  </data>
+  <data name="ArchiveEmpty" xml:space="preserve">
+    <value>This archive is empty.</value>
+  </data>
+  <data name="SelectForComments" xml:space="preserve">
+    <value>Select a folder or document to view its comments.</value>
+  </data>
+  <data name="CoLockedOther" xml:space="preserve">
+    <value>Checked out by another user</value>
+  </data>
+  <data name="CoLockedMine" xml:space="preserve">
+    <value>Checked out by you</value>
+  </data>
+  <data name="LhUnderHold" xml:space="preserve">
+    <value>Under legal hold</value>
+  </data>
+  <data name="CommentPlaceholder" xml:space="preserve">
+    <value>Add a comment…</value>
+  </data>
+  <data name="ReplyPlaceholder" xml:space="preserve">
+    <value>Write a reply…</value>
+  </data>
+  <data name="TagAddPlaceholder" xml:space="preserve">
+    <value>add a tag…</value>
+  </data>
+  <data name="FollowDoc" xml:space="preserve">
+    <value>Follow — get notified when this document changes</value>
+  </data>
+  <data name="UnfollowDoc" xml:space="preserve">
+    <value>Unfollow — stop notifications about this document</value>
+  </data>
+  <data name="FollowFolder" xml:space="preserve">
+    <value>Follow — get notified of any change in this folder and its contents</value>
+  </data>
+  <data name="UnfollowFolder" xml:space="preserve">
+    <value>Unfollow — stop notifications about this folder</value>
+  </data>
+  <data name="PvHighlight" xml:space="preserve">
+    <value>Highlight (drag to draw)</value>
+  </data>
+  <data name="PvRectangle" xml:space="preserve">
+    <value>Rectangle (drag to draw)</value>
+  </data>
+  <data name="PvArrow" xml:space="preserve">
+    <value>Arrow (drag to draw)</value>
+  </data>
+  <data name="PvShowNotes" xml:space="preserve">
+    <value>Show notes</value>
+  </data>
+  <data name="PvHideNotes" xml:space="preserve">
+    <value>Hide notes</value>
+  </data>
+  <data name="SortDocDate" xml:space="preserve">
+    <value>Doc date</value>
+  </data>
+  <data name="SortSize" xml:space="preserve">
+    <value>Size</value>
+  </data>
+  <data name="FolderType" xml:space="preserve">
+    <value>Folder</value>
+  </data>
+  <data name="ArchiveBack" xml:space="preserve">
+    <value> — back</value>
+  </data>
+  <data name="SensitivityTip" xml:space="preserve">
+    <value>Sensitivity: {0}</value>
+  </data>
+  <data name="LoginPageTitle" xml:space="preserve">
+    <value>Sign in · SimplArchive</value>
+  </data>
+  <data name="LoginSaveRecoveryTitle" xml:space="preserve">
+    <value>Save your recovery codes</value>
+  </data>
+  <data name="LoginRecoveryHint" xml:space="preserve">
+    <value>Store these somewhere safe. Each can be used once if you lose access to your authenticator app. They won't be shown again.</value>
+  </data>
+  <data name="LoginSavedContinue" xml:space="preserve">
+    <value>I've saved them — continue</value>
+  </data>
+  <data name="LoginEnrollTitle" xml:space="preserve">
+    <value>Set up two-factor authentication</value>
+  </data>
+  <data name="LoginEnrollHint" xml:space="preserve">
+    <value>Your organization requires two-factor authentication. Scan this QR code with an authenticator app, then enter the 6-digit code to finish.</value>
+  </data>
+  <data name="LoginQrAlt" xml:space="preserve">
+    <value>Authenticator QR code</value>
+  </data>
+  <data name="LoginManualKey" xml:space="preserve">
+    <value>Can't scan? Enter this key manually:</value>
+  </data>
+  <data name="LoginAuthCode" xml:space="preserve">
+    <value>Authentication code</value>
+  </data>
+  <data name="LoginVerifyEnable" xml:space="preserve">
+    <value>Verify &amp; enable</value>
+  </data>
+  <data name="LoginMfaTitle" xml:space="preserve">
+    <value>Two-factor authentication</value>
+  </data>
+  <data name="LoginUsePasskey" xml:space="preserve">
+    <value>Use a passkey</value>
+  </data>
+  <data name="LoginOr" xml:space="preserve">
+    <value>or</value>
+  </data>
+  <data name="LoginTotpHint" xml:space="preserve">
+    <value>Enter the 6-digit code from your authenticator app, or one of your recovery codes.</value>
+  </data>
+  <data name="LoginVerify" xml:space="preserve">
+    <value>Verify</value>
+  </data>
+  <data name="LoginPasskeyFailedAlert" xml:space="preserve">
+    <value>Passkey authentication was cancelled or failed.</value>
+  </data>
+  <data name="LoginSignIn" xml:space="preserve">
+    <value>Sign in</value>
+  </data>
+  <data name="LoginEmail" xml:space="preserve">
+    <value>Email</value>
+  </data>
+  <data name="LoginPassword" xml:space="preserve">
+    <value>Password</value>
+  </data>
+  <data name="LoginPasswordPlaceholder" xml:space="preserve">
+    <value>Your password</value>
+  </data>
+  <data name="LoginSignInPasskey" xml:space="preserve">
+    <value>Sign in with a passkey</value>
+  </data>
+  <data name="LoginPasskeySignInFailedAlert" xml:space="preserve">
+    <value>Passkey sign-in was cancelled or failed.</value>
+  </data>
+  <data name="LoginErrInvalidCreds" xml:space="preserve">
+    <value>Invalid email or password.</value>
+  </data>
+  <data name="LoginErrSessionExpiredSignIn" xml:space="preserve">
+    <value>Your session expired. Please sign in again.</value>
+  </data>
+  <data name="LoginErrInvalidCode" xml:space="preserve">
+    <value>Invalid authentication code.</value>
+  </data>
+  <data name="LoginErrPasskeyMfaFailed" xml:space="preserve">
+    <value>Passkey authentication failed. Try again, or use your authenticator code.</value>
+  </data>
+  <data name="LoginErrPasskeyFailed" xml:space="preserve">
+    <value>Passkey sign-in failed. Please try again.</value>
+  </data>
+  <data name="LoginErrSessionExpiredTry" xml:space="preserve">
+    <value>Your session expired. Please try again.</value>
+  </data>
+  <data name="LoginErrPasskeyNotEnabled" xml:space="preserve">
+    <value>Passwordless passkey sign-in isn't enabled for your account.</value>
+  </data>
+  <data name="Confirm" xml:space="preserve">
+    <value>Confirm</value>
+  </data>
+  <data name="Copy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="RenameNewName" xml:space="preserve">
+    <value>New name</value>
+  </data>
+  <data name="GenPwTitle" xml:space="preserve">
+    <value>Password reset</value>
+  </data>
+  <data name="GenPwHint" xml:space="preserve">
+    <value>Copy this password now — it won't be shown again. Ask the user to change it after signing in.</value>
+  </data>
+  <data name="HdaTitle" xml:space="preserve">
+    <value>Empty recycle bin</value>
+  </data>
+  <data name="HdaWarn" xml:space="preserve">
+    <value>All listed documents will be unrecoverably deleted.</value>
+  </data>
+  <data name="HdaConfirmType" xml:space="preserve">
+    <value>Type I AGREE to confirm.</value>
+  </data>
+  <data name="ExtRetTitle" xml:space="preserve">
+    <value>Extend retention</value>
+  </data>
+  <data name="ExtRetPrompt" xml:space="preserve">
+    <value>Retain this document until:</value>
+  </data>
+  <data name="ExtRetBtn" xml:space="preserve">
+    <value>Extend</value>
+  </data>
+  <data name="RrTitle" xml:space="preserve">
+    <value>Reassign pending reviews</value>
+  </data>
+  <data name="RrHint" xml:space="preserve">
+    <value>This user still holds pending review tasks. Choose a replacement reviewer to hand them to before deactivating.</value>
+  </data>
+  <data name="RrPlaceholder" xml:space="preserve">
+    <value>Replacement reviewer…</value>
+  </data>
+  <data name="RrConfirm" xml:space="preserve">
+    <value>Reassign &amp; deactivate</value>
+  </data>
+  <data name="DropTitle" xml:space="preserve">
+    <value>Move or reference</value>
+  </data>
+  <data name="DropPlaceRef" xml:space="preserve">
+    <value>Place reference</value>
+  </data>
+  <data name="DropMoveHere" xml:space="preserve">
+    <value>Move here</value>
+  </data>
+  <data name="AddBtn" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="RefDlgTitle" xml:space="preserve">
+    <value>References</value>
+  </data>
+  <data name="OcrDlgTitle" xml:space="preserve">
+    <value>OCR languages</value>
+  </data>
+  <data name="OcrDlgHint" xml:space="preserve">
+    <value>Click to select in priority order — 1 is highest (tried first).</value>
+  </data>
+  <data name="ClTitle" xml:space="preserve">
+    <value>Connection lost</value>
+  </data>
+  <data name="ClHeadline" xml:space="preserve">
+    <value>Lost connection to the server.</value>
+  </data>
+  <data name="ClBody" xml:space="preserve">
+    <value>The last action couldn't be completed. Reconnect to reload, or close the app.</value>
+  </data>
+  <data name="ClTechDetails" xml:space="preserve">
+    <value>Technical details</value>
+  </data>
+  <data name="ClReconnect" xml:space="preserve">
+    <value>Reconnect</value>
+  </data>
+  <data name="BulkSensTitle" xml:space="preserve">
+    <value>Set sensitivity</value>
+  </data>
+  <data name="BulkSensBody" xml:space="preserve">
+    <value>Set this classification on every selected document.</value>
+  </data>
+  <data name="NotifPrefTitle" xml:space="preserve">
+    <value>Notification preferences</value>
+  </data>
+  <data name="NotifPrefBody" xml:space="preserve">
+    <value>Choose which notifications are also sent to your email. In-app notifications always appear in the bell.</value>
+  </data>
+  <data name="BulkTagsTitle" xml:space="preserve">
+    <value>Add tags</value>
+  </data>
+  <data name="BulkTagsBody" xml:space="preserve">
+    <value>These tags are added to every selected document (existing tags are kept).</value>
+  </data>
+  <data name="BulkTagsConfirm" xml:space="preserve">
+    <value>Add tags</value>
+  </data>
+  <data name="LhDlgTitle" xml:space="preserve">
+    <value>New legal hold</value>
+  </data>
+  <data name="LhDlgBody" xml:space="preserve">
+    <value>A legal hold freezes its documents — they can't be deleted, moved, re-versioned, or edited until the hold is released.</value>
+  </data>
+  <data name="LhMatterName" xml:space="preserve">
+    <value>Matter name</value>
+  </data>
+  <data name="LhReason" xml:space="preserve">
+    <value>Reason (optional)</value>
+  </data>
+  <data name="LhPlaceHold" xml:space="preserve">
+    <value>Place hold</value>
+  </data>
+  <data name="PkTitle" xml:space="preserve">
+    <value>Passkeys</value>
+  </data>
+  <data name="PkBody" xml:space="preserve">
+    <value>Passkeys let you sign in with your device's fingerprint, face, or a security key. Adding one opens your web browser to complete the security check.</value>
+  </data>
+  <data name="PkAdd" xml:space="preserve">
+    <value>Add a passkey</value>
+  </data>
+  <data name="DupHeadline" xml:space="preserve">
+    <value>This file already exists</value>
+  </data>
+  <data name="DupRefExplain" xml:space="preserve">
+    <value>Referencing files a shortcut to the existing document in this folder without storing a second copy.</value>
+  </data>
+  <data name="PpTitle" xml:space="preserve">
+    <value>Profile photo</value>
+  </data>
+  <data name="PpChoose" xml:space="preserve">
+    <value>Choose image…</value>
+  </data>
+  <data name="PpHint" xml:space="preserve">
+    <value>Pick an image, then drag or resize the square to choose the visible area.</value>
+  </data>
+  <data name="CpTitle" xml:space="preserve">
+    <value>Change password</value>
+  </data>
+  <data name="CpCurrent" xml:space="preserve">
+    <value>Current password</value>
+  </data>
+  <data name="CpNew" xml:space="preserve">
+    <value>New password</value>
+  </data>
+  <data name="CpConfirm" xml:space="preserve">
+    <value>Confirm new password</value>
+  </data>
+  <data name="CpMismatch" xml:space="preserve">
+    <value>Passwords don't match.</value>
+  </data>
+  <data name="FpTitle" xml:space="preserve">
+    <value>File item</value>
+  </data>
+  <data name="FpAsVersion" xml:space="preserve">
+    <value>File as a new version of the selected document</value>
+  </data>
+  <data name="FpInFolder" xml:space="preserve">
+    <value>File in the folder of the selected item</value>
+  </data>
+  <data name="FpFile" xml:space="preserve">
+    <value>File</value>
+  </data>
+  <data name="ImpTitle" xml:space="preserve">
+    <value>Import archive</value>
+  </data>
+  <data name="ImpUpdate" xml:space="preserve">
+    <value>Update already-imported items (add new versions, refresh metadata)</value>
+  </data>
+  <data name="ImpUpdateHint" xml:space="preserve">
+    <value>Off: re-importing the same archive skips items that were already imported — no duplicates.</value>
+  </data>
+  <data name="ImpPerms" xml:space="preserve">
+    <value>Import permissions (ACL), if the archive contains them</value>
+  </data>
+  <data name="ImpMerge" xml:space="preserve">
+    <value>Merge into the current folder (reuse same-named folders)</value>
+  </data>
+  <data name="ImpLeafConflict" xml:space="preserve">
+    <value>When a document with the same name already exists</value>
+  </data>
+  <data name="ImportBtn" xml:space="preserve">
+    <value>Import</value>
+  </data>
+  <data name="WdTitle" xml:space="preserve">
+    <value>WebDAV access</value>
+  </data>
+  <data name="WdBody" xml:space="preserve">
+    <value>Mount the archive as a network drive using a WebDAV client (Finder / Explorer / Nautilus). Use your email as the username and an app-specific password below — not your login password.</value>
+  </data>
+  <data name="WdMountUrl" xml:space="preserve">
+    <value>Mount URL</value>
+  </data>
+  <data name="WdUsername" xml:space="preserve">
+    <value>Username</value>
+  </data>
+  <data name="WdCopyPw" xml:space="preserve">
+    <value>Copy this password now — it won't be shown again.</value>
+  </data>
+  <data name="WdRevoke" xml:space="preserve">
+    <value>Revoke</value>
+  </data>
+  <data name="WdGenerate" xml:space="preserve">
+    <value>Generate password</value>
+  </data>
+  <data name="SssTitle" xml:space="preserve">
+    <value>Share saved search</value>
+  </data>
+  <data name="SssPrivate" xml:space="preserve">
+    <value>Only me (private)</value>
+  </data>
+  <data name="SssSpecific" xml:space="preserve">
+    <value>Specific people &amp; groups</value>
+  </data>
+  <data name="SssEveryone" xml:space="preserve">
+    <value>Everyone in the tenant</value>
+  </data>
+  <data name="SlTitle" xml:space="preserve">
+    <value>Sensitivity labels</value>
+  </data>
+  <data name="SlBody" xml:space="preserve">
+    <value>The tenant's classification labels. Retiring keeps a label on existing documents but stops offering it. 'Watermark' marks the preview of documents with that label.</value>
+  </data>
+  <data name="AnnTitle" xml:space="preserve">
+    <value>Note</value>
+  </data>
+  <data name="CvTitle" xml:space="preserve">
+    <value>Compare versions</value>
+  </data>
+  <data name="CompareEllipsis" xml:space="preserve">
+    <value>Compare…</value>
+  </data>
+  <data name="MakeCurrent" xml:space="preserve">
+    <value>Make current</value>
+  </data>
+  <data name="VerCurrent" xml:space="preserve">
+    <value>current</value>
+  </data>
+  <data name="RemTitle" xml:space="preserve">
+    <value>Reminders</value>
+  </data>
+  <data name="RemDate" xml:space="preserve">
+    <value>Date</value>
+  </data>
+  <data name="RemTime" xml:space="preserve">
+    <value>Time</value>
+  </data>
+  <data name="RemRepeat" xml:space="preserve">
+    <value>Repeat</value>
+  </data>
+  <data name="RemRemind" xml:space="preserve">
+    <value>Remind</value>
+  </data>
+  <data name="ExportTitle" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="ExpAllVersions" xml:space="preserve">
+    <value>All versions</value>
+  </data>
+  <data name="ExpActiveOnly" xml:space="preserve">
+    <value>Active version only</value>
+  </data>
+  <data name="ExpDocDateFrom" xml:space="preserve">
+    <value>Document date from</value>
+  </data>
+  <data name="ExpDocDateTo" xml:space="preserve">
+    <value>Document date to</value>
+  </data>
+  <data name="ExpFiledFrom" xml:space="preserve">
+    <value>Filed from</value>
+  </data>
+  <data name="ExpFiledTo" xml:space="preserve">
+    <value>Filed to</value>
+  </data>
+  <data name="ExpCreatedBy" xml:space="preserve">
+    <value>Created by (name contains)</value>
+  </data>
+  <data name="ExpInclPerms" xml:space="preserve">
+    <value>Include permissions (ACL)</value>
+  </data>
+  <data name="MfaScanHint" xml:space="preserve">
+    <value>Scan this QR code with an authenticator app (Google Authenticator, 1Password, Authy…), then enter the 6-digit code it shows.</value>
+  </data>
+  <data name="MfaRecoveryHint" xml:space="preserve">
+    <value>Save these recovery codes somewhere safe. Each can be used once to sign in if you lose your authenticator. They won't be shown again.</value>
+  </data>
+  <data name="TmTitle" xml:space="preserve">
+    <value>Tenants</value>
+  </data>
+  <data name="WfTitle" xml:space="preserve">
+    <value>Workflow</value>
+  </data>
+  <data name="WfNoVersion" xml:space="preserve">
+    <value>This document has no confirmed version to run a workflow on.</value>
+  </data>
+  <data name="WfStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="MwAuditActionPh" xml:space="preserve">
+    <value>Action (e.g. Document.Deleted)</value>
+  </data>
+  <data name="MwAddAsVersion" xml:space="preserve">
+    <value>Add as new version</value>
+  </data>
+  <data name="MwAddTagsSelected" xml:space="preserve">
+    <value>Add tags to selected</value>
+  </data>
+  <data name="MwSaveToCloudTip" xml:space="preserve">
+    <value>Back up the working copy so it survives closing and is restored on next login</value>
+  </data>
+  <data name="MwChooseOcr" xml:space="preserve">
+    <value>Choose OCR languages in priority order</value>
+  </data>
+  <data name="MwCollapseExpand" xml:space="preserve">
+    <value>Collapse / expand</value>
+  </data>
+  <data name="MwCompareVersions" xml:space="preserve">
+    <value>Compare versions…</value>
+  </data>
+  <data name="MwConvertScansTip" xml:space="preserve">
+    <value>Converts existing scanned documents (TIFFs + scanned image-only PDFs) into searchable PDFs so their text is indexed. Runs across the whole tenant; safe to run repeatedly.</value>
+  </data>
+  <data name="MwDeletePermanently" xml:space="preserve">
+    <value>Delete permanently</value>
+  </data>
+  <data name="MwDeleteSelected" xml:space="preserve">
+    <value>Delete selected</value>
+  </data>
+  <data name="MwDiscard" xml:space="preserve">
+    <value>Discard</value>
+  </data>
+  <data name="MwDocuments" xml:space="preserve">
+    <value>Documents</value>
+  </data>
+  <data name="MwRetDescAuto" xml:space="preserve">
+    <value>Documents with a retention period + their auto-disposition date. Expired, un-held records are soft-deleted to the recycle bin automatically.</value>
+  </data>
+  <data name="MwRetDescReview" xml:space="preserve">
+    <value>Documents with a retention period. Auto-disposition is OFF for this tenant — review each expired record and Dispose or Extend it.</value>
+  </data>
+  <data name="MwEditOcr" xml:space="preserve">
+    <value>Edit OCR languages</value>
+  </data>
+  <data name="MwEditEllipsis" xml:space="preserve">
+    <value>Edit…</value>
+  </data>
+  <data name="MwFileIntoFolder" xml:space="preserve">
+    <value>File into folder…</value>
+  </data>
+  <data name="MwFileSelected" xml:space="preserve">
+    <value>File selected</value>
+  </data>
+  <data name="MwFileSelectedTip" xml:space="preserve">
+    <value>File the selected items into a folder</value>
+  </data>
+  <data name="MwFollowFolder" xml:space="preserve">
+    <value>Follow / unfollow this folder</value>
+  </data>
+  <data name="MwGoTo" xml:space="preserve">
+    <value>Go to …</value>
+  </data>
+  <data name="MwLoginToBrowse" xml:space="preserve">
+    <value>Log in to browse your repositories.</value>
+  </data>
+  <data name="MwMerge" xml:space="preserve">
+    <value>Merge</value>
+  </data>
+  <data name="MwOpenWebDavTip" xml:space="preserve">
+    <value>Mount your Personal WebDAV folder (Inbox / Check-out / archive) and open it in your file manager</value>
+  </data>
+  <data name="MwMoveSelected" xml:space="preserve">
+    <value>Move selected</value>
+  </data>
+  <data name="MwNewSubfolder" xml:space="preserve">
+    <value>New subfolder…</value>
+  </data>
+  <data name="MwCheckoutEmpty" xml:space="preserve">
+    <value>Nothing is checked out. Select a document in Repositories and choose Check out to take an edit lock and download a working copy.</value>
+  </data>
+  <data name="MwOpen" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="MwOpenInFileManager" xml:space="preserve">
+    <value>Open in file manager</value>
+  </data>
+  <data name="MwPostComment" xml:space="preserve">
+    <value>Post comment</value>
+  </data>
+  <data name="MwPreview" xml:space="preserve">
+    <value>Preview</value>
+  </data>
+  <data name="MwRecomputeTip" xml:space="preserve">
+    <value>Recomputes used-storage from the actual stored files — use it if the figure looks wrong (e.g. after importing, or for content predating storage accounting).</value>
+  </data>
+  <data name="MwReferences" xml:space="preserve">
+    <value>References …</value>
+  </data>
+  <data name="MwRemind" xml:space="preserve">
+    <value>Remind…</value>
+  </data>
+  <data name="MwExtendCheckoutTip" xml:space="preserve">
+    <value>Reset the auto-release timer to keep this check-out longer</value>
+  </data>
+  <data name="MwSaveSearch" xml:space="preserve">
+    <value>Save this search</value>
+  </data>
+  <data name="MwSaveToCloud" xml:space="preserve">
+    <value>Save to cloud</value>
+  </data>
+  <data name="MwSelectDeleted" xml:space="preserve">
+    <value>Select a deleted item to see its details.</value>
+  </data>
+  <data name="MwSelectInboxItem" xml:space="preserve">
+    <value>Select a server inbox item to set its mask.</value>
+  </data>
+  <data name="MwSelectAll" xml:space="preserve">
+    <value>Select all</value>
+  </data>
+  <data name="MwTestWebhookTip" xml:space="preserve">
+    <value>Sends a one-off synthetic audit event to the saved webhook so you can verify the endpoint + signature before real events flow.</value>
+  </data>
+  <data name="MwClearanceLabel" xml:space="preserve">
+    <value>Sensitivity clearance:</value>
+  </data>
+  <data name="MwSetSensSelected" xml:space="preserve">
+    <value>Set sensitivity on selected</value>
+  </data>
+  <data name="MwWebDavSettingsTip" xml:space="preserve">
+    <value>Set up your WebDAV access (app-specific password + folder URL)</value>
+  </data>
+  <data name="MwSharedEveryone" xml:space="preserve">
+    <value>Shared with everyone</value>
+  </data>
+  <data name="MwSharedSpecific" xml:space="preserve">
+    <value>Shared with specific people</value>
+  </data>
+  <data name="MwShare" xml:space="preserve">
+    <value>Share…</value>
+  </data>
+  <data name="MwTagCatalogDesc" xml:space="preserve">
+    <value>The tenant's tag vocabulary. Rename or merge to tidy up (documents are re-tagged); retire to stop offering a tag. Enforce with 'Restrict tags to the catalog' on the Tenant tab.</value>
+  </data>
+  <data name="MwOrphanCheckout" xml:space="preserve">
+    <value>These documents were checked in elsewhere, but you still have local edits. Add them as a new version, or discard.</value>
+  </data>
+  <data name="MwUnlock" xml:space="preserve">
+    <value>Unlock</value>
+  </data>
+  <data name="MwVerifyWormTip" xml:space="preserve">
+    <value>Verifies the immutable sealed WORM segments against the database — catches a database tamper (even a full re-chain) that the hash-chain check alone cannot.</value>
+  </data>
+  <data name="MwWebDavSettings" xml:space="preserve">
+    <value>WebDAV settings</value>
+  </data>
+  <data name="MwEnforceClearanceTip" xml:space="preserve">
+    <value>When on, a user can only see or open a document whose sensitivity label ranks at or below their clearance (set per user/group in the Users &amp; groups tab). Documents above their clearance are hidden from listings and search. Tenant admins bypass this. When off, sensitivity labels are informational only. New users start at clearance 0 — grant clearances before turning this on.</value>
+  </data>
+  <data name="MwRequireDispositionTip" xml:space="preserve">
+    <value>When on, the retention sweep does NOT auto-delete expired documents. Instead they wait in the Retention tab as a review queue for a records manager to Dispose or Extend each one. When off, expired un-held records are auto-disposed to the recycle bin.</value>
+  </data>
+  <data name="MwImpersonating" xml:space="preserve">
+    <value>You are impersonating</value>
+  </data>
+  <data name="MwMergeInto" xml:space="preserve">
+    <value>merge into…</value>
+  </data>
+  <data name="MwOverdue" xml:space="preserve">
+    <value>overdue</value>
+  </data>
+  <data name="StRejectReasonReq" xml:space="preserve">
+    <value>A rejection reason is required.</value>
+  </data>
+  <data name="StAuditRetUpdated" xml:space="preserve">
+    <value>Audit retention updated.</value>
+  </data>
+  <data name="StComparing" xml:space="preserve">
+    <value>Comparing…</value>
+  </data>
+  <data name="StConnecting" xml:space="preserve">
+    <value>Connecting…</value>
+  </data>
+  <data name="StErrAddMember" xml:space="preserve">
+    <value>Could not add the member.</value>
+  </data>
+  <data name="StErrCreateHold" xml:space="preserve">
+    <value>Could not create the legal hold.</value>
+  </data>
+  <data name="StErrCreate" xml:space="preserve">
+    <value>Could not create.</value>
+  </data>
+  <data name="StErrDelete" xml:space="preserve">
+    <value>Could not delete.</value>
+  </data>
+  <data name="StErrImpersonate" xml:space="preserve">
+    <value>Could not impersonate this user.</value>
+  </data>
+  <data name="StErrLoadMembers" xml:space="preserve">
+    <value>Could not load group members.</value>
+  </data>
+  <data name="StErrLoadHolds" xml:space="preserve">
+    <value>Could not load legal holds.</value>
+  </data>
+  <data name="StErrLoadRetention" xml:space="preserve">
+    <value>Could not load the retention schedule.</value>
+  </data>
+  <data name="StErrLoadTenant" xml:space="preserve">
+    <value>Could not load the tenant settings.</value>
+  </data>
+  <data name="StErrLoadUsers" xml:space="preserve">
+    <value>Could not load users and groups.</value>
+  </data>
+  <data name="StErrReassign" xml:space="preserve">
+    <value>Could not reassign the reviews.</value>
+  </data>
+  <data name="StErrRecompute" xml:space="preserve">
+    <value>Could not recompute storage usage.</value>
+  </data>
+  <data name="StErrReleaseHold" xml:space="preserve">
+    <value>Could not release the hold.</value>
+  </data>
+  <data name="StErrRemoveFromHold" xml:space="preserve">
+    <value>Could not remove the document from the hold.</value>
+  </data>
+  <data name="StErrRemoveMember" xml:space="preserve">
+    <value>Could not remove the member.</value>
+  </data>
+  <data name="StErrRemovePhoto" xml:space="preserve">
+    <value>Could not remove the photo.</value>
+  </data>
+  <data name="StErrResetPw" xml:space="preserve">
+    <value>Could not reset the password.</value>
+  </data>
+  <data name="StErrResetMfa" xml:space="preserve">
+    <value>Could not reset two-factor authentication.</value>
+  </data>
+  <data name="StErrSaveRights" xml:space="preserve">
+    <value>Could not save rights.</value>
+  </data>
+  <data name="StErrTestEvent" xml:space="preserve">
+    <value>Could not send the test event.</value>
+  </data>
+  <data name="StErrUpdatePhoto" xml:space="preserve">
+    <value>Could not update the photo.</value>
+  </data>
+  <data name="StErrSubscription" xml:space="preserve">
+    <value>Could not update your subscription.</value>
+  </data>
+  <data name="StFolderDeleted" xml:space="preserve">
+    <value>Folder moved to the recycle bin.</value>
+  </data>
+  <data name="StHoldReleased" xml:space="preserve">
+    <value>Legal hold released.</value>
+  </data>
+  <data name="StLoading" xml:space="preserve">
+    <value>Loading…</value>
+  </data>
+  <data name="StMakingCurrent" xml:space="preserve">
+    <value>Making current…</value>
+  </data>
+  <data name="StMaskSaved" xml:space="preserve">
+    <value>Mask saved to the inbox item.</value>
+  </data>
+  <data name="StNoConnection" xml:space="preserve">
+    <value>No connection to the server. Retry later.</value>
+  </data>
+  <data name="StOpeningBc" xml:space="preserve">
+    <value>Opening Beyond Compare…</value>
+  </data>
+  <data name="StOpeningBrowser" xml:space="preserve">
+    <value>Opening browser to sign in…</value>
+  </data>
+  <data name="StPickReviewer" xml:space="preserve">
+    <value>Pick a reviewer first.</value>
+  </data>
+  <data name="StPhotoRemoved" xml:space="preserve">
+    <value>Profile photo removed.</value>
+  </data>
+  <data name="StPhotoUpdated" xml:space="preserve">
+    <value>Profile photo updated.</value>
+  </data>
+  <data name="StReconnected" xml:space="preserve">
+    <value>Reconnected.</value>
+  </data>
+  <data name="StRestoring" xml:space="preserve">
+    <value>Restoring…</value>
+  </data>
+  <data name="StReviewsReassigned" xml:space="preserve">
+    <value>Reviews reassigned and user deactivated.</value>
+  </data>
+  <data name="StRightsSaved" xml:space="preserve">
+    <value>Rights saved.</value>
+  </data>
+  <data name="StSaved" xml:space="preserve">
+    <value>Saved.</value>
+  </data>
+  <data name="StSearchSaved" xml:space="preserve">
+    <value>Search saved.</value>
+  </data>
+  <data name="StSearching" xml:space="preserve">
+    <value>Searching…</value>
+  </data>
+  <data name="StSelectFolderDrop" xml:space="preserve">
+    <value>Select a folder before dropping files.</value>
+  </data>
+  <data name="StSignInFailed" xml:space="preserve">
+    <value>Sign-in was cancelled or failed.</value>
+  </data>
+  <data name="StSignedOut" xml:space="preserve">
+    <value>Signed out.</value>
+  </data>
+  <data name="StStillWaiting" xml:space="preserve">
+    <value>Still waiting for the browser sign-in — click Log in to try again.</value>
+  </data>
+  <data name="StStorageRecomputed" xml:space="preserve">
+    <value>Storage usage recomputed.</value>
+  </data>
+  <data name="StTenantSaved" xml:space="preserve">
+    <value>Tenant settings saved.</value>
+  </data>
+  <data name="StOneVersion" xml:space="preserve">
+    <value>This document has only one version — nothing to compare.</value>
+  </data>
+  <data name="StLayoutReset" xml:space="preserve">
+    <value>Workbench layout reset.</value>
+  </data>
+  <data name="StErrSearch" xml:space="preserve">
+    <value>Search failed: {0}</value>
+  </data>
+  <data name="StErrBeyondCompare" xml:space="preserve">
+    <value>Beyond Compare failed: {0}</value>
+  </data>
+  <data name="StErrCompare" xml:space="preserve">
+    <value>Compare failed: {0}</value>
+  </data>
+  <data name="StErrSharing" xml:space="preserve">
+    <value>Could not change sharing: {0}</value>
+  </data>
+  <data name="StErrCreateFolder" xml:space="preserve">
+    <value>Could not create folder: {0}</value>
+  </data>
+  <data name="StErrDeleteMsg" xml:space="preserve">
+    <value>Could not delete: {0}</value>
+  </data>
+  <data name="StErrLoadAudit" xml:space="preserve">
+    <value>Could not load the audit log: {0}</value>
+  </data>
+  <data name="StErrLoadInbox" xml:space="preserve">
+    <value>Could not load the inbox: {0}</value>
+  </data>
+  <data name="StErrMove" xml:space="preserve">
+    <value>Could not move: {0}</value>
+  </data>
+  <data name="StErrOpenFolder" xml:space="preserve">
+    <value>Could not open the folder: {0}</value>
+  </data>
+  <data name="StErrPlaceRef" xml:space="preserve">
+    <value>Could not place reference: {0}</value>
+  </data>
+  <data name="StErrPostComment" xml:space="preserve">
+    <value>Could not post comment: {0}</value>
+  </data>
+  <data name="StErrRename" xml:space="preserve">
+    <value>Could not rename: {0}</value>
+  </data>
+  <data name="StErrSaveMask" xml:space="preserve">
+    <value>Could not save the mask: {0}</value>
+  </data>
+  <data name="StErrStartEdit" xml:space="preserve">
+    <value>Could not start editing: {0}</value>
+  </data>
+  <data name="StErrStartConversion" xml:space="preserve">
+    <value>Could not start the conversion: {0}</value>
+  </data>
+  <data name="StErrSubscriptionMsg" xml:space="preserve">
+    <value>Could not update your subscription: {0}</value>
+  </data>
+  <data name="StErrVerifyWorm" xml:space="preserve">
+    <value>Could not verify the WORM segments: {0}</value>
+  </data>
+  <data name="StErrVerifyAudit" xml:space="preserve">
+    <value>Could not verify the audit log: {0}</value>
+  </data>
+  <data name="StErrLoad" xml:space="preserve">
+    <value>Load failed: {0}</value>
+  </data>
+  <data name="StErrSignIn" xml:space="preserve">
+    <value>Sign-in failed: {0}</value>
+  </data>
+  <data name="StErrBulk" xml:space="preserve">
+    <value>The bulk action failed: {0}</value>
+  </data>
+  <data name="StErrFiling2" xml:space="preserve">
+    <value>'{0}': filing failed — {1}</value>
+  </data>
+  <data name="StErrUpload2" xml:space="preserve">
+    <value>'{0}': upload failed — {1}</value>
+  </data>
+  <data name="StErrCheckout2" xml:space="preserve">
+    <value>Could not check out '{0}': {1}</value>
+  </data>
+  <data name="StErrLoad2" xml:space="preserve">
+    <value>Could not load '{0}': {1}</value>
+  </data>
+  <data name="StErrOpen2" xml:space="preserve">
+    <value>Could not open '{0}': {1}</value>
+  </data>
+  <data name="StErrOverride2" xml:space="preserve">
+    <value>Could not override the check-out of '{0}': {1}</value>
+  </data>
+  <data name="StErrRead2" xml:space="preserve">
+    <value>Could not read '{0}': {1}</value>
+  </data>
+  <data name="StErrUpload2b" xml:space="preserve">
+    <value>Could not upload {0}: {1}</value>
+  </data>
+  <data name="StLines" xml:space="preserve">
+    <value>{0} line(s).</value>
+  </data>
+  <data name="StRepositories" xml:space="preserve">
+    <value>{0} repositories.</value>
+  </data>
+  <data name="StItems" xml:space="preserve">
+    <value>{0} item(s).</value>
+  </data>
+  <data name="StErrReadArchive" xml:space="preserve">
+    <value>Could not read '{0}' from the archive.</value>
+  </data>
+  <data name="StOpenedNative" xml:space="preserve">
+    <value>Opened '{0}' in its native application.</value>
+  </data>
+  <data name="StNoDownloadable" xml:space="preserve">
+    <value>'{0}' has no downloadable version.</value>
+  </data>
+  <data name="StArchiveEntries" xml:space="preserve">
+    <value>{0} archive entries.</value>
+  </data>
+  <data name="StCreatedFolder" xml:space="preserve">
+    <value>Created folder '{0}'.</value>
+  </data>
+  <data name="StRenamedTo" xml:space="preserve">
+    <value>Renamed to '{0}'.</value>
+  </data>
+  <data name="StRemovedRef" xml:space="preserve">
+    <value>Removed the reference to '{0}'.</value>
+  </data>
+  <data name="StDeleted" xml:space="preserve">
+    <value>Deleted '{0}'.</value>
+  </data>
+  <data name="StMoved" xml:space="preserve">
+    <value>Moved '{0}'.</value>
+  </data>
+  <data name="StBulkResult" xml:space="preserve">
+    <value>{0} item(s) {1}</value>
+  </data>
+  <data name="StBulkSkipped" xml:space="preserve">
+    <value>, {0} skipped.</value>
+  </data>
+  <data name="StPlacedRef" xml:space="preserve">
+    <value>Placed a reference to '{0}'.</value>
+  </data>
+  <data name="StCheckingOut" xml:space="preserve">
+    <value>Checking out '{0}'…</value>
+  </data>
+  <data name="StCheckedOut" xml:space="preserve">
+    <value>Checked out '{0}' to the local checkout folder.</value>
+  </data>
+  <data name="StReleasedCheckout" xml:space="preserve">
+    <value>Released the check-out of '{0}'.</value>
+  </data>
+  <data name="StUploadingN" xml:space="preserve">
+    <value>Uploading {0} file(s)…</value>
+  </data>
+  <data name="StUploadedAndItems" xml:space="preserve">
+    <value>Uploaded {0} file(s). {1} item(s).</value>
+  </data>
+  <data name="StOpened" xml:space="preserve">
+    <value>Opened '{0}'.</value>
+  </data>
+  <data name="StFiled" xml:space="preserve">
+    <value>Filed '{0}'.</value>
+  </data>
+  <data name="StFiledVersion" xml:space="preserve">
+    <value>Filed '{0}' as a new version.</value>
+  </data>
+  <data name="StFiledOf" xml:space="preserve">
+    <value>Filed {0} of {1} item(s).</value>
+  </data>
+  <data name="StUploadingFile" xml:space="preserve">
+    <value>Uploading '{0}'…</value>
+  </data>
+  <data name="StUploadedN" xml:space="preserve">
+    <value>Uploaded {0} file(s)</value>
+  </data>
+  <data name="StFailedN" xml:space="preserve">
+    <value>, {0} failed</value>
+  </data>
+  <data name="StFilingFile" xml:space="preserve">
+    <value>Filing '{0}'…</value>
+  </data>
+  <data name="StAdded" xml:space="preserve">
+    <value>Added {0}.</value>
+  </data>
+  <data name="StRemovedName" xml:space="preserve">
+    <value>Removed {0}.</value>
+  </data>
+  <data name="StMfaResetFor" xml:space="preserve">
+    <value>Two-factor authentication reset for {0}.</value>
+  </data>
+  <data name="StHoldCreated" xml:space="preserve">
+    <value>Legal hold '{0}' created.</value>
+  </data>
+  <data name="StDisposed" xml:space="preserve">
+    <value>Disposed '{0}'.</value>
+  </data>
+  <data name="StExtendedRetention" xml:space="preserve">
+    <value>Extended retention for '{0}'.</value>
+  </data>
+  <data name="StCreatedRepo" xml:space="preserve">
+    <value>Created repository '{0}'.</value>
+  </data>
+  <data name="StPwResetFor" xml:space="preserve">
+    <value>Password reset for {0}.</value>
+  </data>
+  <data name="StErrSaveJoin" xml:space="preserve">
+    <value>Could not save: {0}</value>
+  </data>
+  <data name="StPurgedAudit" xml:space="preserve">
+    <value>Purged {0} audit event(s).</value>
+  </data>
+  <data name="StDeletedItems" xml:space="preserve">
+    <value>{0} deleted item(s).</value>
+  </data>
+  <data name="StVersionCurrent" xml:space="preserve">
+    <value>v{0} is now the current version.</value>
+  </data>
+  <data name="StWorkflowStatus" xml:space="preserve">
+    <value>Workflow: {0}.</value>
+  </data>
+  <data name="StCompareUnavailable" xml:space="preserve">
+    <value>Comparison isn't available for this format (only text-extractable documents can be diffed).</value>
+  </data>
+  <data name="StMfaDisabled" xml:space="preserve">
+    <value>Two-factor authentication disabled.</value>
+  </data>
+  <data name="StErrDisableMfa" xml:space="preserve">
+    <value>Could not disable two-factor authentication.</value>
+  </data>
+  <data name="StPwChanged" xml:space="preserve">
+    <value>Password changed.</value>
+  </data>
+  <data name="StErrChangePw" xml:space="preserve">
+    <value>Could not change the password.</value>
+  </data>
+  <data name="StReminderSet" xml:space="preserve">
+    <value>Reminder set.</value>
+  </data>
+</root>

@@ -1,0 +1,239 @@
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+@* The approval workflow for a document, opened on demand from the Repositories ribbon / row menu (ADR
+   "Workflow start on demand", superseding the inline detail-pane panel of ADR 0298). Resolves the latest
+   confirmed version's workflow, shows the current status + whichever transitions are valid + the history,
+   and drives Submit/Approve/Reject/Release. Closes returning true if any action changed the workflow, so
+   the caller can refresh the Tasks badge. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 460px; max-width: 560px;">
+            @if (_loading)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            }
+            else if (_workflow is null)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("WorkflowNoVersion")</MudText>
+            }
+            else
+            {
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <MudText Typo="Typo.subtitle2">@Strings.Get("WorkflowStatus")</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@WorkflowColor(_workflow.Status)">@_workflow.StatusName</MudChip>
+                    @if (_workflow.AssignedToName is { } who)
+                    {
+                        <span class="mud-text-secondary" style="font-size:.8em;">@string.Format(Strings.Get("WorkflowReviewer"), who)</span>
+                    }
+                    @if (_workflow.DueAt is { } due)
+                    {
+                        @if (_workflow.IsOverdue)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">@string.Format(Strings.Get("WorkflowOverdue"), due.LocalDateTime.ToString("yyyy-MM-dd"))</MudChip>
+                        }
+                        else
+                        {
+                            <span class="mud-text-secondary" style="font-size:.8em;">@string.Format(Strings.Get("WorkflowDue"), due.LocalDateTime.ToString("yyyy-MM-dd"))</span>
+                        }
+                    }
+                </div>
+
+                @if (HasLink("submit"))
+                {
+                    <div class="mt-3" style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+                        <MudSelect T="Guid?" @bind-Value="_reviewerId" Label="@Strings.Get("WorkflowReviewerLabel")" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="min-width:200px;">
+                            @foreach (var u in _reviewers)
+                            {
+                                <MudSelectItem T="Guid?" Value="@((Guid?)u.Id)">@u.DisplayName</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="Submit" Disabled="@(_busy || _reviewerId is null)">@Strings.Get("WorkflowSubmit")</MudButton>
+                    </div>
+                }
+                @if (HasLink("approve"))
+                {
+                    <div class="mt-3" style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" OnClick="Approve" Disabled="_busy">@Strings.Get("WorkflowApprove")</MudButton>
+                        <MudTextField @bind-Value="_rejectReason" Label="@Strings.Get("WorkflowRejectReason")" Margin="Margin.Dense" Variant="Variant.Outlined" Style="min-width:220px;" />
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="Reject" Disabled="@(_busy || string.IsNullOrWhiteSpace(_rejectReason))">@Strings.Get("WorkflowReject")</MudButton>
+                    </div>
+                }
+                @if (HasLink("reassign"))
+                {
+                    <div class="mt-3" style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
+                        <MudSelect T="Guid?" @bind-Value="_reviewerId" Label="@Strings.Get("WorkflowReassignTo")" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="min-width:200px;">
+                            @foreach (var u in _reviewers)
+                            {
+                                <MudSelectItem T="Guid?" Value="@((Guid?)u.Id)">@u.DisplayName</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" OnClick="Reassign" Disabled="@(_busy || _reviewerId is null)">@Strings.Get("WorkflowReassign")</MudButton>
+                    </div>
+                }
+                @if (HasLink("release"))
+                {
+                    <div class="mt-3"><MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="Release" Disabled="_busy">@Strings.Get("WorkflowRelease")</MudButton></div>
+                }
+
+                @if (_workflow.History.Count > 0)
+                {
+                    <MudText Typo="Typo.caption" Class="mt-4 mud-text-secondary">@Strings.Get("WorkflowHistory")</MudText>
+                    <div style="font-size:.8em; line-height:1.6;">
+                        @foreach (var h in _workflow.History)
+                        {
+                            <div><b>@h.ToStatusName</b> <span class="mud-text-secondary">@string.Format(Strings.Get("WorkflowBy"), h.PerformedByName)@(h.AssignedToName is { } a ? $" → {a}" : "")@(h.RejectionReason is { } r ? $" · {r}" : "")</span></div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">@Strings.Get("Close")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public Guid DocumentId { get; set; }
+
+    private WorkflowResponse? _workflow;
+    private string? _workflowHref;
+    private List<UserOption> _reviewers = [];
+    private Guid? _reviewerId;
+    private string _rejectReason = "";
+    private bool _loading = true;
+    private bool _busy;
+    private bool _changed;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            // Resolve the latest confirmed version's workflow link (the same "latest-confirmed" rule the
+            // detail pane uses); the status-gating filter means this is the latest Released/never-submitted
+            // version for a non-editor, but an editor sees the true latest.
+            var versions = await Http.GetFromJsonAsync<VersionListResponse>($"api/documents/{DocumentId}/versions");
+            var confirmed = versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [];
+            var latest = confirmed.OrderByDescending(v => v.VersionNumber ?? 0).FirstOrDefault();
+            var wfHref = latest is null ? null : Rel(latest.Links, "workflow");
+            if (wfHref is not null)
+            {
+                await LoadWorkflowAsync(wfHref);
+            }
+        }
+        catch (Exception)
+        {
+            _workflow = null;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadWorkflowAsync(string wfHref)
+    {
+        _workflowHref = wfHref.TrimStart('/');
+        _workflow = await Http.GetFromJsonAsync<WorkflowResponse>(_workflowHref);
+
+        // Populate the reviewer picker when a submit or reassign is offered — any editor may read this catalog
+        // (ADR "Workflow assignable-reviewers endpoint"), no CanManageUsers needed.
+        if ((HasLink("submit") || HasLink("reassign")) && _reviewers.Count == 0)
+        {
+            try { _reviewers = (await Http.GetFromJsonAsync<AssignableReviewersResponse>($"api/documents/{DocumentId}/assignable-reviewers"))?.Reviewers ?? []; }
+            catch (Exception) { _reviewers = []; }
+        }
+    }
+
+    private bool HasLink(string rel) => _workflow?.Links?.Any(l => l.Rel == rel) ?? false;
+
+    private Task Submit() => PostAsync("submit", new { reviewerId = _reviewerId });
+    private Task Approve() => PostAsync("approve", null);
+    private Task Reject() => PostAsync("reject", new { reason = _rejectReason });
+    private Task Release() => PostAsync("release", null);
+    private Task Reassign() => PostAsync("reassign", new { reviewerId = _reviewerId });
+
+    private async Task PostAsync(string rel, object? body)
+    {
+        var href = _workflow?.Links?.FirstOrDefault(l => l.Rel == rel)?.Href?.TrimStart('/');
+        if (href is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            using var response = body is null ? await Http.PostAsync(href, null) : await Http.PostAsJsonAsync(href, body);
+            if (response.IsSuccessStatusCode)
+            {
+                _changed = true;
+                _reviewerId = null;
+                _rejectReason = "";
+                if (_workflowHref is not null) await LoadWorkflowAsync(_workflowHref);
+                Snackbar.Add($"Workflow: {_workflow?.StatusName}.", Severity.Success);
+            }
+            else
+            {
+                var problem = await response.Content.ReadFromJsonAsync<ProblemResponse>();
+                Snackbar.Add(problem?.Detail ?? "The workflow action was rejected.", Severity.Warning);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("WorkflowActionFailed"), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Close() => Dialog.Close(DialogResult.Ok(_changed));
+
+    private static Color WorkflowColor(int status) => status switch
+    {
+        1 => Color.Warning, // In Review
+        2 => Color.Info,    // Approved
+        3 => Color.Error,   // Rejected
+        4 => Color.Success, // Released
+        _ => Color.Default, // Draft
+    };
+
+    private static string? Rel(List<LinkResponse>? links, string rel)
+    {
+        var href = links?.FirstOrDefault(l => l.Rel == rel)?.Href;
+        return string.IsNullOrEmpty(href) ? null : (href.StartsWith("http") ? href : href.TrimStart('/'));
+    }
+
+    private record LinkResponse { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+    private record WorkflowResponse
+    {
+        public int Status { get; set; }
+        public string StatusName { get; set; } = "";
+        public string? AssignedToName { get; set; }
+        public DateTimeOffset? DueAt { get; set; }
+        public bool IsOverdue { get; set; }
+        public List<WorkflowTransitionItem> History { get; set; } = [];
+        public List<LinkResponse> Links { get; set; } = [];
+    }
+    private record WorkflowTransitionItem
+    {
+        public string ToStatusName { get; set; } = "";
+        public string? AssignedToName { get; set; }
+        public string? PerformedByName { get; set; }
+        public string? RejectionReason { get; set; }
+    }
+    private record VersionListResponse { public List<VersionSummary> Versions { get; set; } = []; }
+    private record VersionSummary { public string Status { get; set; } = ""; public int? VersionNumber { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record AssignableReviewersResponse { public List<UserOption> Reviewers { get; set; } = []; }
+    private record UserOption { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; }
+    private record ProblemResponse { public string? Detail { get; set; } }
+}

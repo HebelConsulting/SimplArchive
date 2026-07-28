@@ -1,0 +1,53 @@
+@* Repository/folder export filter dialog (ADR "Repository export"). Collects the version selection + optional
+   date-range / creator filters, returns them as an ExportOptions record for the caller to build the query and
+   download the .zip. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 420px; max-width: 520px;">
+            <MudText Typo="Typo.body2" Class="mb-3">
+                @((MarkupString)string.Format(Strings.Get("ExportDesc"), RootName))
+            </MudText>
+
+            <MudRadioGroup @bind-Value="_versions" Class="mb-2">
+                <MudRadio Value="@("all")" Dense="true">@Strings.Get("ExportAllVersions")</MudRadio>
+                <MudRadio Value="@("active")" Dense="true">@Strings.Get("ExportActiveVersion")</MudRadio>
+            </MudRadioGroup>
+
+            <div style="display:flex; gap:12px;">
+                <MudDatePicker @bind-Date="_documentDateFrom" Label="@Strings.Get("ExportDocDateFrom")" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+                <MudDatePicker @bind-Date="_documentDateTo" Label="@Strings.Get("ExportDocDateTo")" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+            </div>
+            <div style="display:flex; gap:12px;">
+                <MudDatePicker @bind-Date="_filedFrom" Label="@Strings.Get("ExportFiledFrom")" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+                <MudDatePicker @bind-Date="_filedTo" Label="@Strings.Get("ExportFiledTo")" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+            </div>
+            <MudTextField @bind-Value="_createdBy" Label="@Strings.Get("ExportCreatedBy")" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+
+            <MudCheckBox @bind-Value="_includePermissions" Class="mt-2" Dense="true" Label="@Strings.Get("ExportIncludePerms")" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Archive" OnClick="Ok">@Strings.Get("RibbonExport")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public string RootName { get; set; } = "";
+
+    private string _versions = "all";
+    private DateTime? _documentDateFrom;
+    private DateTime? _documentDateTo;
+    private DateTime? _filedFrom;
+    private DateTime? _filedTo;
+    private string? _createdBy;
+    private bool _includePermissions;
+
+    public record ExportOptions(string Versions, DateTime? DocumentDateFrom, DateTime? DocumentDateTo, DateTime? FiledFrom, DateTime? FiledTo, string? CreatedBy, bool IncludePermissions);
+
+    private void Ok() => Dialog.Close(DialogResult.Ok(new ExportOptions(_versions, _documentDateFrom, _documentDateTo, _filedFrom, _filedTo, string.IsNullOrWhiteSpace(_createdBy) ? null : _createdBy!.Trim(), _includePermissions)));
+
+    private void Cancel() => Dialog.Cancel();
+}

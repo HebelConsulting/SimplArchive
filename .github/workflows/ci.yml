@@ -1,0 +1,138 @@
+name: CI
+
+# ADR 0378 "Continuous integration (GitHub Actions)". Two tiers, both on GitHub-hosted Ubuntu runners:
+#  - fast: build + unit + integration (SQLite in-memory, no Docker) — gates every PR.
+#  - heavy: container E2E (Testcontainers) + browser/desktop UI E2E (Playwright). The GitHub-hosted Ubuntu image
+#    ships Docker and Google Chrome pre-installed, which the Testcontainers fleet + Playwright ("chrome" channel)
+#    need. Runs natively on the host (no Docker-Desktop VM slicing RAM), so the ~7 GB fits the memory-optimized
+#    fleet (Tika/OpenSearch heap-capped; SeaweedFS -volume.max raised).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to a branch cancels its in-progress run, so superseded runs don't waste hosted minutes.
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast:
+    name: Build + unit + integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - name: Restore
+        run: dotnet restore
+      # Formatting gate (ADR "dotnet format whitespace gate"): fail on any code that isn't whitespace-formatted per
+      # .editorconfig (trailing whitespace, final newlines, indentation, one-member-per-line initializers, LF line
+      # endings). Whitespace-only by design — analyzer/code-style rules are already enforced at build time by
+      # TreatWarningsAsErrors (ADR 0402), so a full `dotnet format` would just duplicate that + need a build; this
+      # covers exactly the gap the compiler leaves. Needs the restored solution to load, not a build. Generated EF
+      # migrations are marked `generated_code = true` in .editorconfig, so they're skipped.
+      - name: Format check (whitespace)
+        run: dotnet format whitespace SimplArchive.slnx --verify-no-changes
+      # Security gate (ADR "Security and dependency scanning"): fail the build on any known-CVE dependency
+      # (direct or transitive). Queries the NuGet advisory database.
+      - name: Vulnerable dependency scan
+        run: |
+          dotnet list package --vulnerable --include-transitive --format json > vuln.json
+          count=$(jq '[.projects[].frameworks[]? | ((.topLevelPackages // []) + (.transitivePackages // []))[] | select((.vulnerabilities // []) | length > 0)] | length' vuln.json)
+          if [ "$count" -gt 0 ]; then
+            echo "::error::Found $count vulnerable package reference(s) — pin to a fixed version:"
+            jq -r '.projects[] | .path as $p | (.frameworks[]? | ((.topLevelPackages // []) + (.transitivePackages // []))[] | select((.vulnerabilities // []) | length > 0) | "\($p | split("/") | last)  \(.id) \(.resolvedVersion)  \(.vulnerabilities[].severity)  \(.vulnerabilities[].advisoryurl)")' vuln.json | sort -u
+            exit 1
+          fi
+          echo "No vulnerable dependencies."
+      # Advisory only (don't block): deprecated packages are worth surfacing but aren't a security failure.
+      - name: Deprecated dependency check (advisory)
+        continue-on-error: true
+        run: dotnet list package --deprecated --include-transitive
+      # License gate (ADR "License compliance automation"): fail on any dependency whose license isn't in the
+      # Apache-2.0-compatible allowlist. nuget-license exits non-zero on a violation.
+      - name: Restore local tools
+        run: dotnet tool restore
+      - name: License compliance
+        run: |
+          dotnet nuget-license -i SimplArchive.slnx -t \
+            -a build/licenses/allowed-licenses.json \
+            -override build/licenses/package-license-overrides.json \
+            -ignore build/licenses/ignored-packages.json \
+            -err -o Table
+      - name: Build
+        run: dotnet build --no-restore -c Debug
+      # The migration-data-preservation guard runs inside the integration suite (MigrationDataPreservationTests).
+      # Coverage (ADR "Code-coverage reporting"): the fast-tier suites collect line/branch coverage via the
+      # coverlet.collector already referenced in every test project (`--collect "XPlat Code Coverage"` → a
+      # cobertura file per run under the results dir). Fast-tier only by design — the Api controllers are
+      # exercised by the heavy E2E matrix (separate jobs/runners), so this number reflects the unit/integration
+      # signal over Domain/Application/Infrastructure, not a full end-to-end figure.
+      - name: Unit tests
+        run: dotnet test tests/SimplArchive.UnitTests --no-build -c Debug --collect:"XPlat Code Coverage" --results-directory ./coverage/unit
+      - name: Integration tests
+        run: dotnet test tests/SimplArchive.IntegrationTests --no-build -c Debug --collect:"XPlat Code Coverage" --results-directory ./coverage/integration
+      # Merge the two cobertura files into one report (ReportGenerator, pinned in .config/dotnet-tools.json). The
+      # GitHub-flavoured markdown summary is appended to the job summary; the HTML report is uploaded as an
+      # artifact below. Informational only — `continue-on-error` so a report hiccup never fails the build, and
+      # generated EF migrations are filtered out of the number.
+      - name: Coverage report
+        if: always()
+        continue-on-error: true
+        run: |
+          dotnet tool run reportgenerator \
+            -reports:"coverage/**/coverage.cobertura.xml" \
+            -targetdir:"coverage/report" \
+            -reporttypes:"Html;MarkdownSummaryGithub" \
+            "-assemblyfilters:+SimplArchive.*;-SimplArchive.*Tests" \
+            "-classfilters:-SimplArchive.Infrastructure.Migrations.*"
+          cat coverage/report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/report
+          if-no-files-found: ignore
+
+  # The three heavy suites run as a parallel matrix — one hosted runner each — so wall-clock is the slowest suite,
+  # not their sum. EndToEndTests = container E2E (in-process API); UiEndToEndTests = browser/web UI (Playwright +
+  # Chrome); DesktopUiEndToEndTests = the DesktopClient api-client tests (no browser). Splitting web and desktop
+  # into separate projects lets the desktop suite skip Chrome and keeps each runner's load light on the 2-core
+  # hosted runner (ADR 0378).
+  heavy:
+    name: E2E (${{ matrix.suite }})
+    needs: fast # don't spend heavy-tier minutes if the build/unit/integration tier is already red
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [EndToEndTests, UiEndToEndTests, DesktopUiEndToEndTests]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - name: Restore
+        run: dotnet restore
+      - name: Build ${{ matrix.suite }}
+        run: dotnet build tests/SimplArchive.${{ matrix.suite }} --no-restore -c Debug
+      # Suites run once, no retry wrapper — the known intermittent flakes are root-caused (SearchTests polls until
+      # BOTH docs are indexed; the login helper waits on DOMContentLoaded + a 60s timeout for the slower hosted
+      # CPU; WebSearchFilterTests polls until the row clears). A red suite is a real regression or a new flake.
+      - name: Test ${{ matrix.suite }}
+        run: dotnet test tests/SimplArchive.${{ matrix.suite }} --no-build -c Debug

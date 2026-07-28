@@ -1,0 +1,86 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        x:Class="SimplArchive.DesktopClient.Views.WorkflowWindow"
+        x:DataType="vm:WorkflowWindowViewModel"
+        Title="{loc:Tr WfTitle}" Width="520" Height="440"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="14" LastChildFill="True">
+
+        <Border DockPanel.Dock="Bottom" Margin="0,10,0,0">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Text="{Binding Status}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                <Button Grid.Column="1" Content="{loc:Tr Close}" Click="OnClose" IsCancel="True" />
+            </Grid>
+        </Border>
+
+        <ScrollViewer>
+            <StackPanel Spacing="10">
+
+                <!-- No confirmed version → nothing to run a workflow on. -->
+                <TextBlock Text="{loc:Tr WfNoVersion}"
+                           Foreground="{DynamicResource WbMuted}" TextWrapping="Wrap"
+                           IsVisible="{Binding !HasWorkflow}" />
+
+                <StackPanel IsVisible="{Binding HasWorkflow}" Spacing="10">
+
+                    <!-- Status + assigned reviewer. -->
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{loc:Tr WfStatus}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <Border Background="{DynamicResource WbChrome}" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="9" Padding="9,1">
+                            <TextBlock Text="{Binding StatusName}" FontSize="12" />
+                        </Border>
+                        <TextBlock Text="{Binding AssignedTo}" Foreground="{DynamicResource WbMuted}" FontSize="12" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- Submit for review (Draft/Rejected). -->
+                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding CanSubmit}">
+                        <ComboBox ItemsSource="{Binding Reviewers}" SelectedItem="{Binding SelectedReviewer}" MinWidth="190" PlaceholderText="Reviewer…">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate><TextBlock Text="{Binding DisplayName}" /></DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Content="Submit for review" Command="{Binding SubmitCommand}" IsEnabled="{Binding !Busy}" />
+                    </StackPanel>
+
+                    <!-- Approve / Reject (the assigned reviewer). -->
+                    <StackPanel Spacing="6" IsVisible="{Binding CanReview}">
+                        <Button Content="Approve" Command="{Binding ApproveCommand}" IsEnabled="{Binding !Busy}" HorizontalAlignment="Left" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBox Text="{Binding RejectReason}" Watermark="Rejection reason" MinWidth="230" />
+                            <Button Content="Reject" Command="{Binding RejectCommand}" IsEnabled="{Binding !Busy}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Reassign (delegate/re-route — the reviewer or an editor). -->
+                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding CanReassign}">
+                        <ComboBox ItemsSource="{Binding Reviewers}" SelectedItem="{Binding SelectedReviewer}" MinWidth="190" PlaceholderText="Reassign to…">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate><TextBlock Text="{Binding DisplayName}" /></DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Content="Reassign" Command="{Binding ReassignCommand}" IsEnabled="{Binding !Busy}" />
+                    </StackPanel>
+
+                    <!-- Release (Approved). -->
+                    <Button Content="Release" Command="{Binding ReleaseCommand}" IsVisible="{Binding CanRelease}" IsEnabled="{Binding !Busy}" HorizontalAlignment="Left" />
+
+                    <!-- History. -->
+                    <StackPanel IsVisible="{Binding HasHistory}" Spacing="1">
+                        <TextBlock Text="History" Foreground="{DynamicResource WbMuted}" FontSize="12" Margin="0,6,0,2" />
+                        <ItemsControl ItemsSource="{Binding History}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:WorkflowHistoryItemViewModel">
+                                    <TextBlock FontSize="12" TextWrapping="Wrap">
+                                        <Run Text="{Binding ToStatusName}" FontWeight="SemiBold" /><Run Text=" " /><Run Text="{Binding Detail}" Foreground="{DynamicResource WbMuted}" />
+                                    </TextBlock>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

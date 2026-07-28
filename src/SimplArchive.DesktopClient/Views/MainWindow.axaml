@@ -1,0 +1,1864 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        xmlns:v="using:SimplArchive.DesktopClient.Views"
+        xmlns:conv="using:Avalonia.Data.Converters"
+        xmlns:svc="using:SimplArchive.DesktopClient.Services"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Width="1180" Height="760"
+        Icon="/Assets/cabinet.png"
+        Title="SimplArchive">
+
+    <Window.KeyBindings>
+        <!-- Esc exits the preview full-screen (no-op otherwise). See ADR "Desktop preview full-screen toggle". -->
+        <KeyBinding Gesture="Escape" Command="{Binding ExitPreviewFullscreenCommand}" />
+    </Window.KeyBindings>
+
+    <DockPanel LastChildFill="True">
+
+        <!-- Top bar -->
+        <Border DockPanel.Dock="Top" Background="#5b4ee5" Padding="14,10">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Grid.Column="0" Text="SimplArchive" Foreground="White" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" />
+                <!-- Current user: DisplayName + photo (or initials); click to change your own photo (ADR
+                     "User profile photo"). The self-service avatar sits in the right corner (rightmost), with
+                     the display name to its left (ADR "Desktop recycle bin parity"). The email is gone. -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center" IsVisible="{Binding IsLoggedIn}">
+
+                <!-- In-app notifications bell (ADR "Notification viewer + click-through"): unread badge + a flyout
+                     list; clicking a notification marks it read and navigates to its document. -->
+                <Button ToolTip.Tip="{loc:Tr AppbarNotifications}" Background="Transparent" BorderThickness="0" Padding="4" Click="OnBellClick">
+                    <Panel Width="24" Height="22">
+                        <i:Icon Value="mdi-bell-outline" Foreground="White" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <Border Background="#e53935" CornerRadius="8" MinWidth="15" Height="15" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                Margin="0,-4,-6,0" IsVisible="{Binding HasUnreadNotifications}">
+                            <TextBlock Text="{Binding UnreadNotificationCount}" Foreground="White" FontSize="10" Margin="3,0" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </Panel>
+                    <Button.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedRight">
+                            <StackPanel Width="340" Spacing="4">
+                                <Grid ColumnDefinitions="*,Auto" Margin="4,2">
+                                    <TextBlock Grid.Column="0" Text="{loc:Tr AppbarNotifications}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <Button Grid.Column="1" Content="{loc:Tr MarkAllRead}" Padding="6,2" FontSize="12" Command="{Binding MarkAllNotificationsReadCommand}" />
+                                </Grid>
+                                <TextBlock Text="{loc:Tr NoNotifications}" Foreground="{DynamicResource WbMuted}" Margin="4,6"
+                                           IsVisible="{Binding !Notifications.Count}" />
+                                <ScrollViewer MaxHeight="360">
+                                    <ItemsControl ItemsSource="{Binding Notifications}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:NotificationRowViewModel">
+                                                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Padding="6,4"
+                                                        Command="{ReflectionBinding $parent[ItemsControl].DataContext.OpenNotificationCommand}" CommandParameter="{Binding}">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap"
+                                                                   FontWeight="{Binding IsRead, Converter={x:Static vm:BoolToWeightConverter.Instance}, ConverterParameter=invert}" />
+                                                        <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+                                                        <TextBlock Text="{Binding When}" FontSize="11" Foreground="{DynamicResource WbFaint}" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
+                <Button HorizontalAlignment="Right" Margin="0,0,6,0"
+                        ToolTip.Tip="{loc:Tr AppbarAccount}" Background="Transparent" BorderThickness="0" Padding="4,2">
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding UserDisplayName}" Foreground="White" VerticalAlignment="Center" />
+                        <Border Width="28" Height="28" CornerRadius="14" ClipToBounds="True" Background="#8a7ff0">
+                            <Panel>
+                                <TextBlock Text="{Binding UserInitials}" Foreground="White" FontSize="12" FontWeight="SemiBold"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !HasProfilePhoto}" />
+                                <Image Source="{Binding ProfilePhoto}" Stretch="UniformToFill" IsVisible="{Binding HasProfilePhoto}" />
+                            </Panel>
+                        </Border>
+                    </StackPanel>
+                    <Button.Flyout>
+                        <!-- Open under the account button's right edge (the button sits in the top-right corner)
+                             rather than the default centred placement, which drifted the menu to the left. -->
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <MenuItem Header="{loc:Tr AccountChangePhoto}" Click="OnChangeMyPhoto" />
+                            <MenuItem Header="{loc:Tr AccountChangePassword}" Click="OnChangeMyPassword" />
+                            <MenuItem Header="{loc:Tr AccountEnableTwoFactor}" Click="OnSetUpMfa" IsVisible="{Binding !MfaEnabled}" />
+                            <MenuItem Header="{loc:Tr AccountDisableTwoFactor}" Click="OnDisableMfa" IsVisible="{Binding MfaEnabled}" />
+                            <MenuItem Header="{loc:Tr AccountPasskeys}" Click="OnManagePasskeys" />
+                            <MenuItem Header="{loc:Tr AccountWebDav}" Click="OnManageWebDav" />
+                            <MenuItem Header="{loc:Tr AccountNotificationPrefs}" Click="OnNotificationPreferences" />
+                            <Separator />
+                            <MenuItem Header="{loc:Tr AccountLogout}" Command="{Binding LogoutCommand}" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+
+                </StackPanel>
+                <Button Grid.Column="2" Command="{Binding LoginCommand}" IsVisible="{Binding !IsLoggedIn}" ToolTip.Tip="{loc:Tr LogonLogin}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <i:Icon Value="mdi-login" />
+                        <TextBlock Text="{loc:Tr LogonLogin}" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Impersonation banner (ADR "User impersonation") -->
+        <Border DockPanel.Dock="Top" Background="#b26a00" Padding="12,5" IsVisible="{Binding IsImpersonating}">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <i:Icon Value="mdi-account-supervisor" Foreground="White" />
+                <TextBlock Foreground="White" VerticalAlignment="Center">
+                    <Run Text="{loc:Tr MwImpersonating}" />
+                    <Run Text="{Binding ImpersonatedName}" FontWeight="Bold" />
+                </TextBlock>
+                <Button Content="{loc:Tr StopImpersonating}" Command="{Binding StopImpersonatingCommand}" Margin="8,0,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- Status bar -->
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource WbChrome}" Padding="12,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,1,0,0">
+            <TextBlock Text="{Binding Status}" Foreground="{DynamicResource WbMuted}" />
+        </Border>
+
+        <!-- Logged-out prompt -->
+        <TextBlock Text="{loc:Tr MwLoginToBrowse}" Foreground="{DynamicResource WbFaint}"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !IsLoggedIn}" />
+
+        <!-- Bottom tabs -->
+        <TabControl TabStripPlacement="Bottom" IsVisible="{Binding IsLoggedIn}" SelectedIndex="{Binding SelectedTab}">
+
+            <TabItem ToolTip.Tip="{loc:Tr TabRepositories}">
+                <TabItem.Header><i:Icon Value="mdi-folder-multiple" FontSize="20" /></TabItem.Header>
+                <!-- The preview full-screen overlay (at the end of this Grid) covers the ribbon + panes but not
+                     the bottom tab strip, which stays reachable — mirrors the web (ADR "Desktop preview
+                     full-screen toggle"). -->
+                <Grid>
+                <DockPanel LastChildFill="True">
+
+                    <!-- Ribbon — buttons grouped by concern (tree / documents / general) with vertical separators
+                         between the groups (ADR "Desktop Repositories-tab UI polish"). "Convert scans" moved to
+                         the Tenant tab. The vertical separators are thin theme-coloured Borders. -->
+                    <Border DockPanel.Dock="Top" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <!-- Tree group: folder/structure + repository export/import (act on the selected folder/repository subtree). -->
+                            <Button IsEnabled="{Binding CanCreateFolder}" Click="OnNewFolder" ToolTip.Tip="{loc:Tr NewFolder}"><i:Icon Value="mdi-folder-plus" FontSize="18" /></Button>
+                            <!-- Requires CanExport (ADR "Dedicated CanExport/CanImport rights"); enabled once a folder is open. -->
+                            <Button IsVisible="{Binding HasExportRight}" IsEnabled="{Binding CanExport}" Click="OnExport" ToolTip.Tip="{loc:Tr RibbonExport}"><i:Icon Value="mdi-archive-arrow-down-outline" FontSize="18" /></Button>
+                            <!-- Requires CanImport (ADR "Dedicated CanExport/CanImport rights"): import an archive under the current folder, or as a new repository. -->
+                            <Button IsVisible="{Binding HasImportRight}" Click="OnImport" ToolTip.Tip="{loc:Tr RibbonImport}"><i:Icon Value="mdi-archive-arrow-up-outline" FontSize="18" /></Button>
+
+                            <Border Width="1" Margin="4,2" Background="{DynamicResource WbBorder}" />
+
+                            <!-- Documents group: operations on the selected document/item (order: Open · Save · Rename · Delete · Upload · Check-out · Workflow). -->
+                            <Button Command="{Binding OpenCommand}" ToolTip.Tip="{loc:Tr RibbonOpen}"><i:Icon Value="mdi-open-in-app" FontSize="18" /></Button>
+                            <Button IsEnabled="{Binding CanSaveAs}" Click="OnSaveAs" ToolTip.Tip="{loc:Tr RibbonSaveAs}"><i:Icon Value="mdi-content-save-outline" FontSize="18" /></Button>
+                            <Button IsEnabled="{Binding HasSelectedItem}" Click="OnRename" ToolTip.Tip="{loc:Tr RibbonRename}"><i:Icon Value="mdi-rename-box" FontSize="18" /></Button>
+                            <Button IsEnabled="{Binding HasSelectedItem}" Click="OnDelete" ToolTip.Tip="{loc:Tr RibbonDelete}"><i:Icon Value="mdi-delete" FontSize="18" /></Button>
+                            <Button IsEnabled="False" ToolTip.Tip="{loc:Tr RibbonUpload}"><i:Icon Value="mdi-upload" FontSize="18" /></Button>
+                            <Button IsEnabled="{Binding CanCheckOut}" Command="{Binding CheckOutSelectedCommand}" ToolTip.Tip="{loc:Tr RibbonCheckOut}"><i:Icon Value="mdi-lock-outline" FontSize="18" /></Button>
+                            <Button IsEnabled="{Binding CanSaveAs}" Click="OnVersions" ToolTip.Tip="{loc:Tr RibbonVersions}"><i:Icon Value="mdi-history" FontSize="18" /></Button>
+                            <Button IsEnabled="{Binding CanStartWorkflow}" Click="OnStartWorkflow" ToolTip.Tip="{loc:Tr RibbonStartWorkflow}"><i:Icon Value="mdi-sitemap-outline" FontSize="18" /></Button>
+
+                            <Border Width="1" Margin="4,2" Background="{DynamicResource WbBorder}" />
+
+                            <!-- General group: view actions. -->
+                            <Button Command="{Binding RefreshCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
+                            <Button Command="{Binding ResetLayoutCommand}" ToolTip.Tip="{loc:Tr RibbonResetLayout}"><i:Icon Value="mdi-view-grid-outline" FontSize="18" /></Button>
+
+                            <ItemsControl ItemsSource="{Binding Breadcrumbs}" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:BreadcrumbViewModel">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="/" Foreground="{DynamicResource WbFaint}" Margin="4,0" VerticalAlignment="Center" IsVisible="{Binding ShowSeparator}" />
+                                            <Button Content="{Binding Name}" CommandParameter="{Binding}"
+                                                    Command="{ReflectionBinding $parent[ItemsControl].DataContext.NavigateToBreadcrumbCommand}"
+                                                    Background="Transparent" BorderThickness="0" Padding="3,1" Foreground="#5b4ee5" Cursor="Hand" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- tree | contents | detail (resizable via gutters, each side pane collapsible) -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="{Binding TreeWidth, Mode=TwoWay}" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="{Binding ListWidth, Mode=TwoWay}" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="4.2*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Tree (folders only, lazy) -->
+                        <TreeView Grid.Column="0" x:Name="FolderTree" DragDrop.AllowDrop="True" IsVisible="{Binding !TreeCollapsed}" ItemsSource="{Binding Tree}" SelectedItem="{Binding SelectedTreeNode}"
+                                  ContextRequested="OnTreeContextRequested">
+                            <!-- Folder actions on the right-clicked tree node (ADR "Desktop tree-pane folder context menu"). -->
+                            <TreeView.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="{loc:Tr MwNewSubfolder}" Click="OnTreeNewFolder">
+                                        <MenuItem.Icon><i:Icon Value="mdi-folder-plus-outline" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{loc:Tr CtxRename}" Click="OnTreeRename">
+                                        <MenuItem.Icon><i:Icon Value="mdi-rename-box" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{loc:Tr UgDelete}" Click="OnTreeDelete">
+                                        <MenuItem.Icon><i:Icon Value="mdi-delete" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator />
+                                    <MenuItem Header="{loc:Tr MwFollowFolder}" Click="OnTreeToggleFollow">
+                                        <MenuItem.Icon><i:Icon Value="mdi-bell-outline" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator />
+                                    <MenuItem Header="{loc:Tr RibbonRefresh}" Click="OnTreeRefresh">
+                                        <MenuItem.Icon><i:Icon Value="mdi-refresh" /></MenuItem.Icon>
+                                    </MenuItem>
+                                </ContextMenu>
+                            </TreeView.ContextMenu>
+                            <TreeView.Styles>
+                                <Style Selector="TreeViewItem">
+                                    <Setter Property="IsExpanded" Value="{ReflectionBinding IsExpanded, Mode=TwoWay}" />
+                                </Style>
+                            </TreeView.Styles>
+                            <TreeView.DataTemplates>
+                                <TreeDataTemplate DataType="vm:TreeNodeViewModel" ItemsSource="{Binding Children}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <i:Icon Value="{Binding IconValue}" Foreground="#d9a400" />
+                                        <TextBlock Text="{Binding Name}" />
+                                    </StackPanel>
+                                </TreeDataTemplate>
+                            </TreeView.DataTemplates>
+                        </TreeView>
+
+                        <!-- gutter: resize + collapse the tree. The GridSplitter must be a DIRECT child of the
+                             resizable Grid (nesting it caused an NRE in Grid.ArrangeOverride); the caret Button
+                             is a second child overlaid in the same cell. -->
+                        <GridSplitter Grid.Column="1" Background="#33808080" ResizeDirection="Columns" IsEnabled="{Binding !TreeCollapsed}" />
+                        <Button Grid.Column="1" Command="{Binding ToggleTreeCommand}" Width="10" Height="24" Padding="0" MinWidth="0" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
+                            <i:Icon Value="{Binding TreeCaret}" FontSize="11" />
+                        </Button>
+
+                        <!-- Contents list (drop OS files here to upload into the current folder) -->
+                        <DockPanel Grid.Column="2" IsVisible="{Binding !ListCollapsed}">
+                        <!-- Bulk-action bar (ADR "Bulk actions on selected documents") — shows when ≥2 rows are selected. -->
+                        <Border DockPanel.Dock="Top" IsVisible="{Binding HasBulkSelection}" Background="{DynamicResource WbChrome}"
+                                BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="6,3">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="{Binding BulkSelectionCount, StringFormat='{}{0} selected'}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Margin="2,0,6,0" />
+                                <Button Click="OnBulkMove" Padding="6,2" ToolTip.Tip="{loc:Tr MwMoveSelected}"><StackPanel Orientation="Horizontal" Spacing="3"><i:Icon Value="mdi-file-move-outline" FontSize="13" /><TextBlock Text="{loc:Tr BulkMove}" FontSize="12" /></StackPanel></Button>
+                                <Button Click="OnBulkAddTags" Padding="6,2" ToolTip.Tip="{loc:Tr MwAddTagsSelected}"><StackPanel Orientation="Horizontal" Spacing="3"><i:Icon Value="mdi-label-outline" FontSize="13" /><TextBlock Text="{loc:Tr TagsColTag}" FontSize="12" /></StackPanel></Button>
+                                <Button Click="OnBulkSensitivity" Padding="6,2" ToolTip.Tip="{loc:Tr MwSetSensSelected}"><StackPanel Orientation="Horizontal" Spacing="3"><i:Icon Value="mdi-shield-outline" FontSize="13" /><TextBlock Text="{loc:Tr BulkSensLabel}" FontSize="12" /></StackPanel></Button>
+                                <Button Click="OnBulkDelete" Padding="6,2" ToolTip.Tip="{loc:Tr MwDeleteSelected}"><StackPanel Orientation="Horizontal" Spacing="3"><i:Icon Value="mdi-delete-outline" FontSize="13" Foreground="#c0392b" /><TextBlock Text="{loc:Tr UgDelete}" FontSize="12" /></StackPanel></Button>
+                            </StackPanel>
+                        </Border>
+                        <!-- Resizable, horizontally-scrollable columns (ADR "Desktop list-pane resizable columns"):
+                             the header + the ListBox live in one horizontal ScrollViewer with a fixed total width
+                             (ContentsTotalWidth), so they stay aligned when scrolled and a scrollbar appears once the
+                             columns don't fit the pane. Each header cell carries a drag Thumb at its right edge. -->
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <DockPanel Width="{Binding ContentsTotalWidth}">
+                        <!-- Sortable column header (ADR "List-row columns and sorting") — click a header to sort the loaded rows. -->
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="6,2,0,0" Background="{DynamicResource WbChrome}">
+                            <Grid Width="{Binding ColNameWidth}">
+                                <Button Content="{Binding NameHeader}" Command="{Binding SortContentsCommand}" CommandParameter="name" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,1" Background="Transparent" BorderThickness="0" FontSize="11" FontWeight="SemiBold" />
+                                <Thumb Tag="0" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
+                            </Grid>
+                            <Grid Width="{Binding ColTypeWidth}">
+                                <Button Content="{Binding TypeHeader}" Command="{Binding SortContentsCommand}" CommandParameter="type" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,1" Background="Transparent" BorderThickness="0" FontSize="11" FontWeight="SemiBold" />
+                                <Thumb Tag="1" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
+                            </Grid>
+                            <Grid Width="{Binding ColDateWidth}">
+                                <Button Content="{Binding DateHeader}" Command="{Binding SortContentsCommand}" CommandParameter="date" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,1" Background="Transparent" BorderThickness="0" FontSize="11" FontWeight="SemiBold" />
+                                <Thumb Tag="2" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
+                            </Grid>
+                            <Grid Width="{Binding ColSizeWidth}">
+                                <Button Content="{Binding SizeHeader}" Command="{Binding SortContentsCommand}" CommandParameter="size" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,1" Background="Transparent" BorderThickness="0" FontSize="11" FontWeight="SemiBold" />
+                                <Thumb Tag="3" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
+                            </Grid>
+                            <Grid Width="{Binding ColTagsWidth}">
+                                <Button Content="{Binding TagsHeader}" Command="{Binding SortContentsCommand}" CommandParameter="tags" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,1" Background="Transparent" BorderThickness="0" FontSize="11" FontWeight="SemiBold" />
+                                <Thumb Tag="4" DragDelta="OnColumnResize" DragCompleted="OnColumnResizeDone" Width="6" HorizontalAlignment="Right" Background="Transparent" Cursor="SizeWestEast" />
+                            </Grid>
+                        </StackPanel>
+                        <ListBox x:Name="ContentsList" DragDrop.AllowDrop="True" SelectionMode="Multiple"
+                                 ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" DoubleTapped="OnListDoubleTapped"
+                                 SelectionChanged="OnContentsSelectionChanged"
+                                 ContextRequested="OnContentsContextRequested" KeyDown="OnListKeyDown">
+                            <ListBox.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="{loc:Tr MwOpen}" Click="OnOpen">
+                                        <MenuItem.Icon><i:Icon Value="mdi-open-in-app" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{loc:Tr RibbonSaveAs}" Click="OnSaveAs">
+                                        <MenuItem.Icon><i:Icon Value="mdi-content-save-outline" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{loc:Tr CtxVersions}" Click="OnVersions" IsEnabled="{Binding CanCompareVersions}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-history" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{loc:Tr MwCompareVersions}" Click="OnCompareVersions" IsEnabled="{Binding CanCompareVersions}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-compare" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator />
+                                    <MenuItem Header="{loc:Tr CtxRename}" Click="OnRename">
+                                        <MenuItem.Icon><i:Icon Value="mdi-rename-box" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{loc:Tr UgDelete}" Click="OnDelete">
+                                        <MenuItem.Icon><i:Icon Value="mdi-delete" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator IsVisible="{Binding CanLegalHold}" />
+                                    <MenuItem Header="{loc:Tr CtxPlaceLegalHold}" Click="OnPlaceLegalHold" IsVisible="{Binding CanLegalHold}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-gavel" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator IsVisible="{Binding CanStartWorkflow}" />
+                                    <MenuItem Header="{loc:Tr CtxStartWorkflow}" Click="OnStartWorkflow" IsVisible="{Binding CanStartWorkflow}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-sitemap-outline" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{loc:Tr MwRemind}" Command="{Binding RemindCommand}" IsVisible="{Binding CanRemind}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-alarm" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator IsVisible="{Binding CanCheckOut}" />
+                                    <MenuItem Header="{loc:Tr CtxCheckOut}" Command="{Binding CheckOutSelectedCommand}" IsVisible="{Binding CanCheckOut}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-lock-outline" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{loc:Tr CtxOverrideCheckout}" Command="{Binding OverrideCheckoutSelectedCommand}" IsVisible="{Binding CanOverrideSelected}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-lock-open-variant-outline" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator IsVisible="{Binding SelectedHasReferences}" />
+                                    <MenuItem Header="{loc:Tr MwReferences}" Click="OnReferences" IsVisible="{Binding SelectedHasReferences}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-link-variant" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator IsVisible="{Binding SelectedIsReference}" />
+                                    <MenuItem Header="{loc:Tr MwGoTo}" Click="OnGoTo" IsVisible="{Binding SelectedIsReference}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-arrow-right-thin-circle-outline" /></MenuItem.Icon>
+                                    </MenuItem>
+                                </ContextMenu>
+                            </ListBox.ContextMenu>
+                            <ListBox.Styles>
+                                <Style Selector="ListBoxItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Padding" Value="6,2" />
+                                </Style>
+                            </ListBox.Styles>
+                            <!-- List-row columns (ADRs "List-row columns and sorting" / "Desktop list-pane resizable
+                                 columns"): each cell's width is bound to the same VM column width the header uses, so
+                                 the header and rows stay aligned and resize together. -->
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:NodeViewModel">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Grid Width="{Binding $parent[ListBox].DataContext.ColNameWidth}" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
+                                            <i:Icon Grid.Column="0" Value="{Binding IconValue}" Foreground="#5b4ee5" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                            <TextBlock Grid.Column="1" Text="{Binding DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <i:Icon Grid.Column="2" Value="mdi-lock" Foreground="#d9a400" VerticalAlignment="Center" Margin="6,0,0,0" IsVisible="{Binding OnLegalHold}" ToolTip.Tip="{loc:Tr LhUnderHold}" />
+                                            <!-- Check-out lock (ADR "Document check-out / check-in"): green when mine, red when someone else's. -->
+                                            <i:Icon Grid.Column="3" Value="mdi-lock-open-check" Foreground="#2e7d32" VerticalAlignment="Center" Margin="6,0,0,0" IsVisible="{Binding CheckedOutByMe}" ToolTip.Tip="{loc:Tr CoLockedMine}" />
+                                            <i:Icon Grid.Column="4" Value="mdi-lock" Foreground="#e53935" VerticalAlignment="Center" Margin="6,0,0,0" IsVisible="{Binding CheckedOutByOther}" ToolTip.Tip="{loc:Tr CoLockedOther}" />
+                                            <!-- Sensitivity badge (ADR "Sensitivity-label list badge + search facet"). -->
+                                            <Border Grid.Column="5" IsVisible="{Binding HasSensitivity}" Background="{Binding SensitivityBrush}" CornerRadius="3" Padding="4,0" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                    ToolTip.Tip="{Binding SensitivityText, StringFormat='Sensitivity: {0}'}">
+                                                <TextBlock Text="{Binding SensitivityText}" Foreground="White" FontSize="9" FontWeight="SemiBold" />
+                                            </Border>
+                                        </Grid>
+                                        <TextBlock Width="{Binding $parent[ListBox].DataContext.ColTypeWidth}" Text="{Binding TypeText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Width="{Binding $parent[ListBox].DataContext.ColDateWidth}" Text="{Binding DocumentDateText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                        <TextBlock Width="{Binding $parent[ListBox].DataContext.ColSizeWidth}" Text="{Binding SizeText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                        <TextBlock Width="{Binding $parent[ListBox].DataContext.ColTagsWidth}" Text="{Binding TagsText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding TagsText}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        </DockPanel>
+                        </ScrollViewer>
+                        </DockPanel>
+
+                        <!-- gutter: resize + collapse the contents list -->
+                        <GridSplitter Grid.Column="3" Background="#33808080" ResizeDirection="Columns" IsEnabled="{Binding !ListCollapsed}" />
+                        <Button Grid.Column="3" Command="{Binding ToggleListCommand}" Width="10" Height="24" Padding="0" MinWidth="0" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
+                            <i:Icon Value="{Binding ListCaret}" FontSize="11" />
+                        </Button>
+
+                        <!-- Detail: index-data over (preview | chat) -->
+                        <Grid Grid.Column="4">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="{Binding IndexHeight, Mode=TwoWay}" />
+                                <RowDefinition Height="10" />
+                                <RowDefinition Height="3*" />
+                            </Grid.RowDefinitions>
+
+                            <!-- Index-data -->
+                            <ScrollViewer Grid.Row="0" IsVisible="{Binding !IndexCollapsed}">
+                                <StackPanel Margin="12,10" Spacing="4">
+                                    <DockPanel>
+                                        <!-- Follow / unfollow this document (ADR "Document subscriptions"). -->
+                                        <Button DockPanel.Dock="Right" Command="{Binding ToggleSubscriptionCommand}" ToolTip.Tip="{Binding SubscriptionTip}"
+                                                IsVisible="{Binding DetailTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
+                                                Height="26" Padding="6,0" Background="Transparent" BorderThickness="0">
+                                            <i:Icon Value="{Binding SubscriptionIcon}" FontSize="16" />
+                                        </Button>
+                                        <TextBlock Text="{Binding DetailTitle}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    </DockPanel>
+
+                                    <!-- System fields: always shown, separate from the mask (ADR "System fields + OCR-language mask
+                                         field"). Read-only until the pane enters edit mode (ADR "Single pane-level edit toggle on
+                                         the detail pane"); Name/Document date/OCR languages then become editable, File extension/
+                                         Created/Created by stay read-only. -->
+                                    <Grid ColumnDefinitions="110,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,8,0,0"
+                                          IsVisible="{Binding SysCreated, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr Name}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SysName}" VerticalAlignment="Center" Margin="0,2" IsVisible="{Binding !IsEditing}" />
+                                        <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding SysName}" Height="28" Padding="4,2" VerticalContentAlignment="Center" Margin="0,2" IsVisible="{Binding IsEditing}" />
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr SysFileExtension}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SysFileExtension}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Margin="0,2" />
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr VerColDocDate}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysDocumentDateText}" VerticalAlignment="Center" Margin="0,2" IsVisible="{Binding !IsEditing}" />
+                                        <DatePicker Grid.Row="2" Grid.Column="1" SelectedDate="{Binding SysDocumentDate}" HorizontalAlignment="Left" Margin="0,2" IsVisible="{Binding IsEditing}" />
+
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr SysOcrLanguages}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" IsVisible="{Binding SysHasTiff}" />
+                                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SysOcrLanguages}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,2" IsVisible="{Binding SysHasTiff}" />
+                                        <Button Grid.Row="3" Grid.Column="2" Click="OnEditOcrLanguages" Margin="6,2,0,2" ToolTip.Tip="{loc:Tr MwEditOcr}" IsVisible="{Binding CanEditOcr}"><i:Icon Value="mdi-pencil-outline" /></Button>
+
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Tr SysCreated}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SysCreated}" VerticalAlignment="Center" Margin="0,2" />
+
+                                        <TextBlock Grid.Row="5" Grid.Column="0" Text="{loc:Tr SysCreatedBy}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SysCreatedBy}" VerticalAlignment="Center" Margin="0,2" />
+
+                                        <!-- The document's current (latest confirmed) version number, directly below Created by
+                                             (ADR "Mask-pane current-version line"). -->
+                                        <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:Tr SysCurrentVersion}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SysCurrentVersion}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Margin="0,2" />
+                                    </Grid>
+
+                                    <!-- Mask (additional metadata) — read-only when the pane isn't editing. -->
+                                    <StackPanel IsVisible="{Binding !IsEditing}" Margin="0,10,0,0">
+                                        <TextBlock Text="{Binding MaskLine}" Foreground="{DynamicResource WbMuted}" FontSize="12" VerticalAlignment="Center" />
+                                        <!-- Sensitivity badge (ADR "Configurable sensitivity labels + upload defaults"). -->
+                                        <Border IsVisible="{Binding HasSensitivity}" Background="{Binding DetailSensitivityBrush}" CornerRadius="3" Padding="6,1" HorizontalAlignment="Left" Margin="0,4,0,0">
+                                            <TextBlock Text="{Binding DetailSensitivityText}" Foreground="White" FontSize="11" FontWeight="SemiBold" />
+                                        </Border>
+                                        <ItemsControl ItemsSource="{Binding IndexFields}" Margin="0,2,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:IndexFieldViewModel">
+                                                    <Grid ColumnDefinitions="180,*" Margin="0,2">
+                                                        <TextBlock Grid.Column="0" Text="{Binding FieldName}" Foreground="{DynamicResource WbMuted}" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding Values}" TextWrapping="Wrap" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <!-- Free-form tags (ADR "Document tags") — clickable chips → search by that tag. -->
+                                        <ItemsControl IsVisible="{Binding HasDetailTags}" ItemsSource="{Binding DetailTags}" Margin="0,6,0,0">
+                                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:CompileBindings="False">
+                                                    <Button Margin="0,0,4,4" Padding="7,1" Background="#33808080" CornerRadius="3"
+                                                            CommandParameter="{Binding}"
+                                                            Command="{Binding DataContext.SearchByTagCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
+                                                        <StackPanel Orientation="Horizontal" Spacing="3">
+                                                            <i:Icon Value="mdi-label-outline" FontSize="11" />
+                                                            <TextBlock Text="{Binding}" FontSize="11" />
+                                                        </StackPanel>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+
+                                    <!-- Mask edit mode: choose the mask + type-aware field editors. -->
+                                    <StackPanel IsVisible="{Binding IsEditing}" Spacing="6" Margin="0,10,0,0">
+                                        <Grid ColumnDefinitions="180,*">
+                                            <TextBlock Grid.Column="0" Text="{loc:Tr MaskLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding AvailableMasks}" SelectedItem="{Binding SelectedMaskChoice}">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:MaskChoiceViewModel"><TextBlock Text="{Binding Name}" /></DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                        </Grid>
+                                        <!-- Sensitivity label (ADR "Data classification / sensitivity labels"). -->
+                                        <Grid ColumnDefinitions="180,*">
+                                            <TextBlock Grid.Column="0" Text="{loc:Tr BulkSensLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding SensitivityPickerItems}" SelectedItem="{Binding SelectedSensitivityItem}">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:MainWindowViewModel+SensitivityPickerItem"><TextBlock Text="{Binding Name}" /></DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                        </Grid>
+                                        <ItemsControl ItemsSource="{Binding MaskEditFields}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:MaskFieldEditViewModel">
+                                                    <Grid ColumnDefinitions="180,*" Margin="0,3">
+                                                        <TextBlock Grid.Column="0" Text="{Binding Label}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                                        <Panel Grid.Column="1">
+                                                            <DatePicker IsVisible="{Binding IsDate}" HorizontalAlignment="Left" SelectedDate="{Binding DateValue}" />
+                                                            <CheckBox IsVisible="{Binding IsBoolean}" IsChecked="{Binding BoolValue}" />
+                                                            <TextBox IsVisible="{Binding IsMultiSelect}" Text="{Binding TextValue}" AcceptsReturn="True" Height="60" Watermark="{loc:Tr OneValuePerLine}" />
+                                                            <TextBox IsVisible="{Binding IsSingleLine}" Text="{Binding TextValue}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />
+                                                        </Panel>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <!-- Free-form tags (ADR "Document tags") — removable chips + a catalog-autocomplete add box. -->
+                                        <Grid ColumnDefinitions="180,*">
+                                            <TextBlock Grid.Column="0" Text="{loc:Tr TabTags}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Top" Margin="0,4,0,0" />
+                                            <StackPanel Grid.Column="1" Spacing="4">
+                                                <ItemsControl ItemsSource="{Binding EditTags}">
+                                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:CompileBindings="False">
+                                                            <Border Margin="0,0,4,4" Padding="7,1" Background="#33808080" CornerRadius="3">
+                                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                                    <TextBlock Text="{Binding}" FontSize="11" VerticalAlignment="Center" />
+                                                                    <Button Content="✕" Padding="3,0" MinWidth="0" MinHeight="0" FontSize="10" Background="Transparent"
+                                                                            CommandParameter="{Binding}"
+                                                                            Command="{Binding DataContext.RemoveTagCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <AutoCompleteBox Text="{Binding NewTag, Mode=TwoWay}" ItemsSource="{Binding TagCatalog}"
+                                                                     Watermark="{loc:Tr BulkTagsPlaceholder}" FilterMode="ContainsOrdinal" MinimumPrefixLength="0" Width="220" />
+                                                    <Button Content="{loc:Tr Add}" Command="{Binding AddTagCommand}" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
+
+                                    <!-- One pane-level action row: Edit (read-only) or Save + Cancel (editing). -->
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,10,0,0">
+                                        <Button Content="{loc:Tr Edit}" Command="{Binding BeginEditCommand}" IsVisible="{Binding CanBeginEdit}" />
+                                        <Button Content="{loc:Tr Cancel}" Command="{Binding CancelEditCommand}" IsVisible="{Binding IsEditing}" />
+                                        <Button Content="{loc:Tr Save}" Command="{Binding SaveDetailCommand}" IsVisible="{Binding IsEditing}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <!-- gutter: resize + collapse the index-data pane -->
+                            <GridSplitter Grid.Row="1" Background="#33808080" ResizeDirection="Rows" HorizontalAlignment="Stretch" IsEnabled="{Binding !IndexCollapsed}" />
+                            <Button Grid.Row="1" Command="{Binding ToggleIndexCommand}" Width="24" Height="10" Padding="0" MinHeight="0" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
+                                <i:Icon Value="{Binding IndexCaret}" FontSize="11" />
+                            </Button>
+
+                            <!-- preview | chat -->
+                            <Grid Grid.Row="2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="3*" />
+                                    <ColumnDefinition Width="10" />
+                                    <ColumnDefinition Width="{Binding ChatWidth, Mode=TwoWay}" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Preview (docked). The surface is a reusable UserControl — see the full-screen
+                                     overlay below and ADR "Desktop preview full-screen toggle". -->
+                                <Border Grid.Column="0" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,1,0,0"
+                                        IsVisible="{Binding !Preview.PreviewFullscreen}">
+                                    <v:PreviewPane DataContext="{Binding Preview}" />
+                                </Border>
+
+                                <!-- gutter: resize + collapse the chat -->
+                                <GridSplitter Grid.Column="1" Background="#33808080" ResizeDirection="Columns" IsEnabled="{Binding !ChatCollapsed}" />
+                                <Button Grid.Column="1" Command="{Binding ToggleChatCommand}" Width="10" Height="24" Padding="0" MinWidth="0" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
+                                    <i:Icon Value="{Binding ChatCaret}" FontSize="11" />
+                                </Button>
+
+                                <!-- Chat -->
+                                <Border Grid.Column="2" IsVisible="{Binding !ChatCollapsed}" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,1,0,0">
+                                    <DockPanel LastChildFill="True">
+                                        <TextBlock DockPanel.Dock="Top" Text="{loc:Tr CommentsHeader}" FontWeight="SemiBold" Margin="10,8" />
+                                        <Border DockPanel.Dock="Bottom" Padding="8" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,1,0,0">
+                                            <StackPanel Spacing="4">
+                                                <TextBox Text="{Binding NewComment}" Watermark="{loc:Tr CommentPlaceholder}" AcceptsReturn="True" MinHeight="46" />
+                                                <Button Command="{Binding PostCommentCommand}" HorizontalAlignment="Right" ToolTip.Tip="{loc:Tr MwPostComment}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <i:Icon Value="mdi-send" FontSize="16" />
+                                                        <TextBlock Text="{loc:Tr CommentBtn}" />
+                                                    </StackPanel>
+                                                </Button>
+                                            </StackPanel>
+                                        </Border>
+                                        <ScrollViewer>
+                                            <ItemsControl ItemsSource="{Binding Comments}" Margin="10,0">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:CommentViewModel">
+                                                        <StackPanel Margin="0,6">
+                                                            <TextBlock Text="{Binding Meta}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                            <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" />
+                                                            <ItemsControl ItemsSource="{Binding Replies}" Margin="16,4,0,0">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate x:DataType="vm:CommentViewModel">
+                                                                        <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0" Padding="8,2" Margin="0,3">
+                                                                            <StackPanel>
+                                                                                <TextBlock Text="{Binding Meta}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                                                <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" />
+                                                                            </StackPanel>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </DockPanel>
+                                </Border>
+
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </DockPanel>
+
+                    <!-- Full-screen preview overlay (in-app maximize): covers the ribbon + panes; the bottom tab
+                         strip stays reachable, so switching tabs exits full screen. Esc also exits (Window key
+                         binding). See ADR "Desktop preview full-screen toggle". -->
+                    <Border IsVisible="{Binding Preview.PreviewFullscreen}" ZIndex="100" Background="{DynamicResource WbChrome}">
+                        <v:PreviewPane DataContext="{Binding Preview}" />
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem ToolTip.Tip="{loc:Tr TabInbox}">
+                <TabItem.Header><i:Icon Value="mdi-inbox" FontSize="20" /></TabItem.Header>
+                <!-- Outer grid so the preview full-screen overlay can cover the inbox (tab strip stays reachable). -->
+                <Grid>
+                <Grid Margin="14" ColumnDefinitions="*,10,1.15*">
+
+                    <!-- Left column: the server inbox (the S3-backed staging area) + actions. The old local-inbox
+                         sync is replaced by opening the Inbox as a WebDAV folder (ADR "Desktop inbox via WebDAV"). -->
+                    <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto">
+                        <!-- Inbox header -->
+                        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="{loc:Tr TabInbox}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding InboxStatus}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Margin="8,0,0,0" Command="{Binding RefreshInboxCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" /></Button>
+                        </Grid>
+                        <ListBox Grid.Row="1" x:Name="ServerInboxList" ItemsSource="{Binding ServerInbox}" SelectedItem="{Binding SelectedServerInboxItem}"
+                                 DragDrop.AllowDrop="True"
+                                 SelectionMode="Multiple" SelectionChanged="OnServerInboxSelectionChanged" DoubleTapped="OnInboxItemDoubleTapped">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:InboxItemViewModel">
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="0,2">
+                                        <i:Icon Grid.Column="0" Value="{Binding IconValue}" Foreground="#5b4ee5" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                        <TextBlock Grid.Column="1" Text="{Binding DisplayName}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding SizeText}" Foreground="{DynamicResource WbFaint}" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                        <Button Grid.Column="3" ToolTip.Tip="{loc:Tr MwOpen}" Click="OnInboxOpen" Tag="{Binding}"><i:Icon Value="mdi-open-in-new" /></Button>
+                                        <Button Grid.Column="4" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwFileIntoFolder}" Click="OnInboxFile" Tag="{Binding}"><i:Icon Value="mdi-file-move-outline" /></Button>
+                                        <Button Grid.Column="5" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr UgDelete}" Click="OnInboxDelete" Tag="{Binding}"><i:Icon Value="mdi-delete-outline" /></Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <!-- Actions: WebDAV settings (access/password dialog) + mount-and-open in the OS file manager
+                             over WebDAV (ADR "Desktop inbox WebDAV buttons"); file the current selection. -->
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
+                            <Button Click="OnManageWebDav" Padding="10,4" ToolTip.Tip="{loc:Tr MwWebDavSettingsTip}">
+                                <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-cog-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwWebDavSettings}" /></StackPanel>
+                            </Button>
+                            <Button Click="OnOpenWebDavInbox" Padding="10,4" ToolTip.Tip="{loc:Tr MwOpenWebDavTip}">
+                                <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-folder-network-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwOpenInFileManager}" /></StackPanel>
+                            </Button>
+                            <Button Click="OnInboxFileMultiple" Padding="10,4" IsVisible="{Binding CanFileMultiple}" ToolTip.Tip="{loc:Tr MwFileSelectedTip}">
+                                <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-file-move-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwFileSelected}" /></StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <GridSplitter Grid.Column="1" Background="#33808080" ResizeDirection="Columns" HorizontalAlignment="Stretch" />
+
+                    <!-- Right column: mask/index-data pane (top) │ preview pane (bottom). Each is resizable
+                         (the row splitter) + collapsible (its header caret) + persisted. -->
+                    <Grid Grid.Column="2">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="{Binding InboxMaskHeight, Mode=TwoWay}" />
+                            <RowDefinition Height="6" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="{Binding InboxPreviewHeight, Mode=TwoWay}" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Mask / index-data header -->
+                        <Border Grid.Row="0" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0">
+                            <Grid ColumnDefinitions="*,Auto" Margin="12,6">
+                                <TextBlock Grid.Column="0" Text="{Binding InboxDetailTitle}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Command="{Binding ToggleInboxMaskCommand}" ToolTip.Tip="{loc:Tr MwCollapseExpand}"><i:Icon Value="{Binding InboxMaskCaret}" /></Button>
+                            </Grid>
+                        </Border>
+
+                        <!-- Mask / index-data body (staged to the item's sidecar) — editable only for a focused server item -->
+                        <Border Grid.Row="1" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0" IsVisible="{Binding !InboxMaskCollapsed}">
+                            <ScrollViewer>
+                                <StackPanel Margin="12,4" Spacing="6">
+                                    <TextBlock Text="{loc:Tr MwSelectInboxItem}" Foreground="{DynamicResource WbFaint}"
+                                               TextWrapping="Wrap" IsVisible="{Binding !InboxItemFocused}" />
+
+                                    <!-- Emails (.eml/.msg) are classified automatically when filed — no mask offered. -->
+                                    <StackPanel IsVisible="{Binding InboxIsEmail}" Orientation="Horizontal" Spacing="8" Margin="0,4">
+                                        <i:Icon Value="mdi-email-check-outline" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                        <TextBlock Text="{loc:Tr InboxEmailAutoMask}" Foreground="{DynamicResource WbMuted}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="6">
+                                        <StackPanel.IsVisible>
+                                            <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                                <Binding Path="InboxItemFocused" />
+                                                <Binding Path="!InboxIsEmail" />
+                                            </MultiBinding>
+                                        </StackPanel.IsVisible>
+                                        <Grid ColumnDefinitions="180,*">
+                                            <TextBlock Grid.Column="0" Text="{loc:Tr Name}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                            <TextBox Grid.Column="1" Text="{Binding InboxName}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="180,*">
+                                            <TextBlock Grid.Column="0" Text="{loc:Tr VerColDocDate}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                            <!-- Free-text date entry with an optional calendar picker (ADR "Intray refinements"). -->
+                                            <CalendarDatePicker Grid.Column="1" SelectedDate="{Binding InboxDocumentDate}" Watermark="yyyy-MM-dd" HorizontalAlignment="Stretch" />
+                                        </Grid>
+                                        <Grid ColumnDefinitions="180,*">
+                                            <TextBlock Grid.Column="0" Text="{loc:Tr MaskLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding InboxAvailableMasks}" SelectedItem="{Binding InboxSelectedMaskChoice}">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:MaskChoiceViewModel"><TextBlock Text="{Binding Name}" /></DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                        </Grid>
+                                        <ItemsControl ItemsSource="{Binding InboxMaskEditFields}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:MaskFieldEditViewModel">
+                                                    <Grid ColumnDefinitions="180,*" Margin="0,3">
+                                                        <TextBlock Grid.Column="0" Text="{Binding Label}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                                        <Panel Grid.Column="1">
+                                                            <DatePicker IsVisible="{Binding IsDate}" HorizontalAlignment="Left" SelectedDate="{Binding DateValue}" />
+                                                            <CheckBox IsVisible="{Binding IsBoolean}" IsChecked="{Binding BoolValue}" />
+                                                            <TextBox IsVisible="{Binding IsMultiSelect}" Text="{Binding TextValue}" AcceptsReturn="True" Height="60" Watermark="{loc:Tr OneValuePerLine}" />
+                                                            <TextBox IsVisible="{Binding IsSingleLine}" Text="{Binding TextValue}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />
+                                                        </Panel>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <Button Content="{loc:Tr Save}" Command="{Binding SaveInboxMaskCommand}" HorizontalAlignment="Right" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+
+                        <GridSplitter Grid.Row="2" Background="#33808080" ResizeDirection="Rows" HorizontalAlignment="Stretch"
+                                      IsEnabled="{Binding !InboxMaskCollapsed}" />
+
+                        <!-- Preview header -->
+                        <Border Grid.Row="3" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,1,0,0">
+                            <Grid ColumnDefinitions="*,Auto" Margin="12,6">
+                                <TextBlock Grid.Column="0" Text="{loc:Tr MwPreview}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Command="{Binding ToggleInboxPreviewCommand}" ToolTip.Tip="{loc:Tr MwCollapseExpand}"><i:Icon Value="{Binding InboxPreviewCaret}" /></Button>
+                            </Grid>
+                        </Border>
+
+                        <!-- Preview body (full parity: renditions, hit-overlay, find-in-document, click-to-copy) -->
+                        <!-- Inbox preview — the same reusable surface as the Repositories pane; full-screen shows
+                             the overlay below (ADR "Desktop preview full-screen toggle"). -->
+                        <Border Grid.Row="4" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0" IsVisible="{Binding !InboxPreviewCollapsed}">
+                            <v:PreviewPane DataContext="{Binding InboxPreview}" />
+                        </Border>
+                    </Grid>
+                </Grid>
+
+                    <!-- Full-screen preview overlay for the Inbox tab (its own InboxPreview, disconnected from Repositories). -->
+                    <Border IsVisible="{Binding InboxPreview.PreviewFullscreen}" ZIndex="100" Background="{DynamicResource WbChrome}">
+                        <v:PreviewPane DataContext="{Binding InboxPreview}" />
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- Check-out (ADR "Document check-out / check-in"): the caller's checked-out documents + their
+                 local working-copy status (repo SHA-256 vs the local file). Modified → Check in / Discard;
+                 unchanged/missing → Unlock. Working copies live in the local `checkout` folder. -->
+            <TabItem ToolTip.Tip="{loc:Tr TabCheckout}">
+                <TabItem.Header>
+                    <Panel>
+                        <i:Icon Value="mdi-lock-outline" FontSize="20" />
+                        <Border IsVisible="{Binding HasCheckouts}" Background="#5b4ee5" CornerRadius="8" MinWidth="16" Height="16"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-5,-9,0" Padding="4,0">
+                            <TextBlock Text="{Binding CheckoutCount}" Foreground="White" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </Panel>
+                </TabItem.Header>
+                <DockPanel Margin="16" LastChildFill="True">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+                        <TextBlock Text="{loc:Tr CoHeader}" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center" />
+                        <Button Command="{Binding Checkout.RefreshCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}" Padding="6,2"><i:Icon Value="mdi-refresh" /></Button>
+                    </StackPanel>
+
+                    <!-- Orphaned local copies (ADR "Web check-out + orphaned local copy"): the check-out was
+                         checked in from the web or force-released while this client held local edits. -->
+                    <Border DockPanel.Dock="Top" IsVisible="{Binding Checkout.HasOrphans}" Margin="0,0,0,12" Padding="10"
+                            Background="#22e5a300" BorderBrush="#e5a300" BorderThickness="1" CornerRadius="4">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="{loc:Tr MwOrphanCheckout}"
+                                       TextWrapping="Wrap" FontWeight="SemiBold" />
+                            <ItemsControl ItemsSource="{Binding Checkout.Orphans}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:OrphanRowViewModel">
+                                        <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                                                <Button Content="{loc:Tr MwAddAsVersion}" Padding="8,3"
+                                                        Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.AddOrphanAsVersionCommand}" CommandParameter="{Binding}" />
+                                                <Button Content="{loc:Tr MwDiscard}" Padding="8,3" Tag="{Binding}" Click="OnDiscardOrphan" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock DockPanel.Dock="Bottom" Text="{Binding Checkout.Status}" Foreground="{DynamicResource WbFaint}" FontSize="12" Margin="0,6,0,0" />
+                    <TextBlock DockPanel.Dock="Top" IsVisible="{Binding !Checkout.HasItems}" TextWrapping="Wrap"
+                               Text="{loc:Tr MwCheckoutEmpty}"
+                               Foreground="{DynamicResource WbFaint}" />
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,*,150,150,330" Margin="4,0,4,4" IsVisible="{Binding Checkout.HasItems}">
+                        <TextBlock Grid.Column="0" Text="{loc:Tr ColDocument}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+                        <TextBlock Grid.Column="1" Text="{loc:Tr CoColRepoPath}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+                        <TextBlock Grid.Column="2" Text="{loc:Tr CoColAutoRelease}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+                        <TextBlock Grid.Column="3" Text="{loc:Tr WorkflowStatus}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+                    </Grid>
+                    <ScrollViewer>
+                        <ItemsControl ItemsSource="{Binding Checkout.Items}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:CheckoutRowViewModel">
+                                    <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="4,8">
+                                        <Grid ColumnDefinitions="*,*,150,150,330">
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Path}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="2" Text="{Binding ExpiresText}" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+                                            <TextBlock Grid.Column="3" Text="{Binding StatusText}" VerticalAlignment="Center" FontSize="12" />
+                                            <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                                                <Button Content="{loc:Tr MwSaveToCloud}" Padding="8,3" IsVisible="{Binding CanSaveToCloud}" ToolTip.Tip="{loc:Tr MwSaveToCloudTip}"
+                                                        Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.SaveToCloudCommand}" CommandParameter="{Binding}" />
+                                                <Button Content="{loc:Tr CoCheckIn}" Padding="8,3" IsVisible="{Binding CanCheckIn}"
+                                                        Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.CheckInCommand}" CommandParameter="{Binding}" />
+                                                <Button Content="{loc:Tr MwDiscard}" Padding="8,3" IsVisible="{Binding CanDiscard}" Tag="{Binding}" Click="OnCheckoutDiscard" />
+                                                <Button Content="{loc:Tr Extend}" Padding="8,3" IsVisible="{Binding CanExtend}" ToolTip.Tip="{loc:Tr MwExtendCheckoutTip}"
+                                                        Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.ExtendCommand}" CommandParameter="{Binding}" />
+                                                <Button Content="{loc:Tr MwUnlock}" Padding="8,3" IsVisible="{Binding CanUnlock}"
+                                                        Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.UnlockCommand}" CommandParameter="{Binding}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem ToolTip.Tip="{loc:Tr TabSearch}">
+                <TabItem.Header><i:Icon Value="mdi-magnify" FontSize="20" /></TabItem.Header>
+                <DockPanel Margin="14" LastChildFill="True">
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,8">
+                        <TextBox Grid.Column="0" x:Name="SearchBox" Text="{Binding SearchQuery}"
+                                 Watermark="{loc:Tr SearchPlaceholder}" KeyDown="OnSearchKeyDown" />
+                        <ComboBox Grid.Column="1" Margin="8,0,0,0" Width="160" ItemsSource="{Binding SearchRepositories}"
+                                  SelectedItem="{Binding SelectedSearchRepository}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:CompileBindings="False"><TextBlock Text="{Binding Name}" /></DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Grid.Column="2" Margin="8,0,0,0" Command="{Binding SearchCommand}" ToolTip.Tip="{loc:Tr TabSearch}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <i:Icon Value="mdi-magnify" />
+                                <TextBlock Text="{loc:Tr TabSearch}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Grid.Column="3" Margin="8,0,0,0" Command="{Binding SaveCurrentSearchCommand}" IsEnabled="{Binding CanSaveSearch}"
+                                ToolTip.Tip="{loc:Tr MwSaveSearch}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <i:Icon Value="mdi-bookmark-plus-outline" />
+                                <TextBlock Text="{loc:Tr Save}" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <!-- Saved searches (ADR "Saved searches"/"Scoped saved-search sharing") — click to restore + re-run.
+                         Mine: the share button opens the scope dialog, ✕ removes. Others' shared searches are run-only. -->
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="0,0,0,8"
+                                IsVisible="{Binding !!SavedSearches.Count}">
+                        <TextBlock Text="{loc:Tr SearchSavedLabel}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                        <ItemsControl ItemsSource="{Binding SavedSearches}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:CompileBindings="False">
+                                    <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="10" Margin="0,0,4,4" Padding="2,0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <i:Icon Value="mdi-earth" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"
+                                                    Foreground="{DynamicResource WbMuted}" IsVisible="{Binding IsEveryone}" ToolTip.Tip="{loc:Tr MwSharedEveryone}" />
+                                            <i:Icon Value="mdi-account-group" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"
+                                                    Foreground="{DynamicResource WbMuted}" IsVisible="{Binding IsSpecific}" ToolTip.Tip="{loc:Tr MwSharedSpecific}" />
+                                            <Button Content="{Binding Name}" Background="Transparent" BorderThickness="0" Padding="6,1" FontSize="12"
+                                                    ToolTip.Tip="{Binding OwnerName, StringFormat='Shared by {0}'}"
+                                                    Command="{ReflectionBinding $parent[ItemsControl].DataContext.RunSavedSearchCommand}" CommandParameter="{Binding}" />
+                                            <Button Background="Transparent" BorderThickness="0" Padding="4,1" FontSize="11" Foreground="{DynamicResource WbMuted}"
+                                                    IsVisible="{Binding IsMine}" ToolTip.Tip="{loc:Tr MwShare}"
+                                                    Command="{ReflectionBinding $parent[ItemsControl].DataContext.ShareSavedSearchCommand}" CommandParameter="{Binding}">
+                                                <i:Icon Value="mdi-share-variant" FontSize="11" />
+                                            </Button>
+                                            <Button Content="✕" Background="Transparent" BorderThickness="0" Padding="4,1" FontSize="11" Foreground="{DynamicResource WbMuted}"
+                                                    IsVisible="{Binding IsMine}"
+                                                    Command="{ReflectionBinding $parent[ItemsControl].DataContext.DeleteSavedSearchCommand}" CommandParameter="{Binding}" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                    <Expander DockPanel.Dock="Top" Header="{loc:Tr SearchFilters}" IsExpanded="{Binding FiltersExpanded}" Margin="0,0,0,8">
+                        <StackPanel Spacing="6" Margin="0,6,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{loc:Tr VerColDocDate}" Width="100" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
+                                <DatePicker SelectedDate="{Binding DocDateFrom}" />
+                                <DatePicker SelectedDate="{Binding DocDateTo}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{loc:Tr SysCreated}" Width="100" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
+                                <DatePicker SelectedDate="{Binding CreatedFrom}" />
+                                <DatePicker SelectedDate="{Binding CreatedTo}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{loc:Tr SysCreatedBy}" Width="100" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
+                                <TextBox Width="220" Watermark="{loc:Tr FilterNameContains}" Text="{Binding CreatedByFilter}" />
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding FieldFilters}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:CompileBindings="False">
+                                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2">
+                                            <TextBlock Text="{loc:Tr FilterIndexField}" Width="100" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
+                                            <ComboBox Width="150" ItemsSource="{Binding FieldNames}" SelectedItem="{Binding FieldName}" />
+                                            <ComboBox Width="120" ItemsSource="{Binding Operators}" SelectedItem="{Binding SelectedOperator}">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate x:CompileBindings="False"><TextBlock Text="{Binding Label}" /></DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                            <DatePicker IsVisible="{Binding IsDate}" SelectedDate="{Binding DateValue}" />
+                                            <CheckBox IsVisible="{Binding IsBoolean}" IsChecked="{Binding BooleanValue}" Content="true" VerticalAlignment="Center" />
+                                            <TextBox IsVisible="{Binding IsTextLike}" Width="180" Watermark="{loc:Tr FilterValue}" Text="{Binding Value}" />
+                                            <Button ToolTip.Tip="{loc:Tr UgRemove}" VerticalAlignment="Center"
+                                                    Command="{Binding DataContext.RemoveFieldFilterCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}"><i:Icon Value="mdi-close" /></Button>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Content="{loc:Tr AddIndexFilter}" Command="{Binding AddFieldFilterCommand}" IsEnabled="{Binding CanAddFieldFilter}" />
+                                <Button Content="{loc:Tr ClearFilters}" Command="{Binding ClearFiltersCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Expander>
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding SearchStatus}" Foreground="{DynamicResource WbFaint}" FontSize="12" Margin="0,0,0,8" />
+
+                    <!-- Search facets (ADR "Search facets") — click a value to drill the results down. -->
+                    <StackPanel DockPanel.Dock="Top" Spacing="3" Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasFacetTypes}">
+                            <TextBlock Text="{loc:Tr FacetType}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Width="70" />
+                            <ItemsControl ItemsSource="{Binding FacetTypes}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:FacetBucketViewModel">
+                                        <Button Content="{Binding Display}" Padding="6,1" Margin="0,0,4,4" FontSize="12"
+                                                FontWeight="{Binding IsSelected, Converter={x:Static vm:BoolToWeightConverter.Instance}}"
+                                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.ToggleFacetTypeCommand}" CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasFacetFileTypes}">
+                            <TextBlock Text="{loc:Tr FacetFileType}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Width="70" />
+                            <ItemsControl ItemsSource="{Binding FacetFileTypes}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:FacetBucketViewModel">
+                                        <Button Content="{Binding Display}" Padding="6,1" Margin="0,0,4,4" FontSize="12"
+                                                FontWeight="{Binding IsSelected, Converter={x:Static vm:BoolToWeightConverter.Instance}}"
+                                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.ToggleFacetFileTypeCommand}" CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasFacetCreatedBy}">
+                            <TextBlock Text="{loc:Tr SysCreatedBy}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Width="70" />
+                            <ItemsControl ItemsSource="{Binding FacetCreatedBy}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:FacetBucketViewModel">
+                                        <Button Content="{Binding Display}" Padding="6,1" Margin="0,0,4,4" FontSize="12"
+                                                FontWeight="{Binding IsSelected, Converter={x:Static vm:BoolToWeightConverter.Instance}}"
+                                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.ToggleFacetCreatedByCommand}" CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasFacetYears}">
+                            <TextBlock Text="{loc:Tr FacetYear}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Width="70" />
+                            <ItemsControl ItemsSource="{Binding FacetYears}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:FacetBucketViewModel">
+                                        <Button Content="{Binding Display}" Padding="6,1" Margin="0,0,4,4" FontSize="12"
+                                                FontWeight="{Binding IsSelected, Converter={x:Static vm:BoolToWeightConverter.Instance}}"
+                                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.ToggleFacetYearCommand}" CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasFacetTags}">
+                            <TextBlock Text="{loc:Tr TabTags}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Width="70" />
+                            <ItemsControl ItemsSource="{Binding FacetTags}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:FacetBucketViewModel">
+                                        <Button Content="{Binding Display}" Padding="6,1" Margin="0,0,4,4" FontSize="12"
+                                                FontWeight="{Binding IsSelected, Converter={x:Static vm:BoolToWeightConverter.Instance}}"
+                                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.ToggleFacetTagCommand}" CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                        <!-- Sensitivity facet (ADR "Sensitivity-label list badge + search facet"). -->
+                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding HasFacetSensitivity}">
+                            <TextBlock Text="{loc:Tr BulkSensLabel}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Width="70" />
+                            <ItemsControl ItemsSource="{Binding FacetSensitivity}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:FacetBucketViewModel">
+                                        <Button Content="{Binding Display}" Padding="6,1" Margin="0,0,4,4" FontSize="12"
+                                                FontWeight="{Binding IsSelected, Converter={x:Static vm:BoolToWeightConverter.Instance}}"
+                                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.ToggleFacetSensitivityCommand}" CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                        <!-- Per-Select-index-field facets (ADR "Search facet refinements"): one group per field. -->
+                        <ItemsControl ItemsSource="{Binding FieldFacets}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:FieldFacetGroupViewModel">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Width="70" TextTrimming="CharacterEllipsis" />
+                                        <ItemsControl ItemsSource="{Binding Buckets}">
+                                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:FacetBucketViewModel">
+                                                    <Button Content="{Binding Display}" Padding="6,1" Margin="0,0,4,4" FontSize="12"
+                                                            FontWeight="{Binding IsSelected, Converter={x:Static vm:BoolToWeightConverter.Instance}}"
+                                                            Command="{ReflectionBinding $parent[ItemsControl].DataContext.ToggleCommand}" CommandParameter="{Binding}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <ListBox ItemsSource="{Binding SearchResults}" SelectedItem="{Binding SelectedSearchResult}"
+                             DoubleTapped="OnSearchResultDoubleTapped">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SearchResultViewModel">
+                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,3">
+                                    <i:Icon Value="{Binding IconValue}" Foreground="#5b4ee5" VerticalAlignment="Center" />
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" />
+                                        <!-- Highlight snippet: <em> match tags → bold runs (ADR "Search result highlighting"). -->
+                                        <TextBlock v:InlineHighlighter.Html="{Binding Highlight}" Foreground="{DynamicResource WbMuted}" FontSize="11" TextTrimming="CharacterEllipsis"
+                                                   IsVisible="{Binding Highlight, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                        <TextBlock Text="{Binding Path}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Recycle bin (ADR "Desktop recycle bin parity", mirroring the web ADR 0329): a tenant-wide
+                 master-detail — the list of soft-deleted documents on the left, and the same read-only detail
+                 + preview + chat as the Repositories tab on the right (its own RecycleBin.Preview, never shared). -->
+            <TabItem ToolTip.Tip="{loc:Tr TabRecycleBin}">
+                <TabItem.Header><i:Icon Value="mdi-delete-outline" FontSize="20" /></TabItem.Header>
+                <Grid>
+                    <DockPanel Margin="12" LastChildFill="True">
+                        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <TextBlock Text="{loc:Tr TabRecycleBin}" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center" />
+                                <Button Command="{Binding RecycleBin.RefreshCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}" Padding="6,2"><i:Icon Value="mdi-refresh" /></Button>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                <!-- Bulk restore (ADR "Bulk restore from the recycle bin") — restores every checked row. -->
+                                <Button Content="{Binding RecycleBin.RestoreSelectedLabel}" Command="{Binding RecycleBin.RestoreSelectedCommand}"
+                                        IsVisible="{Binding RecycleBin.HasCheckedItems}" />
+                                <!-- Bulk purge of the checked items (ADR "Bulk purge of selected recycle-bin items") — I AGREE gate. -->
+                                <Button Content="{Binding RecycleBin.PurgeSelectedLabel}" Click="OnRecycleBinPurgeSelected"
+                                        IsVisible="{Binding RecycleBin.CanPurgeSelected}" />
+                                <!-- Hard-delete all requires a case-sensitive "I AGREE" confirmation (code-behind dialog). -->
+                                <Button Content="{loc:Tr RbHardDeleteAll}" Click="OnRecycleBinHardDeleteAll"
+                                        IsVisible="{Binding RecycleBin.IsTenantAdmin}" IsEnabled="{Binding RecycleBin.HasItems}" />
+                            </StackPanel>
+                        </Grid>
+                        <Grid ColumnDefinitions="1.6*,10,2.4*">
+                            <!-- Master list: Name / Path / DeletedAt / DeletedBy + per-row Restore / Hard-delete. -->
+                            <DockPanel Grid.Column="0" LastChildFill="True">
+                                <TextBlock DockPanel.Dock="Bottom" Text="{Binding RecycleBin.Status}" Foreground="{DynamicResource WbFaint}" FontSize="12" Margin="2,6,0,0" />
+                                <Grid DockPanel.Dock="Top" ColumnDefinitions="28,*,*,130,120,72" Margin="4,0,4,4">
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding RecycleBin.SelectAll}" ToolTip.Tip="{loc:Tr MwSelectAll}" Padding="0" MinWidth="0" />
+                                    <TextBlock Grid.Column="1" Text="{loc:Tr Name}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+                                    <TextBlock Grid.Column="2" Text="{loc:Tr RbColPath}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+                                    <TextBlock Grid.Column="3" Text="{loc:Tr RbColDeleted}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+                                    <TextBlock Grid.Column="4" Text="{loc:Tr VerColBy}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+                                </Grid>
+                                <ListBox ItemsSource="{Binding RecycleBin.Items}" SelectedItem="{Binding RecycleBin.SelectedItem}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:RecycleBinRowViewModel">
+                                            <Grid ColumnDefinitions="28,*,*,130,120,72">
+                                                <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}" Padding="0" MinWidth="0" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Grid.Column="2" Text="{Binding Path}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Grid.Column="3" Text="{Binding DeletedAtText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                                <TextBlock Grid.Column="4" Text="{Binding DeletedBy}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                                <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="2" HorizontalAlignment="Right">
+                                                    <Button ToolTip.Tip="{loc:Tr RbRestore}" Padding="5,2"
+                                                            Command="{ReflectionBinding $parent[ListBox].DataContext.RecycleBin.RestoreCommand}" CommandParameter="{Binding}">
+                                                        <i:Icon Value="mdi-restore" />
+                                                    </Button>
+                                                    <Button ToolTip.Tip="{loc:Tr MwDeletePermanently}" Padding="5,2"
+                                                            IsVisible="{ReflectionBinding $parent[ListBox].DataContext.RecycleBin.IsTenantAdmin}"
+                                                            Command="{ReflectionBinding $parent[ListBox].DataContext.RecycleBin.HardDeleteCommand}" CommandParameter="{Binding}">
+                                                        <i:Icon Value="mdi-delete-forever" Foreground="#e53935" />
+                                                    </Button>
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </DockPanel>
+
+                            <GridSplitter Grid.Column="1" Background="#33808080" ResizeDirection="Columns" />
+
+                            <!-- Read-only detail: system fields + mask + index over (preview | chat). -->
+                            <Panel Grid.Column="2">
+                                <TextBlock Text="{loc:Tr MwSelectDeleted}" Foreground="{DynamicResource WbFaint}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !RecycleBin.HasSelection}" />
+                                <Grid RowDefinitions="Auto,*" IsVisible="{Binding RecycleBin.HasSelection}">
+                                    <ScrollViewer Grid.Row="0" MaxHeight="210" Padding="10,6">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="{Binding RecycleBin.DetailTitle}" FontWeight="SemiBold" FontSize="15" />
+                                            <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+                                                <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr Name}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding RecycleBin.SysName}" FontSize="12" TextWrapping="Wrap" />
+                                                <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr SysFileExtension}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RecycleBin.SysFileExtension}" FontSize="12" />
+                                                <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr VerColDocDate}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding RecycleBin.SysDocumentDate}" FontSize="12" />
+                                                <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr SysCreated}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding RecycleBin.SysCreated}" FontSize="12" />
+                                                <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Tr SysCreatedBy}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding RecycleBin.SysCreatedBy}" FontSize="12" />
+                                                <TextBlock Grid.Row="5" Grid.Column="0" Text="{loc:Tr SysOcrLanguages}" Foreground="{DynamicResource WbMuted}" FontSize="12"
+                                                           IsVisible="{Binding RecycleBin.SysOcrLanguages, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding RecycleBin.SysOcrLanguages}" FontSize="12"
+                                                           IsVisible="{Binding RecycleBin.SysOcrLanguages, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                            </Grid>
+                                            <TextBlock Text="{Binding RecycleBin.MaskLine}" Foreground="{DynamicResource WbMuted}" FontSize="12" Margin="0,4,0,0" />
+                                            <ItemsControl ItemsSource="{Binding RecycleBin.IndexFields}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:IndexFieldViewModel">
+                                                        <Grid ColumnDefinitions="110,*" Margin="0,1">
+                                                            <TextBlock Grid.Column="0" Text="{Binding FieldName}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                                            <TextBlock Grid.Column="1" Text="{Binding Values}" FontSize="12" TextWrapping="Wrap" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </ScrollViewer>
+
+                                    <Grid Grid.Row="1" ColumnDefinitions="3*,10,2*">
+                                        <Border Grid.Column="0" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,1,0,0"
+                                                IsVisible="{Binding !RecycleBin.Preview.PreviewFullscreen}">
+                                            <v:PreviewPane DataContext="{Binding RecycleBin.Preview}" />
+                                        </Border>
+                                        <GridSplitter Grid.Column="1" Background="#33808080" ResizeDirection="Columns" />
+                                        <Border Grid.Column="2" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,1,0,0">
+                                            <DockPanel LastChildFill="True">
+                                                <TextBlock DockPanel.Dock="Top" Text="{loc:Tr CommentsHeader}" FontWeight="SemiBold" Margin="10,8" />
+                                                <ScrollViewer>
+                                                    <ItemsControl ItemsSource="{Binding RecycleBin.Comments}" Margin="10,0">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="vm:CommentViewModel">
+                                                                <StackPanel Margin="0,6">
+                                                                    <TextBlock Text="{Binding Meta}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                                    <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" />
+                                                                    <ItemsControl ItemsSource="{Binding Replies}" Margin="16,4,0,0">
+                                                                        <ItemsControl.ItemTemplate>
+                                                                            <DataTemplate x:DataType="vm:CommentViewModel">
+                                                                                <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0" Padding="8,2" Margin="0,3">
+                                                                                    <StackPanel>
+                                                                                        <TextBlock Text="{Binding Meta}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                                                        <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" />
+                                                                                    </StackPanel>
+                                                                                </Border>
+                                                                            </DataTemplate>
+                                                                        </ItemsControl.ItemTemplate>
+                                                                    </ItemsControl>
+                                                                </StackPanel>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </ScrollViewer>
+                                            </DockPanel>
+                                        </Border>
+                                    </Grid>
+                                </Grid>
+                            </Panel>
+                        </Grid>
+                    </DockPanel>
+
+                    <!-- Full-screen preview overlay for the Recycle bin tab (its own preview surface). -->
+                    <Border IsVisible="{Binding RecycleBin.Preview.PreviewFullscreen}" ZIndex="100" Background="{DynamicResource WbChrome}">
+                        <v:PreviewPane DataContext="{Binding RecycleBin.Preview}" />
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem ToolTip.Tip="{loc:Tr TabTasks}">
+                <TabItem.Header>
+                    <Panel>
+                        <i:Icon Value="mdi-clipboard-check-outline" FontSize="20" />
+                        <!-- Pending-task count badge (ADR "Workflow / document state model", 0009). -->
+                        <Border IsVisible="{Binding HasTasks}" Background="#e53935" CornerRadius="8" MinWidth="16" Height="16"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-5,-9,0" Padding="4,0">
+                            <TextBlock Text="{Binding TaskCount}" Foreground="White" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </Panel>
+                </TabItem.Header>
+                <DockPanel Margin="16" LastChildFill="True">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+                        <TextBlock Text="{loc:Tr TasksHeader}" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center" />
+                        <Button Command="{Binding RefreshTasksCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}" Padding="6,2"><i:Icon Value="mdi-refresh" /></Button>
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="{loc:Tr TasksEmpty}"
+                               Foreground="{DynamicResource WbFaint}" IsVisible="{Binding !HasTasks}" />
+                    <ScrollViewer IsVisible="{Binding HasTasks}">
+                        <ItemsControl ItemsSource="{Binding Tasks}" MaxWidth="820" HorizontalAlignment="Left">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:TaskItemViewModel">
+                                    <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="0,8">
+                                        <Grid ColumnDefinitions="*,90,150,Auto">
+                                            <TextBlock Grid.Column="0" Text="{Binding DocumentName}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding VersionText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
+                                            <TextBlock Grid.Column="2" Text="{Binding AssignedText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
+                                            <Button Grid.Column="3" Content="{loc:Tr MwOpen}" Padding="10,3"
+                                                    Command="{ReflectionBinding $parent[ItemsControl].DataContext.OpenTaskCommand}" CommandParameter="{Binding}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Users & groups administration (ADR "Users & groups administration tab"). Shown only to a
+                 CanManageUsers holder (whoami). Combined principal list | assignable rights matrix. -->
+            <TabItem ToolTip.Tip="{loc:Tr TabUsersGroups}" IsVisible="{Binding CanManageUsers}">
+                <TabItem.Header><i:Icon Value="mdi-account-cog" FontSize="20" /></TabItem.Header>
+                <Grid ColumnDefinitions="300,*">
+                    <DockPanel Grid.Column="0" LastChildFill="True">
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="2" Margin="6"
+                                    Background="{DynamicResource WbChrome}">
+                            <Button ToolTip.Tip="{loc:Tr UgNew}" Padding="6,2">
+                                <i:Icon Value="mdi-plus" />
+                                <Button.Flyout>
+                                    <MenuFlyout>
+                                        <MenuItem Header="{loc:Tr UgNewUser}" Click="OnNewUser" />
+                                        <MenuItem Header="{loc:Tr UgNewGroup}" Click="OnNewGroup" />
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                            </Button>
+                            <Button ToolTip.Tip="{loc:Tr UgCopy}" Padding="6,2" Click="OnCopyPrincipal" IsEnabled="{Binding HasSelectedPrincipal}"><i:Icon Value="mdi-content-copy" /></Button>
+                            <Button ToolTip.Tip="{loc:Tr UgDelete}" Padding="6,2" Click="OnDeletePrincipal" IsEnabled="{Binding HasSelectedPrincipal}"><i:Icon Value="mdi-delete" /></Button>
+                            <Button ToolTip.Tip="{loc:Tr RibbonRefresh}" Padding="6,2" Command="{Binding RefreshPrincipalsCommand}"><i:Icon Value="mdi-refresh" /></Button>
+                        </StackPanel>
+                        <ListBox ItemsSource="{Binding Principals}" SelectedItem="{Binding SelectedPrincipal}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:PrincipalRowViewModel">
+                                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2">
+                                        <i:Icon Value="{Binding IconValue}" Foreground="#5b4ee5" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                    <Border Grid.Column="1" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0">
+                        <Panel>
+                            <TextBlock IsVisible="{Binding !HasSelectedPrincipal}" Text="{loc:Tr UgSelectPrincipal}"
+                                       Foreground="{DynamicResource WbFaint}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <DockPanel Margin="16" IsVisible="{Binding HasSelectedPrincipal}" LastChildFill="True">
+                                <TextBlock DockPanel.Dock="Top" Text="{Binding PrincipalRightsHeader}" FontWeight="SemiBold" FontSize="15" Margin="0,0,0,6" />
+                                <TextBlock DockPanel.Dock="Top" IsVisible="{Binding SelectedPrincipalIsGroup}" TextWrapping="Wrap"
+                                           Text="{loc:Tr UgGroupRightsNote}"
+                                           Foreground="{DynamicResource WbFaint}" FontSize="11" Margin="0,0,0,8" />
+                                <!-- Group membership (ADR "Group membership editing") — direct members with a
+                                     searchable add-picker. -->
+                                <StackPanel DockPanel.Dock="Top" IsVisible="{Binding SelectedPrincipalIsGroup}" Spacing="6" Margin="0,0,0,10">
+                                    <TextBlock Text="{loc:Tr UgMembers}" FontWeight="SemiBold" />
+                                    <AutoCompleteBox ItemsSource="{Binding MemberCandidates}" SelectedItem="{Binding SelectedMemberToAdd}"
+                                                     Watermark="{loc:Tr UgAddMember}" FilterMode="ContainsOrdinal" MinimumPrefixLength="0"
+                                                     ValueMemberBinding="{Binding DisplayName}" Width="320" HorizontalAlignment="Left">
+                                        <AutoCompleteBox.ItemTemplate>
+                                            <DataTemplate x:CompileBindings="False"><TextBlock Text="{Binding DisplayName}" /></DataTemplate>
+                                        </AutoCompleteBox.ItemTemplate>
+                                    </AutoCompleteBox>
+                                    <TextBlock Text="{loc:Tr UgNoMembers}" Foreground="{DynamicResource WbFaint}" FontSize="11"
+                                               IsVisible="{Binding !HasGroupMembers}" />
+                                    <ItemsControl ItemsSource="{Binding GroupMembers}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:CompileBindings="False">
+                                                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,1">
+                                                    <i:Icon Value="mdi-account" Foreground="#5b4ee5" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" Width="240" TextTrimming="CharacterEllipsis" />
+                                                    <Button Padding="4,0" ToolTip.Tip="{loc:Tr UgRemoveMember}"
+                                                            Command="{Binding DataContext.RemoveMemberCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}"><i:Icon Value="mdi-close" Foreground="#e53935" /></Button>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                                <!-- Profile photo (users only) — ADR "User profile photo". -->
+                                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="0,0,0,12"
+                                            IsVisible="{Binding SelectedPrincipalIsUser}">
+                                    <Border Width="56" Height="56" CornerRadius="28" ClipToBounds="True" Background="#8a7ff0">
+                                        <Panel>
+                                            <TextBlock Text="{Binding SelectedPrincipalInitials}" Foreground="White" FontSize="20" FontWeight="SemiBold"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !HasSelectedPrincipalPhoto}" />
+                                            <Image Source="{Binding SelectedPrincipalPhoto}" Stretch="UniformToFill" IsVisible="{Binding HasSelectedPrincipalPhoto}" />
+                                        </Panel>
+                                    </Border>
+                                    <StackPanel Orientation="Vertical" Spacing="6" VerticalAlignment="Center">
+                                        <Button Content="{loc:Tr AccountChangePhoto}" Click="OnChangePrincipalPhoto" />
+                                        <Button Content="{loc:Tr UgRemove}" Click="OnRemovePrincipalPhoto" IsVisible="{Binding HasSelectedPrincipalPhoto}" />
+                                        <!-- Admin password reset — ADR "User password management". -->
+                                        <Button Content="{loc:Tr UgResetPassword}" Click="OnResetPrincipalPassword" />
+                                        <!-- Two-factor status + admin reset — ADR "MFA (interactive login, TOTP)". -->
+                                        <TextBlock Text="{Binding SelectedPrincipalMfaStatus}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                        <Button Content="{loc:Tr UgResetMfa}" Click="OnResetPrincipalMfa" IsVisible="{Binding CanResetSelectedPrincipalMfa}" />
+                                        <!-- Impersonate a non-admin user — ADR "User impersonation". -->
+                                        <Button Content="{loc:Tr UgImpersonate}" Click="OnImpersonatePrincipal" IsVisible="{Binding CanImpersonateSelectedPrincipal}" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <!-- Read-only until Edit; then Save/Cancel (Cancel reverts). ADR "Desktop recycle bin parity". -->
+                                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
+                                    <Button Content="{loc:Tr Edit}" Command="{Binding BeginRightsEditCommand}"
+                                            IsVisible="{Binding !UgEditingRights}" IsEnabled="{Binding !UgBusy}" />
+                                    <Button Content="{loc:Tr Save}" Command="{Binding SaveRightsCommand}"
+                                            IsVisible="{Binding UgEditingRights}" IsEnabled="{Binding !UgBusy}" />
+                                    <Button Content="{loc:Tr Cancel}" Command="{Binding CancelRightsEditCommand}"
+                                            IsVisible="{Binding UgEditingRights}" IsEnabled="{Binding !UgBusy}" />
+                                </StackPanel>
+                                <ScrollViewer>
+                                    <StackPanel>
+                                        <ItemsControl ItemsSource="{Binding PrincipalRights}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:PrincipalRightViewModel">
+                                                    <CheckBox IsChecked="{Binding IsChecked}" Content="{Binding Label}" Margin="0,1"
+                                                              IsEnabled="{ReflectionBinding $parent[ItemsControl].DataContext.UgEditingRights}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <!-- Sensitivity clearance (ADR "Sensitivity clearance enforcement") — the highest label rank this principal may access. -->
+                                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,10,0,0">
+                                            <TextBlock Text="{loc:Tr MwClearanceLabel}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
+                                            <ComboBox MinWidth="220"
+                                                      ItemsSource="{Binding ClearanceOptions}"
+                                                      SelectedValue="{Binding SelectedPrincipalClearance}"
+                                                      SelectedValueBinding="{ReflectionBinding Rank}"
+                                                      IsEnabled="{Binding UgEditingRights}">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{ReflectionBinding Label}" />
+                                                    </DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </Panel>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- Audit log (ADR "Desktop audit viewer") — visible only for a CanViewAuditLog holder. -->
+            <TabItem ToolTip.Tip="{loc:Tr TabAudit}" IsVisible="{Binding CanViewAuditLog}">
+                <TabItem.Header><i:Icon Value="mdi-history" FontSize="20" /></TabItem.Header>
+                <DockPanel LastChildFill="True" Margin="8">
+                    <!-- filter + verify bar -->
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,6">
+                        <TextBox Watermark="{loc:Tr MwAuditActionPh}" Text="{Binding AuditActionFilter}" Width="230" />
+                        <DatePicker SelectedDate="{Binding AuditFrom}" />
+                        <DatePicker SelectedDate="{Binding AuditTo}" />
+                        <Button Content="{loc:Tr Apply}" Command="{Binding RunAuditSearchCommand}" />
+                        <Button Content="{loc:Tr AuditClear}" Command="{Binding ClearAuditFiltersCommand}" />
+                        <Button Content="{loc:Tr AuditExport}" Click="OnAuditExport" />
+                        <Button Content="{loc:Tr AuditVerify}" Command="{Binding VerifyAuditCommand}" />
+                        <Border IsVisible="{Binding AuditVerifyShown}" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="9" Padding="9,2" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding AuditVerifyStatus}" FontSize="12" />
+                        </Border>
+                        <Button Content="{loc:Tr AuditVerifyWorm}" Command="{Binding VerifyWormCommand}"
+                                ToolTip.Tip="{loc:Tr MwVerifyWormTip}" />
+                        <Border IsVisible="{Binding WormVerifyShown}" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="9" Padding="9,2" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding WormVerifyStatus}" FontSize="12" />
+                        </Border>
+                    </StackPanel>
+
+                    <!-- retention bar -->
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,6" VerticalAlignment="Center">
+                        <i:Icon Value="mdi-delete-clock-outline" VerticalAlignment="Center" />
+                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsTenantAdmin}">
+                            <TextBlock Text="{loc:Tr AuditRetentionLabel}" VerticalAlignment="Center" />
+                            <TextBox Text="{Binding AuditRetentionDays}" Width="80" />
+                            <TextBlock Text="{loc:Tr AuditRetentionDaysHint}" Foreground="{DynamicResource WbMuted}" FontSize="12" VerticalAlignment="Center" />
+                            <Button Content="{loc:Tr Save}" Command="{Binding SaveRetentionCommand}" />
+                            <Button Content="{loc:Tr AuditPurgeNow}" Click="OnAuditPurge" />
+                        </StackPanel>
+                        <TextBlock IsVisible="{Binding !IsTenantAdmin}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12"
+                                   Text="{Binding AuditRetentionDays, StringFormat='Retention: {0} days'}" />
+                        <TextBlock Text="{Binding AuditRetentionNote}" Foreground="{DynamicResource WbMuted}" FontSize="12" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- load more -->
+                    <Button DockPanel.Dock="Bottom" Content="{loc:Tr LoadMore}" HorizontalAlignment="Center" Margin="0,6,0,0"
+                            IsVisible="{Binding AuditHasMore}" Command="{Binding LoadMoreAuditCommand}" />
+
+                    <!-- newest-first table -->
+                    <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="1">
+                        <DockPanel LastChildFill="True">
+                            <Grid DockPanel.Dock="Top" ColumnDefinitions="170,190,170,2*,3*" Background="{DynamicResource WbChrome}">
+                                <TextBlock Grid.Column="0" Text="{loc:Tr AuditColWhen}" FontWeight="SemiBold" Margin="6,4" />
+                                <TextBlock Grid.Column="1" Text="{loc:Tr AuditColActor}" FontWeight="SemiBold" Margin="6,4" />
+                                <TextBlock Grid.Column="2" Text="{loc:Tr AuditActionLabel}" FontWeight="SemiBold" Margin="6,4" />
+                                <TextBlock Grid.Column="3" Text="{loc:Tr AuditColTarget}" FontWeight="SemiBold" Margin="6,4" />
+                                <TextBlock Grid.Column="4" Text="{loc:Tr AuditColDetails}" FontWeight="SemiBold" Margin="6,4" />
+                            </Grid>
+                            <ScrollViewer>
+                                <ItemsControl ItemsSource="{Binding AuditEvents}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AuditEventRowViewModel">
+                                            <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+                                                <Grid ColumnDefinitions="170,190,170,2*,3*">
+                                                    <TextBlock Grid.Column="0" Text="{Binding When}" Margin="6,3" FontSize="12" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding Actor}" Margin="6,3" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Grid.Column="2" Text="{Binding Action}" Margin="6,3" FontSize="12" />
+                                                    <TextBlock Grid.Column="3" Text="{Binding Target}" Margin="6,3" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Grid.Column="4" Text="{Binding Details}" Margin="6,3" FontSize="12" Foreground="{DynamicResource WbMuted}" TextTrimming="CharacterEllipsis" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Legal holds (ADR "Legal hold & retention enforcement") — visible only for a CanLegalHold holder. -->
+            <TabItem ToolTip.Tip="{loc:Tr TabLegalHolds}" IsVisible="{Binding CanLegalHold}">
+                <TabItem.Header><i:Icon Value="mdi-gavel" FontSize="20" /></TabItem.Header>
+                <DockPanel LastChildFill="True" Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,6">
+                        <Button Content="{loc:Tr LhNewHold}" Click="OnNewLegalHold" />
+                        <Button Content="{loc:Tr RibbonRefresh}" Command="{Binding LoadLegalHoldsCommand}" />
+                    </StackPanel>
+                    <Grid ColumnDefinitions="300,*">
+                        <ListBox Grid.Column="0" ItemsSource="{Binding LegalHolds}" SelectedItem="{Binding SelectedLegalHold}"
+                                 BorderBrush="{DynamicResource WbBorder}" BorderThickness="1">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:LegalHoldRowViewModel">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <i:Icon Value="{Binding IconValue}" Foreground="#d9a400" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <DockPanel Grid.Column="1" Margin="10,0,0,0" LastChildFill="True" IsVisible="{Binding HasSelectedHold}">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+                                <TextBlock Text="{Binding SelectedLegalHold.Name}" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
+                                <Button Content="{loc:Tr LhRelease}" Click="OnReleaseLegalHold" IsVisible="{Binding SelectedHoldIsActive}" />
+                            </StackPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="{loc:Tr MwDocuments}" FontWeight="SemiBold" Margin="0,0,0,4" />
+                            <ScrollViewer>
+                                <ItemsControl ItemsSource="{Binding SelectedHoldItems}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:LegalHoldItemRowViewModel">
+                                            <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="0,2">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                                        <i:Icon Value="mdi-file-document-outline" Foreground="#5b4ee5" VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding DocumentName}" VerticalAlignment="Center" />
+                                                    </StackPanel>
+                                                    <Button Grid.Column="1" Content="{loc:Tr UgRemove}" Click="OnRemoveLegalHoldItem" Tag="{Binding DocumentId}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Retention schedule (ADR "Retention policies (auto-disposition)") — visible for a CanManageClassification holder. -->
+            <TabItem ToolTip.Tip="{loc:Tr TabRetention}" IsVisible="{Binding CanManageClassification}">
+                <TabItem.Header><i:Icon Value="mdi-calendar-remove-outline" FontSize="20" /></TabItem.Header>
+                <DockPanel LastChildFill="True" Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,6">
+                        <TextBlock Text="{loc:Tr MwRetDescAuto}"
+                                   Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" TextWrapping="Wrap"
+                                   IsVisible="{Binding !RetentionRequiresReview}" />
+                        <TextBlock Text="{loc:Tr MwRetDescReview}"
+                                   Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" TextWrapping="Wrap"
+                                   IsVisible="{Binding RetentionRequiresReview}" />
+                        <Button Content="{loc:Tr RibbonRefresh}" Command="{Binding LoadRetentionScheduleCommand}" />
+                    </StackPanel>
+                    <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="1">
+                        <DockPanel LastChildFill="True">
+                            <Grid DockPanel.Dock="Top" ColumnDefinitions="3*,110,170,150,150" Background="{DynamicResource WbChrome}">
+                                <TextBlock Grid.Column="0" Text="{loc:Tr ColDocument}" FontWeight="SemiBold" Margin="6,4" />
+                                <TextBlock Grid.Column="1" Text="{loc:Tr TabRetention}" FontWeight="SemiBold" Margin="6,4" />
+                                <TextBlock Grid.Column="2" Text="{loc:Tr RetColDisposition}" FontWeight="SemiBold" Margin="6,4" />
+                                <TextBlock Grid.Column="3" Text="{loc:Tr WorkflowStatus}" FontWeight="SemiBold" Margin="6,4" />
+                                <TextBlock Grid.Column="4" Text="{loc:Tr VerColActions}" FontWeight="SemiBold" Margin="6,4" />
+                            </Grid>
+                            <ScrollViewer>
+                                <ItemsControl ItemsSource="{Binding RetentionItems}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:RetentionRowViewModel">
+                                            <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+                                                <Grid ColumnDefinitions="3*,110,170,150,150">
+                                                    <TextBlock Grid.Column="0" Text="{Binding DocumentName}" Margin="6,3" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding Retention}" Margin="6,3" />
+                                                    <TextBlock Grid.Column="2" Text="{Binding DispositionDate}" Margin="6,3" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Grid.Column="3" Text="{Binding Status}" Margin="6,3" Foreground="{DynamicResource WbMuted}" />
+                                                    <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="4,2">
+                                                        <Button Content="{loc:Tr RetDispose}" Padding="6,2" IsVisible="{Binding CanDispose}"
+                                                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.DisposeRetentionCommand}" CommandParameter="{Binding}" />
+                                                        <Button Content="{loc:Tr RetExtend}" Padding="6,2"
+                                                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.ExtendRetentionCommand}" CommandParameter="{Binding}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Tenant-admin self-service settings (ADR "Tenant-admin settings tab") — visible for a tenant admin. -->
+            <TabItem ToolTip.Tip="{loc:Tr TabTenant}" IsVisible="{Binding IsTenantAdmin}">
+                <TabItem.Header><i:Icon Value="mdi-office-building-cog-outline" FontSize="20" /></TabItem.Header>
+                <ScrollViewer Margin="12">
+                    <StackPanel Spacing="10" MaxWidth="560" HorizontalAlignment="Left">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{loc:Tr TenantHeader}" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Button Content="{loc:Tr Edit}" Command="{Binding BeginTenantEditCommand}"
+                                    IsVisible="{Binding !TenantEditing}" IsEnabled="{Binding HasTenantSettings}" />
+                            <Button Content="{loc:Tr Save}" Command="{Binding SaveTenantSettingsCommand}" IsVisible="{Binding TenantEditing}" />
+                            <Button Content="{loc:Tr Cancel}" Command="{Binding CancelTenantEditCommand}" IsVisible="{Binding TenantEditing}" />
+                            <Button Content="{loc:Tr TenantSensitivityLabels}" Click="OnManageSensitivityLabels" HorizontalAlignment="Right" />
+                            <Button Content="{loc:Tr TenantNewRepository}" Click="OnNewRepository" HorizontalAlignment="Right" />
+                        </StackPanel>
+
+                        <!-- Maintenance: convert existing scans (TIFFs + scanned image-only PDFs) to searchable PDFs
+                             (ADRs "Backfill searchable PDFs for existing TIFFs" / "Scanned image-only PDF detection").
+                             Moved here from the Repositories ribbon (ADR "Desktop Repositories-tab UI polish"). The
+                             Tenant tab is already tenant-admin-gated, so the button needs no separate visibility. -->
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Click="OnConvertExistingTiffs">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <i:Icon Value="mdi-file-pdf-box" FontSize="16" VerticalAlignment="Center" />
+                                    <TextBlock Text="{loc:Tr RibbonConvertScans}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                    ToolTip.Tip="{loc:Tr MwConvertScansTip}" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="4" IsVisible="{Binding HasTenantSettings}">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="{loc:Tr TenantNameLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr TenantNameInfo}" />
+                            </StackPanel>
+                            <TextBox Text="{Binding TenantName}" IsEnabled="{Binding TenantEditing}" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,0">
+                                <TextBlock Text="{loc:Tr TenantOcrLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr TenantOcrInfo}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{Binding TenantOcrDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <Button Content="{loc:Tr MwEditEllipsis}" Click="OnEditTenantOcrLanguages" IsVisible="{Binding TenantEditing}" ToolTip.Tip="{loc:Tr MwChooseOcr}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,0">
+                                <TextBlock Text="{loc:Tr TenantAuditRetLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr TenantAuditRetInfo}" />
+                            </StackPanel>
+                            <NumericUpDown Value="{Binding TenantAuditRetentionDays}" Minimum="0" Increment="1" FormatString="0"
+                                           IsEnabled="{Binding TenantEditing}" HorizontalAlignment="Left" Width="160" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,0">
+                                <TextBlock Text="{loc:Tr TenantCoTtlLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr TenantCoTtlInfo}" />
+                            </StackPanel>
+                            <NumericUpDown Value="{Binding TenantCheckoutTtlDays}" Minimum="0" Increment="1" FormatString="0"
+                                           IsEnabled="{Binding TenantEditing}" HorizontalAlignment="Left" Width="160" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,0">
+                                <TextBlock Text="{loc:Tr TenantCoWarnLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr TenantCoWarnInfo}" />
+                            </StackPanel>
+                            <NumericUpDown Value="{Binding TenantCheckoutWarningDays}" Minimum="0" Increment="1" FormatString="0"
+                                           IsEnabled="{Binding TenantEditing}" HorizontalAlignment="Left" Width="160" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,0">
+                                <TextBlock Text="{loc:Tr TenantWormLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr TenantWormInfo}" />
+                            </StackPanel>
+                            <ComboBox SelectedIndex="{Binding TenantWormLockModeIndex}" IsEnabled="{Binding TenantEditing}" HorizontalAlignment="Left" Width="200">
+                                <ComboBoxItem>Governance</ComboBoxItem>
+                                <ComboBoxItem>Compliance</ComboBoxItem>
+                            </ComboBox>
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,0">
+                                <TextBlock Text="{loc:Tr TenantQuotaLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr TenantQuotaInfo}" />
+                            </StackPanel>
+                            <NumericUpDown Value="{Binding TenantStorageQuotaMb}" Minimum="0" Increment="50" FormatString="0"
+                                           IsEnabled="{Binding TenantEditing}" HorizontalAlignment="Left" Width="200" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                                <TextBlock Text="{Binding TenantStorageUsage}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                <Border Background="#c0392b" CornerRadius="9" Padding="8,1" Margin="8,0,0,0" VerticalAlignment="Center"
+                                        IsVisible="{Binding TenantStorageWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                    <TextBlock Text="{Binding TenantStorageWarning}" Foreground="White" FontSize="12" />
+                                </Border>
+                                <Button Content="{loc:Tr TenantRecompute}" Command="{Binding RecomputeStorageCommand}" Padding="8,2"
+                                        ToolTip.Tip="{loc:Tr MwRecomputeTip}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,0">
+                                <TextBlock Text="{loc:Tr TenantUploadCleanupLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr TenantUploadCleanupInfo}" />
+                            </StackPanel>
+                            <NumericUpDown Value="{Binding TenantIncompleteUploadCleanupDays}" Minimum="0" Increment="1" FormatString="0"
+                                           IsEnabled="{Binding TenantEditing}" HorizontalAlignment="Left" Width="200" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,10,0,0">
+                                <CheckBox IsChecked="{Binding TenantRequireMfa}" IsEnabled="{Binding TenantEditing}" Content="{loc:Tr TenantRequireMfa}" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr TenantRequireMfaInfo}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,10,0,0">
+                                <CheckBox IsChecked="{Binding TenantAllowPasskeyLogin}" IsEnabled="{Binding TenantEditing}" Content="{loc:Tr TenantAllowPasskey}" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr TenantAllowPasskeyInfo}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,10,0,0">
+                                <CheckBox IsChecked="{Binding TenantRequireDispositionReview}" IsEnabled="{Binding TenantEditing}" Content="{loc:Tr TenantRequireDisposition}" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr MwRequireDispositionTip}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,10,0,0">
+                                <CheckBox IsChecked="{Binding TenantRestrictTagsToCatalog}" IsEnabled="{Binding TenantEditing}" Content="{loc:Tr TenantRestrictTags}" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr TenantRestrictTagsInfo}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,10,0,0">
+                                <CheckBox IsChecked="{Binding TenantEnforceClearance}" IsEnabled="{Binding TenantEditing}" Content="{loc:Tr TenantEnforceClearance}" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr MwEnforceClearanceTip}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,10,0,0">
+                                <TextBlock Text="{loc:Tr TenantWebhookUrlLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr TenantWebhookUrlInfo}" />
+                            </StackPanel>
+                            <TextBox Text="{Binding TenantAuditWebhookUrl}" IsEnabled="{Binding TenantEditing}" Watermark="https://siem.example.com/ingest" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,0" IsVisible="{Binding TenantEditing}">
+                                <TextBlock Text="{loc:Tr TenantSecretLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr TenantSecretInfo}" />
+                            </StackPanel>
+                            <TextBox Text="{Binding TenantAuditWebhookSecret}" PasswordChar="•" IsVisible="{Binding TenantEditing}"
+                                     Watermark="{Binding TenantWebhookSecretWatermark}" />
+                            <TextBlock Margin="0,4,0,0" Foreground="{DynamicResource WbMuted}" IsVisible="{Binding !TenantEditing}"
+                                       Text="{Binding TenantWebhookSecretStatus}" />
+                            <!-- Read-only delivery health (ADR "Audit webhook delivery retry/backoff"). Green when healthy, amber when failing. -->
+                            <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" IsVisible="{Binding TenantWebhookHealthVisible}"
+                                       Text="{Binding TenantWebhookHealth}"
+                                       Foreground="{Binding TenantWebhookHealthBrush}" />
+                            <Button Content="{loc:Tr TenantSendTest}" Command="{Binding TestWebhookCommand}" Padding="8,2" Margin="0,6,0,0"
+                                    IsVisible="{Binding TenantWebhookConfigured}"
+                                    ToolTip.Tip="{loc:Tr MwTestWebhookTip}" />
+
+                            <Separator Margin="0,12,0,4" />
+                            <TextBlock Text="{loc:Tr TenantReference}" FontWeight="SemiBold" Foreground="{DynamicResource WbMuted}" />
+                            <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr TenantIdLabel}" Foreground="{DynamicResource WbMuted}" Margin="0,2" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding TenantId}" Margin="0,2" />
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr WorkflowStatus}" Foreground="{DynamicResource WbMuted}" Margin="0,2" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TenantStatus}" Margin="0,2" />
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr SysCreated}" Foreground="{DynamicResource WbMuted}" Margin="0,2" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding TenantCreated}" Margin="0,2" />
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- My work dashboard (ADR "My work dashboard") — added last to avoid re-indexing the other tabs. -->
+            <TabItem ToolTip.Tip="{loc:Tr TabMyWork}">
+                <TabItem.Header><i:Icon Value="mdi-view-dashboard-outline" FontSize="20" /></TabItem.Header>
+                <ScrollViewer Margin="14">
+                    <StackPanel Spacing="6" MaxWidth="640" HorizontalAlignment="Left">
+                        <TextBlock Text="{loc:Tr TabMyWork}" FontSize="16" FontWeight="SemiBold" />
+
+                        <TextBlock Text="{loc:Tr MyWorkReminders}" FontWeight="SemiBold" Margin="0,8,0,2" />
+                        <TextBlock Text="{loc:Tr MyWorkNothingDue}" Foreground="{DynamicResource WbMuted}" IsVisible="{Binding !DashboardReminders.Count}" />
+                        <ItemsControl ItemsSource="{Binding DashboardReminders}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="svc:SimplArchiveApiClient+DashReminderInfo">
+                                    <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Padding="2"
+                                            Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).OpenDashboardReminderCommand}" CommandParameter="{Binding}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <i:Icon Value="mdi-alarm" FontSize="16" />
+                                            <TextBlock Text="{Binding DocumentName}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding RemindAt, StringFormat='{}{0:g}'}" Foreground="{DynamicResource WbMuted}" />
+                                            <TextBlock Text="{loc:Tr MwOverdue}" Foreground="#c62828" IsVisible="{Binding Overdue}" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="{loc:Tr MyWorkFollowing}" FontWeight="SemiBold" Margin="0,10,0,2" />
+                        <TextBlock Text="{loc:Tr MyWorkNotFollowing}" Foreground="{DynamicResource WbMuted}" IsVisible="{Binding !DashboardFollowing.Count}" />
+                        <ItemsControl ItemsSource="{Binding DashboardFollowing}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="svc:SimplArchiveApiClient+DashFollowedInfo">
+                                    <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Padding="2"
+                                            Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).OpenDashboardFollowedCommand}" CommandParameter="{Binding}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <i:Icon Value="mdi-bell" FontSize="16" />
+                                            <TextBlock Text="{Binding DocumentName}" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="{loc:Tr MyWorkReviewTasks}" FontWeight="SemiBold" Margin="0,10,0,2" />
+                        <TextBlock Text="{loc:Tr MyWorkNoReview}" Foreground="{DynamicResource WbMuted}" IsVisible="{Binding !Tasks.Count}" />
+                        <ItemsControl ItemsSource="{Binding Tasks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:TaskItemViewModel">
+                                    <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Padding="2"
+                                            Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).OpenTaskCommand}" CommandParameter="{Binding}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <i:Icon Value="mdi-clipboard-check-outline" FontSize="16" />
+                                            <TextBlock Text="{Binding DocumentName}" FontWeight="SemiBold" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Tag catalog (ADR "Tag controlled vocabulary") — added last to avoid re-indexing the other tabs. -->
+            <TabItem ToolTip.Tip="{loc:Tr TabTags}" IsVisible="{Binding IsTenantAdmin}">
+                <TabItem.Header><i:Icon Value="mdi-tag-multiple-outline" FontSize="20" /></TabItem.Header>
+                <ScrollViewer Margin="14">
+                    <StackPanel Spacing="8" MaxWidth="720" HorizontalAlignment="Left">
+                        <TextBlock Text="{loc:Tr TagsCatalogHeader}" FontSize="16" FontWeight="SemiBold" />
+                        <TextBlock Text="{loc:Tr MwTagCatalogDesc}"
+                                   Foreground="{DynamicResource WbMuted}" TextWrapping="Wrap" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBox Text="{Binding NewTagName}" Watermark="{loc:Tr TagsNewPlaceholder}" Width="200" />
+                            <TextBox Text="{Binding NewTagColor}" Watermark="#RRGGBB" Width="110" />
+                            <Button Content="{loc:Tr TagsAdd}" Command="{Binding CreateTagCommand}" />
+                        </StackPanel>
+
+                        <ItemsControl ItemsSource="{Binding TagCatalogAdmin}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:TagCatalogRow">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2">
+                                        <Border Width="14" Height="14" CornerRadius="3" VerticalAlignment="Center"
+                                                Background="{Binding SwatchBrush}" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" />
+                                        <TextBox Text="{Binding Name}" Width="180" />
+                                        <TextBox Text="{Binding Color}" Watermark="#RRGGBB" Width="100" />
+                                        <Button Content="{loc:Tr Save}"
+                                                Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).SaveTagCommand}" CommandParameter="{Binding}" />
+                                        <ComboBox ItemsSource="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).TagCatalogAdmin}"
+                                                  SelectedItem="{Binding MergeTarget}" PlaceholderText="{loc:Tr MwMergeInto}" Width="150">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:TagCatalogRow"><TextBlock Text="{Binding Name}" /></DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <Button Content="{loc:Tr MwMerge}"
+                                                Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).MergeTagCommand}" CommandParameter="{Binding}" />
+                                        <Button Content="{loc:Tr TagsRetire}"
+                                                Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).RetireTagCommand}" CommandParameter="{Binding}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+        </TabControl>
+    </DockPanel>
+</Window>

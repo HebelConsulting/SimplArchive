@@ -1,0 +1,66 @@
+# Example production overrides — copy, adjust, and pass with `-f`. Sensitive values live ONLY in the referenced
+# Kubernetes Secret (`existingSecret`), never here. Dependencies are managed/external.
+
+replicaCount: 3
+
+image:
+  repository: ghcr.io/hebelconsulting/simplarchive
+  tag: "1.0.0"
+
+# The Secret must contain at least OpenBao__SecretId. Create it out-of-band, e.g.:
+#   kubectl create secret generic simplarchive-secrets --from-literal=OpenBao__SecretId=...
+existingSecret: simplarchive-secrets
+
+config:
+  aspnetCoreEnvironment: Production
+  app:
+    baseUrl: "https://dms.example.com"
+    applyMigrationsAtStartup: false   # run migrations as a one-off job/step instead
+  objectStorage:
+    serviceUrl: "https://s3.eu-central-1.amazonaws.com"
+    publicServiceUrl: "https://s3.eu-central-1.amazonaws.com"
+    region: "eu-central-1"
+    bucketName: "acme-simplarchive"
+  gotenbergUrl: "http://gotenberg:3000"
+  openSearchUrl: "https://opensearch.internal:9200"
+  tikaUrl: "http://tika:9998"
+  ocrUrl: "http://ocr:8080"
+  smtp:
+    host: "smtp.internal"
+    port: 587
+    fromAddress: "dms@example.com"
+    fromName: "Acme DMS"
+  openBao:
+    address: "https://openbao.internal:8200"
+    roleId: "simplarchive-role"
+    databaseConnectionTemplate: "Host=pg.internal;Port=5432;Database=simplarchive"
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: dms.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: simplarchive-tls
+      hosts:
+        - dms.example.com
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+# Spread replicas across zones for HA.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: simplarchive

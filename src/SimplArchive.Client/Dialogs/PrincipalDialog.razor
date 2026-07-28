@@ -1,0 +1,50 @@
+@* New/Copy a user or group (ADR "Users & groups administration tab"). Collects the identifying fields
+   (a user's email + display name, or a group's name); the caller (Home) does the POST + rights copy. For
+   Copy, the fields are pre-filled from the selected principal. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 360px;">
+            @if (IsGroup)
+            {
+                <MudTextField @bind-Value="_name" Label="@Strings.Get("PrincipalGroupName")" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
+            }
+            else
+            {
+                <MudTextField @bind-Value="_email" Label="@Strings.Get("PrincipalEmail")" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Class="mb-2" />
+                <MudTextField @bind-Value="_name" Label="@Strings.Get("PrincipalDisplayName")" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="@(!IsValid)">@Strings.Get("Create")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public bool IsGroup { get; set; }
+    [Parameter] public string InitialName { get; set; } = "";
+    [Parameter] public string InitialEmail { get; set; } = "";
+
+    private string _name = "";
+    private string _email = "";
+
+    protected override void OnInitialized()
+    {
+        _name = InitialName;
+        _email = InitialEmail;
+    }
+
+    private bool IsValid => IsGroup
+        ? !string.IsNullOrWhiteSpace(_name)
+        : !string.IsNullOrWhiteSpace(_email) && !string.IsNullOrWhiteSpace(_name);
+
+    private void Submit() => Dialog.Close(DialogResult.Ok(new Result(_name.Trim(), _email.Trim())));
+
+    private void Cancel() => Dialog.Cancel();
+
+    public record Result(string Name, string Email);
+}

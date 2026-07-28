@@ -1,0 +1,351 @@
+@page
+@model SimplArchive.Api.Pages.Account.LoginModel
+@using SimplArchive.Localization
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@Strings.Get("LoginPageTitle")</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+    <style>
+        /* Aligned with the Blazor app's MudBlazor default theme (primary #594AE2, Roboto, Material
+           elevation). Server-rendered, so it can't read the app's localStorage light/dark preference —
+           it follows the system via prefers-color-scheme, matching the app's own default behaviour. */
+        :root {
+            --primary: #594AE2;
+            --primary-hover: #4d3fd4;
+            --error: #f44336;
+            --page-bg: #f5f5f5;
+            --surface: #ffffff;
+            --text: rgba(0, 0, 0, 0.87);
+            --text-secondary: rgba(0, 0, 0, 0.54);
+            --border: rgba(0, 0, 0, 0.23);
+            --shadow: 0 3px 5px -1px rgba(0,0,0,.2), 0 6px 10px 0 rgba(0,0,0,.14), 0 1px 18px 0 rgba(0,0,0,.12);
+        }
+
+        @@media (prefers-color-scheme: dark) {
+            :root {
+                --page-bg: #27272f;
+                --surface: #373740;
+                --text: rgba(255, 255, 255, 0.87);
+                --text-secondary: rgba(255, 255, 255, 0.60);
+                --border: rgba(255, 255, 255, 0.30);
+                --shadow: 0 3px 5px -1px rgba(0,0,0,.4), 0 6px 10px 0 rgba(0,0,0,.28), 0 1px 18px 0 rgba(0,0,0,.24);
+            }
+        }
+
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+
+        body {
+            margin: 0;
+            font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--page-bg);
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-card {
+            background: var(--surface);
+            width: 100%;
+            max-width: 400px;
+            margin: 24px;
+            padding: 32px;
+            border-radius: 4px;
+            box-shadow: var(--shadow);
+        }
+
+        .brand {
+            font-size: 1.5rem;
+            font-weight: 500;
+            color: var(--primary);
+            margin-bottom: 4px;
+        }
+
+        .title {
+            font-size: 1.25rem;
+            font-weight: 400;
+            margin: 0 0 24px;
+        }
+
+        .error {
+            background: rgba(244, 67, 54, 0.12);
+            color: var(--error);
+            padding: 12px 16px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 0.875rem;
+        }
+
+        .hint {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin: 0 0 20px;
+        }
+
+        .field { margin-bottom: 20px; }
+
+        .field label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .field input {
+            width: 100%;
+            padding: 12px 14px;
+            font-size: 1rem;
+            font-family: inherit;
+            color: var(--text);
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            outline: none;
+            transition: border-color .15s, box-shadow .15s;
+        }
+
+        .field input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 1px var(--primary);
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 12px;
+            margin-top: 8px;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            font-family: inherit;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #fff;
+            background: var(--primary);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            box-shadow: 0 3px 1px -2px rgba(0,0,0,.2), 0 2px 2px 0 rgba(0,0,0,.14), 0 1px 5px 0 rgba(0,0,0,.12);
+            transition: background .15s;
+        }
+
+        .recovery-codes {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            font-family: 'Roboto Mono', ui-monospace, monospace;
+            font-size: 0.95rem;
+            background: rgba(89, 74, 226, 0.06);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+
+        code { font-family: 'Roboto Mono', ui-monospace, monospace; }
+
+        .or-divider {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.8125rem;
+            margin: 16px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-primary:active { box-shadow: 0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14), 0 3px 14px 2px rgba(0,0,0,.12); }
+    </style>
+</head>
+<body>
+    <main>
+        @if (Model.ShowRecoveryCodes)
+        {
+            <form method="post" asp-page-handler="Continue" class="login-card">
+                <div class="brand">SimplArchive</div>
+                <h1 class="title">@Strings.Get("LoginSaveRecoveryTitle")</h1>
+
+                <p class="hint">@Strings.Get("LoginRecoveryHint")</p>
+
+                <div class="recovery-codes">
+                    @foreach (var code in Model.RecoveryCodes)
+                    {
+                        <div>@code</div>
+                    }
+                </div>
+
+                <input type="hidden" asp-for="ReturnUrl" />
+                <input type="hidden" asp-for="ContinueTicket" />
+
+                <button type="submit" class="btn-primary">@Strings.Get("LoginSavedContinue")</button>
+            </form>
+        }
+        else if (Model.ShowEnroll)
+        {
+            <form method="post" asp-page-handler="Enroll" class="login-card">
+                <div class="brand">SimplArchive</div>
+                <h1 class="title">@Strings.Get("LoginEnrollTitle")</h1>
+
+                @if (Model.Error is not null)
+                {
+                    <div class="error">@Model.Error</div>
+                }
+
+                <p class="hint">@Strings.Get("LoginEnrollHint")</p>
+
+                <div style="text-align:center; margin-bottom:16px;">
+                    <img src="@Model.EnrollQrDataUrl" alt="@Strings.Get("LoginQrAlt")" style="width:180px; height:180px;" />
+                </div>
+
+                <p class="hint">@Strings.Get("LoginManualKey") <code>@Model.EnrollSecret</code></p>
+
+                <input type="hidden" asp-for="ReturnUrl" />
+                <input type="hidden" asp-for="EnrollTicket" />
+
+                <div class="field">
+                    <label asp-for="Code">@Strings.Get("LoginAuthCode")</label>
+                    <input asp-for="Code" autocomplete="one-time-code" autofocus inputmode="text" placeholder="123456" />
+                </div>
+
+                <button type="submit" class="btn-primary">@Strings.Get("LoginVerifyEnable")</button>
+            </form>
+        }
+        else if (Model.ShowMfa)
+        {
+            <div class="login-card">
+                <div class="brand">SimplArchive</div>
+                <h1 class="title">@Strings.Get("LoginMfaTitle")</h1>
+
+                @if (Model.Error is not null)
+                {
+                    <div class="error">@Model.Error</div>
+                }
+
+                @if (Model.ShowPasskey)
+                {
+                    <form method="post" asp-page-handler="Passkey" id="passkeyForm">
+                        <input type="hidden" asp-for="ReturnUrl" />
+                        <input type="hidden" asp-for="MfaTicket" />
+                        <input type="hidden" asp-for="PasskeyToken" />
+                        <input type="hidden" asp-for="PasskeyResponse" id="passkeyResponse" />
+                    </form>
+                    <button type="button" id="passkeyButton" class="btn-primary" data-options="@Model.PasskeyOptionsJson">@Strings.Get("LoginUsePasskey")</button>
+                    @if (Model.ShowTotp)
+                    {
+                        <div class="or-divider">@Strings.Get("LoginOr")</div>
+                    }
+                }
+
+                @if (Model.ShowTotp)
+                {
+                    <form method="post" asp-page-handler="Verify">
+                        <p class="hint">@Strings.Get("LoginTotpHint")</p>
+                        <input type="hidden" asp-for="ReturnUrl" />
+                        <input type="hidden" asp-for="MfaTicket" />
+                        <div class="field">
+                            <label asp-for="Code">@Strings.Get("LoginAuthCode")</label>
+                            <input asp-for="Code" autocomplete="one-time-code" inputmode="text" placeholder="123456" />
+                        </div>
+                        <button type="submit" class="btn-primary">@Strings.Get("LoginVerify")</button>
+                    </form>
+                }
+            </div>
+
+            @if (Model.ShowPasskey)
+            {
+                <script src="/webauthn.js"></script>
+                <script>
+                    document.getElementById('passkeyButton').addEventListener('click', async function () {
+                        this.disabled = true;
+                        try {
+                            const assertion = await window.simplArchiveWebAuthn.authenticate(this.dataset.options);
+                            document.getElementById('passkeyResponse').value = assertion;
+                            document.getElementById('passkeyForm').submit();
+                        } catch (e) {
+                            this.disabled = false;
+                            alert(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Strings.Get("LoginPasskeyFailedAlert"))));
+                        }
+                    });
+                </script>
+            }
+        }
+        else
+        {
+            <div class="login-card">
+                <form method="post">
+                    <div class="brand">SimplArchive</div>
+                    <h1 class="title">@Strings.Get("LoginSignIn")</h1>
+
+                    @if (Model.Error is not null)
+                    {
+                        <div class="error">@Model.Error</div>
+                    }
+
+                    <input type="hidden" asp-for="ReturnUrl" />
+
+                    <div class="field">
+                        <label asp-for="Input.Email">@Strings.Get("LoginEmail")</label>
+                        <input asp-for="Input.Email" type="email" autocomplete="username webauthn" autofocus placeholder="you@@example.com" />
+                    </div>
+
+                    <div class="field">
+                        <label asp-for="Input.Password">@Strings.Get("LoginPassword")</label>
+                        <input asp-for="Input.Password" type="password" autocomplete="current-password" placeholder="@Strings.Get("LoginPasswordPlaceholder")" />
+                    </div>
+
+                    <button type="submit" class="btn-primary">@Strings.Get("LoginSignIn")</button>
+                </form>
+
+                @if (Model.PasskeyLoginOptionsJson is not null)
+                {
+                    @* Passwordless (discoverable) passkey sign-in — the whole section is hidden by the script on
+                       browsers without WebAuthn; the per-tenant AllowPasskeyLogin policy is enforced server-side. *@
+                    <div id="passkeyLoginSection">
+                        <div class="or-divider">@Strings.Get("LoginOr")</div>
+                        <form method="post" asp-page-handler="PasskeyLogin" id="passkeyLoginForm">
+                            <input type="hidden" asp-for="ReturnUrl" />
+                            <input type="hidden" asp-for="PasskeyLoginToken" />
+                            <input type="hidden" asp-for="PasskeyLoginResponse" id="passkeyLoginResponse" />
+                        </form>
+                        <button type="button" id="passkeyLoginButton" class="btn-primary"
+                                style="background:transparent; color:var(--primary); border:1px solid var(--primary); box-shadow:none;"
+                                data-options="@Model.PasskeyLoginOptionsJson">@Strings.Get("LoginSignInPasskey")</button>
+                    </div>
+                }
+            </div>
+
+            @if (Model.PasskeyLoginOptionsJson is not null)
+            {
+                <script src="/webauthn.js"></script>
+                <script>
+                    (function () {
+                        var section = document.getElementById('passkeyLoginSection');
+                        var btn = document.getElementById('passkeyLoginButton');
+                        if (!btn || !window.simplArchiveWebAuthn || !window.simplArchiveWebAuthn.supported) {
+                            if (section) section.style.display = 'none';
+                            return;
+                        }
+                        btn.addEventListener('click', async function () {
+                            btn.disabled = true;
+                            try {
+                                const assertion = await window.simplArchiveWebAuthn.authenticate(btn.dataset.options);
+                                document.getElementById('passkeyLoginResponse').value = assertion;
+                                document.getElementById('passkeyLoginForm').submit();
+                            } catch (e) {
+                                btn.disabled = false;
+                                alert(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Strings.Get("LoginPasskeySignInFailedAlert"))));
+                            }
+                        });
+                    })();
+                </script>
+            }
+        }
+    </main>
+</body>
+</html>

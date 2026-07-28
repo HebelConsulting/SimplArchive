@@ -1,0 +1,152 @@
+@inject HttpClient Http
+
+@* Context-aware inbox filing dialog (ADRs 0286/0287/0288) — file as a new version of the selected document,
+   into its folder, or into a picked folder, with an optional feed comment. Bulk hides the as-version option.
+   Returns a FilingChoice. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 420px;">
+            @if (ShowAsVersion || ShowInFolder)
+            {
+                <MudRadioGroup T="int" @bind-Value="_mode">
+                    @if (ShowAsVersion)
+                    {
+                        <MudRadio T="int" Value="0" Dense="true">
+                            <div>@Strings.Get("FilingAsVersion")</div>
+                            <div class="mud-text-secondary" style="font-size:.8em;">@DocumentName</div>
+                        </MudRadio>
+                    }
+                    @if (ShowInFolder)
+                    {
+                        <MudRadio T="int" Value="1" Dense="true">
+                            <div>@Strings.Get("FilingInFolder")</div>
+                            <div class="mud-text-secondary" style="font-size:.8em;">@FolderName</div>
+                        </MudRadio>
+                    }
+                    <MudRadio T="int" Value="2" Dense="true">@Strings.Get("FilingChooseFolder")</MudRadio>
+                </MudRadioGroup>
+            }
+
+            <div style="height: 300px; overflow: auto; margin-top: 8px; opacity: @(_mode == 2 ? "1" : ".5"); pointer-events: @(_mode == 2 ? "auto" : "none");">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("FilingChooseTarget")</MudText>
+                @if (_loading)
+                {
+                    <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                }
+                else
+                {
+                    <MudTreeView T="PickNode" Items="_roots" ServerData="LoadChildrenAsync" Hover="true" Dense="true">
+                        <ItemTemplate Context="item">
+                            <MudTreeViewItem Value="@item.Value" Text="@item.Text" Icon="@Icons.Material.Filled.Folder"
+                                             CanExpand="@item.Expandable" Items="@item.Children"
+                                             OnClick="@(() => _picked = item.Value)" />
+                        </ItemTemplate>
+                    </MudTreeView>
+                }
+            </div>
+
+            <MudTextField @bind-Value="_comment" Label="@Strings.Get("FilingCommentLabel")" Placeholder="@Strings.Get("FilingCommentPlaceholder")"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" Class="mt-2" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!CanFile)" OnClick="File">@Strings.Get("FilingFile")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+
+    // The Repositories tab's current selection, passed in by Home.
+    [Parameter] public Guid? DocumentId { get; set; }
+    [Parameter] public string? DocumentName { get; set; }
+    [Parameter] public Guid? FolderId { get; set; }
+    [Parameter] public string? FolderName { get; set; }
+    [Parameter] public bool Bulk { get; set; }
+
+    public enum FilingMode { AsVersion, InFolder, Pick }
+    public record FilingChoice(FilingMode Mode, Guid TargetId, string? Comment);
+
+    private bool ShowAsVersion => DocumentId is not null && !Bulk;
+    private bool ShowInFolder => FolderId is not null;
+
+    private int _mode;                 // 0 = as-version, 1 = in-folder, 2 = pick
+    private string _comment = "";
+    private PickNode? _picked;
+    private IReadOnlyCollection<TreeItemData<PickNode>> _roots = [];
+    private bool _loading = true;
+
+    private bool CanFile => _mode switch { 0 => ShowAsVersion, 1 => ShowInFolder, _ => _picked is not null };
+
+    protected override void OnInitialized()
+    {
+        _mode = ShowAsVersion ? 0 : ShowInFolder ? 1 : 2;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var nodes = new List<TreeItemData<PickNode>>();
+        var url = "api/repositories";
+        while (url is not null)
+        {
+            var page = await Http.GetFromJsonAsync<ListResponse>(url);
+            foreach (var r in page?.Repositories ?? [])
+            {
+                nodes.Add(ToItem(new PickNode(r.Id, r.Name, r.HasSubfolders)));
+            }
+            url = Next(page?.Links);
+        }
+        _roots = nodes;
+        _loading = false;
+    }
+
+    private async Task<IReadOnlyCollection<TreeItemData<PickNode>>> LoadChildrenAsync(PickNode node)
+    {
+        var children = new List<TreeItemData<PickNode>>();
+        var url = $"api/documents/{node.Id}/children";
+        while (url is not null)
+        {
+            var page = await Http.GetFromJsonAsync<ChildrenResponse>(url);
+            foreach (var c in (page?.Children ?? []).Where(c => !c.HasVersions))
+            {
+                children.Add(ToItem(new PickNode(c.Id, c.Name, c.HasSubfolders)));
+            }
+            url = Next(page?.Links);
+        }
+        return children;
+    }
+
+    private void File()
+    {
+        var choice = _mode switch
+        {
+            0 => new FilingChoice(FilingMode.AsVersion, DocumentId!.Value, Trimmed()),
+            1 => new FilingChoice(FilingMode.InFolder, FolderId!.Value, Trimmed()),
+            _ => _picked is { } p ? new FilingChoice(FilingMode.Pick, p.Id, Trimmed()) : null,
+        };
+        if (choice is not null)
+        {
+            Dialog.Close(DialogResult.Ok(choice));
+        }
+    }
+
+    private string? Trimmed() => string.IsNullOrWhiteSpace(_comment) ? null : _comment.Trim();
+
+    private void Cancel() => Dialog.Cancel();
+
+    private static TreeItemData<PickNode> ToItem(PickNode n) => new() { Value = n, Text = n.Name, Expandable = n.HasSubfolders };
+
+    private static string? Next(List<Link>? links)
+    {
+        var href = links?.FirstOrDefault(l => l.Rel == "next")?.Href;
+        return href is null ? null : (href.StartsWith("http") ? href : href.TrimStart('/'));
+    }
+
+    private record PickNode(Guid Id, string Name, bool HasSubfolders);
+    private record Link { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+    private record ListResponse { public List<Repo> Repositories { get; set; } = []; public List<Link> Links { get; set; } = []; }
+    private record Repo { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasSubfolders { get; set; } }
+    private record ChildrenResponse { public List<Child> Children { get; set; } = []; public List<Link> Links { get; set; } = []; }
+    private record Child { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } }
+}

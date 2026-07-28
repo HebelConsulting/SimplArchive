@@ -1,0 +1,13 @@
+{
+  "stryker-config": {
+    "solution": "SimplArchive.slnx",
+    "test-projects": [
+      "tests/SimplArchive.UnitTests/SimplArchive.UnitTests.csproj",
+      "tests/SimplArchive.IntegrationTests/SimplArchive.IntegrationTests.csproj"
+    ],
+    "reporters": ["html", "progress"],
+    "mutation-level": "Standard",
+    "thresholds": { "high": 80, "low": 60, "break": 0 },
+    "mutate": ["!**/Migrations/*.cs"]
+  }
+}

@@ -1,0 +1,26 @@
+@* Confirm emptying the tenant recycle bin (ADR "Recycle bin tab") — the user must type "I AGREE" exactly
+   (case-sensitive) before OK enables. Irreversible. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 400px;">
+            <MudText Typo="Typo.body1" Class="mb-3">@Strings.Get("HdaWarning")</MudText>
+            <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">@((MarkupString)Strings.Get("HdaTypeToConfirm"))</MudText>
+            <MudTextField @bind-Value="_text" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Placeholder="I AGREE" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="Ok" Disabled="@(_text != "I AGREE")">@Strings.Get("Ok")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    private string _text = "";
+
+    private void Ok() => Dialog.Close(DialogResult.Ok(true));
+
+    private void Cancel() => Dialog.Cancel();
+}

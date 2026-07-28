@@ -1,0 +1,144 @@
+# Default values for the SimplArchive API chart. See docs/deploy/README.md for a production walkthrough.
+# A production install MUST supply real endpoints + an existingSecret (never inline plaintext secrets here).
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/hebelconsulting/simplarchive
+  # Defaults to the chart's appVersion when empty.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Non-secret application configuration (mapped to the API's env / IConfiguration). Sensitive values (the OpenBao
+# AppRole SecretId, or DB/object-storage credentials when not using OpenBao) come from `existingSecret`, not here.
+config:
+  aspnetCoreEnvironment: Production
+  app:
+    baseUrl: "https://simplarchive.example.com"
+    # Leave false in production and run migrations as a one-off step; with multiple replicas, startup migration
+    # would race. See docs/deploy/README.md.
+    applyMigrationsAtStartup: false
+  objectStorage:
+    serviceUrl: ""        # server-side S3 endpoint (e.g. https://s3.eu-central-1.amazonaws.com)
+    publicServiceUrl: ""  # browser-facing endpoint for presigned URLs (often the same)
+    region: "us-east-1"
+    bucketName: "simplarchive"
+  gotenbergUrl: ""        # office/markdown/html -> PDF preview (optional; unset disables converted preview)
+  openSearchUrl: ""       # full-text search (optional; unset falls back to metadata-only search)
+  tikaUrl: ""             # content extraction + OCR (optional)
+  tikaOcrLanguages: "eng+deu+fra+ita"
+  ocrUrl: ""              # searchable-PDF sidecar (optional)
+  # SignalR Valkey/Redis backplane (ADR "SignalR Valkey backplane") — REQUIRED once replicaCount / the HPA scales
+  # past 1, so real-time notification pushes fan out across pods. Unset ⇒ in-process only (correct only at 1 replica).
+  valkeyConnectionString: ""   # e.g. "valkey:6379" or "valkey.internal:6379,password=...,ssl=true"
+  smtp:
+    host: ""              # notification email (optional; unset disables email, in-app notifications still work)
+    port: 587
+    fromAddress: ""
+    fromName: "SimplArchive"
+  openBao:
+    address: ""                       # e.g. https://openbao.internal:8200 (recommended for secrets)
+    roleId: ""                        # AppRole RoleId (non-secret)
+    databaseConnectionTemplate: ""    # host/port/db, e.g. "Host=pg;Port=5432;Database=simplarchive"
+  bootstrap:
+    name: "bootstrap-admin"
+    clientId: "bootstrap-platform-admin"
+
+# A Kubernetes Secret whose keys are injected as env (via envFrom). At minimum it should carry the OpenBao
+# AppRole SecretId (`OpenBao__SecretId`); when not using OpenBao, also `ConnectionStrings__Default`,
+# `ObjectStorage__AccessKey`, `ObjectStorage__SecretKey`, `Bootstrap__PlatformAdministrator__ClientSecret`.
+existingSecret: ""
+
+# Extra raw env entries ({name, value} or {name, valueFrom}) appended verbatim.
+extraEnv: []
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: simplarchive.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+    # - secretName: simplarchive-tls
+    #   hosts:
+    #     - simplarchive.example.com
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 75
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Runs EF Core migrations as a one-off pre-install/pre-upgrade hook Job (`--migrate` mode) before the app rolls
+# out — the recommended way to apply migrations in production (keeps them off the app's startup path).
+migrationJob:
+  enabled: true
+  backoffLimit: 1
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Liveness = the process is up (zero dependency checks); readiness = Postgres reachable. See ADR 0205.
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 3
+  failureThreshold: 6
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1654   # the aspnet Alpine image's built-in non-root `app` user
+  runAsGroup: 1654
+  fsGroup: 1654
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false   # some rendition libraries write to a temp dir
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+# Spread replicas across nodes/zones for HA (used when set).
+topologySpreadConstraints: []

@@ -1,0 +1,87 @@
+name: CodeQL
+
+# ADR 0433 "CodeQL SAST in CI". Static analysis of the C# code on every PR + push to main.
+#
+# This repo is a PRIVATE repo on a Free-plan org, so GitHub Advanced Security (the code-scanning / Security-tab
+# upload) is NOT available — the code-scanning API returns 403 "Advanced Security must be enabled". So instead of
+# uploading (upload: never), the analysis writes SARIF that is published as a downloadable artifact, and a gate
+# step fails the job on any error-severity finding. Real CodeQL, no GHAS needed.
+#
+# build-mode: none = CodeQL's buildless C# analysis (no restore/compile step in this job), so it runs fast and
+# independently of the fast/heavy CI tiers.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: codeql-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # The CodeQL action reads the Actions workflow-run API during analyze; without this it fails with
+  # "Resource not accessible by integration".
+  actions: read
+  # Native code-scanning upload on the public repo (where GitHub Advanced Security is free). Granted but unused on
+  # the private canonical, where the analysis falls back to a SARIF artifact + jq gate.
+  security-events: write
+
+jobs:
+  analyze:
+    name: CodeQL analyze (C#)
+    runs-on: ubuntu-latest
+    # On the public repo (HebelConsulting/SimplArchive), and only while it is actually public, GitHub Advanced
+    # Security code-scanning is free → upload natively to the Security tab. On the private canonical, fall back to
+    # the SARIF-artifact + jq gate. This job runs on push/PR only, so the inline visibility context is populated.
+    env:
+      IS_PUBLIC: ${{ github.repository == 'HebelConsulting/SimplArchive' && github.event.repository.visibility == 'public' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+          build-mode: none
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:csharp"
+          # Public: upload natively to the Security tab. Private: emit SARIF only (no GHAS → a real upload 403s).
+          upload: ${{ env.IS_PUBLIC == 'true' && 'always' || 'never' }}
+          upload-database: ${{ env.IS_PUBLIC == 'true' }}
+          output: sarif-results
+
+      - name: Upload SARIF artifact
+        # Private only — on the public repo the Security tab is the record of findings.
+        if: ${{ always() && env.IS_PUBLIC != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif
+          path: sarif-results
+          if-no-files-found: warn
+
+      - name: Gate on error-severity findings
+        # Private only — on the public repo, native code-scanning owns the gate.
+        if: ${{ env.IS_PUBLIC != 'true' }}
+        run: |
+          set -euo pipefail
+          file=sarif-results/csharp.sarif
+          if [ ! -f "$file" ]; then
+            echo "No CodeQL SARIF produced ($file missing) — nothing to gate."
+            exit 0
+          fi
+          count=$(jq '[.runs[].results[]? | select(.level == "error")] | length' "$file")
+          echo "CodeQL error-severity findings: $count"
+          if [ "$count" -gt 0 ]; then
+            echo "----- error-severity findings -----"
+            jq -r '.runs[].results[]? | select(.level=="error")
+                   | "  - \(.ruleId): \(.message.text) [\(.locations[0].physicalLocation.artifactLocation.uri // "?"):\(.locations[0].physicalLocation.region.startLine // 0)]"' "$file"
+            echo "::error::CodeQL found $count error-severity finding(s) — download the codeql-sarif artifact for details."
+            exit 1
+          fi
+          echo "No error-severity findings. (Any warning/security-severity findings are in the codeql-sarif artifact.)"

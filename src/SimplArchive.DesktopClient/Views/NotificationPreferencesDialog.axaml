@@ -1,0 +1,23 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.NotificationPreferencesDialog"
+        Title="{loc:Tr NotifPrefTitle}" Width="440" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="12">
+        <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource WbMuted}"
+                   Text="{loc:Tr NotifPrefBody}" />
+        <ItemsControl x:Name="PrefList">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:CompileBindings="False">
+                    <CheckBox Content="{Binding Label}" IsChecked="{Binding EmailEnabled, Mode=TwoWay}" Margin="0,2" />
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock x:Name="Error" Foreground="#c0392b" IsVisible="False" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Cancel}" Click="OnClose" IsCancel="True" />
+            <Button x:Name="SaveButton" Content="{loc:Tr Save}" Click="OnSave" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

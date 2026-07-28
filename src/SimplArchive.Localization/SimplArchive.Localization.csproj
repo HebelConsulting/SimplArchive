@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- TargetFramework is set explicitly (not just inherited from Directory.Build.props) because the Docker
+       restore layer copies only the .csproj files, not Directory.Build.props — every project does the same. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- Shared UI-string resources for both clients (ADR "Web UI localization — shared resources"): the .resx
+       (English + de/it/es satellites) + the ResourceManager accessor + the culture helper, with no UI
+       dependency so the Avalonia desktop and the Blazor WASM web client can both reference it. Each client
+       keeps its own binding glue (the desktop's {loc:Tr} markup extension; the web's Loc helper). -->
+
+</Project>

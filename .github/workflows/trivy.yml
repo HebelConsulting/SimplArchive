@@ -1,0 +1,47 @@
+name: Trivy
+
+# ADR 0435 "Trivy image CVE scan in CI". Builds the runtime Docker image and scans it with Trivy for OS-package
+# (Alpine apk) + .NET-dependency vulnerabilities — the layer the .NET dependency-CVE gate (ADR 0379) can't see.
+# Fails on HIGH/CRITICAL that have a fix available (--ignore-unfixed), so an unpatched base-image CVE with no
+# upstream fix doesn't wedge every merge; accepted exceptions go in .trivyignore.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  # Base-image CVEs are disclosed over time, so re-scan the unchanged image weekly (schedule runs on main).
+  schedule:
+    - cron: "0 6 * * 1" # Monday 06:00 UTC
+
+concurrency:
+  group: trivy-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Trivy image scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Build the same runtime image the Dockerfile produces (multi-stage: SDK build + Blazor WASM → aspnet-alpine).
+      - name: Build image
+        run: docker build -t simplarchive:scan .
+
+      - name: Scan image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: simplarchive:scan
+          # CVEs only — the ADR's purpose is OS-package + runtime-.NET vulnerabilities. Trivy's default also runs
+          # its secret scanner, which flags the dev certs / test fixtures baked into the image (image-secret false
+          # positives); source-secret scanning is the separate gitleaks follow-up.
+          scanners: vuln
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          # .trivyignore in the repo root is read automatically for accepted CVEs.

@@ -1,0 +1,70 @@
+@* Bulk add-tags dialog (ADR "Bulk actions on selected documents") — a chip editor + a catalog-autocomplete
+   add box; returns the normalized tag list to union onto every selected document. *@
+@using System.Net.Http.Json
+@inject HttpClient Http
+
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 340px;">
+            <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">@Strings.Get("BulkTagsHint")</MudText>
+            @if (_tags.Count > 0)
+            {
+                <div style="display:flex; flex-wrap:wrap; gap:4px;" class="mb-2">
+                    @foreach (var t in _tags)
+                    {
+                        <MudChip T="string" Size="Size.Small" OnClose="@(() => _tags.Remove(t))">@t</MudChip>
+                    }
+                </div>
+            }
+            <MudAutocomplete T="string" @bind-Value="_newTag" SearchFunc="Search" CoerceValue="true"
+                             Placeholder="@Strings.Get("BulkTagsPlaceholder")" Margin="Margin.Dense" Variant="Variant.Outlined"
+                             OnKeyUp="OnKeyUp" Immediate="true" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_tags.Count == 0)" OnClick="Save">@Strings.Get("BulkTagsAdd")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    private readonly List<string> _tags = [];
+    private List<string> _catalog = [];
+    private string? _newTag;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _catalog = (await Http.GetFromJsonAsync<TagsResponse>("api/tags"))?.Tags ?? []; }
+        catch { _catalog = []; }
+    }
+
+    private Task<IEnumerable<string>> Search(string value, CancellationToken ct)
+    {
+        var pool = _catalog.Where(t => !_tags.Contains(t));
+        return Task.FromResult(string.IsNullOrWhiteSpace(value)
+            ? pool
+            : pool.Where(t => t.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private void OnKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or "NumpadEnter")
+        {
+            var t = (_newTag ?? "").Trim().ToLowerInvariant();
+            if (t.Length is > 0 and <= 100 && !_tags.Contains(t))
+            {
+                _tags.Add(t);
+            }
+
+            _newTag = null;
+        }
+    }
+
+    private void Save() => Dialog.Close(DialogResult.Ok(_tags.ToList()));
+    private void Cancel() => Dialog.Cancel();
+
+    private record TagsResponse { public List<string> Tags { get; set; } = []; }
+}

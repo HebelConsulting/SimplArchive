@@ -1,0 +1,50 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        xmlns:svc="using:SimplArchive.DesktopClient.Services"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.LogonWindow"
+        x:DataType="vm:LogonViewModel"
+        Title="{loc:Tr LogonTitle}" Width="380" Height="360"
+        CanResize="False" WindowStartupLocation="CenterScreen">
+    <StackPanel Margin="28" Spacing="16">
+        <StackPanel Orientation="Horizontal" Spacing="10">
+            <i:Icon Value="mdi-file-cabinet" FontSize="28" Foreground="#5b4ee5" />
+            <TextBlock Text="SimplArchive" FontSize="22" FontWeight="SemiBold" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Spacing="4">
+            <TextBlock Text="{loc:Tr LogonUsername}" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+            <TextBox Text="{Binding Username}" Watermark="you@example.com" />
+        </StackPanel>
+
+        <StackPanel Spacing="4">
+            <TextBlock Text="{loc:Tr LogonTenant}" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+            <ComboBox ItemsSource="{Binding Tenants}" SelectedItem="{Binding SelectedTenant}" HorizontalAlignment="Stretch">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="svc:TenantProfile"><TextBlock Text="{Binding Name}" /></DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </StackPanel>
+
+        <StackPanel Spacing="4">
+            <TextBlock Text="{loc:Tr LogonLanguage}" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+            <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding SelectedLanguage}" HorizontalAlignment="Stretch">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LanguageOption"><TextBlock Text="{Binding Name}" /></DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </StackPanel>
+
+        <Button Command="{Binding LoginCommand}" Classes="accent" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="0,4,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <i:Icon Value="mdi-login" />
+                <TextBlock Text="{loc:Tr LogonLogin}" />
+            </StackPanel>
+        </Button>
+
+        <TextBlock Text="{Binding Status}" Foreground="{DynamicResource WbMuted}" FontSize="12" TextWrapping="Wrap" HorizontalAlignment="Center" />
+        <TextBlock Text="{loc:Tr LogonManageTenants}" Foreground="{DynamicResource WbFaint}" FontSize="11" HorizontalAlignment="Center" />
+    </StackPanel>
+</Window>

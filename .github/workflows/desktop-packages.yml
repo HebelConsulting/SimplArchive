@@ -1,0 +1,58 @@
+# Builds the Avalonia desktop client packages and attaches them to the GitHub Release — PUBLIC repo only.
+#
+# Triggered on a v* tag. Name-gated to HebelConsulting/SimplArchive (a no-op on the private canonical); like the
+# Docker publish, a name-only gate is fine because attaching release assets is harmless in the private-first
+# window. The win/linux job cross-builds on ubuntu (cheap). The macOS .dmg needs a macos-latest runner (pricier
+# minutes even on public), so it is an OPT-IN job: enable it by setting the repo Actions variable
+# BUILD_MACOS_DMG = true. Uploads use the built-in gh CLI (no third-party action); the first job to run creates
+# the release, the others upload to it.
+name: Desktop packages
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  # Windows + Linux x64 — self-contained portable archives, cross-built on ubuntu (ADR 0478).
+  win-linux:
+    if: ${{ github.repository == 'HebelConsulting/SimplArchive' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create/update the GitHub Release + upload assets
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Package win-x64 + linux-x64
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          scripts/package-windows-linux.sh "$version"
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes \
+            || gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+
+  # macOS .dmg (arm64 + x64) — OPT-IN (needs a macos runner). Set repo variable BUILD_MACOS_DMG=true to enable.
+  macos:
+    if: ${{ github.repository == 'HebelConsulting/SimplArchive' && vars.BUILD_MACOS_DMG == 'true' }}
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Package macOS .dmg
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          scripts/package-macos-dmg.sh "$version"
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes \
+            || gh release upload "$GITHUB_REF_NAME" dist/* --clobber

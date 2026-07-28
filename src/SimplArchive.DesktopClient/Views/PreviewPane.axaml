@@ -1,0 +1,146 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:v="using:SimplArchive.DesktopClient.Views"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             x:Class="SimplArchive.DesktopClient.Views.PreviewPane"
+             x:DataType="vm:PreviewViewModel">
+    <!-- Delete the selected annotations with the Del key (ADR "Annotation multi-select"); the toolbar bin button
+         is the reliable path, this is the keyboard convenience. -->
+    <UserControl.KeyBindings>
+        <KeyBinding Gesture="Delete" Command="{Binding DeleteSelectedAnnotationsCommand}" />
+        <KeyBinding Gesture="Back" Command="{Binding DeleteSelectedAnnotationsCommand}" />
+    </UserControl.KeyBindings>
+    <!-- The preview surface (toolbar + pages/text/placeholder). Reused both docked and in the full-screen
+         overlay (ADR "Desktop preview full-screen toggle"); each instance binds to a PreviewViewModel — the
+         Repositories/Inbox tabs use MainWindowViewModel.Preview, the Recycle bin tab uses RecycleBin.Preview,
+         so the previews are never entangled (ADR "Desktop recycle bin parity"). -->
+    <DockPanel LastChildFill="True">
+        <!-- Toolbar: find-in-document (when a text layout exists) + the full-screen toggle (always, when there's
+             a preview) — mirrors the web (ADRs 0295, "Search hit overlay"). -->
+        <Border DockPanel.Dock="Top" IsVisible="{Binding HasPreview}" Padding="6,4"
+                Background="{DynamicResource WbChrome}" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+            <!-- Toolbar items in a WrapPanel so a whole cluster reflows onto the next line when the pane is too
+                 narrow to fit them all, instead of clipping (ADR "Desktop Repositories-tab UI polish"). -->
+            <WrapPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                    <!-- Sticky notes: Add needs CanAnnotate (ADR "CanAnnotate right"); show/hide needs only read. -->
+                    <Button Command="{Binding AddNoteCommand}" IsVisible="{Binding CanAddNote}"
+                            ToolTip.Tip="Add a sticky note" Height="26" Padding="6,0">
+                        <i:Icon Value="mdi-note-plus-outline" />
+                    </Button>
+                    <!-- Markup tools (ADR "Annotation markup"): drag on the page to draw. -->
+                    <Button Command="{Binding SelectShapeToolCommand}" CommandParameter="1" IsVisible="{Binding CanAddNote}"
+                            ToolTip.Tip="Highlight (drag to draw)" Height="26" Padding="6,0">
+                        <i:Icon Value="mdi-marker" />
+                    </Button>
+                    <Button Command="{Binding SelectShapeToolCommand}" CommandParameter="2" IsVisible="{Binding CanAddNote}"
+                            ToolTip.Tip="Rectangle (drag to draw)" Height="26" Padding="6,0">
+                        <i:Icon Value="mdi-rectangle-outline" />
+                    </Button>
+                    <Button Command="{Binding SelectShapeToolCommand}" CommandParameter="3" IsVisible="{Binding CanAddNote}"
+                            ToolTip.Tip="Arrow (drag to draw)" Height="26" Padding="6,0">
+                        <i:Icon Value="mdi-arrow-top-right" />
+                    </Button>
+                    <!-- Colour palette (ADR "Highlighting redesign"): sets the draw colour for new shapes AND recolours the selection. Shown while drawing or with a selection. -->
+                    <ItemsControl ItemsSource="{Binding AnnotationPalette}" IsVisible="{Binding ShowAnnotationColorPalette}" VerticalAlignment="Center" Margin="4,0">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="3" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AnnotationSwatch">
+                                <Button Command="{Binding $parent[ItemsControl].DataContext.SetAnnotationColorCommand}" CommandParameter="{Binding Hex}"
+                                        Width="18" Height="18" Padding="0" MinWidth="0" Background="{Binding Brush}" ToolTip.Tip="Set colour" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Command="{Binding ToggleNotesCommand}" IsVisible="{Binding AnnotationsAvailable}"
+                            ToolTip.Tip="Show / hide notes" Height="26" Padding="6,0">
+                        <i:Icon Value="mdi-note-multiple-outline" />
+                    </Button>
+                    <!-- Multi-select actions (ADR "Annotation multi-select"): Ctrl-click / marquee to select, then
+                         copy / paste / delete the selection. -->
+                    <Button Command="{Binding CopySelectedAnnotationsCommand}" IsEnabled="{Binding HasSelectedAnnotations}"
+                            IsVisible="{Binding CanAddNote}" ToolTip.Tip="Copy selected annotations" Height="26" Padding="6,0">
+                        <i:Icon Value="mdi-content-copy" />
+                    </Button>
+                    <Button Command="{Binding PasteAnnotationsCommand}" IsEnabled="{Binding HasClipboardAnnotations}"
+                            IsVisible="{Binding CanAddNote}" ToolTip.Tip="Paste annotations" Height="26" Padding="6,0">
+                        <i:Icon Value="mdi-content-paste" />
+                    </Button>
+                    <Button Command="{Binding DeleteSelectedAnnotationsCommand}" IsEnabled="{Binding HasSelectedAnnotations}"
+                            IsVisible="{Binding CanAddNote}" ToolTip.Tip="Delete selected annotations (Del)" Height="26" Padding="6,0">
+                        <i:Icon Value="mdi-delete-outline" />
+                    </Button>
+                    <Button Command="{Binding TogglePreviewFullscreenCommand}"
+                            ToolTip.Tip="{Binding PreviewFullscreenTip}" Height="26" Padding="6,0">
+                        <i:Icon Value="{Binding PreviewFullscreenIcon}" />
+                    </Button>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding CanFindInDocument}">
+                    <i:Icon Value="mdi-magnify" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
+                    <TextBox Text="{Binding FindQuery}" Watermark="Find in document…" Tag="find" Width="240" Height="26" Padding="4,2" VerticalContentAlignment="Center" />
+                    <TextBlock Text="{Binding FindPosition}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" MinWidth="44"
+                               IsVisible="{Binding FindQuery, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                    <Button Command="{Binding FindPreviousCommand}" IsEnabled="{Binding CanFindNavigate}" ToolTip.Tip="Previous match" Height="26" Padding="6,0"><i:Icon Value="mdi-chevron-up" /></Button>
+                    <Button Command="{Binding FindNextCommand}" IsEnabled="{Binding CanFindNavigate}" ToolTip.Tip="Next match" Height="26" Padding="6,0"><i:Icon Value="mdi-chevron-down" /></Button>
+                    <Button Command="{Binding ClearFindCommand}" ToolTip.Tip="Clear" Height="26" Padding="6,0"
+                            IsVisible="{Binding FindQuery, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"><i:Icon Value="mdi-close" /></Button>
+                </StackPanel>
+            </WrapPanel>
+        </Border>
+        <Grid>
+            <ScrollViewer IsVisible="{Binding HasPreviewPages}">
+                <ItemsControl ItemsSource="{Binding PreviewPages}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:PreviewPageViewModel">
+                            <Grid Margin="6,6,6,0">
+                                <Image Source="{Binding Image}" Stretch="Uniform" />
+                                <!-- Draws the hit boxes; every word is clickable to copy, shift-click appends (ADR "Copy a preview word to the clipboard"). -->
+                                <v:HighlightOverlay Boxes="{Binding Highlights}" Words="{Binding AllWords}" ActiveBox="{Binding ActiveHighlight}"
+                                                    Notes="{Binding Notes}" PageIndex="{Binding PageIndex}"
+                                                    WordCopiedCommand="{ReflectionBinding $parent[ItemsControl].DataContext.HitWordCopiedCommand}"
+                                                    AddMode="{ReflectionBinding $parent[ItemsControl].DataContext.AddNoteMode}"
+                                                    NotePlacedCommand="{ReflectionBinding $parent[ItemsControl].DataContext.NotePlacedCommand}"
+                                                    NoteClickedCommand="{ReflectionBinding $parent[ItemsControl].DataContext.NoteClickedCommand}"
+                                                    NoteMovedCommand="{ReflectionBinding $parent[ItemsControl].DataContext.NoteMovedCommand}"
+                                                    NoteResizedCommand="{ReflectionBinding $parent[ItemsControl].DataContext.NoteResizedCommand}"
+                                                    SelectAnnotationCommand="{ReflectionBinding $parent[ItemsControl].DataContext.SelectAnnotationCommand}"
+                                                    MarqueeSelectCommand="{ReflectionBinding $parent[ItemsControl].DataContext.MarqueeSelectAnnotationsCommand}"
+                                                    ClearSelectionCommand="{ReflectionBinding $parent[ItemsControl].DataContext.ClearAnnotationSelectionCommand}"
+                                                    GroupMovedCommand="{ReflectionBinding $parent[ItemsControl].DataContext.GroupMoveAnnotationsCommand}"
+                                                    DrawKind="{ReflectionBinding $parent[ItemsControl].DataContext.AnnotationTool}"
+                                                    DrawColor="{ReflectionBinding $parent[ItemsControl].DataContext.AnnotationColor}"
+                                                    ShapeDrawnCommand="{ReflectionBinding $parent[ItemsControl].DataContext.ShapeDrawnCommand}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <ScrollViewer IsVisible="{Binding PreviewText, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+                <SelectableTextBlock Text="{Binding PreviewText}" FontFamily="Menlo,Consolas,monospace" FontSize="12" Padding="10" />
+            </ScrollViewer>
+            <TextBlock Text="{Binding PreviewPlaceholder}" Foreground="{DynamicResource WbFaint}" TextWrapping="Wrap" MaxWidth="280"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                       IsVisible="{Binding PreviewPlaceholder, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+            <!-- Sensitivity watermark (ADR "Document watermarking") — repeating diagonal label+viewer, click-through. -->
+            <ItemsControl ItemsSource="{Binding WatermarkTiles}" IsVisible="{Binding HasWatermark}" IsHitTestVisible="False" ClipToBounds="True">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:CompileBindings="False">
+                        <TextBlock Text="{Binding}" Foreground="#2a808080" FontSize="17" FontWeight="SemiBold" Margin="26,22">
+                            <TextBlock.RenderTransform><RotateTransform Angle="-28" /></TextBlock.RenderTransform>
+                        </TextBlock>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <!-- Converted-preview badge -->
+            <Border IsVisible="{Binding PreviewConverted}" Background="#9e000000" CornerRadius="10"
+                    Padding="8,3" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="10">
+                <TextBlock Text="{loc:Tr RbConvertedPreview}" Foreground="White" FontSize="11" />
+            </Border>
+        </Grid>
+    </DockPanel>
+</UserControl>

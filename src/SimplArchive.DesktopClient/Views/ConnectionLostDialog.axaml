@@ -1,0 +1,30 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        x:Class="SimplArchive.DesktopClient.Views.ConnectionLostDialog"
+        Title="{loc:Tr ClTitle}" Width="460" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="14">
+        <StackPanel Orientation="Horizontal" Spacing="12">
+            <i:Icon Value="mdi-lan-disconnect" FontSize="30" Foreground="#c0392b" VerticalAlignment="Top" />
+            <StackPanel VerticalAlignment="Center" Spacing="2">
+                <TextBlock Text="{loc:Tr ClHeadline}" FontWeight="SemiBold" FontSize="15" />
+                <TextBlock Text="{loc:Tr ClBody}"
+                           Foreground="{DynamicResource WbMuted}" TextWrapping="Wrap" MaxWidth="360" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Tenant-admin-only technical details. -->
+        <Expander x:Name="DetailsExpander" Header="{loc:Tr ClTechDetails}" IsExpanded="False" IsVisible="False">
+            <ScrollViewer MaxHeight="260">
+                <SelectableTextBlock x:Name="DetailsText" FontFamily="Menlo,Consolas,monospace" FontSize="11" TextWrapping="Wrap" />
+            </ScrollViewer>
+        </Expander>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="{loc:Tr Close}" Click="OnClose" />
+            <Button Content="{loc:Tr ClReconnect}" Click="OnReconnect" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

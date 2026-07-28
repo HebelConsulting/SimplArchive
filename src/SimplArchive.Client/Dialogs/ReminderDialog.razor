@@ -1,0 +1,144 @@
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+@* Set / view / cancel reminders (Wiedervorlage) on a document (ADR "Document reminders"): a date-time, an
+   optional note, an optional repeat, and an optional target colleague (defaults to yourself). Lists the
+   pending reminders you set or are the target of, each cancellable. Interactive — does its own API calls. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 460px;">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">@((MarkupString)string.Format(Strings.Get("ReminderTitle"), DocumentName))</MudText>
+
+            @if (_reminders.Count > 0)
+            {
+                <MudList T="string" Dense="true" Class="mb-1">
+                    @foreach (var r in _reminders)
+                    {
+                        <MudListItem T="string">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <MudIcon Icon="@Icons.Material.Filled.Alarm" Size="Size.Small" />
+                                <div style="flex:1 1 auto; min-width:0;">
+                                    <div>@r.RemindAt.ToLocalTime().ToString("g")@(r.Recurrence != 0 ? string.Format(Strings.Get("ReminderRepeatsSuffix"), r.RecurrenceName.ToLowerInvariant()) : "")</div>
+                                    <div class="mud-text-secondary" style="font-size:.8em;">@string.Format(Strings.Get("ReminderForLine"), r.TargetName, string.IsNullOrEmpty(r.Note) ? "" : " — " + r.Note)</div>
+                                </div>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="@Strings.Get("ReminderCancelAria")" OnClick="@(() => CancelAsync(r.Id))" />
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+                <MudDivider Class="my-2" />
+            }
+
+            <MudDatePicker @bind-Date="_date" Label="@Strings.Get("ReminderDate")" MinDate="DateTime.Today" DateFormat="yyyy-MM-dd" Variant="Variant.Outlined" Class="mb-2" />
+            <MudTimePicker @bind-Time="_time" Label="@Strings.Get("ReminderTime")" Variant="Variant.Outlined" Class="mb-2" />
+            <MudTextField @bind-Value="_note" Label="@Strings.Get("ReminderNote")" Variant="Variant.Outlined" Class="mb-2" />
+            <MudSelect T="int" @bind-Value="_recurrence" Label="@Strings.Get("ReminderRepeat")" Variant="Variant.Outlined" Class="mb-2">
+                <MudSelectItem T="int" Value="@(0)">@Strings.Get("RecurNone")</MudSelectItem>
+                <MudSelectItem T="int" Value="@(1)">@Strings.Get("RecurDaily")</MudSelectItem>
+                <MudSelectItem T="int" Value="@(2)">@Strings.Get("RecurWeekly")</MudSelectItem>
+                <MudSelectItem T="int" Value="@(3)">@Strings.Get("RecurMonthly")</MudSelectItem>
+            </MudSelect>
+            <MudSelect T="Guid" @bind-Value="_target" Label="@Strings.Get("ReminderRemindLabel")" Variant="Variant.Outlined">
+                <MudSelectItem T="Guid" Value="@Guid.Empty">@Strings.Get("ReminderMyself")</MudSelectItem>
+                @foreach (var t in _targets)
+                {
+                    <MudSelectItem T="Guid" Value="@t.Id">@t.DisplayName</MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => Dialog.Close())">@Strings.Get("Close")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_date is null || _busy)" OnClick="CreateAsync">@Strings.Get("ReminderSet")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public Guid DocumentId { get; set; }
+    [Parameter] public string DocumentName { get; set; } = "";
+
+    private DateTime? _date = DateTime.Today.AddDays(1);
+    private TimeSpan? _time = new(9, 0, 0);
+    private string _note = "";
+    private int _recurrence;
+    private Guid _target = Guid.Empty;
+    private bool _busy;
+    private List<TargetDto> _targets = [];
+    private List<ReminderDto> _reminders = [];
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _targets = (await Http.GetFromJsonAsync<TargetsResponse>($"api/documents/{DocumentId}/reminders/targets"))?.Targets ?? [];
+            _reminders = (await Http.GetFromJsonAsync<ReminderListResponse>($"api/documents/{DocumentId}/reminders"))?.Reminders ?? [];
+        }
+        catch (Exception)
+        {
+            // best-effort — leave the lists empty
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        if (_date is not { } date)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var when = new DateTimeOffset(date.Date + (_time ?? TimeSpan.Zero), DateTimeOffset.Now.Offset);
+            var body = new
+            {
+                remindAt = when,
+                note = _note,
+                recurrence = _recurrence,
+                targetUserId = _target == Guid.Empty ? (Guid?)null : _target,
+            };
+            using var response = await Http.PostAsJsonAsync($"api/documents/{DocumentId}/reminders", body);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add(Strings.Get("ReminderSetOk"), Severity.Success);
+                _note = "";
+                await LoadAsync();
+            }
+            else
+            {
+                Snackbar.Add(Strings.Get("ReminderSetError"), Severity.Error);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("ReminderSetError"), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CancelAsync(Guid id)
+    {
+        try
+        {
+            using var response = await Http.DeleteAsync($"api/documents/{DocumentId}/reminders/{id}");
+            await LoadAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("ReminderCancelError"), Severity.Error);
+        }
+    }
+
+    private record TargetsResponse { public List<TargetDto> Targets { get; set; } = []; }
+    private record TargetDto { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; }
+    private record ReminderListResponse { public List<ReminderDto> Reminders { get; set; } = []; }
+    private record ReminderDto { public Guid Id { get; set; } public DateTimeOffset RemindAt { get; set; } public string? Note { get; set; } public int Recurrence { get; set; } public string RecurrenceName { get; set; } = ""; public string TargetName { get; set; } = ""; }
+}

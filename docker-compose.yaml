@@ -1,0 +1,450 @@
+# Local development / demo stack — see docs/adr/0213-local-development-docker-compose.md.
+# `docker compose up --build` brings up the Api (built from the repo Dockerfile) plus its two
+# dependencies (PostgreSQL, SeaweedFS object storage) and works out of the box: migrations auto-apply, the
+# storage bucket is created by a one-shot init service, and a first PlatformAdministrator is seeded from the
+# env below so you can immediately create tenants. NOT for production — it runs in the Development
+# environment (OpenIddict dev certificates, plain HTTP) and ships fixed dev credentials in plaintext.
+#
+# Podman parity (docs/adr/0313-podman-compose-parity.md): this SAME file also runs under Podman via
+# `podman compose up --build` — no separate config, so there is nothing to keep in sync. On macOS first
+# create a VM: `podman machine init --cpus 4 --memory 6144 --disk-size 40 && podman machine start`. Verified
+# end-to-end (all services + healthchecks + depends_on conditions + the SPA/auth/OpenSearch/storage paths).
+#
+# Crash resilience (docs/adr/0314-crash-resilient-compose-stack.md): every long-running service has
+# `restart: unless-stopped` (the one-shot init services are intentionally not), so a crashed container comes
+# back automatically on both engines. To also survive a Podman *machine reboot*, enable the boot service
+# once: `podman machine ssh 'systemctl --user enable podman-restart.service && sudo loginctl enable-linger $(id -un)'`.
+#
+# Once up, browse to http://localhost:8080. To create a tenant, get a token as the bootstrap platform
+# administrator:
+#   curl -s -X POST http://localhost:8080/connect/token \
+#     -d 'grant_type=client_credentials&client_id=bootstrap-platform-admin&client_secret=dev-bootstrap-secret'
+# then POST /tenants with the returned bearer token (see the Api architecture docs).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: simplarchive
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d simplarchive"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-shot: provisions the database roles for the "migration owner" model (ADR "Dedicated migration owner
+  # role"). Creates a NOLOGIN `simplarchive_app` group (which the OpenBao dynamic runtime roles join) and a
+  # LOGIN `simplarchive_owner` role that owns the schema and runs DDL migrations; sets ALTER DEFAULT PRIVILEGES
+  # so anything the owner creates is auto-granted (DML) to the app group; and idempotently transfers any
+  # existing objects (created by a prior dynamic role / postgres) to the owner. Runs as the postgres superuser
+  # (which the db exposes for local dev) and is safe to re-run. Uses the postgres image for its psql client.
+  db-init:
+    image: postgres:16-alpine
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: postgres
+    volumes:
+      # The SQL lives in a mounted file (not an inline compose command) so Compose's `$`/`$$` interpolation
+      # doesn't mangle the PL/pgSQL dollar-quoting.
+      - ./scripts/db-init.sql:/db-init.sql:ro
+    entrypoint: ["psql", "-h", "db", "-U", "postgres", "-d", "simplarchive", "-v", "ON_ERROR_STOP=1", "-f", "/db-init.sql"]
+
+  # S3-compatible object store (ADR 0360). SeaweedFS replaced MinIO, which was archived by its owner in 2026
+  # (server + `mc` client) and is EOL as open source. SeaweedFS is maintained, lightweight, and — critically —
+  # supports S3 Object Lock (retention + legal hold) + versioning, which our WORM features require (ADR 0337/0340).
+  # The runtime is engine-neutral (IObjectStorageClient → AWS S3 SDK, ADR 0184); this is just the dev backend.
+  # Pinned by digest (weed version "4.39" build, ~3.97 release line) — its object-lock support is validated by the
+  # WormObjectLockTests E2E; SeaweedFS's release tag vs internal version numbering is inconsistent.
+  seaweedfs:
+    image: chrislusf/seaweedfs@sha256:c7d6c721b30ae711db766bbbfd40192776e263d4e51e22f57baef7bef93c12c6
+    restart: unless-stopped
+    # Explicit ports: the S3 API (the only one the Api/browser use), plus the master/volume/filer/WebDAV
+    # endpoints for dev convenience. The volume server is moved off its 8080 default to 9340 to avoid clashing
+    # with the Api's host port 8080.
+    command: server -dir=/data -s3 -s3.config=/etc/seaweedfs/s3.json -s3.port=8333 -master.port=9333 -volume.port=9340 -filer.port=8888 -webdav -webdav.port=7333
+    volumes:
+      - ./scripts/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+      - seaweedfs-data:/data
+    ports:
+      - "8333:8333"   # S3 API (presigned upload/download URLs the browser hits directly)
+      - "9333:9333"   # Master UI
+      - "9340:9340"   # Volume server
+      - "8888:8888"   # Filer UI
+      - "7333:7333"   # WebDAV
+
+  # SeaweedFS web admin UI (a separate `weed admin` command, not part of `weed server`) — dev convenience.
+  seaweedfs-admin:
+    image: chrislusf/seaweedfs@sha256:c7d6c721b30ae711db766bbbfd40192776e263d4e51e22f57baef7bef93c12c6
+    restart: unless-stopped
+    depends_on:
+      - seaweedfs
+    command: admin -port=23646 -master=seaweedfs:9333
+    ports:
+      - "23646:23646"  # Admin UI
+
+  # One-shot: waits for the object store, creates the bucket with S3 Object Lock, and sets bucket CORS so the
+  # browser can PUT/GET presigned URLs directly (the upload/download bytes never go through the Api — ADR
+  # 0006/0184). Engine-neutral AWS CLI (path-style S3), no vendor client. Idempotent: head-bucket succeeds on a
+  # persisted volume so create-bucket (which is the only time object lock can be enabled) runs only on a fresh
+  # one; put-bucket-cors is applied every run.
+  storage-init:
+    image: amazon/aws-cli:2.36.2
+    depends_on:
+      - seaweedfs
+    environment:
+      AWS_ACCESS_KEY_ID: storageadmin
+      AWS_SECRET_ACCESS_KEY: storageadmin
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: >
+      /bin/sh -c "
+      aws configure set default.s3.addressing_style path;
+      until aws --endpoint-url http://seaweedfs:8333 s3api list-buckets >/dev/null 2>&1; do
+        echo 'waiting for object store...'; sleep 1;
+      done;
+      aws --endpoint-url http://seaweedfs:8333 s3api head-bucket --bucket simplarchive 2>/dev/null ||
+        aws --endpoint-url http://seaweedfs:8333 s3api create-bucket --bucket simplarchive --object-lock-enabled-for-bucket;
+      aws --endpoint-url http://seaweedfs:8333 s3api put-bucket-cors --bucket simplarchive --cors-configuration 'CORSRules=[{AllowedOrigins=[\"*\"],AllowedMethods=[GET,PUT,HEAD],AllowedHeaders=[\"*\"]}]';
+      echo 'bucket ready';
+      "
+
+  # Converts office/OpenDocument files (docx/xlsx/pptx/odt/ods) to PDF for preview via its bundled headless
+  # LibreOffice — see docs/adr/0228-office-document-preview-gotenberg.md. The Api POSTs the file and caches
+  # the returned PDF as a rendition; keeps the Api image free of LibreOffice.
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    restart: unless-stopped
+
+  # Full-text search engine (ADR 0011). Single-node, security disabled — dev only.
+  opensearch:
+    image: opensearchproject/opensearch:2
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      bootstrap.memory_lock: "true"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    restart: unless-stopped
+
+  # Document-content text extraction for the search index (ADR 0011 / "OpenSearch full-text slice 1").
+  # The `-full` image bundles Tesseract OCR (ADR "OCR for scanned documents") so scanned images / image-only
+  # PDFs are OCR'd at index time; it ships eng/deu/fra/ita/spa/jpn tessdata.
+  tika:
+    image: apache/tika:3.3.1.0-full
+    restart: unless-stopped
+
+  # OCR sidecar (ADR "Searchable PDF successor for TIFFs"): a thin FastAPI wrapper over OCRmyPDF/Tesseract that
+  # turns a TIFF into a searchable PDF. Built from ./ocr; not an off-the-shelf image.
+  ocr:
+    build:
+      context: ./ocr
+    restart: unless-stopped
+
+  # Dev SMTP catcher (ADR "Email notifications (SMTP)"): Mailpit accepts the notification emails on :1025 and
+  # shows them in a web inbox on :8025 — so the demo's workflow/escalation emails are visible in a browser
+  # (http://localhost:8025) without a real mail server. Dev-only; captures mail, never delivers it.
+  mailpit:
+    image: axllent/mailpit:v1.30.4
+    restart: unless-stopped
+    ports:
+      - "8025:8025"  # web inbox
+
+  # Valkey (the maintained Redis-compatible open fork) — the SignalR backplane so real-time notifications fan out
+  # across API replicas (ADR "SignalR Valkey backplane"). Single-pod dev doesn't strictly need it, but wiring it
+  # here exercises the backplane config path. Also the store ADR 0017 picked for future caching.
+  valkey:
+    image: valkey/valkey:8.1.1-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  # pgAdmin 4 — a web UI for the dev Postgres, pre-wired for zero-click connect (ADR 0437). Desktop mode
+  # (SERVER_MODE=False ⇒ no pgAdmin login, MASTER_PASSWORD_REQUIRED=False ⇒ no master password) + a pre-registered
+  # "SimplArchive (dev)" server (scripts/pgadmin-servers.json) whose password comes from a mounted passfile
+  # (scripts/pgadmin-pgpass — the fixed dev `postgres` superuser creds). libpq requires the passfile be 0600, but a
+  # bind-mount stays world-readable, so an entrypoint wrapper copies it to /tmp/pgpass at mode 600 before handing off
+  # to pgAdmin's own /entrypoint.sh. Dev-only convenience baking in throwaway creds (the stack is "Not for
+  # production"); browse http://localhost:5050 and the tree is already connected.
+  pgadmin:
+    image: dpage/pgadmin4:9.16
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # A pgAdmin login is still required by the image even in desktop mode; these are never prompted for
+      # (SERVER_MODE=False auto-authenticates as this user) and are throwaway. `.local` is rejected as a reserved
+      # TLD, so use `.com`.
+      PGADMIN_DEFAULT_EMAIL: "admin@simplarchive.com"
+      PGADMIN_DEFAULT_PASSWORD: "admin"
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      PGADMIN_SERVER_JSON_FILE: "/pgadmin4/servers.json"
+    entrypoint: ["/bin/sh", "-c", "install -m 600 /pgpass.src /tmp/pgpass && exec /entrypoint.sh"]
+    volumes:
+      - ./scripts/pgadmin-servers.json:/pgadmin4/servers.json:ro
+      - ./scripts/pgadmin-pgpass:/pgpass.src:ro
+    ports:
+      - "5050:80"
+
+  # OpenBao (dev server) — the secret store the Api reads its DB / object-storage / SMTP / bootstrap credentials from
+  # (ADR "Secrets management with OpenBao"). Dev mode = in-memory, auto-unsealed, fixed root token; NOT for
+  # production (a real deployment runs a sealed HA server with persistent storage + auto-unseal). If this
+  # container restarts it comes up EMPTY — re-run `docker compose up openbao-init` (or `down`/`up`) to
+  # re-provision; a still-running Api keeps working on the secrets it read at startup.
+  # Persistent dev OpenBao (ADR "Persist the dev OpenBao"): a file storage backend + a named volume + an
+  # auto-init/unseal entrypoint, so secrets survive container restarts (machine sleep, Docker restart). The old
+  # in-memory `-dev` mode lost everything on restart while Postgres kept the rotated passwords → the recurring
+  # `simplarchive` `28P01` credential drift. Runs as root so it can write the /openbao data volume (dev only).
+  openbao:
+    image: openbao/openbao:2.6.0
+    restart: unless-stopped
+    user: root
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "8200:8200"
+    volumes:
+      - openbao-data:/openbao
+      - ./scripts/openbao.hcl:/etc/openbao/openbao.hcl:ro
+      - ./scripts/openbao-entrypoint.sh:/usr/local/bin/openbao-entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/openbao-entrypoint.sh"]
+
+  # One-shot: provisions OpenBao with the app's static KV secrets, the Postgres database secrets engine
+  # (dynamic per-startup credentials), and an AppRole for the Api, then exits. Dev-only FIXED RoleId/SecretId
+  # (analogous to the storage dev creds); production would response-wrap a short-lived SecretId.
+  openbao-init:
+    image: openbao/openbao:2.6.0
+    depends_on:
+      openbao:
+        condition: service_started
+      db:
+        condition: service_healthy
+      # The database secrets engine connects as `simplarchive` — db-init must have created that role first.
+      db-init:
+        condition: service_completed_successfully
+    # Read the persistent OpenBao's data volume (ro) to pick up the generated root token (ADR "Persist the dev
+    # OpenBao") — the fixed dev root token is gone now that OpenBao is initialized with a real seal.
+    volumes:
+      - openbao-data:/openbao:ro
+    environment:
+      BAO_ADDR: "http://openbao:8200"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        # Wait until OpenBao is initialized + unsealed (its entrypoint writes /openbao/init.json), then auth with
+        # the generated root token from that file.
+        until [ -f /openbao/init.json ] && bao status >/dev/null 2>&1; do echo 'waiting for openbao (unsealed)...'; sleep 1; done
+        export BAO_TOKEN=$$(sed -n 's/.*"root_token": *"\([^"]*\)".*/\1/p' /openbao/init.json)
+        # Enable the KV v2 engine at secret/ — dev mode auto-mounted this, but the persistent file backend
+        # (ADR "Persist the dev OpenBao") does not, so provision it explicitly (idempotent on a re-run).
+        bao secrets enable -path=secret -version=2 kv 2>/dev/null || true
+        # Static KV secrets.
+        bao kv put secret/simplarchive/objectstorage accessKey=storageadmin secretKey=storageadmin
+        bao kv put secret/simplarchive/smtp user= password=
+        bao kv put secret/simplarchive/bootstrap clientSecret=dev-bootstrap-secret
+        # Database secrets engine. The engine connects as `simplarchive_vault` (a dedicated CREATEROLE admin, NOT
+        # the schema owner and NOT postgres); `rotate-root` immediately makes OpenBao own its password (the
+        # bootstrap literal from db-init dies at once). The engine mints the short-lived dynamic runtime roles
+        # (database/creds) and owns + rotates the schema-owning `simplarchive` password as a *static role*.
+        bao secrets enable database || true
+        bao write database/config/simplarchive \
+          plugin_name=postgresql-database-plugin \
+          allowed_roles=simplarchive,simplarchive-owner \
+          connection_url='postgresql://{{username}}:{{password}}@db:5432/simplarchive?sslmode=disable' \
+          username=simplarchive_vault password=simplarchive_vault_bootstrap
+        bao write -force database/rotate-root/simplarchive
+        # Least-privilege dynamic runtime roles: created IN ROLE simplarchive_app (DML via the group's grants +
+        # default privileges); they own nothing, so revocation just drops them.
+        bao write database/roles/simplarchive \
+          db_name=simplarchive \
+          creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}' IN ROLE simplarchive_app;" \
+          revocation_statements="DROP OWNED BY \"{{name}}\"; DROP ROLE IF EXISTS \"{{name}}\";" \
+          default_ttl=24h max_ttl=72h
+        # Static role: OpenBao owns + rotates the schema-owning `simplarchive` password (24h). Rotated once on
+        # creation, so the db-init bootstrap literal is immediately replaced. The Api reads the current password
+        # from database/static-creds/simplarchive-owner for its migration connection.
+        bao write database/static-roles/simplarchive-owner \
+          db_name=simplarchive \
+          username=simplarchive \
+          rotation_period=86400 \
+          rotation_statements="ALTER ROLE \"{{name}}\" WITH PASSWORD '{{password}}';"
+        # Force an immediate static-role rotation on EVERY provision (ADR "Fix OpenBao static-role drift on
+        # re-provision"). Writing the static-role config only rotates on first creation; on a re-run against the
+        # now-persistent OpenBao (ADR "Persist the dev OpenBao") the role already exists so the write does NOT
+        # re-rotate — leaving OpenBao's stored `simplarchive` static-cred untouched while db-init has just reset
+        # the Postgres password to its bootstrap seed, so the api reads a stale password and Postgres rejects it
+        # (`28P01`). An explicit rotate-role makes OpenBao ALTER Postgres to a fresh password it also stores, so
+        # the two always re-agree after a re-provision. (rotate-root above already re-synced simplarchive_vault.)
+        bao write -f database/rotate-role/simplarchive-owner
+        # Transit engine for encrypting the TOTP secret at rest (ADR "MFA require-policy + TOTP secret
+        # encryption") — the key never leaves OpenBao.
+        bao secrets enable transit || true
+        bao write -f transit/keys/simplarchive-mfa
+        # AppRole machine auth for the Api (fixed dev ids).
+        bao auth enable approle || true
+        printf 'path "secret/data/simplarchive/*" { capabilities = ["read"] }\npath "database/creds/simplarchive" { capabilities = ["read"] }\npath "database/static-creds/simplarchive-owner" { capabilities = ["read"] }\npath "transit/encrypt/simplarchive-mfa" { capabilities = ["update"] }\npath "transit/decrypt/simplarchive-mfa" { capabilities = ["update"] }\n' | bao policy write simplarchive -
+        bao write auth/approle/role/simplarchive token_policies=simplarchive token_ttl=1h token_max_ttl=4h
+        bao write auth/approle/role/simplarchive/role-id role_id=simplarchive-role
+        # Idempotent on a re-run against an already-provisioned OpenBao (the fixed SecretID may already exist).
+        bao write auth/approle/role/simplarchive/custom-secret-id secret_id=simplarchive-secret || true
+        # OpenIddict signing + encryption certificates via the PKI engine (ADR "OpenIddict certificates from
+        # OpenBao"). Issue two certs and store each full issue-JSON in KV (the Api extracts certificate +
+        # private_key — no jq needed here). Dev-only self-signed CA; production would use a persistent CA.
+        bao secrets enable pki || true
+        bao secrets tune -max-lease-ttl=87600h pki
+        bao write -field=certificate pki/root/generate/internal common_name='SimplArchive Dev CA' ttl=87600h >/dev/null
+        bao write pki/roles/openiddict allow_any_name=true max_ttl=8760h key_type=rsa key_bits=2048
+        bao write -format=json pki/issue/openiddict common_name=simplarchive-signing ttl=8760h > /tmp/signing.json
+        bao write -format=json pki/issue/openiddict common_name=simplarchive-encryption ttl=8760h > /tmp/encryption.json
+        bao kv put secret/simplarchive/openiddict signing=@/tmp/signing.json encryption=@/tmp/encryption.json
+        echo 'openbao provisioned'
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+      storage-init:
+        condition: service_completed_successfully
+      gotenberg:
+        condition: service_started
+      opensearch:
+        condition: service_started
+      tika:
+        condition: service_started
+      ocr:
+        condition: service_started
+      mailpit:
+        condition: service_started
+      valkey:
+        condition: service_started
+      openbao-init:
+        condition: service_completed_successfully
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      # Secrets come from OpenBao (ADR "Secrets management with OpenBao"): ConnectionStrings:Default is built
+      # from a DYNAMIC Postgres credential (host/port/db from the template below + username/password minted per
+      # startup), and ObjectStorage:AccessKey/SecretKey + Bootstrap:...:ClientSecret come from KV — so those
+      # plaintext values are gone from here. The Api authenticates to OpenBao with the AppRole ids below.
+      OpenBao__Address: "http://openbao:8200"
+      OpenBao__RoleId: "simplarchive-role"
+      OpenBao__SecretId: "simplarchive-secret"
+      OpenBao__DatabaseConnectionTemplate: "Host=db;Port=5432;Database=simplarchive"
+      # The database static role whose OpenBao-rotated password backs the migration connection (ADR 0359).
+      OpenBao__DatabaseOwnerStaticRole: "simplarchive-owner"
+      # The browser-facing origin — must match the host port mapping above so the blazor-client's seeded
+      # redirect URIs and OpenIddict's issuer line up with what the browser actually loads.
+      App__BaseUrl: "http://localhost:8080"
+      # LAN reverse-proxy origin (ADR "Reverse proxy for LAN testing"): when other devices reach the app over
+      # HTTPS via the caddy proxy at https://<PROXY_HOST>:9443, the blazor-client's seeded OIDC redirect URIs
+      # must include that origin too. PROXY_HOST is the host's LAN IP/hostname (default localhost).
+      App__ProxyBaseUrl: "https://${PROXY_HOST:-localhost}:9443"
+      # Honor X-Forwarded-Proto/-Host/-For from the caddy proxy so OpenIddict emits the external https URLs the
+      # browser used (issuer, endpoints). Trusts any proxy — dev only, the Api is only reached via the proxy.
+      App__TrustProxyHeaders: "true"
+      App__ApplyMigrationsAtStartup: "true"
+      # Split endpoints (ADR 0213): the Api reaches the object store server-side over the compose network
+      # (seaweedfs:8333, for hashing at finalize), while presigned URLs are signed against the browser-facing
+      # address so the browser can actually resolve them. Defaults to localhost:8333 (plain local dev). For LAN
+      # testing set S3_PUBLIC_URL=https://<PROXY_HOST>:9444 (the Caddy S3 proxy, ADR "Proxy S3 object storage
+      # for LAN testing") alongside PROXY_HOST, so a phone/other device can reach presigned URLs over HTTPS.
+      ObjectStorage__ServiceUrl: "http://seaweedfs:8333"
+      ObjectStorage__PublicServiceUrl: "${S3_PUBLIC_URL:-http://localhost:8333}"
+      ObjectStorage__Region: "us-east-1"
+      ObjectStorage__BucketName: "simplarchive"
+      # ObjectStorage__AccessKey / __SecretKey now come from OpenBao KV (secret/simplarchive/objectstorage).
+      # Gotenberg sidecar for office-document -> PDF preview conversion (ADR 0228). Reached over the compose
+      # network; when unset, office preview simply falls back to offering the original file.
+      Gotenberg__Url: "http://gotenberg:3000"
+      # Full-text search (ADR 0011). When unset, the Api falls back to metadata-only search (ADR 0249) and
+      # indexing is a no-op — so the stack still runs without these.
+      OpenSearch__Url: "http://opensearch:9200"
+      Tika__Url: "http://tika:9998"
+      # OCR languages for scanned documents (ADR "OCR for scanned documents") — a Tesseract language string.
+      # Defaults to "eng+deu+fra+ita" when unset; each language must have matching tessdata in the Tika image.
+      Tika__OcrLanguages: "eng+deu+fra+ita"
+      # OCR sidecar for the searchable-PDF successor of TIFF uploads (ADR "Searchable PDF successor for
+      # TIFFs"). When unset the workflow is disabled (no successor version is generated). OCR languages are
+      # resolved per conversion from the DocumentVersion override / Tenant default (ADR "Per-tenant /
+      # per-version OCR languages"), not a global env.
+      Ocr__Url: "http://ocr:8080"
+      # SMTP for notification emails (ADR "Email notifications (SMTP)"). Points at the Mailpit catcher over the
+      # compose network; when Smtp__Host is unset, email is disabled (in-app notifications still work). Mailpit
+      # takes plain SMTP with no auth, so no port/TLS/credentials overrides are needed here (Port defaults 587
+      # in code but Mailpit listens on 1025, so it's set explicitly).
+      Smtp__Host: "mailpit"
+      Smtp__Port: "1025"
+      Smtp__FromAddress: "notifications@simplarchive.local"
+      Smtp__FromName: "SimplArchive"
+      # SignalR Valkey backplane (ADR "SignalR Valkey backplane"): when set, real-time notification pushes fan out
+      # across API replicas. Unset ⇒ in-process only. Reached over the compose network.
+      ConnectionStrings__Valkey: "valkey:6379"
+      # First PlatformAdministrator, seeded idempotently on startup (no-op once one exists). The ClientSecret
+      # now comes from OpenBao KV (secret/simplarchive/bootstrap); only the non-secret Name/ClientId stay here.
+      Bootstrap__PlatformAdministrator__Name: "bootstrap-admin"
+      Bootstrap__PlatformAdministrator__ClientId: "bootstrap-platform-admin"
+      # Demo data, seeded idempotently on startup (no-op once the tenant exists): a demo tenant + a
+      # TenantAdministrator with this KNOWN password + a small sample tree (a folder and a document with a
+      # mask + index-data). Log straight into the UI at http://localhost:8080 with the email/password below.
+      Demo__Tenant__Name: "Demo"
+      Demo__Administrator__Email: "demo@simplarchive.local"
+      Demo__Administrator__DisplayName: "Demo Admin"
+      Demo__Administrator__Password: "demo1234"
+      Demo__RepositoryName: "Demo Repository"
+
+  # Reverse proxy for LAN testing (ADR "Reverse proxy for LAN testing" + "Proxy S3 object storage for LAN
+  # testing"): terminates TLS with a self-signed cert (Caddy's internal CA) and forwards to the app —
+  # :9443 → the Api, :9444 → the SeaweedFS S3 API — so other devices on the same network reach the app over
+  # HTTPS at https://<PROXY_HOST>:9443 AND its presigned object-storage URLs over https://<PROXY_HOST>:9444
+  # (no mixed-content). PROXY_HOST = the host's LAN IP/hostname (default localhost). Caddy adds the
+  # X-Forwarded-* headers and transparently proxies the SignalR WebSocket. Dev only.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+      seaweedfs:
+        condition: service_started
+    environment:
+      PROXY_HOST: "${PROXY_HOST:-localhost}"
+    ports:
+      - "9443:9443"
+      - "9444:9444"
+    volumes:
+      - ./scripts/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  db-data:
+  seaweedfs-data:
+  opensearch-data:
+  openbao-data:
+  caddy-data:
+  caddy-config:

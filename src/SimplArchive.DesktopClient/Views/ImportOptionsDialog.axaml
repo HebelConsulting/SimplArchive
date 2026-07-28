@@ -1,0 +1,28 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.ImportOptionsDialog"
+        Title="{loc:Tr ImpTitle}" Width="440" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="12">
+        <TextBlock x:Name="IntroText" TextWrapping="Wrap" Foreground="#888" />
+        <CheckBox x:Name="UpdateExistingBox" Content="{loc:Tr ImpUpdate}" />
+        <TextBlock TextWrapping="Wrap" Foreground="#888" FontSize="12"
+                   Text="{loc:Tr ImpUpdateHint}" />
+        <CheckBox x:Name="IncludePermissionsBox" Content="{loc:Tr ImpPerms}" />
+        <CheckBox x:Name="MergeBox" IsVisible="False" Content="{loc:Tr ImpMerge}" />
+        <!-- Leaf-conflict mode (ADR "Leaf-document merge modes"), shown only when merging. -->
+        <StackPanel Spacing="4" IsVisible="{Binding #MergeBox.IsChecked}">
+            <TextBlock Text="{loc:Tr ImpLeafConflict}" Foreground="#888" FontSize="12" />
+            <ComboBox x:Name="LeafConflictBox" SelectedIndex="0" HorizontalAlignment="Stretch">
+                <ComboBoxItem>Keep both (import as a renamed copy)</ComboBoxItem>
+                <ComboBoxItem>Add the incoming versions to the existing document</ComboBoxItem>
+                <ComboBoxItem>Skip the incoming document</ComboBoxItem>
+            </ComboBox>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button Content="{loc:Tr ImportBtn}" Click="OnOk" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

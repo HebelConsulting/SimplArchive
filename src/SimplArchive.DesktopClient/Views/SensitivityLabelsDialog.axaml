@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:vm="clr-namespace:SimplArchive.DesktopClient.ViewModels"
+        x:Class="SimplArchive.DesktopClient.Views.SensitivityLabelsDialog"
+        x:DataType="vm:SensitivityLabelsViewModel"
+        Title="{loc:Tr SlTitle}" Width="640" Height="480" CanResize="True"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="16">
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource WbMuted}" Margin="0,0,0,10"
+                   Text="{loc:Tr SlBody}" />
+
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,10">
+            <TextBox Text="{Binding NewName}" Watermark="new label…" Width="160" />
+            <TextBox Text="{Binding NewColor}" Watermark="#RRGGBB" Width="100" />
+            <NumericUpDown Value="{Binding NewRank}" Minimum="0" Maximum="100" Width="90" />
+            <CheckBox Content="Watermark" IsChecked="{Binding NewWatermark}" />
+            <Button Content="Add" Command="{Binding CreateCommand}" />
+        </StackPanel>
+
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Foreground="#c62828" Margin="0,8,0,0" />
+        <Button DockPanel.Dock="Bottom" Content="{loc:Tr Close}" Click="OnClose" HorizontalAlignment="Right" Margin="0,8,0,0" />
+
+        <ScrollViewer>
+            <ItemsControl ItemsSource="{Binding Labels}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SensitivityLabelRow">
+                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2">
+                            <Border Width="14" Height="14" CornerRadius="3" VerticalAlignment="Center" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1"
+                                    Background="{Binding Color}" />
+                            <TextBox Text="{Binding Name}" Width="150" />
+                            <TextBox Text="{Binding Color}" Watermark="#RRGGBB" Width="90" />
+                            <NumericUpDown Value="{Binding Rank}" Minimum="0" Maximum="100" Width="90" />
+                            <CheckBox Content="WM" IsChecked="{Binding Watermark}" VerticalAlignment="Center" />
+                            <Button Content="{loc:Tr Save}"
+                                    Command="{Binding $parent[ItemsControl].((vm:SensitivityLabelsViewModel)DataContext).SaveCommand}" CommandParameter="{Binding}" />
+                            <Button Content="{Binding RetireLabel}"
+                                    Command="{Binding $parent[ItemsControl].((vm:SensitivityLabelsViewModel)DataContext).RetireCommand}" CommandParameter="{Binding}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

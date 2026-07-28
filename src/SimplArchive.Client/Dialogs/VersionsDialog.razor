@@ -1,0 +1,219 @@
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+@* Versions dialog (ADR "Versions dialog"): lists a document's confirmed versions (number / document date /
+   filing date / author) with Open, Download and Make-current per row, plus a Compare… launcher. "Make current"
+   reinstates an earlier version as a new current version (non-destructive, ADR "Version restore"); the latest
+   version is labelled "Current". *@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@string.Format(Strings.Get("VersionsTitle"), DocumentName)</MudText>
+    </TitleContent>
+    <DialogContent>
+        <div style="min-width: 560px;">
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" />
+            }
+            else if (_versions.Count == 0)
+            {
+                <MudText>@Strings.Get("NoVersions")</MudText>
+            }
+            else
+            {
+                <MudSimpleTable Dense="true" Hover="true" Style="overflow-x:auto;">
+                    <thead>
+                        <tr><th>@Strings.Get("VerColVersion")</th><th>@Strings.Get("VerColDocDate")</th><th>@Strings.Get("VerColFiled")</th><th>@Strings.Get("VerColBy")</th><th style="text-align:right;">@Strings.Get("VerColActions")</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var v in _versions)
+                        {
+                            <tr class="wb-version-row @(v.Id == _selectedId ? "wb-version-selected" : null)"
+                                style="cursor:pointer; @(v.Id == _selectedId ? "background: var(--mud-palette-action-default-hover);" : null)"
+                                @onclick="() => _selectedId = v.Id">
+                                <td>
+                                    v@(v.VersionNumber)
+                                    @if (v.IsCurrent)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="ml-2">@Strings.Get("VersionCurrent")</MudChip>
+                                    }
+                                </td>
+                                <td>@v.DocumentDate</td>
+                                <td>@v.Filed.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                                <td>@v.By</td>
+                                <td style="text-align:right; white-space:nowrap;">
+                                    @if (v.OpenUrl is not null)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Href="@v.OpenUrl" Target="_blank" title="@Strings.Get("RibbonOpen")" />
+                                    }
+                                    @if (v.DownloadUrl is not null)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small" Href="@v.DownloadUrl" Target="_blank" title="@Strings.Get("Download")" />
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton StartIcon="@Icons.Material.Filled.Difference" OnClick="CompareAsync" Disabled="@(_versions.Count < 2)" Class="wb-version-compare">@Strings.Get("VersionsCompare")</MudButton>
+        @* Make current acts on the single selected (non-current) row + a confirmation, so it can't fire by
+           accident (ADR "Deliberate make-current in the Versions dialog"). *@
+        <MudButton StartIcon="@Icons.Material.Filled.Restore" OnClick="MakeCurrentSelectedAsync" Disabled="@(!CanMakeCurrent || _busy)" Class="wb-version-makecurrent">@Strings.Get("VersionsMakeCurrent")</MudButton>
+        <MudSpacer />
+        <MudButton OnClick="Close">@Strings.Get("Close")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public Guid DocumentId { get; set; }
+    [Parameter] public string DocumentName { get; set; } = "";
+
+    private List<Row> _versions = [];
+    private Guid? _selectedId;
+    private bool _loading = true;
+    private bool _busy;
+    private bool _changed;
+
+    // The selected row can be made current only if it's a real, non-current version with a restore link.
+    private Row? SelectedRow => _versions.FirstOrDefault(v => v.Id == _selectedId);
+    private bool CanMakeCurrent => SelectedRow is { IsCurrent: false, RestoreUrl: not null };
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            var resp = await Http.GetFromJsonAsync<VersionListResponse>($"api/documents/{DocumentId}/versions");
+            var confirmed = (resp?.Versions ?? [])
+                .Where(v => v.Status == "Confirmed")
+                .OrderByDescending(v => v.VersionNumber ?? 0)
+                .ToList();
+            var currentId = confirmed.FirstOrDefault()?.Id;
+            _versions = confirmed.Select(v => new Row(
+                v.Id, v.VersionNumber ?? 0, v.DocumentDate ?? "", v.CreatedAt, v.CreatedByName ?? "",
+                Abs(Href(v.Links, "preview")) ?? Abs(Href(v.Links, "download")),
+                Abs(Href(v.Links, "download")),
+                Href(v.Links, "restore"),
+                v.Id == currentId)).ToList();
+        }
+        catch (Exception)
+        {
+            _versions = [];
+        }
+        _loading = false;
+    }
+
+    // Deliberate two-step (ADR "Deliberate make-current in the Versions dialog"): the button acts on the single
+    // selected non-current row, and a confirmation names the exact version before anything happens.
+    private async Task MakeCurrentSelectedAsync()
+    {
+        if (SelectedRow is not { IsCurrent: false } v)
+        {
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = Strings.Get("VerMakeCurrentTitle"),
+            Message = string.Format(Strings.Get("VerMakeCurrentMessage"), v.VersionNumber),
+            YesText = Strings.Get("VersionsMakeCurrent"),
+            CancelText = Strings.Get("Cancel"),
+        });
+        if (confirmed == true)
+        {
+            await MakeCurrentAsync(v);
+        }
+    }
+
+    private async Task MakeCurrentAsync(Row v)
+    {
+        if (v.RestoreUrl is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            using var resp = await Http.PostAsync(v.RestoreUrl.TrimStart('/'), null);
+            if (resp.IsSuccessStatusCode)
+            {
+                _changed = true;
+                Snackbar.Add(string.Format(Strings.Get("VerIsNowCurrent"), v.VersionNumber), Severity.Success);
+                await LoadAsync();
+            }
+            else if (resp.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                Snackbar.Add(Strings.Get("VerChangeConflict"), Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add(Strings.Get("VerMakeCurrentError"), Severity.Error);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("VerMakeCurrentError"), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    // Compare… launches the existing compare dialog (ADR "Document version comparison"); a restore there also
+    // marks this dialog changed so the parent refreshes.
+    private async Task CompareAsync()
+    {
+        var parameters = new DialogParameters { ["DocumentId"] = DocumentId, ["DocumentName"] = DocumentName };
+        var dialog = await DialogService.ShowAsync<CompareVersionsDialog>("Compare versions", parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+        if ((await dialog.Result) is { Canceled: false, Data: true })
+        {
+            _changed = true;
+            await LoadAsync();
+        }
+    }
+
+    private void Close() => Dialog.Close(DialogResult.Ok(_changed));
+
+    private static string? Href(List<LinkResponse> links, string rel) => links.FirstOrDefault(l => l.Rel == rel)?.Href;
+
+    private string? Abs(string? href)
+    {
+        if (string.IsNullOrEmpty(href))
+        {
+            return null;
+        }
+
+        if (href.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+        {
+            return href; // a presigned object-storage URL
+        }
+
+        var baseUri = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        return $"{baseUri}/{href.TrimStart('/')}";
+    }
+
+    private record Row(Guid Id, int VersionNumber, string DocumentDate, DateTimeOffset Filed, string By, string? OpenUrl, string? DownloadUrl, string? RestoreUrl, bool IsCurrent);
+    private record VersionListResponse { public List<VersionResponse> Versions { get; set; } = []; }
+    private record VersionResponse
+    {
+        public Guid Id { get; set; }
+        public int? VersionNumber { get; set; }
+        public string Status { get; set; } = "";
+        public DateTimeOffset CreatedAt { get; set; }
+        public string? CreatedByName { get; set; }
+        public string? DocumentDate { get; set; }
+        public List<LinkResponse> Links { get; set; } = [];
+    }
+    private record LinkResponse { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+}

@@ -1,0 +1,26 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        x:Class="SimplArchive.DesktopClient.Views.DropActionDialog"
+        Title="{loc:Tr DropTitle}" Width="440" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="16">
+        <TextBlock x:Name="MessageBlock" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button Click="OnReference" ToolTip.Tip="Place a shortcut here; the item stays where it is">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <i:Icon Value="mdi-file-link" />
+                    <TextBlock Text="{loc:Tr DropPlaceRef}" />
+                </StackPanel>
+            </Button>
+            <Button Click="OnMove" IsDefault="True" ToolTip.Tip="Move the item here (change its folder)">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <i:Icon Value="mdi-folder-move" />
+                    <TextBlock Text="{loc:Tr DropMoveHere}" />
+                </StackPanel>
+            </Button>
+        </StackPanel>
+    </StackPanel>
+</Window>

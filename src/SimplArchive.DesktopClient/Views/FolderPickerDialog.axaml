@@ -1,0 +1,57 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        x:Class="SimplArchive.DesktopClient.Views.FolderPickerDialog"
+        x:DataType="vm:FolderPickerViewModel"
+        Title="{loc:Tr FpTitle}" Width="460" Height="540" CanResize="True"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="14">
+
+        <!-- Context options: when a document/folder is selected on the Repositories tab (ADR "Context-aware
+             inbox filing dialog"), offer filing as a new version of it / into its folder, else just the picker. -->
+        <StackPanel DockPanel.Dock="Top" IsVisible="{Binding HasOptions}" Spacing="8" Margin="0,0,0,12">
+            <RadioButton GroupName="filing" IsChecked="{Binding ModeAsVersion}" IsVisible="{Binding ShowAsVersion}">
+                <StackPanel>
+                    <TextBlock Text="{loc:Tr FpAsVersion}" />
+                    <TextBlock Text="{Binding DocumentPath}" FontSize="11" Foreground="{DynamicResource WbMuted}" TextWrapping="Wrap" />
+                </StackPanel>
+            </RadioButton>
+            <RadioButton GroupName="filing" IsChecked="{Binding ModeInFolder}" IsVisible="{Binding ShowInFolder}">
+                <StackPanel>
+                    <TextBlock Text="{loc:Tr FpInFolder}" />
+                    <TextBlock Text="{Binding FolderPath}" FontSize="11" Foreground="{DynamicResource WbMuted}" TextWrapping="Wrap" />
+                </StackPanel>
+            </RadioButton>
+            <RadioButton GroupName="filing" IsChecked="{Binding ModePicked}" Content="Choose a folder…" />
+        </StackPanel>
+
+        <TextBlock DockPanel.Dock="Top" Text="Choose the target folder:" Margin="0,0,0,8" IsEnabled="{Binding ModePicked}" />
+
+        <!-- Optional feed comment on the filed document(s) (ADR "Filing posts a feed comment"). -->
+        <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,10,0,0">
+            <TextBlock Text="Comment (optional):" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+            <TextBox Text="{Binding Comment}" Watermark="Leave blank to post &quot;Filed a new document.&quot;" AcceptsReturn="True" MinHeight="46" />
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,6,0,0">
+                <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+                <Button Content="{loc:Tr FpFile}" Click="OnOk" IsDefault="True" />
+            </StackPanel>
+        </StackPanel>
+        <TreeView ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode}" IsEnabled="{Binding ModePicked}">
+            <TreeView.Styles>
+                <Style Selector="TreeViewItem">
+                    <Setter Property="IsExpanded" Value="{ReflectionBinding IsExpanded, Mode=TwoWay}" />
+                </Style>
+            </TreeView.Styles>
+            <TreeView.DataTemplates>
+                <TreeDataTemplate DataType="vm:TreeNodeViewModel" ItemsSource="{Binding Children}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <i:Icon Value="{Binding IconValue}" Foreground="#d9a400" />
+                        <TextBlock Text="{Binding Name}" />
+                    </StackPanel>
+                </TreeDataTemplate>
+            </TreeView.DataTemplates>
+        </TreeView>
+    </DockPanel>
+</Window>

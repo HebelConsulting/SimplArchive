@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\SimplArchive.Application\SimplArchive.Application.csproj" />
+    <ProjectReference Include="..\SimplArchive.Infrastructure\SimplArchive.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenIddict.AspNetCore" Version="7.5.0" />
+    <PackageReference Include="OpenIddict.EntityFrameworkCore" Version="7.5.0" />
+    <!-- Security-driven transitive pin (ADR "Security and dependency scanning"): OpenIddict pulls
+         System.Security.Cryptography.Xml transitively; 10.0.7 has High-severity advisories (GHSA-mmjf-rqrv-855v
+         and others), fixed in 10.0.10. The CI vulnerable-dependency gate would otherwise fail. Re-check on the
+         next OpenIddict bump; remove if its own dependency moves past 10.0.10. -->
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.10" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

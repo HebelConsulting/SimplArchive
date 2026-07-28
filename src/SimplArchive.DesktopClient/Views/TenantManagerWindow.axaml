@@ -1,0 +1,71 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        xmlns:svc="using:SimplArchive.DesktopClient.Services"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        x:Class="SimplArchive.DesktopClient.Views.TenantManagerWindow"
+        x:DataType="vm:TenantManagerViewModel"
+        Title="{loc:Tr TmTitle}" Width="640" Height="400"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="12" ColumnDefinitions="220,12,*" RowDefinitions="*,Auto">
+        <!-- Tenants pane (left) -->
+        <DockPanel Grid.Row="0" Grid.Column="0">
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="4" Margin="0,6,0,0">
+                <Button Command="{Binding AddCommand}" ToolTip.Tip="Add a tenant" Padding="6,2"><i:Icon Value="mdi-plus" /></Button>
+                <Button Command="{Binding RemoveCommand}" ToolTip.Tip="Remove the selected tenant (the last one can't be removed)" Padding="6,2"><i:Icon Value="mdi-minus" /></Button>
+            </StackPanel>
+            <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="4">
+                <ListBox ItemsSource="{Binding Tenants}" SelectedItem="{Binding Selected}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="svc:TenantProfile">
+                            <TextBlock Text="{Binding Name}" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+        </DockPanel>
+
+        <!-- Data pane (right): read-only until Edit, then editable with Save/Cancel. -->
+        <Border Grid.Row="0" Grid.Column="2" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="4" Padding="14">
+            <StackPanel Spacing="10">
+                <!-- Read-only view -->
+                <StackPanel Spacing="10" IsVisible="{Binding !IsEditing}">
+                    <StackPanel IsVisible="{Binding HasSelection}" Spacing="10">
+                        <StackPanel>
+                            <TextBlock Text="Tenant Name" FontSize="11" Foreground="{DynamicResource WbMuted}" />
+                            <TextBlock Text="{Binding Selected.Name}" FontSize="14" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="URL" FontSize="11" Foreground="{DynamicResource WbMuted}" />
+                            <TextBlock Text="{Binding Selected.ApiRootUrl}" FontSize="14" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button Command="{Binding EditCommand}" HorizontalAlignment="Left" Margin="0,4,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="5"><i:Icon Value="mdi-pencil" /><TextBlock Text="{loc:Tr Edit}" /></StackPanel>
+                        </Button>
+                    </StackPanel>
+                    <TextBlock IsVisible="{Binding !HasSelection}" Text="Select a tenant, or add one with +." Foreground="{DynamicResource WbFaint}" />
+                </StackPanel>
+
+                <!-- Editable view -->
+                <StackPanel Spacing="10" IsVisible="{Binding IsEditing}">
+                    <StackPanel>
+                        <TextBlock Text="Tenant Name" FontSize="11" Foreground="{DynamicResource WbMuted}" />
+                        <TextBox Text="{Binding EditName}" Watermark="e.g. Production" />
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Text="URL (API root)" FontSize="11" Foreground="{DynamicResource WbMuted}" />
+                        <TextBox Text="{Binding EditUrl}" Watermark="https://host/…" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding Error}" Foreground="#c0392b" FontSize="12" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                        <Button Command="{Binding SaveCommand}" Classes="accent"><StackPanel Orientation="Horizontal" Spacing="5"><i:Icon Value="mdi-content-save-outline" /><TextBlock Text="Save" /></StackPanel></Button>
+                        <Button Command="{Binding CancelCommand}">Cancel</Button>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <Button Grid.Row="1" Grid.Column="2" Content="{loc:Tr Close}" Click="OnClose" HorizontalAlignment="Right" Margin="0,10,0,0" />
+    </Grid>
+</Window>

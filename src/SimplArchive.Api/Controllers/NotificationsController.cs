@@ -1,0 +1,287 @@
+using Asp.Versioning;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using SimplArchive.Api.Errors.Exceptions.Notifications;
+using SimplArchive.Api.Hypermedia;
+using SimplArchive.Api.Pagination;
+using SimplArchive.Application.Abstractions;
+using SimplArchive.Domain.Notifications;
+using SimplArchive.Infrastructure.Persistence;
+
+namespace SimplArchive.Api.Controllers;
+
+/// <summary>
+/// The caller's in-app notification inbox (ADR "Notifications (in-app, first slice)"). Every User sees only
+/// their own notifications — no special right; a ServiceAccount / PlatformAdministrator has no inbox. Written
+/// by <see cref="INotificationService"/> at the workflow / comment / ACL trigger sites; read here.
+/// </summary>
+[ApiController]
+[ApiVersion("1.0")]
+[Route("api/notifications")]
+[Authorize]
+public class NotificationsController : ControllerBase
+{
+    private readonly SimplArchiveDbContext _dbContext;
+    private readonly ICurrentUserAccessor _currentUserAccessor;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
+
+    public NotificationsController(SimplArchiveDbContext dbContext, ICurrentUserAccessor currentUserAccessor, ICurrentTenantAccessor currentTenantAccessor)
+    {
+        _dbContext = dbContext;
+        _currentUserAccessor = currentUserAccessor;
+        _currentTenantAccessor = currentTenantAccessor;
+    }
+
+    public class NotificationResource : HypermediaResource
+    {
+        public Guid Id { get; set; }
+        public string Type { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Body { get; set; } = "";
+        // How many coalesced events this notification represents (ADR "Notification digest / coalescing"); 1 for a
+        // normal one. The clients render "… (×N)" when > 1.
+        public int EventCount { get; set; } = 1;
+        public Guid? DocumentId { get; set; }
+
+        // The related document's parent folder (ADR "Notification viewer + click-through") — lets a client
+        // navigate to the document (open the folder + select it). Null when the notification has no document, or
+        // the document is a repository root.
+        public Guid? DocumentParentId { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset? ReadAt { get; set; }
+        public bool IsRead { get; set; }
+    }
+
+    public class NotificationsListResource : HypermediaResource
+    {
+        public List<NotificationResource> Notifications { get; set; } = [];
+        public int UnreadCount { get; set; }
+    }
+
+    public class UnreadCountResource : HypermediaResource
+    {
+        public int UnreadCount { get; set; }
+    }
+
+    public class PreferenceResource
+    {
+        public int Type { get; set; }
+        public string TypeName { get; set; } = "";
+        public bool EmailEnabled { get; set; }
+    }
+
+    public class PreferencesResource : HypermediaResource
+    {
+        public List<PreferenceResource> Preferences { get; set; } = [];
+    }
+
+    public class SetPreferencesRequest
+    {
+        public List<PreferenceItem>? Preferences { get; set; }
+    }
+
+    public class PreferenceItem
+    {
+        public int Type { get; set; }
+        public bool EmailEnabled { get; set; }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> List([FromQuery] string? cursor, [FromQuery] int? limit, CancellationToken cancellationToken)
+    {
+        if (_currentUserAccessor.UserId is not { } userId)
+        {
+            return Forbid();
+        }
+
+        var pageSize = PageSize.Resolve(limit);
+        var query = _dbContext.Notifications.Where(n => n.RecipientUserId == userId);
+
+        // Newest first; the cursor is a (CreatedAt, Id) position, so "next" = strictly older.
+        var pageQuery = query;
+        if (Cursor.TryDecode(cursor, out var cursorTimestamp, out var cursorId))
+        {
+            pageQuery = pageQuery.Where(n => n.CreatedAt < cursorTimestamp || (n.CreatedAt == cursorTimestamp && n.Id < cursorId));
+        }
+
+        var fetched = await pageQuery
+            .OrderByDescending(n => n.CreatedAt).ThenByDescending(n => n.Id)
+            .Take(pageSize + 1)
+            .ToListAsync(cancellationToken);
+        var (page, hasMore) = Cursor.Split(fetched, pageSize);
+
+        // Resolve each document notification's parent folder in one query, so a client can navigate to it.
+        var documentIds = page.Where(n => n.DocumentId is not null).Select(n => n.DocumentId!.Value).Distinct().ToList();
+        var parents = documentIds.Count == 0
+            ? new Dictionary<Guid, Guid?>()
+            : await _dbContext.Documents.Where(d => documentIds.Contains(d.Id)).ToDictionaryAsync(d => d.Id, d => d.ParentId, cancellationToken);
+
+        var links = new List<Link>
+        {
+            new("self", Url.Action(nameof(List), new { cursor, limit = pageSize })!, "GET"),
+            new("preferences", Url.Action(nameof(GetPreferences))!, "GET"),
+        };
+        if (hasMore)
+        {
+            links.Add(new Link("next", Url.Action(nameof(List), new { cursor = Cursor.Encode(page[^1].CreatedAt, page[^1].Id), limit = pageSize })!, "GET"));
+        }
+
+        return Ok(new NotificationsListResource
+        {
+            Notifications = page.Select(n => BuildResource(n, parents)).ToList(),
+            UnreadCount = await query.CountAsync(n => n.ReadAt == null, cancellationToken),
+            Links = links,
+        });
+    }
+
+    [HttpHead]
+    public IActionResult Head() => _currentUserAccessor.UserId is null ? Forbid() : NoContent();
+
+    // Just the unread count — the client polls this cheaply for the bell badge.
+    [HttpGet("unread-count")]
+    public async Task<IActionResult> UnreadCount(CancellationToken cancellationToken)
+    {
+        if (_currentUserAccessor.UserId is not { } userId)
+        {
+            return Forbid();
+        }
+
+        return Ok(new UnreadCountResource
+        {
+            UnreadCount = await _dbContext.Notifications.CountAsync(n => n.RecipientUserId == userId && n.ReadAt == null, cancellationToken),
+            Links = [new Link("self", Url.Action(nameof(UnreadCount))!, "GET")],
+        });
+    }
+
+    [HttpHead("unread-count")]
+    public IActionResult UnreadCountHead() => _currentUserAccessor.UserId is null ? Forbid() : NoContent();
+
+    // Marks one of the caller's notifications read (idempotent). A POST action sub-resource — a state change,
+    // not a create/replace.
+    [HttpPost("{id:guid}/read")]
+    public async Task<IActionResult> MarkRead(Guid id, CancellationToken cancellationToken)
+    {
+        if (_currentUserAccessor.UserId is not { } userId)
+        {
+            return Forbid();
+        }
+
+        var notification = await _dbContext.Notifications.SingleOrDefaultAsync(n => n.Id == id && n.RecipientUserId == userId, cancellationToken);
+        if (notification is null)
+        {
+            return NotFound();
+        }
+
+        if (notification.ReadAt is null)
+        {
+            notification.ReadAt = DateTimeOffset.UtcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return NoContent();
+    }
+
+    // Marks all of the caller's unread notifications read.
+    [HttpPost("read-all")]
+    public async Task<IActionResult> MarkAllRead(CancellationToken cancellationToken)
+    {
+        if (_currentUserAccessor.UserId is not { } userId)
+        {
+            return Forbid();
+        }
+
+        await _dbContext.Notifications
+            .Where(n => n.RecipientUserId == userId && n.ReadAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(n => n.ReadAt, DateTimeOffset.UtcNow), cancellationToken);
+
+        return NoContent();
+    }
+
+    // ---- Email preferences (ADR "Notification preferences") ---------------------------------------------
+    // In-app notifications are always delivered; these govern only whether a type is also emailed. Only the
+    // mutable types (NotificationTypePolicy) are listed/settable — the deadline/compliance escalations are
+    // always emailed. Absence of a row means the default (enabled), so this returns true for any unset type.
+
+    [HttpGet("preferences")]
+    public async Task<IActionResult> GetPreferences(CancellationToken cancellationToken)
+    {
+        if (_currentUserAccessor.UserId is not { } userId)
+        {
+            return Forbid();
+        }
+
+        return Ok(await BuildPreferencesAsync(userId, cancellationToken));
+    }
+
+    [HttpHead("preferences")]
+    public IActionResult PreferencesHead() => _currentUserAccessor.UserId is null ? Forbid() : NoContent();
+
+    // Replaces the caller's whole preference set. PUT (not PATCH): the body is the complete intended state of
+    // the mutable-type email toggles, so it's idempotent.
+    [HttpPut("preferences")]
+    public async Task<IActionResult> SetPreferences([FromBody] SetPreferencesRequest request, CancellationToken cancellationToken)
+    {
+        if (_currentUserAccessor.UserId is not { } userId || _currentTenantAccessor.TenantId is not { } tenantId)
+        {
+            return Forbid();
+        }
+
+        var items = request.Preferences ?? [];
+        if (items.Any(p => !NotificationTypePolicy.IsMutable((NotificationType)p.Type)))
+        {
+            throw new InvalidNotificationPreferenceException();
+        }
+
+        // Replace-the-set: drop the user's existing rows, then insert one per provided mutable type.
+        var existing = await _dbContext.UserNotificationPreferences.Where(p => p.UserId == userId).ToListAsync(cancellationToken);
+        _dbContext.UserNotificationPreferences.RemoveRange(existing);
+
+        foreach (var item in items.DistinctBy(p => p.Type))
+        {
+            _dbContext.UserNotificationPreferences.Add(new UserNotificationPreference
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                UserId = userId,
+                Type = (NotificationType)item.Type,
+                EmailEnabled = item.EmailEnabled,
+            });
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(await BuildPreferencesAsync(userId, cancellationToken));
+    }
+
+    private async Task<PreferencesResource> BuildPreferencesAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var stored = await _dbContext.UserNotificationPreferences
+            .Where(p => p.UserId == userId)
+            .ToDictionaryAsync(p => p.Type, p => p.EmailEnabled, cancellationToken);
+
+        return new PreferencesResource
+        {
+            Preferences = NotificationTypePolicy.Mutable.Select(type => new PreferenceResource
+            {
+                Type = (int)type,
+                TypeName = type.ToString(),
+                EmailEnabled = stored.GetValueOrDefault(type, true),
+            }).ToList(),
+            Links = [new Link("self", Url.Action(nameof(GetPreferences))!, "GET")],
+        };
+    }
+
+    private static NotificationResource BuildResource(Notification n, IReadOnlyDictionary<Guid, Guid?> parents) => new()
+    {
+        Id = n.Id,
+        Type = n.Type.ToString(),
+        Title = n.Title,
+        Body = n.Body,
+        EventCount = n.EventCount,
+        DocumentId = n.DocumentId,
+        DocumentParentId = n.DocumentId is { } d && parents.TryGetValue(d, out var parent) ? parent : null,
+        CreatedAt = n.CreatedAt,
+        ReadAt = n.ReadAt,
+        IsRead = n.ReadAt is not null,
+    };
+}

@@ -1,0 +1,29 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.WebDavDialog"
+        Title="{loc:Tr WdTitle}" Width="480" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="10">
+        <TextBlock TextWrapping="Wrap" Text="{loc:Tr WdBody}" />
+
+        <TextBlock Text="{loc:Tr WdMountUrl}" FontWeight="SemiBold" FontSize="12" />
+        <TextBox x:Name="UrlBox" IsReadOnly="True" />
+        <TextBlock Text="{loc:Tr WdUsername}" FontWeight="SemiBold" FontSize="12" />
+        <TextBox x:Name="UsernameBox" IsReadOnly="True" />
+
+        <Border x:Name="PasswordPanel" IsVisible="False" Background="#2e7d32" CornerRadius="3" Padding="8" >
+            <StackPanel Spacing="4">
+                <TextBlock Foreground="White" FontSize="12" Text="{loc:Tr WdCopyPw}" />
+                <TextBox x:Name="PasswordBox" IsReadOnly="True" />
+            </StackPanel>
+        </Border>
+        <TextBlock x:Name="StatusText" Foreground="{DynamicResource WbMuted}" FontSize="12" TextWrapping="Wrap" />
+
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button x:Name="RevokeButton" Content="{loc:Tr WdRevoke}" IsVisible="False" Click="OnRevoke" />
+            <Button x:Name="GenerateButton" Content="{loc:Tr WdGenerate}" Click="OnGenerate" />
+            <Button Content="{loc:Tr Close}" Click="OnClose" IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

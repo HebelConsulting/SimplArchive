@@ -1,0 +1,2936 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+
+namespace SimplArchive.DesktopClient.Services;
+
+// Raised for an Api action that failed with a message worth showing the user (duplicate name, no permission).
+public sealed class ApiActionException(string message) : Exception(message);
+
+// Raised by DeleteUserAsync when the user still holds pending review tasks and no replacement reviewer was
+// supplied (ADR "Workflow review reassignment") — the caller (Users & groups tab) prompts for a replacement
+// and retries with reassignReviewsTo.
+public sealed class ReviewerHasPendingReviewsException(string message) : Exception(message);
+
+// Thin HTTP client over the SimplArchive Api (the same endpoints the Blazor client uses). See ADR
+// "Cross-platform desktop fat client (Avalonia)" and "Desktop workbench UI".
+public sealed class SimplArchiveApiClient
+{
+    private static readonly HttpClient Anonymous = new();
+    private readonly HttpClient _http;
+
+    public SimplArchiveApiClient(string accessToken)
+    {
+        AccessToken = accessToken;
+        _http = new HttpClient { BaseAddress = new Uri(DesktopClientOptions.ApiBaseUrl) };
+        _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+    }
+
+    // This client's bearer token — used as the RFC 8693 subject_token to start impersonation (ADR "User
+    // impersonation").
+    public string AccessToken { get; }
+
+    // Exchanges an admin's access token for an impersonation token representing the target user (ADR "User
+    // impersonation"); null if the exchange is refused (e.g. the target is an admin).
+    public static async Task<string?> ExchangeImpersonationTokenAsync(string subjectToken, Guid targetUserId, CancellationToken cancellationToken = default)
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(DesktopClientOptions.ApiBaseUrl) };
+        var response = await http.PostAsync("connect/token", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "urn:ietf:params:oauth:grant-type:token-exchange",
+            ["client_id"] = "simplarchive-desktop",
+            ["subject_token"] = subjectToken,
+            ["subject_token_type"] = "urn:ietf:params:oauth:token-type:access_token",
+            ["requested_subject"] = targetUserId.ToString(),
+        }), cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return json.GetProperty("access_token").GetString();
+    }
+
+    public sealed record Node(Guid Id, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, bool OnLegalHold = false, bool CheckedOut = false, bool CheckedOutByMe = false, string CheckedOutByName = "",
+        string DocumentType = "", DateOnly? DocumentDate = null, long? SizeBytes = null, IReadOnlyList<string>? Tags = null, string SensitivityLabelName = "", string? SensitivityLabelColor = null, int VersionCount = 0);
+
+    // A folder that references a given item, with its full display path — see ADR "References-of-an-item list".
+    public sealed record ReferencingFolder(Guid Id, string Name, string Path);
+
+    // A metadata-search hit — see ADR "Metadata search (first slice)". ParentId is the item's home folder
+    // (null = a repository root), for navigating to it.
+    public sealed record SearchResult(Guid Id, string Name, bool IsFolder, Guid? ParentId, string Path, string Highlight);
+
+    public sealed record IndexField(string FieldName, IReadOnlyList<string> Values);
+
+    public sealed record MaskInfo(Guid? MaskId, string? Name, int? VersionNumber);
+
+    // A tenant mask option for the mask-change dropdown (ADR "Editable mask on the detail pane").
+    public sealed record MaskOptionInfo(Guid Id, string Name);
+
+    // A mask's field definition + type, for building the type-aware editor.
+    public sealed record MaskFieldInfo(Guid Id, string Name, string DataType, bool IsRequired);
+
+    // System-field values shown always (separate from the mask, ADR "System fields + OCR-language mask
+    // field"). Created/CreatedBy/DocumentDate are the currently-shown version's; the OCR-language override +
+    // TIFF-source come from the latest TIFF version.
+    public sealed record SystemFields(
+        Guid CurrentVersionId, int CurrentVersionNumber, DateTimeOffset CreatedAt, string CreatedByName, string DocumentDate,
+        bool HasTiffVersion, string? OcrLanguages, string FileExtension);
+
+    public sealed record OcrLanguageOption(string Code, string DisplayName);
+
+    // FileExtension is the current version's derived extension (ADR "Extension off Document.Name"); native
+    // Open/Save-as append it to Document.Name (the bare stem) to reconstruct a correct filename.
+    public sealed record Preview(string? PreviewUrl, bool PreviewConverted, string? DownloadUrl, string? TextLayoutUrl, string? PreviewPagesUrl, string FileExtension, string? AnnotationsUrl = null);
+
+    // Per-page word boxes for search hit-overlay (ADR "Search hit overlay"). Coordinates are normalized 0..1
+    // within each page (top-left origin); the client scales them to the rendered page size.
+    public sealed record TextLayoutBox(string Text, double X, double Y, double Width, double Height);
+
+    // A sticky note / positional annotation (ADR "Document annotations"). Etag is the optimistic-concurrency
+    // token to send back as If-Match on edit/delete; CanEdit/CanDelete are the server's per-caller hints.
+    public sealed record AnnotationInfo(Guid Id, int PageIndex, int Kind, double PositionX, double PositionY, double? Width, double? Height, string Text, string Color, string AuthorName, string Etag, bool CanEdit, bool CanDelete);
+
+    public sealed record TextLayoutPageInfo(IReadOnlyList<TextLayoutBox> Words);
+
+    public sealed record TextLayoutInfo(IReadOnlyList<TextLayoutPageInfo> Pages);
+
+    public sealed record Comment(Guid Id, Guid? ParentCommentId, string Body, string AuthorName, DateTimeOffset CreatedAt);
+
+    public sealed record RecycleBinItem(Guid Id, string Name, DateTimeOffset DeletedAt);
+
+    // A file entry inside a browsed .zip (ADR "Zip file browsing") — not a real Document.
+    public sealed record ArchiveEntryInfo(string Name, string Path, long Size);
+
+    // The signed-in principal's ids + display names (ADR "S3-backed inbox") — names drive the local folder
+    // path. IsTenantAdmin gates admin-only actions (e.g. the searchable-PDF backfill).
+    public sealed record WhoAmIInfo(Guid? UserId, Guid? TenantId, string? TenantName, string? UserName, bool IsTenantAdmin, bool CanManageUsers, bool HasPhoto, bool CanViewAuditLog, bool MfaEnabled, bool CanResetMfa, bool CanLegalHold, bool CanManageClassification, bool CanOverrideCheckout = false, bool CanImpersonate = false, string? ImpersonatedBy = null, bool CanExport = false, bool CanImport = false);
+
+    // Tenant-wide system-level rights, mirroring the User/Group columns (ADR "Users & groups administration
+    // tab"). Backs the rights matrix on the Users & groups tab.
+    public sealed record SystemRightsData(
+        bool IsTenantAdmin, bool CanImpersonate, bool CanOverrideCheckout, bool CanLegalHold,
+        bool CanManageClassification, bool CanResetMfa, bool CanManageRepositories, bool CanManageMasks,
+        bool CanManageServiceAccounts, bool CanManageUsers, bool CanViewAuditLog, bool CanExport, bool CanImport,
+        // Data-classification clearance (ADR "Sensitivity clearance enforcement"). Defaulted so existing
+        // construction sites (e.g. a copied-rights bundle) keep compiling.
+        int ClearanceRank = 0);
+
+    // A user or group in the combined admin list (ADR "Users & groups administration tab"). IsActive is
+    // meaningful only for a user (a group has no active/inactive concept).
+    public sealed record PrincipalInfo(bool IsGroup, Guid Id, string Name, bool IsActive, SystemRightsData Rights, bool MfaEnabled = false);
+
+    // A server-inbox item — a staged file (ADR "S3-backed inbox"). Download is a presigned URL; HasMask tells
+    // whether a `{name}.mask.json` staging sidecar exists (ADR "Inbox item classification + preview").
+    public sealed record InboxItemInfo(string Name, long Size, string DownloadUrl, bool HasMask);
+
+    // A staged mask/index-data draft for an inbox item (the `{name}.mask.json` sidecar content). Name +
+    // DocumentDate ("yyyy-MM-dd") are the staged system fields (ADR "Staged Name + Document date on inbox items").
+    public sealed record InboxMaskDraft(string? Name, string? DocumentDate, Guid? MaskId, IReadOnlyList<InboxMaskFieldValue> Fields);
+
+    public sealed record InboxMaskFieldValue(Guid FieldDefinitionId, IReadOnlyList<string> Values);
+
+    // A reference (shortcut) filed in a folder — see ADR "Desktop drag-and-drop move and reference".
+    // TargetId/Name/HasVersions/HasSubfolders describe the referenced item; ReferenceId identifies the
+    // shortcut row (for delete); RealParentId is the target's real home folder (for "Go to …").
+    public sealed record Reference(
+        Guid ReferenceId, Guid TargetId, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, Guid? RealParentId);
+
+    // The approval workflow on a version (ADR "Workflow / document state model", 0009). Status is the
+    // WorkflowStatus int; Links maps each valid-transition rel (submit/approve/reject/release) to its href.
+    public sealed record WorkflowInfo(
+        int Status, string StatusName, string? AssignedToName,
+        IReadOnlyList<WorkflowTransitionInfo> History, IReadOnlyDictionary<string, string> Links);
+
+    public sealed record WorkflowTransitionInfo(string ToStatusName, string? AssignedToName, string? PerformedByName, string? RejectionReason);
+
+    // A pending review task assigned to the caller (backs the Tasks tab).
+    public sealed record TaskInfo(Guid DocumentId, Guid? ParentId, Guid VersionId, string DocumentName, int? VersionNumber, DateTimeOffset AssignedAt);
+
+    // A user option for the reviewer picker.
+    public sealed record UserOptionInfo(Guid Id, string DisplayName);
+
+    // Audit log (ADRs "Audit trail (first slice)" / "... hash chain" / "... retention and purge").
+    public sealed record AuditEventInfo(DateTimeOffset Timestamp, string ActorType, string ActorName, string Action, string? TargetType, string? TargetName, string? Details);
+    public sealed record AuditPage(IReadOnlyList<AuditEventInfo> Events, string? NextCursor);
+    public sealed record AuditVerifyInfo(bool Valid, int CheckedCount, long? BrokenAtSequence);
+
+    public sealed record RepositoryExportOptions(bool ActiveOnly, DateOnly? DocumentDateFrom, DateOnly? DocumentDateTo, DateTimeOffset? FiledFrom, DateTimeOffset? FiledTo, string? CreatedBy, bool IncludePermissions = false);
+
+    public sealed record ImportResultInfo(Guid RootId, string RootName, int Documents, int Versions, int Skipped);
+    public sealed record AuditRetentionInfo(int RetentionDays, long ChainStartSequence, DateTimeOffset? LastPurgedAt);
+    public sealed record AuditPurgeInfo(int PurgedCount, long ChainStartSequence);
+
+    // A page of audit events, newest first, with optional filters + an opaque cursor for "load more".
+    public async Task<AuditPage> GetAuditEventsAsync(string? action, DateTimeOffset? from, DateTimeOffset? to, string? cursor, CancellationToken cancellationToken = default)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrWhiteSpace(action)) query.Add($"action={Uri.EscapeDataString(action.Trim())}");
+        if (from is { } f) query.Add($"from={Uri.EscapeDataString(f.UtcDateTime.ToString("o"))}");
+        if (to is { } t) query.Add($"to={Uri.EscapeDataString(t.UtcDateTime.ToString("o"))}");
+        if (cursor is not null) query.Add($"cursor={Uri.EscapeDataString(cursor)}");
+
+        var url = "api/audit-events" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
+        var page = await _http.GetFromJsonAsync<JsonElement>(url, cancellationToken);
+        var events = page.TryGetProperty("events", out var array)
+            ? array.EnumerateArray().Select(ParseAuditEvent).ToList()
+            : new List<AuditEventInfo>();
+        return new AuditPage(events, ExtractCursor(FindLink(page, "next")));
+    }
+
+    // Exports the tenant audit log (respecting the filters) as NDJSON bytes (ADR "Audit trail export").
+    public async Task<byte[]> ExportAuditEventsAsync(string? action, DateTimeOffset? from, DateTimeOffset? to, CancellationToken cancellationToken = default)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrWhiteSpace(action)) query.Add($"action={Uri.EscapeDataString(action.Trim())}");
+        if (from is { } f) query.Add($"from={Uri.EscapeDataString(f.UtcDateTime.ToString("o"))}");
+        if (to is { } t) query.Add($"to={Uri.EscapeDataString(t.UtcDateTime.ToString("o"))}");
+
+        var url = "api/audit-events/export" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
+        return await _http.GetByteArrayAsync(url, cancellationToken);
+    }
+
+    // Exports a repository/folder + subtree to a .zip (ADR "Repository export"). Tenant-admin-only server-side.
+    public async Task<byte[]> ExportRepositoryAsync(Guid rootId, RepositoryExportOptions options, CancellationToken cancellationToken = default)
+    {
+        var query = new List<string> { $"versions={(options.ActiveOnly ? "active" : "all")}" };
+        if (options.DocumentDateFrom is { } df) query.Add($"documentDateFrom={df:yyyy-MM-dd}");
+        if (options.DocumentDateTo is { } dt) query.Add($"documentDateTo={dt:yyyy-MM-dd}");
+        if (options.FiledFrom is { } ff) query.Add($"filedFrom={Uri.EscapeDataString(ff.UtcDateTime.ToString("o"))}");
+        if (options.FiledTo is { } ft) query.Add($"filedTo={Uri.EscapeDataString(ft.UtcDateTime.ToString("o"))}");
+        if (!string.IsNullOrWhiteSpace(options.CreatedBy)) query.Add($"createdBy={Uri.EscapeDataString(options.CreatedBy.Trim())}");
+        if (options.IncludePermissions) query.Add("includePermissions=true");
+
+        return await _http.GetByteArrayAsync($"api/documents/{rootId}/export?" + string.Join("&", query), cancellationToken);
+    }
+
+    // Imports an export archive (ADR "Repository import"). targetFolderId == null → a new repository; otherwise
+    // grafted under that folder. Tenant-admin-only server-side. Returns the imported root's name + counts.
+    public async Task<ImportResultInfo> ImportRepositoryAsync(Guid? targetFolderId, byte[] zip, bool updateExisting = false, bool includePermissions = false, bool merge = false, string leafConflict = "rename", CancellationToken cancellationToken = default)
+    {
+        using var content = new MultipartFormDataContent();
+        var file = new ByteArrayContent(zip);
+        file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
+        content.Add(file, "file", "import.zip");
+
+        var basePath = targetFolderId is { } id ? $"api/documents/{id}/import" : "api/repositories/import";
+        var url = $"{basePath}?updateExisting={(updateExisting ? "true" : "false")}&includePermissions={(includePermissions ? "true" : "false")}&merge={(merge ? "true" : "false")}&leafConflict={leafConflict}";
+        var response = await _http.PostAsync(url, content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return new ImportResultInfo(
+            json.GetProperty("rootId").GetGuid(),
+            json.GetProperty("rootName").GetString() ?? "",
+            json.GetProperty("documents").GetInt32(),
+            json.GetProperty("versions").GetInt32(),
+            json.GetProperty("skipped").GetInt32());
+    }
+
+    public async Task<AuditVerifyInfo> VerifyAuditChainAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/audit-events/verify", cancellationToken);
+        return new AuditVerifyInfo(
+            json.GetProperty("valid").GetBoolean(),
+            json.GetProperty("checkedCount").GetInt32(),
+            json.TryGetProperty("brokenAtSequence", out var b) && b.ValueKind == JsonValueKind.Number ? b.GetInt64() : null);
+    }
+
+    public sealed record WormVerifyInfo(bool Valid, int SegmentCount, int CheckedCount, long? BrokenAtSequence, string? Reason);
+
+    // Verifies the sealed WORM segments against the DB (ADR "Audit WORM segment verify").
+    public async Task<WormVerifyInfo> VerifyAuditWormAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/audit-events/worm-verify", cancellationToken);
+        return new WormVerifyInfo(
+            json.GetProperty("valid").GetBoolean(),
+            json.GetProperty("segmentCount").GetInt32(),
+            json.GetProperty("checkedCount").GetInt32(),
+            json.TryGetProperty("brokenAtSequence", out var b) && b.ValueKind == JsonValueKind.Number ? b.GetInt64() : null,
+            json.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null);
+    }
+
+    public async Task<AuditRetentionInfo> GetAuditRetentionAsync(CancellationToken cancellationToken = default) =>
+        ParseRetention(await _http.GetFromJsonAsync<JsonElement>("api/audit-events/retention", cancellationToken));
+
+    public async Task<AuditRetentionInfo> SetAuditRetentionAsync(int retentionDays, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PutAsJsonAsync("api/audit-events/retention", new { retentionDays }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to change audit retention.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        return ParseRetention(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
+    }
+
+    public async Task<AuditPurgeInfo> PurgeAuditAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync("api/audit-events/purge", null, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to purge the audit log.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return new AuditPurgeInfo(json.GetProperty("purgedCount").GetInt32(), json.GetProperty("chainStartSequence").GetInt64());
+    }
+
+    private static AuditEventInfo ParseAuditEvent(JsonElement e) => new(
+        e.GetProperty("timestamp").GetDateTimeOffset(),
+        e.TryGetProperty("actorType", out var at) ? at.GetString() ?? "" : "",
+        e.TryGetProperty("actorName", out var an) ? an.GetString() ?? "" : "",
+        e.TryGetProperty("action", out var ac) ? ac.GetString() ?? "" : "",
+        StrOrNull(e, "targetType"),
+        StrOrNull(e, "targetName"),
+        StrOrNull(e, "details"));
+
+    private static AuditRetentionInfo ParseRetention(JsonElement json) => new(
+        json.GetProperty("retentionDays").GetInt32(),
+        json.GetProperty("chainStartSequence").GetInt64(),
+        json.TryGetProperty("lastPurgedAt", out var lp) && lp.ValueKind == JsonValueKind.String ? lp.GetDateTimeOffset() : null);
+
+    // Pulls the cursor value out of a "next" hypermedia href (…?cursor=…&limit=…).
+    private static string? ExtractCursor(string? nextHref)
+    {
+        if (string.IsNullOrEmpty(nextHref))
+        {
+            return null;
+        }
+
+        var index = nextHref.IndexOf("cursor=", StringComparison.Ordinal);
+        if (index < 0)
+        {
+            return null;
+        }
+
+        var value = nextHref[(index + "cursor=".Length)..];
+        var amp = value.IndexOf('&');
+        return Uri.UnescapeDataString(amp >= 0 ? value[..amp] : value);
+    }
+
+    public Task<List<Node>> GetRepositoriesAsync(CancellationToken cancellationToken = default) =>
+        LoadPagedAsync("api/repositories", "repositories", ParseNode, cancellationToken);
+
+    public sealed record AdminPersonalRepoInfo(Guid UserId, string DisplayName, string Email, bool UserIsActive, Guid RepositoryId, bool HasChildren, bool HasSubfolders);
+
+    // Lists every user's personal repository (ADR "Tenant-admin Administration → Users view") — tenant-admin only.
+    public async Task<List<AdminPersonalRepoInfo>> GetAdminPersonalRepositoriesAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/admin/personal-repositories", cancellationToken);
+        var list = new List<AdminPersonalRepoInfo>();
+        if (json.TryGetProperty("repositories", out var array))
+        {
+            foreach (var r in array.EnumerateArray())
+            {
+                list.Add(new AdminPersonalRepoInfo(
+                    r.GetProperty("userId").GetGuid(),
+                    r.GetProperty("displayName").GetString() ?? "",
+                    r.TryGetProperty("email", out var e) ? e.GetString() ?? "" : "",
+                    r.TryGetProperty("userIsActive", out var a) && a.GetBoolean(),
+                    r.GetProperty("repositoryId").GetGuid(),
+                    r.TryGetProperty("hasChildren", out var hc) && hc.GetBoolean(),
+                    r.TryGetProperty("hasSubfolders", out var hs) && hs.GetBoolean()));
+            }
+        }
+        return list;
+    }
+
+    // Get-or-create the current user's personal repository (ADR "Per-user personal repository"). Returns null if
+    // the caller has no personal space (e.g. a ServiceAccount → 403) so the tree still renders shared repositories.
+    public async Task<Node?> GetPersonalRepositoryAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync("api/me/personal-repository", null, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return new Node(
+            json.GetProperty("id").GetGuid(),
+            json.GetProperty("name").GetString() ?? "Personal",
+            json.TryGetProperty("hasChildren", out var hc) && hc.GetBoolean(),
+            HasVersions: false,
+            json.TryGetProperty("hasSubfolders", out var hs) && hs.GetBoolean(),
+            HasReferences: false);
+    }
+
+    public Task<List<Node>> GetChildrenAsync(Guid folderId, CancellationToken cancellationToken = default) =>
+        LoadPagedAsync($"api/documents/{folderId}/children", "children", ParseNode, cancellationToken);
+
+    // Lists a .zip document's entries on demand (ADR "Zip file browsing") — nothing is unpacked.
+    public async Task<IReadOnlyList<ArchiveEntryInfo>> GetArchiveEntriesAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/archive-entries", cancellationToken);
+        var entries = new List<ArchiveEntryInfo>();
+        if (json.TryGetProperty("entries", out var array))
+        {
+            foreach (var e in array.EnumerateArray())
+            {
+                entries.Add(new ArchiveEntryInfo(
+                    e.GetProperty("name").GetString() ?? "",
+                    e.GetProperty("path").GetString() ?? "",
+                    e.TryGetProperty("size", out var size) ? size.GetInt64() : 0));
+            }
+        }
+
+        return entries;
+    }
+
+    // Downloads one archive entry's bytes (the Api proxies these — an entry isn't a storage object).
+    public Task<byte[]> DownloadArchiveEntryAsync(Guid documentId, string entryPath, CancellationToken cancellationToken = default) =>
+        _http.GetByteArrayAsync($"api/documents/{documentId}/archive-entries/content?path={Uri.EscapeDataString(entryPath)}", cancellationToken);
+
+    public async Task<WhoAmIInfo> GetWhoAmIAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/diagnostics/whoami", cancellationToken);
+        return new WhoAmIInfo(
+            json.TryGetProperty("userId", out var u) && u.ValueKind == JsonValueKind.String ? u.GetGuid() : null,
+            json.TryGetProperty("tenantId", out var t) && t.ValueKind == JsonValueKind.String ? t.GetGuid() : null,
+            json.TryGetProperty("tenantName", out var tn) ? tn.GetString() : null,
+            json.TryGetProperty("userName", out var un) ? un.GetString() : null,
+            json.TryGetProperty("isTenantAdmin", out var a) && a.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("canManageUsers", out var m) && m.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("hasPhoto", out var hp) && hp.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("canViewAuditLog", out var av) && av.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("mfaEnabled", out var mfa) && mfa.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("canResetMfa", out var crm) && crm.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("canLegalHold", out var clh) && clh.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("canManageClassification", out var cmc) && cmc.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("canOverrideCheckout", out var coc) && coc.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("canImpersonate", out var ci) && ci.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("impersonatedBy", out var ib) && ib.ValueKind == JsonValueKind.String ? ib.GetString() : null,
+            json.TryGetProperty("canExport", out var ce) && ce.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("canImport", out var cim) && cim.ValueKind == JsonValueKind.True);
+    }
+
+    // The count of existing "current TIFF" documents with no searchable-PDF successor yet (ADR "Backfill
+    // searchable PDFs for existing TIFFs").
+    public async Task<int> GetTiffBackfillPendingAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/searchable-pdf/backfill", cancellationToken);
+        return json.TryGetProperty("count", out var c) ? c.GetInt32() : 0;
+    }
+
+    // Enqueues a searchable-PDF conversion for every current TIFF; returns how many were enqueued.
+    public async Task<int> TriggerTiffBackfillAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PostAsync("api/searchable-pdf/backfill", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return json.TryGetProperty("count", out var c) ? c.GetInt32() : 0;
+    }
+
+    // Lists the caller's server-inbox items (ADR "S3-backed inbox").
+    public async Task<IReadOnlyList<InboxItemInfo>> GetInboxAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/inbox", cancellationToken);
+        var items = new List<InboxItemInfo>();
+        if (json.TryGetProperty("items", out var array))
+        {
+            foreach (var item in array.EnumerateArray())
+            {
+                string Link(string rel) => item.TryGetProperty("links", out var links)
+                    ? links.EnumerateArray().FirstOrDefault(l => l.GetProperty("rel").GetString() == rel).GetProperty("href").GetString() ?? ""
+                    : "";
+                items.Add(new InboxItemInfo(
+                    item.GetProperty("name").GetString() ?? "",
+                    item.TryGetProperty("size", out var s) ? s.GetInt64() : 0,
+                    Link("download"),
+                    item.TryGetProperty("hasMask", out var hm) && hm.GetBoolean()));
+            }
+        }
+
+        return items;
+    }
+
+    // The inbox item's preview (renditions on the object key) — same Preview shape as a document's, so it feeds
+    // the same rendering + hit-overlay pipeline. 204 (no preview available) yields an all-null Preview.
+    public async Task<Preview> GetInboxPreviewAsync(string name, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.GetAsync($"api/inbox/{Uri.EscapeDataString(name)}/preview", cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
+        {
+            return new Preview(null, false, null, null, null, "");
+        }
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        string? Link(string rel) => json.TryGetProperty("links", out var links)
+            ? links.EnumerateArray().Where(l => l.GetProperty("rel").GetString() == rel).Select(l => l.GetProperty("href").GetString()).FirstOrDefault()
+            : null;
+
+        return new Preview(
+            json.TryGetProperty("previewUrl", out var pu) ? pu.GetString() : null,
+            json.TryGetProperty("previewConverted", out var pc) && pc.GetBoolean(),
+            DownloadUrl: null,
+            Link("text-layout"),
+            Link("preview-pages"),
+            System.IO.Path.GetExtension(name));
+    }
+
+    // Reads an inbox item's staged mask/index-data draft (the `{name}.mask.json` sidecar); MaskId null = none.
+    public async Task<InboxMaskDraft> GetInboxMaskAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/inbox/{Uri.EscapeDataString(name)}/mask", cancellationToken);
+        return ParseInboxMaskDraft(json);
+    }
+
+    // Parses the `{maskId, fields:[{fieldDefinitionId, values}]}` draft shape (the server response and the local
+    // sidecar file share it, so a moved item carries its staged mask both ways).
+    public static InboxMaskDraft ParseInboxMaskDraft(JsonElement json)
+    {
+        var name = json.TryGetProperty("name", out var nm) && nm.ValueKind == JsonValueKind.String ? nm.GetString() : null;
+        var docDate = json.TryGetProperty("documentDate", out var dd) && dd.ValueKind == JsonValueKind.String ? dd.GetString() : null;
+        var maskId = json.TryGetProperty("maskId", out var mid) && mid.ValueKind == JsonValueKind.String ? mid.GetGuid() : (Guid?)null;
+        var fields = new List<InboxMaskFieldValue>();
+        if (json.TryGetProperty("fields", out var fieldArray) && fieldArray.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var f in fieldArray.EnumerateArray())
+            {
+                var values = f.TryGetProperty("values", out var v) && v.ValueKind == JsonValueKind.Array
+                    ? v.EnumerateArray().Select(e => e.GetString() ?? "").ToList()
+                    : [];
+                fields.Add(new InboxMaskFieldValue(f.GetProperty("fieldDefinitionId").GetGuid(), values));
+            }
+        }
+
+        return new InboxMaskDraft(name, docDate, maskId, fields);
+    }
+
+    // Writes (or, when nothing is staged, clears) an inbox item's staged mask/index-data draft. Name +
+    // documentDate ("yyyy-MM-dd", or null) are the staged system fields.
+    public async Task SetInboxMaskAsync(string name, string? stagedName, string? documentDate, Guid? maskId,
+        IEnumerable<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> fields, CancellationToken cancellationToken = default)
+    {
+        var body = new { name = stagedName, documentDate, maskId, fields = fields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.Values }) };
+        (await _http.PutAsJsonAsync($"api/inbox/{Uri.EscapeDataString(name)}/mask", body, cancellationToken)).EnsureSuccessStatusCode();
+    }
+
+    // Uploads a local file into the server inbox: POST for a presigned URL, then PUT the bytes to it.
+    public async Task UploadToInboxAsync(string fileName, byte[] bytes, CancellationToken cancellationToken = default)
+    {
+        var response = await (await _http.PostAsJsonAsync("api/inbox", new { fileName }, cancellationToken)).Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        var uploadUrl = response.GetProperty("uploadUrl").GetString()!;
+        using var content = new ByteArrayContent(bytes);
+        (await Anonymous.PutAsync(uploadUrl, content, cancellationToken)).EnsureSuccessStatusCode();
+    }
+
+    public async Task FileInboxItemAsync(string name, Guid folderId, string? comment = null, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync($"api/inbox/{Uri.EscapeDataString(name)}/file", new { folderId, comment }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to file into that folder.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Files the inbox item as a new version of an existing document (ADR "Context-aware inbox filing dialog").
+    public async Task FileInboxItemAsVersionAsync(string name, Guid documentId, string? comment = null, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync($"api/inbox/{Uri.EscapeDataString(name)}/file", new { documentId, comment }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to add a version to that document.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    public Task DeleteInboxItemAsync(string name, CancellationToken cancellationToken = default) =>
+        _http.DeleteAsync($"api/inbox/{Uri.EscapeDataString(name)}", cancellationToken);
+
+    public async Task<string> GetDocumentNameAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var document = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}", cancellationToken);
+        return document.TryGetProperty("name", out var name) ? name.GetString() ?? "" : "";
+    }
+
+    public async Task<MaskInfo> GetMaskAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var mask = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/mask", cancellationToken);
+        return new MaskInfo(
+            mask.TryGetProperty("maskId", out var mid) && mid.ValueKind == JsonValueKind.String ? mid.GetGuid() : null,
+            mask.TryGetProperty("name", out var n) ? n.GetString() : null,
+            mask.TryGetProperty("versionNumber", out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : null);
+    }
+
+    // The tenant's masks (id + name) for the mask-change dropdown (ADR "Editable mask on the detail pane").
+    public async Task<IReadOnlyList<MaskOptionInfo>> GetMasksAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/masks", cancellationToken);
+        var list = new List<MaskOptionInfo>();
+        if (json.TryGetProperty("masks", out var masks))
+        {
+            foreach (var m in masks.EnumerateArray())
+            {
+                list.Add(new MaskOptionInfo(m.GetProperty("id").GetGuid(), m.GetProperty("name").GetString() ?? ""));
+            }
+        }
+
+        return list;
+    }
+
+    // A mask's field definitions (+ types), for building the type-aware editors.
+    public async Task<IReadOnlyList<MaskFieldInfo>> GetMaskFieldsAsync(Guid maskId, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/masks/{maskId}", cancellationToken);
+        var list = new List<MaskFieldInfo>();
+        if (json.TryGetProperty("fields", out var fields))
+        {
+            foreach (var f in fields.EnumerateArray())
+            {
+                list.Add(new MaskFieldInfo(
+                    f.GetProperty("id").GetGuid(),
+                    f.GetProperty("name").GetString() ?? "",
+                    f.TryGetProperty("dataType", out var dt) ? dt.GetString() ?? "Text" : "Text",
+                    f.TryGetProperty("isRequired", out var r) && r.GetBoolean()));
+            }
+        }
+
+        return list;
+    }
+
+    // Assigns (or changes) the document's mask. 400 REQUIRED_FIELD_MISSING surfaces as a friendly message.
+    public async Task SetMaskAsync(Guid documentId, Guid maskId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/mask", new { maskId }, cancellationToken);
+        await ThrowIfProblemAsync(response, "Could not assign the mask", cancellationToken);
+    }
+
+    public async Task ClearMaskAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.DeleteAsync($"api/documents/{documentId}/mask", cancellationToken);
+        await ThrowIfProblemAsync(response, "Could not clear the mask", cancellationToken);
+    }
+
+    // Replaces the whole index-data set. 400 FIELD_VALUE_INVALID / MULTIPLE_VALUES_NOT_ALLOWED surface as a message.
+    public async Task SetIndexDataAsync(Guid documentId, IEnumerable<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> fields, CancellationToken cancellationToken = default)
+    {
+        var body = new { fields = fields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.Values }) };
+        var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/index-data", body, cancellationToken);
+        await ThrowIfProblemAsync(response, "Could not save the index data", cancellationToken);
+    }
+
+    // Surfaces a Problem Details `detail` (or a generic message) as an ApiActionException on a failed response.
+    private static async Task ThrowIfProblemAsync(HttpResponseMessage response, string fallback, CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var detail = fallback;
+        try
+        {
+            var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+            if (json.TryGetProperty("detail", out var d) && d.GetString() is { Length: > 0 } message)
+            {
+                detail = message;
+            }
+        }
+        catch
+        {
+            // no problem body — use the fallback
+        }
+
+        throw new ApiActionException(detail);
+    }
+
+    public async Task<List<IndexField>> GetIndexDataAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/index-data", cancellationToken);
+        var fields = new List<IndexField>();
+        if (response.TryGetProperty("fields", out var items))
+        {
+            foreach (var field in items.EnumerateArray())
+            {
+                var values = field.TryGetProperty("values", out var vs) && vs.ValueKind == JsonValueKind.Array
+                    ? vs.EnumerateArray().Select(x => x.GetString() ?? "").ToList()
+                    : [];
+                fields.Add(new IndexField(field.GetProperty("fieldName").GetString() ?? "", values));
+            }
+        }
+
+        return fields;
+    }
+
+    // The always-shown system fields (ADR "System fields + OCR-language mask field"): Created/CreatedBy/
+    // DocumentDate from the latest confirmed version; the OCR-language override + whether a TIFF source exists
+    // from the latest confirmed TIFF version.
+    public async Task<SystemFields?> GetSystemFieldsAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/versions", cancellationToken);
+        if (!response.TryGetProperty("versions", out var versions))
+        {
+            return null;
+        }
+
+        JsonElement? current = null, tiff = null;
+        var currentNumber = -1;
+        var tiffNumber = -1;
+        foreach (var v in versions.EnumerateArray())
+        {
+            if (v.GetProperty("status").GetString() != "Confirmed")
+            {
+                continue;
+            }
+
+            var number = v.TryGetProperty("versionNumber", out var vn) && vn.ValueKind == JsonValueKind.Number ? vn.GetInt32() : 0;
+            if (number >= currentNumber)
+            {
+                currentNumber = number;
+                current = v;
+            }
+
+            var objectKey = v.TryGetProperty("objectKey", out var ok) ? ok.GetString() ?? "" : "";
+            if ((objectKey.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) || objectKey.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase)) && number >= tiffNumber)
+            {
+                tiffNumber = number;
+                tiff = v;
+            }
+        }
+
+        if (current is not { } cur)
+        {
+            return null;
+        }
+
+        static string Str(JsonElement e, string name) => e.TryGetProperty(name, out var p) ? p.GetString() ?? "" : "";
+
+        string? ocr = null;
+        if (tiff is { } t && t.TryGetProperty("ocrLanguages", out var o) && o.ValueKind == JsonValueKind.String)
+        {
+            ocr = o.GetString();
+        }
+
+        return new SystemFields(
+            cur.GetProperty("id").GetGuid(),
+            currentNumber,
+            cur.TryGetProperty("createdAt", out var ca) ? ca.GetDateTimeOffset() : default,
+            Str(cur, "createdByName"),
+            Str(cur, "documentDate"),
+            tiff is not null,
+            ocr,
+            Str(cur, "fileExtension"));
+    }
+
+    public async Task<IReadOnlyList<OcrLanguageOption>> GetOcrLanguageCatalogAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/ocr-languages", cancellationToken);
+        var list = new List<OcrLanguageOption>();
+        if (json.TryGetProperty("languages", out var langs))
+        {
+            foreach (var l in langs.EnumerateArray())
+            {
+                list.Add(new OcrLanguageOption(l.GetProperty("code").GetString() ?? "", l.GetProperty("displayName").GetString() ?? ""));
+            }
+        }
+
+        return list;
+    }
+
+    // Sets the document's OCR-language override (ordered codes) and re-runs the searchable-PDF conversion.
+    public async Task SetOcrLanguagesAsync(Guid documentId, IReadOnlyList<string> codes, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/ocr-languages", new { languages = codes }, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ApiActionException($"Could not set OCR languages ({(int)response.StatusCode}).");
+        }
+    }
+
+    // Data-classification / sensitivity label (ADR "Configurable sensitivity labels + upload defaults") — the
+    // per-tenant label on the document (id/name/colour + whether it watermarks), read from the document resource.
+    public sealed record DocumentSensitivityInfo(Guid? LabelId, string Name, string? Color, bool Watermark);
+
+    public sealed record SensitivityLabelInfo(Guid Id, string Name, int Rank, string? Color, bool Watermark, bool Retired);
+    public sealed record SensitivityLabelCatalog(IReadOnlyList<SensitivityLabelInfo> Items, bool CanManage);
+
+    public async Task<DocumentSensitivityInfo> GetDocumentSensitivityAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}", cancellationToken);
+        return new DocumentSensitivityInfo(
+            json.TryGetProperty("sensitivityLabelId", out var id) && id.ValueKind == JsonValueKind.String ? id.GetGuid() : null,
+            json.TryGetProperty("sensitivityLabelName", out var n) ? n.GetString() ?? "" : "",
+            json.TryGetProperty("sensitivityLabelColor", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null,
+            json.TryGetProperty("sensitivityWatermark", out var w) && w.ValueKind == JsonValueKind.True);
+    }
+
+    public async Task SetSensitivityAsync(Guid documentId, Guid? labelId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/sensitivity", new { labelId }, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ApiActionException($"Could not set the sensitivity label ({(int)response.StatusCode}).");
+        }
+    }
+
+    // The tenant's configurable label catalog (for the picker + admin).
+    public async Task<SensitivityLabelCatalog> GetSensitivityLabelsAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/sensitivity-labels", cancellationToken);
+        var items = new List<SensitivityLabelInfo>();
+        if (json.TryGetProperty("labels", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var l in arr.EnumerateArray())
+            {
+                items.Add(new SensitivityLabelInfo(
+                    l.GetProperty("id").GetGuid(),
+                    l.GetProperty("name").GetString() ?? "",
+                    l.TryGetProperty("rank", out var r) ? r.GetInt32() : 0,
+                    l.TryGetProperty("color", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null,
+                    l.TryGetProperty("watermark", out var w) && w.ValueKind == JsonValueKind.True,
+                    l.TryGetProperty("retired", out var rt) && rt.ValueKind == JsonValueKind.True));
+            }
+        }
+
+        return new SensitivityLabelCatalog(items, json.TryGetProperty("canManage", out var cm) && cm.GetBoolean());
+    }
+
+    public async Task CreateSensitivityLabelAsync(string name, int rank, string? color, bool watermark, CancellationToken cancellationToken = default)
+    {
+        var resp = await _http.PostAsJsonAsync("api/sensitivity-labels", new { name, rank, color, watermark }, cancellationToken);
+        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ErrorMessageAsync(resp, "Could not add the label."));
+    }
+
+    public async Task UpdateSensitivityLabelAsync(Guid id, string name, int rank, string? color, bool watermark, CancellationToken cancellationToken = default)
+    {
+        var resp = await _http.PutAsJsonAsync($"api/sensitivity-labels/{id}", new { name, rank, color, watermark }, cancellationToken);
+        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ErrorMessageAsync(resp, "Could not update the label."));
+    }
+
+    public async Task RetireSensitivityLabelAsync(Guid id, CancellationToken cancellationToken = default) =>
+        (await _http.DeleteAsync($"api/sensitivity-labels/{id}", cancellationToken)).EnsureSuccessStatusCode();
+
+    public async Task UnretireSensitivityLabelAsync(Guid id, CancellationToken cancellationToken = default) =>
+        (await _http.PostAsync($"api/sensitivity-labels/{id}/unretire", null, cancellationToken)).EnsureSuccessStatusCode();
+
+    // Free-form tags (ADR "Document tags"). GET the document's tags; PUT-replaces the whole set (the server
+    // normalizes/dedupes and returns the stored set); the tenant tag catalog backs add-box autocomplete.
+    public async Task<IReadOnlyList<string>> GetTagsAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/tags", cancellationToken);
+        return ReadTags(json);
+    }
+
+    public async Task<IReadOnlyList<string>> SetTagsAsync(Guid documentId, IEnumerable<string> tags, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/tags", new { tags = tags.ToArray() }, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ApiActionException($"Could not set tags ({(int)response.StatusCode}).");
+        }
+
+        return ReadTags(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
+    }
+
+    public async Task<IReadOnlyList<string>> GetTagCatalogAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/tags", cancellationToken);
+        return ReadTags(json);
+    }
+
+    private static IReadOnlyList<string> ReadTags(JsonElement json) =>
+        json.TryGetProperty("tags", out var t) && t.ValueKind == JsonValueKind.Array
+            ? t.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s.Length > 0).ToList()
+            : [];
+
+    // ---- Tag catalog admin (ADR "Tag controlled vocabulary") ----------------------------------------
+    public sealed record TagCatalogItem(Guid Id, string Name, string? Color);
+    public sealed record TagCatalog(IReadOnlyList<TagCatalogItem> Items, bool CanManage);
+
+    public async Task<TagCatalog> GetTagCatalogWithColorsAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/tags", cancellationToken);
+        var items = new List<TagCatalogItem>();
+        if (json.TryGetProperty("catalog", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var e in arr.EnumerateArray())
+            {
+                items.Add(new TagCatalogItem(
+                    e.GetProperty("id").GetGuid(),
+                    e.GetProperty("name").GetString() ?? "",
+                    e.TryGetProperty("color", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null));
+            }
+        }
+
+        return new TagCatalog(items, json.TryGetProperty("canManage", out var cm) && cm.GetBoolean());
+    }
+
+    public async Task CreateTagAsync(string name, string? color, CancellationToken cancellationToken = default)
+    {
+        var resp = await _http.PostAsJsonAsync("api/tags", new { name, color }, cancellationToken);
+        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ErrorMessageAsync(resp, "Could not add the tag."));
+    }
+
+    public async Task UpdateTagAsync(Guid id, string? name, string? color, CancellationToken cancellationToken = default)
+    {
+        var resp = await _http.PutAsJsonAsync($"api/tags/{id}", new { name, color }, cancellationToken);
+        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ErrorMessageAsync(resp, "Could not update the tag."));
+    }
+
+    public async Task RetireTagAsync(Guid id, CancellationToken cancellationToken = default) =>
+        (await _http.DeleteAsync($"api/tags/{id}", cancellationToken)).EnsureSuccessStatusCode();
+
+    public async Task MergeTagAsync(Guid id, Guid intoId, CancellationToken cancellationToken = default)
+    {
+        var resp = await _http.PostAsJsonAsync($"api/tags/{id}/merge", new { intoId }, cancellationToken);
+        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ErrorMessageAsync(resp, "Could not merge the tags."));
+    }
+
+    private static async Task<string> ErrorMessageAsync(HttpResponseMessage resp, string fallback)
+    {
+        try
+        {
+            var json = await resp.Content.ReadFromJsonAsync<JsonElement>();
+            if (json.TryGetProperty("detail", out var d) && d.GetString() is { Length: > 0 } detail) return detail;
+        }
+        catch { /* not a problem+json body */ }
+
+        return fallback;
+    }
+
+    // Bulk actions over a set of selected documents (ADR "Bulk actions on selected documents") — each POSTs
+    // { ids, ... } and returns how many items succeeded vs were skipped (an item the caller can't touch or
+    // that's refused is skipped, not an error).
+    public sealed record BulkResult(int Succeeded, int Skipped);
+
+    public Task<BulkResult> BulkMoveAsync(IEnumerable<Guid> ids, Guid parentId, CancellationToken cancellationToken = default) =>
+        PostBulkAsync("api/documents/bulk/move", new { ids = ids.ToArray(), parentId }, cancellationToken);
+
+    public Task<BulkResult> BulkDeleteAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default) =>
+        PostBulkAsync("api/documents/bulk/delete", new { ids = ids.ToArray() }, cancellationToken);
+
+    public Task<BulkResult> BulkAddTagsAsync(IEnumerable<Guid> ids, IEnumerable<string> tags, CancellationToken cancellationToken = default) =>
+        PostBulkAsync("api/documents/bulk/tags", new { ids = ids.ToArray(), tags = tags.ToArray() }, cancellationToken);
+
+    public Task<BulkResult> BulkSetSensitivityAsync(IEnumerable<Guid> ids, Guid? labelId, CancellationToken cancellationToken = default) =>
+        PostBulkAsync("api/documents/bulk/sensitivity", new { ids = ids.ToArray(), labelId }, cancellationToken);
+
+    private async Task<BulkResult> PostBulkAsync(string url, object body, CancellationToken cancellationToken)
+    {
+        var response = await _http.PostAsJsonAsync(url, body, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ApiActionException($"The bulk action failed ({(int)response.StatusCode}).");
+        }
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return new BulkResult(
+            json.TryGetProperty("succeeded", out var s) ? s.GetInt32() : 0,
+            json.TryGetProperty("skipped", out var k) ? k.GetInt32() : 0);
+    }
+
+    // Whether the current user follows (subscribes to) the document (ADR "Document subscriptions").
+    public async Task<bool> GetSubscriptionAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/subscription", cancellationToken);
+        return json.TryGetProperty("subscribed", out var s) && s.ValueKind == JsonValueKind.True;
+    }
+
+    // Follow (subscribe = true) or unfollow (false) the document.
+    public async Task SetSubscriptionAsync(Guid documentId, bool subscribe, CancellationToken cancellationToken = default)
+    {
+        using var response = subscribe
+            ? await _http.PutAsync($"api/documents/{documentId}/subscription", null, cancellationToken)
+            : await _http.DeleteAsync($"api/documents/{documentId}/subscription", cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ApiActionException($"Could not update your subscription ({(int)response.StatusCode}).");
+        }
+    }
+
+    // A document reminder (Wiedervorlage, ADR "Document reminders").
+    public sealed record ReminderInfo(Guid Id, DateTimeOffset RemindAt, string? Note, int Recurrence, string RecurrenceName, string TargetName);
+
+    // Dashboard rows (ADR "My work dashboard"): a due-soon reminder / a followed document, each with the
+    // document + its parent folder for click-through.
+    public sealed record DashReminderInfo(Guid DocumentId, Guid? ParentId, string DocumentName, DateTimeOffset RemindAt, string? Note, int Recurrence, string RecurrenceName, bool Overdue);
+    public sealed record DashFollowedInfo(Guid DocumentId, Guid? ParentId, string DocumentName);
+
+    // The caller's overdue + due-soon reminders across all documents (the dashboard's Reminders section).
+    public async Task<IReadOnlyList<DashReminderInfo>> GetDashboardRemindersAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/reminders", cancellationToken);
+        var list = new List<DashReminderInfo>();
+        if (json.TryGetProperty("reminders", out var arr))
+        {
+            foreach (var r in arr.EnumerateArray())
+            {
+                list.Add(new DashReminderInfo(
+                    r.GetProperty("documentId").GetGuid(),
+                    r.TryGetProperty("parentId", out var p) && p.ValueKind == JsonValueKind.String ? p.GetGuid() : null,
+                    r.GetProperty("documentName").GetString() ?? "",
+                    r.GetProperty("remindAt").GetDateTimeOffset(),
+                    r.TryGetProperty("note", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null,
+                    r.GetProperty("recurrence").GetInt32(),
+                    r.TryGetProperty("recurrenceName", out var rn) ? rn.GetString() ?? "" : "",
+                    r.TryGetProperty("overdue", out var o) && o.ValueKind == JsonValueKind.True));
+            }
+        }
+
+        return list;
+    }
+
+    // The documents the caller follows (the dashboard's Following section).
+    public async Task<IReadOnlyList<DashFollowedInfo>> GetDashboardFollowingAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/subscriptions", cancellationToken);
+        var list = new List<DashFollowedInfo>();
+        if (json.TryGetProperty("followed", out var arr))
+        {
+            foreach (var f in arr.EnumerateArray())
+            {
+                list.Add(new DashFollowedInfo(
+                    f.GetProperty("documentId").GetGuid(),
+                    f.TryGetProperty("parentId", out var p) && p.ValueKind == JsonValueKind.String ? p.GetGuid() : null,
+                    f.GetProperty("documentName").GetString() ?? ""));
+            }
+        }
+
+        return list;
+    }
+
+    // Active tenant users the caller can target a reminder at (the picker).
+    public async Task<IReadOnlyList<UserOptionInfo>> GetReminderTargetsAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/reminders/targets", cancellationToken);
+        var list = new List<UserOptionInfo>();
+        if (json.TryGetProperty("targets", out var targets))
+        {
+            foreach (var u in targets.EnumerateArray())
+            {
+                list.Add(new UserOptionInfo(u.GetProperty("id").GetGuid(), u.GetProperty("displayName").GetString() ?? ""));
+            }
+        }
+
+        return list;
+    }
+
+    // The caller's pending reminders on the document (set by or targeted at them).
+    public async Task<IReadOnlyList<ReminderInfo>> GetRemindersAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/reminders", cancellationToken);
+        var list = new List<ReminderInfo>();
+        if (json.TryGetProperty("reminders", out var reminders))
+        {
+            foreach (var r in reminders.EnumerateArray())
+            {
+                list.Add(new ReminderInfo(
+                    r.GetProperty("id").GetGuid(),
+                    r.GetProperty("remindAt").GetDateTimeOffset(),
+                    r.TryGetProperty("note", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null,
+                    r.GetProperty("recurrence").GetInt32(),
+                    r.TryGetProperty("recurrenceName", out var rn) ? rn.GetString() ?? "" : "",
+                    r.TryGetProperty("targetName", out var tn) ? tn.GetString() ?? "" : ""));
+            }
+        }
+
+        return list;
+    }
+
+    // Sets a reminder; targetUserId null = the caller. Returns nothing on success, throws on a rejected request.
+    public async Task CreateReminderAsync(Guid documentId, DateTimeOffset remindAt, string? note, int recurrence, Guid? targetUserId, CancellationToken cancellationToken = default)
+    {
+        var body = new { remindAt, note, recurrence, targetUserId };
+        using var response = await _http.PostAsJsonAsync($"api/documents/{documentId}/reminders", body, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ApiActionException($"Could not set the reminder ({(int)response.StatusCode}).");
+        }
+    }
+
+    public async Task CancelReminderAsync(Guid documentId, Guid reminderId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync($"api/documents/{documentId}/reminders/{reminderId}", cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ApiActionException($"Could not cancel the reminder ({(int)response.StatusCode}).");
+        }
+    }
+
+    // Sets the given version's document (issuing) date ("yyyy-MM-dd").
+    public async Task SetDocumentDateAsync(Guid documentId, Guid versionId, string documentDate, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/versions/{versionId}/document-date", new { documentDate }, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ApiActionException($"Could not set the document date ({(int)response.StatusCode}).");
+        }
+    }
+
+    // The latest confirmed version's preview + download links plus whether the preview is a converted rendition.
+    public async Task<Preview> GetPreviewAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/versions", cancellationToken);
+        if (!response.TryGetProperty("versions", out var versions))
+        {
+            return new Preview(null, false, null, null, null, "");
+        }
+
+        JsonElement? latest = null;
+        var latestNumber = -1;
+        foreach (var version in versions.EnumerateArray())
+        {
+            if (version.GetProperty("status").GetString() != "Confirmed")
+            {
+                continue;
+            }
+
+            var number = version.TryGetProperty("versionNumber", out var vn) && vn.ValueKind == JsonValueKind.Number ? vn.GetInt32() : 0;
+            if (number >= latestNumber)
+            {
+                latestNumber = number;
+                latest = version;
+            }
+        }
+
+        if (latest is not { } confirmed)
+        {
+            return new Preview(null, false, null, null, null, "");
+        }
+
+        var converted = confirmed.TryGetProperty("previewConverted", out var pc) && pc.GetBoolean();
+        var extension = confirmed.TryGetProperty("fileExtension", out var fe) ? fe.GetString() ?? "" : "";
+        return new Preview(FindLink(confirmed, "preview"), converted, FindLink(confirmed, "download"), FindLink(confirmed, "text-layout"), FindLink(confirmed, "preview-pages"), extension, FindLink(confirmed, "annotations"));
+    }
+
+    // --- Sticky notes / annotations (ADR "Document annotations") ----------------------------------------
+
+    // The annotation list + whether the caller may create a note here (CanAnnotate, ADR "CanAnnotate right").
+    public sealed record AnnotationList(IReadOnlyList<AnnotationInfo> Items, bool CanCreate);
+
+    public async Task<AnnotationList> GetAnnotationsAsync(string annotationsUrl, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>(annotationsUrl.TrimStart('/'), cancellationToken);
+        var result = new List<AnnotationInfo>();
+        if (json.TryGetProperty("annotations", out var arr))
+        {
+            foreach (var a in arr.EnumerateArray())
+            {
+                result.Add(new AnnotationInfo(
+                    a.GetProperty("id").GetGuid(),
+                    a.GetProperty("pageIndex").GetInt32(),
+                    a.TryGetProperty("kind", out var k) ? k.GetInt32() : 0,
+                    a.GetProperty("positionX").GetDouble(),
+                    a.GetProperty("positionY").GetDouble(),
+                    a.TryGetProperty("width", out var w) && w.ValueKind == JsonValueKind.Number ? w.GetDouble() : null,
+                    a.TryGetProperty("height", out var h) && h.ValueKind == JsonValueKind.Number ? h.GetDouble() : null,
+                    a.GetProperty("text").GetString() ?? "",
+                    a.GetProperty("color").GetString() ?? "#FFEB3B",
+                    a.TryGetProperty("authorName", out var an) ? an.GetString() ?? "" : "",
+                    a.TryGetProperty("etag", out var et) ? et.GetString() ?? "" : "",
+                    a.TryGetProperty("canEdit", out var ce) && ce.GetBoolean(),
+                    a.TryGetProperty("canDelete", out var cd) && cd.GetBoolean()));
+            }
+        }
+
+        return new AnnotationList(result, json.TryGetProperty("canCreate", out var cc) && cc.GetBoolean());
+    }
+
+    public async Task CreateAnnotationAsync(string annotationsUrl, int pageIndex, double x, double y, string text, string color, CancellationToken cancellationToken = default)
+        => await CreateAnnotationAsync(annotationsUrl, pageIndex, 0, x, y, null, null, text, color, cancellationToken);
+
+    // Create a note (kind 0) or a markup shape (kind 1/2/3 with width/height) — ADR "Annotation markup".
+    public async Task CreateAnnotationAsync(string annotationsUrl, int pageIndex, int kind, double x, double y, double? width, double? height, string text, string color, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PostAsJsonAsync(annotationsUrl.TrimStart('/'), new { pageIndex, kind, positionX = x, positionY = y, width, height, text, color }, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ApiActionException("Could not add the markup.");
+        }
+    }
+
+    public async Task UpdateAnnotationAsync(string annotationsUrl, Guid id, int pageIndex, double x, double y, string text, string color, string etag, CancellationToken cancellationToken = default)
+        => await UpdateAnnotationAsync(annotationsUrl, id, pageIndex, x, y, null, null, text, color, etag, cancellationToken);
+
+    public async Task UpdateAnnotationAsync(string annotationsUrl, Guid id, int pageIndex, double x, double y, double? width, double? height, string text, string color, string etag, CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"{annotationsUrl.TrimStart('/')}/{id}")
+        {
+            Content = JsonContent.Create(new { pageIndex, positionX = x, positionY = y, width, height, text, color }),
+        };
+        request.Headers.TryAddWithoutValidation("If-Match", $"\"{etag}\"");
+        using var response = await _http.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ApiActionException("Could not save the note.");
+        }
+    }
+
+    public async Task DeleteAnnotationAsync(string annotationsUrl, Guid id, string etag, CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"{annotationsUrl.TrimStart('/')}/{id}");
+        request.Headers.TryAddWithoutValidation("If-Match", $"\"{etag}\"");
+        using var response = await _http.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ApiActionException("Could not delete the note.");
+        }
+    }
+
+    // Ordered per-page image URLs for a multi-page TIFF (ADR "Multi-page TIFF preview pages"); null (204) for
+    // every other format, where the caller uses the single preview URL.
+    public async Task<IReadOnlyList<string>?> GetPreviewPagesAsync(string previewPagesUrl, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.GetAsync(previewPagesUrl.TrimStart('/'), cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        if (!json.TryGetProperty("pages", out var pages) || pages.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var urls = new List<string>();
+        foreach (var page in pages.EnumerateArray())
+        {
+            if (page.TryGetProperty("url", out var url) && url.GetString() is { } u)
+            {
+                urls.Add(u);
+            }
+        }
+
+        return urls.Count > 0 ? urls : null;
+    }
+
+    // Fetches the per-page word boxes for hit-overlay (ADR "Search hit overlay"). textLayoutUrl is the version
+    // resource's `text-layout` link; a 204 (unsupported format / nothing recognized) yields null.
+    public async Task<TextLayoutInfo?> GetTextLayoutAsync(string textLayoutUrl, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.GetAsync(textLayoutUrl.TrimStart('/'), cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        if (!json.TryGetProperty("pages", out var pages) || pages.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var pageList = new List<TextLayoutPageInfo>();
+        foreach (var page in pages.EnumerateArray())
+        {
+            var words = new List<TextLayoutBox>();
+            if (page.TryGetProperty("words", out var wordArray) && wordArray.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var w in wordArray.EnumerateArray())
+                {
+                    words.Add(new TextLayoutBox(
+                        w.GetProperty("text").GetString() ?? "",
+                        w.GetProperty("x").GetDouble(),
+                        w.GetProperty("y").GetDouble(),
+                        w.GetProperty("width").GetDouble(),
+                        w.GetProperty("height").GetDouble()));
+                }
+            }
+
+            pageList.Add(new TextLayoutPageInfo(words));
+        }
+
+        return new TextLayoutInfo(pageList);
+    }
+
+    public string? GetDownloadUrl(Preview preview) => preview.DownloadUrl;
+
+    public Task<List<Comment>> GetCommentsAsync(Guid documentId, CancellationToken cancellationToken = default) =>
+        LoadPagedAsync($"api/documents/{documentId}/comments", "comments", ParseComment, cancellationToken);
+
+    public async Task PostCommentAsync(Guid documentId, string body, Guid? parentCommentId, CancellationToken cancellationToken = default)
+    {
+        var payload = parentCommentId is { } parent
+            ? new { body, parentCommentId = parent }
+            : (object)new { body };
+        using var response = await _http.PostAsJsonAsync($"api/documents/{documentId}/comments", payload, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Creates a folder = a child Document with no version (ADR 0175). Duplicate name -> 409, no permission -> 403.
+    public async Task CreateFolderAsync(Guid parentId, string name, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync($"api/documents/{parentId}/children", new { name }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException($"A folder or document named '{name}' already exists here.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to create a folder here.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // ---- Tenant-admin settings (ADR "Tenant-admin settings tab") -----------------------------------
+
+    public sealed record TenantSettingsInfo(Guid Id, string Name, string Status, DateTimeOffset CreatedAt, string DefaultOcrLanguages, int AuditRetentionDays, int CheckoutTtlDays, int CheckoutWarningDays, int WormLockMode, bool RequireMfa, bool AllowPasskeyLogin, bool RequireDispositionReview, bool RestrictTagsToCatalog, bool EnforceClearance, long? StorageQuotaBytes, long StorageUsedBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool AuditWebhookConfigured, int AuditWebhookConsecutiveFailures, DateTimeOffset? AuditWebhookLastSuccessAt, DateTimeOffset? AuditWebhookLastFailureAt, DateTimeOffset? AuditWebhookNextAttemptAt, string? AuditWebhookLastError);
+
+    private static DateTimeOffset? OptDate(JsonElement j, string name) =>
+        j.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetDateTimeOffset() : null;
+
+    private static TenantSettingsInfo ParseTenantSettings(JsonElement j) => new(
+        j.GetProperty("id").GetGuid(),
+        j.GetProperty("name").GetString() ?? "",
+        j.GetProperty("status").GetString() ?? "",
+        j.GetProperty("createdAt").GetDateTimeOffset(),
+        j.GetProperty("defaultOcrLanguages").GetString() ?? "",
+        j.TryGetProperty("auditRetentionDays", out var r) ? r.GetInt32() : 0,
+        j.TryGetProperty("checkoutTtlDays", out var c) ? c.GetInt32() : 0,
+        j.TryGetProperty("checkoutWarningDays", out var cw) ? cw.GetInt32() : 1,
+        j.TryGetProperty("wormLockMode", out var w) ? w.GetInt32() : 0,
+        j.TryGetProperty("requireMfa", out var m) && m.ValueKind == JsonValueKind.True,
+        j.TryGetProperty("allowPasskeyLogin", out var pk) && pk.ValueKind == JsonValueKind.True,
+        j.TryGetProperty("requireDispositionReview", out var dr) && dr.ValueKind == JsonValueKind.True,
+        j.TryGetProperty("restrictTagsToCatalog", out var rt) && rt.ValueKind == JsonValueKind.True,
+        j.TryGetProperty("enforceClearance", out var ec) && ec.ValueKind == JsonValueKind.True,
+        j.TryGetProperty("storageQuotaBytes", out var sq) && sq.ValueKind == JsonValueKind.Number ? sq.GetInt64() : null,
+        j.TryGetProperty("storageUsedBytes", out var su) && su.ValueKind == JsonValueKind.Number ? su.GetInt64() : 0,
+        j.TryGetProperty("incompleteUploadCleanupDays", out var iu) ? iu.GetInt32() : 0,
+        j.TryGetProperty("auditWebhookUrl", out var u) && u.ValueKind == JsonValueKind.String ? u.GetString() : null,
+        j.TryGetProperty("auditWebhookConfigured", out var cf) && cf.ValueKind == JsonValueKind.True,
+        j.TryGetProperty("auditWebhookConsecutiveFailures", out var f) ? f.GetInt32() : 0,
+        OptDate(j, "auditWebhookLastSuccessAt"),
+        OptDate(j, "auditWebhookLastFailureAt"),
+        OptDate(j, "auditWebhookNextAttemptAt"),
+        j.TryGetProperty("auditWebhookLastError", out var le) && le.ValueKind == JsonValueKind.String ? le.GetString() : null);
+
+    public async Task<TenantSettingsInfo> GetTenantSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        var j = await _http.GetFromJsonAsync<JsonElement>("api/tenant-settings", cancellationToken);
+        return ParseTenantSettings(j);
+    }
+
+    // Sends a synthetic test event to the tenant's saved SIEM webhook (ADR "Audit webhook test delivery") — returns
+    // whether the endpoint accepted it + the error on failure.
+    public async Task<(bool Success, string? Error)> TestAuditWebhookAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync("api/tenant-settings/audit-webhook/test", null, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            throw new ApiActionException("Save the webhook URL + secret before sending a test.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to test the audit webhook.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        var j = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return (j.GetProperty("success").GetBoolean(),
+            j.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null);
+    }
+
+    // Rebuilds the tenant's used-storage counter from the actual stored blobs (ADR "Per-tenant storage quota").
+    public async Task<TenantSettingsInfo> RecomputeStorageAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync("api/tenant-settings/recompute-storage", null, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to recompute storage usage.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        var j = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return ParseTenantSettings(j);
+    }
+
+    public async Task<TenantSettingsInfo> SetTenantSettingsAsync(string name, string defaultOcrLanguages, int auditRetentionDays, int checkoutTtlDays, int checkoutWarningDays, int wormLockMode, bool requireMfa, bool allowPasskeyLogin, bool requireDispositionReview, bool restrictTagsToCatalog, bool enforceClearance, long? storageQuotaBytes, int incompleteUploadCleanupDays, string? auditWebhookUrl, string? auditWebhookSecret, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PutAsJsonAsync("api/tenant-settings", new { name, defaultOcrLanguages, auditRetentionDays, checkoutTtlDays, checkoutWarningDays, wormLockMode, requireMfa, allowPasskeyLogin, requireDispositionReview, restrictTagsToCatalog, enforceClearance, storageQuotaBytes, incompleteUploadCleanupDays, auditWebhookUrl, auditWebhookSecret }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException("Another active tenant already uses this name.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            throw new ApiActionException("Check the name, OCR languages, retention value and the webhook URL/secret.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to manage tenant settings.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        var j = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return ParseTenantSettings(j);
+    }
+
+    public async Task CreateRepositoryAsync(string name, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync("api/repositories", new { name }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException($"A repository named '{name}' already exists.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to create repositories.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Renames a document/folder. Both this and DeleteAsync require an If-Match ETag (ADR 0188), fetched via
+    // a HEAD first. 409 = duplicate sibling name, 403 = no permission (CanEditIndexData), 412 = changed since
+    // it was loaded.
+    public async Task RenameAsync(Guid documentId, string newName, CancellationToken cancellationToken = default)
+    {
+        var etag = await GetETagAsync(documentId, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"api/documents/{documentId}")
+        {
+            Content = JsonContent.Create(new { name = newName }),
+        };
+        if (etag is not null)
+        {
+            request.Headers.IfMatch.Add(etag);
+        }
+
+        using var response = await _http.SendAsync(request, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException($"A folder or document named '{newName}' already exists here.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to rename this item.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.PreconditionFailed)
+        {
+            throw new ApiActionException("This item changed since you loaded it — refresh and try again.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Soft-deletes a document/folder to the recycle bin (a folder cascades to its whole subtree, ADR 0196).
+    // Requires If-Match (ADR 0188). 403 = no permission (CanDelete), 412 = changed since it was loaded.
+    public async Task DeleteAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var etag = await GetETagAsync(documentId, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"api/documents/{documentId}");
+        if (etag is not null)
+        {
+            request.Headers.IfMatch.Add(etag);
+        }
+
+        using var response = await _http.SendAsync(request, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to delete this item.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.PreconditionFailed)
+        {
+            throw new ApiActionException("This item changed since you loaded it — refresh and try again.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Restores a soft-deleted document/folder (and its cascade-deleted descendants). Idempotent, no If-Match
+    // (ADR 0196). 403 = no permission (CanDelete).
+    public async Task RestoreAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync($"api/documents/{documentId}/restore", null, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to restore this item.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Every deleted Document at any depth under a repository root (ADR 0196).
+    public Task<List<RecycleBinItem>> GetRecycleBinAsync(Guid repositoryId, CancellationToken cancellationToken = default) =>
+        LoadPagedAsync($"api/repositories/{repositoryId}/recycle-bin", "items", ParseRecycleBinItem, cancellationToken);
+
+    // Permanently purges a recycle-bin item + its subtree (ADR "Manual hard-delete / purge") — tenant-admin only.
+    public async Task PurgeAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync($"api/documents/{documentId}/purge", null, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("Only a tenant administrator can permanently purge items.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException("This item is under a legal hold and cannot be purged.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Empties a repository's recycle bin — permanently purges every item in it (ADR "Manual hard-delete / purge").
+    public async Task EmptyRecycleBinAsync(Guid repositoryId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync($"api/repositories/{repositoryId}/recycle-bin/purge", null, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("Only a tenant administrator can empty the recycle bin.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // One soft-deleted document in the tenant-wide recycle bin (ADR "Recycle bin tab" / "Desktop recycle bin
+    // parity"): its name, full path, when it was deleted, and by whom (from the audit trail).
+    public sealed record RecycleBinEntry(Guid Id, string Name, string Path, DateTimeOffset DeletedAt, string DeletedBy);
+
+    // Every soft-deleted document the caller can see, tenant-wide (ADR "Recycle bin tab") — capped at 500 by the
+    // Api (Truncated flag ignored here; the tab tells the user if more exist via the status line).
+    public async Task<List<RecycleBinEntry>> GetRecycleBinItemsAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await _http.GetFromJsonAsync<JsonElement>("api/recycle-bin", cancellationToken);
+        var items = new List<RecycleBinEntry>();
+        if (response.TryGetProperty("items", out var array))
+        {
+            foreach (var item in array.EnumerateArray())
+            {
+                items.Add(new RecycleBinEntry(
+                    item.GetProperty("id").GetGuid(),
+                    item.GetProperty("name").GetString() ?? "",
+                    item.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "",
+                    item.GetProperty("deletedAt").GetDateTimeOffset(),
+                    item.TryGetProperty("deletedBy", out var db) ? db.GetString() ?? "—" : "—"));
+            }
+        }
+
+        return items;
+    }
+
+    // Empties the whole tenant-wide recycle bin — permanently purges every soft-deleted document (ADR "Recycle
+    // bin tab") — tenant-admin only.
+    public async Task PurgeRecycleBinAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync("api/recycle-bin/purge", null, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("Only a tenant administrator can empty the recycle bin.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Bulk restore (ADR "Bulk restore from the recycle bin") — restores each requested soft-deleted document +
+    // its subtree in one call; returns how many were restored vs skipped (already active / gone / not permitted).
+    public async Task<(int Restored, int Skipped)> RestoreManyAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync("api/recycle-bin/restore", new { ids }, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return (json.GetProperty("restored").GetInt32(), json.GetProperty("skipped").GetInt32());
+    }
+
+    // Bulk purge of selected items (ADR "Bulk purge of selected recycle-bin items") — tenant-admin; permanently
+    // removes each requested recycle-bin root + subtree; returns purged vs skipped (gone / active / held / WORM).
+    public async Task<(int Purged, int Skipped)> PurgeManyAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync("api/recycle-bin/purge-selected", new { ids }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("Only a tenant administrator can purge items.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return (json.GetProperty("purged").GetInt32(), json.GetProperty("skipped").GetInt32());
+    }
+
+    // The references (shortcuts) filed in a folder — see ADR "Desktop drag-and-drop move and reference".
+    public Task<List<Reference>> GetReferencesAsync(Guid folderId, CancellationToken cancellationToken = default) =>
+        LoadPagedAsync($"api/documents/{folderId}/references", "references", ParseReference, cancellationToken);
+
+    // The folders that reference a given item (with full paths) — see ADR "References-of-an-item list".
+    public Task<List<ReferencingFolder>> GetReferencingFoldersAsync(Guid documentId, CancellationToken cancellationToken = default) =>
+        LoadPagedAsync($"api/documents/{documentId}/referencing-folders", "folders", ParseReferencingFolder, cancellationToken);
+
+    // Free-text metadata search across the tenant (names + index-field values) — see ADR "Metadata search
+    // (first slice)". Follows the next links to load all pages.
+    public Task<List<SearchResult>> SearchAsync(string query, CancellationToken cancellationToken = default) =>
+        LoadPagedAsync($"api/search?q={Uri.EscapeDataString(query)}", "results", ParseSearchResult, cancellationToken);
+
+    // Runs a search from a pre-assembled query string (q + repositoryId + system[..]/fields[..] filters) —
+    // see ADR "Search-refinement UI".
+    public Task<List<SearchResult>> SearchWithFiltersAsync(string queryString, CancellationToken cancellationToken = default) =>
+        LoadPagedAsync($"api/search?{queryString}", "results", ParseSearchResult, cancellationToken);
+
+    // Search facets (ADR "Search facets") — document type / created-by / year counts to drill down by.
+    public sealed record SearchFacetBucket(string Value, long Count);
+    public sealed record SearchFieldFacet(string Name, IReadOnlyList<SearchFacetBucket> Buckets);
+    public sealed record SearchFacets(IReadOnlyList<SearchFacetBucket> DocumentTypes, IReadOnlyList<SearchFacetBucket> CreatedBy, IReadOnlyList<SearchFacetBucket> Years, IReadOnlyList<SearchFacetBucket> Tags, IReadOnlyList<SearchFacetBucket> FileTypes, IReadOnlyList<SearchFacetBucket> SensitivityLabels, IReadOnlyList<SearchFieldFacet> Fields);
+    public sealed record SearchResults(IReadOnlyList<SearchResult> Results, SearchFacets Facets);
+
+    // Like SearchWithFiltersAsync but also returns the facet counts (from the first page — they're the same
+    // across pages), for the refinement panel.
+    public async Task<SearchResults> SearchWithFacetsAsync(string queryString, CancellationToken cancellationToken = default)
+    {
+        var results = new List<SearchResult>();
+        var facets = new SearchFacets([], [], [], [], [], [], []);
+        string? next = $"api/search?{queryString}";
+        var first = true;
+        while (next is not null)
+        {
+            var page = await _http.GetFromJsonAsync<JsonElement>(next, cancellationToken);
+            if (page.TryGetProperty("results", out var array))
+            {
+                results.AddRange(array.EnumerateArray().Select(ParseSearchResult));
+            }
+
+            if (first)
+            {
+                facets = ParseFacets(page);
+                first = false;
+            }
+
+            next = FindLink(page, "next");
+        }
+
+        return new SearchResults(results, facets);
+    }
+
+    private static SearchFacets ParseFacets(JsonElement page)
+    {
+        if (!page.TryGetProperty("facets", out var f) || f.ValueKind != JsonValueKind.Object)
+        {
+            return new SearchFacets([], [], [], [], [], [], []);
+        }
+
+        static IReadOnlyList<SearchFacetBucket> BucketsOf(JsonElement arr)
+        {
+            var list = new List<SearchFacetBucket>();
+            if (arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var b in arr.EnumerateArray())
+                {
+                    list.Add(new SearchFacetBucket(b.GetProperty("value").GetString() ?? "", b.GetProperty("count").GetInt64()));
+                }
+            }
+
+            return list;
+        }
+
+        static IReadOnlyList<SearchFacetBucket> Buckets(JsonElement facets, string group) =>
+            facets.TryGetProperty(group, out var arr) ? BucketsOf(arr) : [];
+
+        var fields = new List<SearchFieldFacet>();
+        if (f.TryGetProperty("fields", out var fieldArr) && fieldArr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var ff in fieldArr.EnumerateArray())
+            {
+                fields.Add(new SearchFieldFacet(
+                    ff.GetProperty("name").GetString() ?? "",
+                    ff.TryGetProperty("buckets", out var b) ? BucketsOf(b) : []));
+            }
+        }
+
+        return new SearchFacets(Buckets(f, "documentTypes"), Buckets(f, "createdBy"), Buckets(f, "years"), Buckets(f, "tags"), Buckets(f, "fileTypes"), Buckets(f, "sensitivityLabels"), fields);
+    }
+
+    // ---- Saved searches (ADR "Saved searches") ------------------------------------------------------
+
+    // ShareScope: 0 = Private, 1 = Everyone, 2 = Specific (ADR "Scoped saved-search sharing").
+    public sealed record SavedSearchInfo(Guid Id, string Name, string QueryString, int ShareScope, bool IsMine, string OwnerName)
+    {
+        public bool IsEveryone => ShareScope == 1;
+        public bool IsSpecific => ShareScope == 2;
+    }
+
+    public sealed record ShareTargetInfo(string Type, Guid Id, string Name);
+    public sealed record ShareGrantInfo(string PrincipalType, Guid PrincipalId);
+
+    public async Task<List<SavedSearchInfo>> GetSavedSearchesAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/saved-searches", cancellationToken);
+        var list = new List<SavedSearchInfo>();
+        if (json.TryGetProperty("savedSearches", out var arr))
+        {
+            foreach (var s in arr.EnumerateArray())
+            {
+                list.Add(new SavedSearchInfo(
+                    s.GetProperty("id").GetGuid(),
+                    s.GetProperty("name").GetString() ?? "",
+                    s.GetProperty("queryString").GetString() ?? "",
+                    s.TryGetProperty("shareScope", out var sc) ? sc.GetInt32() : 0,
+                    !s.TryGetProperty("isMine", out var mine) || mine.ValueKind != JsonValueKind.False,
+                    s.TryGetProperty("ownerName", out var on) ? on.GetString() ?? "" : ""));
+            }
+        }
+
+        return list;
+    }
+
+    // The picker options (active users + groups) for the share dialog.
+    public async Task<List<ShareTargetInfo>> GetShareTargetsAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/saved-searches/share-targets", cancellationToken);
+        var list = new List<ShareTargetInfo>();
+        if (json.TryGetProperty("users", out var users))
+        {
+            foreach (var u in users.EnumerateArray())
+            {
+                list.Add(new ShareTargetInfo("user", u.GetProperty("id").GetGuid(), u.GetProperty("displayName").GetString() ?? ""));
+            }
+        }
+
+        if (json.TryGetProperty("groups", out var groups))
+        {
+            foreach (var g in groups.EnumerateArray())
+            {
+                list.Add(new ShareTargetInfo("group", g.GetProperty("id").GetGuid(), g.GetProperty("name").GetString() ?? ""));
+            }
+        }
+
+        return list;
+    }
+
+    // The current specific-principal grants on my search (owner-only).
+    public async Task<List<ShareGrantInfo>> GetSavedSearchSharesAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/saved-searches/{id}/shares", cancellationToken);
+        var list = new List<ShareGrantInfo>();
+        if (json.TryGetProperty("shares", out var arr))
+        {
+            foreach (var g in arr.EnumerateArray())
+            {
+                list.Add(new ShareGrantInfo(g.GetProperty("principalType").GetString() ?? "", g.GetProperty("principalId").GetGuid()));
+            }
+        }
+
+        return list;
+    }
+
+    public async Task SaveSearchAsync(string name, string queryString, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync("api/saved-searches", new { name, queryString }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException("You already have a saved search with that name.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Set the scope + specific-principal grants on my own saved search (ADR "Scoped saved-search sharing") —
+    // owner-only PUT. shares carries the ("user"|"group", id) principals (only applied when scope == Specific).
+    public async Task SetSavedSearchShareAsync(SavedSearchInfo search, int shareScope, IReadOnlyList<(string Type, Guid Id)> shares, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PutAsJsonAsync(
+            $"api/saved-searches/{search.Id}",
+            new { name = search.Name, queryString = search.QueryString, shareScope, shares = shares.Select(s => new { type = s.Type, id = s.Id }) },
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task DeleteSavedSearchAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync($"api/saved-searches/{id}", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    // The tenant's distinct index-field names + types, for the refinement UI's field picker.
+    public sealed record SearchField(string Name, int DataType);
+
+    public async Task<IReadOnlyList<SearchField>> GetSearchFieldsAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/search/fields", cancellationToken);
+        var fields = new List<SearchField>();
+        if (json.TryGetProperty("fields", out var array))
+        {
+            foreach (var f in array.EnumerateArray())
+            {
+                fields.Add(new SearchField(
+                    f.GetProperty("name").GetString() ?? "",
+                    f.TryGetProperty("dataType", out var dataType) ? dataType.GetInt32() : 0));
+            }
+        }
+
+        return fields;
+    }
+
+    // Moves (reparents) an item into another folder. Requires If-Match (like rename/delete), fetched via a
+    // HEAD. 400 = into its own subtree, 403 = no permission (CanMove/CanCreateSubItems), 409 = name clash.
+    public async Task MoveAsync(Guid documentId, Guid newParentId, CancellationToken cancellationToken = default)
+    {
+        var etag = await GetETagAsync(documentId, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"api/documents/{documentId}/parent")
+        {
+            Content = JsonContent.Create(new { parentId = newParentId }),
+        };
+        if (etag is not null)
+        {
+            request.Headers.IfMatch.Add(etag);
+        }
+
+        using var response = await _http.SendAsync(request, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            throw new ApiActionException("Can't move an item into itself or one of its own sub-folders.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to move this item here.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException("An item with that name already exists in the target folder.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.PreconditionFailed)
+        {
+            throw new ApiActionException("This item changed since you loaded it — refresh and try again.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Files a reference (shortcut) to an item into a folder. 400 = into its own subtree, 403 = no permission,
+    // 409 = already referenced here.
+    // Duplicate detection (ADR "Duplicate document detection") — documents whose latest confirmed version is
+    // byte-identical to the given SHA-256, ACL-filtered. Used to warn before an upload.
+    public sealed record DuplicateInfo(Guid Id, string Name, string Path);
+
+    public async Task<List<DuplicateInfo>> FindDuplicatesAsync(string hash, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/duplicates?hash={hash}", cancellationToken);
+        var list = new List<DuplicateInfo>();
+        if (json.TryGetProperty("duplicates", out var arr))
+        {
+            foreach (var d in arr.EnumerateArray())
+            {
+                list.Add(new DuplicateInfo(
+                    d.GetProperty("id").GetGuid(),
+                    d.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "",
+                    d.TryGetProperty("path", out var p) ? p.GetString() ?? "" : ""));
+            }
+        }
+
+        return list;
+    }
+
+    public async Task CreateReferenceAsync(Guid folderId, Guid targetId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync($"api/documents/{folderId}/references", new { targetId }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            throw new ApiActionException("Can't reference an item into itself or one of its own sub-folders.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to place a reference here.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException("This item is already referenced in that folder.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Removes a reference (the shortcut only, never the target).
+    public async Task DeleteReferenceAsync(Guid folderId, Guid referenceId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync($"api/documents/{folderId}/references/{referenceId}", cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to remove this reference.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Reads the current ETag (a HEAD, cheaper than GET) so a rename/delete can send it as If-Match.
+    private async Task<EntityTagHeaderValue?> GetETagAsync(Guid documentId, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Head, $"api/documents/{documentId}");
+        using var response = await _http.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return response.Headers.ETag;
+    }
+
+    // Uploads a file into a folder, mirroring the web client's drag-drop flow (ADR 0216): create the child
+    // Document, create a Pending version, PUT the bytes straight to the presigned URL (never proxied), then
+    // finalise (server hashes + assigns the version number). The server assigns the mask at finalize (eMail
+    // for .eml/.msg, else Basic Entry — ADR "Email auto-classification"), so the client doesn't classify.
+    // Returns the created document's id. An optional feed comment is posted on it after finalize (ADR "Filing
+    // posts a feed comment") — used by list-pane drop filing into a folder (ADR "List-pane drop filing").
+    public async Task<Guid> UploadFileAsync(Guid folderId, string fileName, byte[] bytes, string? comment = null, CancellationToken cancellationToken = default)
+    {
+        // Document.Name is the stem (no extension); the extension rides on the version's object key (ADR
+        // "Extension off Document.Name, derived from the object key").
+        var name = Path.GetFileNameWithoutExtension(fileName);
+        var extension = Path.GetExtension(fileName);
+
+        using var createResponse = await _http.PostAsJsonAsync($"api/documents/{folderId}/children", new { name }, cancellationToken);
+        if (createResponse.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException($"'{fileName}': a document with that name already exists here.");
+        }
+
+        if (createResponse.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException($"'{fileName}': you don't have permission to upload here.");
+        }
+
+        createResponse.EnsureSuccessStatusCode();
+        var documentId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken)).GetProperty("id").GetGuid();
+
+        using var versionResponse = await _http.PostAsJsonAsync($"api/documents/{documentId}/versions", new { fileExtension = extension }, cancellationToken);
+        versionResponse.EnsureSuccessStatusCode();
+        var version = await versionResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        var versionId = version.GetProperty("id").GetGuid();
+        var uploadUrl = version.GetProperty("uploadUrl").GetString()!;
+
+        using var uploadContent = new ByteArrayContent(bytes);
+        uploadContent.Headers.ContentType = new MediaTypeHeaderValue(GuessContentType(fileName));
+        using var uploadResponse = await Anonymous.PutAsync(uploadUrl, uploadContent, cancellationToken);
+        uploadResponse.EnsureSuccessStatusCode();
+
+        using var finalizeResponse = await _http.PutAsync($"api/documents/{documentId}/versions/{versionId}", null, cancellationToken);
+        finalizeResponse.EnsureSuccessStatusCode();
+
+        // The server assigns the mask at finalize (eMail for .eml/.msg, else Basic Entry) — ADR "Email
+        // auto-classification"; the client no longer classifies.
+
+        if (!string.IsNullOrWhiteSpace(comment))
+        {
+            try { await PostCommentAsync(documentId, comment.Trim(), null, cancellationToken); }
+            catch (Exception) { /* best-effort feed comment, ADR "Filing posts a feed comment" */ }
+        }
+
+        return documentId;
+    }
+
+    // ---- Check-out / check-in (ADR "Document check-out / check-in") -----------------------------------
+
+    public sealed record CheckoutItem(Guid Id, string Name, string Path, string Sha256, string FileExtension, bool HasStash, string? StashDownloadUrl, DateTimeOffset? ExpiresAt);
+
+    // Acquire the exclusive edit lock. 409 = already held by someone else; 403 = no permission / not a User.
+    public async Task CheckOutAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PutAsync($"api/documents/{documentId}/checkout", null, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException("This document is already checked out by another user.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to check out this document.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Release the lock — used for check-in / unlock / discard (the holder) and override (a CanOverrideCheckout
+    // holder force-releasing someone else's). Idempotent when not checked out.
+    public async Task CheckInAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync($"api/documents/{documentId}/checkout", cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to release this check-out.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // "Extend my check-out" (ADR "Self-service check-out extension") — resets the auto-release idle timer. The
+    // holder or a CanOverrideCheckout admin; 409 if the document isn't checked out.
+    public async Task ExtendCheckoutAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync($"api/checkouts/{documentId}/extend", null, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to extend this check-out.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // The caller's currently checked-out documents (tenant-wide), each with the current version's SHA-256.
+    public async Task<List<CheckoutItem>> GetCheckoutsAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/checkouts", cancellationToken);
+        var items = new List<CheckoutItem>();
+        if (json.TryGetProperty("items", out var arr))
+        {
+            foreach (var i in arr.EnumerateArray())
+            {
+                items.Add(new CheckoutItem(
+                    i.GetProperty("id").GetGuid(),
+                    i.GetProperty("name").GetString() ?? "",
+                    i.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "",
+                    i.TryGetProperty("sha256", out var s) ? s.GetString() ?? "" : "",
+                    i.TryGetProperty("fileExtension", out var fe) ? fe.GetString() ?? "" : "",
+                    i.TryGetProperty("hasStash", out var hst) && hst.ValueKind == JsonValueKind.True,
+                    i.TryGetProperty("stashDownloadUrl", out var sdu) && sdu.ValueKind == JsonValueKind.String ? sdu.GetString() : null,
+                    i.TryGetProperty("expiresAt", out var ea) && ea.ValueKind == JsonValueKind.String ? ea.GetDateTimeOffset() : null));
+            }
+        }
+
+        return items;
+    }
+
+    // "Save to cloud" — uploads the in-progress working copy to the S3 stash so it survives logout/close and is
+    // re-downloaded on next login (ADR "Check-out working-copy stash + exit guard"). Holder-only server-side.
+    public async Task SaveWorkingCopyAsync(Guid documentId, byte[] bytes, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync($"api/checkouts/{documentId}/working-copy", new { }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't hold the check-out on this document.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        var uploadUrl = (await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken)).GetProperty("uploadUrl").GetString()!;
+
+        using var content = new ByteArrayContent(bytes);
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        using var upload = await Anonymous.PutAsync(uploadUrl, content, cancellationToken);
+        upload.EnsureSuccessStatusCode();
+    }
+
+    // Downloads the cloud working-copy stash bytes (restoring in-progress edits on login).
+    public async Task<byte[]> DownloadStashAsync(string stashDownloadUrl, CancellationToken cancellationToken = default)
+    {
+        var (bytes, _) = await DownloadAsync(stashDownloadUrl, cancellationToken);
+        return bytes;
+    }
+
+    // Downloads the current confirmed version's bytes (for writing to the local checkout working copy).
+    public async Task<byte[]> DownloadCurrentVersionAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var preview = await GetPreviewAsync(documentId, cancellationToken);
+        if (preview.DownloadUrl is null)
+        {
+            throw new ApiActionException("This document has no downloadable version.");
+        }
+
+        var (bytes, _) = await DownloadAsync(preview.DownloadUrl, cancellationToken);
+        return bytes;
+    }
+
+    // ---- Version comparison (ADR "Document version comparison") ----
+    public sealed record VersionInfo(Guid Id, int? VersionNumber, string Status, string FileExtension, string? DownloadUrl,
+        string DocumentDate = "", DateTimeOffset CreatedAt = default, string CreatedByName = "");
+    public sealed record DiffLineInfo(int Op, string Text);
+    public sealed record VersionComparison(bool Available, List<DiffLineInfo> Lines);
+
+    // Restores (rolls back to) an earlier version (ADR "Version restore") — creates a new current version from
+    // its content. Throws on a rejected request (403 no edit rights, 409 workflow/hold/checkout).
+    public async Task RestoreVersionAsync(Guid documentId, Guid versionId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync($"api/documents/{documentId}/versions/{versionId}/restore", null, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var reason = response.StatusCode == HttpStatusCode.Conflict
+                ? "the document is under a workflow, legal hold, or checked out"
+                : $"HTTP {(int)response.StatusCode}";
+            throw new ApiActionException($"Could not restore this version ({reason}).");
+        }
+    }
+
+    // The confirmed versions of a document (newest first), each with its presigned download URL.
+    public async Task<List<VersionInfo>> GetVersionsAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/versions", cancellationToken);
+        var list = new List<VersionInfo>();
+        if (json.TryGetProperty("versions", out var arr))
+        {
+            foreach (var v in arr.EnumerateArray())
+            {
+                string? download = null;
+                if (v.TryGetProperty("links", out var links))
+                {
+                    foreach (var l in links.EnumerateArray())
+                    {
+                        if (l.GetProperty("rel").GetString() == "download") { download = l.GetProperty("href").GetString(); }
+                    }
+                }
+
+                list.Add(new VersionInfo(
+                    v.GetProperty("id").GetGuid(),
+                    v.TryGetProperty("versionNumber", out var n) && n.ValueKind == JsonValueKind.Number ? n.GetInt32() : null,
+                    v.TryGetProperty("status", out var s) ? s.GetString() ?? "" : "",
+                    v.TryGetProperty("fileExtension", out var fe) ? fe.GetString() ?? "" : "",
+                    download,
+                    v.TryGetProperty("documentDate", out var dd) ? dd.GetString() ?? "" : "",
+                    v.TryGetProperty("createdAt", out var ca) && ca.ValueKind == JsonValueKind.String ? ca.GetDateTimeOffset() : default,
+                    v.TryGetProperty("createdByName", out var cb) ? cb.GetString() ?? "" : ""));
+            }
+        }
+
+        return list.Where(v => v.Status == "Confirmed").OrderByDescending(v => v.VersionNumber ?? 0).ToList();
+    }
+
+    public async Task<VersionComparison> GetVersionComparisonAsync(Guid documentId, Guid fromVersionId, Guid toVersionId, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/versions/{fromVersionId}/compare/{toVersionId}", cancellationToken);
+        var lines = new List<DiffLineInfo>();
+        if (json.TryGetProperty("lines", out var arr))
+        {
+            foreach (var l in arr.EnumerateArray())
+            {
+                lines.Add(new DiffLineInfo(l.GetProperty("op").GetInt32(), l.GetProperty("text").GetString() ?? ""));
+            }
+        }
+
+        return new VersionComparison(json.TryGetProperty("available", out var a) && a.ValueKind == JsonValueKind.True, lines);
+    }
+
+    // A specific version's bytes (via its presigned download URL) — used to stage both versions to temp files for
+    // an external diff tool (Beyond Compare).
+    public async Task<byte[]> DownloadVersionBytesAsync(string downloadUrl, CancellationToken cancellationToken = default)
+    {
+        var (bytes, _) = await DownloadAsync(downloadUrl, cancellationToken);
+        return bytes;
+    }
+
+    // Uploads bytes as a NEW version of an existing document (the check-in upload) — POST /versions → PUT bytes
+    // → finalize. Distinct from UploadFileAsync, which creates a new document.
+    public async Task UploadNewVersionAsync(Guid documentId, byte[] bytes, string fileExtension, string? comment = null, CancellationToken cancellationToken = default)
+    {
+        using var versionResponse = await _http.PostAsJsonAsync($"api/documents/{documentId}/versions", new { fileExtension }, cancellationToken);
+        if (versionResponse.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException("This document is checked out by another user or under a legal hold.");
+        }
+
+        versionResponse.EnsureSuccessStatusCode();
+        var version = await versionResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        var versionId = version.GetProperty("id").GetGuid();
+        var uploadUrl = version.GetProperty("uploadUrl").GetString()!;
+
+        using var uploadContent = new ByteArrayContent(bytes);
+        uploadContent.Headers.ContentType = new MediaTypeHeaderValue(GuessContentType($"x{fileExtension}"));
+        using var uploadResponse = await Anonymous.PutAsync(uploadUrl, uploadContent, cancellationToken);
+        uploadResponse.EnsureSuccessStatusCode();
+
+        using var finalizeResponse = await _http.PutAsync($"api/documents/{documentId}/versions/{versionId}", null, cancellationToken);
+        finalizeResponse.EnsureSuccessStatusCode();
+
+        // Optional feed comment (ADR "Filing posts a feed comment") — used by list-pane drop-as-version.
+        if (!string.IsNullOrWhiteSpace(comment))
+        {
+            try { await PostCommentAsync(documentId, comment.Trim(), null, cancellationToken); }
+            catch (Exception) { /* best-effort */ }
+        }
+    }
+
+    private static string GuessContentType(string fileName) => Path.GetExtension(fileName).ToLowerInvariant() switch
+    {
+        ".txt" => "text/plain",
+        ".csv" => "text/csv",
+        ".md" or ".markdown" => "text/markdown",
+        ".html" or ".htm" => "text/html",
+        ".json" => "application/json",
+        ".xml" => "application/xml",
+        ".pdf" => "application/pdf",
+        ".png" => "image/png",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".gif" => "image/gif",
+        ".tif" or ".tiff" => "image/tiff",
+        ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ".odt" => "application/vnd.oasis.opendocument.text",
+        ".ods" => "application/vnd.oasis.opendocument.spreadsheet",
+        ".eml" => "message/rfc822",
+        ".msg" => "application/vnd.ms-outlook",
+        _ => "application/octet-stream",
+    };
+
+    // Fetches a preview/download URL's bytes (a presigned URL — no auth) plus its content-type.
+    public static async Task<(byte[] Bytes, string ContentType)> DownloadAsync(string url, CancellationToken cancellationToken = default)
+    {
+        using var response = await Anonymous.GetAsync(url, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        return (bytes, response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream");
+    }
+
+    private async Task<List<T>> LoadPagedAsync<T>(string url, string arrayProperty, Func<JsonElement, T> parse, CancellationToken cancellationToken)
+    {
+        var items = new List<T>();
+        string? next = url;
+
+        while (next is not null)
+        {
+            var page = await _http.GetFromJsonAsync<JsonElement>(next, cancellationToken);
+            if (page.TryGetProperty(arrayProperty, out var array))
+            {
+                items.AddRange(array.EnumerateArray().Select(parse));
+            }
+
+            next = FindLink(page, "next");
+        }
+
+        return items;
+    }
+
+    private static Node ParseNode(JsonElement item) => new(
+        item.GetProperty("id").GetGuid(),
+        item.GetProperty("name").GetString() ?? "",
+        item.TryGetProperty("hasChildren", out var hc) && hc.GetBoolean(),
+        item.TryGetProperty("hasVersions", out var hv) && hv.GetBoolean(),
+        item.TryGetProperty("hasSubfolders", out var hs) && hs.GetBoolean(),
+        item.TryGetProperty("hasReferences", out var hr) && hr.GetBoolean(),
+        item.TryGetProperty("onLegalHold", out var lh) && lh.ValueKind == JsonValueKind.True,
+        item.TryGetProperty("checkedOut", out var co) && co.ValueKind == JsonValueKind.True,
+        item.TryGetProperty("checkedOutByMe", out var com) && com.ValueKind == JsonValueKind.True,
+        item.TryGetProperty("checkedOutByName", out var con) ? con.GetString() ?? "" : "",
+        // List-row columns (ADR "List-row columns and sorting").
+        item.TryGetProperty("documentType", out var dt) ? dt.GetString() ?? "" : "",
+        item.TryGetProperty("documentDate", out var dd) && dd.ValueKind == JsonValueKind.String && DateOnly.TryParse(dd.GetString(), out var date) ? date : null,
+        item.TryGetProperty("sizeBytes", out var sz) && sz.ValueKind == JsonValueKind.Number ? sz.GetInt64() : null,
+        item.TryGetProperty("tags", out var tg) && tg.ValueKind == JsonValueKind.Array ? tg.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s.Length > 0).ToList() : [],
+        item.TryGetProperty("sensitivityLabelName", out var sln) ? sln.GetString() ?? "" : "",
+        item.TryGetProperty("sensitivityLabelColor", out var slc) && slc.ValueKind == JsonValueKind.String ? slc.GetString() : null,
+        item.TryGetProperty("versionCount", out var vc) && vc.ValueKind == JsonValueKind.Number ? vc.GetInt32() : 0);
+
+    private static SearchResult ParseSearchResult(JsonElement item) => new(
+        item.GetProperty("id").GetGuid(),
+        item.GetProperty("name").GetString() ?? "",
+        item.TryGetProperty("isFolder", out var f) && f.GetBoolean(),
+        item.TryGetProperty("parentId", out var p) && p.ValueKind != JsonValueKind.Null ? p.GetGuid() : null,
+        item.TryGetProperty("path", out var path) ? path.GetString() ?? "" : "",
+        item.TryGetProperty("highlight", out var hl) ? hl.GetString() ?? "" : "");
+
+    private static ReferencingFolder ParseReferencingFolder(JsonElement item) => new(
+        item.GetProperty("id").GetGuid(),
+        item.GetProperty("name").GetString() ?? "",
+        item.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "");
+
+    private static Reference ParseReference(JsonElement item) => new(
+        item.GetProperty("referenceId").GetGuid(),
+        item.GetProperty("id").GetGuid(),
+        item.GetProperty("name").GetString() ?? "",
+        item.TryGetProperty("hasChildren", out var hc) && hc.GetBoolean(),
+        item.TryGetProperty("hasVersions", out var hv) && hv.GetBoolean(),
+        item.TryGetProperty("hasSubfolders", out var hs) && hs.GetBoolean(),
+        item.TryGetProperty("hasReferences", out var hr) && hr.GetBoolean(),
+        item.TryGetProperty("realParentId", out var rp) && rp.ValueKind != JsonValueKind.Null ? rp.GetGuid() : null);
+
+    private static RecycleBinItem ParseRecycleBinItem(JsonElement item) => new(
+        item.GetProperty("id").GetGuid(),
+        item.GetProperty("name").GetString() ?? "",
+        item.GetProperty("deletedAt").GetDateTimeOffset());
+
+    private static Comment ParseComment(JsonElement item) => new(
+        item.GetProperty("id").GetGuid(),
+        item.TryGetProperty("parentCommentId", out var p) && p.ValueKind != JsonValueKind.Null ? p.GetGuid() : null,
+        item.GetProperty("body").GetString() ?? "",
+        item.TryGetProperty("authorName", out var a) ? a.GetString() ?? "" : "",
+        item.GetProperty("createdAt").GetDateTimeOffset());
+
+    // ---- Workflow + tasks (ADR "Workflow / document state model", 0009) -----------------------------------
+
+    public async Task<IReadOnlyList<TaskInfo>> GetTasksAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/tasks", cancellationToken);
+        var list = new List<TaskInfo>();
+        if (json.TryGetProperty("tasks", out var tasks))
+        {
+            foreach (var t in tasks.EnumerateArray())
+            {
+                list.Add(new TaskInfo(
+                    t.GetProperty("documentId").GetGuid(),
+                    t.TryGetProperty("parentId", out var p) && p.ValueKind == JsonValueKind.String ? p.GetGuid() : null,
+                    t.GetProperty("versionId").GetGuid(),
+                    t.GetProperty("documentName").GetString() ?? "",
+                    t.TryGetProperty("versionNumber", out var vn) && vn.ValueKind == JsonValueKind.Number ? vn.GetInt32() : null,
+                    t.TryGetProperty("assignedAt", out var a) ? a.GetDateTimeOffset() : default));
+            }
+        }
+
+        return list;
+    }
+
+    // The latest confirmed version's workflow (null if the document has no confirmed version).
+    public async Task<WorkflowInfo?> GetWorkflowAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/versions", cancellationToken);
+        if (!response.TryGetProperty("versions", out var versions))
+        {
+            return null;
+        }
+
+        JsonElement? latest = null;
+        var number = -1;
+        foreach (var v in versions.EnumerateArray())
+        {
+            if (v.GetProperty("status").GetString() != "Confirmed")
+            {
+                continue;
+            }
+
+            var n = v.TryGetProperty("versionNumber", out var vn) && vn.ValueKind == JsonValueKind.Number ? vn.GetInt32() : 0;
+            if (n >= number)
+            {
+                number = n;
+                latest = v;
+            }
+        }
+
+        if (latest is not { } cur || FindLink(cur, "workflow") is not { } wfLink)
+        {
+            return null;
+        }
+
+        var json = await _http.GetFromJsonAsync<JsonElement>(wfLink.TrimStart('/'), cancellationToken);
+        var links = new Dictionary<string, string>();
+        if (json.TryGetProperty("links", out var ls))
+        {
+            foreach (var l in ls.EnumerateArray())
+            {
+                links[l.GetProperty("rel").GetString() ?? ""] = l.GetProperty("href").GetString() ?? "";
+            }
+        }
+
+        var history = new List<WorkflowTransitionInfo>();
+        if (json.TryGetProperty("history", out var hs))
+        {
+            foreach (var h in hs.EnumerateArray())
+            {
+                history.Add(new WorkflowTransitionInfo(
+                    h.GetProperty("toStatusName").GetString() ?? "",
+                    StrOrNull(h, "assignedToName"), StrOrNull(h, "performedByName"), StrOrNull(h, "rejectionReason")));
+            }
+        }
+
+        return new WorkflowInfo(
+            json.GetProperty("status").GetInt32(),
+            json.GetProperty("statusName").GetString() ?? "",
+            StrOrNull(json, "assignedToName"), history, links);
+    }
+
+    // POSTs a workflow transition action (the href comes from WorkflowInfo.Links). Throws ApiActionException
+    // with the server's Problem-Details detail on a rejected transition (409/400/403).
+    public async Task PostWorkflowActionAsync(string href, object? body, CancellationToken cancellationToken = default)
+    {
+        using var response = body is null
+            ? await _http.PostAsync(href.TrimStart('/'), null, cancellationToken)
+            : await _http.PostAsJsonAsync(href.TrimStart('/'), body, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var detail = "The workflow action was rejected.";
+            try
+            {
+                var problem = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+                if (problem.TryGetProperty("detail", out var d) && d.GetString() is { } s)
+                {
+                    detail = s;
+                }
+            }
+            catch (Exception) { /* keep the default */ }
+
+            throw new ApiActionException(detail);
+        }
+    }
+
+    // The candidate reviewers for submitting a document into the workflow (ADR "Workflow assignable-reviewers
+    // endpoint") — a light per-document catalog any editor can read, no CanManageUsers needed. Returns empty on
+    // no access (e.g. the caller lacks CanEditContent).
+    public async Task<IReadOnlyList<UserOptionInfo>> GetAssignableReviewersAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/assignable-reviewers", cancellationToken);
+            var list = new List<UserOptionInfo>();
+            if (json.TryGetProperty("reviewers", out var reviewers))
+            {
+                foreach (var u in reviewers.EnumerateArray())
+                {
+                    list.Add(new UserOptionInfo(u.GetProperty("id").GetGuid(), u.GetProperty("displayName").GetString() ?? ""));
+                }
+            }
+
+            return list;
+        }
+        catch (HttpRequestException)
+        {
+            return [];
+        }
+    }
+
+    // ---- Users & groups administration (ADR "Users & groups administration tab") --------------------
+
+    public Task<List<PrincipalInfo>> GetUsersAsync(CancellationToken cancellationToken = default) =>
+        LoadPagedAsync("api/users", "users", ParseUser, cancellationToken);
+
+    public Task<List<PrincipalInfo>> GetGroupsAsync(CancellationToken cancellationToken = default) =>
+        LoadPagedAsync("api/groups", "groups", ParseGroup, cancellationToken);
+
+    public async Task<Guid> CreateUserAsync(string email, string displayName, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync("api/users", new { email, displayName }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException("A user with this email already exists.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to manage users.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return json.GetProperty("id").GetGuid();
+    }
+
+    public async Task<Guid> CreateGroupAsync(string name, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync("api/groups", new { name }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException($"A group named '{name}' already exists.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to manage groups.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return json.GetProperty("id").GetGuid();
+    }
+
+    public Task SetUserRightsAsync(Guid id, SystemRightsData rights, CancellationToken cancellationToken = default) =>
+        SetRightsAsync($"api/users/{id}/rights", rights, cancellationToken);
+
+    public Task SetGroupRightsAsync(Guid id, SystemRightsData rights, CancellationToken cancellationToken = default) =>
+        SetRightsAsync($"api/groups/{id}/rights", rights, cancellationToken);
+
+    private async Task SetRightsAsync(string path, SystemRightsData rights, CancellationToken cancellationToken)
+    {
+        using var response = await _http.PutAsJsonAsync(path, rights, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You can only grant rights you hold yourself; changing tenant-admin needs a tenant admin.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Deactivates a user (reversible on the server; the row stays, marked inactive).
+    // Deactivates a user. If they still hold pending review tasks, the server refuses (409
+    // REVIEWER_HAS_PENDING_REVIEWS) unless reassignReviewsTo hands them to a replacement reviewer (ADR
+    // "Workflow review reassignment") — surfaced as ReviewerHasPendingReviewsException so the caller can prompt.
+    public async Task DeleteUserAsync(Guid id, Guid? reassignReviewsTo = null, CancellationToken cancellationToken = default)
+    {
+        var url = reassignReviewsTo is { } r ? $"api/users/{id}?reassignReviewsTo={r}" : $"api/users/{id}";
+        using var response = await _http.DeleteAsync(url, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to manage users.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Conflict && await ErrorCodeAsync(response, cancellationToken) == "REVIEWER_HAS_PENDING_REVIEWS")
+        {
+            throw new ReviewerHasPendingReviewsException("This user still holds pending review tasks.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    private static async Task<string?> ErrorCodeAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+            return json.TryGetProperty("errorCode", out var c) ? c.GetString() : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // Deletes a group (409 if it still has child groups or members).
+    public async Task DeleteGroupAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync($"api/groups/{id}", cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException("The group still has child groups or members.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to manage groups.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // ---- Passwords (ADR "User password management") -------------------------------------------------
+
+    public async Task ChangeMyPasswordAsync(string currentPassword, string newPassword, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PutAsJsonAsync("api/users/me/password", new { currentPassword, newPassword }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            throw new ApiActionException("The current password is incorrect.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // WebDAV gateway (ADR "WebDAV gateway") — the app-specific WebDAV password + mount info.
+    public sealed record WebDavStatus(bool Enabled, string Username, string Url, string? Password);
+
+    public async Task<WebDavStatus> GetWebDavStatusAsync(CancellationToken cancellationToken = default) =>
+        await _http.GetFromJsonAsync<WebDavStatus>("api/me/webdav-password", cancellationToken) ?? new WebDavStatus(false, "", "", null);
+
+    // Generate/regenerate — returns the plaintext password (shown once).
+    public async Task<WebDavStatus> GenerateWebDavPasswordAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync("api/me/webdav-password", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<WebDavStatus>(cancellationToken))!;
+    }
+
+    public async Task RevokeWebDavPasswordAsync(CancellationToken cancellationToken = default) =>
+        (await _http.DeleteAsync("api/me/webdav-password", cancellationToken)).EnsureSuccessStatusCode();
+
+    // Admin reset — returns the generated password (shown once).
+    public async Task<string> ResetUserPasswordAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync($"api/users/{userId}/reset-password", null, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to reset passwords.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return json.GetProperty("password").GetString() ?? "";
+    }
+
+    // ---- Two-factor authentication (ADR "MFA (interactive login, TOTP)") ----------------------------
+
+    public sealed record MfaEnrollInfo(string Secret, string OtpauthUri, string QrDataUrl);
+
+    // Starts enrollment: returns the secret + otpauth URI + QR data URL (the secret is stored server-side as
+    // a pending, not-yet-active enrollment).
+    public async Task<MfaEnrollInfo> EnrollMfaAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync("api/users/me/mfa/enroll", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return new MfaEnrollInfo(
+            json.GetProperty("secret").GetString() ?? "",
+            json.GetProperty("otpauthUri").GetString() ?? "",
+            json.GetProperty("qrDataUrl").GetString() ?? "");
+    }
+
+    // Confirms enrollment with a code; returns the one-time recovery codes (shown once).
+    public async Task<List<string>> EnableMfaAsync(string code, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync("api/users/me/mfa/enable", new { code }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            throw new ApiActionException("That authentication code isn't right.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return json.GetProperty("recoveryCodes").EnumerateArray().Select(c => c.GetString() ?? "").ToList();
+    }
+
+    public async Task DisableMfaAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync("api/users/me/mfa", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Admin reset — disables a locked-out user's two-factor.
+    public async Task ResetUserMfaAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync($"api/users/{userId}/mfa/reset", null, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to reset two-factor authentication.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // ---- Passkeys (ADR "Desktop passkey management") ------------------------------------------------
+    // List + remove are plain API calls the native app makes directly; registration needs a browser
+    // attestation ceremony and is delegated to the system browser (see OidcLoopbackAuthenticator).
+
+    public sealed record PasskeyInfo(Guid Id, string Name, DateTimeOffset CreatedAt, DateTimeOffset? LastUsedAt);
+
+    public async Task<List<PasskeyInfo>> GetPasskeysAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/users/me/passkeys", cancellationToken);
+        var list = new List<PasskeyInfo>();
+        if (json.TryGetProperty("passkeys", out var passkeys))
+        {
+            foreach (var p in passkeys.EnumerateArray())
+            {
+                list.Add(new PasskeyInfo(
+                    p.GetProperty("id").GetGuid(),
+                    p.GetProperty("name").GetString() ?? "",
+                    p.GetProperty("createdAt").GetDateTimeOffset(),
+                    p.TryGetProperty("lastUsedAt", out var lu) && lu.ValueKind != JsonValueKind.Null ? lu.GetDateTimeOffset() : null));
+            }
+        }
+
+        return list;
+    }
+
+    public async Task RemovePasskeyAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync($"api/users/me/passkeys/{id}", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    // ---- Notification email preferences (ADR "Notification preferences") -----------------------------
+
+    public sealed record NotificationPreferenceInfo(int Type, string TypeName, bool EmailEnabled);
+
+    public async Task<List<NotificationPreferenceInfo>> GetNotificationPreferencesAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/notifications/preferences", cancellationToken);
+        var list = new List<NotificationPreferenceInfo>();
+        if (json.TryGetProperty("preferences", out var prefs))
+        {
+            foreach (var p in prefs.EnumerateArray())
+            {
+                list.Add(new NotificationPreferenceInfo(
+                    p.GetProperty("type").GetInt32(),
+                    p.GetProperty("typeName").GetString() ?? "",
+                    p.GetProperty("emailEnabled").GetBoolean()));
+            }
+        }
+
+        return list;
+    }
+
+    public async Task SetNotificationPreferencesAsync(IEnumerable<NotificationPreferenceInfo> preferences, CancellationToken cancellationToken = default)
+    {
+        var body = new { preferences = preferences.Select(p => new { type = p.Type, emailEnabled = p.EmailEnabled }) };
+        using var response = await _http.PutAsJsonAsync("api/notifications/preferences", body, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    // ---- In-app notifications viewer (ADR "Notification viewer + click-through") ---------------------
+
+    public sealed record NotificationInfo(Guid Id, string Type, string Title, string Body, Guid? DocumentId, Guid? DocumentParentId, DateTimeOffset CreatedAt, bool IsRead, int EventCount = 1);
+    public sealed record NotificationList(IReadOnlyList<NotificationInfo> Items, int UnreadCount);
+
+    public async Task<NotificationList> GetNotificationsAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/notifications", cancellationToken);
+        var items = new List<NotificationInfo>();
+        if (json.TryGetProperty("notifications", out var arr))
+        {
+            foreach (var n in arr.EnumerateArray())
+            {
+                items.Add(new NotificationInfo(
+                    n.GetProperty("id").GetGuid(),
+                    n.GetProperty("type").GetString() ?? "",
+                    n.GetProperty("title").GetString() ?? "",
+                    n.GetProperty("body").GetString() ?? "",
+                    n.TryGetProperty("documentId", out var d) && d.ValueKind != JsonValueKind.Null ? d.GetGuid() : null,
+                    n.TryGetProperty("documentParentId", out var p) && p.ValueKind != JsonValueKind.Null ? p.GetGuid() : null,
+                    n.GetProperty("createdAt").GetDateTimeOffset(),
+                    n.TryGetProperty("isRead", out var r) && r.ValueKind == JsonValueKind.True,
+                    n.TryGetProperty("eventCount", out var ec) && ec.ValueKind == JsonValueKind.Number ? ec.GetInt32() : 1));
+            }
+        }
+
+        return new NotificationList(items, json.TryGetProperty("unreadCount", out var uc) ? uc.GetInt32() : 0);
+    }
+
+    public async Task MarkNotificationReadAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync($"api/notifications/{id}/read", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task MarkAllNotificationsReadAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync("api/notifications/read-all", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    // ---- Legal holds (ADR "Legal hold & retention enforcement") -------------------------------------
+
+    public sealed record LegalHoldInfo(Guid Id, string Name, string? Reason, DateTimeOffset PlacedAt, bool IsActive, int ItemCount, List<LegalHoldItemInfo> Items);
+    public sealed record LegalHoldItemInfo(Guid DocumentId, string DocumentName);
+
+    public async Task<List<LegalHoldInfo>> GetLegalHoldsAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/legal-holds", cancellationToken);
+        var list = new List<LegalHoldInfo>();
+        if (json.TryGetProperty("holds", out var holds))
+        {
+            foreach (var h in holds.EnumerateArray())
+            {
+                list.Add(ParseLegalHold(h));
+            }
+        }
+
+        return list;
+    }
+
+    public async Task<LegalHoldInfo> GetLegalHoldAsync(Guid holdId, CancellationToken cancellationToken = default) =>
+        ParseLegalHold(await _http.GetFromJsonAsync<JsonElement>($"api/legal-holds/{holdId}", cancellationToken));
+
+    public async Task<LegalHoldInfo> CreateLegalHoldAsync(string name, string? reason, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync("api/legal-holds", new { name, reason }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to place legal holds.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        return ParseLegalHold(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
+    }
+
+    public async Task AddLegalHoldItemAsync(Guid holdId, Guid documentId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync($"api/legal-holds/{holdId}/items", new { documentId }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException("The document is already on this hold.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task RemoveLegalHoldItemAsync(Guid holdId, Guid documentId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync($"api/legal-holds/{holdId}/items/{documentId}", cancellationToken);
+        if (response.StatusCode != HttpStatusCode.NotFound)
+        {
+            response.EnsureSuccessStatusCode();
+        }
+    }
+
+    public async Task ReleaseLegalHoldAsync(Guid holdId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync($"api/legal-holds/{holdId}/release", null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private static LegalHoldInfo ParseLegalHold(JsonElement e)
+    {
+        var items = new List<LegalHoldItemInfo>();
+        if (e.TryGetProperty("items", out var itemsEl) && itemsEl.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var i in itemsEl.EnumerateArray())
+            {
+                items.Add(new LegalHoldItemInfo(i.GetProperty("documentId").GetGuid(), i.GetProperty("documentName").GetString() ?? ""));
+            }
+        }
+
+        return new LegalHoldInfo(
+            e.GetProperty("id").GetGuid(),
+            e.GetProperty("name").GetString() ?? "",
+            e.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null,
+            e.GetProperty("placedAt").GetDateTimeOffset(),
+            e.TryGetProperty("isActive", out var a) && a.ValueKind == JsonValueKind.True,
+            e.TryGetProperty("itemCount", out var c) ? c.GetInt32() : items.Count,
+            items);
+    }
+
+    // ---- Retention schedule (ADR "Retention policies (auto-disposition)") ---------------------------
+
+    public sealed record RetentionItemInfo(Guid DocumentId, string DocumentName, int RetentionYears, string DispositionDate, bool Overdue, bool SuspendedByHold, string? RetentionOverrideUntil);
+    public sealed record RetentionScheduleInfo(IReadOnlyList<RetentionItemInfo> Items, bool RequiresReview);
+
+    public async Task<RetentionScheduleInfo> GetRetentionScheduleAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>("api/retention/schedule", cancellationToken);
+        var list = new List<RetentionItemInfo>();
+        if (json.TryGetProperty("items", out var items))
+        {
+            foreach (var i in items.EnumerateArray())
+            {
+                list.Add(new RetentionItemInfo(
+                    i.GetProperty("documentId").GetGuid(),
+                    i.GetProperty("documentName").GetString() ?? "",
+                    i.TryGetProperty("retentionYears", out var y) ? y.GetInt32() : 0,
+                    i.GetProperty("dispositionDate").GetString() ?? "",
+                    i.TryGetProperty("overdue", out var o) && o.ValueKind == JsonValueKind.True,
+                    i.TryGetProperty("suspendedByHold", out var s) && s.ValueKind == JsonValueKind.True,
+                    i.TryGetProperty("retentionOverrideUntil", out var ru) && ru.ValueKind == JsonValueKind.String ? ru.GetString() : null));
+            }
+        }
+
+        return new RetentionScheduleInfo(list, json.TryGetProperty("requiresReview", out var rr) && rr.ValueKind == JsonValueKind.True);
+    }
+
+    // Manually dispose an eligible document (ADR "Retention review-before-disposition").
+    public async Task DisposeRetentionAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync($"api/retention/{documentId}/dispose", null, cancellationToken);
+        await ThrowIfProblemAsync(response, "Could not dispose the document.", cancellationToken);
+    }
+
+    // Extend a document's retention to a new "retain until" date ("yyyy-MM-dd").
+    public async Task ExtendRetentionAsync(Guid documentId, string until, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync($"api/retention/{documentId}/extend", new { until }, cancellationToken);
+        await ThrowIfProblemAsync(response, "Could not extend retention.", cancellationToken);
+    }
+
+    // ---- Group membership (ADR "Group membership editing") ------------------------------------------
+
+    public Task<List<UserOptionInfo>> GetGroupMembersAsync(Guid groupId, CancellationToken cancellationToken = default) =>
+        LoadPagedAsync($"api/groups/{groupId}/members", "members", ParseMember, cancellationToken);
+
+    public async Task AddGroupMemberAsync(Guid groupId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PutAsync($"api/groups/{groupId}/members/{userId}", null, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to manage members.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task RemoveGroupMemberAsync(Guid groupId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync($"api/groups/{groupId}/members/{userId}", cancellationToken);
+        if (response.StatusCode != HttpStatusCode.NotFound)
+        {
+            response.EnsureSuccessStatusCode();
+        }
+    }
+
+    private static UserOptionInfo ParseMember(JsonElement e) =>
+        new(e.GetProperty("id").GetGuid(), e.GetProperty("displayName").GetString() ?? "");
+
+    // ---- Profile photo (ADR "User profile photo") ---------------------------------------------------
+
+    public Task SetUserPhotoAsync(Guid userId, byte[] png, CancellationToken cancellationToken = default) =>
+        PutPhotoAsync($"api/users/{userId}/photo", png, cancellationToken);
+
+    public Task SetMyPhotoAsync(byte[] png, CancellationToken cancellationToken = default) =>
+        PutPhotoAsync("api/users/me/photo", png, cancellationToken);
+
+    private async Task PutPhotoAsync(string url, byte[] png, CancellationToken cancellationToken)
+    {
+        var content = new ByteArrayContent(png);
+        content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        using var response = await _http.PutAsync(url, content, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to change this photo.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            throw new ApiActionException("That image could not be used as a profile photo.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // The normalized PNG bytes, or null if the user has no photo.
+    public async Task<byte[]?> GetUserPhotoAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.GetAsync($"api/users/{userId}/photo", cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync(cancellationToken);
+    }
+
+    public async Task DeleteUserPhotoAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync($"api/users/{userId}/photo", cancellationToken);
+        if (response.StatusCode != HttpStatusCode.NotFound)
+        {
+            response.EnsureSuccessStatusCode();
+        }
+    }
+
+    private static PrincipalInfo ParseUser(JsonElement e) => new(
+        false,
+        e.GetProperty("id").GetGuid(),
+        e.GetProperty("displayName").GetString() ?? "",
+        !e.TryGetProperty("isActive", out var a) || a.ValueKind == JsonValueKind.True,
+        ParseRights(e),
+        e.TryGetProperty("mfaEnabled", out var mfa) && mfa.ValueKind == JsonValueKind.True);
+
+    private static PrincipalInfo ParseGroup(JsonElement e) => new(
+        true,
+        e.GetProperty("id").GetGuid(),
+        e.GetProperty("name").GetString() ?? "",
+        true,
+        ParseRights(e));
+
+    private static SystemRightsData ParseRights(JsonElement e)
+    {
+        if (!e.TryGetProperty("rights", out var r))
+        {
+            return new SystemRightsData(false, false, false, false, false, false, false, false, false, false, false, false, false);
+        }
+
+        bool B(string name) => r.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
+        return new SystemRightsData(
+            B("isTenantAdmin"), B("canImpersonate"), B("canOverrideCheckout"), B("canLegalHold"),
+            B("canManageClassification"), B("canResetMfa"), B("canManageRepositories"), B("canManageMasks"),
+            B("canManageServiceAccounts"), B("canManageUsers"), B("canViewAuditLog"), B("canExport"), B("canImport"),
+            r.TryGetProperty("clearanceRank", out var cr) && cr.ValueKind == JsonValueKind.Number ? cr.GetInt32() : 0);
+    }
+
+    private static string? StrOrNull(JsonElement e, string name) =>
+        e.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
+
+    private static string? FindLink(JsonElement resource, string rel)
+    {
+        if (!resource.TryGetProperty("links", out var links))
+        {
+            return null;
+        }
+
+        foreach (var link in links.EnumerateArray())
+        {
+            if (link.GetProperty("rel").GetString() == rel)
+            {
+                return link.GetProperty("href").GetString();
+            }
+        }
+
+        return null;
+    }
+}

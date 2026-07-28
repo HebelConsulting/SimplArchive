@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-SimplArchive.Worker-073ce9c1-5a3f-4eb8-aa85-cc1c33d36bc5</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SimplArchive.Application\SimplArchive.Application.csproj" />
+    <ProjectReference Include="..\SimplArchive.Infrastructure\SimplArchive.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

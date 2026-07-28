@@ -1,0 +1,35 @@
+@* Rename dialog, pre-filled with the current name — see ADR "Web client rename/delete/recycle-bin".
+   Returns the trimmed new name, or cancels. *@
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_name" Label="@Strings.Get("Name")" Variant="Variant.Outlined" Immediate="true"
+                      AutoFocus="true" OnKeyDown="OnKeyDown" Style="min-width: 360px;" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@string.IsNullOrWhiteSpace(_name)" OnClick="Save">@Strings.Get("RibbonRename")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public string CurrentName { get; set; } = "";
+
+    private string _name = "";
+
+    protected override void OnInitialized() => _name = CurrentName;
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_name))
+        {
+            Save();
+        }
+    }
+
+    private void Save() => Dialog.Close(DialogResult.Ok(_name.Trim()));
+
+    private void Cancel() => Dialog.Cancel();
+}

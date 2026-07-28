@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- Treat compiler/analyzer warnings as errors repo-wide (ADR "Enforce TreatWarningsAsErrors"): a build is
+         not done while it leaves a warning. NuGet package-audit warnings (NU1901 through NU1904,
+         deprecated/vulnerable) are deliberately excluded because the dedicated CI vulnerable-dependency scan
+         (ADR 0379) owns vulnerability-blocking, so a freshly-published advisory cannot break every local and CI
+         compile mid-task. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+  </PropertyGroup>
+</Project>

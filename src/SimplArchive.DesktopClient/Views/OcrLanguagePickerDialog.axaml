@@ -1,0 +1,37 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        x:Class="SimplArchive.DesktopClient.Views.OcrLanguagePickerDialog"
+        x:DataType="vm:OcrLanguagePickerViewModel"
+        Title="{loc:Tr OcrDlgTitle}" Width="360" Height="460" CanResize="True"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="14">
+        <TextBlock DockPanel.Dock="Top" Text="{loc:Tr OcrDlgHint}"
+                   TextWrapping="Wrap" Margin="0,0,0,8" Foreground="{DynamicResource WbMuted}" />
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,10,0,0">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button Content="{loc:Tr Apply}" Click="OnOk" IsDefault="True" />
+        </StackPanel>
+        <ScrollViewer>
+            <ItemsControl ItemsSource="{Binding Languages}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:OcrLanguageItemViewModel">
+                        <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Margin="0,2" Padding="8,6"
+                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.ToggleCommand}"
+                                CommandParameter="{Binding}">
+                            <Grid ColumnDefinitions="30,*">
+                                <Border Grid.Column="0" Width="22" Height="22" CornerRadius="11" Background="#5b4ee5"
+                                        IsVisible="{Binding IsSelected}" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding PriorityLabel}" Foreground="White" FontSize="12"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <TextBlock Grid.Column="1" Text="{Binding DisplayName}" VerticalAlignment="Center" />
+                            </Grid>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

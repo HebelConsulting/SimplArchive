@@ -1,0 +1,48 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.MfaSetupDialog"
+        Title="{loc:Tr LoginMfaTitle}" Width="420" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="10">
+        <!-- Enrollment step -->
+        <StackPanel x:Name="EnrollPanel" Spacing="10">
+            <TextBlock TextWrapping="Wrap"
+                       Text="{loc:Tr MfaScanHint}" />
+            <Image x:Name="QrImage" Width="180" Height="180" HorizontalAlignment="Center" />
+            <TextBlock FontSize="12">
+                <Run Text="{loc:Tr MfaManualKey}" />
+                <Run x:Name="SecretRun" FontFamily="monospace" />
+            </TextBlock>
+            <StackPanel Spacing="4">
+                <TextBlock Text="{loc:Tr LoginAuthCode}" />
+                <TextBox x:Name="CodeBox" Watermark="123456" />
+            </StackPanel>
+            <TextBlock x:Name="Error" Foreground="#e53935" FontSize="12" IsVisible="False" />
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+                <Button x:Name="EnableButton" Content="{loc:Tr MfaEnable}" Click="OnEnable" IsDefault="True" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Recovery-codes step (shown after enabling) -->
+        <StackPanel x:Name="RecoveryPanel" Spacing="10" IsVisible="False">
+            <TextBlock FontWeight="SemiBold" Text="{loc:Tr MfaOn}" />
+            <TextBlock TextWrapping="Wrap"
+                       Text="{loc:Tr MfaRecoveryHint}" />
+            <ItemsControl x:Name="RecoveryList">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="2" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" FontFamily="monospace" Margin="2" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Button Content="{loc:Tr Done}" Click="OnDone" IsDefault="True" HorizontalAlignment="Right" />
+        </StackPanel>
+    </StackPanel>
+</Window>

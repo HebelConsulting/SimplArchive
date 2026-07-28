@@ -1,0 +1,101 @@
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+@* Per-type email-notification preferences (ADR "Notification preferences"). In-app notifications always show;
+   these toggles only control which types are also emailed. The deadline/compliance escalations aren't listed
+   (they're always emailed). *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 420px;">
+            @if (_loading)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">
+                    @Strings.Get("NotifPrefsDesc")
+                </MudText>
+                @foreach (var p in _prefs)
+                {
+                    <div style="display:flex; align-items:center; justify-content:space-between; padding:2px 0;">
+                        <span>@Label(p.TypeName)</span>
+                        <MudSwitch T="bool" @bind-Value="p.EmailEnabled" Color="Color.Primary" />
+                    </div>
+                }
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_loading || _busy)" OnClick="SaveAsync">@Strings.Get("Save")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    private List<Pref> _prefs = [];
+    private bool _loading = true;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _prefs = (await Http.GetFromJsonAsync<PrefsResponse>("api/notifications/preferences"))?.Preferences ?? [];
+        }
+        catch (Exception)
+        {
+            _prefs = [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        try
+        {
+            var body = new { preferences = _prefs.Select(p => new { type = p.Type, emailEnabled = p.EmailEnabled }) };
+            using var resp = await Http.PutAsJsonAsync("api/notifications/preferences", body);
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add(Strings.Get("NotifPrefsSaved"), Severity.Success);
+                Dialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                Snackbar.Add(Strings.Get("NotifPrefsError"), Severity.Warning);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("NotifPrefsError"), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Cancel() => Dialog.Cancel();
+
+    private static string Label(string typeName) => typeName switch
+    {
+        "ReviewAssigned" => "A review is assigned to me",
+        "WorkflowApproved" => "A document I submitted is approved",
+        "WorkflowRejected" => "A document I submitted is rejected",
+        "WorkflowReleased" => "A document I submitted is released",
+        "CommentPosted" => "A comment is posted on my document",
+        "AccessGranted" => "I'm granted access to a document",
+        _ => typeName,
+    };
+
+    private record PrefsResponse { public List<Pref> Preferences { get; set; } = []; }
+    private class Pref { public int Type { get; set; } public string TypeName { get; set; } = ""; public bool EmailEnabled { get; set; } }
+}

@@ -1,0 +1,42 @@
+@* Create a legal hold / matter (ADR "Legal hold & retention enforcement"). Returns the matter name + optional
+   reason; the caller creates the hold (and, from a document's menu, adds that document to it). *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 380px;">
+            <MudText Typo="Typo.body2" Class="mb-2">
+                @Strings.Get("LegalHoldInfo")
+            </MudText>
+            <MudTextField @bind-Value="_name" Label="@Strings.Get("LegalHoldMatterName")" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Class="mb-2" />
+            <MudTextField @bind-Value="_reason" Label="@Strings.Get("LegalHoldReason")" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Ok" Disabled="@(_name.Trim().Length == 0)">@Strings.Get("LegalHoldPlace")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter]
+    public string? SuggestedName { get; set; }
+
+    private string _name = "";
+    private string _reason = "";
+
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrWhiteSpace(SuggestedName))
+        {
+            _name = $"Hold: {SuggestedName}";
+        }
+    }
+
+    private void Ok() => Dialog.Close(DialogResult.Ok(new LegalHoldFormResult(_name.Trim(), string.IsNullOrWhiteSpace(_reason) ? null : _reason.Trim())));
+
+    private void Cancel() => Dialog.Cancel();
+
+    public record LegalHoldFormResult(string Name, string? Reason);
+}
