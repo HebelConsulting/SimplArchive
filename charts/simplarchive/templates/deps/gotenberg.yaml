@@ -1,0 +1,55 @@
+{{- if .Values.deps.gotenberg.enabled }}
+# Gotenberg (LibreOffice + Chromium) — office/markdown/html/email → PDF preview renditions. ADR 0485.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-gotenberg
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gotenberg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "simplarchive.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: gotenberg
+  template:
+    metadata:
+      labels:
+        {{- include "simplarchive.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: gotenberg
+    spec:
+      containers:
+        - name: gotenberg
+          image: {{ .Values.deps.gotenberg.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          resources:
+            {{- toYaml .Values.deps.gotenberg.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-gotenberg
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gotenberg
+spec:
+  selector:
+    {{- include "simplarchive.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: gotenberg
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+{{- end }}

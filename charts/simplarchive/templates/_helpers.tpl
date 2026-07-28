@@ -46,6 +46,28 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/*
+Dependency URLs: when an in-cluster dep (ADR 0485) is enabled, point the app at its Service; otherwise use the
+config.* value (external/managed). This is what lets `deps.<x>.enabled: true` auto-wire the app with no other change.
+*/}}
+{{- define "simplarchive.gotenbergUrl" -}}
+{{- if .Values.deps.gotenberg.enabled -}}http://{{ include "simplarchive.fullname" . }}-gotenberg:3000{{- else -}}{{ .Values.config.gotenbergUrl }}{{- end -}}
+{{- end -}}
+{{- define "simplarchive.tikaUrl" -}}
+{{- if .Values.deps.tika.enabled -}}http://{{ include "simplarchive.fullname" . }}-tika:9998{{- else -}}{{ .Values.config.tikaUrl }}{{- end -}}
+{{- end -}}
+{{- define "simplarchive.ocrUrl" -}}
+{{- if .Values.deps.ocr.enabled -}}http://{{ include "simplarchive.fullname" . }}-ocr:8080{{- else -}}{{ .Values.config.ocrUrl }}{{- end -}}
+{{- end -}}
+{{- define "simplarchive.valkeyConn" -}}
+{{- if .Values.deps.valkey.enabled -}}{{ include "simplarchive.fullname" . }}-valkey:6379{{- else -}}{{ .Values.config.valkeyConnectionString }}{{- end -}}
+{{- end -}}
+
+{{/* Component name for a dep workload/Service, e.g. "<fullname>-tika". */}}
+{{- define "simplarchive.depName" -}}
+{{- printf "%s-%s" (include "simplarchive.fullname" .root) .component -}}
+{{- end -}}
+
+{{/*
 The non-secret application config as inline env. Used by both the Deployment and the migration Job (a pre-*
 hook, which can't rely on a separately-created ConfigMap existing yet). Inline env also means a config change
 rolls the Deployment automatically (the pod template changes). Secrets come from `existingSecret` via envFrom.
@@ -68,17 +90,17 @@ rolls the Deployment automatically (the pod template changes). Secrets come from
 - name: ObjectStorage__BucketName
   value: {{ .Values.config.objectStorage.bucketName | quote }}
 - name: Gotenberg__Url
-  value: {{ .Values.config.gotenbergUrl | quote }}
+  value: {{ include "simplarchive.gotenbergUrl" . | quote }}
 - name: OpenSearch__Url
   value: {{ .Values.config.openSearchUrl | quote }}
 - name: Tika__Url
-  value: {{ .Values.config.tikaUrl | quote }}
+  value: {{ include "simplarchive.tikaUrl" . | quote }}
 - name: Tika__OcrLanguages
   value: {{ .Values.config.tikaOcrLanguages | quote }}
 - name: Ocr__Url
-  value: {{ .Values.config.ocrUrl | quote }}
+  value: {{ include "simplarchive.ocrUrl" . | quote }}
 - name: ConnectionStrings__Valkey
-  value: {{ .Values.config.valkeyConnectionString | quote }}
+  value: {{ include "simplarchive.valkeyConn" . | quote }}
 - name: Smtp__Host
   value: {{ .Values.config.smtp.host | quote }}
 - name: Smtp__Port

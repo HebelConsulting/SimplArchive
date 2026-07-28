@@ -1,0 +1,55 @@
+{{- if .Values.deps.valkey.enabled }}
+# Valkey — the SignalR real-time backplane (ADR 0432). ADR 0485.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-valkey
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "simplarchive.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: valkey
+  template:
+    metadata:
+      labels:
+        {{- include "simplarchive.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: valkey
+    spec:
+      containers:
+        - name: valkey
+          image: {{ .Values.deps.valkey.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: valkey
+              containerPort: 6379
+          resources:
+            {{- toYaml .Values.deps.valkey.resources | nindent 12 }}
+          readinessProbe:
+            tcpSocket: { port: valkey }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: valkey }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-valkey
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+spec:
+  selector:
+    {{- include "simplarchive.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: valkey
+  ports:
+    - name: valkey
+      port: 6379
+      targetPort: valkey
+{{- end }}

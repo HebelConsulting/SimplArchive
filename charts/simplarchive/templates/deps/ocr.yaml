@@ -1,0 +1,56 @@
+{{- if .Values.deps.ocr.enabled }}
+# OCR sidecar (OCRmyPDF/Tesseract, FastAPI) — searchable-PDF successor for TIFFs + scanned PDFs. ADR 0485.
+# Image published by docker-publish.yml (multi-arch); tag defaults to the chart appVersion.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-ocr
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ocr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "simplarchive.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ocr
+  template:
+    metadata:
+      labels:
+        {{- include "simplarchive.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ocr
+    spec:
+      containers:
+        - name: ocr
+          image: "{{ .Values.deps.ocr.image }}:{{ default .Chart.AppVersion .Values.deps.ocr.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            {{- toYaml .Values.deps.ocr.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-ocr
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ocr
+spec:
+  selector:
+    {{- include "simplarchive.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ocr
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+{{- end }}

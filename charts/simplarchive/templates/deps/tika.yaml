@@ -1,0 +1,56 @@
+{{- if .Values.deps.tika.enabled }}
+# Apache Tika (-full, with Tesseract OCR) — content extraction + OCR for full-text search. ADR 0485.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-tika
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tika
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "simplarchive.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: tika
+  template:
+    metadata:
+      labels:
+        {{- include "simplarchive.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: tika
+    spec:
+      containers:
+        - name: tika
+          image: {{ .Values.deps.tika.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9998
+          resources:
+            {{- toYaml .Values.deps.tika.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /tika, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: { path: /tika, port: http }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-tika
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tika
+spec:
+  selector:
+    {{- include "simplarchive.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: tika
+  ports:
+    - name: http
+      port: 9998
+      targetPort: http
+{{- end }}

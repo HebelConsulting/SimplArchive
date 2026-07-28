@@ -1,0 +1,28 @@
+# Kiosk-demo values overlay (ADR 0485): the self-contained, daily-reset public demo on a single k3s node
+# (Oracle A1 free tier). Built up across the phased chart work — this is phase 1 (stateless in-cluster deps).
+#
+#   helm install sa charts/simplarchive -f charts/simplarchive/values-kiosk.yaml
+#
+# Single node → single replica, no HPA/PDB.
+
+replicaCount: 1
+
+autoscaling:
+  enabled: false
+
+podDisruptionBudget:
+  enabled: false
+
+# In-cluster stateless dependencies (phase 1). The app auto-wires to their Services (see _helpers.tpl).
+deps:
+  tika:
+    enabled: true
+  gotenberg:
+    enabled: true
+  ocr:
+    enabled: true
+  valkey:
+    enabled: true
+
+# Phases still to come here: the stateful deps (postgres/seaweedfs/opensearch/openbao), the OpenBao secrets flow,
+# the two ingress hosts + cert-manager TLS, the demo seed, resource tuning for 24 GB, and the daily-reset CronJob.

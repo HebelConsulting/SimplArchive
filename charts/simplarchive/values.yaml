@@ -56,6 +56,37 @@ existingSecret: ""
 # Extra raw env entries ({name, value} or {name, valueFrom}) appended verbatim.
 extraEnv: []
 
+# In-cluster dependency workloads for the self-contained kiosk demo (ADR 0485). In production these stay DISABLED
+# and the deps are external/managed (the config.* URLs above point at them). When a dep is enabled here, the app's
+# corresponding URL auto-wires to its in-cluster Service (see _helpers.tpl), overriding the config.* value. The
+# stateful deps (postgres/seaweedfs/opensearch/openbao) are added in later phases.
+deps:
+  tika:
+    enabled: false
+    image: apache/tika:3.3.1.0-full
+    resources:
+      requests: { cpu: 100m, memory: 512Mi }
+      limits: { cpu: "1", memory: 1Gi }
+  gotenberg:
+    enabled: false
+    image: gotenberg/gotenberg:8
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: "1", memory: 768Mi }
+  ocr:
+    enabled: false
+    image: ghcr.io/hebelconsulting/simplarchive-ocr
+    tag: ""   # defaults to the chart appVersion
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: "1", memory: 512Mi }
+  valkey:
+    enabled: false
+    image: valkey/valkey:8.1.1-alpine
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 250m, memory: 128Mi }
+
 service:
   type: ClusterIP
   port: 80
