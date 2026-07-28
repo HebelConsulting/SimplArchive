@@ -1,0 +1,23 @@
+# Public kiosk reverse proxy (ADR "Public kiosk demo, Docker Compose on an OpenVZ VM"). Terminates TLS on :443
+# with automatic Let's Encrypt certificates for the two public hostnames, redirects :80 → :443, and forwards to
+# the app. Caddy adds X-Forwarded-Proto / -Host / -For (the app trusts them via App__TrustProxyHeaders) and
+# transparently proxies the SignalR notifications WebSocket.
+#
+#   demo.simplarchive.dev → the Api (the SPA + API + OIDC + the /hubs SignalR endpoint)
+#   s3.simplarchive.dev   → the SeaweedFS S3 API, so the browser can reach presigned upload/download/preview
+#                           URLs over HTTPS with no mixed-content. Caddy v2 preserves the incoming Host header,
+#                           so SeaweedFS's SigV4 validation matches (the AWS signature covers host, not scheme).
+#
+# ACME HTTP-01 is served automatically on :80; both A-records must point at this VM before first start.
+
+{
+	email admin@simplarchive.dev
+}
+
+demo.simplarchive.dev {
+	reverse_proxy api:8080
+}
+
+s3.simplarchive.dev {
+	reverse_proxy seaweedfs:8333
+}

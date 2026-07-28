@@ -21,6 +21,7 @@ paths = [
   '''scripts/db-init\.sql''',
   '''scripts/seaweedfs-s3\.json''',
   '''src/SimplArchive\.Api/appsettings\.Development\.json''',
+  '''deploy/kiosk/.*''',
 ]
 
 # Specific dev-only credential strings (belt-and-suspenders, in case one appears outside the files above — e.g.
