@@ -4,12 +4,12 @@
 # no-op (skipped job, zero minutes) on the private canonical. A name-only gate is fine here: pushing an image to
 # GHCR is harmless during the brief private-first window (the package just inherits the repo's visibility), unlike
 # mutation testing / native CodeQL upload, which are additionally visibility-gated. Uses the built-in GITHUB_TOKEN
-# (no registry secrets). amd64 only for now; multi-arch (amd64+arm64 via buildx + QEMU) is an easy follow-up.
+# (no registry secrets). Builds multi-arch (amd64 + arm64 via buildx + QEMU) and runs ONLY on a `v*` release tag —
+# not on every main push (which would rebuild the slow arm64 layer each time) — matching desktop-packages.yml.
 name: Docker image (GHCR)
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
 
 concurrency:
@@ -49,12 +49,12 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/hebelconsulting/${{ matrix.image }}
-          # :latest + :<sha> on a push to main; :vX.Y.Z (and :X.Y) on a v* tag.
+          # :vX.Y.Z + :X.Y on a v* release tag, :<sha> for traceability, and :latest for the newest stable release
+          # (metadata-action's default latest=auto).
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=sha
 
       - name: Build + push
         uses: docker/build-push-action@v6
