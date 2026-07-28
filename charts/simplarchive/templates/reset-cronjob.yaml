@@ -1,0 +1,121 @@
+{{- if .Values.deps.reset.enabled }}
+# Daily kiosk reset (ADR 0485): wipe tenant data (Postgres tables + object-storage bucket + search index), then
+# restart the app so it re-migrates + re-seeds the demo tenant. Deliberately does NOT touch OpenBao state, the
+# certs, or the DB roles/passwords (dropping TABLES, not the schema, so the OpenBao-owned `simplarchive` password
+# isn't reset — avoiding the ADR 0474 drift).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-reset
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-reset
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-reset
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "simplarchive.fullname" . }}-reset
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "simplarchive.fullname" . }}-reset
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-reset
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+    app.kubernetes.io/component: reset
+spec:
+  schedule: {{ .Values.deps.reset.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "simplarchive.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: reset
+        spec:
+          serviceAccountName: {{ include "simplarchive.fullname" . }}-reset
+          restartPolicy: Never
+          initContainers:
+            - name: wipe-db
+              image: {{ .Values.deps.postgres.image | quote }}
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "simplarchive.statefulSecretName" . }}
+                      key: POSTGRES_PASSWORD
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  host="{{ include "simplarchive.fullname" . }}-postgres"
+                  # Drop every table in public (keeping the schema, roles, passwords + default privileges), so the
+                  # app re-migrates from scratch on restart and OpenBao's simplarchive password stays valid.
+                  psql -h "$host" -U postgres -d {{ .Values.deps.postgres.database }} -v ON_ERROR_STOP=1 -c \
+                    "DO \$\$ DECLARE r RECORD; BEGIN FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' LOOP EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE'; END LOOP; END \$\$;"
+                  echo "db wiped"
+            {{- if .Values.deps.seaweedfs.enabled }}
+            - name: wipe-storage
+              image: amazon/aws-cli:2.36.2
+              env:
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "simplarchive.statefulSecretName" . }}
+                      key: S3_ACCESS_KEY
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "simplarchive.statefulSecretName" . }}
+                      key: S3_SECRET_KEY
+                - name: AWS_DEFAULT_REGION
+                  value: {{ .Values.config.objectStorage.region | quote }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  aws configure set default.s3.addressing_style path
+                  endpoint="http://{{ include "simplarchive.fullname" . }}-seaweedfs:8333"
+                  # Best-effort empty (any WORM-locked object under active retention is skipped).
+                  aws --endpoint-url "$endpoint" s3 rm "s3://{{ .Values.config.objectStorage.bucketName }}" --recursive || true
+                  echo "storage wiped"
+            {{- end }}
+            {{- if .Values.deps.opensearch.enabled }}
+            - name: wipe-search
+              image: curlimages/curl:8.11.1
+              command: ["/bin/sh", "-c"]
+              args:
+                - curl -s -X DELETE "http://{{ include "simplarchive.fullname" . }}-opensearch:9200/documents*" || true; echo "search wiped"
+            {{- end }}
+          containers:
+            - name: restart-app
+              image: {{ .Values.deps.reset.kubectlImage | quote }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  # Roll the app so it re-migrates the wiped schema + re-seeds the demo tenant on boot.
+                  kubectl rollout restart deployment/{{ include "simplarchive.fullname" . }}
+                  echo "app restarted"
+{{- end }}

@@ -31,6 +31,59 @@ deps:
     enabled: true
   openbao:
     enabled: true
+  reset:
+    enabled: true
 
-# Phases still to come here: the two ingress hosts + cert-manager TLS, the demo seed + Development env + startup
-# migration, resource tuning for the node, and the daily-reset CronJob.
+# Ingress + Let's Encrypt TLS (phase 4): demo.* → the app, s3.* → SeaweedFS, both on 443.
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: demo.simplarchive.dev
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: s3.simplarchive.dev
+      backend: seaweedfs
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: simplarchive-tls
+      hosts:
+        - demo.simplarchive.dev
+        - s3.simplarchive.dev
+
+certManager:
+  clusterIssuer:
+    enabled: true
+    email: "you@example.com"   # REPLACE with a real address before deploying (LE account/expiry notices).
+
+# App config (phase 6). The kiosk runs the demo seed, so it uses the Development environment (the production-
+# readiness gate, ADR 0343, refuses demo seeding + startup migration outside Development) — but WITH full OpenBao
+# providing real certs + credentials. Single replica ⇒ startup migration is safe; the migrate hook Job is off.
+config:
+  aspnetCoreEnvironment: Development
+  app:
+    baseUrl: "https://demo.simplarchive.dev"
+    applyMigrationsAtStartup: true
+  objectStorage:
+    publicServiceUrl: "https://s3.simplarchive.dev"   # presigned URLs the browser hits (the s3.* ingress host)
+
+migrationJob:
+  enabled: false
+
+# The demo tenant/admin seed + reverse-proxy trust (the ingress terminates TLS, so the app must emit https URLs).
+extraEnv:
+  - name: App__TrustProxyHeaders
+    value: "true"
+  - name: App__ProxyBaseUrl
+    value: "https://demo.simplarchive.dev"
+  - name: Demo__Tenant__Name
+    value: "Demo"
+  - name: Demo__Administrator__Email
+    value: "demo@simplarchive.local"
+  - name: Demo__Administrator__Password
+    value: "demo1234"

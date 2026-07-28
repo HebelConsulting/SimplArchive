@@ -1,0 +1,20 @@
+{{- if .Values.certManager.clusterIssuer.enabled }}
+# Let's Encrypt ClusterIssuer for the kiosk's two hosts (ADR 0485). Requires cert-manager to be installed in the
+# cluster (a one-time prerequisite — see docs/deploy/kiosk.md). HTTP-01 solved through the ingress controller.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.certManager.clusterIssuer.name }}
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+spec:
+  acme:
+    server: {{ .Values.certManager.clusterIssuer.server | quote }}
+    email: {{ required "certManager.clusterIssuer.email is required for Let's Encrypt" .Values.certManager.clusterIssuer.email | quote }}
+    privateKeySecretRef:
+      name: {{ .Values.certManager.clusterIssuer.name }}-account-key
+    solvers:
+      - http01:
+          ingress:
+            class: {{ .Values.ingress.className | default "nginx" }}
+{{- end }}

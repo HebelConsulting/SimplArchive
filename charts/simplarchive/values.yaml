@@ -125,6 +125,11 @@ deps:
     resources:
       requests: { cpu: 100m, memory: 128Mi }
       limits: { cpu: 500m, memory: 256Mi }
+  # Daily-reset CronJob (phase 5) — wipes tenant data then restarts the app to re-migrate + re-seed.
+  reset:
+    enabled: false
+    schedule: "0 1 * * *"   # daily 01:00 UTC
+    kubectlImage: rancher/kubectl:v1.31.0
 
 service:
   type: ClusterIP
@@ -144,6 +149,15 @@ ingress:
     # - secretName: simplarchive-tls
     #   hosts:
     #     - simplarchive.example.com
+
+# A Let's Encrypt ClusterIssuer for the Ingress TLS (ADR 0485). Requires cert-manager installed in the cluster
+# (a one-time prerequisite). Disabled by default; the kiosk overlay enables it + provides the email.
+certManager:
+  clusterIssuer:
+    enabled: false
+    name: letsencrypt-prod
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ""   # REQUIRED when enabled — the ACME account/expiry-notice address.
 
 resources:
   requests:

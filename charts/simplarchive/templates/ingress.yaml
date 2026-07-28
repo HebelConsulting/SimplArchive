@@ -18,18 +18,25 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   rules:
-    {{- range .Values.ingress.hosts }}
-    - host: {{ .host | quote }}
+    {{- range $host := .Values.ingress.hosts }}
+    - host: {{ $host.host | quote }}
       http:
         paths:
-          {{- range .paths }}
+          {{- range $host.paths }}
           - path: {{ .path }}
             pathType: {{ .pathType }}
             backend:
               service:
+                {{- if eq ($host.backend | default "app") "seaweedfs" }}
+                # The S3 host routes straight to the object store (presigned URLs the browser hits directly).
+                name: {{ include "simplarchive.fullname" $ }}-seaweedfs
+                port:
+                  number: 8333
+                {{- else }}
                 name: {{ include "simplarchive.fullname" $ }}
                 port:
                   number: {{ $.Values.service.port }}
+                {{- end }}
           {{- end }}
     {{- end }}
 {{- end }}
