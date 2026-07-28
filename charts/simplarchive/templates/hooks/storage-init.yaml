@@ -1,0 +1,56 @@
+{{- if .Values.deps.seaweedfs.enabled }}
+# Creates the object-storage bucket (Object-Lock-enabled) + CORS once SeaweedFS is up. A post-install/upgrade
+# hook (the StatefulSet must exist first), waiting for the S3 endpoint. ADR 0485.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-storage-init
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+    app.kubernetes.io/component: storage-init
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 20
+  template:
+    metadata:
+      labels:
+        {{- include "simplarchive.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: storage-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: storage-init
+          image: amazon/aws-cli:2.36.2
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "simplarchive.statefulSecretName" . }}
+                  key: S3_ACCESS_KEY
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "simplarchive.statefulSecretName" . }}
+                  key: S3_SECRET_KEY
+            - name: AWS_DEFAULT_REGION
+              value: {{ .Values.config.objectStorage.region | quote }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              aws configure set default.s3.addressing_style path
+              endpoint="http://{{ include "simplarchive.fullname" . }}-seaweedfs:8333"
+              bucket="{{ .Values.config.objectStorage.bucketName }}"
+              origin="{{ .Values.config.objectStorage.corsAllowedOrigin | default "*" }}"
+              until aws --endpoint-url "$endpoint" s3api list-buckets >/dev/null 2>&1; do
+                echo "waiting for object store..."; sleep 2;
+              done
+              aws --endpoint-url "$endpoint" s3api head-bucket --bucket "$bucket" 2>/dev/null || \
+                aws --endpoint-url "$endpoint" s3api create-bucket --bucket "$bucket" --object-lock-enabled-for-bucket
+              aws --endpoint-url "$endpoint" s3api put-bucket-cors --bucket "$bucket" \
+                --cors-configuration "CORSRules=[{AllowedOrigins=[\"$origin\"],AllowedMethods=[GET,PUT,HEAD],AllowedHeaders=[\"*\"]}]"
+              echo "bucket ready"
+{{- end }}

@@ -86,6 +86,33 @@ deps:
     resources:
       requests: { cpu: 50m, memory: 64Mi }
       limits: { cpu: 250m, memory: 128Mi }
+  # Stateful deps (phase 2) — StatefulSet + headless Service + PVC each. Credentials are generated into a chart
+  # Secret (idempotent via lookup); phase 3 moves them under OpenBao.
+  postgres:
+    enabled: false
+    image: postgres:16-alpine
+    database: simplarchive
+    storage: 5Gi
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: "1", memory: 1Gi }
+  seaweedfs:
+    enabled: false
+    image: chrislusf/seaweedfs@sha256:c7d6c721b30ae711db766bbbfd40192776e263d4e51e22f57baef7bef93c12c6
+    storage: 10Gi
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: "1", memory: 512Mi }
+  opensearch:
+    enabled: false
+    image: opensearchproject/opensearch:2
+    storage: 5Gi
+    javaOpts: "-Xms512m -Xmx512m"
+    # A privileged initContainer sets vm.max_map_count=262144 (OpenSearch requires it; the node must allow it).
+    setSysctl: true
+    resources:
+      requests: { cpu: 200m, memory: 1Gi }
+      limits: { cpu: "1", memory: 1536Mi }
 
 service:
   type: ClusterIP

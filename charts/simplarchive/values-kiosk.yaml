@@ -13,7 +13,7 @@ autoscaling:
 podDisruptionBudget:
   enabled: false
 
-# In-cluster stateless dependencies (phase 1). The app auto-wires to their Services (see _helpers.tpl).
+# In-cluster dependencies (phases 1-2). The app auto-wires to their Services (see _helpers.tpl).
 deps:
   tika:
     enabled: true
@@ -23,6 +23,12 @@ deps:
     enabled: true
   valkey:
     enabled: true
+  postgres:
+    enabled: true
+  seaweedfs:
+    enabled: true
+  opensearch:
+    enabled: true
 
-# Phases still to come here: the stateful deps (postgres/seaweedfs/opensearch/openbao), the OpenBao secrets flow,
-# the two ingress hosts + cert-manager TLS, the demo seed, resource tuning for 24 GB, and the daily-reset CronJob.
+# Phases still to come here: OpenBao + the app's secret wiring (DB creds / S3 keys / certs), the two ingress hosts
+# + cert-manager TLS, the demo seed, resource tuning for the node, and the daily-reset CronJob.

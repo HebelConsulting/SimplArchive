@@ -61,6 +61,17 @@ config.* value (external/managed). This is what lets `deps.<x>.enabled: true` au
 {{- define "simplarchive.valkeyConn" -}}
 {{- if .Values.deps.valkey.enabled -}}{{ include "simplarchive.fullname" . }}-valkey:6379{{- else -}}{{ .Values.config.valkeyConnectionString }}{{- end -}}
 {{- end -}}
+{{- define "simplarchive.openSearchUrl" -}}
+{{- if .Values.deps.opensearch.enabled -}}http://{{ include "simplarchive.fullname" . }}-opensearch:9200{{- else -}}{{ .Values.config.openSearchUrl }}{{- end -}}
+{{- end -}}
+{{- define "simplarchive.objectStorageServiceUrl" -}}
+{{- if .Values.deps.seaweedfs.enabled -}}http://{{ include "simplarchive.fullname" . }}-seaweedfs:8333{{- else -}}{{ .Values.config.objectStorage.serviceUrl }}{{- end -}}
+{{- end -}}
+
+{{/* Chart-generated Secret holding the in-cluster stateful deps' credentials (kiosk; phase 3 → OpenBao). */}}
+{{- define "simplarchive.statefulSecretName" -}}
+{{- printf "%s-stateful" (include "simplarchive.fullname" .) -}}
+{{- end -}}
 
 {{/* Component name for a dep workload/Service, e.g. "<fullname>-tika". */}}
 {{- define "simplarchive.depName" -}}
@@ -82,7 +93,7 @@ rolls the Deployment automatically (the pod template changes). Secrets come from
 - name: App__ApplyMigrationsAtStartup
   value: {{ .Values.config.app.applyMigrationsAtStartup | quote }}
 - name: ObjectStorage__ServiceUrl
-  value: {{ .Values.config.objectStorage.serviceUrl | quote }}
+  value: {{ include "simplarchive.objectStorageServiceUrl" . | quote }}
 - name: ObjectStorage__PublicServiceUrl
   value: {{ .Values.config.objectStorage.publicServiceUrl | quote }}
 - name: ObjectStorage__Region
@@ -92,7 +103,7 @@ rolls the Deployment automatically (the pod template changes). Secrets come from
 - name: Gotenberg__Url
   value: {{ include "simplarchive.gotenbergUrl" . | quote }}
 - name: OpenSearch__Url
-  value: {{ .Values.config.openSearchUrl | quote }}
+  value: {{ include "simplarchive.openSearchUrl" . | quote }}
 - name: Tika__Url
   value: {{ include "simplarchive.tikaUrl" . | quote }}
 - name: Tika__OcrLanguages
