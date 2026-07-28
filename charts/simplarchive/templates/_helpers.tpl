@@ -72,6 +72,15 @@ config.* value (external/managed). This is what lets `deps.<x>.enabled: true` au
 {{- define "simplarchive.statefulSecretName" -}}
 {{- printf "%s-stateful" (include "simplarchive.fullname" .) -}}
 {{- end -}}
+{{- define "simplarchive.openBaoAddress" -}}
+{{- if .Values.deps.openbao.enabled -}}http://{{ include "simplarchive.fullname" . }}-openbao:8200{{- else -}}{{ .Values.config.openBao.address }}{{- end -}}
+{{- end -}}
+{{- define "simplarchive.openBaoRoleId" -}}
+{{- if .Values.deps.openbao.enabled -}}{{ .Values.deps.openbao.roleId }}{{- else -}}{{ .Values.config.openBao.roleId }}{{- end -}}
+{{- end -}}
+{{- define "simplarchive.openBaoDbTemplate" -}}
+{{- if .Values.deps.openbao.enabled -}}Host={{ include "simplarchive.fullname" . }}-postgres;Port=5432;Database={{ .Values.deps.postgres.database }}{{- else -}}{{ .Values.config.openBao.databaseConnectionTemplate }}{{- end -}}
+{{- end -}}
 
 {{/* Component name for a dep workload/Service, e.g. "<fullname>-tika". */}}
 {{- define "simplarchive.depName" -}}
@@ -121,11 +130,20 @@ rolls the Deployment automatically (the pod template changes). Secrets come from
 - name: Smtp__FromName
   value: {{ .Values.config.smtp.fromName | quote }}
 - name: OpenBao__Address
-  value: {{ .Values.config.openBao.address | quote }}
+  value: {{ include "simplarchive.openBaoAddress" . | quote }}
 - name: OpenBao__RoleId
-  value: {{ .Values.config.openBao.roleId | quote }}
+  value: {{ include "simplarchive.openBaoRoleId" . | quote }}
 - name: OpenBao__DatabaseConnectionTemplate
-  value: {{ .Values.config.openBao.databaseConnectionTemplate | quote }}
+  value: {{ include "simplarchive.openBaoDbTemplate" . | quote }}
+{{- if .Values.deps.openbao.enabled }}
+- name: OpenBao__SecretId
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "simplarchive.fullname" . }}-openbao-approle
+      key: OpenBao__SecretId
+- name: OpenBao__DatabaseOwnerStaticRole
+  value: "simplarchive-owner"
+{{- end }}
 - name: Bootstrap__PlatformAdministrator__Name
   value: {{ .Values.config.bootstrap.name | quote }}
 - name: Bootstrap__PlatformAdministrator__ClientId

@@ -1,0 +1,62 @@
+{{- if .Values.deps.postgres.enabled }}
+# Creates the simplarchive / simplarchive_app / simplarchive_vault Postgres roles (ADR 0358) that OpenBao's
+# database engine + the app's dynamic creds depend on. A post-install/upgrade hook, run before storage-init +
+# migrate. ADR 0485.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-db-init
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+data:
+  db-init.sql: |
+{{ .Files.Get "files/db-init.sql" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-db-init
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+    app.kubernetes.io/component: db-init
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 20
+  template:
+    metadata:
+      labels:
+        {{- include "simplarchive.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: db-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: db-init
+          image: {{ .Values.deps.postgres.image | quote }}
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "simplarchive.statefulSecretName" . }}
+                  key: POSTGRES_PASSWORD
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              host="{{ include "simplarchive.fullname" . }}-postgres"
+              until pg_isready -h "$host" -U postgres -d {{ .Values.deps.postgres.database }} >/dev/null 2>&1; do
+                echo "waiting for postgres..."; sleep 2;
+              done
+              psql -h "$host" -U postgres -d {{ .Values.deps.postgres.database }} -v ON_ERROR_STOP=1 -f /db-init.sql
+              echo "db roles ready"
+          volumeMounts:
+            - name: sql
+              mountPath: /db-init.sql
+              subPath: db-init.sql
+      volumes:
+        - name: sql
+          configMap:
+            name: {{ include "simplarchive.fullname" . }}-db-init
+{{- end }}

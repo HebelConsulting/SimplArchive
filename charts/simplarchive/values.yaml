@@ -113,6 +113,18 @@ deps:
     resources:
       requests: { cpu: 200m, memory: 1Gi }
       limits: { cpu: "1", memory: 1536Mi }
+  # OpenBao (phase 3) — the combined entrypoint inits+unseals+provisions in-pod. roleId/secretId are fixed for the
+  # kiosk (isolated network); the app reads them + the OpenBao-managed DB creds / OIDC certs at runtime.
+  openbao:
+    enabled: false
+    image: openbao/openbao:2.6.0
+    storage: 1Gi
+    roleId: "simplarchive-role"
+    secretId: "simplarchive-secret"
+    bootstrapClientSecret: "dev-bootstrap-secret"
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 256Mi }
 
 service:
   type: ClusterIP
