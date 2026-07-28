@@ -84,6 +84,19 @@ public class AclEntriesController : ControllerBase
         public bool CanAnnotate { get; set; }
     }
 
+    // The picker catalog for the Manage-access dialog (ADR "Manage-access UI for document/folder ACLs").
+    public class GrantablePrincipalsResource : HypermediaResource
+    {
+        public List<GrantablePrincipal> Principals { get; set; } = [];
+    }
+
+    public class GrantablePrincipal
+    {
+        public string Type { get; set; } = "";   // users | groups | service-accounts
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
     public class AclEntriesListResource : HypermediaResource
     {
         public List<AclEntryResource> Entries { get; set; } = [];
@@ -171,6 +184,46 @@ public class AclEntriesController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    // The users/groups/service-accounts a manager can grant to (ADR "Manage-access UI for document/folder ACLs")
+    // — gated on CanManagePermissions on THIS document (not CanManageUsers), so a permissions manager who isn't a
+    // user-admin can still populate the picker (same reasoning as assignable-reviewers). Bounded, not paginated.
+    [HttpGet("grantable-principals")]
+    public async Task<IActionResult> GrantablePrincipals(Guid documentId, CancellationToken cancellationToken)
+    {
+        if (!await _dbContext.Documents.AnyAsync(d => d.Id == documentId, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        if (!await CanManagePermissionsAsync(documentId, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var groups = await _dbContext.Groups.OrderBy(g => g.Name)
+            .Select(g => new GrantablePrincipal { Type = "groups", Id = g.Id, Name = g.Name })
+            .ToListAsync(cancellationToken);
+        var users = await _dbContext.Users.Where(u => u.IsActive).OrderBy(u => u.DisplayName)
+            .Select(u => new GrantablePrincipal { Type = "users", Id = u.Id, Name = u.DisplayName })
+            .ToListAsync(cancellationToken);
+        var serviceAccounts = await _dbContext.ServiceAccounts.Where(s => s.IsActive).OrderBy(s => s.Name)
+            .Select(s => new GrantablePrincipal { Type = "service-accounts", Id = s.Id, Name = s.Name })
+            .ToListAsync(cancellationToken);
+
+        return Ok(new GrantablePrincipalsResource { Principals = [.. groups, .. users, .. serviceAccounts] });
+    }
+
+    [HttpHead("grantable-principals")]
+    public async Task<IActionResult> HeadGrantablePrincipals(Guid documentId, CancellationToken cancellationToken)
+    {
+        if (!await _dbContext.Documents.AnyAsync(d => d.Id == documentId, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        return await CanManagePermissionsAsync(documentId, cancellationToken) ? NoContent() : Forbid();
     }
 
     [HttpGet("{principalType}/{principalId:guid}")]

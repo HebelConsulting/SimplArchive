@@ -223,6 +223,14 @@ public class DocumentsController : ControllerBase
         // Present when the document is checked out (ADR "Document check-out / check-in") — the lock indicator +
         // check-in / override affordance. Null when free.
         public CheckoutInfo? CheckedOut { get; set; }
+
+        // The caller's own CanManagePermissions on this item (ADR "Manage-access UI for document/folder ACLs") —
+        // gates the clients' "Manage access…" affordance without a trial 403.
+        public bool CanManagePermissions { get; set; }
+
+        // True when this item ignores its ancestors' ACL and uses only its own grants (ADR "Document ACL
+        // inheritance resolution") — the read-only inheritance indicator in the Manage-access dialog.
+        public bool BreaksInheritance { get; set; }
     }
 
     public class RetentionInfo
@@ -242,7 +250,7 @@ public class DocumentsController : ControllerBase
         public bool ByMe { get; set; }
     }
 
-    private record DocumentRow(string Name, Guid ConcurrencyToken, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, bool SensitivityWatermark);
+    private record DocumentRow(string Name, Guid ConcurrencyToken, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, bool SensitivityWatermark, bool BreaksInheritance);
 
     [HttpGet]
     public async Task<IActionResult> Get(Guid documentId, CancellationToken cancellationToken)
@@ -304,6 +312,8 @@ public class DocumentsController : ControllerBase
             OnLegalHold = onLegalHold,
             CheckedOut = checkedOut,
             Retention = await BuildRetentionInfoAsync(documentId, cancellationToken),
+            CanManagePermissions = rights.CanManagePermissions,
+            BreaksInheritance = document.BreaksInheritance,
             Links = links,
         });
     }
@@ -1830,7 +1840,8 @@ public class DocumentsController : ControllerBase
                 d.SensitivityLabelId,
                 d.SensitivityLabelId == null ? null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => l.Name).FirstOrDefault(),
                 d.SensitivityLabelId == null ? null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => l.Color).FirstOrDefault(),
-                d.SensitivityLabelId != null && _dbContext.SensitivityLabelDefinitions.Any(l => l.Id == d.SensitivityLabelId && l.Watermark)))
+                d.SensitivityLabelId != null && _dbContext.SensitivityLabelDefinitions.Any(l => l.Id == d.SensitivityLabelId && l.Watermark),
+                d.BreaksInheritance))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
