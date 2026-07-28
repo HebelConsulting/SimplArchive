@@ -1,0 +1,402 @@
+@using SimplArchive.Localization
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+@* Manage the ACL of a document or folder (ADR "Manage-access UI for document/folder ACLs"). Backed by the
+   existing AclEntriesController (list / set / revoke) + the grantable-principals picker. Rights are presented
+   as Viewer/Editor/Manager presets with an Advanced expander for the full nine-right checklist; inheritance
+   is shown read-only (v1). Every load path (list / picker) needs the caller's own CanManagePermissions, so a
+   403 collapses to a friendly read-only message rather than a broken editor. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 480px; max-width: 620px;">
+            @if (_loading)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            }
+            else if (_forbidden)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true">@Strings.Get("MaNoPermission")</MudAlert>
+            }
+            else if (_loadError)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@Strings.Get("MaLoadFailed")</MudAlert>
+            }
+            else
+            {
+                @* Inheritance indicator — read-only in v1. *@
+                <div style="display:flex; align-items:center; gap:6px;" class="mb-3">
+                    <MudIcon Icon="@(_breaksInheritance ? Icons.Material.Filled.LinkOff : Icons.Material.Filled.Link)" Size="Size.Small" Color="Color.Default" />
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@(_breaksInheritance ? Strings.Get("MaAccessOwn") : Strings.Get("MaAccessInherited"))</MudText>
+                </div>
+
+                <MudText Typo="Typo.subtitle2" Class="mb-1">@Strings.Get("MaCurrentAccess")</MudText>
+                @if (_entries.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("MaNoGrants")</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Style="background:transparent;">
+                        <tbody>
+                            @foreach (var e in _entries)
+                            {
+                                <tr>
+                                    <td>
+                                        <MudText Typo="Typo.body2" Style="display:inline;">@PrincipalName(e.PrincipalType, e.PrincipalId)</MudText>
+                                        <span class="mud-text-secondary" style="font-size:.78em;"> (@TypeLabel(e.PrincipalType))</span>
+                                    </td>
+                                    <td><span class="mud-text-secondary" style="font-size:.82em;">@Strings.Get(PresetLabelKey(ToModel(e)))</span></td>
+                                    <td style="text-align:right; white-space:nowrap;">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="Edit" OnClick="() => BeginEdit(e)" Disabled="_busy" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" aria-label="Remove" OnClick="() => RemoveAsync(e)" Disabled="_busy" />
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+
+                @if (_editing is not null)
+                {
+                    <MudPaper Outlined="true" Class="pa-3 mt-3">
+                        @if (_editing.IsNew)
+                        {
+                            <MudSelect T="string" @bind-Value="_editing.PrincipalKey" Label="@Strings.Get("MaPrincipal")"
+                                       Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
+                                @foreach (var p in AvailablePrincipals())
+                                {
+                                    <MudSelectItem T="string" Value="@Key(p.Type, p.Id)">@p.Name (@TypeLabel(p.Type))</MudSelectItem>
+                                }
+                            </MudSelect>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.subtitle2">@_editing.PrincipalName <span class="mud-text-secondary" style="font-size:.82em;">(@TypeLabel(_editing.PrincipalType))</span></MudText>
+                        }
+
+                        <MudSelect T="string" Value="@PresetOf(_editing.Rights)" ValueChanged="ApplyPreset" Label="@Strings.Get("MaRole")"
+                                   Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Class="mt-2">
+                            <MudSelectItem T="string" Value="@("Viewer")">@Strings.Get("MaRoleViewer")</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Editor")">@Strings.Get("MaRoleEditor")</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Manager")">@Strings.Get("MaRoleManager")</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Custom")">@Strings.Get("MaRoleCustom")</MudSelectItem>
+                        </MudSelect>
+
+                        <MudExpansionPanels Class="mt-2" Elevation="0">
+                            <MudExpansionPanel Text="@Strings.Get("MaAdvanced")" Dense="true">
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0 12px;">
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanSee" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightCanSee")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanReadContent" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightReadContent")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanEditContent" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightEditContent")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanEditIndexData" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightEditIndexData")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanCreateSubItems" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightCreateSubItems")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanAnnotate" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightAnnotate")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanMove" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightMove")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanDelete" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightDelete")" />
+                                    <MudCheckBox T="bool" @bind-Value="_editing.Rights.CanManagePermissions" Dense="true" Size="Size.Small" Label="@Strings.Get("MaRightManagePermissions")" />
+                                </div>
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+
+                        <div style="display:flex; gap:8px; justify-content:flex-end;" class="mt-2">
+                            <MudButton Size="Size.Small" OnClick="CancelEdit" Disabled="_busy">@Strings.Get("Cancel")</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="@(_busy || !CanSave())">@Strings.Get("Save")</MudButton>
+                        </div>
+                    </MudPaper>
+                }
+                else
+                {
+                    <MudButton StartIcon="@Icons.Material.Filled.PersonAdd" Size="Size.Small" Class="mt-3"
+                               OnClick="BeginAdd" Disabled="@(_busy || AvailablePrincipals().Count == 0)">@Strings.Get("MaAddAccess")</MudButton>
+                }
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">@Strings.Get("Close")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public Guid DocumentId { get; set; }
+    [Parameter] public string DocumentName { get; set; } = "";
+
+    private bool _loading = true;
+    private bool _forbidden;
+    private bool _loadError;
+    private bool _busy;
+    private bool _breaksInheritance;
+
+    private List<AclEntryDto> _entries = [];
+    private List<PrincipalDto> _principals = [];
+    private EditState? _editing;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _forbidden = false;
+        _loadError = false;
+        try
+        {
+            var listResponse = await Http.GetAsync($"api/documents/{DocumentId}/acl-entries");
+            if (listResponse.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                _forbidden = true;
+                return;
+            }
+            listResponse.EnsureSuccessStatusCode();
+            _entries = (await listResponse.Content.ReadFromJsonAsync<AclListDto>())?.Entries ?? [];
+            _principals = (await Http.GetFromJsonAsync<PrincipalsDto>($"api/documents/{DocumentId}/acl-entries/grantable-principals"))?.Principals ?? [];
+            var doc = await Http.GetFromJsonAsync<DocDto>($"api/documents/{DocumentId}");
+            _breaksInheritance = doc?.BreaksInheritance ?? false;
+        }
+        catch (Exception)
+        {
+            _loadError = true;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    // ---- rights presets ----
+
+    private static RightsModel ViewerBundle() => new() { CanSee = true, CanReadContent = true };
+    private static RightsModel EditorBundle() => new() { CanSee = true, CanReadContent = true, CanEditContent = true, CanEditIndexData = true, CanCreateSubItems = true, CanAnnotate = true, CanMove = true };
+    private static RightsModel ManagerBundle() => new() { CanSee = true, CanReadContent = true, CanEditContent = true, CanEditIndexData = true, CanCreateSubItems = true, CanAnnotate = true, CanMove = true, CanDelete = true, CanManagePermissions = true };
+
+    private static string PresetOf(RightsModel r) =>
+        r.Equals(ViewerBundle()) ? "Viewer"
+        : r.Equals(EditorBundle()) ? "Editor"
+        : r.Equals(ManagerBundle()) ? "Manager"
+        : "Custom";
+
+    private static string PresetLabelKey(RightsModel r) => PresetOf(r) switch
+    {
+        "Viewer" => "MaRoleViewer",
+        "Editor" => "MaRoleEditor",
+        "Manager" => "MaRoleManager",
+        _ => "MaRoleCustom",
+    };
+
+    private void ApplyPreset(string preset)
+    {
+        if (_editing is null)
+        {
+            return;
+        }
+        _editing.Rights = preset switch
+        {
+            "Viewer" => ViewerBundle(),
+            "Editor" => EditorBundle(),
+            "Manager" => ManagerBundle(),
+            _ => _editing.Rights, // "Custom" — leave the checkboxes as-is
+        };
+    }
+
+    private static RightsModel ToModel(AclEntryDto e) => new()
+    {
+        CanSee = e.CanSee,
+        CanReadContent = e.CanReadContent,
+        CanEditContent = e.CanEditContent,
+        CanEditIndexData = e.CanEditIndexData,
+        CanCreateSubItems = e.CanCreateSubItems,
+        CanDelete = e.CanDelete,
+        CanMove = e.CanMove,
+        CanAnnotate = e.CanAnnotate,
+        CanManagePermissions = e.CanManagePermissions,
+    };
+
+    // ---- editor lifecycle ----
+
+    private void BeginAdd() => _editing = new EditState { IsNew = true, Rights = ViewerBundle() };
+
+    private void BeginEdit(AclEntryDto e) => _editing = new EditState
+    {
+        IsNew = false,
+        PrincipalType = e.PrincipalType,
+        PrincipalId = e.PrincipalId,
+        PrincipalName = PrincipalName(e.PrincipalType, e.PrincipalId),
+        PrincipalKey = Key(e.PrincipalType, e.PrincipalId),
+        Rights = ToModel(e),
+    };
+
+    private void CancelEdit() => _editing = null;
+
+    private bool CanSave()
+    {
+        if (_editing is null)
+        {
+            return false;
+        }
+        if (_editing.IsNew && string.IsNullOrEmpty(_editing.PrincipalKey))
+        {
+            return false;
+        }
+        return _editing.Rights.Any(); // the API rejects an all-false grant (EMPTY_GRANT_NOT_ALLOWED)
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_editing is null || !CanSave())
+        {
+            return;
+        }
+
+        var (type, id) = _editing.IsNew ? Split(_editing.PrincipalKey) : (_editing.PrincipalType, _editing.PrincipalId);
+        _busy = true;
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"api/documents/{DocumentId}/acl-entries/{type}/{id}", _editing.Rights);
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                Snackbar.Add(Strings.Get("MaInsufficientRights"), Severity.Warning);
+                return;
+            }
+            response.EnsureSuccessStatusCode();
+            _editing = null;
+            await LoadAsync();
+            Snackbar.Add(Strings.Get("MaSaved"), Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("MaLoadFailed"), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RemoveAsync(AclEntryDto e)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = Strings.Get("MaManageAccess"),
+            Message = string.Format(Strings.Get("MaRemoveConfirm"), PrincipalName(e.PrincipalType, e.PrincipalId)),
+            YesText = Strings.Get("UgDelete"),
+            CancelText = Strings.Get("Cancel"),
+        }) == true;
+        if (!confirmed)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var response = await Http.DeleteAsync($"api/documents/{DocumentId}/acl-entries/{e.PrincipalType}/{e.PrincipalId}");
+            response.EnsureSuccessStatusCode();
+            if (_editing is not null && !_editing.IsNew && _editing.PrincipalType == e.PrincipalType && _editing.PrincipalId == e.PrincipalId)
+            {
+                _editing = null;
+            }
+            await LoadAsync();
+            Snackbar.Add(Strings.Get("MaRemoved"), Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("MaLoadFailed"), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Close() => Dialog.Close();
+
+    // ---- principal helpers ----
+
+    private List<PrincipalDto> AvailablePrincipals() =>
+        _principals.Where(p => !_entries.Any(e => e.PrincipalType == p.Type && e.PrincipalId == p.Id)).ToList();
+
+    private string PrincipalName(string type, Guid id) =>
+        _principals.FirstOrDefault(p => p.Type == type && p.Id == id)?.Name ?? $"{TypeLabel(type)} {id.ToString()[..8]}…";
+
+    private static string Key(string type, Guid id) => $"{type}|{id}";
+
+    private static (string Type, Guid Id) Split(string key)
+    {
+        var parts = key.Split('|', 2);
+        return (parts[0], Guid.Parse(parts[1]));
+    }
+
+    private static string TypeLabel(string type) => type switch
+    {
+        "users" => Strings.Get("MaTypeUser"),
+        "groups" => Strings.Get("MaTypeGroup"),
+        "service-accounts" => Strings.Get("MaTypeServiceAccount"),
+        _ => type,
+    };
+
+    // ---- DTOs / state ----
+
+    private sealed class EditState
+    {
+        public bool IsNew { get; set; }
+        public string PrincipalType { get; set; } = "";
+        public Guid PrincipalId { get; set; }
+        public string PrincipalName { get; set; } = "";
+        public string PrincipalKey { get; set; } = "";
+        public RightsModel Rights { get; set; } = new();
+    }
+
+    // Mirrors AclEntriesController.SetAclEntryRequest (camelCase over the wire). Also the PUT body.
+    private sealed class RightsModel
+    {
+        public bool CanSee { get; set; }
+        public bool CanReadContent { get; set; }
+        public bool CanEditContent { get; set; }
+        public bool CanEditIndexData { get; set; }
+        public bool CanCreateSubItems { get; set; }
+        public bool CanDelete { get; set; }
+        public bool CanMove { get; set; }
+        public bool CanAnnotate { get; set; }
+        public bool CanManagePermissions { get; set; }
+
+        public bool Any() => CanSee || CanReadContent || CanEditContent || CanEditIndexData || CanCreateSubItems || CanDelete || CanMove || CanAnnotate || CanManagePermissions;
+
+        public bool Equals(RightsModel o) =>
+            CanSee == o.CanSee && CanReadContent == o.CanReadContent && CanEditContent == o.CanEditContent
+            && CanEditIndexData == o.CanEditIndexData && CanCreateSubItems == o.CanCreateSubItems && CanDelete == o.CanDelete
+            && CanMove == o.CanMove && CanAnnotate == o.CanAnnotate && CanManagePermissions == o.CanManagePermissions;
+    }
+
+    private sealed class AclListDto { public List<AclEntryDto> Entries { get; set; } = []; }
+
+    private sealed class AclEntryDto
+    {
+        public Guid Id { get; set; }
+        public string PrincipalType { get; set; } = "";
+        public Guid PrincipalId { get; set; }
+        public bool CanSee { get; set; }
+        public bool CanReadContent { get; set; }
+        public bool CanEditContent { get; set; }
+        public bool CanEditIndexData { get; set; }
+        public bool CanCreateSubItems { get; set; }
+        public bool CanDelete { get; set; }
+        public bool CanMove { get; set; }
+        public bool CanAnnotate { get; set; }
+        public bool CanManagePermissions { get; set; }
+    }
+
+    private sealed class PrincipalsDto { public List<PrincipalDto> Principals { get; set; } = []; }
+
+    private sealed class PrincipalDto
+    {
+        public string Type { get; set; } = "";
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    private sealed class DocDto { public bool BreaksInheritance { get; set; } }
+}

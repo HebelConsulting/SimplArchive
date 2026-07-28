@@ -375,6 +375,7 @@
                                             }
                                             @if (!node.IsReference)
                                             {
+                                                <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessAsync(node.Id, node.Name)">@Strings.Get("MaManageAccess")</MudMenuItem>
                                                 <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteAsync(node)">@Strings.Get("UgDelete")</MudMenuItem>
                                             }
                                         </MudMenu>
@@ -407,6 +408,13 @@
                                     <MudTooltip Text="@Strings.Get("RemindTooltip")">
                                         <MudIconButton Size="Size.Small" aria-label="Remind" Icon="@Icons.Material.Filled.Alarm" OnClick="OpenReminderDialogAsync" />
                                     </MudTooltip>
+                                    @* Manage access (ACL) — only when the caller can manage permissions (ADR "Manage-access UI"). *@
+                                    @if (_detailCanManagePermissions)
+                                    {
+                                        <MudTooltip Text="@Strings.Get("MaManageAccess")">
+                                            <MudIconButton Size="Size.Small" aria-label="Manage access" Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessAsync(_selectedItem!.Id, _sysName)" />
+                                        </MudTooltip>
+                                    }
                                 </div>
 
                                 @* System fields — always shown for a document with a confirmed version (ADR 0273). *@
@@ -3965,6 +3973,14 @@
         await LoadTasksAsync();
     }
 
+    // Manage the ACL of a document or folder on demand (ADR "Manage-access UI for document/folder ACLs").
+    // The dialog is self-contained (loads the grants + picker, gates itself on the caller's CanManagePermissions).
+    private async Task OpenManageAccessAsync(Guid documentId, string name)
+    {
+        var parameters = new DialogParameters { ["DocumentId"] = documentId, ["DocumentName"] = name };
+        await DialogService.ShowAsync<ManageAccessDialog>(Strings.Get("MaManageAccess"), parameters, new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+    }
+
     private async Task LoadTasksAsync()
     {
         try
@@ -4758,6 +4774,8 @@
             _detailSensitivityName = detail?.SensitivityLabelName ?? "";
             _detailSensitivityColor = detail?.SensitivityLabelColor;
             _detailSensitivityWatermark = detail?.SensitivityWatermark ?? false;
+            _detailCanManagePermissions = detail?.CanManagePermissions ?? false;
+            _detailBreaksInheritance = detail?.BreaksInheritance ?? false;
             if (_sensitivityLabels.Count == 0)
             {
                 await LoadSensitivityLabelsAsync();
@@ -4917,6 +4935,10 @@
     }
 
     private DetailRetentionDto? _detailRetention;
+    // Manage-access affordance (ADR "Manage-access UI for document/folder ACLs"): the caller's own
+    // CanManagePermissions on the selected item gates the button; BreaksInheritance is shown in the dialog.
+    private bool _detailCanManagePermissions;
+    private bool _detailBreaksInheritance;
     // Sensitivity label (ADR "Data classification / sensitivity labels"): current value + the staged edit value.
     // The selected document's sensitivity (ADR "Configurable sensitivity labels + upload defaults") — the per-
     // tenant label id/name/colour + whether it watermarks; _edit* is the pending picker value.
@@ -4952,7 +4974,7 @@
         var svg = $"<svg xmlns='http://www.w3.org/2000/svg' width='360' height='200'><text x='10' y='150' fill='rgba(130,130,130,0.20)' font-size='20' font-family='sans-serif' transform='rotate(-28 10 150)'>{text}</text></svg>";
         return $"background-image:url(\"data:image/svg+xml,{Uri.EscapeDataString(svg)}\");";
     }
-    private record DocumentDetailResponse { public DetailRetentionDto? Retention { get; set; } public Guid? SensitivityLabelId { get; set; } public string SensitivityLabelName { get; set; } = ""; public string? SensitivityLabelColor { get; set; } public bool SensitivityWatermark { get; set; } }
+    private record DocumentDetailResponse { public DetailRetentionDto? Retention { get; set; } public Guid? SensitivityLabelId { get; set; } public string SensitivityLabelName { get; set; } = ""; public string? SensitivityLabelColor { get; set; } public bool SensitivityWatermark { get; set; } public bool CanManagePermissions { get; set; } public bool BreaksInheritance { get; set; } }
     private record DetailRetentionDto { public int RetentionYears { get; set; } public string DispositionDate { get; set; } = ""; public bool SuspendedByHold { get; set; } }
 
     // Derives the always-shown system fields from the confirmed versions (ADR 0273): the current version's

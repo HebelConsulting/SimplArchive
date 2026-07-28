@@ -586,6 +586,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // "References …" appears only for an item that at least one reference targets.
     public bool SelectedHasReferences => SelectedItem is { HasReferences: true };
 
+    // "Manage access …" appears for any real folder or document (not a reference/archive row). ACLs apply to
+    // folders and documents alike; the dialog self-gates on the caller's CanManagePermissions (ADR 0486).
+    public bool CanManageAccess => SelectedItem is { IsReference: false, IsArchiveEntry: false, IsArchiveBack: false };
+
     async partial void OnSelectedTreeNodeChanged(TreeNodeViewModel? value)
     {
         // The Inbox / Check-out launcher nodes under Personal switch to their bottom tab (ADR "GUI-tree Personal
@@ -635,6 +639,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanRemind));
         OnPropertyChanged(nameof(SelectedIsReference));
         OnPropertyChanged(nameof(SelectedHasReferences));
+        OnPropertyChanged(nameof(CanManageAccess));
         OnPropertyChanged(nameof(CanCheckOut));
         OnPropertyChanged(nameof(CanOverrideSelected));
         if (value is { IsFolder: false, IsArchiveEntry: false })

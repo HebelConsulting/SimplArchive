@@ -313,6 +313,10 @@
                                     <MenuItem Header="{loc:Tr UgDelete}" Click="OnDelete">
                                         <MenuItem.Icon><i:Icon Value="mdi-delete" /></MenuItem.Icon>
                                     </MenuItem>
+                                    <Separator IsVisible="{Binding CanManageAccess}" />
+                                    <MenuItem Header="{loc:Tr MaManageAccess}" Click="OnManageAccess" IsVisible="{Binding CanManageAccess}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-shield-account-outline" /></MenuItem.Icon>
+                                    </MenuItem>
                                     <Separator IsVisible="{Binding CanLegalHold}" />
                                     <MenuItem Header="{loc:Tr CtxPlaceLegalHold}" Click="OnPlaceLegalHold" IsVisible="{Binding CanLegalHold}">
                                         <MenuItem.Icon><i:Icon Value="mdi-gavel" /></MenuItem.Icon>

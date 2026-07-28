@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using SimplArchive.Localization;
 
 namespace SimplArchive.DesktopClient.Services;
 
@@ -2806,6 +2807,98 @@ public sealed class SimplArchiveApiClient
         using var response = await _http.PostAsJsonAsync($"api/retention/{documentId}/extend", new { until }, cancellationToken);
         await ThrowIfProblemAsync(response, "Could not extend retention.", cancellationToken);
     }
+
+    // ---- Document ACL / Manage access (ADR "Manage-access UI for document/folder ACLs") -------------
+
+    public sealed record AclRights(
+        bool CanSee, bool CanReadContent, bool CanEditContent, bool CanEditIndexData,
+        bool CanCreateSubItems, bool CanDelete, bool CanMove, bool CanAnnotate, bool CanManagePermissions);
+
+    public sealed record AclEntryInfo(string PrincipalType, Guid PrincipalId, AclRights Rights);
+
+    public sealed record GrantablePrincipalInfo(string Type, Guid Id, string Name);
+
+    // Everything the Manage-access dialog needs in one load. Forbidden = the caller lacks CanManagePermissions
+    // (the list/picker endpoints 403), so the dialog shows a read-only message instead of a broken editor.
+    public sealed record AclInfo(bool Forbidden, bool BreaksInheritance, List<AclEntryInfo> Entries, List<GrantablePrincipalInfo> Principals);
+
+    public async Task<AclInfo> GetAclAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        using var listResponse = await _http.GetAsync($"api/documents/{documentId}/acl-entries", cancellationToken);
+        if (listResponse.StatusCode == HttpStatusCode.Forbidden)
+        {
+            return new AclInfo(true, false, [], []);
+        }
+
+        listResponse.EnsureSuccessStatusCode();
+
+        var entries = new List<AclEntryInfo>();
+        var listJson = await listResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        if (listJson.TryGetProperty("entries", out var es))
+        {
+            foreach (var e in es.EnumerateArray())
+            {
+                entries.Add(new AclEntryInfo(
+                    e.GetProperty("principalType").GetString() ?? "",
+                    e.GetProperty("principalId").GetGuid(),
+                    ReadRights(e)));
+            }
+        }
+
+        var principals = new List<GrantablePrincipalInfo>();
+        var pj = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/acl-entries/grantable-principals", cancellationToken);
+        if (pj.TryGetProperty("principals", out var ps))
+        {
+            foreach (var p in ps.EnumerateArray())
+            {
+                principals.Add(new GrantablePrincipalInfo(
+                    p.GetProperty("type").GetString() ?? "",
+                    p.GetProperty("id").GetGuid(),
+                    p.GetProperty("name").GetString() ?? ""));
+            }
+        }
+
+        var breaksInheritance = false;
+        try
+        {
+            var doc = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}", cancellationToken);
+            breaksInheritance = doc.TryGetProperty("breaksInheritance", out var bi) && bi.ValueKind == JsonValueKind.True;
+        }
+        catch
+        {
+            // Best-effort — the inheritance line just reads "inherits" if the document GET fails.
+        }
+
+        return new AclInfo(false, breaksInheritance, entries, principals);
+    }
+
+    public async Task SetAclEntryAsync(Guid documentId, string principalType, Guid principalId, AclRights rights, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/acl-entries/{principalType}/{principalId}", rights, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException(Strings.Get("MaInsufficientRights"));
+        }
+
+        await ThrowIfProblemAsync(response, Strings.Get("MaLoadFailed"), cancellationToken);
+    }
+
+    public async Task RevokeAclEntryAsync(Guid documentId, string principalType, Guid principalId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync($"api/documents/{documentId}/acl-entries/{principalType}/{principalId}", cancellationToken);
+        await ThrowIfProblemAsync(response, Strings.Get("MaLoadFailed"), cancellationToken);
+    }
+
+    private static AclRights ReadRights(JsonElement e) => new(
+        e.GetProperty("canSee").GetBoolean(),
+        e.GetProperty("canReadContent").GetBoolean(),
+        e.GetProperty("canEditContent").GetBoolean(),
+        e.GetProperty("canEditIndexData").GetBoolean(),
+        e.GetProperty("canCreateSubItems").GetBoolean(),
+        e.GetProperty("canDelete").GetBoolean(),
+        e.GetProperty("canMove").GetBoolean(),
+        e.GetProperty("canAnnotate").GetBoolean(),
+        e.GetProperty("canManagePermissions").GetBoolean());
 
     // ---- Group membership (ADR "Group membership editing") ------------------------------------------
 

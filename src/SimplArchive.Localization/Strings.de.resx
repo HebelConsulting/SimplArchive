@@ -2604,4 +2604,97 @@
   <data name="StReminderSet" xml:space="preserve">
     <value>Erinnerung gesetzt.</value>
   </data>
+  <data name="MaManageAccess" xml:space="preserve">
+    <value>Zugriff verwalten…</value>
+  </data>
+  <data name="MaNoPermission" xml:space="preserve">
+    <value>Sie sind nicht berechtigt, den Zugriff auf dieses Element zu verwalten.</value>
+  </data>
+  <data name="MaLoadFailed" xml:space="preserve">
+    <value>Die Zugriffseinstellungen konnten nicht geladen werden.</value>
+  </data>
+  <data name="MaAccessOwn" xml:space="preserve">
+    <value>Dieses Element verwendet eigene Berechtigungen.</value>
+  </data>
+  <data name="MaAccessInherited" xml:space="preserve">
+    <value>Dieses Element erbt die Berechtigungen des übergeordneten Ordners.</value>
+  </data>
+  <data name="MaCurrentAccess" xml:space="preserve">
+    <value>Wer hat Zugriff</value>
+  </data>
+  <data name="MaNoGrants" xml:space="preserve">
+    <value>Für dieses Element sind keine direkten Berechtigungen festgelegt.</value>
+  </data>
+  <data name="MaAddAccess" xml:space="preserve">
+    <value>Zugriff hinzufügen</value>
+  </data>
+  <data name="MaPrincipal" xml:space="preserve">
+    <value>Benutzer, Gruppe oder Dienstkonto</value>
+  </data>
+  <data name="MaRole" xml:space="preserve">
+    <value>Rolle</value>
+  </data>
+  <data name="MaRoleViewer" xml:space="preserve">
+    <value>Leser</value>
+  </data>
+  <data name="MaRoleEditor" xml:space="preserve">
+    <value>Bearbeiter</value>
+  </data>
+  <data name="MaRoleManager" xml:space="preserve">
+    <value>Manager</value>
+  </data>
+  <data name="MaRoleCustom" xml:space="preserve">
+    <value>Benutzerdefiniert</value>
+  </data>
+  <data name="MaAdvanced" xml:space="preserve">
+    <value>Erweiterte Berechtigungen</value>
+  </data>
+  <data name="MaRightCanSee" xml:space="preserve">
+    <value>Sehen</value>
+  </data>
+  <data name="MaRightReadContent" xml:space="preserve">
+    <value>Inhalt lesen</value>
+  </data>
+  <data name="MaRightEditContent" xml:space="preserve">
+    <value>Inhalt bearbeiten</value>
+  </data>
+  <data name="MaRightEditIndexData" xml:space="preserve">
+    <value>Indexdaten bearbeiten</value>
+  </data>
+  <data name="MaRightCreateSubItems" xml:space="preserve">
+    <value>Unterelemente erstellen</value>
+  </data>
+  <data name="MaRightDelete" xml:space="preserve">
+    <value>Löschen</value>
+  </data>
+  <data name="MaRightMove" xml:space="preserve">
+    <value>Verschieben</value>
+  </data>
+  <data name="MaRightAnnotate" xml:space="preserve">
+    <value>Kommentieren</value>
+  </data>
+  <data name="MaRightManagePermissions" xml:space="preserve">
+    <value>Berechtigungen verwalten</value>
+  </data>
+  <data name="MaInsufficientRights" xml:space="preserve">
+    <value>Sie können nur Berechtigungen erteilen, die Sie selbst besitzen.</value>
+  </data>
+  <data name="MaSaved" xml:space="preserve">
+    <value>Zugriff aktualisiert.</value>
+  </data>
+  <data name="MaRemoved" xml:space="preserve">
+    <value>Zugriff entfernt.</value>
+  </data>
+  <data name="MaRemoveConfirm" xml:space="preserve">
+    <value>Gesamten Zugriff für {0} entfernen?</value>
+  </data>
+  <data name="MaTypeUser" xml:space="preserve">
+    <value>Benutzer</value>
+  </data>
+  <data name="MaTypeGroup" xml:space="preserve">
+    <value>Gruppe</value>
+  </data>
+  <data name="MaTypeServiceAccount" xml:space="preserve">
+    <value>Dienstkonto</value>
+  </data>
 </root>

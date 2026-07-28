@@ -512,6 +512,18 @@ public partial class MainWindow : Window
         }
     });
 
+    private void OnManageAccess(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api || vm.SelectedItem is not { } node)
+        {
+            return;
+        }
+
+        var mvm = new ManageAccessViewModel();
+        await mvm.SetupAsync(api, node.Id, node.Name);
+        await new ManageAccessDialog(mvm).ShowDialog(this);
+    });
+
     private void OnSaveAs(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.SelectedItem is not { IsFolder: false } node)
