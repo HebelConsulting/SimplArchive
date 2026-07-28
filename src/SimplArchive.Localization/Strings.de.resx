@@ -2697,4 +2697,16 @@
   <data name="MaTypeServiceAccount" xml:space="preserve">
     <value>Dienstkonto</value>
   </data>
+  <data name="MaBreakInheritance" xml:space="preserve">
+    <value>Vererbung aufheben</value>
+  </data>
+  <data name="MaRestoreInheritance" xml:space="preserve">
+    <value>Vererbung wiederherstellen</value>
+  </data>
+  <data name="MaBreakConfirm" xml:space="preserve">
+    <value>Vererbung aufheben? Die geerbten Berechtigungen werden hierher kopiert, damit Sie sie unabhängig bearbeiten können.</value>
+  </data>
+  <data name="MaRestoreConfirm" xml:space="preserve">
+    <value>Vererbung wiederherstellen? Die eigenen Berechtigungen dieses Elements werden verworfen und es erbt wieder vom übergeordneten Ordner.</value>
+  </data>
 </root>

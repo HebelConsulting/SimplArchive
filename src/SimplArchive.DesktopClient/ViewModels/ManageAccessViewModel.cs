@@ -24,7 +24,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
     [ObservableProperty] private bool _loading = true;
     [ObservableProperty] private bool _forbidden;
     [ObservableProperty] private bool _loadFailed;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(InheritanceText))] private bool _breaksInheritance;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(InheritanceText))][NotifyPropertyChangedFor(nameof(InheritanceToggleLabel))] private bool _breaksInheritance;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(HasStatus))] private string _status = "";
     public bool HasStatus => !string.IsNullOrEmpty(Status);
 
@@ -33,9 +33,11 @@ public sealed partial class ManageAccessViewModel : ObservableObject
     public bool HasEntries => Entries.Count > 0;
     public bool Ready => !Loading && !Forbidden && !LoadFailed;
     public string InheritanceText => BreaksInheritance ? Strings.Get("MaAccessOwn") : Strings.Get("MaAccessInherited");
+    public string InheritanceToggleLabel => BreaksInheritance ? Strings.Get("MaRestoreInheritance") : Strings.Get("MaBreakInheritance");
 
-    // Confirm provider (nested ConfirmDialog owned by the dialog window) set by the dialog code-behind.
-    public Func<string, Task<bool>>? ConfirmRemoveAsync { get; set; }
+    // Confirm provider (a nested ConfirmDialog owned by the dialog window; message + confirm-button label) set
+    // by the dialog code-behind — used by both remove and the inheritance toggle.
+    public Func<string, string, Task<bool>>? ConfirmAsync { get; set; }
 
     // ---- editor state ----
     [ObservableProperty][NotifyPropertyChangedFor(nameof(EditorVisible))][NotifyPropertyChangedFor(nameof(AddButtonEnabled))] private bool _editing;
@@ -170,6 +172,39 @@ public sealed partial class ManageAccessViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task ToggleInheritance()
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        var breaking = !BreaksInheritance;
+        var confirm = ConfirmAsync;
+        var message = breaking ? Strings.Get("MaBreakConfirm") : Strings.Get("MaRestoreConfirm");
+        var label = breaking ? Strings.Get("MaBreakInheritance") : Strings.Get("MaRestoreInheritance");
+        if (confirm is not null && !await confirm(message, label))
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.SetInheritanceAsync(_documentId, breaking);
+            Editing = false;
+            await ReloadAsync();
+        }
+        catch (ApiActionException ex)
+        {
+            Status = ex.Message;
+        }
+        catch (Exception)
+        {
+            Status = Strings.Get("MaLoadFailed");
+        }
+    }
+
+    [RelayCommand]
     private void ApplyViewer() => Load(ViewerBundle());
 
     [RelayCommand]
@@ -213,8 +248,8 @@ public sealed partial class ManageAccessViewModel : ObservableObject
             return;
         }
 
-        var confirm = ConfirmRemoveAsync;
-        if (confirm is not null && !await confirm(string.Format(Strings.Get("MaRemoveConfirm"), row.PrincipalLabel)))
+        var confirm = ConfirmAsync;
+        if (confirm is not null && !await confirm(string.Format(Strings.Get("MaRemoveConfirm"), row.PrincipalLabel), Strings.Get("UgDelete")))
         {
             return;
         }

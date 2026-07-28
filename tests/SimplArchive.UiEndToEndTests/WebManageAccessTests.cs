@@ -66,4 +66,41 @@ public class WebManageAccessTests
         await Expect(dialog.GetByText(granteeName).First).ToBeVisibleAsync();
         await Expect(dialog.GetByText("Viewer").First).ToBeVisibleAsync();
     }
+
+    [Fact]
+    public async Task Break_inheritance_from_the_dialog_flips_the_toggle()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var name = $"inh-{suffix}";
+
+        using var http = new HttpClient { BaseAddress = new Uri(_app.BaseUrl) };
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await Ui.GetUserTokenAsync(_app.BaseUrl));
+        var repos = (await http.GetFromJsonAsync<JsonElement>("/api/repositories")).GetProperty("repositories");
+        var repoId = repos.EnumerateArray().First(r => r.GetProperty("name").GetString() == "Demo Repository").GetProperty("id").GetGuid();
+        var docId = (await (await http.PostAsJsonAsync($"/api/documents/{repoId}/children", new { name })).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var v = await (await http.PostAsJsonAsync($"/api/documents/{docId}/versions", new { fileExtension = ".txt" })).Content.ReadFromJsonAsync<JsonElement>();
+        using (var storage = new HttpClient())
+        {
+            (await storage.PutAsync(v.GetProperty("uploadUrl").GetString()!, new ByteArrayContent(Encoding.UTF8.GetBytes("inh content")))).EnsureSuccessStatusCode();
+        }
+        (await http.PutAsJsonAsync($"/api/documents/{docId}/versions/{v.GetProperty("id").GetGuid()}", new { })).EnsureSuccessStatusCode();
+
+        var page = await Ui.LoginAsync(_app);
+        await page.GetByText("Demo Repository").First.ClickAsync();
+        var row = page.Locator("[data-pane='list']").Locator(".wb-list-row").Filter(new() { HasText = name });
+        await Expect(row).ToBeVisibleAsync();
+        await row.ClickAsync();
+
+        var detail = page.Locator("[data-pane='index']");
+        await detail.GetByRole(AriaRole.Button, new() { Name = "Manage access" }).ClickAsync();
+        var dialog = page.Locator(".mud-dialog").First;
+        await Expect(dialog).ToBeVisibleAsync();
+
+        // A fresh child inherits — the toggle offers Break inheritance. Click it and confirm.
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Break inheritance" }).ClickAsync();
+        await page.Locator(".mud-message-box").GetByRole(AriaRole.Button, new() { Name = "Break inheritance" }).ClickAsync();
+
+        // The dialog reloads: the toggle now offers Restore inheritance (inheritance is broken).
+        await Expect(dialog.GetByRole(AriaRole.Button, new() { Name = "Restore inheritance" })).ToBeVisibleAsync();
+    }
 }

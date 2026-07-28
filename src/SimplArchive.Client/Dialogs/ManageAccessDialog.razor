@@ -25,10 +25,13 @@
             }
             else
             {
-                @* Inheritance indicator — read-only in v1. *@
+                @* Inheritance indicator + break/restore toggle. *@
                 <div style="display:flex; align-items:center; gap:6px;" class="mb-3">
                     <MudIcon Icon="@(_breaksInheritance ? Icons.Material.Filled.LinkOff : Icons.Material.Filled.Link)" Size="Size.Small" Color="Color.Default" />
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@(_breaksInheritance ? Strings.Get("MaAccessOwn") : Strings.Get("MaAccessInherited"))</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="flex:1 1 auto;">@(_breaksInheritance ? Strings.Get("MaAccessOwn") : Strings.Get("MaAccessInherited"))</MudText>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="ToggleInheritanceAsync" Disabled="_busy">
+                        @(_breaksInheritance ? Strings.Get("MaRestoreInheritance") : Strings.Get("MaBreakInheritance"))
+                    </MudButton>
                 </div>
 
                 <MudText Typo="Typo.subtitle2" Class="mb-1">@Strings.Get("MaCurrentAccess")</MudText>
@@ -312,6 +315,45 @@
         }
     }
 
+    private async Task ToggleInheritanceAsync()
+    {
+        var breaking = !_breaksInheritance;
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = Strings.Get("MaManageAccess"),
+            Message = breaking ? Strings.Get("MaBreakConfirm") : Strings.Get("MaRestoreConfirm"),
+            YesText = breaking ? Strings.Get("MaBreakInheritance") : Strings.Get("MaRestoreInheritance"),
+            CancelText = Strings.Get("Cancel"),
+        }) == true;
+        if (!confirmed)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"api/documents/{DocumentId}/acl-entries/inheritance", new { breaksInheritance = breaking });
+            if (!response.IsSuccessStatusCode)
+            {
+                var problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+                Snackbar.Add(problem?.Detail ?? Strings.Get("MaLoadFailed"), Severity.Warning);
+                return;
+            }
+            _editing = null;
+            await LoadAsync();
+            Snackbar.Add(Strings.Get("MaSaved"), Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("MaLoadFailed"), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
     private void Close() => Dialog.Close();
 
     // ---- principal helpers ----
@@ -399,4 +441,6 @@
     }
 
     private sealed class DocDto { public bool BreaksInheritance { get; set; } }
+
+    private sealed class ProblemDto { public string? Detail { get; set; } }
 }

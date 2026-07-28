@@ -2697,4 +2697,16 @@
   <data name="MaTypeServiceAccount" xml:space="preserve">
     <value>Service account</value>
   </data>
+  <data name="MaBreakInheritance" xml:space="preserve">
+    <value>Break inheritance</value>
+  </data>
+  <data name="MaRestoreInheritance" xml:space="preserve">
+    <value>Restore inheritance</value>
+  </data>
+  <data name="MaBreakConfirm" xml:space="preserve">
+    <value>Break inheritance? The inherited permissions will be copied here so you can edit them independently.</value>
+  </data>
+  <data name="MaRestoreConfirm" xml:space="preserve">
+    <value>Restore inheritance? This item's own permissions will be discarded and it will inherit from its parent folder again.</value>
+  </data>
 </root>

@@ -10,6 +10,7 @@ using SimplArchive.Api.Pagination;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Notifications;
 using SimplArchive.Domain.Acl;
+using SimplArchive.Domain.Documents;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Controllers;
@@ -100,6 +101,16 @@ public class AclEntriesController : ControllerBase
     public class AclEntriesListResource : HypermediaResource
     {
         public List<AclEntryResource> Entries { get; set; } = [];
+    }
+
+    public class SetInheritanceRequest
+    {
+        public bool BreaksInheritance { get; set; }
+    }
+
+    public class InheritanceResource : HypermediaResource
+    {
+        public bool BreaksInheritance { get; set; }
     }
 
     public class SetAclEntryRequest
@@ -397,6 +408,124 @@ public class AclEntriesController : ControllerBase
         await _audit.RecordAsync(AuditActions.AclRevoked, "Document", documentId, await DocumentNameAsync(documentId, cancellationToken), $"{principalType} {principalId}", cancellationToken: cancellationToken);
 
         return NoContent();
+    }
+
+    // Break or restore ACL inheritance on a document/folder (ADR "Manage-access UI ..." inheritance follow-up).
+    //   Break (true): snapshot the currently-effective inherited grants as explicit own grants on this document
+    //     (so access is preserved and then editable), then set the flag. No escalation cap — the copied grants
+    //     already applied via inheritance, so copying them down grants nobody anything new.
+    //   Restore (false): discard this document's own grants and revert to inheriting from the parent.
+    // A repository root has no parent to inherit from (its own grants are always the fallback), so the toggle is
+    // rejected there. Gated on the caller's own CanManagePermissions, like every action here.
+    [HttpPut("inheritance")]
+    public async Task<IActionResult> SetInheritance(Guid documentId, [FromBody] SetInheritanceRequest request, CancellationToken cancellationToken)
+    {
+        var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken);
+
+        if (document is null)
+        {
+            return NotFound();
+        }
+
+        if (!await CanManagePermissionsAsync(documentId, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (document.ParentId is null)
+        {
+            throw new CannotChangeRootInheritanceException();
+        }
+
+        if (document.BreaksInheritance == request.BreaksInheritance)
+        {
+            return Ok(new InheritanceResource { BreaksInheritance = document.BreaksInheritance });
+        }
+
+        if (request.BreaksInheritance)
+        {
+            // Copy the governing scope's own grants down so effective access is preserved, then break.
+            var governingScopeId = await ResolveGoverningScopeAsync(document, cancellationToken);
+            if (governingScopeId is { } sourceId)
+            {
+                var sourceEntries = await _dbContext.AclEntries.Where(a => a.DocumentId == sourceId).ToListAsync(cancellationToken);
+                foreach (var src in sourceEntries)
+                {
+                    _dbContext.AclEntries.Add(new AclEntry
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = document.TenantId,
+                        DocumentId = documentId,
+                        UserId = src.UserId,
+                        GroupId = src.GroupId,
+                        ServiceAccountId = src.ServiceAccountId,
+                        CanSee = src.CanSee,
+                        CanReadContent = src.CanReadContent,
+                        CanEditContent = src.CanEditContent,
+                        CanEditIndexData = src.CanEditIndexData,
+                        CanDelete = src.CanDelete,
+                        CanCreateSubItems = src.CanCreateSubItems,
+                        CanManagePermissions = src.CanManagePermissions,
+                        CanMove = src.CanMove,
+                        CanAnnotate = src.CanAnnotate,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                    });
+                }
+            }
+
+            document.BreaksInheritance = true;
+        }
+        else
+        {
+            // Restore: discard own grants and revert to inheriting from the parent.
+            var ownEntries = await _dbContext.AclEntries.Where(a => a.DocumentId == documentId).ToListAsync(cancellationToken);
+            _dbContext.AclEntries.RemoveRange(ownEntries);
+            document.BreaksInheritance = false;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Changing inheritance changes the resolved visibility of this document and its inheriting descendants.
+        await EnqueueSubtreeAsync(documentId, cancellationToken);
+
+        await _audit.RecordAsync(
+            request.BreaksInheritance ? AuditActions.AclInheritanceBroken : AuditActions.AclInheritanceRestored,
+            "Document", documentId, document.Name, cancellationToken: cancellationToken);
+
+        return Ok(new InheritanceResource { BreaksInheritance = document.BreaksInheritance });
+    }
+
+    // The ACL scope a currently-inheriting document draws its grants from: the nearest ancestor that itself
+    // breaks inheritance, else the repository root (whose own grants are the ultimate fallback). Mirrors the
+    // resolution in EffectiveRightsCalculator (ADR "Document ACL inheritance resolution") — one query per
+    // ancestor level, walking up from the parent.
+    private async Task<Guid?> ResolveGoverningScopeAsync(Document document, CancellationToken cancellationToken)
+    {
+        var currentId = document.ParentId;
+        Guid? rootId = null;
+
+        while (currentId is { } id)
+        {
+            var node = await _dbContext.Documents
+                .Where(d => d.Id == id)
+                .Select(d => new { d.Id, d.ParentId, d.BreaksInheritance })
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (node is null)
+            {
+                break;
+            }
+
+            if (node.BreaksInheritance)
+            {
+                return node.Id;
+            }
+
+            rootId = node.Id;
+            currentId = node.ParentId;
+        }
+
+        return rootId;
     }
 
     private Task<string?> DocumentNameAsync(Guid documentId, CancellationToken cancellationToken) =>

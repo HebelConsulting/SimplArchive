@@ -1,7 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using SimplArchive.DesktopClient.ViewModels;
-using SimplArchive.Localization;
 
 namespace SimplArchive.DesktopClient.Views;
 
@@ -18,7 +17,7 @@ public partial class ManageAccessDialog : Window
     {
         InitializeComponent();
         DataContext = viewModel;
-        viewModel.ConfirmRemoveAsync = message => new ConfirmDialog(message, Strings.Get("UgDelete")).ShowDialog<bool>(this);
+        viewModel.ConfirmAsync = (message, confirmLabel) => new ConfirmDialog(message, confirmLabel).ShowDialog<bool>(this);
     }
 
     private void OnClose(object? sender, RoutedEventArgs e) => Close();

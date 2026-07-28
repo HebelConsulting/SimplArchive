@@ -8,6 +8,8 @@ public static class AuditActions
 {
     public const string AclGranted = "Acl.Granted";
     public const string AclRevoked = "Acl.Revoked";
+    public const string AclInheritanceBroken = "Acl.InheritanceBroken";
+    public const string AclInheritanceRestored = "Acl.InheritanceRestored";
 
     public const string DocumentDeleted = "Document.Deleted";
     public const string DocumentRestored = "Document.Restored";

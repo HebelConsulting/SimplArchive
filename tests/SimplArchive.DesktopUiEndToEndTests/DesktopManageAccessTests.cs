@@ -56,4 +56,39 @@ public class DesktopManageAccessTests
 
         await api.DeleteAsync(folder.Id); // clean up
     }
+
+    [Fact]
+    public async Task Break_copies_inherited_grants_down_and_restore_clears_them()
+    {
+        DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
+        var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var repo = (await api.GetRepositoriesAsync())[0];
+        var folderName = $"inh-{suffix}";
+        await api.CreateFolderAsync(repo.Id, folderName);
+        var folder = (await api.GetChildrenAsync(repo.Id)).First(c => c.Name == folderName);
+
+        // A fresh child inherits — no own grants.
+        var before = await api.GetAclAsync(folder.Id);
+        Assert.False(before.BreaksInheritance);
+        Assert.Empty(before.Entries);
+
+        // Break → the governing (root) grants are copied down, so the folder now has its own grants.
+        await api.SetInheritanceAsync(folder.Id, true);
+        var broken = await api.GetAclAsync(folder.Id);
+        Assert.True(broken.BreaksInheritance);
+        Assert.NotEmpty(broken.Entries);
+
+        // Restore → own grants discarded, inherits again.
+        await api.SetInheritanceAsync(folder.Id, false);
+        var restored = await api.GetAclAsync(folder.Id);
+        Assert.False(restored.BreaksInheritance);
+        Assert.Empty(restored.Entries);
+
+        // A repository root has no parent to inherit from — the toggle is refused.
+        await Assert.ThrowsAnyAsync<Exception>(() => api.SetInheritanceAsync(repo.Id, true));
+
+        await api.DeleteAsync(folder.Id); // clean up
+    }
 }

@@ -2697,4 +2697,16 @@
   <data name="MaTypeServiceAccount" xml:space="preserve">
     <value>Account di servizio</value>
   </data>
+  <data name="MaBreakInheritance" xml:space="preserve">
+    <value>Interrompi ereditarietà</value>
+  </data>
+  <data name="MaRestoreInheritance" xml:space="preserve">
+    <value>Ripristina ereditarietà</value>
+  </data>
+  <data name="MaBreakConfirm" xml:space="preserve">
+    <value>Interrompere l'ereditarietà? Le autorizzazioni ereditate verranno copiate qui per poterle modificare in modo indipendente.</value>
+  </data>
+  <data name="MaRestoreConfirm" xml:space="preserve">
+    <value>Ripristinare l'ereditarietà? Le autorizzazioni proprie di questo elemento verranno eliminate ed erediterà nuovamente dalla cartella principale.</value>
+  </data>
 </root>

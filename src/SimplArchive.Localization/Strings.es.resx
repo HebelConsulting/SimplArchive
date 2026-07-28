@@ -2697,4 +2697,16 @@
   <data name="MaTypeServiceAccount" xml:space="preserve">
     <value>Cuenta de servicio</value>
   </data>
+  <data name="MaBreakInheritance" xml:space="preserve">
+    <value>Interrumpir herencia</value>
+  </data>
+  <data name="MaRestoreInheritance" xml:space="preserve">
+    <value>Restaurar herencia</value>
+  </data>
+  <data name="MaBreakConfirm" xml:space="preserve">
+    <value>¿Interrumpir la herencia? Los permisos heredados se copiarán aquí para que puedas editarlos de forma independiente.</value>
+  </data>
+  <data name="MaRestoreConfirm" xml:space="preserve">
+    <value>¿Restaurar la herencia? Los permisos propios de este elemento se descartarán y volverá a heredar de su carpeta principal.</value>
+  </data>
 </root>

@@ -18,12 +18,14 @@
 
         <StackPanel Spacing="10" IsVisible="{Binding Ready}">
 
-            <!-- Inheritance indicator — read-only (v1). -->
-            <StackPanel Orientation="Horizontal" Spacing="6">
-                <i:Icon Value="mdi-link-variant" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
-                <TextBlock Text="{Binding InheritanceText}" TextWrapping="Wrap" VerticalAlignment="Center"
+            <!-- Inheritance indicator + break/restore toggle. -->
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <i:Icon Grid.Column="0" Value="mdi-link-variant" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{DynamicResource WbMuted}" />
+                <TextBlock Grid.Column="1" Text="{Binding InheritanceText}" TextWrapping="Wrap" VerticalAlignment="Center"
                            Foreground="{DynamicResource WbMuted}" />
-            </StackPanel>
+                <Button Grid.Column="2" Content="{Binding InheritanceToggleLabel}" Command="{Binding ToggleInheritanceCommand}"
+                        VerticalAlignment="Center" Margin="8,0,0,0" />
+            </Grid>
 
             <TextBlock Text="{loc:Tr MaCurrentAccess}" FontWeight="SemiBold" />
             <TextBlock Text="{loc:Tr MaNoGrants}" Foreground="{DynamicResource WbMuted}" IsVisible="{Binding !HasEntries}" />

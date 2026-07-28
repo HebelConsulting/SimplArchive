@@ -2889,6 +2889,18 @@ public sealed class SimplArchiveApiClient
         await ThrowIfProblemAsync(response, Strings.Get("MaLoadFailed"), cancellationToken);
     }
 
+    // Break (copy inherited grants down) / restore (discard own grants) ACL inheritance (ADR 0486 follow-up).
+    public async Task SetInheritanceAsync(Guid documentId, bool breaksInheritance, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/acl-entries/inheritance", new { breaksInheritance }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException(Strings.Get("MaInsufficientRights"));
+        }
+
+        await ThrowIfProblemAsync(response, Strings.Get("MaLoadFailed"), cancellationToken);
+    }
+
     private static AclRights ReadRights(JsonElement e) => new(
         e.GetProperty("canSee").GetBoolean(),
         e.GetProperty("canReadContent").GetBoolean(),
