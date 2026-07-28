@@ -2709,4 +2709,22 @@
   <data name="MaRestoreConfirm" xml:space="preserve">
     <value>¿Restaurar la herencia? Los permisos propios de este elemento se descartarán y volverá a heredar de su carpeta principal.</value>
   </data>
+  <data name="MaEffectiveAccess" xml:space="preserve">
+    <value>Acceso efectivo</value>
+  </data>
+  <data name="MaEffDirect" xml:space="preserve">
+    <value>Directo</value>
+  </data>
+  <data name="MaEffVia" xml:space="preserve">
+    <value>vía {0}</value>
+  </data>
+  <data name="MaEffAdmin" xml:space="preserve">
+    <value>Administrador del inquilino</value>
+  </data>
+  <data name="MaEffInheritedFrom" xml:space="preserve">
+    <value>Heredado de {0}</value>
+  </data>
+  <data name="MaEffNoAccess" xml:space="preserve">
+    <value>Nadie tiene acceso todavía.</value>
+  </data>
 </root>

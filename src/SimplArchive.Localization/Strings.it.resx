@@ -2709,4 +2709,22 @@
   <data name="MaRestoreConfirm" xml:space="preserve">
     <value>Ripristinare l'ereditarietà? Le autorizzazioni proprie di questo elemento verranno eliminate ed erediterà nuovamente dalla cartella principale.</value>
   </data>
+  <data name="MaEffectiveAccess" xml:space="preserve">
+    <value>Accesso effettivo</value>
+  </data>
+  <data name="MaEffDirect" xml:space="preserve">
+    <value>Diretto</value>
+  </data>
+  <data name="MaEffVia" xml:space="preserve">
+    <value>tramite {0}</value>
+  </data>
+  <data name="MaEffAdmin" xml:space="preserve">
+    <value>Amministratore tenant</value>
+  </data>
+  <data name="MaEffInheritedFrom" xml:space="preserve">
+    <value>Ereditato da {0}</value>
+  </data>
+  <data name="MaEffNoAccess" xml:space="preserve">
+    <value>Nessuno ha ancora accesso.</value>
+  </data>
 </root>

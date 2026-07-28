@@ -2709,4 +2709,22 @@
   <data name="MaRestoreConfirm" xml:space="preserve">
     <value>Vererbung wiederherstellen? Die eigenen Berechtigungen dieses Elements werden verworfen und es erbt wieder vom übergeordneten Ordner.</value>
   </data>
+  <data name="MaEffectiveAccess" xml:space="preserve">
+    <value>Effektiver Zugriff</value>
+  </data>
+  <data name="MaEffDirect" xml:space="preserve">
+    <value>Direkt</value>
+  </data>
+  <data name="MaEffVia" xml:space="preserve">
+    <value>über {0}</value>
+  </data>
+  <data name="MaEffAdmin" xml:space="preserve">
+    <value>Mandanten-Admin</value>
+  </data>
+  <data name="MaEffInheritedFrom" xml:space="preserve">
+    <value>Geerbt von {0}</value>
+  </data>
+  <data name="MaEffNoAccess" xml:space="preserve">
+    <value>Noch niemand hat Zugriff.</value>
+  </data>
 </root>

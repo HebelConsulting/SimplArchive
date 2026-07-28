@@ -91,4 +91,41 @@ public class DesktopManageAccessTests
 
         await api.DeleteAsync(folder.Id); // clean up
     }
+
+    [Fact]
+    public async Task Effective_access_resolves_groups_to_members_and_flags_admins()
+    {
+        DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
+        var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var repo = (await api.GetRepositoriesAsync())[0];
+        var folderName = $"eff-{suffix}";
+        await api.CreateFolderAsync(repo.Id, folderName);
+        var folder = (await api.GetChildrenAsync(repo.Id)).First(c => c.Name == folderName);
+
+        // Break inheritance so the folder's own grants actually govern it — a grant on a still-inheriting item is
+        // a no-op (only the governing scope's grants apply, ADR 0183).
+        await api.SetInheritanceAsync(folder.Id, true);
+
+        // A group with a member.
+        var groupName = $"grp-{suffix}";
+        var groupId = await api.CreateGroupAsync(groupName);
+        var userId = await api.CreateUserAsync($"member-{suffix}@simplarchive.local", $"Member {suffix}");
+        await api.AddGroupMemberAsync(groupId, userId);
+
+        // Grant the group Viewer directly on the folder (now the governing scope).
+        var viewer = new SimplArchiveApiClient.AclRights(true, true, false, false, false, false, false, false, false);
+        await api.SetAclEntryAsync(folder.Id, "groups", groupId, viewer);
+
+        var eff = await api.GetEffectiveAccessAsync(folder.Id);
+
+        // The group appears as a direct grant, and its member is resolved as accessing "via group".
+        Assert.Contains(eff.Entries, e => e.Type == "groups" && e.Id == groupId && e.Access == "direct");
+        Assert.Contains(eff.Entries, e => e.Type == "users" && e.Id == userId && e.Access == "group" && e.ViaGroup == groupName);
+        // The demo admin bypasses the ACL — flagged as a tenant admin.
+        Assert.Contains(eff.Entries, e => e.Type == "users" && e.Access == "admin");
+
+        await api.DeleteAsync(folder.Id); // clean up
+    }
 }

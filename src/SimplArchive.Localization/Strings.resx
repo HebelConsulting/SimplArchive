@@ -2709,4 +2709,22 @@
   <data name="MaRestoreConfirm" xml:space="preserve">
     <value>Restore inheritance? This item's own permissions will be discarded and it will inherit from its parent folder again.</value>
   </data>
+  <data name="MaEffectiveAccess" xml:space="preserve">
+    <value>Effective access</value>
+  </data>
+  <data name="MaEffDirect" xml:space="preserve">
+    <value>Direct</value>
+  </data>
+  <data name="MaEffVia" xml:space="preserve">
+    <value>via {0}</value>
+  </data>
+  <data name="MaEffAdmin" xml:space="preserve">
+    <value>Tenant admin</value>
+  </data>
+  <data name="MaEffInheritedFrom" xml:space="preserve">
+    <value>Inherited from {0}</value>
+  </data>
+  <data name="MaEffNoAccess" xml:space="preserve">
+    <value>No one has access yet.</value>
+  </data>
 </root>

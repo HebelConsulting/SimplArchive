@@ -2889,6 +2889,35 @@ public sealed class SimplArchiveApiClient
         await ThrowIfProblemAsync(response, Strings.Get("MaLoadFailed"), cancellationToken);
     }
 
+    public sealed record EffectiveAccessInfo(string? InheritedFrom, List<EffectiveAccessEntryInfo> Entries);
+
+    public sealed record EffectiveAccessEntryInfo(string Type, Guid Id, string Name, string Access, string? ViaGroup, AclRights Rights);
+
+    // The resolved "who can actually access this" view (ADR 0488): effective grants resolved to people (groups
+    // expanded to members, tenant admins flagged).
+    public async Task<EffectiveAccessInfo> GetEffectiveAccessAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/acl-entries/effective", cancellationToken);
+
+        var entries = new List<EffectiveAccessEntryInfo>();
+        if (json.TryGetProperty("entries", out var es))
+        {
+            foreach (var e in es.EnumerateArray())
+            {
+                entries.Add(new EffectiveAccessEntryInfo(
+                    e.GetProperty("type").GetString() ?? "",
+                    e.GetProperty("id").GetGuid(),
+                    e.GetProperty("name").GetString() ?? "",
+                    e.GetProperty("access").GetString() ?? "",
+                    e.TryGetProperty("viaGroup", out var vg) && vg.ValueKind == JsonValueKind.String ? vg.GetString() : null,
+                    ReadRights(e)));
+            }
+        }
+
+        var inheritedFrom = json.TryGetProperty("inheritedFrom", out var inf) && inf.ValueKind == JsonValueKind.String ? inf.GetString() : null;
+        return new EffectiveAccessInfo(inheritedFrom, entries);
+    }
+
     // Break (copy inherited grants down) / restore (discard own grants) ACL inheritance (ADR 0486 follow-up).
     public async Task SetInheritanceAsync(Guid documentId, bool breaksInheritance, CancellationToken cancellationToken = default)
     {

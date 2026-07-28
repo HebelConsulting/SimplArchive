@@ -39,6 +39,64 @@ public sealed partial class ManageAccessViewModel : ObservableObject
     // by the dialog code-behind — used by both remove and the inheritance toggle.
     public Func<string, string, Task<bool>>? ConfirmAsync { get; set; }
 
+    // ---- effective-access view (ADR 0488): resolved to people, lazy-loaded on expand ----
+    [ObservableProperty] private bool _effectiveExpanded;
+    [ObservableProperty] private bool _effectiveLoading;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(HasInheritedFrom))][NotifyPropertyChangedFor(nameof(InheritedFromText))] private string _effectiveInheritedFrom = "";
+    private bool _effectiveLoadedOnce;
+    public ObservableCollection<EffectiveRowViewModel> Effective { get; } = [];
+    public bool HasInheritedFrom => !string.IsNullOrEmpty(EffectiveInheritedFrom);
+    public string InheritedFromText => string.Format(Strings.Get("MaEffInheritedFrom"), EffectiveInheritedFrom);
+    public bool EffectiveEmpty => _effectiveLoadedOnce && !EffectiveLoading && Effective.Count == 0;
+
+    partial void OnEffectiveExpandedChanged(bool value)
+    {
+        if (value && !_effectiveLoadedOnce)
+        {
+            _ = LoadEffectiveAsync();
+        }
+    }
+
+    private async Task LoadEffectiveAsync()
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        EffectiveLoading = true;
+        try
+        {
+            var info = await _api.GetEffectiveAccessAsync(_documentId);
+            EffectiveInheritedFrom = info.InheritedFrom ?? "";
+            Effective.Clear();
+            foreach (var e in info.Entries.OrderBy(e => e.Type).ThenBy(e => e.Name))
+            {
+                Effective.Add(new EffectiveRowViewModel(e));
+            }
+        }
+        catch (Exception)
+        {
+            // Best-effort — the view just stays empty on failure.
+        }
+        finally
+        {
+            _effectiveLoadedOnce = true;
+            EffectiveLoading = false;
+            OnPropertyChanged(nameof(EffectiveEmpty));
+        }
+    }
+
+    // Refresh the effective view (if already loaded) after a grant/inheritance change.
+    private void InvalidateEffective()
+    {
+        _effectiveLoadedOnce = false;
+        if (EffectiveExpanded)
+        {
+            _ = LoadEffectiveAsync();
+        }
+    }
+
     // ---- editor state ----
     [ObservableProperty][NotifyPropertyChangedFor(nameof(EditorVisible))][NotifyPropertyChangedFor(nameof(AddButtonEnabled))] private bool _editing;
     [ObservableProperty] private bool _isNew;
@@ -112,6 +170,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
                 Entries.Add(new AclRowViewModel(e.PrincipalType, e.PrincipalId, PrincipalName(e.PrincipalType, e.PrincipalId), TypeLabel(e.PrincipalType), e.Rights, this));
             }
             RefreshAvailable();
+            InvalidateEffective();
         }
         catch (Exception)
         {
@@ -316,6 +375,30 @@ public sealed partial class ManageAccessViewModel : ObservableObject
 
 // One selectable grantable principal in the "Add access" picker.
 public sealed record GranteeOption(string Type, Guid Id, string Name);
+
+// One row in the read-only effective-access view (a resolved user, a granted group, or a service account).
+public sealed class EffectiveRowViewModel
+{
+    public EffectiveRowViewModel(SimplArchiveApiClient.EffectiveAccessEntryInfo e)
+    {
+        Name = e.Name;
+        TypeLabel = ManageAccessViewModel.TypeLabel(e.Type);
+        RoleLabel = Strings.Get(ManageAccessViewModel.PresetLabelKey(e.Rights));
+        SourceLabel = e.Access switch
+        {
+            "admin" => Strings.Get("MaEffAdmin"),
+            "group" => string.Format(Strings.Get("MaEffVia"), e.ViaGroup ?? ""),
+            _ => Strings.Get("MaEffDirect"),
+        };
+        Icon = e.Type switch { "groups" => "mdi-account-group", "service-accounts" => "mdi-robot-outline", _ => "mdi-account" };
+    }
+
+    public string Name { get; }
+    public string TypeLabel { get; }
+    public string RoleLabel { get; }
+    public string SourceLabel { get; }
+    public string Icon { get; }
+}
 
 // One ACL grant row in the Manage-access list. Edit/Remove call back into the parent VM.
 public sealed partial class AclRowViewModel : ObservableObject

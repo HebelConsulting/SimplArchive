@@ -103,4 +103,38 @@ public class WebManageAccessTests
         // The dialog reloads: the toggle now offers Restore inheritance (inheritance is broken).
         await Expect(dialog.GetByRole(AriaRole.Button, new() { Name = "Restore inheritance" })).ToBeVisibleAsync();
     }
+
+    [Fact]
+    public async Task Effective_access_expander_lists_who_can_access()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var name = $"eff-{suffix}";
+
+        using var http = new HttpClient { BaseAddress = new Uri(_app.BaseUrl) };
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await Ui.GetUserTokenAsync(_app.BaseUrl));
+        var repos = (await http.GetFromJsonAsync<JsonElement>("/api/repositories")).GetProperty("repositories");
+        var repoId = repos.EnumerateArray().First(r => r.GetProperty("name").GetString() == "Demo Repository").GetProperty("id").GetGuid();
+        var docId = (await (await http.PostAsJsonAsync($"/api/documents/{repoId}/children", new { name })).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var v = await (await http.PostAsJsonAsync($"/api/documents/{docId}/versions", new { fileExtension = ".txt" })).Content.ReadFromJsonAsync<JsonElement>();
+        using (var storage = new HttpClient())
+        {
+            (await storage.PutAsync(v.GetProperty("uploadUrl").GetString()!, new ByteArrayContent(Encoding.UTF8.GetBytes("eff content")))).EnsureSuccessStatusCode();
+        }
+        (await http.PutAsJsonAsync($"/api/documents/{docId}/versions/{v.GetProperty("id").GetGuid()}", new { })).EnsureSuccessStatusCode();
+
+        var page = await Ui.LoginAsync(_app);
+        await page.GetByText("Demo Repository").First.ClickAsync();
+        var row = page.Locator("[data-pane='list']").Locator(".wb-list-row").Filter(new() { HasText = name });
+        await Expect(row).ToBeVisibleAsync();
+        await row.ClickAsync();
+
+        var detail = page.Locator("[data-pane='index']");
+        await detail.GetByRole(AriaRole.Button, new() { Name = "Manage access" }).ClickAsync();
+        var dialog = page.Locator(".mud-dialog").First;
+        await Expect(dialog).ToBeVisibleAsync();
+
+        // Expand the Effective access panel — the demo admin resolves as a tenant admin.
+        await dialog.GetByText("Effective access").ClickAsync();
+        await Expect(dialog.GetByText("Tenant admin").First).ToBeVisibleAsync();
+    }
 }

@@ -114,6 +114,42 @@
                     <MudButton StartIcon="@Icons.Material.Filled.PersonAdd" Size="Size.Small" Class="mt-3"
                                OnClick="BeginAdd" Disabled="@(_busy || AvailablePrincipals().Count == 0)">@Strings.Get("MaAddAccess")</MudButton>
                 }
+
+                @* Effective access (ADR 0488) — resolved to people, lazy-loaded on expand. *@
+                <MudExpansionPanels Class="mt-3" Elevation="0">
+                    <MudExpansionPanel Text="@Strings.Get("MaEffectiveAccess")" Dense="true" ExpandedChanged="OnEffectiveExpanded">
+                        @if (_effectiveLoading)
+                        {
+                            <MudProgressLinear Indeterminate="true" Class="my-2" />
+                        }
+                        else
+                        {
+                            @if (!string.IsNullOrEmpty(_effectiveInheritedFrom))
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="font-style:italic;">@string.Format(Strings.Get("MaEffInheritedFrom"), _effectiveInheritedFrom)</MudText>
+                            }
+                            @if (_effectiveLoadedOnce && _effective.Count == 0)
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("MaEffNoAccess")</MudText>
+                            }
+                            <MudSimpleTable Dense="true" Hover="true" Style="background:transparent;">
+                                <tbody>
+                                    @foreach (var e in _effective)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <MudIcon Icon="@EffIcon(e.Type)" Size="Size.Small" Style="vertical-align:middle; margin-right:4px;" />
+                                                <span>@e.Name</span>
+                                            </td>
+                                            <td><span class="mud-text-secondary" style="font-size:.8em;">@EffSource(e)</span></td>
+                                            <td><span class="mud-text-secondary" style="font-size:.82em;">@Strings.Get(PresetLabelKey(EffModel(e)))</span></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        }
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
             }
         </div>
     </DialogContent>
@@ -138,6 +174,13 @@
     private List<AclEntryDto> _entries = [];
     private List<PrincipalDto> _principals = [];
     private EditState? _editing;
+
+    // Effective-access view (ADR 0488) — lazy-loaded on expand.
+    private bool _effectiveExpanded;
+    private bool _effectiveLoading;
+    private bool _effectiveLoadedOnce;
+    private string _effectiveInheritedFrom = "";
+    private List<EffEntryDto> _effective = [];
 
     protected override Task OnInitializedAsync() => LoadAsync();
 
@@ -168,7 +211,70 @@
         {
             _loading = false;
         }
+
+        // A grant/inheritance change invalidates the effective view; refresh it if it's open.
+        _effectiveLoadedOnce = false;
+        if (_effectiveExpanded)
+        {
+            await LoadEffectiveAsync();
+        }
     }
+
+    private async Task OnEffectiveExpanded(bool expanded)
+    {
+        _effectiveExpanded = expanded;
+        if (expanded && !_effectiveLoadedOnce)
+        {
+            await LoadEffectiveAsync();
+        }
+    }
+
+    private async Task LoadEffectiveAsync()
+    {
+        _effectiveLoading = true;
+        try
+        {
+            var resp = await Http.GetFromJsonAsync<EffectiveDto>($"api/documents/{DocumentId}/acl-entries/effective");
+            _effectiveInheritedFrom = resp?.InheritedFrom ?? "";
+            _effective = (resp?.Entries ?? []).OrderBy(e => e.Type).ThenBy(e => e.Name).ToList();
+        }
+        catch (Exception)
+        {
+            _effective = [];
+        }
+        finally
+        {
+            _effectiveLoadedOnce = true;
+            _effectiveLoading = false;
+        }
+    }
+
+    private static string EffIcon(string type) => type switch
+    {
+        "groups" => Icons.Material.Filled.Group,
+        "service-accounts" => Icons.Material.Filled.SmartToy,
+        _ => Icons.Material.Filled.Person,
+    };
+
+    private static string EffSource(EffEntryDto e) => e.Access switch
+    {
+        "admin" => Strings.Get("MaEffAdmin"),
+        "group" => string.Format(Strings.Get("MaEffVia"), e.ViaGroup ?? ""),
+        _ => Strings.Get("MaEffDirect"),
+    };
+
+    private static RightsModel EffModel(EffEntryDto e) => new()
+    {
+        CanSee = e.CanSee,
+        CanReadContent = e.CanReadContent,
+        CanEditContent = e.CanEditContent,
+        CanEditIndexData = e.CanEditIndexData,
+        CanCreateSubItems = e.CanCreateSubItems,
+        CanDelete = e.CanDelete,
+        CanMove = e.CanMove,
+        CanAnnotate = e.CanAnnotate,
+        CanManagePermissions = e.CanManagePermissions,
+    };
 
     // ---- rights presets ----
 
@@ -443,4 +549,28 @@
     private sealed class DocDto { public bool BreaksInheritance { get; set; } }
 
     private sealed class ProblemDto { public string? Detail { get; set; } }
+
+    private sealed class EffectiveDto
+    {
+        public string? InheritedFrom { get; set; }
+        public List<EffEntryDto> Entries { get; set; } = [];
+    }
+
+    private sealed class EffEntryDto
+    {
+        public string Type { get; set; } = "";
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Access { get; set; } = "";
+        public string? ViaGroup { get; set; }
+        public bool CanSee { get; set; }
+        public bool CanReadContent { get; set; }
+        public bool CanEditContent { get; set; }
+        public bool CanEditIndexData { get; set; }
+        public bool CanCreateSubItems { get; set; }
+        public bool CanDelete { get; set; }
+        public bool CanMove { get; set; }
+        public bool CanAnnotate { get; set; }
+        public bool CanManagePermissions { get; set; }
+    }
 }

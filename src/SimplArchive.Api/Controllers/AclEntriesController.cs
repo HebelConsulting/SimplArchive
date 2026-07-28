@@ -113,6 +113,34 @@ public class AclEntriesController : ControllerBase
         public bool BreaksInheritance { get; set; }
     }
 
+    // The resolved "who can actually access this" view (ADR 0488): the effective grants (from the governing
+    // scope) plus each granted group expanded to the individual users it confers access on, plus tenant admins.
+    public class EffectiveAccessResource : HypermediaResource
+    {
+        // The folder path the grants are inherited from, or null when they're set directly on this item.
+        public string? InheritedFrom { get; set; }
+
+        public List<EffectiveAccessEntry> Entries { get; set; } = [];
+    }
+
+    public class EffectiveAccessEntry
+    {
+        public string Type { get; set; } = "";     // users | groups | service-accounts
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Access { get; set; } = "";    // direct | group | admin
+        public string? ViaGroup { get; set; }        // the group name when Access == "group"
+        public bool CanSee { get; set; }
+        public bool CanReadContent { get; set; }
+        public bool CanEditContent { get; set; }
+        public bool CanEditIndexData { get; set; }
+        public bool CanCreateSubItems { get; set; }
+        public bool CanDelete { get; set; }
+        public bool CanMove { get; set; }
+        public bool CanAnnotate { get; set; }
+        public bool CanManagePermissions { get; set; }
+    }
+
     public class SetAclEntryRequest
     {
         public bool CanSee { get; set; }
@@ -445,7 +473,7 @@ public class AclEntriesController : ControllerBase
         if (request.BreaksInheritance)
         {
             // Copy the governing scope's own grants down so effective access is preserved, then break.
-            var governingScopeId = await ResolveGoverningScopeAsync(document, cancellationToken);
+            var governingScopeId = await ResolveGoverningScopeAsync(document.ParentId, cancellationToken);
             if (governingScopeId is { } sourceId)
             {
                 var sourceEntries = await _dbContext.AclEntries.Where(a => a.DocumentId == sourceId).ToListAsync(cancellationToken);
@@ -495,13 +523,243 @@ public class AclEntriesController : ControllerBase
         return Ok(new InheritanceResource { BreaksInheritance = document.BreaksInheritance });
     }
 
+    // The resolved "who can actually access this" view (ADR 0488): the effective grants (from the governing
+    // scope) resolved to people — each granted group expanded to the users it confers access on, plus tenant
+    // admins (who bypass the ACL). Read-only, gated on the caller's own CanManagePermissions like the rest.
+    [HttpGet("effective")]
+    public async Task<IActionResult> Effective(Guid documentId, CancellationToken cancellationToken)
+    {
+        var document = await _dbContext.Documents
+            .Where(d => d.Id == documentId)
+            .Select(d => new { d.Id, d.ParentId, d.BreaksInheritance })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (document is null)
+        {
+            return NotFound();
+        }
+
+        if (!await CanManagePermissionsAsync(documentId, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        // The governing scope: this document's own grants if it breaks inheritance, else the nearest breaking
+        // ancestor / root (whose grants it inherits).
+        Guid? scopeId = document.BreaksInheritance
+            ? document.Id
+            : await ResolveGoverningScopeAsync(document.ParentId, cancellationToken);
+
+        var inheritedFrom = scopeId is { } sid && sid != documentId
+            ? await BuildPathAsync(sid, cancellationToken)
+            : null;
+
+        var grants = scopeId is { } gid
+            ? await _dbContext.AclEntries.Where(a => a.DocumentId == gid).ToListAsync(cancellationToken)
+            : [];
+
+        var entries = new List<EffectiveAccessEntry>();
+
+        // Per-user accumulator: union of rights + the highest-precedence source (admin > direct > group).
+        var users = new Dictionary<Guid, UserAccess>();
+
+        void MergeUser(Guid userId, AclEntry rights, string access, string? viaGroup)
+        {
+            if (!users.TryGetValue(userId, out var acc))
+            {
+                acc = new UserAccess();
+                users[userId] = acc;
+            }
+
+            acc.Rights.CanSee |= rights.CanSee;
+            acc.Rights.CanReadContent |= rights.CanReadContent;
+            acc.Rights.CanEditContent |= rights.CanEditContent;
+            acc.Rights.CanEditIndexData |= rights.CanEditIndexData;
+            acc.Rights.CanCreateSubItems |= rights.CanCreateSubItems;
+            acc.Rights.CanDelete |= rights.CanDelete;
+            acc.Rights.CanMove |= rights.CanMove;
+            acc.Rights.CanAnnotate |= rights.CanAnnotate;
+            acc.Rights.CanManagePermissions |= rights.CanManagePermissions;
+            // Precedence: admin (2) > direct (1) > group (0). Keep the strongest source label.
+            var rank = access switch { "admin" => 2, "direct" => 1, _ => 0 };
+            if (rank >= acc.Rank)
+            {
+                acc.Rank = rank;
+                acc.Access = access;
+                acc.ViaGroup = viaGroup;
+            }
+        }
+
+        foreach (var grant in grants)
+        {
+            if (grant.UserId is { } directUserId)
+            {
+                MergeUser(directUserId, grant, "direct", null);
+            }
+            else if (grant.ServiceAccountId is { } saId)
+            {
+                var saName = await _dbContext.ServiceAccounts.Where(s => s.Id == saId).Select(s => s.Name).SingleOrDefaultAsync(cancellationToken);
+                entries.Add(BuildEntry("service-accounts", saId, saName ?? "", "direct", null, grant));
+            }
+            else if (grant.GroupId is { } groupId)
+            {
+                var groupName = await _dbContext.Groups.Where(g => g.Id == groupId).Select(g => g.Name).SingleOrDefaultAsync(cancellationToken) ?? "";
+                entries.Add(BuildEntry("groups", groupId, groupName, "direct", null, grant));
+
+                // Membership flows down: a grant on group G reaches every user who is a member of G or any of
+                // its ancestors (ADR "Document ACL inheritance resolution" / group expansion).
+                foreach (var memberId in await UsersEffectivelyInGroupAsync(groupId, cancellationToken))
+                {
+                    MergeUser(memberId, grant, "group", groupName);
+                }
+            }
+        }
+
+        // Tenant admins bypass the ACL entirely — full rights, however the grants fall.
+        var full = new AclEntry
+        {
+            CanSee = true,
+            CanReadContent = true,
+            CanEditContent = true,
+            CanEditIndexData = true,
+            CanCreateSubItems = true,
+            CanDelete = true,
+            CanMove = true,
+            CanAnnotate = true,
+            CanManagePermissions = true,
+        };
+        foreach (var adminId in await TenantAdminUserIdsAsync(cancellationToken))
+        {
+            MergeUser(adminId, full, "admin", null);
+        }
+
+        // Resolve the accumulated users to entries (active users only — a deactivated user has no rights).
+        var userIds = users.Keys.ToList();
+        var userRows = await _dbContext.Users
+            .Where(u => userIds.Contains(u.Id) && u.IsActive)
+            .Select(u => new { u.Id, u.DisplayName })
+            .ToListAsync(cancellationToken);
+
+        foreach (var u in userRows)
+        {
+            var acc = users[u.Id];
+            entries.Add(BuildEntry("users", u.Id, u.DisplayName, acc.Access, acc.ViaGroup, acc.Rights));
+        }
+
+        return Ok(new EffectiveAccessResource { InheritedFrom = inheritedFrom, Entries = entries });
+    }
+
+    [HttpHead("effective")]
+    public async Task<IActionResult> HeadEffective(Guid documentId, CancellationToken cancellationToken)
+    {
+        if (!await _dbContext.Documents.AnyAsync(d => d.Id == documentId, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        return await CanManagePermissionsAsync(documentId, cancellationToken) ? NoContent() : Forbid();
+    }
+
+    private sealed class UserAccess
+    {
+        public AclEntry Rights { get; } = new();
+        public int Rank { get; set; } = -1;
+        public string Access { get; set; } = "";
+        public string? ViaGroup { get; set; }
+    }
+
+    private static EffectiveAccessEntry BuildEntry(string type, Guid id, string name, string access, string? viaGroup, AclEntry r) => new()
+    {
+        Type = type,
+        Id = id,
+        Name = name,
+        Access = access,
+        ViaGroup = viaGroup,
+        CanSee = r.CanSee,
+        CanReadContent = r.CanReadContent,
+        CanEditContent = r.CanEditContent,
+        CanEditIndexData = r.CanEditIndexData,
+        CanCreateSubItems = r.CanCreateSubItems,
+        CanDelete = r.CanDelete,
+        CanMove = r.CanMove,
+        CanAnnotate = r.CanAnnotate,
+        CanManagePermissions = r.CanManagePermissions,
+    };
+
+    // Users who effectively belong to a group: direct members of it or any of its ancestors (membership flows
+    // down). One query per ancestor level, then a single membership query.
+    private async Task<List<Guid>> UsersEffectivelyInGroupAsync(Guid groupId, CancellationToken cancellationToken)
+    {
+        var groupIds = new List<Guid> { groupId };
+        var currentId = (Guid?)groupId;
+
+        while (currentId is { } id)
+        {
+            var parentId = await _dbContext.Groups.Where(g => g.Id == id).Select(g => g.ParentGroupId).SingleOrDefaultAsync(cancellationToken);
+            if (parentId is { } pid && !groupIds.Contains(pid))
+            {
+                groupIds.Add(pid);
+                currentId = pid;
+            }
+            else
+            {
+                currentId = null;
+            }
+        }
+
+        return await _dbContext.GroupMemberships
+            .Where(m => groupIds.Contains(m.GroupId))
+            .Select(m => m.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+    }
+
+    // All users who effectively hold IsTenantAdmin: own flag, or membership of any IsTenantAdmin group.
+    private async Task<HashSet<Guid>> TenantAdminUserIdsAsync(CancellationToken cancellationToken)
+    {
+        var admins = new HashSet<Guid>(await _dbContext.Users.Where(u => u.IsTenantAdmin).Select(u => u.Id).ToListAsync(cancellationToken));
+
+        var adminGroupIds = await _dbContext.Groups.Where(g => g.IsTenantAdmin).Select(g => g.Id).ToListAsync(cancellationToken);
+        foreach (var groupId in adminGroupIds)
+        {
+            foreach (var memberId in await UsersEffectivelyInGroupAsync(groupId, cancellationToken))
+            {
+                admins.Add(memberId);
+            }
+        }
+
+        return admins;
+    }
+
+    // A document's folder path ("Repositories / Contracts / 2026"), walking up ParentId.
+    private async Task<string> BuildPathAsync(Guid documentId, CancellationToken cancellationToken)
+    {
+        var names = new List<string>();
+        var currentId = (Guid?)documentId;
+
+        while (currentId is { } id)
+        {
+            var node = await _dbContext.Documents.Where(d => d.Id == id).Select(d => new { d.Name, d.ParentId }).SingleOrDefaultAsync(cancellationToken);
+            if (node is null)
+            {
+                break;
+            }
+
+            names.Add(node.Name);
+            currentId = node.ParentId;
+        }
+
+        names.Reverse();
+        return string.Join(" / ", names);
+    }
+
     // The ACL scope a currently-inheriting document draws its grants from: the nearest ancestor that itself
     // breaks inheritance, else the repository root (whose own grants are the ultimate fallback). Mirrors the
     // resolution in EffectiveRightsCalculator (ADR "Document ACL inheritance resolution") — one query per
     // ancestor level, walking up from the parent.
-    private async Task<Guid?> ResolveGoverningScopeAsync(Document document, CancellationToken cancellationToken)
+    private async Task<Guid?> ResolveGoverningScopeAsync(Guid? parentId, CancellationToken cancellationToken)
     {
-        var currentId = document.ParentId;
+        var currentId = parentId;
         Guid? rootId = null;
 
         while (currentId is { } id)
