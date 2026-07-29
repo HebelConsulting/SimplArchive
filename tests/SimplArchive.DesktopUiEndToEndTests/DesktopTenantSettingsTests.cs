@@ -49,10 +49,10 @@ public class DesktopTenantSettingsTests
         Assert.True(readBack.AuditWebhookConfigured);
 
         // Restore the original values so a re-run / other tests see a clean tenant (require-MFA OFF for the shared demo admin,
-        // passkey login OFF, webhook cleared).
+        // passkey login back to the tenant's original state, webhook cleared).
         await api.SetTenantSettingsAsync(before.Name, before.DefaultOcrLanguages, before.AuditRetentionDays, before.CheckoutTtlDays, before.CheckoutWarningDays, before.WormLockMode, before.RequireMfa, before.AllowPasskeyLogin, before.RequireDispositionReview, before.RestrictTagsToCatalog, before.EnforceClearance, before.StorageQuotaBytes, before.IncompleteUploadCleanupDays, null, null);
         var restored = await api.GetTenantSettingsAsync();
-        Assert.False(restored.AllowPasskeyLogin);
+        Assert.Equal(before.AllowPasskeyLogin, restored.AllowPasskeyLogin); // round-trips to the original (passkey login defaults ON, ADR "Passwordless passkey login on by default")
         Assert.False(restored.RequireDispositionReview);
         Assert.Null(restored.AuditWebhookUrl);
         Assert.False(restored.AuditWebhookConfigured);

@@ -35,7 +35,9 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         // Tenant-wide require-MFA policy (ADR "MFA require-policy + TOTP secret encryption"). Store default
         // false so the migration backfills existing tenants; new tenants get it from the entity default.
         builder.Property(t => t.RequireMfa).HasDefaultValue(false);
-        builder.Property(t => t.AllowPasskeyLogin).HasDefaultValue(false);
+        // Passwordless passkey sign-in is allowed by default (ADR "Passwordless passkey login on by default"). Store
+        // default true so the migration backfills existing tenants to true; new tenants get it from the entity default.
+        builder.Property(t => t.AllowPasskeyLogin).HasDefaultValue(true);
         builder.Property(t => t.AuditChainStartSequence).HasDefaultValue(0L);
         // Audit-log WORM archive checkpoint (ADR "Audit-log WORM"). Store default -1 (nothing archived) so the
         // migration backfills existing tenants; new tenants get it from the entity default.

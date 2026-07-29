@@ -77,7 +77,9 @@ public class WebPasswordlessPasskeyTests
         {
             await using var conn = new NpgsqlConnection(_app.PostgresConnectionString);
             await conn.OpenAsync();
-            await using var cmd = new NpgsqlCommand("DELETE FROM \"WebAuthnCredentials\"; UPDATE \"Tenants\" SET \"AllowPasskeyLogin\" = false;", conn);
+            // Restore the tenant's default (passkey login defaults ON, ADR "Passwordless passkey login on by default")
+            // and drop the registered credential so other tests' logins are unaffected.
+            await using var cmd = new NpgsqlCommand("DELETE FROM \"WebAuthnCredentials\"; UPDATE \"Tenants\" SET \"AllowPasskeyLogin\" = true;", conn);
             await cmd.ExecuteNonQueryAsync();
         }
     }
