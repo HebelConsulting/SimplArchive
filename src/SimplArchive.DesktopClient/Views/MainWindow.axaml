@@ -415,6 +415,27 @@
                                         <TextBlock Text="{Binding DetailTitle}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
                                     </DockPanel>
 
+                                    <!-- Folder detail: the open folder's persisted contents sort order (ADR "Per-folder contents
+                                         sort order"), editable under an Edit toggle. Shown when a folder is open and no document
+                                         is selected. -->
+                                    <StackPanel IsVisible="{Binding ShowFolderDetail}" Spacing="6">
+                                        <TextBlock Text="{Binding CurrentFolderName}" FontSize="15" FontWeight="SemiBold" />
+                                        <Grid ColumnDefinitions="130,*" Margin="0,6,0,0">
+                                            <TextBlock Grid.Column="0" Text="{loc:Tr FolderSortLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding FolderSortText}" VerticalAlignment="Center" IsVisible="{Binding !FolderSortEditing}" />
+                                            <ComboBox Grid.Column="1" SelectedIndex="{Binding FolderSortEditIndex}" IsVisible="{Binding FolderSortEditing}" HorizontalAlignment="Left" MinWidth="180">
+                                                <ComboBoxItem Content="{loc:Tr FolderSortName}" />
+                                                <ComboBoxItem Content="{loc:Tr FolderSortDocDate}" />
+                                                <ComboBoxItem Content="{loc:Tr FolderSortCreated}" />
+                                            </ComboBox>
+                                        </Grid>
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Button Content="{loc:Tr Edit}" Command="{Binding BeginFolderSortEditCommand}" IsVisible="{Binding !FolderSortEditing}" />
+                                            <Button Content="{loc:Tr Save}" Command="{Binding SaveFolderSortCommand}" IsVisible="{Binding FolderSortEditing}" />
+                                            <Button Content="{loc:Tr Cancel}" Command="{Binding CancelFolderSortEditCommand}" IsVisible="{Binding FolderSortEditing}" />
+                                        </StackPanel>
+                                    </StackPanel>
+
                                     <!-- System fields: always shown, separate from the mask (ADR "System fields + OCR-language mask
                                          field"). Read-only until the pane enters edit mode (ADR "Single pane-level edit toggle on
                                          the detail pane"); Name/Document date/OCR languages then become editable, File extension/

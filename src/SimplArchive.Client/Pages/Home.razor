@@ -497,7 +497,43 @@
                             </div>
                         }
                         <div class="wb-pane wb-index" data-pane="index">
-                            @if (_selectedItem is null)
+                            @if (_selectedItem is null && _selectedFolder is { } detailFolder)
+                            {
+                                @* Folder detail pane (ADR "Per-folder contents sort order") — the open folder's
+                                   persisted default contents sort order, editable under an Edit toggle. *@
+                                <MudText Typo="Typo.subtitle1" Style="min-width:0; overflow:hidden; text-overflow:ellipsis;">@detailFolder.Name</MudText>
+                                <table class="wb-sysfields">
+                                    <tr>
+                                        <td>@Strings.Get("FolderSortLabel")</td>
+                                        <td>
+                                            @if (_folderEditing)
+                                            {
+                                                <MudSelect T="FolderContentsSortOrder" @bind-Value="_folderSortEdit" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
+                                                    <MudSelectItem Value="FolderContentsSortOrder.Name">@Strings.Get("FolderSortName")</MudSelectItem>
+                                                    <MudSelectItem Value="FolderContentsSortOrder.DocumentDate">@Strings.Get("FolderSortDocDate")</MudSelectItem>
+                                                    <MudSelectItem Value="FolderContentsSortOrder.Created">@Strings.Get("FolderSortCreated")</MudSelectItem>
+                                                </MudSelect>
+                                            }
+                                            else
+                                            {
+                                                @FolderSortText(_folderSortOrder)
+                                            }
+                                        </td>
+                                    </tr>
+                                </table>
+                                @if (_folderEditing)
+                                {
+                                    <div style="display:flex; gap:6px; margin-top:8px;">
+                                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveFolderSortAsync" Disabled="_folderBusy">@Strings.Get("Save")</MudButton>
+                                        <MudButton Size="Size.Small" OnClick="() => _folderEditing = false" Disabled="_folderBusy">@Strings.Get("Cancel")</MudButton>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Edit" OnClick="BeginFolderEdit">@Strings.Get("Edit")</MudButton>
+                                }
+                            }
+                            else if (_selectedItem is null)
                             {
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("SelectDocDetail")</MudText>
                             }
@@ -2130,7 +2166,10 @@
         // the label name + colour for the list-row badge; empty name = None (no badge).
         string? SensitivityLabelName = null, string? SensitivityLabelColor = null,
         // Confirmed-version count (ADR "Versions dialog") — gates the row's "Versions…" menu item (> 1).
-        int VersionCount = 0)
+        int VersionCount = 0,
+        // The latest confirmed version's CreatedAt (filing timestamp) — the "Created" contents-sort key (ADR
+        // "Per-folder contents sort order"). Null for a folder / version-less doc.
+        DateTimeOffset? VersionCreatedAt = null)
     {
         public bool IsFolder => !HasVersions;
 
@@ -2150,15 +2189,20 @@
     private BrowseNode? _selectedFolder;
     private List<BrowseNode> _folderContents = [];
 
-    // Contents-list column sorting (ADR "List-row columns and sorting") — client-side over the loaded rows,
-    // since the listing is cursor-paginated by creation order.
+    // Contents ordering (ADR "Per-folder contents sort order"): folders are ALWAYS listed on top; within each
+    // group the default is the open folder's persisted ContentsSortOrder (_folderSortOrder, loaded from the
+    // ListChildren envelope). Clicking a column header is an EPHEMERAL override (_headerSortActive) that resets
+    // when another folder is opened. Client-side over the fully-loaded rows (the listing loads all pages).
+    private FolderContentsSortOrder _folderSortOrder = FolderContentsSortOrder.DocumentDate;
+    private bool _headerSortActive;
+
     private enum ContentSort { Name, Type, Date, Size, Tags }
     private ContentSort _contentSort = ContentSort.Name;
     private bool _contentSortAsc = true;
 
     private void SortBy(ContentSort col)
     {
-        if (_contentSort == col)
+        if (_headerSortActive && _contentSort == col)
         {
             _contentSortAsc = !_contentSortAsc;
         }
@@ -2166,22 +2210,92 @@
         {
             _contentSort = col;
             _contentSortAsc = true;
+            _headerSortActive = true; // an ephemeral override, until the next folder is opened
         }
     }
 
-    private string SortArrow(ContentSort col) => _contentSort == col ? (_contentSortAsc ? "▲" : "▼") : "";
+    private string SortArrow(ContentSort col) => _headerSortActive && _contentSort == col ? (_contentSortAsc ? "▲" : "▼") : "";
 
     private IEnumerable<BrowseNode> SortedContents()
     {
+        // Folders on top, then documents — each group ordered by the active criterion.
+        var folders = _folderContents.Where(n => n.IsFolder);
+        var docs = _folderContents.Where(n => !n.IsFolder);
+        if (_headerSortActive)
+        {
+            return ApplyHeaderSort(folders).Concat(ApplyHeaderSort(docs));
+        }
+        return ApplyFolderSort(folders).Concat(ApplyFolderSort(docs));
+    }
+
+    private IEnumerable<BrowseNode> ApplyFolderSort(IEnumerable<BrowseNode> items) => _folderSortOrder switch
+    {
+        FolderContentsSortOrder.DocumentDate => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue).ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
+        FolderContentsSortOrder.Created => items.OrderBy(n => n.VersionCreatedAt ?? DateTimeOffset.MinValue).ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
+        _ => items.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
+    };
+
+    private IEnumerable<BrowseNode> ApplyHeaderSort(IEnumerable<BrowseNode> items)
+    {
         IEnumerable<BrowseNode> ordered = _contentSort switch
         {
-            ContentSort.Type => _folderContents.OrderBy(n => n.IsFolder ? "" : n.DocumentType, StringComparer.OrdinalIgnoreCase),
-            ContentSort.Date => _folderContents.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue),
-            ContentSort.Size => _folderContents.OrderBy(n => n.SizeBytes ?? -1),
-            ContentSort.Tags => _folderContents.OrderBy(n => string.Join(",", n.TagList), StringComparer.OrdinalIgnoreCase),
-            _ => _folderContents.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
+            ContentSort.Type => items.OrderBy(n => n.DocumentType, StringComparer.OrdinalIgnoreCase),
+            ContentSort.Date => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue),
+            ContentSort.Size => items.OrderBy(n => n.SizeBytes ?? -1),
+            ContentSort.Tags => items.OrderBy(n => string.Join(",", n.TagList), StringComparer.OrdinalIgnoreCase),
+            _ => items.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
         };
         return _contentSortAsc ? ordered : ordered.Reverse();
+    }
+
+    // Folder detail-pane editing of the persisted contents sort order (ADR "Per-folder contents sort order").
+    private bool _folderEditing;
+    private bool _folderBusy;
+    private FolderContentsSortOrder _folderSortEdit;
+
+    private void BeginFolderEdit()
+    {
+        _folderSortEdit = _folderSortOrder;
+        _folderEditing = true;
+    }
+
+    private string FolderSortText(FolderContentsSortOrder order) => order switch
+    {
+        FolderContentsSortOrder.DocumentDate => Strings.Get("FolderSortDocDate"),
+        FolderContentsSortOrder.Created => Strings.Get("FolderSortCreated"),
+        _ => Strings.Get("FolderSortName"),
+    };
+
+    private async Task SaveFolderSortAsync()
+    {
+        if (_selectedFolder is not { } folder)
+        {
+            return;
+        }
+
+        _folderBusy = true;
+        try
+        {
+            var resp = await Http.PutAsJsonAsync($"api/documents/{folder.Id}/contents-sort-order", new { sortOrder = (int)_folderSortEdit });
+            if (resp.IsSuccessStatusCode)
+            {
+                _folderSortOrder = _folderSortEdit;
+                _headerSortActive = false; // re-apply the persisted default order to the current listing
+                _folderEditing = false;
+            }
+            else if (resp.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                Snackbar.Add(Strings.Get("FolderSortNoPermission"), Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add(Strings.Get("FolderSortSaveFailed"), Severity.Error);
+            }
+        }
+        finally
+        {
+            _folderBusy = false;
+        }
     }
 
     private static string FormatSize(long? bytes) => bytes switch
@@ -3161,7 +3275,7 @@
         // from the Inbox) shows. See the "refresh list pane on return" requirement.
         if (tab == Tab.Repositories && _selectedFolder is { } folder)
         {
-            _folderContents = await LoadContentsAsync(folder.Id, folder.RepositoryId);
+            _folderContents = await LoadContentsAsync(folder.Id, folder.RepositoryId, trackAsCurrentFolder: true);
             if (_selectedItem is { } sel && _folderContents.FirstOrDefault(n => n.Id == sel.Id) is { } fresh)
             {
                 await SelectItemAsync(fresh);
@@ -3649,7 +3763,7 @@
             Snackbar.Add($"'{node.Name}' placed under legal hold.", Severity.Success);
             if (_selectedFolder is { } sf)
             {
-                _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId);
+                _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, trackAsCurrentFolder: true);
             }
         }
         catch (Exception)
@@ -3685,7 +3799,7 @@
             await SelectHoldAsync(sel);
             if (_selectedFolder is { } sf)
             {
-                _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId);
+                _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, trackAsCurrentFolder: true);
             }
         }
         catch (Exception)
@@ -3709,7 +3823,7 @@
             await LoadLegalHoldsAsync();
             if (_selectedFolder is { } sf)
             {
-                _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId);
+                _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, trackAsCurrentFolder: true);
             }
         }
         catch (Exception)
@@ -4321,7 +4435,7 @@
     {
         if (_selectedFolder is { } sf)
         {
-            _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId);
+            _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, trackAsCurrentFolder: true);
         }
     }
 
@@ -4630,18 +4744,28 @@
     // Real children plus references (shortcuts) filed in the folder — the references appear as extra rows
     // (with a shortcut icon); a folder-target reference also shows in the tree (ADR "Referenced folder in
     // the tree"). Id on a reference is its target, so open/detail act on the target.
-    private async Task<List<BrowseNode>> LoadContentsAsync(Guid folderId, Guid repositoryId)
+    // trackAsCurrentFolder: this load is the contents pane for the open folder (not a tree-child load), so capture
+    // its persisted ContentsSortOrder as the default order + reset the ephemeral header sort (ADR "Per-folder
+    // contents sort order").
+    private async Task<List<BrowseNode>> LoadContentsAsync(Guid folderId, Guid repositoryId, bool trackAsCurrentFolder = false)
     {
         var nodes = new List<BrowseNode>();
         var url = $"api/documents/{folderId}/children";
+        var first = true;
         while (url is not null)
         {
             var page = await Http.GetFromJsonAsync<DocumentChildrenResponse>(url);
+            if (first && trackAsCurrentFolder && page is not null)
+            {
+                _folderSortOrder = page.ContentsSortOrder;
+                _headerSortActive = false;
+            }
+            first = false;
             foreach (var c in page?.Children ?? [])
             {
                 nodes.Add(new BrowseNode(c.Id, c.Name, c.HasChildren, c.HasVersions, c.HasSubfolders, c.HasReferences, RepositoryId: repositoryId, FileExtension: c.FileExtension, OnLegalHold: c.OnLegalHold,
                     CheckedOut: c.CheckedOut, CheckedOutByMe: c.CheckedOutByMe, CheckedOutByName: c.CheckedOutByName,
-                    DocumentType: c.DocumentType, DocumentDate: c.DocumentDate, SizeBytes: c.SizeBytes, Tags: c.Tags, SensitivityLabelName: c.SensitivityLabelName, SensitivityLabelColor: c.SensitivityLabelColor, VersionCount: c.VersionCount));
+                    DocumentType: c.DocumentType, DocumentDate: c.DocumentDate, SizeBytes: c.SizeBytes, Tags: c.Tags, SensitivityLabelName: c.SensitivityLabelName, SensitivityLabelColor: c.SensitivityLabelColor, VersionCount: c.VersionCount, VersionCreatedAt: c.VersionCreatedAt));
             }
             url = RelativeHref(page?.Links, "next");
         }
@@ -5390,7 +5514,7 @@
                 await ReloadRootsAsync();
                 if (_selectedFolder is { } folder)
                 {
-                    _folderContents = await LoadContentsAsync(folder.Id, folder.RepositoryId);
+                    _folderContents = await LoadContentsAsync(folder.Id, folder.RepositoryId, trackAsCurrentFolder: true);
                 }
 
                 var fresh = (_folderContents ?? []).FirstOrDefault(c => c.Id == item.Id) ?? item with { Name = _sysName };
@@ -5526,7 +5650,7 @@
         await ReloadRootsAsync();
         if (_selectedFolder is { } folder)
         {
-            _folderContents = await LoadContentsAsync(folder.Id, folder.RepositoryId);
+            _folderContents = await LoadContentsAsync(folder.Id, folder.RepositoryId, trackAsCurrentFolder: true);
         }
         if (_selectedItem is { } item)
         {
@@ -7584,8 +7708,10 @@
     private record RepositoryListResponse { public List<RepositorySummary> Repositories { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
     private record PersonalRepositoryResponse { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasSubfolders { get; set; } }
     private record RepositorySummary { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } }
-    private record DocumentChildrenResponse { public List<DocumentSummary> Children { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-    private record DocumentSummary { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool HasReferences { get; set; } public bool OnLegalHold { get; set; } public bool CheckedOut { get; set; } public bool CheckedOutByMe { get; set; } public string CheckedOutByName { get; set; } = ""; public string FileExtension { get; set; } = ""; public string DocumentType { get; set; } = ""; public DateOnly? DocumentDate { get; set; } public long? SizeBytes { get; set; } public List<string> Tags { get; set; } = []; public Guid? SensitivityLabelId { get; set; } public string SensitivityLabelName { get; set; } = ""; public string? SensitivityLabelColor { get; set; } public int VersionCount { get; set; } }
+    // Mirrors the server FolderContentsSortOrder enum (ADR "Per-folder contents sort order").
+    private enum FolderContentsSortOrder { Name = 0, DocumentDate = 1, Created = 2 }
+    private record DocumentChildrenResponse { public List<DocumentSummary> Children { get; set; } = []; public FolderContentsSortOrder ContentsSortOrder { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record DocumentSummary { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool HasReferences { get; set; } public bool OnLegalHold { get; set; } public bool CheckedOut { get; set; } public bool CheckedOutByMe { get; set; } public string CheckedOutByName { get; set; } = ""; public string FileExtension { get; set; } = ""; public string DocumentType { get; set; } = ""; public DateOnly? DocumentDate { get; set; } public long? SizeBytes { get; set; } public List<string> Tags { get; set; } = []; public Guid? SensitivityLabelId { get; set; } public string SensitivityLabelName { get; set; } = ""; public string? SensitivityLabelColor { get; set; } public int VersionCount { get; set; } public DateTimeOffset? VersionCreatedAt { get; set; } }
     private record ReferenceListResponse { public List<ReferenceSummary> References { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
     private record ReferenceSummary { public Guid ReferenceId { get; set; } public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool HasReferences { get; set; } public Guid? RealParentId { get; set; } }
     private record DocNameResponse { public string Name { get; set; } = ""; }

@@ -83,3 +83,4 @@ dist/
 /src/SimplArchive.Api/wwwroot/download/clients/**/*.zip
 /src/SimplArchive.Api/wwwroot/download/clients/**/*.tar.gz
 /src/SimplArchive.Api/wwwroot/download/clients/**/*.dmg
+white-bar-bug.png

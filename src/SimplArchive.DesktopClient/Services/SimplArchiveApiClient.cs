@@ -55,7 +55,10 @@ public sealed class SimplArchiveApiClient
     }
 
     public sealed record Node(Guid Id, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, bool OnLegalHold = false, bool CheckedOut = false, bool CheckedOutByMe = false, string CheckedOutByName = "",
-        string DocumentType = "", DateOnly? DocumentDate = null, long? SizeBytes = null, IReadOnlyList<string>? Tags = null, string SensitivityLabelName = "", string? SensitivityLabelColor = null, int VersionCount = 0);
+        string DocumentType = "", DateOnly? DocumentDate = null, long? SizeBytes = null, IReadOnlyList<string>? Tags = null, string SensitivityLabelName = "", string? SensitivityLabelColor = null, int VersionCount = 0,
+        // The latest confirmed version's CreatedAt (filing timestamp) — the "Created" folder contents-sort key
+        // (ADR "Per-folder contents sort order"). Null for a folder / version-less doc.
+        DateTimeOffset? VersionCreatedAt = null);
 
     // A folder that references a given item, with its full display path — see ADR "References-of-an-item list".
     public sealed record ReferencingFolder(Guid Id, string Name, string Path);
@@ -363,6 +366,24 @@ public sealed class SimplArchiveApiClient
 
     public Task<List<Node>> GetChildrenAsync(Guid folderId, CancellationToken cancellationToken = default) =>
         LoadPagedAsync($"api/documents/{folderId}/children", "children", ParseNode, cancellationToken);
+
+    // The folder's persisted default contents sort order (ADR "Per-folder contents sort order") from the children
+    // listing envelope — 0=Name / 1=DocumentDate / 2=Created; DocumentDate (1) when unavailable.
+    public async Task<int> GetContentsSortOrderAsync(Guid folderId, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{folderId}/children?limit=1", cancellationToken);
+        return json.TryGetProperty("contentsSortOrder", out var so) && so.ValueKind == JsonValueKind.Number ? so.GetInt32() : 1;
+    }
+
+    // Sets the folder's persisted default contents sort order (CanEditIndexData-gated).
+    public async Task SetContentsSortOrderAsync(Guid folderId, int sortOrder, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PutAsJsonAsync($"api/documents/{folderId}/contents-sort-order", new { sortOrder }, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ApiActionException($"Could not set the contents sort order ({(int)response.StatusCode}).");
+        }
+    }
 
     // Lists a .zip document's entries on demand (ADR "Zip file browsing") — nothing is unpacked.
     public async Task<IReadOnlyList<ArchiveEntryInfo>> GetArchiveEntriesAsync(Guid documentId, CancellationToken cancellationToken = default)
@@ -2211,7 +2232,8 @@ public sealed class SimplArchiveApiClient
         item.TryGetProperty("tags", out var tg) && tg.ValueKind == JsonValueKind.Array ? tg.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s.Length > 0).ToList() : [],
         item.TryGetProperty("sensitivityLabelName", out var sln) ? sln.GetString() ?? "" : "",
         item.TryGetProperty("sensitivityLabelColor", out var slc) && slc.ValueKind == JsonValueKind.String ? slc.GetString() : null,
-        item.TryGetProperty("versionCount", out var vc) && vc.ValueKind == JsonValueKind.Number ? vc.GetInt32() : 0);
+        item.TryGetProperty("versionCount", out var vc) && vc.ValueKind == JsonValueKind.Number ? vc.GetInt32() : 0,
+        item.TryGetProperty("versionCreatedAt", out var vca) && vca.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(vca.GetString(), out var vcaDt) ? vcaDt : null);
 
     private static SearchResult ParseSearchResult(JsonElement item) => new(
         item.GetProperty("id").GetGuid(),

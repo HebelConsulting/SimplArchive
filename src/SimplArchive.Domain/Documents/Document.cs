@@ -27,6 +27,11 @@ public class Document : ITenantScoped, IConcurrencyTracked, ISoftDeletable
     // Informational + searchable + watermark trigger; no access enforcement.
     public Guid? SensitivityLabelId { get; set; }
 
+    // How this folder's children are ordered by default (ADR "Per-folder contents sort order"). Only read for a
+    // folder (a Document with no versions); the default is DocumentDate. Folders are always listed on top; this
+    // orders within each group. A client column-header click is an ephemeral override, not persisted here.
+    public FolderContentsSortOrder ContentsSortOrder { get; set; } = FolderContentsSortOrder.DocumentDate;
+
     // Exactly one of CreatedByUserId/CreatedByServiceAccountId is set — mirrors the identical fix already
     // applied to DocumentVersion.CreatedByUserId (ADR "Document version upload/download endpoints
     // (pragmatic slice)"). No interactive human-user login flow exists yet (ADR "ServiceAccount request

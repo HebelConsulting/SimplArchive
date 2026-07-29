@@ -28,6 +28,7 @@ public static class AuditActions
 
     public const string DocumentTagsUpdated = "Document.TagsUpdated";
     public const string DocumentDateChanged = "Document.DocumentDateChanged";
+    public const string DocumentContentsSortOrderChanged = "Document.ContentsSortOrderChanged";
     public const string DocumentOcrLanguagesChanged = "Document.OcrLanguagesChanged";
     // The data-classification / sensitivity label changed (ADR "Data classification / sensitivity labels").
     public const string DocumentSensitivityChanged = "Document.SensitivityChanged";

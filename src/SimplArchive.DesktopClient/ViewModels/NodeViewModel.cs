@@ -94,6 +94,10 @@ public sealed class NodeViewModel
     // doesn't carry it), so Compare is offered on a reference's real row rather than the shortcut.
     public int VersionCount { get; init; }
 
+    // The latest confirmed version's CreatedAt (filing timestamp) — the "Created" folder contents-sort key (ADR
+    // "Per-folder contents sort order"). Null for a folder / version-less doc.
+    public DateTimeOffset? VersionCreatedAt { get; init; }
+
     // A folder is a Document with no versions (ADR 0175); a document has versions.
     public bool IsFolder => !HasVersions;
 

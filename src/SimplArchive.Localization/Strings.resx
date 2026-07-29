@@ -2736,4 +2736,22 @@
   <data name="PhoneTabComments" xml:space="preserve">
     <value>Comments</value>
   </data>
+  <data name="FolderSortLabel" xml:space="preserve">
+    <value>Contents sort order</value>
+  </data>
+  <data name="FolderSortName" xml:space="preserve">
+    <value>Name (A–Z)</value>
+  </data>
+  <data name="FolderSortDocDate" xml:space="preserve">
+    <value>Document date</value>
+  </data>
+  <data name="FolderSortCreated" xml:space="preserve">
+    <value>Created (filed)</value>
+  </data>
+  <data name="FolderSortNoPermission" xml:space="preserve">
+    <value>You don't have permission to change this folder's sort order.</value>
+  </data>
+  <data name="FolderSortSaveFailed" xml:space="preserve">
+    <value>Couldn't save the sort order.</value>
+  </data>
 </root>

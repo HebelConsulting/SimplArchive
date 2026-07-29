@@ -15,6 +15,11 @@ public class DocumentConfiguration : IEntityTypeConfiguration<Document>
         builder.HasKey(d => d.Id);
         builder.Property(d => d.Name).IsRequired().HasMaxLength(200);
 
+        // Per-folder default contents sort order (ADR "Per-folder contents sort order"). Store default
+        // DocumentDate so the migration backfills existing folders to it; new documents get it from the entity
+        // default. Only meaningful for a folder.
+        builder.Property(d => d.ContentsSortOrder).HasDefaultValue(FolderContentsSortOrder.DocumentDate);
+
         // Exactly one of CreatedByUserId/CreatedByServiceAccountId is set — see ADR "Repositories
         // controller and Document creation". Same CASE WHEN "exactly one" shape already used for
         // AclEntry's principal/scope columns and DocumentVersion's own creator columns.

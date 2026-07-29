@@ -642,6 +642,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanManageAccess));
         OnPropertyChanged(nameof(CanCheckOut));
         OnPropertyChanged(nameof(CanOverrideSelected));
+        OnPropertyChanged(nameof(ShowFolderDetail)); // folder detail pane shows only when no document is selected
+        FolderSortEditing = false;
         if (value is { IsFolder: false, IsArchiveEntry: false })
         {
             await LoadDetailAsync(value);
@@ -902,6 +904,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             var children = await _api.GetChildrenAsync(folderId);
             var references = await _api.GetReferencesAsync(folderId);
+            // The folder's persisted default contents order (ADR "Per-folder contents sort order"); opening a
+            // fresh folder resets any ephemeral column-header sort back to that default.
+            _folderSortOrder = await _api.GetContentsSortOrderAsync(folderId);
+            _headerSortActive = false;
+            FolderSortEditing = false;
+            OnPropertyChanged(nameof(FolderSortText));
+            OnPropertyChanged(nameof(ShowFolderDetail));
             Items.Clear();
             foreach (var child in children)
             {
@@ -923,6 +932,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     SensitivityLabelName = child.SensitivityLabelName,
                     SensitivityLabelColor = child.SensitivityLabelColor,
                     VersionCount = child.VersionCount,
+                    VersionCreatedAt = child.VersionCreatedAt,
                 });
             }
 
@@ -954,6 +964,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // ---- Contents-list column sorting (ADR "List-row columns and sorting") — client-side over the loaded
     // rows, since the listing is cursor-paginated by creation order. -----------------------------------
+    // Folders are ALWAYS listed on top (ADR "Per-folder contents sort order"); within each group the default is
+    // the open folder's persisted _folderSortOrder (0=Name/1=DocumentDate/2=Created). Clicking a column header is
+    // an EPHEMERAL override (_headerSortActive) that resets when another folder is opened.
+    private int _folderSortOrder = 1; // DocumentDate
+    private bool _headerSortActive;
     private string _contentSortColumn = "name";
     private bool _contentSortAscending = true;
 
@@ -962,12 +977,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public string DateHeader => ColumnHeader("date", "Doc date");
     public string SizeHeader => ColumnHeader("size", "Size");
     public string TagsHeader => ColumnHeader("tags", "Tags");
-    private string ColumnHeader(string col, string label) => _contentSortColumn == col ? $"{label} {(_contentSortAscending ? "▲" : "▼")}" : label;
+    private string ColumnHeader(string col, string label) => _headerSortActive && _contentSortColumn == col ? $"{label} {(_contentSortAscending ? "▲" : "▼")}" : label;
 
     [RelayCommand]
     private void SortContents(string column)
     {
-        if (_contentSortColumn == column)
+        if (_headerSortActive && _contentSortColumn == column)
         {
             _contentSortAscending = !_contentSortAscending;
         }
@@ -975,6 +990,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             _contentSortColumn = column;
             _contentSortAscending = true;
+            _headerSortActive = true; // an ephemeral override, until the next folder is opened
         }
 
         OnPropertyChanged(nameof(NameHeader));
@@ -992,19 +1008,84 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        IEnumerable<NodeViewModel> ordered = _contentSortColumn switch
-        {
-            "type" => Items.OrderBy(n => n.IsFolder ? "" : n.DocumentType, StringComparer.OrdinalIgnoreCase),
-            "date" => Items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue),
-            "size" => Items.OrderBy(n => n.SizeBytes ?? -1),
-            "tags" => Items.OrderBy(n => n.TagsText, StringComparer.OrdinalIgnoreCase),
-            _ => Items.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
-        };
-        var sorted = (_contentSortAscending ? ordered : ordered.Reverse()).ToList();
+        // Folders on top, then documents — each group ordered by the active criterion.
+        var folders = Items.Where(n => n.IsFolder);
+        var docs = Items.Where(n => !n.IsFolder);
+        var sorted = _headerSortActive
+            ? HeaderSort(folders).Concat(HeaderSort(docs)).ToList()
+            : FolderSort(folders).Concat(FolderSort(docs)).ToList();
         Items.Clear();
         foreach (var n in sorted)
         {
             Items.Add(n);
+        }
+    }
+
+    private IEnumerable<NodeViewModel> FolderSort(IEnumerable<NodeViewModel> items) => _folderSortOrder switch
+    {
+        1 => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue).ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
+        2 => items.OrderBy(n => n.VersionCreatedAt ?? DateTimeOffset.MinValue).ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
+        _ => items.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
+    };
+
+    private IEnumerable<NodeViewModel> HeaderSort(IEnumerable<NodeViewModel> items)
+    {
+        IEnumerable<NodeViewModel> ordered = _contentSortColumn switch
+        {
+            "type" => items.OrderBy(n => n.DocumentType, StringComparer.OrdinalIgnoreCase),
+            "date" => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue),
+            "size" => items.OrderBy(n => n.SizeBytes ?? -1),
+            "tags" => items.OrderBy(n => n.TagsText, StringComparer.OrdinalIgnoreCase),
+            _ => items.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
+        };
+        return _contentSortAscending ? ordered : ordered.Reverse();
+    }
+
+    // ---- Folder detail pane: the open folder's persisted contents sort order (ADR "Per-folder contents sort
+    // order") — a "Contents sort order" field editable under an Edit toggle. -----------------------------
+    public string FolderSortText => _folderSortOrder switch
+    {
+        1 => Strings.Get("FolderSortDocDate"),
+        2 => Strings.Get("FolderSortCreated"),
+        _ => Strings.Get("FolderSortName"),
+    };
+
+    // A folder is open and no document is selected → show the folder detail pane instead of the placeholder.
+    public bool ShowFolderDetail => _currentFolderId is not null && SelectedItem is null;
+
+    [ObservableProperty] private bool _folderSortEditing;
+    [ObservableProperty] private int _folderSortEditIndex;
+
+    [RelayCommand]
+    private void BeginFolderSortEdit()
+    {
+        FolderSortEditIndex = _folderSortOrder;
+        FolderSortEditing = true;
+    }
+
+    [RelayCommand]
+    private void CancelFolderSortEdit() => FolderSortEditing = false;
+
+    [RelayCommand]
+    private async Task SaveFolderSortAsync()
+    {
+        if (_api is null || _currentFolderId is not { } folderId)
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.SetContentsSortOrderAsync(folderId, FolderSortEditIndex);
+            _folderSortOrder = FolderSortEditIndex;
+            _headerSortActive = false; // re-apply the persisted default to the current listing
+            FolderSortEditing = false;
+            OnPropertyChanged(nameof(FolderSortText));
+            ApplyContentSort();
+        }
+        catch (Services.ApiActionException e)
+        {
+            Status = e.Message;
         }
     }
 
@@ -5280,6 +5361,31 @@ public sealed partial class MainWindowViewModel : ObservableObject
             await DeleteFolderByIdAsync(created.Id);
         }
         return stillExpanded;
+    }
+
+    // Per-folder contents sort order (ADR "Per-folder contents sort order", see DesktopFolderContentsSortTests):
+    // a fresh folder defaults to DocumentDate; the detail-pane Save round-trips the choice to the server and
+    // updates the VM state.
+    internal async Task<bool> FolderContentsSortSelfTestAsync(string accessToken)
+    {
+        UseApi(new SimplArchiveApiClient(accessToken));
+        await LoadRootAsync();
+        var repoId = Tree[0].Id;
+
+        var name = "fsort-" + Guid.NewGuid().ToString("N")[..8];
+        await _api!.CreateFolderAsync(repoId, name);
+        var folderId = (await _api.GetChildrenAsync(repoId)).First(c => c.Name == name).Id;
+
+        await OpenFolderAsync(folderId);
+        var defaultIsDocDate = _folderSortOrder == 1 && FolderSortText == Strings.Get("FolderSortDocDate");
+
+        FolderSortEditIndex = 2; // Created
+        await SaveFolderSortCommand.ExecuteAsync(null);
+        var persisted = await _api.GetContentsSortOrderAsync(folderId) == 2;
+        var reflected = _folderSortOrder == 2 && !FolderSortEditing && FolderSortText == Strings.Get("FolderSortCreated");
+
+        await DeleteFolderByIdAsync(folderId);
+        return defaultIsDocDate && persisted && reflected;
     }
 
     // Headless exercise of the inbox drop-zone upload (ADR "Inbox file-list drop-zone", see DesktopInboxDropTests):

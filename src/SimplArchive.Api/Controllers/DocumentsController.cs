@@ -1024,13 +1024,22 @@ public class DocumentsController : ControllerBase
         // Count of confirmed versions — gates the desktop "Compare versions" action (needs >= 2 to have anything
         // to diff), ADR "Compare-versions gating + default". Projected (one COUNT subquery), never stored.
         public int VersionCount { get; set; }
+
+        // The latest confirmed version's CreatedAt (its filing timestamp) — the sort key for the "Created" folder
+        // contents-sort order (ADR "Per-folder contents sort order"). Null for a folder / version-less doc.
+        public DateTimeOffset? VersionCreatedAt { get; set; }
     }
 
-    private record DocumentSummaryRow(Guid Id, string Name, DateTimeOffset CreatedAt, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, bool OnLegalHold, Guid? CheckedOutByUserId, string? CheckedOutByName, string? LatestObjectKey, string? DocumentType, DateOnly? DocumentDate, long? SizeBytes, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, int VersionCount);
+    private record DocumentSummaryRow(Guid Id, string Name, DateTimeOffset CreatedAt, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, bool OnLegalHold, Guid? CheckedOutByUserId, string? CheckedOutByName, string? LatestObjectKey, string? DocumentType, DateOnly? DocumentDate, long? SizeBytes, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, int VersionCount, DateTimeOffset? VersionCreatedAt);
 
     public class DocumentChildrenResource : HypermediaResource
     {
         public List<DocumentSummaryResource> Children { get; set; } = [];
+
+        // The listed folder's persisted default contents sort order (ADR "Per-folder contents sort order"). The
+        // clients apply it (folders-first) as the default order when the folder is opened; a column-header click
+        // is an ephemeral override. Serialized as the int enum value (Name=0/DocumentDate=1/Created=2).
+        public FolderContentsSortOrder ContentsSortOrder { get; set; }
     }
 
     // "children", not "documents" — /documents/{id}/documents would repeat the same word despite being
@@ -1042,7 +1051,13 @@ public class DocumentsController : ControllerBase
     [HttpGet("children")]
     public async Task<IActionResult> ListChildren(Guid documentId, [FromQuery] string? cursor, [FromQuery] int? limit, CancellationToken cancellationToken)
     {
-        if (!await _dbContext.Documents.AnyAsync(d => d.Id == documentId, cancellationToken))
+        // Fetch the listed folder's persisted contents sort order (ADR "Per-folder contents sort order") — also
+        // serves as the existence check (null = no such document).
+        var folderSortOrder = await _dbContext.Documents
+            .Where(d => d.Id == documentId)
+            .Select(d => (FolderContentsSortOrder?)d.ContentsSortOrder)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (folderSortOrder is null)
         {
             return NotFound();
         }
@@ -1104,7 +1119,13 @@ public class DocumentsController : ControllerBase
                 d.SensitivityLabelId == null ? null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => l.Name).FirstOrDefault(),
                 d.SensitivityLabelId == null ? null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => l.Color).FirstOrDefault(),
                 // Confirmed-version count — gates the desktop "Compare versions" action (needs >= 2).
-                _dbContext.DocumentVersions.Count(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed)))
+                _dbContext.DocumentVersions.Count(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed),
+                // The latest confirmed version's CreatedAt (filing timestamp) — the "Created" contents-sort key.
+                _dbContext.DocumentVersions
+                    .Where(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed)
+                    .OrderByDescending(v => v.VersionNumber)
+                    .Select(v => (DateTimeOffset?)v.CreatedAt)
+                    .FirstOrDefault()))
             .ToListAsync(cancellationToken);
         var (page, hasMore) = Cursor.Split(fetched, pageSize);
 
@@ -1146,8 +1167,10 @@ public class DocumentsController : ControllerBase
                 SensitivityLabelName = d.SensitivityLabelName ?? "",
                 SensitivityLabelColor = d.SensitivityLabelColor,
                 VersionCount = d.VersionCount,
+                VersionCreatedAt = d.VersionCreatedAt,
                 Links = new List<Link> { new("self", $"/api/documents/{d.Id}", "GET") },
             }).ToList(),
+            ContentsSortOrder = folderSortOrder.Value,
             Links = links,
         });
     }
@@ -1480,6 +1503,54 @@ public class DocumentsController : ControllerBase
         await _audit.RecordAsync(AuditActions.DocumentMaskAssigned, "Document", documentId, document.Name, $"Mask set to '{mask.Name}'", cancellationToken: cancellationToken);
 
         return Ok(await BuildMaskResourceAsync(documentId, mask.Id, cancellationToken));
+    }
+
+    public class SetContentsSortOrderRequest
+    {
+        // The persisted default contents sort order for this folder (ADR "Per-folder contents sort order"):
+        // Name=0 / DocumentDate=1 / Created=2.
+        public FolderContentsSortOrder SortOrder { get; set; }
+    }
+
+    public class ContentsSortOrderResource : HypermediaResource
+    {
+        public FolderContentsSortOrder ContentsSortOrder { get; set; }
+    }
+
+    // Sets a folder's persisted default contents sort order (ADR "Per-folder contents sort order") — a shared,
+    // per-folder setting (it changes the default order for everyone who opens the folder). A metadata edit:
+    // CanEditIndexData. Applied client-side (folders-first) when the folder is opened; a column-header click is
+    // an ephemeral override. An undefined enum value → 400 INVALID_CONTENTS_SORT_ORDER. No re-index (ordering is
+    // client-side, it doesn't affect the search index).
+    [HttpPut("contents-sort-order")]
+    public async Task<IActionResult> SetContentsSortOrder(Guid documentId, [FromBody] SetContentsSortOrderRequest request, CancellationToken cancellationToken)
+    {
+        var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken);
+        if (document is null)
+        {
+            return NotFound();
+        }
+
+        if (!await CanEditIndexDataAsync(documentId, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (!Enum.IsDefined(request.SortOrder))
+        {
+            throw new InvalidContentsSortOrderException();
+        }
+
+        document.ContentsSortOrder = request.SortOrder;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _audit.RecordAsync(AuditActions.DocumentContentsSortOrderChanged, "Document", documentId, document.Name, $"Contents sort order set to {request.SortOrder}", cancellationToken: cancellationToken);
+
+        return Ok(new ContentsSortOrderResource
+        {
+            ContentsSortOrder = document.ContentsSortOrder,
+            Links = [new Link("self", $"/api/documents/{documentId}/contents-sort-order", "GET")],
+        });
     }
 
     public class SetSensitivityRequest
