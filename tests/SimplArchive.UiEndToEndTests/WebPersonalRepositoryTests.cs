@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // the workbench tree and is browsable/writable like any repository — selecting it and creating a folder into it
 // round-trips.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebPersonalRepositoryTests
 {
     private readonly SelfHostedAppFixture _app;

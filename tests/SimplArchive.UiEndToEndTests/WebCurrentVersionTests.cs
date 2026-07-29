@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The last line of the detail pane shows the document's current (latest confirmed) version number
 // (ADR "Mask-pane current-version line"). Uploads a fresh document (version 1) and confirms the line reads it.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebCurrentVersionTests
 {
     private readonly SelfHostedAppFixture _app;

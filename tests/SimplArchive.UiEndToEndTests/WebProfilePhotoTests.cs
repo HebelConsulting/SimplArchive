@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // groups tab, picking + cropping a photo for a user uploads a 256×256 PNG (browser canvas → PUT) and the
 // user's avatar image appears.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebProfilePhotoTests
 {
     // A 1×1 PNG — the crop canvas rescales it to a valid 256×256 PNG on upload.

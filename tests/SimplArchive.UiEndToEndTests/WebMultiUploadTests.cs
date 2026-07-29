@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow (ADR 0216): selecting several files at once in the ribbon Upload creates a separate document per
 // file in the folder.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebMultiUploadTests
 {
     private readonly SelfHostedAppFixture _app;

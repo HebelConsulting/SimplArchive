@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // the demo seed — sees the Retention tab, which lists the demo document (its Basic Entry mask carries a 7-year
 // retention) with its computed disposition date. Read-only, so nothing else in the suite is affected.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebRetentionTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -10,6 +10,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The web half of version comparison (ADR "Document version comparison"): a document with two text versions is
 // seeded via the API, then the UI opens "Compare versions" from the detail pane and shows the inline diff.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebVersionComparisonTests
 {
     private readonly SelfHostedAppFixture _app;

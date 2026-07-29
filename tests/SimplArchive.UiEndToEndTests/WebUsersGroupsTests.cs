@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // New/Copy/Delete. The demo admin is a tenant admin with CanManageUsers, so the tab is visible and it can
 // grant the rights it holds (Manage repositories / Manage masks).
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebUsersGroupsTests
 {
     private readonly SelfHostedAppFixture _app;

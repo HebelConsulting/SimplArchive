@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // Entry mask (a Keywords field) but no Keywords value, so a Keywords filter excludes it — proving the field
 // filter is applied. OpenSearch is in the fixture; indexing is async, so the initial search polls.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebSearchFieldFilterTests
 {
     private const string Doc = "Invoice 2025-001";

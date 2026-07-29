@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow (ADR 0234): a .json is previewed as re-indented text, rendered in-process (no Gotenberg) — the
 // json/xml rendition family.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebJsonPreviewTests
 {
     private readonly SelfHostedAppFixture _app;

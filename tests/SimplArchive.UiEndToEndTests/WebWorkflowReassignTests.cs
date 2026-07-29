@@ -13,6 +13,7 @@ namespace SimplArchive.UiEndToEndTests;
 // dialog, where picking R2 reassigns the review and deactivates R1. Uses fresh users so it never touches the
 // shared demo document's workflow (which WebWorkflowTests mutates).
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebWorkflowReassignTests
 {
     private readonly SelfHostedAppFixture _app;

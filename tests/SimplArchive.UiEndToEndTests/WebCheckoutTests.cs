@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A web UI flow (ADR "Web check-out"): the demo admin checks out a document from the Repositories row menu, sees
 // it prefixed with "[name]" + a lock icon, finds it on the Check-out tab, and cancels the check-out.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebCheckoutTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // own document (independent of the seeded content), then in one edit changes the name and assigns a mask via the
 // mask picker, and confirms both persist in the read-only view.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebDetailEditTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -10,6 +10,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The web half of document subscriptions (ADR "Document subscriptions"): the Follow toggle in the detail pane
 // subscribes/unsubscribes the current user, cross-checked against the backend subscription state.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebSubscriptionTests
 {
     private readonly SelfHostedAppFixture _app;

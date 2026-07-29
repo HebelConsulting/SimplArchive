@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // uploads them straight into the S3-backed inbox. Playwright can't perform a real OS file drag, so the drop is
 // synthesized with a DataTransfer holding a File; the JS handler presigns + PUTs it exactly like a real drop.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebInboxDropTests
 {
     private readonly SelfHostedAppFixture _app;

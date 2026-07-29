@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // — sees the Legal Holds tab, creates a new matter, and releases it. A standalone empty matter is used (no
 // shared document is placed on hold), so nothing else in the suite is affected.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebLegalHoldsTests
 {
     private readonly SelfHostedAppFixture _app;

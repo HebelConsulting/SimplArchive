@@ -9,6 +9,7 @@ namespace SimplArchive.UiEndToEndTests;
 // signs back in USING the passkey at the login challenge (navigator.credentials.get → Fido2 assertion). Cleans
 // up the passkey from the shared demo admin afterwards so other tests' logins are unaffected.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebPasskeyTests
 {
     private readonly SelfHostedAppFixture _app;

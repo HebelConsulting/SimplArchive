@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // Repositories tab. (The fixture has no OpenSearch, so this exercises the Postgres metadata-search fallback,
 // which matches the document name immediately — no indexing delay.)
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebSearchTests
 {
     private readonly SelfHostedAppFixture _app;

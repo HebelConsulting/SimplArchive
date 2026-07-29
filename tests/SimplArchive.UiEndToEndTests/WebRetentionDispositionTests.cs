@@ -12,6 +12,7 @@ namespace SimplArchive.UiEndToEndTests;
 // Retention tab's Dispose action; the result is asserted over the API. The demo admin holds
 // CanManageClassification, so the Retention tab + actions are available.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebRetentionDispositionTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // → presigned PUT to MinIO → finalize) and the new document appears in the contents list, previewable. Distinct
 // from the inbox-filing path already covered.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebUploadTests
 {
     private readonly SelfHostedAppFixture _app;

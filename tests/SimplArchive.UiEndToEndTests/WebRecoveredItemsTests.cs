@@ -6,6 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow (ADR 0196): restoring a child whose parent is still deleted reparents it into an auto-created
 // "Recovered Items" folder under the repository root, rather than back into the (still-deleted) parent.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebRecoveredItemsTests
 {
     private readonly SelfHostedAppFixture _app;

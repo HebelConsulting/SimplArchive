@@ -6,6 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow: logging out returns the app to the "please log in" prompt and clears the logged-in identity —
 // completes the auth lifecycle (login is covered by the other tests).
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebLogoutTests
 {
     private readonly SelfHostedAppFixture _app;

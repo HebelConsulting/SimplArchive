@@ -10,6 +10,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The web half of duplicate detection (ADR "Duplicate document detection"): uploading a file whose content is
 // identical to an existing document pops the reference/file-anyway/cancel modal; "File it again anyway" proceeds.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebDuplicateDetectionTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // min-height:0`) lets the tab bar ride up / get pushed off-screen. STANDING RULE (see CLAUDE.md): every new
 // bottom tab must be added to this [Theory] — the Tasks tab regressed this first, then the Check-out tab.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebTabBarTests
 {
     private readonly SelfHostedAppFixture _app;

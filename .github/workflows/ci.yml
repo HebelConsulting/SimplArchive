@@ -103,19 +103,28 @@ jobs:
           path: coverage/report
           if-no-files-found: ignore
 
-  # The three heavy suites run as a parallel matrix — one hosted runner each — so wall-clock is the slowest suite,
-  # not their sum. EndToEndTests = container E2E (in-process API); UiEndToEndTests = browser/web UI (Playwright +
-  # Chrome); DesktopUiEndToEndTests = the DesktopClient api-client tests (no browser). Splitting web and desktop
-  # into separate projects lets the desktop suite skip Chrome and keeps each runner's load light on the 2-core
-  # hosted runner (ADR 0378).
+  # The heavy suites run as a parallel matrix — one hosted runner each — so wall-clock is the slowest leg, not
+  # their sum. EndToEndTests = container E2E (in-process API); DesktopUiEndToEndTests = the DesktopClient api-client
+  # tests (no browser). UiEndToEndTests = browser/web UI (Playwright + Chrome) — by far the biggest suite, so it's
+  # **split into 4 time-balanced legs** (ADR "Split the UiEndToEndTests suite into parallel CI legs"): classes are
+  # Area-tagged `ui-1/ui-2/ui-3` (bin-packed by measured runtime, ~1/4 each) and the 4th leg is the remainder
+  # (`Area!=ui-1&…` — it also catches any new class added without an Area trait, so nothing is silently skipped).
+  # This takes the ~20-min single Ui leg down to ~5-6 min each. Each leg is its own `dotnet test` process → its own
+  # SelfHostedAppFixture on its own runner (ADR 0378).
   heavy:
-    name: E2E (${{ matrix.suite }})
+    name: E2E (${{ matrix.name }})
     needs: fast # don't spend heavy-tier minutes if the build/unit/integration tier is already red
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        suite: [EndToEndTests, UiEndToEndTests, DesktopUiEndToEndTests]
+        include:
+          - { name: EndToEndTests, project: EndToEndTests, filter: "" }
+          - { name: DesktopUiEndToEndTests, project: DesktopUiEndToEndTests, filter: "" }
+          - { name: "UiEndToEndTests · 1", project: UiEndToEndTests, filter: '--filter "Area=ui-1"' }
+          - { name: "UiEndToEndTests · 2", project: UiEndToEndTests, filter: '--filter "Area=ui-2"' }
+          - { name: "UiEndToEndTests · 3", project: UiEndToEndTests, filter: '--filter "Area=ui-3"' }
+          - { name: "UiEndToEndTests · 4", project: UiEndToEndTests, filter: '--filter "Area!=ui-1&Area!=ui-2&Area!=ui-3"' }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -129,10 +138,10 @@ jobs:
           restore-keys: nuget-${{ runner.os }}-
       - name: Restore
         run: dotnet restore
-      - name: Build ${{ matrix.suite }}
-        run: dotnet build tests/SimplArchive.${{ matrix.suite }} --no-restore -c Debug
+      - name: Build ${{ matrix.project }}
+        run: dotnet build tests/SimplArchive.${{ matrix.project }} --no-restore -c Debug
       # Suites run once, no retry wrapper — the known intermittent flakes are root-caused (SearchTests polls until
       # BOTH docs are indexed; the login helper waits on DOMContentLoaded + a 60s timeout for the slower hosted
       # CPU; WebSearchFilterTests polls until the row clears). A red suite is a real regression or a new flake.
-      - name: Test ${{ matrix.suite }}
-        run: dotnet test tests/SimplArchive.${{ matrix.suite }} --no-build -c Debug
+      - name: Test ${{ matrix.project }} ${{ matrix.filter }}
+        run: dotnet test tests/SimplArchive.${{ matrix.project }} --no-build -c Debug ${{ matrix.filter }}

@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // in <em>). The seeded document's text ("…Acme Corp AG…") is content-extracted (Tika) and indexed (OpenSearch),
 // so searching a content-only word highlights it. Indexing is async, so the search polls.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebSearchHighlightTests
 {
     private readonly SelfHostedAppFixture _app;

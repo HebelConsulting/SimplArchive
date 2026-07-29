@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // Delete (confirm → recycle bin) → Restore (recycle-bin dialog). Uses its own throwaway folder so it doesn't
 // disturb the seeded content other tests rely on.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebLifecycleTests
 {
     private readonly SelfHostedAppFixture _app;

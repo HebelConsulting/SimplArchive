@@ -9,6 +9,7 @@ namespace SimplArchive.UiEndToEndTests;
 // does, minus the loopback), register a passkey via the real navigator.credentials.create → Fido2 attestation
 // ceremony, confirm it appears in the list, then remove it. Cleans up the shared demo admin's passkeys.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebPasskeyManagementPageTests
 {
     private readonly SelfHostedAppFixture _app;

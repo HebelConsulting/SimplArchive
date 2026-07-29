@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // the tenant settings read-only; clicking Edit makes the fields editable and Save persists. Kept read-only-ish
 // (no destructive change committed here) so the shared demo tenant stays clean for the rest of the suite.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebTenantSettingsTests
 {
     private readonly SelfHostedAppFixture _app;

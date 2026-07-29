@@ -10,6 +10,7 @@ namespace SimplArchive.UiEndToEndTests;
 // reveals a Follow bell in the comment-pane header that subscribes to the folder (and its whole subtree),
 // cross-checked against the backend.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebFolderSubscriptionTests
 {
     private readonly SelfHostedAppFixture _app;

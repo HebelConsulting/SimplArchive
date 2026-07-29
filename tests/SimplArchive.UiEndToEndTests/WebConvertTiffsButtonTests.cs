@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // "No documents need conversion" — exercising the admin-gated button + the pending-count path without
 // enqueuing anything.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebConvertTiffsButtonTests
 {
     private readonly SelfHostedAppFixture _app;

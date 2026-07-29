@@ -9,6 +9,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The web half of sensitivity labels (ADR "Data classification / sensitivity labels"): the demo admin sets a
 // document's sensitivity via the detail-pane Edit → Save, and the badge appears.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebSensitivityLabelTests
 {
     private readonly SelfHostedAppFixture _app;

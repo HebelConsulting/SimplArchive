@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // is converted to a PDF (Gotenberg) and rendered, with the "Converted preview" badge marking it as a rendition
 // rather than the original.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebConvertedPreviewTests
 {
     private readonly SelfHostedAppFixture _app;

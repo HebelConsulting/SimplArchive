@@ -9,6 +9,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The web half of list-row columns (ADR "List-row columns and sorting"): the contents list shows a sortable
 // column header, and clicking the Name header toggles the row order.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebListColumnsTests
 {
     private readonly SelfHostedAppFixture _app;

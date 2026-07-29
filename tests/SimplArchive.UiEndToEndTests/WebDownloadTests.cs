@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // Task 2 (web half): the web client's Download actually downloads the document — the browser saves a file named
 // after the document with the correct bytes. Drives the real workbench end to end.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public partial class WebDownloadTests
 {
     private readonly SelfHostedAppFixture _app;

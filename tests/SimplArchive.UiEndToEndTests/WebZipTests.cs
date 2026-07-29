@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow (ADR 0263): a .zip is filed as-is and, on double-click, its entries are browsed virtually (nothing
 // unpacked) with a back affordance.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebZipTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -9,6 +9,7 @@ namespace SimplArchive.UiEndToEndTests;
 // which opens a separate window where the assigned reviewer Approves then Releases it. (This is the only test
 // that mutates the demo document's workflow state; nothing else asserts on it.)
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebWorkflowTests
 {
     private readonly SelfHostedAppFixture _app;

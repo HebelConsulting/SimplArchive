@@ -6,6 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow (ADR 0246): after a reference to an item exists, the item's ⋮ "References…" opens a dialog listing
 // the folders that reference it. Self-contained folders; references into the repo root (no picker expansion).
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebReferencesDialogTests
 {
     private readonly SelfHostedAppFixture _app;

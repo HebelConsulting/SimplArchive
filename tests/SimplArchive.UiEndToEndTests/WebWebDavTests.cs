@@ -6,6 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The web half of the WebDAV gateway (ADR "WebDAV gateway"): the account-menu "WebDAV access…" dialog shows the
 // mount URL and generates an app-specific password (shown once).
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebWebDavTests
 {
     private readonly SelfHostedAppFixture _app;

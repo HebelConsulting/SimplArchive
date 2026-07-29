@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // (a shortcut appears in another folder). Uses throwaway folders and always targets the repository root in the
 // picker (no tree expansion needed), so it stays independent of the seeded content.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebMoveReferenceTests
 {
     private readonly SelfHostedAppFixture _app;

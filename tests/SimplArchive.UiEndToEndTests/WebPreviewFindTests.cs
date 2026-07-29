@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // and clicking a highlighted word copies it to the clipboard. Uses a .md (Gotenberg → PDF with a text layer)
 // containing a distinctive word twice.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebPreviewFindTests
 {
     private readonly SelfHostedAppFixture _app;

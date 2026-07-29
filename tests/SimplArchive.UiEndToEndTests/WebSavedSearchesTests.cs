@@ -10,6 +10,7 @@ namespace SimplArchive.UiEndToEndTests;
 // browser prompt), the saved chip appearing, and clicking it to restore + re-run. Cleans up the shared demo
 // admin's saved search over the API afterwards.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebSavedSearchesTests
 {
     private readonly SelfHostedAppFixture _app;

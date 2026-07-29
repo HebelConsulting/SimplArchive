@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // confirm), then Restore it from the repository Recycle bin. The lifecycle test covers a folder; this covers
 // a document.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebRecycleBinDocumentTests
 {
     private readonly SelfHostedAppFixture _app;

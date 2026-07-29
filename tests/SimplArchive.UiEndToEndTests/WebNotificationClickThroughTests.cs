@@ -11,6 +11,7 @@ namespace SimplArchive.UiEndToEndTests;
 // document's parent folder. The browser then opens the bell and clicks the notification, which navigates the
 // workbench to the document.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebNotificationClickThroughTests
 {
     private readonly SelfHostedAppFixture _app;

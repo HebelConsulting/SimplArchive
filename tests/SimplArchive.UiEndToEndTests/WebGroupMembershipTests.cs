@@ -6,6 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow (ADR "Group membership editing"): in the Users & groups tab, add a user to a group via the
 // searchable member picker — the member appears in the group's Members list — then remove it.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebGroupMembershipTests
 {
     private readonly SelfHostedAppFixture _app;

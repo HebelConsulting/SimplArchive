@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // future month excludes the seeded document (whose document date is today). OpenSearch is in the fixture;
 // indexing is async, so the initial search polls.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebSearchDateFilterTests
 {
     private const string Doc = "Invoice 2025-001";

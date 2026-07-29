@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // (ADR 0294), cleared on tab switch (ClearPreviewPane). This proves they don't entangle — neither pane ever
 // renders the other tab's document content.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebPreviewIsolationTests
 {
     private const string InboxMarker = "INBOXMARKERZZZ";

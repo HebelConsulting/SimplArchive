@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // notifications bell) persists the choice + reloads the app in that language. Verifies the German satellite
 // actually loads in Blazor WASM (Repositories tab → "Archive").
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebLocalizationTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow (ADR 0290): checkbox-select 2+ inbox items and "File N items" into a picked folder via the bulk
 // filing dialog — all selected items leave the inbox and appear as documents in that folder.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebInboxBulkFilingTests
 {
     private readonly SelfHostedAppFixture _app;

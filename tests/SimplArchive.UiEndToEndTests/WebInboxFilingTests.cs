@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow (ADRs 0265/0286): upload a file to the inbox, then File it into a repository folder via the filing
 // dialog's folder picker — it leaves the inbox and appears as a document in that folder.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebInboxFilingTests
 {
     private readonly SelfHostedAppFixture _app;

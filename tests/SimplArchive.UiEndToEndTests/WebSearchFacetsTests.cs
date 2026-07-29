@@ -11,6 +11,7 @@ namespace SimplArchive.UiEndToEndTests;
 // content word, two of one mask + one of another); indexing is awaited over the API, then the browser drives
 // the Search tab's facet panel: a document-type facet appears and clicking it drills the results down.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebSearchFacetsTests
 {
     private readonly SelfHostedAppFixture _app;

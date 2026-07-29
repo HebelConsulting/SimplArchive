@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // "Administration → Users" branch is pinned in the demo admin's repository tree, and expanding it reveals the
 // users' personal repositories (the admin's own "Demo Admin" personal space at least).
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebAdminUsersTests
 {
     private readonly SelfHostedAppFixture _app;

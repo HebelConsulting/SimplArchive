@@ -6,6 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow (ADR 0310): the self-service path — set your own photo from the corner avatar (not the admin
 // tab) so the corner shows it, then Remove it via the Users & groups tab so it reverts to initials.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebProfilePhotoSelfServiceTests
 {
     private const string OnePixelPngBase64 =

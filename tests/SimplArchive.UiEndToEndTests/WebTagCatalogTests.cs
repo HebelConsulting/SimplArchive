@@ -6,6 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The web half of the tag catalog (ADR "Tag controlled vocabulary"): the demo admin opens the Tags tab and
 // creates a coloured catalog tag, which appears in the catalog table.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebTagCatalogTests
 {
     private readonly SelfHostedAppFixture _app;

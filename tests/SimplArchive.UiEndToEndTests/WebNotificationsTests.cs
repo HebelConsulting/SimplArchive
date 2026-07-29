@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // deterministically by the E2E NotificationsTests with two principals; the demo admin only ever acts on its
 // own tenant, and self-actions don't notify.)
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebNotificationsTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -6,6 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // Responsive web workbench (ADR "Responsive web workbench", iPad-first): below 1200px the lower-priority panes
 // collapse so the workbench fits an iPad/phone without horizontal overflow. Verifies the tablet + phone tiers.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebResponsiveTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -10,6 +10,7 @@ namespace SimplArchive.UiEndToEndTests;
 // assertion; the passkey's user handle identifies the user, and it satisfies require-MFA). Cleans up the passkey
 // + the tenant flag afterwards so the shared demo tenant/admin is unaffected.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebPasswordlessPasskeyTests
 {
     private readonly SelfHostedAppFixture _app;

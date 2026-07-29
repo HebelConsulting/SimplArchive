@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow (ADRs 0260/0261): uploading a .eml auto-classifies it — the document is renamed to the email
 // subject and its attachment is filed as a child document (reachable by drilling in).
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebEmailTests
 {
     private readonly SelfHostedAppFixture _app;

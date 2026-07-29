@@ -10,6 +10,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The web half of document reminders (ADR "Document reminders"): the detail-pane Remind button opens the
 // dialog; setting a reminder (the date defaults to tomorrow) persists it, cross-checked against the backend.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebReminderTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -10,6 +10,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The web half of version restore (ADR "Version restore"): the Compare-versions dialog's Restore button rolls
 // back to the selected version, cross-checked against the backend (a new current version with the old content).
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebVersionRestoreTests
 {
     private readonly SelfHostedAppFixture _app;

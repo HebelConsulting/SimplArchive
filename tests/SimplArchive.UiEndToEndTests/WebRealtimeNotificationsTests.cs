@@ -11,6 +11,7 @@ namespace SimplArchive.UiEndToEndTests;
 // appears LIVE — no reload, no poll (the client only loads on login/open, so a live badge change can only be the
 // SignalR push).
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebRealtimeNotificationsTests
 {
     private readonly SelfHostedAppFixture _app;

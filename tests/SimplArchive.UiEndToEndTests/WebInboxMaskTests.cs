@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow (ADR 0291): an un-classified inbox item shows in square brackets; staging a mask writes the
 // {name}.mask.json sidecar and flips the item to un-bracketed.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebInboxMaskTests
 {
     private readonly SelfHostedAppFixture _app;

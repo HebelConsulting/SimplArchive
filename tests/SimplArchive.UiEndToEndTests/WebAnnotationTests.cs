@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // Add-note button then a spot on the page, fills the dialog, and a coloured marker appears; clicking the marker
 // and choosing Delete removes it. Uses a .md (Gotenberg → PDF page preview), like WebPreviewFindTests.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebAnnotationTests
 {
     private readonly SelfHostedAppFixture _app;

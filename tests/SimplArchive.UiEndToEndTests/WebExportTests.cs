@@ -6,6 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The web Repositories ribbon Export… action (ADR "Repository export"): the demo admin (a tenant admin) selects
 // a repository, opens the export dialog, and downloads a .zip whose archive carries the manifest.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-1")]
 public class WebExportTests
 {
     private readonly SelfHostedAppFixture _app;

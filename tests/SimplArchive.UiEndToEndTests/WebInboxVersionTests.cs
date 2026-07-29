@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow (ADRs 0286/0287): with a document selected on Repositories, the inbox filing dialog can file an item
 // as a NEW VERSION of it — the item leaves the inbox and a filing comment is posted on the target document.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebInboxVersionTests
 {
     private readonly SelfHostedAppFixture _app;
