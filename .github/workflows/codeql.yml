@@ -42,13 +42,13 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: csharp
           build-mode: none
 
       - name: Analyze
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:csharp"
           # Public: upload natively to the Security tab. Private: emit SARIF only (no GHAS → a real upload 403s).
@@ -59,7 +59,7 @@ jobs:
       - name: Upload SARIF artifact
         # Private only — on the public repo the Security tab is the record of findings.
         if: ${{ always() && env.IS_PUBLIC != 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: codeql-sarif
           path: sarif-results
