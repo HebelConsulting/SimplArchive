@@ -21,6 +21,20 @@ const GUTTERS = {
     chat: { pane: 'chat', mode: 'right' },
 };
 
+// Below this viewport width the responsive CSS media queries (Home.razor) govern pane sizing — collapsing the
+// lower-priority panes for iPad/phone (ADR "Responsive web workbench"). wbLayout.js then stops applying the
+// persisted px widths (which would overflow a narrow screen) but keeps the state for when the viewport widens.
+const WIDE_MIN = 1200;
+
+// One shared resize hook re-applies the active workbench's panes when the viewport crosses the breakpoint
+// (debounced); the module loads once, so this listener is registered once.
+let activeReapply = null;
+let resizeTimer = 0;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { if (activeReapply) activeReapply(); }, 150);
+});
+
 function loadState() {
     let s;
     try { s = JSON.parse(localStorage.getItem(KEY)); } catch { /* ignore */ }
@@ -58,6 +72,13 @@ export function attach(root) {
     function applyPane(name) {
         const el = pane(name);
         if (!el) return;
+        if (window.innerWidth < WIDE_MIN) {
+            // Responsive tiers govern (CSS media queries) — clear the JS inline sizing so it doesn't override
+            // them; the persisted state is untouched and re-applies once the viewport widens again.
+            el.style.flex = '';
+            delete el.dataset.collapsed;
+            return;
+        }
         const collapsed = state.collapsed[name];
         el.style.flex = collapsed ? '0 0 0px' : `0 0 ${state.sizes[name]}px`;
         if (collapsed) el.dataset.collapsed = '1'; else delete el.dataset.collapsed;
@@ -116,11 +137,14 @@ export function attach(root) {
         }
     }
 
-    // Restore persisted sizes/collapsed state on attach.
-    for (const name of Object.keys(GUTTERS)) {
-        applyPane(name);
-        updateCaret(name);
-    }
+    // Restore persisted sizes/collapsed state on attach, and register this workbench as the resize target.
+    activeReapply = () => {
+        for (const name of Object.keys(GUTTERS)) {
+            applyPane(name);
+            updateCaret(name);
+        }
+    };
+    activeReapply();
 
     return true;
 }

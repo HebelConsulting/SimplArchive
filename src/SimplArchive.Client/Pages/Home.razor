@@ -182,6 +182,32 @@
     .wb-audit-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
     .wb-audit-table th { text-align: left; position: sticky; top: 0; background: var(--mud-palette-surface); border-bottom: 1px solid var(--mud-palette-lines-default); padding: 6px 12px; font-weight: 600; }
     .wb-audit-table td { padding: 5px 12px; border-bottom: 1px solid var(--mud-palette-lines-default); vertical-align: top; }
+
+    /* Responsive workbench (ADR "Responsive web workbench", iPad-first). Below 1200px wbLayout.js stops applying
+       the persisted px pane widths (they'd overflow) and these rules govern: drop the lower-priority panes so
+       tree | list | preview fit. Placed last so they win over the base .wb-* pane widths at equal specificity.
+       (!important also beats any residual inline flex if JS hasn't cleared it yet.) */
+    @@media (max-width: 1199px) {
+        /* Tablet / iPad: drop the chat (comments) pane; trim the tree + contents list; the preview flexes to fill. */
+        .wb-chat, [data-gutter="chat"] { display: none !important; }
+        .wb-tree { flex: 0 0 190px !important; }
+        .wb-list { flex: 0 1 34% !important; min-width: 200px; max-width: 340px; }
+        /* The 5-column contents grid (Name/Type/Doc date/Size/Tags, ~440px min) won't fit a narrow list pane —
+           collapse to Name + the row-menu; the columns return on wider screens. */
+        .wb-list-row.wb-cols, .wb-chead { grid-template-columns: minmax(0, 1fr) auto !important; }
+        .wb-list-row.wb-cols > .wb-ccell:not(.wb-cname), .wb-chead > span:not(:first-child) { display: none; }
+        /* Many bottom tabs won't fit a tablet width — let them scroll horizontally rather than wrap/clip. */
+        .wb-tabs { overflow-x: auto; }
+        .wb-tab { white-space: nowrap; }
+    }
+    @@media (max-width: 767px) {
+        /* Phones / small iPad portrait: also drop the index (mask/detail-fields) pane — trimmed multi-pane
+           (tree | list | preview). Not phone-optimized; a dedicated single-pane phone mode is a follow-up. */
+        .wb-index, [data-gutter="index"] { display: none !important; }
+        .wb-tree { flex: 0 0 132px !important; }
+        .wb-list { flex: 1 1 44% !important; min-width: 120px; max-width: none; }
+        .wb-ribbon { padding: 4px 8px; }
+    }
 </style>
 
 <AuthorizeView>
