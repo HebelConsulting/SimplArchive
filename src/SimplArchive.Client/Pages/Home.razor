@@ -183,6 +183,9 @@
     .wb-audit-table th { text-align: left; position: sticky; top: 0; background: var(--mud-palette-surface); border-bottom: 1px solid var(--mud-palette-lines-default); padding: 6px 12px; font-weight: 600; }
     .wb-audit-table td { padding: 5px 12px; border-bottom: 1px solid var(--mud-palette-lines-default); vertical-align: top; }
 
+    /* Phone drill-down chrome (ADR "Responsive phone drill-down") — hidden on desktop/tablet, shown only ≤767. */
+    .wb-phone-topbar, .wb-phone-scrim, .wb-phone-detbar { display: none; }
+
     /* Responsive workbench (ADR "Responsive web workbench", iPad-first). Below 1200px wbLayout.js stops applying
        the persisted px pane widths (they'd overflow) and these rules govern: drop the lower-priority panes so
        tree | list | preview fit. Placed last so they win over the base .wb-* pane widths at equal specificity.
@@ -200,13 +203,50 @@
         .wb-tabs { overflow-x: auto; }
         .wb-tab { white-space: nowrap; }
     }
+    /* Phone single-pane drill-down (ADR "Responsive phone drill-down"), replacing the trimmed-3-pane tier: the
+       tree becomes a slide-out drawer, the folder contents list is the default full-width view, and a selected
+       document opens a full-screen detail overlay with Preview/Details/Comments sub-tabs. */
     @@media (max-width: 767px) {
-        /* Phones / small iPad portrait: also drop the index (mask/detail-fields) pane — trimmed multi-pane
-           (tree | list | preview). Not phone-optimized; a dedicated single-pane phone mode is a follow-up. */
-        .wb-index, [data-gutter="index"] { display: none !important; }
-        .wb-tree { flex: 0 0 132px !important; }
-        .wb-list { flex: 1 1 44% !important; min-width: 120px; max-width: none; }
         .wb-ribbon { padding: 4px 8px; }
+        .wb-phone-topbar { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; padding: 2px 6px;
+            border-bottom: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
+        .wb-phone-title { font-size: .9rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* wb-cols is the positioning context for the drawer + detail overlay; no resize gutters on a phone. */
+        .wb-cols { position: relative; }
+        .wb-cols [data-gutter] { display: none !important; }
+        .wb-list { flex: 1 1 auto !important; min-width: 0; max-width: none; }
+
+        /* Tree = slide-out drawer within the content region (below the ribbon, above the tabs). */
+        .wb-tree { position: absolute; top: 0; left: 0; bottom: 0; width: 78%; max-width: 300px; z-index: 50;
+            flex: none !important; transform: translateX(-104%); transition: transform .2s ease;
+            background: var(--mud-palette-surface); box-shadow: 2px 0 8px rgba(0,0,0,.3); }
+        .wb-cols.wb-phone-tree-open .wb-tree { transform: translateX(0); }
+        .wb-phone-scrim-on { display: block; position: absolute; inset: 0; z-index: 45; background: rgba(0,0,0,.35); }
+
+        /* Detail = full-screen overlay, shown only when a document is selected. */
+        .wb-detail { position: absolute; inset: 0; z-index: 55; background: var(--mud-palette-background); display: none; }
+        .wb-detail.wb-phone-detail-open { display: flex; flex-direction: column; }
+        .wb-detail [data-gutter] { display: none !important; }
+        .wb-phone-detbar { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; padding: 2px 4px;
+            border-bottom: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
+        .wb-ptab-btn { flex: 1 1 auto; padding: 7px 4px; border: 0; background: transparent; font-size: .82rem;
+            color: var(--mud-palette-text-secondary); cursor: pointer; border-bottom: 2px solid transparent; }
+        .wb-ptab-on { color: var(--mud-palette-primary); border-bottom-color: var(--mud-palette-primary); font-weight: 600; }
+
+        /* Sub-tab pane visibility inside the overlay (chat + index were dropped by the wider tiers — re-show the
+           active one; more-specific selectors beat those !important hides). */
+        .wb-detail .wb-index { flex: 1 1 auto !important; }
+        .wb-detail.wb-ptab-preview .wb-index { display: none; }
+        .wb-detail.wb-ptab-preview .wb-detail-bottom { display: flex; }
+        .wb-detail.wb-ptab-preview .wb-preview { display: flex; flex: 1 1 auto; }
+        .wb-detail.wb-ptab-preview .wb-chat { display: none !important; }
+        .wb-detail.wb-ptab-details .wb-index { display: flex !important; }
+        .wb-detail.wb-ptab-details .wb-detail-bottom { display: none; }
+        .wb-detail.wb-ptab-comments .wb-index { display: none; }
+        .wb-detail.wb-ptab-comments .wb-detail-bottom { display: flex; }
+        .wb-detail.wb-ptab-comments .wb-preview { display: none; }
+        .wb-detail.wb-ptab-comments .wb-chat { display: flex !important; flex: 1 1 auto; }
     }
 </style>
 
@@ -249,7 +289,22 @@
             @* ---- Tab content ---- *@
             @if (_activeTab == Tab.Repositories)
             {
-                <div class="wb-cols" @ref="_layoutRoot">
+                @* Phone-only top bar (ADR "Responsive phone drill-down"): the hamburger toggles the tree drawer;
+                   the current folder name. Rendered ONLY in phone mode (not merely CSS-hidden) so its duplicate
+                   folder-name text can't collide with the desktop tests' text locators. *@
+                @if (_isPhone)
+                {
+                    <div class="wb-phone-topbar">
+                        <MudIconButton Icon="@Icons.Material.Filled.Menu" Size="Size.Small" aria-label="Folders" OnClick="ToggleTreeDrawer" />
+                        <span class="wb-phone-title">@(_selectedFolder?.Name ?? Strings.Get("TabRepositories"))</span>
+                    </div>
+                }
+                <div class="wb-cols @(_treeDrawerOpen ? "wb-phone-tree-open" : "")" @ref="_layoutRoot">
+                    @* Scrim behind the open tree drawer — tap to close (phone only). *@
+                    @if (_isPhone)
+                    {
+                        <div class="wb-phone-scrim @(_treeDrawerOpen ? "wb-phone-scrim-on" : "")" @onclick="() => _treeDrawerOpen = false"></div>
+                    }
                     <div class="wb-pane wb-tree" data-pane="tree">
                         @if (_loadingRoots)
                         {
@@ -415,7 +470,19 @@
 
                     <div class="wb-gutter wb-gutter-v" data-gutter="list"><button type="button" class="wb-gutter-toggle"></button></div>
 
-                    <div class="wb-detail">
+                    <div class="wb-detail @(_isPhone && _selectedItem is not null ? "wb-phone-detail-open" : "") wb-ptab-@_phoneDetailTab">
+                        @* Phone-only detail bar: back to the folder list + Preview/Details/Comments sub-tabs
+                           (ADR "Responsive phone drill-down"). Rendered ONLY in phone mode so its button text
+                           can't collide with the desktop tests' locators. *@
+                        @if (_isPhone)
+                        {
+                            <div class="wb-phone-detbar">
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Size="Size.Small" aria-label="Back" OnClick="PhoneBack" />
+                                <button type="button" class="wb-ptab-btn @(_phoneDetailTab == "preview" ? "wb-ptab-on" : "")" @onclick='() => SetPhoneTab("preview")'>@Strings.Get("PhoneTabPreview")</button>
+                                <button type="button" class="wb-ptab-btn @(_phoneDetailTab == "details" ? "wb-ptab-on" : "")" @onclick='() => SetPhoneTab("details")'>@Strings.Get("PhoneTabDetails")</button>
+                                <button type="button" class="wb-ptab-btn @(_phoneDetailTab == "comments" ? "wb-ptab-on" : "")" @onclick='() => SetPhoneTab("comments")'>@Strings.Get("PhoneTabComments")</button>
+                            </div>
+                        }
                         <div class="wb-pane wb-index" data-pane="index">
                             @if (_selectedItem is null)
                             {
@@ -2828,6 +2895,40 @@
     private IJSObjectReference? _layoutModule;
     private bool _dropRootWired;
     private bool _panesWired;
+
+    // Phone single-pane drill-down (ADR "Responsive phone drill-down"). _isPhone is reported by wbLayout.js
+    // (viewport <= 767) — the phone tap-to-navigate needs it at click time; the tree slides out as a drawer;
+    // a selected document opens a full-screen detail overlay with Preview/Details/Comments sub-tabs.
+    private bool _isPhone;
+    private bool _viewportWatched;
+    private bool _treeDrawerOpen;
+    private string _phoneDetailTab = "preview";
+
+    [JSInvokable]
+    public Task OnViewportChanged(bool isPhone)
+    {
+        if (_isPhone != isPhone)
+        {
+            _isPhone = isPhone;
+            if (!_isPhone)
+            {
+                _treeDrawerOpen = false; // leaving phone mode — the drawer concept doesn't apply
+            }
+            StateHasChanged();
+        }
+        return Task.CompletedTask;
+    }
+
+    private void ToggleTreeDrawer() => _treeDrawerOpen = !_treeDrawerOpen;
+
+    private void SetPhoneTab(string tab) => _phoneDetailTab = tab;
+
+    // The detail overlay's back control — deselect the document to return to the folder's contents list.
+    private void PhoneBack()
+    {
+        _selectedItem = null;
+        _commentTarget = null;
+    }
     private bool _uploading;
     private ElementReference _inboxDropZone;
     private bool _inboxDropWired;
@@ -3007,6 +3108,11 @@
             if (!_panesWired && _layoutModule is not null)
             {
                 _panesWired = await _layoutModule.InvokeAsync<bool>("attach", _layoutRoot);
+            }
+            if (!_viewportWatched && _layoutModule is not null)
+            {
+                await _layoutModule.InvokeVoidAsync("watchViewport", _selfRef);
+                _viewportWatched = true;
             }
         }
 
@@ -4600,6 +4706,7 @@
     // Selecting a folder (tree click or drilling into a folder row) lists its contents in the middle pane.
     private async Task SelectFolderAsync(BrowseNode? folder)
     {
+        _treeDrawerOpen = false; // phone: navigating a folder closes the tree drawer (no-op on desktop)
         // The synthetic Administration/Users nodes (ADR "Tenant-admin Administration → Users view") aren't real
         // folders — clicking them just expands; a user's personal repo node (a real repo id) browses normally.
         if (folder is { AdminKind: not "" })
@@ -4674,6 +4781,22 @@
             }
 
             StateHasChanged();
+            return;
+        }
+
+        // Phone: a single tap navigates (there's no side-by-side detail) — a folder / doc-with-children / zip
+        // drills in; a leaf document opens the full-screen detail overlay.
+        if (_isPhone)
+        {
+            if (node.IsFolder || node.HasChildren || (node.HasVersions && node.FileExtension.Equals(".zip", StringComparison.OrdinalIgnoreCase)))
+            {
+                await OnRowDoubleClickAsync(node);
+            }
+            else
+            {
+                _phoneDetailTab = "preview";
+                await SelectRowAsync(node);
+            }
             return;
         }
 

@@ -2727,4 +2727,13 @@
   <data name="MaEffNoAccess" xml:space="preserve">
     <value>Nadie tiene acceso todavía.</value>
   </data>
+  <data name="PhoneTabPreview" xml:space="preserve">
+    <value>Vista previa</value>
+  </data>
+  <data name="PhoneTabDetails" xml:space="preserve">
+    <value>Detalles</value>
+  </data>
+  <data name="PhoneTabComments" xml:space="preserve">
+    <value>Comentarios</value>
+  </data>
 </root>

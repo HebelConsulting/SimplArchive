@@ -26,14 +26,28 @@ const GUTTERS = {
 // persisted px widths (which would overflow a narrow screen) but keeps the state for when the viewport widens.
 const WIDE_MIN = 1200;
 
+// The phone single-pane drill-down mode kicks in at/below this width (ADR "Responsive phone drill-down").
+const PHONE_MAX = 767;
+
 // One shared resize hook re-applies the active workbench's panes when the viewport crosses the breakpoint
-// (debounced); the module loads once, so this listener is registered once.
+// (debounced) and reports phone-ness to Blazor (the phone tap-to-navigate needs it at click time); the module
+// loads once, so this listener is registered once.
 let activeReapply = null;
+let viewportRef = null;
 let resizeTimer = 0;
+function reportViewport() {
+    if (viewportRef) viewportRef.invokeMethodAsync('OnViewportChanged', window.innerWidth <= PHONE_MAX);
+}
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { if (activeReapply) activeReapply(); }, 150);
+    resizeTimer = setTimeout(() => { if (activeReapply) activeReapply(); reportViewport(); }, 150);
 });
+
+// Report whether the viewport is phone-sized to Blazor, now and on every subsequent resize.
+export function watchViewport(dotNetRef) {
+    viewportRef = dotNetRef;
+    reportViewport();
+}
 
 function loadState() {
     let s;
