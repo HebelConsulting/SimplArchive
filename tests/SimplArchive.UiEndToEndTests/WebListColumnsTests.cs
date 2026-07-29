@@ -34,6 +34,10 @@ public class WebListColumnsTests
         var page = await Ui.LoginAsync(_app);
         await page.GetByText("Demo Repository").First.ClickAsync();
         var list = page.Locator("[data-pane='list']");
+        // Widen the list pane so all columns show — the pane-adaptive columns (ADR "Pane-adaptive contents
+        // columns") collapse to Name + ⋮ at the default ~300px width, so column-header sorting (the ephemeral
+        // secondary sort) requires a pane wide enough to reveal the Type/Size/Tags headers.
+        await list.EvaluateAsync("el => el.style.flex = '0 0 680px'");
         await list.Locator(".wb-list-row").Filter(new() { HasText = folderName }).DblClickAsync(); // drill into the subfolder
 
         // The sortable header is visible.

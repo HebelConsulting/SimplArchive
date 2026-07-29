@@ -26,7 +26,7 @@
     /* Pane basis/collapsed state are set inline by wbLayout.js (persisted); these are the pre-JS fallbacks.
        Dividers are the gutters below, so panes carry no border on the gutter side. */
     .wb-tree { flex: 0 0 240px; padding: 4px; }
-    .wb-list { flex: 0 0 300px; }
+    .wb-list { flex: 0 0 300px; container-type: inline-size; }
     .wb-detail { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
     .wb-index { flex: 0 0 280px; overflow: auto; padding: 10px 14px; }
     /* System-fields grid + editable-mask form (ADRs 0273/0278). */
@@ -129,13 +129,29 @@
     .wb-tab-active { background: var(--mud-palette-primary); color: var(--mud-palette-primary-text); }
     .wb-tab-disabled { opacity: .5; cursor: not-allowed; }
     .wb-bulk-bar { display: flex; align-items: center; gap: 4px; padding: 3px 8px; background: var(--mud-palette-primary-hover); border-bottom: 1px solid var(--mud-palette-lines-default); position: sticky; top: 0; z-index: 2; }
-    /* Contents-list columns (ADR "List-row columns and sorting") — a grid modifier on .wb-list-row (higher
-       specificity so it overrides the base flex layout), keeping the base hover/cursor/selected + test hooks. */
-    .wb-list-row.wb-cols, .wb-chead { display: grid; grid-template-columns: minmax(130px, 2.2fr) minmax(70px, 1fr) 92px 70px minmax(80px, 1.4fr) auto; align-items: center; gap: 8px; }
+    /* Contents-list columns (ADR "List-row columns and sorting" + "Pane-adaptive contents columns") — a grid
+       modifier on .wb-list-row (higher specificity so it overrides the base flex layout), keeping the base
+       hover/cursor/selected + test hooks. Every track is minmax(0, …) so the cells SHRINK + ellipsize rather than
+       overflow the pane, and the trailing `auto` track is the ⋮ row-menu — it never shrinks and is always the last
+       visible column, so the menu can never be clipped/scrolled off. The `.wb-list` pane is an inline-size query
+       container (above), so the breakpoints below react to the *pane's own width*, not the viewport — collapsing
+       lower-priority columns as the user narrows the split, uniformly on computer/tablet/phone. */
+    .wb-list-row.wb-cols, .wb-chead { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 92px) minmax(0, 70px) minmax(0, 1.3fr) auto; align-items: center; gap: 8px; }
     .wb-chead { padding: 4px 12px; font-size: .72rem; font-weight: 600; color: var(--mud-palette-text-secondary); border-bottom: 1px solid var(--mud-palette-lines-default); position: sticky; top: 0; background: var(--mud-palette-surface); z-index: 1; }
     .wb-chead > span { cursor: pointer; user-select: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .wb-ccell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; color: var(--mud-palette-text-secondary); }
     .wb-cname { display: flex; align-items: center; gap: 6px; color: var(--mud-palette-text-primary); font-size: unset; }
+    /* Medium pane: drop Size (4th) + Tags (5th), keeping Name · Type · Doc date · ⋮. */
+    @@container (max-width: 519px) {
+        .wb-list-row.wb-cols, .wb-chead { grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 92px) auto; }
+        .wb-list-row.wb-cols > :nth-child(4), .wb-list-row.wb-cols > :nth-child(5),
+        .wb-chead > :nth-child(4), .wb-chead > :nth-child(5) { display: none; }
+    }
+    /* Narrow pane: Name + ⋮ only (the menu stays — it isn't a .wb-ccell). */
+    @@container (max-width: 399px) {
+        .wb-list-row.wb-cols, .wb-chead { grid-template-columns: minmax(0, 1fr) auto; }
+        .wb-list-row.wb-cols > .wb-ccell:not(.wb-cname), .wb-chead > span:not(:first-child) { display: none; }
+    }
     .wb-list-row { display: flex; align-items: center; gap: 8px; padding: 5px 12px; cursor: pointer; user-select: none; }
     .wb-list-row:hover { background: var(--mud-palette-action-default-hover); }
     .wb-list-row-selected { background: var(--mud-palette-primary-hover); }
@@ -195,10 +211,7 @@
         .wb-chat, [data-gutter="chat"] { display: none !important; }
         .wb-tree { flex: 0 0 190px !important; }
         .wb-list { flex: 0 1 34% !important; min-width: 200px; max-width: 340px; }
-        /* The 5-column contents grid (Name/Type/Doc date/Size/Tags, ~440px min) won't fit a narrow list pane —
-           collapse to Name + the row-menu; the columns return on wider screens. */
-        .wb-list-row.wb-cols, .wb-chead { grid-template-columns: minmax(0, 1fr) auto !important; }
-        .wb-list-row.wb-cols > .wb-ccell:not(.wb-cname), .wb-chead > span:not(:first-child) { display: none; }
+        /* Column collapse is handled by the .wb-list container queries above (by pane width), not here. */
         /* Many bottom tabs won't fit a tablet width — let them scroll horizontally rather than wrap/clip. */
         .wb-tabs { overflow-x: auto; }
         .wb-tab { white-space: nowrap; }
@@ -394,7 +407,7 @@
                                 var attrs = DropAttributes(node);
                                 <div class="wb-list-row wb-cols @(_bulkIds.Contains(node.Id) || ReferenceEquals(node, _commentTarget) ? "wb-list-row-selected" : "")"
                                      @onclick="(e) => OnRowClickAsync(node, e)" @ondblclick="() => OnRowDoubleClickAsync(node)" @attributes="attrs">
-                                    <span class="wb-ccell wb-cname">
+                                    <span class="wb-ccell wb-cname" title="@node.DisplayName">
                                         <MudIcon Icon="@NodeIcon(node)" Size="Size.Small" />
                                         <span style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@node.DisplayName</span>
                                         @if (node.OnLegalHold)
@@ -416,8 +429,8 @@
                                         }
                                     </span>
                                     <span class="wb-ccell" title="@node.DocumentType">@(node.IsFolder ? Strings.Get("FolderType") : node.DocumentType)</span>
-                                    <span class="wb-ccell">@(node.DocumentDate?.ToString("yyyy-MM-dd") ?? "")</span>
-                                    <span class="wb-ccell">@FormatSize(node.SizeBytes)</span>
+                                    <span class="wb-ccell" title="@(node.DocumentDate?.ToString("yyyy-MM-dd") ?? "")">@(node.DocumentDate?.ToString("yyyy-MM-dd") ?? "")</span>
+                                    <span class="wb-ccell" title="@FormatSize(node.SizeBytes)">@FormatSize(node.SizeBytes)</span>
                                     <span class="wb-ccell" title="@string.Join(", ", node.TagList)">@string.Join(", ", node.TagList)</span>
                                     <div @onclick:stopPropagation="true">
                                         <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
