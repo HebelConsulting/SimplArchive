@@ -805,6 +805,38 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    // After a subfolder is created under parentId, refresh just that node's children in place + keep it expanded,
+    // so the tree keeps showing the parent folder (whose contents are in the list pane) instead of collapsing to
+    // the roots (ADR "Keep the desktop tree expanded on a structural change"). Falls back to a full rebuild only
+    // if the parent isn't currently materialised in the tree (e.g. reached by drilling through the list pane).
+    private async Task ShowNewChildInTreeAsync(Guid parentId)
+    {
+        if (FindTreeNode(Tree, parentId) is { } node)
+        {
+            await node.ReloadChildrenAsync();
+        }
+        else
+        {
+            await ReloadTreeAsync();
+        }
+    }
+
+    private static TreeNodeViewModel? FindTreeNode(IEnumerable<TreeNodeViewModel> nodes, Guid id)
+    {
+        foreach (var n in nodes)
+        {
+            if (n.Id == id && !n.IsSynthetic && !n.IsLauncher)
+            {
+                return n;
+            }
+            if (FindTreeNode(n.Children, id) is { } found)
+            {
+                return found;
+            }
+        }
+        return null;
+    }
+
     private Task<IEnumerable<TreeNodeViewModel>> LoadAdminRootAsync(Guid _) =>
         Task.FromResult<IEnumerable<TreeNodeViewModel>>(
             [new TreeNodeViewModel(Guid.Empty, "Users", true, LoadAdminUsersAsync, syntheticIcon: "mdi-account-group")]);
@@ -1202,7 +1234,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             await _api.CreateFolderAsync(folderId, name);
             Status = string.Format(Strings.Get("StCreatedFolder"), name);
-            await ReloadTreeAsync(); // the new folder is a tree node too — rebuild so the tree shows it
+            await ShowNewChildInTreeAsync(folderId); // refresh the parent's children in the tree, keep it expanded
             await LoadFolderContentsAsync(folderId);
         }
         catch (Services.ApiActionException e)
@@ -1229,7 +1261,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             await _api.CreateFolderAsync(parentId, name);
             Status = string.Format(Strings.Get("StCreatedFolder"), name);
-            await ReloadTreeAsync();
+            await ShowNewChildInTreeAsync(parentId);
             if (_currentFolderId == parentId)
             {
                 await LoadFolderContentsAsync(parentId);
@@ -5224,6 +5256,30 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var isDeleted = (await _api!.GetChildrenAsync(repoId)).All(c => c.Id != created.Id);
 
         return (true, isRenamed, isDeleted);
+    }
+
+    // Creating a subfolder must NOT collapse the tree — the parent folder (whose contents are shown) stays in the
+    // tree, expanded, now showing the new child (ADR "Keep the desktop tree expanded on a structural change", see
+    // DesktopTreeFolderActionsTests). Reference-equality on the parent node distinguishes the targeted reload from
+    // the old full rebuild (which replaced every node).
+    internal async Task<bool> NewFolderKeepsTreeExpandedSelfTestAsync(string accessToken)
+    {
+        UseApi(new SimplArchiveApiClient(accessToken));
+        await LoadRootAsync();
+        var repo = Tree[0];
+        await repo.ReloadChildrenAsync(); // materialise + expand the repository node, as navigating into it would
+
+        var name = "treeexp-" + Guid.NewGuid().ToString("N")[..8];
+        await CreateSubfolderAsync(repo.Id, name);
+
+        var stillExpanded = Tree.Contains(repo) && repo.IsExpanded && repo.Children.Any(c => c.Name == name);
+
+        var created = (await _api!.GetChildrenAsync(repo.Id)).FirstOrDefault(c => c.Name == name);
+        if (created is not null)
+        {
+            await DeleteFolderByIdAsync(created.Id);
+        }
+        return stillExpanded;
     }
 
     // Headless exercise of the inbox drop-zone upload (ADR "Inbox file-list drop-zone", see DesktopInboxDropTests):

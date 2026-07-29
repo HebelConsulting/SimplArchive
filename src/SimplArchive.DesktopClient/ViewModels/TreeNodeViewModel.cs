@@ -88,4 +88,24 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             Children.Add(child);
         }
     }
+
+    // Re-fetch this node's children in place and keep it expanded — used after a structural change under this
+    // folder (e.g. a new subfolder) so the tree reflects it WITHOUT a full rebuild that would collapse everything
+    // (ADR "Keep the tree expanded on a structural change"). No-op for a node that can't have children.
+    public async Task ReloadChildrenAsync()
+    {
+        if (_loadChildren is null)
+        {
+            return;
+        }
+
+        _loaded = true; // mark loaded so re-expanding doesn't double-load via OnIsExpandedChanged
+        Children.Clear();
+        foreach (var child in await _loadChildren(Id))
+        {
+            child.Parent = this;
+            Children.Add(child);
+        }
+        IsExpanded = true;
+    }
 }
