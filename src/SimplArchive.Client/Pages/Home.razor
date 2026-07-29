@@ -17,7 +17,9 @@
 
 <style>
     .wb { height: 100%; display: flex; flex-direction: column; background: var(--mud-palette-background); }
-    .wb-ribbon { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; padding: 6px 12px;
+    /* flex-wrap so ribbon buttons reflow onto a new row when they don't fit, instead of clipping/overflowing —
+       matching the preview-pane toolbar's wrapping behavior (both clients). */
+    .wb-ribbon { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 12px;
         border-bottom: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
     .wb-cols { flex: 1 1 auto; min-height: 0; display: flex; }
     .wb-pane { overflow: auto; }

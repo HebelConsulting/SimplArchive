@@ -144,33 +144,39 @@
                          between the groups (ADR "Desktop Repositories-tab UI polish"). "Convert scans" moved to
                          the Tenant tab. The vertical separators are thin theme-coloured Borders. -->
                     <Border DockPanel.Dock="Top" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
-                        <StackPanel Orientation="Horizontal" Spacing="4">
+                        <!-- WrapPanel so whole button-groups reflow onto a new row when the ribbon is too narrow to
+                             fit them all, instead of clipping — matching the preview-pane toolbar (both clients). Each
+                             concern-group is a cluster (a horizontal StackPanel) with a right/bottom margin; the margin
+                             replaces the old vertical separators and delineates the groups. -->
+                        <WrapPanel Orientation="Horizontal">
                             <!-- Tree group: folder/structure + repository export/import (act on the selected folder/repository subtree). -->
-                            <Button IsEnabled="{Binding CanCreateFolder}" Click="OnNewFolder" ToolTip.Tip="{loc:Tr NewFolder}"><i:Icon Value="mdi-folder-plus" FontSize="18" /></Button>
-                            <!-- Requires CanExport (ADR "Dedicated CanExport/CanImport rights"); enabled once a folder is open. -->
-                            <Button IsVisible="{Binding HasExportRight}" IsEnabled="{Binding CanExport}" Click="OnExport" ToolTip.Tip="{loc:Tr RibbonExport}"><i:Icon Value="mdi-archive-arrow-down-outline" FontSize="18" /></Button>
-                            <!-- Requires CanImport (ADR "Dedicated CanExport/CanImport rights"): import an archive under the current folder, or as a new repository. -->
-                            <Button IsVisible="{Binding HasImportRight}" Click="OnImport" ToolTip.Tip="{loc:Tr RibbonImport}"><i:Icon Value="mdi-archive-arrow-up-outline" FontSize="18" /></Button>
-
-                            <Border Width="1" Margin="4,2" Background="{DynamicResource WbBorder}" />
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                                <Button IsEnabled="{Binding CanCreateFolder}" Click="OnNewFolder" ToolTip.Tip="{loc:Tr NewFolder}"><i:Icon Value="mdi-folder-plus" FontSize="18" /></Button>
+                                <!-- Requires CanExport (ADR "Dedicated CanExport/CanImport rights"); enabled once a folder is open. -->
+                                <Button IsVisible="{Binding HasExportRight}" IsEnabled="{Binding CanExport}" Click="OnExport" ToolTip.Tip="{loc:Tr RibbonExport}"><i:Icon Value="mdi-archive-arrow-down-outline" FontSize="18" /></Button>
+                                <!-- Requires CanImport (ADR "Dedicated CanExport/CanImport rights"): import an archive under the current folder, or as a new repository. -->
+                                <Button IsVisible="{Binding HasImportRight}" Click="OnImport" ToolTip.Tip="{loc:Tr RibbonImport}"><i:Icon Value="mdi-archive-arrow-up-outline" FontSize="18" /></Button>
+                            </StackPanel>
 
                             <!-- Documents group: operations on the selected document/item (order: Open · Save · Rename · Delete · Upload · Check-out · Workflow). -->
-                            <Button Command="{Binding OpenCommand}" ToolTip.Tip="{loc:Tr RibbonOpen}"><i:Icon Value="mdi-open-in-app" FontSize="18" /></Button>
-                            <Button IsEnabled="{Binding CanSaveAs}" Click="OnSaveAs" ToolTip.Tip="{loc:Tr RibbonSaveAs}"><i:Icon Value="mdi-content-save-outline" FontSize="18" /></Button>
-                            <Button IsEnabled="{Binding HasSelectedItem}" Click="OnRename" ToolTip.Tip="{loc:Tr RibbonRename}"><i:Icon Value="mdi-rename-box" FontSize="18" /></Button>
-                            <Button IsEnabled="{Binding HasSelectedItem}" Click="OnDelete" ToolTip.Tip="{loc:Tr RibbonDelete}"><i:Icon Value="mdi-delete" FontSize="18" /></Button>
-                            <Button IsEnabled="False" ToolTip.Tip="{loc:Tr RibbonUpload}"><i:Icon Value="mdi-upload" FontSize="18" /></Button>
-                            <Button IsEnabled="{Binding CanCheckOut}" Command="{Binding CheckOutSelectedCommand}" ToolTip.Tip="{loc:Tr RibbonCheckOut}"><i:Icon Value="mdi-lock-outline" FontSize="18" /></Button>
-                            <Button IsEnabled="{Binding CanSaveAs}" Click="OnVersions" ToolTip.Tip="{loc:Tr RibbonVersions}"><i:Icon Value="mdi-history" FontSize="18" /></Button>
-                            <Button IsEnabled="{Binding CanStartWorkflow}" Click="OnStartWorkflow" ToolTip.Tip="{loc:Tr RibbonStartWorkflow}"><i:Icon Value="mdi-sitemap-outline" FontSize="18" /></Button>
-
-                            <Border Width="1" Margin="4,2" Background="{DynamicResource WbBorder}" />
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                                <Button Command="{Binding OpenCommand}" ToolTip.Tip="{loc:Tr RibbonOpen}"><i:Icon Value="mdi-open-in-app" FontSize="18" /></Button>
+                                <Button IsEnabled="{Binding CanSaveAs}" Click="OnSaveAs" ToolTip.Tip="{loc:Tr RibbonSaveAs}"><i:Icon Value="mdi-content-save-outline" FontSize="18" /></Button>
+                                <Button IsEnabled="{Binding HasSelectedItem}" Click="OnRename" ToolTip.Tip="{loc:Tr RibbonRename}"><i:Icon Value="mdi-rename-box" FontSize="18" /></Button>
+                                <Button IsEnabled="{Binding HasSelectedItem}" Click="OnDelete" ToolTip.Tip="{loc:Tr RibbonDelete}"><i:Icon Value="mdi-delete" FontSize="18" /></Button>
+                                <Button IsEnabled="False" ToolTip.Tip="{loc:Tr RibbonUpload}"><i:Icon Value="mdi-upload" FontSize="18" /></Button>
+                                <Button IsEnabled="{Binding CanCheckOut}" Command="{Binding CheckOutSelectedCommand}" ToolTip.Tip="{loc:Tr RibbonCheckOut}"><i:Icon Value="mdi-lock-outline" FontSize="18" /></Button>
+                                <Button IsEnabled="{Binding CanSaveAs}" Click="OnVersions" ToolTip.Tip="{loc:Tr RibbonVersions}"><i:Icon Value="mdi-history" FontSize="18" /></Button>
+                                <Button IsEnabled="{Binding CanStartWorkflow}" Click="OnStartWorkflow" ToolTip.Tip="{loc:Tr RibbonStartWorkflow}"><i:Icon Value="mdi-sitemap-outline" FontSize="18" /></Button>
+                            </StackPanel>
 
                             <!-- General group: view actions. -->
-                            <Button Command="{Binding RefreshCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
-                            <Button Command="{Binding ResetLayoutCommand}" ToolTip.Tip="{loc:Tr RibbonResetLayout}"><i:Icon Value="mdi-view-grid-outline" FontSize="18" /></Button>
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                                <Button Command="{Binding RefreshCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
+                                <Button Command="{Binding ResetLayoutCommand}" ToolTip.Tip="{loc:Tr RibbonResetLayout}"><i:Icon Value="mdi-view-grid-outline" FontSize="18" /></Button>
+                            </StackPanel>
 
-                            <ItemsControl ItemsSource="{Binding Breadcrumbs}" VerticalAlignment="Center" Margin="8,0,0,0">
+                            <ItemsControl ItemsSource="{Binding Breadcrumbs}" VerticalAlignment="Center" Margin="0,0,0,4">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
@@ -185,7 +191,7 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                        </StackPanel>
+                        </WrapPanel>
                     </Border>
 
                     <!-- tree | contents | detail (resizable via gutters, each side pane collapsible) -->
