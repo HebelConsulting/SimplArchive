@@ -3,6 +3,11 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
 
+# Version stamped into the desktop-client download artifacts + their file names (ADR 0490). CI passes the release
+# tag (docker/metadata-action's {{version}}, e.g. 0.1.0); defaults to 0.1.0 for a plain local build. The Dockerfile
+# can't derive it from git — .git is excluded from the build context (.dockerignore).
+ARG VERSION=0.1.0
+
 # Copy all project files first (preserving relative paths, needed since Api's project references must resolve
 # during restore) so the restore layer is cached independently of source-code changes.
 COPY ["src/SimplArchive.Localization/SimplArchive.Localization.csproj", "src/SimplArchive.Localization/"]
@@ -16,6 +21,17 @@ RUN dotnet restore "src/SimplArchive.Api/SimplArchive.Api.csproj"
 
 COPY . .
 RUN dotnet publish "src/SimplArchive.Api/SimplArchive.Api.csproj" -c Release -o /app/publish --no-restore
+
+# Bake the desktop-client packages into the served /download area so downloads stay in lock-step with this API
+# image (ADR 0490). Only win-x64 + linux-x64 — a Linux build can't produce the macOS .dmg (clients/macos/ links to
+# the GitHub Release instead). Needs bash + zip + tar for scripts/package-windows-linux.sh. The .gitkeep
+# placeholders that kept the (otherwise-empty) folders in git are removed so they don't clutter the listing.
+RUN apk add --no-cache bash zip tar \
+ && bash scripts/package-windows-linux.sh "$VERSION" \
+ && cp dist/SimplArchive-"$VERSION"-win-x64.zip /app/publish/wwwroot/download/clients/windows/ \
+ && cp dist/SimplArchive-"$VERSION"-linux-x64.tar.gz /app/publish/wwwroot/download/clients/linux/ \
+ && rm -f /app/publish/wwwroot/download/clients/windows/.gitkeep /app/publish/wwwroot/download/clients/linux/.gitkeep \
+ && rm -rf dist
 
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS final

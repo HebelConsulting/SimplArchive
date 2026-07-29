@@ -77,3 +77,9 @@ stryker-out/
 
 # macOS .dmg packaging output (scripts/package-macos-dmg.sh)
 dist/
+
+# Baked/staged desktop-client download artifacts (ADR 0490) — build outputs, not committed. The folder structure
+# (.gitkeep) + clients/macos/index.html stay tracked; the Dockerfile / scripts/package-clients.sh produce these.
+/src/SimplArchive.Api/wwwroot/download/clients/**/*.zip
+/src/SimplArchive.Api/wwwroot/download/clients/**/*.tar.gz
+/src/SimplArchive.Api/wwwroot/download/clients/**/*.dmg

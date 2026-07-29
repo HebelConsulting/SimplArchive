@@ -67,6 +67,10 @@ jobs:
           # DesktopClient-only. The OCR sidecar is python:slim + apt/pip — all arm64-available.
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
+          # Stamp the release version into the baked-in desktop-client download artifacts (ADR 0490). Ignored by
+          # the ocr image's Dockerfile (no VERSION arg there).
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}

@@ -171,6 +171,9 @@ builder.Services.AddSingleton<SimplArchive.Api.Authentication.MfaService>();
 // Authorization Code flow needs, so this is a separate, minimal Razor Pages surface.
 builder.Services.AddRazorPages();
 
+// Backs the browsable /download desktop-client area (ADR 0490).
+builder.Services.AddDirectoryBrowser();
+
 // /health/live (no checks — just proves the process can respond) and /health/ready (database
 // connectivity, the one dependency every request actually needs) — see ADR "Health check endpoints".
 builder.Services.AddHealthChecks()
@@ -596,6 +599,43 @@ app.UseMiddleware<SimplArchive.Api.WebDav.WebDavMiddleware>();
 
 app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
+
+// Public desktop-client download area (ADR 0490): make ONLY /download browsable so a visitor can click through to
+// clients/<os>/ and grab the build that matches this API. The win/linux archives are baked into the image by the
+// Dockerfile; clients/macos/ carries an index.html linking to the GitHub Release (a Linux image can't build the
+// .dmg). Placed BEFORE UseAuthentication/UseAuthorization, so the listing + downloads are anonymous. Uses a real
+// PhysicalFileProvider (UseDirectoryBrowser needs directory enumeration, which the static-web-assets manifest
+// provider used under `dotnet run` doesn't support) — resolved across the published (wwwroot) + dev layouts. The
+// dedicated static-file handler sets ServeUnknownFileTypes so .dmg/.tar.gz download rather than 404 on the default
+// (known-types-only) middleware above.
+var downloadDir = new[]
+{
+    string.IsNullOrEmpty(app.Environment.WebRootPath) ? null : System.IO.Path.Combine(app.Environment.WebRootPath, "download"),
+    System.IO.Path.Combine(app.Environment.ContentRootPath, "wwwroot", "download"),
+    System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "download"),
+    // dev: `dotnet run` sets the content root to the repo root, so the API's own wwwroot is under src/.
+    System.IO.Path.Combine(app.Environment.ContentRootPath, "src", "SimplArchive.Api", "wwwroot", "download"),
+}.FirstOrDefault(p => p is not null && System.IO.Directory.Exists(p));
+
+if (downloadDir is not null)
+{
+    var downloadProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(downloadDir);
+    app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = downloadProvider, RequestPath = "/download" });
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = downloadProvider,
+        RequestPath = "/download",
+        ServeUnknownFileTypes = true,
+        DefaultContentType = "application/octet-stream",
+    });
+    app.UseDirectoryBrowser(new DirectoryBrowserOptions { FileProvider = downloadProvider, RequestPath = "/download" });
+}
+
+// Explicit UseRouting so it runs HERE, after the /download static/browse middleware — not auto-injected at the
+// pipeline start. Otherwise the SPA fallback endpoint ({*path}) is already matched by the time the directory
+// browser runs, and the static-file family no-ops when an endpoint is selected (so /download/ would fall to the
+// SPA instead of listing).
+app.UseRouting();
 
 // SignalR hub handshake (ADR "Real-time notifications (SignalR)"): a browser WebSocket can't set the
 // Authorization header, so the access token arrives as ?access_token=. Copy it into the header for /hubs/* before
