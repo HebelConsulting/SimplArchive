@@ -744,6 +744,28 @@ public partial class MainWindow : Window
         }
     });
 
+    // Inbox mask pane's OCR-language picker (ADR "Inbox OCR-language staging") — mirrors OnEditOcrLanguages.
+    private void OnEditInboxOcrLanguages(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm)
+        {
+            return;
+        }
+
+        var (catalog, selected) = vm.InboxOcrPickerState();
+        if (catalog.Count == 0)
+        {
+            return;
+        }
+
+        var picker = new OcrLanguagePickerViewModel(catalog, selected);
+        var codes = await new OcrLanguagePickerDialog { DataContext = picker }.ShowDialog<List<string>?>(this);
+        if (codes is not null)
+        {
+            vm.StageInboxOcrLanguages(codes); // staged into the pane; the pane's Save persists it
+        }
+    });
+
     // Tenant-admin tab: New repository — prompt for a name, then create a root-level document (ADR "Tenant-admin
     // settings tab"). Reuses the name-prompt dialog with a repository-specific title/label.
     private void OnNewRepository(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>

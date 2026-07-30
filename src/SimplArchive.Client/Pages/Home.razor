@@ -1127,6 +1127,22 @@
                                         <table class="wb-sysfields">
                                             <tr><td>@Strings.Get("Name")</td><td><MudTextField @bind-Value="_inboxStgName" Margin="Margin.Dense" Variant="Variant.Outlined" /></td></tr>
                                             <tr><td>@Strings.Get("VerColDocDate")</td><td><MudDatePicker @bind-Date="_inboxStgDate" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" /></td></tr>
+                                            @if (_inboxStgScannable)
+                                            {
+                                                @* OCR languages for a scannable item — staged + applied to the searchable-PDF conversion at filing (ADR "Inbox OCR-language staging"). *@
+                                                <tr>
+                                                    <td>@Strings.Get("SysOcrLanguages")</td>
+                                                    <td>
+                                                        <div class="wb-ocr-chips">
+                                                            @foreach (var lang in _ocrCatalog)
+                                                            {
+                                                                var idx = _inboxStgOcrCodes.IndexOf(lang.Code);
+                                                                <button type="button" class="wb-ocr-chip @(idx >= 0 ? "wb-ocr-chip-on" : "")" @onclick="() => ToggleInboxOcr(lang.Code)">@(idx >= 0 ? $"{idx + 1}. " : "")@lang.DisplayName</button>
+                                                            }
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            }
                                         </table>
                                         <div class="wb-mask-edit">
                                             <div class="wb-mask-row">
@@ -7441,6 +7457,9 @@
     private readonly List<EditField> _inboxStgFields = [];
     private List<MaskOption> _inboxStgMasks = [];
     private Dictionary<Guid, List<string>> _inboxDraftValues = [];
+    // Staged OCR languages for a scannable item (.tif/.tiff/.pdf) — consumed at filing (ADR "Inbox OCR-language staging").
+    private List<string> _inboxStgOcrCodes = [];
+    private bool _inboxStgScannable;
 
     private async Task SelectInboxItemAsync(InboxItem item)
     {
@@ -7484,6 +7503,15 @@
             _inboxStgDate = DateTime.TryParse(draft?.DocumentDate, out var d) ? d.Date : null;
             _inboxDraftValues = (draft?.Fields ?? []).ToDictionary(f => f.FieldDefinitionId, f => f.Values);
 
+            // OCR languages: only offered for a scannable item, staged + consumed at filing (ADR "Inbox
+            // OCR-language staging"). Load the catalog on demand.
+            _inboxStgScannable = IsScannableExtension(item.Name);
+            _inboxStgOcrCodes = draft?.OcrLanguages ?? [];
+            if (_inboxStgScannable && _ocrCatalog.Count == 0)
+            {
+                _ocrCatalog = (await Http.GetFromJsonAsync<OcrCatalogResponse>("api/ocr-languages"))?.Languages ?? [];
+            }
+
             // Preselect the staged mask, or default to "Basic Entry" for an un-classified item (ADR 0284).
             _inboxStgMaskId = draft?.MaskId ?? _inboxStgMasks.FirstOrDefault(m => m.Name == "Basic Entry")?.Id;
             await LoadInboxStgFieldsAsync(_inboxStgMaskId, useDraftValues: true);
@@ -7516,6 +7544,19 @@
         await LoadInboxStgFieldsAsync(maskId, useDraftValues: false);
     }
 
+    // Toggle a staged OCR language (ordered: click appends the next priority, click again removes + renumbers).
+    private void ToggleInboxOcr(string code)
+    {
+        if (!_inboxStgOcrCodes.Remove(code))
+        {
+            _inboxStgOcrCodes.Add(code);
+        }
+    }
+
+    // OCR-language staging only applies to the scannable types the searchable-PDF conversion runs on at filing.
+    private static bool IsScannableExtension(string name) =>
+        System.IO.Path.GetExtension(name).ToLowerInvariant() is ".tif" or ".tiff" or ".pdf";
+
     // Saves the staged Name/Document date/mask/index-data to the item's {name}.mask.json sidecar (ADR 0281).
     private async Task SaveInboxMaskAsync()
     {
@@ -7533,6 +7574,7 @@
                 documentDate = _inboxStgDate?.ToString("yyyy-MM-dd"),
                 maskId = _inboxStgMaskId,
                 fields = _inboxStgFields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.ToValues() }),
+                ocrLanguages = _inboxStgScannable && _inboxStgOcrCodes.Count > 0 ? _inboxStgOcrCodes : null,
             };
 
             var resp = await Http.PutAsJsonAsync($"api/inbox/{Uri.EscapeDataString(item.Name)}/mask", body);
@@ -7684,7 +7726,7 @@
 
     private record InboxResponse { public List<InboxItemDto> Items { get; set; } = []; }
     private record InboxItemDto { public string Name { get; set; } = ""; public long Size { get; set; } public bool HasMask { get; set; } public List<LinkResponse> Links { get; set; } = []; }
-    private record InboxMaskDraft { public string? Name { get; set; } public string? DocumentDate { get; set; } public Guid? MaskId { get; set; } public List<InboxDraftField> Fields { get; set; } = []; }
+    private record InboxMaskDraft { public string? Name { get; set; } public string? DocumentDate { get; set; } public Guid? MaskId { get; set; } public List<InboxDraftField> Fields { get; set; } = []; public List<string>? OcrLanguages { get; set; } }
     private record InboxPreviewResponse { public string? PreviewUrl { get; set; } public bool PreviewConverted { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record InboxDraftField { public Guid FieldDefinitionId { get; set; } public List<string> Values { get; set; } = []; }
     private record UploadInboxResponse { public string Name { get; set; } = ""; public string UploadUrl { get; set; } = ""; }

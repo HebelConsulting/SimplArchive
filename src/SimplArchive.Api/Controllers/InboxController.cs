@@ -179,6 +179,11 @@ public class InboxController : ControllerBase
         public Guid? MaskId { get; set; }
 
         public List<InboxMaskFieldResource> Fields { get; set; } = [];
+
+        // Staged OCR languages (ordered Tesseract codes) for a scannable item (.tif/.tiff/.pdf), consumed at
+        // filing to set the version's OcrLanguages before the searchable-PDF conversion (ADR "Inbox OCR-language
+        // staging"). Null/empty = the tenant default.
+        public List<string>? OcrLanguages { get; set; }
     }
 
     public class InboxMaskFieldResource
@@ -445,7 +450,8 @@ public class InboxController : ControllerBase
         // No mask, no field values, no name and no date → nothing staged, so remove the sidecar and the item
         // reads as un-classified (square brackets).
         if (request.MaskId is null && request.Fields.All(f => f.Values.Count == 0)
-            && string.IsNullOrWhiteSpace(request.Name) && string.IsNullOrWhiteSpace(request.DocumentDate))
+            && string.IsNullOrWhiteSpace(request.Name) && string.IsNullOrWhiteSpace(request.DocumentDate)
+            && (request.OcrLanguages is null || request.OcrLanguages.Count == 0))
         {
             if (await _objectStorageClient.ExistsAsync(sidecarKey, cancellationToken))
             {
@@ -461,6 +467,7 @@ public class InboxController : ControllerBase
             DocumentDate = request.DocumentDate,
             MaskId = request.MaskId,
             Fields = request.Fields,
+            OcrLanguages = request.OcrLanguages,
         });
         using var stream = new MemoryStream(payload);
         await _objectStorageClient.PutObjectAsync(sidecarKey, stream, "application/json", cancellationToken);
@@ -535,7 +542,8 @@ public class InboxController : ControllerBase
         {
             staged = new StagedClassification(
                 draft.Name, draft.DocumentDate, draft.MaskId,
-                draft.Fields.Select(f => (f.FieldDefinitionId, (IReadOnlyList<string>)f.Values)).ToList());
+                draft.Fields.Select(f => (f.FieldDefinitionId, (IReadOnlyList<string>)f.Values)).ToList(),
+                draft.OcrLanguages is { Count: > 0 } langs ? string.Join("+", langs) : null);
         }
 
         // Move the object out of the inbox to a normal document key (server-side copy within the bucket).

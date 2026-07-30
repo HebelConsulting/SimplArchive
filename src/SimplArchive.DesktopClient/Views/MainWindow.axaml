@@ -764,6 +764,12 @@
                                                 </ComboBox.ItemTemplate>
                                             </ComboBox>
                                         </Grid>
+                                        <!-- OCR languages for a scannable item — staged, applied to the searchable-PDF conversion at filing (ADR "Inbox OCR-language staging"). -->
+                                        <Grid ColumnDefinitions="180,*,Auto" IsVisible="{Binding InboxStgScannable}">
+                                            <TextBlock Grid.Column="0" Text="{loc:Tr SysOcrLanguages}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding InboxOcrDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                            <Button Grid.Column="2" Click="OnEditInboxOcrLanguages" Margin="6,2,0,2" ToolTip.Tip="{loc:Tr MwEditOcr}"><i:Icon Value="mdi-pencil-outline" /></Button>
+                                        </Grid>
                                         <ItemsControl ItemsSource="{Binding InboxMaskEditFields}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:MaskFieldEditViewModel">

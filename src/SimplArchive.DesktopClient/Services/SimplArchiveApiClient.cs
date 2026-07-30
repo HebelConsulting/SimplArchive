@@ -133,7 +133,7 @@ public sealed class SimplArchiveApiClient
 
     // A staged mask/index-data draft for an inbox item (the `{name}.mask.json` sidecar content). Name +
     // DocumentDate ("yyyy-MM-dd") are the staged system fields (ADR "Staged Name + Document date on inbox items").
-    public sealed record InboxMaskDraft(string? Name, string? DocumentDate, Guid? MaskId, IReadOnlyList<InboxMaskFieldValue> Fields);
+    public sealed record InboxMaskDraft(string? Name, string? DocumentDate, Guid? MaskId, IReadOnlyList<InboxMaskFieldValue> Fields, IReadOnlyList<string> OcrLanguages);
 
     public sealed record InboxMaskFieldValue(Guid FieldDefinitionId, IReadOnlyList<string> Values);
 
@@ -521,15 +521,18 @@ public sealed class SimplArchiveApiClient
             }
         }
 
-        return new InboxMaskDraft(name, docDate, maskId, fields);
+        var ocrLanguages = json.TryGetProperty("ocrLanguages", out var oc) && oc.ValueKind == JsonValueKind.Array
+            ? oc.EnumerateArray().Select(e => e.GetString() ?? "").Where(s => s.Length > 0).ToList()
+            : [];
+        return new InboxMaskDraft(name, docDate, maskId, fields, ocrLanguages);
     }
 
     // Writes (or, when nothing is staged, clears) an inbox item's staged mask/index-data draft. Name +
     // documentDate ("yyyy-MM-dd", or null) are the staged system fields.
     public async Task SetInboxMaskAsync(string name, string? stagedName, string? documentDate, Guid? maskId,
-        IEnumerable<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> fields, CancellationToken cancellationToken = default)
+        IEnumerable<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> fields, IReadOnlyList<string>? ocrLanguages = null, CancellationToken cancellationToken = default)
     {
-        var body = new { name = stagedName, documentDate, maskId, fields = fields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.Values }) };
+        var body = new { name = stagedName, documentDate, maskId, fields = fields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.Values }), ocrLanguages = ocrLanguages is { Count: > 0 } o ? o : null };
         (await _http.PutAsJsonAsync($"api/inbox/{Uri.EscapeDataString(name)}/mask", body, cancellationToken)).EnsureSuccessStatusCode();
     }
 

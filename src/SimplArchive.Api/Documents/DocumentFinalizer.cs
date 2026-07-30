@@ -162,6 +162,22 @@ public class DocumentFinalizer
             version.DocumentDate = documentDate;
         }
 
+        // Staged OCR languages (ADR "Inbox OCR-language staging") — applied to the version before the
+        // searchable-PDF conversion is enqueued back in FinalizeAsync, so a scanned TIFF/PDF is OCR'd in the
+        // chosen languages. Filtered to the supported catalog (best-effort; unknown codes are dropped).
+        if (!string.IsNullOrWhiteSpace(staged.OcrLanguages))
+        {
+            var known = OcrLanguages.Supported.Select(l => l.Code).ToHashSet(StringComparer.Ordinal);
+            var valid = staged.OcrLanguages
+                .Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(known.Contains)
+                .ToList();
+            if (valid.Count > 0)
+            {
+                version.OcrLanguages = string.Join("+", valid);
+            }
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         if (staged.MaskId is not { } maskId)
@@ -457,4 +473,7 @@ public class DocumentFinalizer
 // (ADR "Consume the staged mask sidecar at filing"). DocumentDate is a "yyyy-MM-dd" string; MaskId null = none.
 public sealed record StagedClassification(
     string? Name, string? DocumentDate, Guid? MaskId,
-    IReadOnlyList<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> Fields);
+    IReadOnlyList<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> Fields,
+    // Staged OCR languages ("+"-joined Tesseract codes) — set on the version before the searchable-PDF
+    // conversion is enqueued (ADR "Inbox OCR-language staging"). Null = the tenant default.
+    string? OcrLanguages = null);

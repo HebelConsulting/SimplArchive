@@ -2052,6 +2052,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
             InboxName = string.IsNullOrEmpty(draft.Name) ? Path.GetFileNameWithoutExtension(name) : draft.Name;
             InboxDocumentDate = DateTime.TryParse(draft.DocumentDate, out var d) ? d.Date : null;
 
+            // OCR languages: only for a scannable item, staged + applied at filing (ADR "Inbox OCR-language
+            // staging"). Load the catalog on demand so DescribeOcrLanguages can map codes → names.
+            InboxStgScannable = IsScannableExtension(name);
+            _inboxStgOcrCodes = draft.OcrLanguages.ToList();
+            if (InboxStgScannable && _ocrCatalog.Count == 0)
+            {
+                try { _ocrCatalog = await _api.GetOcrLanguageCatalogAsync(); }
+                catch { /* non-fatal — the picker just shows codes */ }
+            }
+            InboxOcrDisplay = DescribeOcrLanguages(_inboxStgOcrCodes);
+
             // Preselect the staged mask, or default to "Basic Entry" for an un-classified item (the same
             // default auto-classification applies at filing).
             InboxSelectedMaskChoice = draft.MaskId is { } staged
@@ -2108,8 +2119,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
             var fields = InboxMaskEditFields.Select(f => (f.FieldDefinitionId, f.ToValues())).ToList();
             var stagedName = string.IsNullOrWhiteSpace(InboxName) ? null : InboxName.Trim();
             var docDate = InboxDocumentDate?.ToString("yyyy-MM-dd");
-            await _api.SetInboxMaskAsync(item.Name, stagedName, docDate, maskId, fields);
-            item.HasMask = maskId is not null || fields.Any(f => f.Item2.Count > 0) || stagedName is not null || docDate is not null;
+            var ocr = InboxStgScannable && _inboxStgOcrCodes.Count > 0 ? _inboxStgOcrCodes : null;
+            await _api.SetInboxMaskAsync(item.Name, stagedName, docDate, maskId, fields, ocr);
+            item.HasMask = maskId is not null || fields.Any(f => f.Item2.Count > 0) || stagedName is not null || docDate is not null || ocr is not null;
             Status = Strings.Get("StMaskSaved");
         }
         catch (Exception e)
@@ -2117,6 +2129,25 @@ public sealed partial class MainWindowViewModel : ObservableObject
             Status = string.Format(Strings.Get("StErrSaveMask"), e.Message);
         }
     }
+
+    // The inbox mask pane's OCR-language picker (ADR "Inbox OCR-language staging") — shown only for a scannable
+    // item (.tif/.tiff/.pdf); edited via the view's OnEditInboxOcrLanguages (the shared OcrLanguagePickerDialog),
+    // staged into the pane, and consumed at filing to OCR the searchable-PDF successor in the chosen languages.
+    [ObservableProperty] private bool _inboxStgScannable;
+    [ObservableProperty] private string _inboxOcrDisplay = "";
+    private List<string> _inboxStgOcrCodes = [];
+
+    public (IReadOnlyList<SimplArchiveApiClient.OcrLanguageOption> Catalog, IReadOnlyList<string> Selected) InboxOcrPickerState() =>
+        (_ocrCatalog, _inboxStgOcrCodes);
+
+    public void StageInboxOcrLanguages(IReadOnlyList<string> codes)
+    {
+        _inboxStgOcrCodes = codes.ToList();
+        InboxOcrDisplay = DescribeOcrLanguages(_inboxStgOcrCodes);
+    }
+
+    private static bool IsScannableExtension(string name) =>
+        Path.GetExtension(name).ToLowerInvariant() is ".tif" or ".tiff" or ".pdf";
 
     private void ClearInboxDetail()
     {
