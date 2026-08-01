@@ -180,8 +180,38 @@
   <data name="AccountNotificationPrefs" xml:space="preserve">
     <value>Preferenze di notifica…</value>
   </data>
-  <data name="AccountUserManual" xml:space="preserve">
-    <value>Manuale utente</value>
+  <data name="Help" xml:space="preserve">
+    <value>Aiuto</value>
+  </data>
+  <data name="HelpManual" xml:space="preserve">
+    <value>Manuale</value>
+  </data>
+  <data name="HelpAbout" xml:space="preserve">
+    <value>Informazioni…</value>
+  </data>
+  <data name="AboutHeading" xml:space="preserve">
+    <value>Informazioni su SimplArchive</value>
+  </data>
+  <data name="AboutVersion" xml:space="preserve">
+    <value>Versione</value>
+  </data>
+  <data name="AccountDownloadDesktop" xml:space="preserve">
+    <value>Scarica l'app desktop</value>
+  </data>
+  <data name="DesktopNoticeTitle" xml:space="preserve">
+    <value>Prova l'app desktop</value>
+  </data>
+  <data name="DesktopNoticeBody" xml:space="preserve">
+    <value>SimplArchive ha anche un'app desktop che fa ciò che un browser non può — aprire un documento nella sua applicazione nativa e trascinare i documenti nel gestore file, con anteprime più veloci.</value>
+  </data>
+  <data name="DesktopNoticeDownload" xml:space="preserve">
+    <value>Scarica l'app desktop</value>
+  </data>
+  <data name="DesktopNoticeDontShow" xml:space="preserve">
+    <value>Non mostrare più</value>
+  </data>
+  <data name="DesktopNoticeClose" xml:space="preserve">
+    <value>Forse più tardi</value>
   </data>
   <data name="AccountLogout" xml:space="preserve">
     <value>Esci</value>

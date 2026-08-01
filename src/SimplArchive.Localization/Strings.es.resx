@@ -180,8 +180,38 @@
   <data name="AccountNotificationPrefs" xml:space="preserve">
     <value>Preferencias de notificación…</value>
   </data>
-  <data name="AccountUserManual" xml:space="preserve">
-    <value>Manual de usuario</value>
+  <data name="Help" xml:space="preserve">
+    <value>Ayuda</value>
+  </data>
+  <data name="HelpManual" xml:space="preserve">
+    <value>Manual</value>
+  </data>
+  <data name="HelpAbout" xml:space="preserve">
+    <value>Acerca de…</value>
+  </data>
+  <data name="AboutHeading" xml:space="preserve">
+    <value>Acerca de SimplArchive</value>
+  </data>
+  <data name="AboutVersion" xml:space="preserve">
+    <value>Versión</value>
+  </data>
+  <data name="AccountDownloadDesktop" xml:space="preserve">
+    <value>Descargar la app de escritorio</value>
+  </data>
+  <data name="DesktopNoticeTitle" xml:space="preserve">
+    <value>Prueba la app de escritorio</value>
+  </data>
+  <data name="DesktopNoticeBody" xml:space="preserve">
+    <value>SimplArchive también tiene una app de escritorio que hace lo que un navegador no puede — abrir un documento en su aplicación nativa y arrastrar documentos a tu gestor de archivos, con vistas previas más rápidas.</value>
+  </data>
+  <data name="DesktopNoticeDownload" xml:space="preserve">
+    <value>Descargar la app de escritorio</value>
+  </data>
+  <data name="DesktopNoticeDontShow" xml:space="preserve">
+    <value>No volver a mostrar</value>
+  </data>
+  <data name="DesktopNoticeClose" xml:space="preserve">
+    <value>Quizás más tarde</value>
   </data>
   <data name="AccountLogout" xml:space="preserve">
     <value>Cerrar sesión</value>

@@ -17,7 +17,7 @@ internal static partial class Ui
     // Close the previous test's context on each login so at most one is alive; memory stays flat.
     private static IBrowserContext? _previousContext;
 
-    public static async Task<IPage> LoginAsync(SelfHostedAppFixture app, string[]? permissions = null)
+    public static async Task<IPage> LoginAsync(SelfHostedAppFixture app, string[]? permissions = null, bool dismissDesktopPromo = true)
     {
         if (_previousContext is not null)
         {
@@ -26,6 +26,16 @@ internal static partial class Ui
 
         var context = await app.Browser.NewContextAsync(new BrowserNewContextOptions { AcceptDownloads = true, Permissions = permissions });
         _previousContext = context;
+
+        // The post-logon desktop-client promo (ADR 0505) shows a one-time modal on a fresh browser (empty
+        // localStorage — which every test context is). Left to fire, its MudDialog overlay intercepts the tests'
+        // clicks and everything times out. Pre-seed the "dismissed" flag so it never appears — except for the
+        // dedicated promo test, which passes dismissDesktopPromo:false to exercise the real first-run behaviour.
+        if (dismissDesktopPromo)
+        {
+            await context.AddInitScriptAsync("try { localStorage.setItem('sa.desktopClientNoticeDismissed', '1'); } catch (e) { }");
+        }
+
         var page = await context.NewPageAsync();
         // 60s, not 30s: the Blazor WASM boot + OIDC login round-trip is slow on a 2-core GitHub-hosted runner
         // (the login helper's wait for the app bar timed out at 30s there, while passing locally on more cores).

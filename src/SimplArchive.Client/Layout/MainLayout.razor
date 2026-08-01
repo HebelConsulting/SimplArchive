@@ -104,6 +104,12 @@
                 @* Dark/light toggle to the LEFT of the display name (the self-service avatar stays rightmost). *@
                 <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
                                Color="Color.Inherit" OnClick="ToggleDarkModeAsync" title="@Strings.Get("ToggleTheme")" />
+                @* Help (?) menu — Manual + About (ADR 0504), just left of the account menu. *@
+                <MudIconButton Icon="@Icons.Material.Filled.HelpOutline" Color="Color.Inherit" title="@Strings.Get("Help")" @onclick="OpenHelpMenuAsync" />
+                <MudMenu @ref="_helpMenu" PositionAtCursor="true" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Style="display:none;">
+                    <MudMenuItem Icon="@Icons.Material.Filled.MenuBook" Href="/download/manual/SimplArchive-Manual.pdf" Target="_blank">@Strings.Get("HelpManual")</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Info" OnClick="ShowAboutAsync">@Strings.Get("HelpAbout")</MudMenuItem>
+                </MudMenu>
                 @* DisplayName first, the account/self-service avatar in the corner (rightmost). *@
                 <div class="wb-userbox" title="@Strings.Get("AppbarAccount")" @onclick="OpenAccountMenuAsync">
                     <span class="wb-user">@_displayName</span>
@@ -135,8 +141,8 @@
                     <MudMenuItem Icon="@Icons.Material.Filled.Storage" OnClick="ManageWebDavAsync">@Strings.Get("AccountWebDav")</MudMenuItem>
                     <MudMenuItem Icon="@Icons.Material.Filled.NotificationsActive" OnClick="NotificationPreferencesAsync">@Strings.Get("AccountNotificationPrefs")</MudMenuItem>
                     <MudDivider />
-                    @* The auto-generated user manual (ADR 0502), served from the /download area. *@
-                    <MudMenuItem Icon="@Icons.Material.Filled.MenuBook" Href="/download/manual/SimplArchive-Manual.pdf" Target="_blank">@Strings.Get("AccountUserManual")</MudMenuItem>
+                    @* Promote the desktop fat-client (ADR 0505): resolve the visitor's OS → /download/clients/<os>/. *@
+                    <MudMenuItem Icon="@Icons.Material.Filled.DesktopWindows" OnClick="DownloadDesktopClientAsync">@Strings.Get("AccountDownloadDesktop")</MudMenuItem>
                     <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="BeginLogout">@Strings.Get("AccountLogout")</MudMenuItem>
                 </MudMenu>
             </Authorized>
@@ -213,6 +219,44 @@
     // MudMenu 9.7's ActivatorContent auto-open doesn't fire reliably for a custom activator here, so open it
     // explicitly from the avatar's click (the MudMenu's own activator is hidden via display:none).
     private Task OpenAccountMenuAsync(MouseEventArgs e) => _accountMenu.OpenMenuAsync(e);
+
+    // Help (?) menu — Manual + About (ADR 0504).
+    private MudMenu _helpMenu = null!;
+    private Task OpenHelpMenuAsync(MouseEventArgs e) => _helpMenu.OpenMenuAsync(e);
+    private Task ShowAboutAsync() => DialogService.ShowAsync<AboutDialog>(Strings.Get("HelpAbout"));
+
+    // Promote the desktop fat-client (ADR 0505): resolve the visitor's OS in the browser and open the matching
+    // /download/clients/<os>/ listing in a new tab (macOS's page links to the GitHub Release, ADR 0490).
+    private async Task DownloadDesktopClientAsync()
+    {
+        var os = await JsRuntime.InvokeAsync<string>("simplArchiveDesktop.resolveOs");
+        await JsRuntime.InvokeVoidAsync("open", $"/download/clients/{os}/", "_blank");
+    }
+
+    // One-time post-logon desktop-client promo (ADR 0505): shown once per browser unless dismissed (localStorage).
+    private bool _noticeChecked;
+    private async Task MaybeShowDesktopNoticeAsync()
+    {
+        if (_noticeChecked || _userId is null)
+        {
+            return;
+        }
+
+        _noticeChecked = true;
+        try
+        {
+            if (await JsRuntime.InvokeAsync<bool>("simplArchiveDesktop.noticeDismissed"))
+            {
+                return;
+            }
+
+            await DialogService.ShowAsync<DesktopClientNoticeDialog>(Strings.Get("DesktopNoticeTitle"));
+        }
+        catch (Exception)
+        {
+            // Best effort — a promo notice never blocks the app.
+        }
+    }
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthState { get; set; }
@@ -302,6 +346,7 @@
             // impersonated user (ADR "User impersonation").
             await Impersonation.InitializeAsync();
             await LoadMeAsync();
+            await MaybeShowDesktopNoticeAsync();
         }
     }
 

@@ -1,0 +1,40 @@
+@inject IJSRuntime JsRuntime
+
+@* One-time post-logon desktop-client promo (ADR 0505). "Don't show again" persists in localStorage. *@
+<MudDialog>
+    <DialogContent>
+        <div style="max-width: 440px;">
+            <MudText Typo="Typo.body1">@Strings.Get("DesktopNoticeBody")</MudText>
+            <MudCheckBox T="bool" @bind-Value="_dontShowAgain" Class="mt-3" Color="Color.Primary" Label="@Strings.Get("DesktopNoticeDontShow")" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseAsync">@Strings.Get("DesktopNoticeClose")</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download" OnClick="DownloadAsync">@Strings.Get("DesktopNoticeDownload")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    private bool _dontShowAgain;
+
+    // Resolve the visitor's OS and open the matching /download/clients/<os>/ listing (ADR 0490/0499).
+    private async Task DownloadAsync()
+    {
+        var os = await JsRuntime.InvokeAsync<string>("simplArchiveDesktop.resolveOs");
+        await JsRuntime.InvokeVoidAsync("open", $"/download/clients/{os}/", "_blank");
+        await CloseAsync();
+    }
+
+    private async Task CloseAsync()
+    {
+        if (_dontShowAgain)
+        {
+            await JsRuntime.InvokeVoidAsync("simplArchiveDesktop.dismissNotice");
+        }
+
+        Dialog.Close();
+    }
+}

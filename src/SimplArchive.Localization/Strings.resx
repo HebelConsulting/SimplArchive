@@ -180,8 +180,38 @@
   <data name="AccountNotificationPrefs" xml:space="preserve">
     <value>Notification preferences…</value>
   </data>
-  <data name="AccountUserManual" xml:space="preserve">
-    <value>User manual</value>
+  <data name="Help" xml:space="preserve">
+    <value>Help</value>
+  </data>
+  <data name="HelpManual" xml:space="preserve">
+    <value>Manual</value>
+  </data>
+  <data name="HelpAbout" xml:space="preserve">
+    <value>About…</value>
+  </data>
+  <data name="AboutHeading" xml:space="preserve">
+    <value>About SimplArchive</value>
+  </data>
+  <data name="AboutVersion" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="AccountDownloadDesktop" xml:space="preserve">
+    <value>Download desktop app</value>
+  </data>
+  <data name="DesktopNoticeTitle" xml:space="preserve">
+    <value>Try the desktop app</value>
+  </data>
+  <data name="DesktopNoticeBody" xml:space="preserve">
+    <value>SimplArchive also has a desktop app that does what a browser can't — open a document in its native application and drag documents out to your file manager, with faster previews.</value>
+  </data>
+  <data name="DesktopNoticeDownload" xml:space="preserve">
+    <value>Download the desktop app</value>
+  </data>
+  <data name="DesktopNoticeDontShow" xml:space="preserve">
+    <value>Don't show this again</value>
+  </data>
+  <data name="DesktopNoticeClose" xml:space="preserve">
+    <value>Maybe later</value>
   </data>
   <data name="AccountLogout" xml:space="preserve">
     <value>Log out</value>

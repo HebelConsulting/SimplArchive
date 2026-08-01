@@ -1,0 +1,17 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.AboutDialog"
+        Title="{loc:Tr HelpAbout}" Width="360" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="24" Spacing="4" HorizontalAlignment="Center">
+        <TextBlock Text="SimplArchive" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
+        <TextBlock Text="Hebel Consulting GmbH" FontWeight="SemiBold" Margin="0,12,0,0" HorizontalAlignment="Center" />
+        <TextBlock Text="Schweighofplatz 7" HorizontalAlignment="Center" />
+        <TextBlock Text="6010 Kriens, Switzerland" HorizontalAlignment="Center" />
+        <TextBlock Text="support@simplarchive.dev" Margin="0,2,0,0" HorizontalAlignment="Center" />
+        <TextBlock x:Name="VersionBlock" Margin="0,16,0,0" Opacity="0.7" HorizontalAlignment="Center" />
+        <Button Content="{loc:Tr Close}" Click="OnClose" IsDefault="True" IsCancel="True"
+                Margin="0,16,0,0" HorizontalAlignment="Center" />
+    </StackPanel>
+</Window>
