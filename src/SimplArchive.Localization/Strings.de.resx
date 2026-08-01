@@ -2763,4 +2763,7 @@
   <data name="FolderSortSaveFailed" xml:space="preserve">
     <value>Sortierung konnte nicht gespeichert werden.</value>
   </data>
+  <data name="StPreparingDrag" xml:space="preserve">
+    <value>Dateien zum Ziehen werden vorbereitet…</value>
+  </data>
 </root>

@@ -2763,4 +2763,7 @@
   <data name="FolderSortSaveFailed" xml:space="preserve">
     <value>Impossibile salvare l'ordinamento.</value>
   </data>
+  <data name="StPreparingDrag" xml:space="preserve">
+    <value>Preparazione dei file da trascinare…</value>
+  </data>
 </root>

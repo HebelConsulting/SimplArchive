@@ -2763,4 +2763,7 @@
   <data name="FolderSortSaveFailed" xml:space="preserve">
     <value>Couldn't save the sort order.</value>
   </data>
+  <data name="StPreparingDrag" xml:space="preserve">
+    <value>Preparing files to drag…</value>
+  </data>
 </root>

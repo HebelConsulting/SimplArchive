@@ -6,6 +6,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.DesktopClient.ViewModels;
+using SimplArchive.Localization;
 
 namespace SimplArchive.DesktopClient.Views;
 
@@ -1321,6 +1322,38 @@ public partial class MainWindow : Window
         _dragCandidate = null;
         var data = new DataObject();
         data.Set(NodeDragFormat, node);
+
+        // Also stage the selection as OS files so a drop OUTSIDE the app copies them to the filesystem (issue
+        // #266): a document as its current-version file (<stem><ext>), a folder as a recursive .zip. Real
+        // docs/folders only — a reference stays an internal-only drag. The files must exist before DoDragDrop, so
+        // stage (await) first, with a brief "preparing…" status (an async download can't run during the gesture).
+        if (DataContext is MainWindowViewModel dragVm && dragVm.Api is { } dragApi)
+        {
+            var selected = ContentsList.SelectedItems?.OfType<NodeViewModel>().ToList() ?? [];
+            List<NodeViewModel> source = selected.Count > 1 && selected.Contains(node) ? selected : [node];
+            var items = source.Where(n => !n.IsReference).Select(n => new DragOutItem(n.Id, n.Name, n.IsFolder)).ToList();
+            if (items.Count > 0)
+            {
+                dragVm.Status = Strings.Get("StPreparingDrag");
+                try
+                {
+                    var files = await DragOutStager.StageAsync(dragApi, items);
+                    if (files.Count > 0)
+                    {
+                        data.Set(DataFormats.FileNames, files);
+                    }
+                }
+                catch (Exception)
+                {
+                    // Best-effort — the internal move/reference drag still works even if staging fails.
+                }
+                finally
+                {
+                    dragVm.Status = "";
+                }
+            }
+        }
+
         await DragDrop.DoDragDrop(e, data, DragDropEffects.Move | DragDropEffects.Copy);
     });
 
