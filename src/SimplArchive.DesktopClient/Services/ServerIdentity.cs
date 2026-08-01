@@ -33,7 +33,8 @@ public static class ServerIdentity
     }
 
     // The discovery document is our root iff it carries a `links` array with the self link to `/api` plus the
-    // `openIdConfiguration` link — a shape generic "reachable JSON" won't have, so a foreign server can't match.
+    // `repositories` and `openIdConfiguration` links — a shape generic "reachable JSON" won't have, so a foreign
+    // server can't match.
     internal static bool LooksLikeApiRoot(string json)
     {
         try
@@ -45,6 +46,7 @@ public static class ServerIdentity
             }
 
             var hasSelf = false;
+            var hasRepositories = false;
             var hasOidc = false;
             foreach (var link in links.EnumerateArray())
             {
@@ -55,13 +57,18 @@ public static class ServerIdentity
                     hasSelf = true;
                 }
 
+                if (rel == "repositories")
+                {
+                    hasRepositories = true;
+                }
+
                 if (rel == "openIdConfiguration")
                 {
                     hasOidc = true;
                 }
             }
 
-            return hasSelf && hasOidc;
+            return hasSelf && hasRepositories && hasOidc;
         }
         catch (JsonException)
         {

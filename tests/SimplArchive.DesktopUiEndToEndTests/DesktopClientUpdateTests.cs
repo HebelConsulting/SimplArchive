@@ -62,6 +62,10 @@ public class DesktopClientUpdateTests
 
         // A links array without the SimplArchive-specific rels is not our server.
         Assert.False(ServerIdentity.LooksLikeApiRoot("""{"links":[{"rel":"self","href":"/other"}]}"""));
+        // self + openIdConfiguration but missing the repositories rel → not our server.
+        Assert.False(ServerIdentity.LooksLikeApiRoot("""
+            {"links":[{"rel":"self","href":"/api"},{"rel":"openIdConfiguration","href":"/.well-known/openid-configuration"}]}
+            """));
         // Not even JSON.
         Assert.False(ServerIdentity.LooksLikeApiRoot("<html>hello</html>"));
         // JSON, but no links.
