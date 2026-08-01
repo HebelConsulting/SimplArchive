@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -43,7 +42,7 @@ public sealed class OidcLoopbackAuthenticator
             $"&code_challenge={codeChallenge}&code_challenge_method=S256&state={state}" +
             (forceLogin ? "&prompt=login" : string.Empty) +
             (string.IsNullOrWhiteSpace(loginHint) ? string.Empty : $"&login_hint={Uri.EscapeDataString(loginHint)}");
-        OpenBrowser(authorizeUrl);
+        SystemBrowser.Open(authorizeUrl);
 
         var context = await listener.GetContextAsync().WaitAsync(cancellationToken);
         var code = context.Request.QueryString["code"];
@@ -88,7 +87,7 @@ public sealed class OidcLoopbackAuthenticator
         listener.Prefixes.Add($"http://127.0.0.1:{port}/");
         listener.Start();
 
-        OpenBrowser($"{DesktopClientOptions.ApiBaseUrl}/Account/Passkeys?loopback={port}");
+        SystemBrowser.Open($"{DesktopClientOptions.ApiBaseUrl}/Account/Passkeys?loopback={port}");
 
         HttpListenerContext context;
         try
@@ -162,21 +161,5 @@ public sealed class OidcLoopbackAuthenticator
         var padded = value.Replace('-', '+').Replace('_', '/');
         padded = padded.PadRight(padded.Length + (4 - padded.Length % 4) % 4, '=');
         return Convert.FromBase64String(padded);
-    }
-
-    private static void OpenBrowser(string url)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-        }
-        else if (OperatingSystem.IsMacOS())
-        {
-            Process.Start("open", url);
-        }
-        else
-        {
-            Process.Start("xdg-open", url);
-        }
     }
 }

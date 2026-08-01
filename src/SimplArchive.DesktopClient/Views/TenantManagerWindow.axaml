@@ -38,7 +38,12 @@
                         </StackPanel>
                         <StackPanel>
                             <TextBlock Text="URL" FontSize="11" Foreground="{DynamicResource WbMuted}" />
-                            <TextBlock Text="{Binding Selected.ApiRootUrl}" FontSize="14" TextWrapping="Wrap" />
+                            <!-- Tints light green when a live probe confirms the selected profile is our server (issue #270). -->
+                            <Border Background="{Binding SelectedIsOurServer, Converter={x:Static vm:GreenTintConverter.Instance}, ConverterParameter=bg}"
+                                    CornerRadius="3" Padding="4,2" HorizontalAlignment="Left">
+                                <TextBlock Text="{Binding Selected.ApiRootUrl}" FontSize="14" TextWrapping="Wrap"
+                                           Foreground="{Binding SelectedIsOurServer, Converter={x:Static vm:GreenTintConverter.Instance}, ConverterParameter=fg}" />
+                            </Border>
                         </StackPanel>
                         <Button Command="{Binding EditCommand}" HorizontalAlignment="Left" Margin="0,4,0,0">
                             <StackPanel Orientation="Horizontal" Spacing="5"><i:Icon Value="mdi-pencil" /><TextBlock Text="{loc:Tr Edit}" /></StackPanel>
@@ -55,7 +60,25 @@
                     </StackPanel>
                     <StackPanel>
                         <TextBlock Text="URL (API root)" FontSize="11" Foreground="{DynamicResource WbMuted}" />
-                        <TextBox Text="{Binding EditUrl}" Watermark="https://host/…" />
+                        <!-- Tints light green once a live probe confirms this URL is a SimplArchive server (issue #270).
+                             The Fluent TextBox paints its own background per visual state (incl. focused, i.e. while
+                             editing), so the local Background is overridden — style the template's border part across
+                             the normal / pointerover / focus states instead. -->
+                        <TextBox x:Name="EditUrlBox" Text="{Binding EditUrl}" Watermark="https://host/…"
+                                 Classes.oursrv="{Binding EditUrlIsOurServer}"
+                                 Foreground="{Binding EditUrlIsOurServer, Converter={x:Static vm:GreenTintConverter.Instance}, ConverterParameter=fg}">
+                            <TextBox.Styles>
+                                <Style Selector="TextBox.oursrv /template/ Border#PART_BorderElement">
+                                    <Setter Property="Background" Value="#C8E6C9" />
+                                </Style>
+                                <Style Selector="TextBox.oursrv:pointerover /template/ Border#PART_BorderElement">
+                                    <Setter Property="Background" Value="#C8E6C9" />
+                                </Style>
+                                <Style Selector="TextBox.oursrv:focus /template/ Border#PART_BorderElement">
+                                    <Setter Property="Background" Value="#C8E6C9" />
+                                </Style>
+                            </TextBox.Styles>
+                        </TextBox>
                     </StackPanel>
                     <TextBlock Text="{Binding Error}" Foreground="#c0392b" FontSize="12" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">

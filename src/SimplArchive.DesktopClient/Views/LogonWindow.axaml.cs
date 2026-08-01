@@ -12,6 +12,8 @@ public partial class LogonWindow : Window
     {
         InitializeComponent();
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
+        // Once shown, let the VM run its network-backed self-update check (issue #271).
+        Opened += (_, _) => (DataContext as ViewModels.LogonViewModel)?.Activate();
     }
 
     private async void OnWindowKeyDown(object? sender, KeyEventArgs e)

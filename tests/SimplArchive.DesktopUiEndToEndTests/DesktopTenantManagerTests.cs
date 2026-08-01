@@ -78,4 +78,55 @@ public class DesktopTenantManagerTests
             }
         }
     }
+
+    // The live URL validation (issue #270): a well-formed URL that the probe confirms is our server tints green;
+    // a foreign or malformed URL stays neutral.
+    [Fact]
+    public async Task Url_probe_tints_green_only_for_our_server()
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), $"tenants-{Guid.NewGuid():N}.json");
+        TenantProfileStore.PathOverride = tmp;
+        try
+        {
+            var vm = new TenantManagerViewModel { ProbeDebounce = TimeSpan.Zero };
+            vm.ServerIdentityCheck = (url, _) => Task.FromResult(url.Contains("good"));
+
+            vm.EditUrl = "https://good.example.com";
+            await vm.ProbeEditUrlAsync();
+            Assert.True(vm.EditUrlIsOurServer); // reachable + our server → green
+
+            vm.EditUrl = "https://foreign.example.com";
+            Assert.False(vm.EditUrlIsOurServer); // an edit clears the previous positive result immediately
+            await vm.ProbeEditUrlAsync();
+            Assert.False(vm.EditUrlIsOurServer); // probed, not our server → neutral
+
+            // A malformed URL never probes → stays neutral even if the (unused) probe would say yes.
+            vm.ServerIdentityCheck = (_, _) => Task.FromResult(true);
+            vm.EditUrl = "not-a-url";
+            await vm.ProbeEditUrlAsync();
+            Assert.False(vm.EditUrlIsOurServer);
+
+            // The same cue applies to a merely-selected profile (read-only pane, no edit mode) — issue #270.
+            vm.ServerIdentityCheck = (url, _) => Task.FromResult(url.Contains("good"));
+            vm.Tenants.Add(new TenantProfile { Name = "Good", ApiRootUrl = "https://good.example.com" });
+            vm.Tenants.Add(new TenantProfile { Name = "Other", ApiRootUrl = "https://other.example.com" });
+
+            vm.Selected = vm.Tenants.First(t => t.Name == "Good");
+            await vm.ProbeSelectedAsync();
+            Assert.True(vm.SelectedIsOurServer);
+
+            vm.Selected = vm.Tenants.First(t => t.Name == "Other");
+            Assert.False(vm.SelectedIsOurServer); // a selection change clears the previous tint immediately
+            await vm.ProbeSelectedAsync();
+            Assert.False(vm.SelectedIsOurServer);
+        }
+        finally
+        {
+            TenantProfileStore.PathOverride = null;
+            if (File.Exists(tmp))
+            {
+                File.Delete(tmp);
+            }
+        }
+    }
 }

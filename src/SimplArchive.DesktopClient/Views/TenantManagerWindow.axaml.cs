@@ -11,7 +11,10 @@ public partial class TenantManagerWindow : Window
     public TenantManagerWindow()
     {
         InitializeComponent();
-        DataContext = new TenantManagerViewModel();
+        var vm = new TenantManagerViewModel();
+        DataContext = vm;
+        // Once shown, enable the VM's network-backed "is this our server?" URL probe (issue #270).
+        Opened += (_, _) => vm.Activate();
     }
 
     private void OnClose(object? sender, RoutedEventArgs e) => Close();

@@ -6,7 +6,7 @@
         xmlns:loc="using:SimplArchive.DesktopClient.Localization"
         x:Class="SimplArchive.DesktopClient.Views.LogonWindow"
         x:DataType="vm:LogonViewModel"
-        Title="{loc:Tr LogonTitle}" Width="380" Height="360"
+        Title="{loc:Tr LogonTitle}" Width="380" Height="430"
         CanResize="False" WindowStartupLocation="CenterScreen">
     <StackPanel Margin="28" Spacing="16">
         <StackPanel Orientation="Horizontal" Spacing="10">
@@ -35,6 +35,19 @@
                     <DataTemplate x:DataType="vm:LanguageOption"><TextBlock Text="{Binding Name}" /></DataTemplate>
                 </ComboBox.ItemTemplate>
             </ComboBox>
+        </StackPanel>
+
+        <!-- Self-update notice for the selected deployment (issue #271), above the Login button. -->
+        <StackPanel Spacing="4" IsVisible="{Binding UpdateStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+            <TextBlock Text="{Binding UpdateStatus}" Foreground="#b26a00" FontSize="12" TextWrapping="Wrap"
+                       HorizontalAlignment="Center" TextAlignment="Center" />
+            <Button Command="{Binding OpenDownloadCommand}" IsVisible="{Binding HasUpdateLink}"
+                    HorizontalAlignment="Center" Padding="8,2">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <i:Icon Value="mdi-download" />
+                    <TextBlock Text="{loc:Tr LogonUpdateDownload}" />
+                </StackPanel>
+            </Button>
         </StackPanel>
 
         <Button Command="{Binding LoginCommand}" Classes="accent" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="0,4,0,0">

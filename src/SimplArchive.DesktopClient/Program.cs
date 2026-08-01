@@ -273,8 +273,50 @@ internal static class Program
                 .WithInterFont()
                 .SetupWithoutStarting();
             var win = new Views.TenantManagerWindow();
+            var green = args.Contains("--green");
+            var editShot = args.Contains("--edit");
+            ViewModels.TenantManagerViewModel? gvm = null;
+            // `--green` shows the light-green "confirmed our server" tint (issue #270): on the read-only pane of a
+            // merely-selected profile, or — with `--edit` — on the focused edit field. The real tint needs a
+            // reachable server to probe.
+            if (green)
+            {
+                gvm = new ViewModels.TenantManagerViewModel();
+                gvm.Tenants.Add(new Services.TenantProfile { Name = "Demo", ApiRootUrl = "https://demo.simplarchive.dev" });
+                gvm.Selected = gvm.Tenants[^1];
+                win.DataContext = gvm;
+                if (editShot)
+                {
+                    gvm.EditCommand.Execute(null); // show the editable pane
+                }
+            }
+
             win.Show();
             Dispatcher.UIThread.RunJobs();
+            // Set the tint after the ListBox selection binding has settled (attaching the DataContext momentarily
+            // resets Selected, which clears the flag), then pump another layout pass so it renders.
+            if (gvm is not null)
+            {
+                if (editShot)
+                {
+                    gvm.EditUrlIsOurServer = true;
+                    Dispatcher.UIThread.RunJobs();
+                    // `--focus` also exercises the focused visual state (the "while editing" case).
+                    if (args.Contains("--focus"))
+                    {
+                        win.GetVisualDescendants().OfType<Avalonia.Controls.TextBox>()
+                            .FirstOrDefault(t => t.Name == "EditUrlBox")?.Focus();
+                        Dispatcher.UIThread.RunJobs();
+                    }
+                }
+                else
+                {
+                    gvm.SelectedIsOurServer = true;
+                }
+
+                Dispatcher.UIThread.RunJobs();
+            }
+
             win.CaptureRenderedFrame()?.Save(args[tenantsShotIndex + 1]);
             return;
         }
@@ -296,8 +338,18 @@ internal static class Program
                 .UseSkia()
                 .WithInterFont()
                 .SetupWithoutStarting();
-            var win = new Views.LogonWindow { DataContext = new ViewModels.LogonViewModel() };
+            var logonVm = new ViewModels.LogonViewModel();
+            // `--update` injects a sample self-update result (issue #271) so the shot shows that layout, since the
+            // real check needs a reachable download area (the window's Activate() runs this seam on open).
+            if (args.Contains("--update"))
+            {
+                logonVm.UpdateCheck = (_, _) => System.Threading.Tasks.Task.FromResult<Services.UpdateInfo?>(
+                    new Services.UpdateInfo("2.0.0", "https://demo.simplarchive.dev/download/clients/macos/SimplArchive-2.0.0-x64.dmg", Services.ClientUpdateKind.UpdateAvailable));
+            }
+
+            var win = new Views.LogonWindow { DataContext = logonVm };
             win.Show();
+            Dispatcher.UIThread.RunJobs();
             Dispatcher.UIThread.RunJobs();
             win.CaptureRenderedFrame()?.Save(args[logonShotIndex + 1]);
             return;

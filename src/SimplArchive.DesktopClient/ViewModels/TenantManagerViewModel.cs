@@ -1,6 +1,8 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
@@ -32,7 +34,131 @@ public sealed partial class TenantManagerViewModel : ObservableObject
     [ObservableProperty] private string _editUrl = "";
     [ObservableProperty] private string _error = "";
 
+    // True while EditUrl is a well-formed absolute http(s) address that a live probe confirmed is a SimplArchive
+    // server — drives the light-green tint on the URL field while editing (issue #270).
+    [ObservableProperty] private bool _editUrlIsOurServer;
+
+    // Same, for the read-only URL of the currently-selected profile — so a merely-selected (not edited) profile
+    // shows the green "this is our server" cue too (issue #270).
+    [ObservableProperty] private bool _selectedIsOurServer;
+
     public bool HasSelection => Selected is not null;
+
+    // The live "is this our server?" probe (issue #270) — injectable so a test needn't hit a real server.
+    public Func<string, CancellationToken, Task<bool>> ServerIdentityCheck { get; set; } = ServerIdentity.IsSimplArchiveAsync;
+
+    // How long to wait after the last keystroke before probing, so typing doesn't spam the network. Zeroed in
+    // tests for determinism.
+    internal TimeSpan ProbeDebounce { get; set; } = TimeSpan.FromMilliseconds(400);
+
+    // Supersedes an in-flight probe on each keystroke / selection change.
+    private CancellationTokenSource? _probeCts;
+    private CancellationTokenSource? _selectedProbeCts;
+
+    // The probe hits the network, so it's dormant until the window Activate()s the VM — otherwise constructing it
+    // in a unit test would fire a request before the seam can be overridden.
+    private bool _activated;
+
+    // Called by the window once shown: enables the network-backed URL probes and checks the initially-selected
+    // profile so its green "this is our server" cue shows on open (issue #270).
+    public void Activate()
+    {
+        _activated = true;
+        _ = ProbeSelectedAsync();
+    }
+
+    partial void OnSelectedChanged(TenantProfile? value)
+    {
+        // A different profile invalidates the previous read-only tint until a fresh probe confirms it.
+        SelectedIsOurServer = false;
+        if (_activated)
+        {
+            _ = ProbeSelectedAsync();
+        }
+    }
+
+    // Probes the currently-selected profile's URL (not the edit field) so a merely-selected profile shows the
+    // green cue in the read-only pane. No debounce — selection is a deliberate act, not per-keystroke.
+    internal async Task ProbeSelectedAsync()
+    {
+        _selectedProbeCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _selectedProbeCts = cts;
+
+        var url = Selected?.ApiRootUrl?.Trim();
+        if (string.IsNullOrEmpty(url)
+            || !Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            SelectedIsOurServer = false;
+            return;
+        }
+
+        try
+        {
+            var ok = await ServerIdentityCheck(url, cts.Token);
+            if (!cts.IsCancellationRequested)
+            {
+                SelectedIsOurServer = ok;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer selection.
+        }
+        catch (Exception)
+        {
+            SelectedIsOurServer = false;
+        }
+    }
+
+    partial void OnEditUrlChanged(string value)
+    {
+        // Any edit invalidates the previous positive result until a fresh probe confirms it.
+        EditUrlIsOurServer = false;
+        if (_activated)
+        {
+            _ = ProbeEditUrlAsync();
+        }
+    }
+
+    // Validates EditUrl per keystroke and, when it's a well-formed absolute http(s) URL, debounces then probes
+    // whether it's our server — setting EditUrlIsOurServer (the green tint). Best-effort; failures stay neutral.
+    internal async Task ProbeEditUrlAsync()
+    {
+        _probeCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _probeCts = cts;
+
+        var url = EditUrl.Trim();
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            EditUrlIsOurServer = false;
+            return;
+        }
+
+        try
+        {
+            if (ProbeDebounce > TimeSpan.Zero)
+            {
+                await Task.Delay(ProbeDebounce, cts.Token);
+            }
+
+            var ok = await ServerIdentityCheck(url, cts.Token);
+            if (!cts.IsCancellationRequested)
+            {
+                EditUrlIsOurServer = ok;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer keystroke.
+        }
+        catch (Exception)
+        {
+            EditUrlIsOurServer = false;
+        }
+    }
 
     public TenantManagerViewModel()
     {

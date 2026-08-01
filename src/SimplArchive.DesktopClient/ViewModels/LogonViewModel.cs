@@ -33,6 +33,17 @@ public sealed partial class LogonViewModel : ObservableObject
     [ObservableProperty] private string _username = "";
     [ObservableProperty] private string _status = "";
 
+    // Self-update notice for the selected deployment (issue #271), shown above the Login button: a message plus,
+    // when a build is offered, a clickable download link.
+    [ObservableProperty] private string _updateStatus = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasUpdateLink))]
+    [NotifyCanExecuteChangedFor(nameof(OpenDownloadCommand))]
+    private string? _updateDownloadUrl;
+
+    public bool HasUpdateLink => !string.IsNullOrEmpty(UpdateDownloadUrl);
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(LoginCommand))]
     private bool _busy;
@@ -41,12 +52,22 @@ public sealed partial class LogonViewModel : ObservableObject
     // cancelling it frees the OAuth loopback listener/port so a retry can start cleanly.
     private CancellationTokenSource? _loginCts;
 
+    // Supersedes an in-flight update check when the selected deployment changes (issue #271).
+    private CancellationTokenSource? _updateCts;
+
+    // The update check hits the network, so it stays dormant until the window Activate()s it — otherwise a unit
+    // test that constructs the VM would fire a real request before it can override the UpdateCheck seam.
+    private bool _activated;
+
     // How long a browser sign-in may stall before the Log in button is re-enabled for a retry. Overridable in
     // tests so the re-enable path doesn't take a real 10 s.
     internal TimeSpan ReenableDelay { get; set; } = TimeSpan.FromSeconds(10);
 
     // Injectable seams so a test can drive Login without a real server / browser.
     public Func<string, CancellationToken, Task<bool>> ReachabilityCheck { get; set; } = ServerReachability.CheckAsync;
+    // The self-update check for the selected deployment (issue #271) — injectable so a test needn't hit a real
+    // download area.
+    public Func<string, CancellationToken, Task<UpdateInfo?>> UpdateCheck { get; set; } = ClientUpdate.CheckAsync;
     // The first parameter is the login_hint (the entered username/email) so the browser login pre-fills it; the
     // token lets a retry cancel a stuck browser flow.
     public Func<string?, CancellationToken, Task<OidcLoopbackAuthenticator.AuthResult?>> Authenticate { get; set; } =
@@ -56,12 +77,21 @@ public sealed partial class LogonViewModel : ObservableObject
     // main window.
     public event Action<SimplArchiveApiClient, string>? LoginSucceeded;
 
+    // The pre-seeded public demo deployment (issue #269) — offered as the first-run default so a fresh client
+    // points at the live demo out of the box. Only ever seeded on an empty config; never overrides an existing
+    // saved preference.
+    public const string DemoTenantName = "demo.simplarchive.dev";
+    public const string DemoTenantUrl = "https://demo.simplarchive.dev";
+
     public LogonViewModel()
     {
         var cfg = TenantProfileStore.Load();
         if (cfg.Tenants.Count == 0)
         {
-            // Auto-seed a default deployment so the app is usable out of the box (ADR "Desktop logon window").
+            // First run: seed the public Demo deployment (the default) plus a Local one for dev, so the app is
+            // usable out of the box (ADR "Desktop logon window", issue #269). Demo is first, so it's the default
+            // selection when no LastTenant is remembered yet.
+            cfg.Tenants.Add(new TenantProfile { Name = DemoTenantName, ApiRootUrl = DemoTenantUrl });
             cfg.Tenants.Add(new TenantProfile { Name = "Local", ApiRootUrl = DesktopClientOptions.ApiBaseUrl });
             TenantProfileStore.Save(cfg);
         }
@@ -89,6 +119,81 @@ public sealed partial class LogonViewModel : ObservableObject
         }
 
         SelectedTenant = Tenants.FirstOrDefault(t => string.Equals(t.Name, previous, StringComparison.OrdinalIgnoreCase)) ?? Tenants.FirstOrDefault();
+    }
+
+    // Called by the window once it's shown: enables the network-backed update check and runs an initial one for
+    // the pre-selected deployment (issue #271).
+    public void Activate()
+    {
+        _activated = true;
+        _ = CheckForUpdatesAsync();
+    }
+
+    partial void OnSelectedTenantChanged(TenantProfile? value)
+    {
+        if (_activated)
+        {
+            _ = CheckForUpdatesAsync();
+        }
+    }
+
+    // Best-effort self-update check for the selected deployment: compare the running client with the build the
+    // server offers and surface a notice + download link above the Login button (issue #271).
+    internal async Task CheckForUpdatesAsync()
+    {
+        _updateCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _updateCts = cts;
+
+        UpdateStatus = "";
+        UpdateDownloadUrl = null;
+
+        var profile = SelectedTenant;
+        if (profile is null || string.IsNullOrWhiteSpace(profile.ApiRootUrl))
+        {
+            return;
+        }
+
+        try
+        {
+            var info = await UpdateCheck(profile.ApiRootUrl.TrimEnd('/'), cts.Token);
+            if (cts.IsCancellationRequested || info is null)
+            {
+                return;
+            }
+
+            switch (info.Kind)
+            {
+                case ClientUpdateKind.UpdateAvailable:
+                    UpdateStatus = string.Format(Strings.Get("LogonUpdateAvailable"), info.OfferedVersion);
+                    UpdateDownloadUrl = info.DownloadUrl;
+                    break;
+                case ClientUpdateKind.Inconclusive:
+                    UpdateStatus = Strings.Get("LogonUpdateInconclusive");
+                    UpdateDownloadUrl = info.DownloadUrl;
+                    break;
+                default:
+                    // Up to date — no notice.
+                    break;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer check.
+        }
+        catch (Exception)
+        {
+            // The update check is best-effort; never block or disrupt login.
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(HasUpdateLink))]
+    private void OpenDownload()
+    {
+        if (!string.IsNullOrEmpty(UpdateDownloadUrl))
+        {
+            SystemBrowser.Open(UpdateDownloadUrl);
+        }
     }
 
     private bool CanLogin => SelectedTenant is not null && !Busy;

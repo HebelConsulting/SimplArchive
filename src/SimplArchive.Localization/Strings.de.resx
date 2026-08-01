@@ -30,6 +30,15 @@
   <data name="LogonManageTenants" xml:space="preserve">
     <value>Mandanten mit Strg/Cmd + P verwalten</value>
   </data>
+  <data name="LogonUpdateAvailable" xml:space="preserve">
+    <value>Ein neuerer Client ({0}) ist verfügbar.</value>
+  </data>
+  <data name="LogonUpdateInconclusive" xml:space="preserve">
+    <value>Es ist eine andere Version verfügbar. Bitte erst installieren, wenn dazu geraten wird.</value>
+  </data>
+  <data name="LogonUpdateDownload" xml:space="preserve">
+    <value>Herunterladen</value>
+  </data>
   <data name="Cancel" xml:space="preserve">
     <value>Abbrechen</value>
   </data>

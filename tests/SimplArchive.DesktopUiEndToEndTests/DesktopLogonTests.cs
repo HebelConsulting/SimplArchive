@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.DesktopClient.ViewModels;
+using SimplArchive.Localization;
 
 namespace SimplArchive.UiEndToEndTests;
 
@@ -21,10 +22,13 @@ public class DesktopLogonTests
         {
             var vm = new LogonViewModel();
 
-            // Auto-seeded a default "Local" tenant; English selected by default.
-            Assert.Single(vm.Tenants);
-            Assert.Equal("Local", vm.Tenants[0].Name);
+            // Auto-seeded the public Demo deployment (the default) plus a Local one; English selected (issue #269).
+            Assert.Equal(2, vm.Tenants.Count);
+            Assert.Equal("demo.simplarchive.dev", vm.Tenants[0].Name);
+            Assert.Equal("https://demo.simplarchive.dev", vm.Tenants[0].ApiRootUrl);
+            Assert.Equal("Local", vm.Tenants[1].Name);
             Assert.NotNull(vm.SelectedTenant);
+            Assert.Equal("demo.simplarchive.dev", vm.SelectedTenant!.Name); // Demo is the first-run default
             Assert.Equal("en", vm.SelectedLanguage!.Code);
 
             // Server unreachable → the "No connection" message, and no login.
@@ -37,6 +41,7 @@ public class DesktopLogonTests
             Assert.False(vm.Busy);
 
             // Reachable + a token → LoginSucceeded fires with the api client + email; the choices persist.
+            vm.SelectedTenant = vm.Tenants.First(t => t.Name == "Local");
             vm.Username = "user@example.com";
             vm.SelectedLanguage = vm.Languages.First(l => l.Code == "de");
             vm.ReachabilityCheck = (_, _) => Task.FromResult(true);
@@ -65,6 +70,49 @@ public class DesktopLogonTests
             var reopened = new LogonViewModel();
             Assert.Equal("user@example.com", reopened.Username);
             Assert.Equal("de", reopened.SelectedLanguage!.Code);
+        }
+        finally
+        {
+            TenantProfileStore.PathOverride = null;
+            if (File.Exists(tmp))
+            {
+                File.Delete(tmp);
+            }
+        }
+    }
+
+    // The self-update check (issue #271) surfaces a newer client with a download link above Login, says nothing
+    // when up to date, and shows the "don't install" wording for an inconclusive (dev-SHA) comparison.
+    [Fact]
+    public async Task Update_check_surfaces_a_newer_client()
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), $"logon-{Guid.NewGuid():N}.json");
+        TenantProfileStore.PathOverride = tmp;
+        DesktopClientOptions.ApiBaseUrl = "http://localhost:8080";
+        try
+        {
+            var vm = new LogonViewModel();
+
+            // A strictly-newer build → a notice naming the version + a working download link.
+            vm.UpdateCheck = (_, _) => Task.FromResult<UpdateInfo?>(
+                new UpdateInfo("2.0.0", "https://demo/download/clients/macos/SimplArchive-2.0.0-x64.dmg", ClientUpdateKind.UpdateAvailable));
+            await vm.CheckForUpdatesAsync();
+            Assert.Equal(string.Format(Strings.Get("LogonUpdateAvailable"), "2.0.0"), vm.UpdateStatus);
+            Assert.True(vm.HasUpdateLink);
+            Assert.True(vm.OpenDownloadCommand.CanExecute(null));
+
+            // Up to date → no notice, no link.
+            vm.UpdateCheck = (_, _) => Task.FromResult<UpdateInfo?>(new UpdateInfo("1.0.0", "x", ClientUpdateKind.UpToDate));
+            await vm.CheckForUpdatesAsync();
+            Assert.Equal("", vm.UpdateStatus);
+            Assert.False(vm.HasUpdateLink);
+            Assert.False(vm.OpenDownloadCommand.CanExecute(null));
+
+            // Inconclusive (a git short-SHA on one side) → the "don't install until advised" wording, still linked.
+            vm.UpdateCheck = (_, _) => Task.FromResult<UpdateInfo?>(new UpdateInfo("a1b2c3d", "y", ClientUpdateKind.Inconclusive));
+            await vm.CheckForUpdatesAsync();
+            Assert.Equal(Strings.Get("LogonUpdateInconclusive"), vm.UpdateStatus);
+            Assert.True(vm.HasUpdateLink);
         }
         finally
         {

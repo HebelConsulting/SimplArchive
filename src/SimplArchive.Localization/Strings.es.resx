@@ -30,6 +30,15 @@
   <data name="LogonManageTenants" xml:space="preserve">
     <value>Gestionar tenants con Ctrl/Cmd + P</value>
   </data>
+  <data name="LogonUpdateAvailable" xml:space="preserve">
+    <value>Hay un cliente más reciente ({0}) disponible.</value>
+  </data>
+  <data name="LogonUpdateInconclusive" xml:space="preserve">
+    <value>Hay otra versión disponible. No la instales hasta que se indique.</value>
+  </data>
+  <data name="LogonUpdateDownload" xml:space="preserve">
+    <value>Descargar</value>
+  </data>
   <data name="Cancel" xml:space="preserve">
     <value>Cancelar</value>
   </data>
