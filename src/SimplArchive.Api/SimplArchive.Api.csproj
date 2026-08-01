@@ -1,6 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
+    <!-- Demo document PDFs the Demo:* seed uploads (ADR 0214 / 0502). Embedded so they ship inside the API
+         assembly and work in the container. Regenerate from the .typ sources with Typst. The invoice is
+         "Invoice 2025-001"; the offer's two revisions are versions 1 + 2 of "Offer 2025-014" (for Compare). -->
+    <EmbeddedResource Include="DemoData/sample-invoice.pdf" LogicalName="DemoInvoice.pdf" />
+    <EmbeddedResource Include="DemoData/sample-offer-v1.pdf" LogicalName="DemoOfferV1.pdf" />
+    <EmbeddedResource Include="DemoData/sample-offer-v2.pdf" LogicalName="DemoOfferV2.pdf" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\SimplArchive.Application\SimplArchive.Application.csproj" />
     <ProjectReference Include="..\SimplArchive.Infrastructure\SimplArchive.Infrastructure.csproj" />
     <ProjectReference Include="..\SimplArchive.Auth\SimplArchive.Auth.csproj" />

@@ -180,6 +180,9 @@
   <data name="AccountNotificationPrefs" xml:space="preserve">
     <value>Benachrichtigungseinstellungen…</value>
   </data>
+  <data name="AccountUserManual" xml:space="preserve">
+    <value>Benutzerhandbuch</value>
+  </data>
   <data name="AccountLogout" xml:space="preserve">
     <value>Abmelden</value>
   </data>

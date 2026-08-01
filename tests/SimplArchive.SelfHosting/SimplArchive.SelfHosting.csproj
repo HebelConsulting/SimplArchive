@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- The single source of truth for booting the real app out-of-process for E2E/manual-capture use (ADR 0502).
+       Browser-agnostic: no Playwright reference, so the desktop suite that wraps this stays light. -->
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" Version="4.0.100.3" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.0.0" />
+  </ItemGroup>
+
+</Project>

@@ -5118,26 +5118,30 @@ public sealed partial class MainWindowViewModel : ObservableObject
         IsTenantAdmin = true;
         Breadcrumbs.Add(new BreadcrumbViewModel { Name = "Repositories", FolderId = null, ShowSeparator = false });
         Breadcrumbs.Add(new BreadcrumbViewModel { Name = "Demo Repository", FolderId = Guid.NewGuid(), ShowSeparator = true });
+        // Mirror the real tree's top-level nodes: a Personal repository (ADR 0370) and, for a tenant admin, the
+        // synthetic Administration branch (ADR 0377), around the shared repositories.
+        Tree.Add(new TreeNodeViewModel(Guid.Empty, "Personal", true, null, isPersonal: true));
         Tree.Add(new TreeNodeViewModel(Guid.Empty, "Demo Repository", true, null));
         Tree.Add(new TreeNodeViewModel(Guid.Empty, "Invoices", false, null));
         Tree.Add(new TreeNodeViewModel(Guid.Empty, "Shared (ref)", false, null, isReference: true));
+        Tree.Add(new TreeNodeViewModel(Guid.Empty, "Administration", true, null, syntheticIcon: "mdi-shield-account"));
         Items.Add(new NodeViewModel { Id = Guid.Empty, Name = "Invoices", HasChildren = true, HasVersions = false });
-        Items.Add(new NodeViewModel { Id = Guid.Empty, Name = "Quarterly Report.pdf", HasChildren = false, HasVersions = true });
+        Items.Add(new NodeViewModel { Id = Guid.Empty, Name = "Invoice 2025-001.pdf", HasChildren = false, HasVersions = true });
         Items.Add(new NodeViewModel { Id = Guid.Empty, Name = "sample.docx", HasChildren = false, HasVersions = true });
         Items.Add(new NodeViewModel { Id = Guid.Empty, Name = "Shared Contract.pdf", HasChildren = false, HasVersions = true, IsReference = true });
         SelectedItem = Items[1]; // a document is picked, so Rename/Delete/Download are enabled in the screenshot
-        DetailTitle = "scan-invoice";
-        SysName = "scan-invoice";
-        SysFileExtension = ".tif";
+        DetailTitle = "Invoice 2025-001";
+        SysName = "Invoice 2025-001";
+        SysFileExtension = ".pdf";
         SysCreated = "2026-07-15 09:12";
         SysCreatedBy = "Demo Admin";
         SysDocumentDate = new DateTimeOffset(2026, 6, 28, 0, 0, 0, TimeSpan.Zero);
-        SysHasTiff = true;
+        SysHasTiff = false;
         SysOcrLanguages = "German, French";
         MaskLine = "Mask: Basic Entry · version 1";
         CanEditDetail = true;
-        IndexFields.Add(new IndexFieldViewModel { FieldName = "Keywords", Values = "finance, quarterly" });
-        Preview.PreviewConverted = true;
+        IndexFields.Add(new IndexFieldViewModel { FieldName = "Keywords", Values = "invoice, reviewed" });
+        Preview.PreviewConverted = false;
         Preview.Reset("Preview renders here (PDF/image/text).");
         Comments.Add(new CommentViewModel { Id = Guid.Empty, AuthorName = "demo@simplarchive.local", Body = "Looks good.", CreatedAt = DateTimeOffset.Now });
         Status = "3 item(s).";
@@ -5464,6 +5468,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     internal void SetPreviewPagesForScreenshot(IEnumerable<Bitmap> pages) => Preview.SetPreviewPagesForScreenshot(pages);
+
+    internal void SetPreviewNotesForScreenshot(IReadOnlyList<NoteBox> notes) => Preview.SetScreenshotNotesOnFirstPage(notes);
 
     // Seeds a preview page with a bitmap + hit-overlay words and a find query, for the headless overlay
     // screenshot (no network).

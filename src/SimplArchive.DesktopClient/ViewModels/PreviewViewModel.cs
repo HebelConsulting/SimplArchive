@@ -829,4 +829,14 @@ public sealed partial class PreviewViewModel : ObservableObject
         CanFindInDocument = true;
         FindQuery = query;
     }
+
+    // Places annotation boxes on the first rendered page (ADR 0502) so the workbench screenshot's desktop preview
+    // shows the seeded highlight + sticky note, matching the web capture.
+    public void SetScreenshotNotesOnFirstPage(IReadOnlyList<NoteBox> notes)
+    {
+        if (PreviewPages.Count > 0)
+        {
+            PreviewPages[0].Notes = notes;
+        }
+    }
 }

@@ -29,8 +29,9 @@ public class WebSearchTests
         await Expect(result).ToBeVisibleAsync();
         await result.First.ClickAsync();
 
-        // Navigates to the Repositories tab and selects the document — its content shows in the preview pane.
+        // Navigates to the Repositories tab and selects the document — its name shows in the detail pane (the
+        // preview is a pdf.js canvas for the seeded invoice PDF, so assert on the index detail, not preview text).
         await Expect(page.Locator(".wb-tab-active")).ToContainTextAsync("Repositories");
-        await Expect(page.Locator(".wb-preview")).ToContainTextAsync("Invoice 2025-001");
+        await Expect(page.Locator(".wb-sysfields")).ToContainTextAsync("Invoice 2025-001");
     }
 }

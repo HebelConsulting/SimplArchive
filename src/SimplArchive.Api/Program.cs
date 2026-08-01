@@ -489,11 +489,23 @@ using (var scope = app.Services.CreateScope())
             // so it's fully actionable on the single advertised demo login. Also fixes the "folder icon on a
             // document" cosmetic quirk (hasVersions was false with no version).
             var objectStorage = services.GetRequiredService<IObjectStorageClient>();
-            var fileBytes = Encoding.UTF8.GetBytes("Invoice 2025-001\nAcme Corp AG\nAmount due: CHF 1,234.00\nDue date: 2025-02-28\n");
-            var objectKey = ObjectKeyBuilder.Build(provisioned.TenantId, DateTimeOffset.UtcNow, ".txt");
+            // A real, professional-looking invoice PDF (embedded resource, generated from DemoData/sample-invoice.typ
+            // with Typst — ADR 0502). Its selectable text carries "Acme Corp AG" plus distinctive, rare line-item
+            // terms (Wolframcarbid, Neodym, Zirkoniumoxid, Molybdändraht), so full-text search + hit-highlighting +
+            // the preview all have something meaningful to show on the single demo login.
+            byte[] fileBytes;
+            await using (var resource = typeof(Program).Assembly.GetManifestResourceStream("DemoInvoice.pdf")
+                ?? throw new InvalidOperationException("Embedded resource DemoInvoice.pdf was not found."))
+            using (var buffer = new MemoryStream())
+            {
+                await resource.CopyToAsync(buffer);
+                fileBytes = buffer.ToArray();
+            }
+
+            var objectKey = ObjectKeyBuilder.Build(provisioned.TenantId, DateTimeOffset.UtcNow, ".pdf");
             using (var content = new MemoryStream(fileBytes))
             {
-                await objectStorage.PutObjectAsync(objectKey, content, "text/plain");
+                await objectStorage.PutObjectAsync(objectKey, content, "application/pdf");
             }
 
             var now = DateTimeOffset.UtcNow;
@@ -511,6 +523,47 @@ using (var scope = app.Services.CreateScope())
                 CreatedAt = now,
             };
             dbContext.DocumentVersions.Add(version);
+            await dbContext.SaveChangesAsync();
+
+            // Seed a highlight + a sticky note on the invoice (ADR "Document annotations" / 0502) so the annotation
+            // feature is visible live on the demo login — and the manual can show highlighting + sticky notes on a
+            // real page. Normalized (0..1, top-left origin) coordinates over the total row and the first line item.
+            dbContext.DocumentAnnotations.Add(new DocumentAnnotation
+            {
+                Id = Guid.NewGuid(),
+                TenantId = provisioned.TenantId,
+                DocumentId = document.Id,
+                DocumentVersionId = version.Id,
+                PageIndex = 0,
+                Kind = AnnotationKind.Highlight,
+                PositionX = 0.575,
+                PositionY = 0.490,
+                Width = 0.345,
+                Height = 0.030,
+                Text = string.Empty,
+                Color = "#ffd54a",
+                CreatedByUserId = provisioned.AdministratorId,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            dbContext.DocumentAnnotations.Add(new DocumentAnnotation
+            {
+                Id = Guid.NewGuid(),
+                TenantId = provisioned.TenantId,
+                DocumentId = document.Id,
+                DocumentVersionId = version.Id,
+                PageIndex = 0,
+                Kind = AnnotationKind.Note,
+                PositionX = 0.085,
+                PositionY = 0.300,
+                Width = 0.300,
+                Height = 0.085,
+                Text = "Pos. 1: Preis gemäss Rahmenvertrag geprüft ✓",
+                Color = "#fff59d",
+                CreatedByUserId = provisioned.AdministratorId,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
             await dbContext.SaveChangesAsync();
 
             var workflowState = new WorkflowState
@@ -538,6 +591,91 @@ using (var scope = app.Services.CreateScope())
                 PerformedByUserId = provisioned.AdministratorId,
                 CreatedAt = now,
             });
+            await dbContext.SaveChangesAsync();
+
+            // A second demo document ("Offer 2025-014") with TWO PDF revisions, so the "Compare versions" feature
+            // has something to show live on the demo login + in the manual (ADR 0502). The two versions differ in
+            // real, extractable text (a changed quantity + an added line item + updated totals), so Tika extracts
+            // each version's text and the inline diff highlights the changes.
+            var offer = new Document
+            {
+                Id = Guid.NewGuid(),
+                TenantId = provisioned.TenantId,
+                ParentId = provisioned.RepositoryId,
+                Name = "Offer 2025-014",
+                MaskVersionId = basicEntryVersion.Id,
+                CreatedByUserId = provisioned.AdministratorId,
+                CreatedAt = now,
+            };
+            dbContext.Documents.Add(offer);
+            await dbContext.SaveChangesAsync();
+
+            async Task<Guid> AddOfferVersionAsync(string resourceName, int number)
+            {
+                byte[] bytes;
+                await using (var res = typeof(Program).Assembly.GetManifestResourceStream(resourceName)
+                    ?? throw new InvalidOperationException($"Embedded resource {resourceName} was not found."))
+                using (var buf = new MemoryStream())
+                {
+                    await res.CopyToAsync(buf);
+                    bytes = buf.ToArray();
+                }
+
+                var key = ObjectKeyBuilder.Build(provisioned.TenantId, DateTimeOffset.UtcNow, ".pdf");
+                using (var content = new MemoryStream(bytes))
+                {
+                    await objectStorage.PutObjectAsync(key, content, "application/pdf");
+                }
+
+                var v = new DocumentVersion
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = provisioned.TenantId,
+                    DocumentId = offer.Id,
+                    Status = DocumentVersionStatus.Confirmed,
+                    VersionNumber = number,
+                    Sha256Hash = Convert.ToHexStringLower(SHA256.HashData(bytes)),
+                    ObjectKey = key,
+                    CreatedByUserId = provisioned.AdministratorId,
+                    DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
+                    CreatedAt = now,
+                };
+                dbContext.DocumentVersions.Add(v);
+                await dbContext.SaveChangesAsync();
+                return v.Id;
+            }
+
+            _ = await AddOfferVersionAsync("DemoOfferV1.pdf", 1);
+            offer.CurrentVersionId = await AddOfferVersionAsync("DemoOfferV2.pdf", 2);
+            await dbContext.SaveChangesAsync();
+
+            // A small colour-coded tag catalog + a couple of tags on the invoice (ADR "Tag controlled vocabulary"
+            // 0422), so the Tags tab isn't empty and the demo shows the tagging feature live. Names are normalized
+            // to lowercase (matching DocumentTag.Tag).
+            foreach (var (tagName, tagColor) in new[] { ("invoice", "#e53935"), ("contract", "#1e88e5"), ("urgent", "#fb8c00"), ("reviewed", "#43a047") })
+            {
+                dbContext.TagDefinitions.Add(new TagDefinition
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = provisioned.TenantId,
+                    Name = tagName,
+                    Color = tagColor,
+                    CreatedAt = now,
+                });
+            }
+
+            foreach (var tagName in new[] { "invoice", "reviewed" })
+            {
+                dbContext.DocumentTags.Add(new DocumentTag
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = provisioned.TenantId,
+                    DocumentId = document.Id,
+                    Tag = tagName,
+                    CreatedAt = now,
+                });
+            }
+
             await dbContext.SaveChangesAsync();
         }
     }

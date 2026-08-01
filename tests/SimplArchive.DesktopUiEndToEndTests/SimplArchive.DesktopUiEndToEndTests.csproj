@@ -34,6 +34,8 @@
       <Private>false</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\src\SimplArchive.DesktopClient\SimplArchive.DesktopClient.csproj" />
+    <!-- The shared self-host boot engine (ADR 0502) — one source of truth for standing up the real app. -->
+    <ProjectReference Include="..\SimplArchive.SelfHosting\SimplArchive.SelfHosting.csproj" />
   </ItemGroup>
 
 </Project>

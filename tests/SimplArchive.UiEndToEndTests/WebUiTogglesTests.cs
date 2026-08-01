@@ -17,12 +17,13 @@ public class WebUiTogglesTests
     {
         var page = await Ui.LoginAsync(_app);
 
-        // Select the seeded document → its preview renders (a text preview shows the full-screen control).
+        // Select the seeded document → its preview renders (the seeded invoice PDF via pdf.js), exposing the
+        // full-screen control the rest of this test exercises.
         await page.GetByText("Demo Repository").First.ClickAsync();
         var list = page.Locator("[data-pane='list']");
         await list.GetByText("Invoices").First.DblClickAsync();
         await list.GetByText("Invoice 2025-001").First.ClickAsync();
-        await Expect(page.Locator(".wb-preview")).ToContainTextAsync("Invoice 2025-001");
+        await Expect(page.Locator(".wb-pv-fs-btn").First).ToBeVisibleAsync();
 
         // Maximize → the preview gets the full-screen overlay class; restore removes it.
         await page.Locator(".wb-pv-fs-btn").First.ClickAsync();

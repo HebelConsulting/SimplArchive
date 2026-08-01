@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- The user-manual screenshot-capture harness (ADR 0502). A build/dev tool (not shipped in the container): it
+       emits a deterministic set of PNGs from the real app so the Typst manual is always in step with the UI.
+       Lives under tests/ (published to the public mirror) — NOT tools/, which the sync pipeline withholds (0484). -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Playwright" Version="1.49.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The shared self-host boot engine (ADR 0502) — used for web capture (adds our own Chrome on top). -->
+    <ProjectReference Include="..\SimplArchive.SelfHosting\SimplArchive.SelfHosting.csproj" />
+    <!-- Built (not linked) so each capture subprocess (dotnet run, no-build) works: the API for the web mode, the
+         desktop client's headless screenshot hooks for the desktop mode. -->
+    <ProjectReference Include="..\..\src\SimplArchive.Api\SimplArchive.Api.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\src\SimplArchive.DesktopClient\SimplArchive.DesktopClient.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>

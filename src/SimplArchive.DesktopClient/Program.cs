@@ -713,6 +713,16 @@ internal static class Program
         if (pdfPath is not null)
         {
             viewModel.SetPreviewPagesForScreenshot(Services.PreviewRenderer.RenderPdfPages(File.ReadAllBytes(pdfPath)));
+            if (demo)
+            {
+                // Match the seeded web annotations on the invoice (ADR 0502): a yellow sticky note over the first
+                // line item + an amber highlight over the total row (Kind 0 = note, 1 = highlight; normalized coords).
+                viewModel.SetPreviewNotesForScreenshot(
+                [
+                    new NoteBox(Guid.NewGuid(), 0, 0.085, 0.30, 0.30, 0.085, "#FFF59D", CanEdit: true, "Pos. 1: Preis gemäss Rahmenvertrag geprüft ✓"),
+                    new NoteBox(Guid.NewGuid(), 1, 0.575, 0.49, 0.345, 0.03, "#FFD54A", CanEdit: true),
+                ]);
+            }
         }
 
         // Maximize the preview before first render so the full-screen overlay is arranged from the start.

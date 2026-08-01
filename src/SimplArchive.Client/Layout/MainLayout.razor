@@ -135,6 +135,8 @@
                     <MudMenuItem Icon="@Icons.Material.Filled.Storage" OnClick="ManageWebDavAsync">@Strings.Get("AccountWebDav")</MudMenuItem>
                     <MudMenuItem Icon="@Icons.Material.Filled.NotificationsActive" OnClick="NotificationPreferencesAsync">@Strings.Get("AccountNotificationPrefs")</MudMenuItem>
                     <MudDivider />
+                    @* The auto-generated user manual (ADR 0502), served from the /download area. *@
+                    <MudMenuItem Icon="@Icons.Material.Filled.MenuBook" Href="/download/manual/SimplArchive-Manual.pdf" Target="_blank">@Strings.Get("AccountUserManual")</MudMenuItem>
                     <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="BeginLogout">@Strings.Get("AccountLogout")</MudMenuItem>
                 </MudMenu>
             </Authorized>

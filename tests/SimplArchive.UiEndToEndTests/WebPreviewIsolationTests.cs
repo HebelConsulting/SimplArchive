@@ -12,7 +12,7 @@ namespace SimplArchive.UiEndToEndTests;
 public class WebPreviewIsolationTests
 {
     private const string InboxMarker = "INBOXMARKERZZZ";
-    private const string RepoMarker = "Invoice 2025-001";
+    private const string RepoMarker = "REPOMARKERZZZ";
 
     private readonly SelfHostedAppFixture _app;
 
@@ -24,7 +24,11 @@ public class WebPreviewIsolationTests
         var page = await Ui.LoginAsync(_app);
         var preview = page.Locator(".wb-preview");
 
-        // Repositories: select the seeded document → its content renders in the preview pane.
+        // Upload a distinctively-worded TEXT document into the repository — a text preview renders its content in
+        // the DOM, unlike the seeded invoice PDF whose pdf.js canvas exposes no text to assert on.
+        await UploadRepoDocumentAsync(page);
+
+        // Repositories: select it → its content renders in the preview pane.
         await SelectRepoDocumentAsync(page);
         await Expect(preview).ToContainTextAsync(RepoMarker);
 
@@ -49,11 +53,25 @@ public class WebPreviewIsolationTests
         await Expect(preview).Not.ToContainTextAsync(InboxMarker);
     }
 
+    private static async Task UploadRepoDocumentAsync(IPage page)
+    {
+        await page.GetByText("Demo Repository").First.ClickAsync(); // select the repo so Upload targets it
+        var chooser = await page.RunAndWaitForFileChooserAsync(async () =>
+        {
+            await page.Locator(".wb-ribbon").GetByText("Upload").First.ClickAsync();
+        });
+        await chooser.SetFilesAsync(new FilePayload
+        {
+            Name = "repo-note.txt",
+            MimeType = "text/plain",
+            Buffer = Encoding.UTF8.GetBytes($"{RepoMarker} this is the repository document body"),
+        });
+        await page.Locator("[data-pane='list']").GetByText("repo-note").First.WaitForAsync(new() { Timeout = 15000 });
+    }
+
     private static async Task SelectRepoDocumentAsync(IPage page)
     {
         await page.GetByText("Demo Repository").First.ClickAsync();
-        var list = page.Locator("[data-pane='list']");
-        await list.GetByText("Invoices").First.DblClickAsync();
-        await list.GetByText(RepoMarker).First.ClickAsync();
+        await page.Locator("[data-pane='list']").GetByText("repo-note").First.ClickAsync();
     }
 }
