@@ -42,4 +42,19 @@ public class DownloadAreaTests
         var framework = await http.GetAsync("/_framework/");
         Assert.DoesNotContain("blazor.boot.json", await framework.Content.ReadAsStringAsync());
     }
+
+    // The auto-generated user manual (ADR 0502) is baked into wwwroot/download/manual/ and must be served
+    // anonymously as a real PDF — the /download handler sets ServeUnknownFileTypes, so the content type matters.
+    [Fact]
+    public async Task Serves_the_generated_user_manual()
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(_app.BaseUrl) };
+
+        var manual = await http.GetAsync("/download/manual/SimplArchive-Manual.pdf");
+        Assert.Equal(HttpStatusCode.OK, manual.StatusCode);
+        Assert.Equal("application/pdf", manual.Content.Headers.ContentType?.MediaType);
+
+        var bytes = await manual.Content.ReadAsByteArrayAsync();
+        Assert.StartsWith("%PDF", System.Text.Encoding.ASCII.GetString(bytes, 0, 4)); // a real PDF, not an error page
+    }
 }
