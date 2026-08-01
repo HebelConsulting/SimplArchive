@@ -190,16 +190,18 @@ public class DocumentArchiveController : ControllerBase
 
     private async Task<string?> ResolveZipObjectKeyAsync(Guid documentId, CancellationToken cancellationToken)
     {
-        if (!await _dbContext.Documents.AnyAsync(d => d.Id == documentId, cancellationToken))
+        var doc = await _dbContext.Documents
+            .Where(d => d.Id == documentId)
+            .Select(d => new { d.CurrentVersionId })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (doc is null)
         {
             return null;
         }
 
-        return await _dbContext.DocumentVersions
-            .Where(v => v.DocumentId == documentId && v.Status == DocumentVersionStatus.Confirmed)
-            .OrderByDescending(v => v.VersionNumber)
-            .Select(v => v.ObjectKey)
-            .FirstOrDefaultAsync(cancellationToken);
+        // The current version honoring the CurrentVersionId pointer (issue #265), else the latest confirmed.
+        var current = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, doc.CurrentVersionId, cancellationToken);
+        return current?.ObjectKey;
     }
 
     private static bool IsZip(string objectKey) =>

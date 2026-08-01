@@ -73,13 +73,11 @@ public class DuplicatesController : ControllerBase
         var results = new List<DuplicateResource>();
         foreach (var docId in candidateIds)
         {
-            var latestHash = await _dbContext.DocumentVersions
-                .Where(v => v.DocumentId == docId && v.Status == DocumentVersionStatus.Confirmed)
-                .OrderByDescending(v => v.VersionNumber)
-                .Select(v => v.Sha256Hash)
-                .FirstOrDefaultAsync(cancellationToken);
+            // The current-content hash honoring the CurrentVersionId pointer (issue #265), else the latest confirmed.
+            var pointer = await _dbContext.Documents.Where(d => d.Id == docId).Select(d => d.CurrentVersionId).FirstOrDefaultAsync(cancellationToken);
+            var currentVersion = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, docId, pointer, cancellationToken);
 
-            if (latestHash != normalized)
+            if (currentVersion?.Sha256Hash != normalized)
             {
                 continue; // an older version matched, but the current content differs — not a current duplicate
             }

@@ -87,6 +87,16 @@ public class Document : ITenantScoped, IConcurrencyTracked, ISoftDeletable
     // PersonalOfUserId) enforces at most one personal repository per user.
     public Guid? PersonalOfUserId { get; set; }
 
+    // The explicit "current version" pointer (ADR "Version-restore via a current-version pointer"). null = the
+    // current version is DERIVED as before (the latest confirmed version, gated per ADR "Workflow status-gating");
+    // set = that existing DocumentVersion is current — no blob copy, so its annotations / document date are
+    // preserved. Version-restore sets this; finalizing any new confirmed version clears it back to null (so the
+    // new upload becomes current). A **plain nullable column, not a FK** (a Document→DocumentVersion FK forms a
+    // cascade cycle that breaks the annotation-delete cascade) — integrity is maintained by app logic +
+    // `CurrentVersion.ResolveAsync`, which falls back to the latest confirmed if the pinned version is gone. Never
+    // points at a Pending version.
+    public Guid? CurrentVersionId { get; set; }
+
     // Backs HTTP ETag/If-Match optimistic concurrency — see ADR "ETag / If-Match optimistic
     // concurrency". Never set manually; SimplArchiveDbContext.SaveChanges regenerates it automatically.
     public Guid ConcurrencyToken { get; set; }

@@ -3456,7 +3456,7 @@
             _rbComments = (await Http.GetFromJsonAsync<CommentListResponse>($"api/documents/{item.Id}/comments"))?.Comments ?? new();
 
             var versions = await Http.GetFromJsonAsync<VersionListResponse>($"api/documents/{item.Id}/versions");
-            var latest = versions?.Versions?.Where(v => v.Status == "Confirmed").OrderByDescending(v => v.VersionNumber ?? 0).FirstOrDefault();
+            var latest = PickCurrent(versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [], versions?.CurrentVersionId);
             var previewUrl = latest is null ? null : RelativeToAbsolute(RelativeHref(latest.Links, "preview"));
             var textLayoutUrl = latest is null ? null : RelativeHref(latest.Links, "text-layout");
             _rbPv.Converted = latest?.PreviewConverted ?? false;
@@ -5121,7 +5121,7 @@
 
             var versions = await Http.GetFromJsonAsync<VersionListResponse>($"api/documents/{item.Id}/versions");
             var confirmed = versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [];
-            var latest = confirmed.OrderByDescending(v => v.VersionNumber ?? 0).FirstOrDefault();
+            var latest = PickCurrent(confirmed, versions?.CurrentVersionId);
             string? textLayoutUrl = null;
             if (latest is not null)
             {
@@ -5132,7 +5132,7 @@
                 _pvAnnotationsUrl = RelativeHref(latest.Links, "annotations");
             }
 
-            DeriveSystemFields(item, confirmed);
+            DeriveSystemFields(item, confirmed, versions?.CurrentVersionId);
             await RenderPreviewAsync(_pv.Url, textLayoutUrl, seedQuery: null);
 
             // Sticky notes are available whenever a real version preview loaded (ADR "Document annotations").
@@ -5313,9 +5313,9 @@
 
     // Derives the always-shown system fields from the confirmed versions (ADR 0273): the current version's
     // Created/Created-by/Document-date/File-extension, and the OCR override + TIFF-source from the latest TIFF.
-    private void DeriveSystemFields(BrowseNode item, List<VersionResponse> confirmed)
+    private void DeriveSystemFields(BrowseNode item, List<VersionResponse> confirmed, Guid? currentVersionId)
     {
-        var current = confirmed.OrderByDescending(v => v.VersionNumber ?? 0).FirstOrDefault();
+        var current = PickCurrent(confirmed, currentVersionId);
         if (current is null)
         {
             return; // a folder or a document with no confirmed version yet
@@ -7863,7 +7863,12 @@
         await LoadTagCatalogAsync();
     }
     private record FieldGroup { public string FieldName { get; set; } = ""; public List<string> Values { get; set; } = []; }
-    private record VersionListResponse { public List<VersionResponse> Versions { get; set; } = []; }
+    private record VersionListResponse { public List<VersionResponse> Versions { get; set; } = []; public Guid? CurrentVersionId { get; set; } public int? CurrentVersionNumber { get; set; } }
+
+    // The document's current version = the server's CurrentVersionId pointer when set (ADR "Version-restore via a
+    // current-version pointer", issue #265), else the latest confirmed (fallback for an unpinned document).
+    private static VersionResponse? PickCurrent(List<VersionResponse> confirmed, Guid? currentVersionId)
+        => confirmed.FirstOrDefault(v => v.Id == currentVersionId) ?? confirmed.OrderByDescending(v => v.VersionNumber ?? 0).FirstOrDefault();
     private record VersionResponse
     {
         public Guid Id { get; set; }

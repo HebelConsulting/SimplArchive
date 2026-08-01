@@ -102,7 +102,7 @@ public class RetentionController : ControllerBase
             where d.MaskVersionId != null && !_dbContext.Documents.Any(c => c.ParentId == d.Id)
             join mv in _dbContext.MaskVersions on d.MaskVersionId equals mv.Id
             where mv.RetentionYears != null
-            select new { d.Id, d.Name, d.CreatedAt, d.RetentionOverrideUntil, RetentionYears = mv.RetentionYears!.Value })
+            select new { d.Id, d.Name, d.CreatedAt, d.RetentionOverrideUntil, d.CurrentVersionId, RetentionYears = mv.RetentionYears!.Value })
             .Take(MaxItems + 1)
             .ToListAsync(cancellationToken);
 
@@ -110,12 +110,8 @@ public class RetentionController : ControllerBase
         var items = new List<RetentionItemResource>();
         foreach (var candidate in candidates.Take(MaxItems))
         {
-            var documentDate = await _dbContext.DocumentVersions
-                .Where(v => v.DocumentId == candidate.Id && v.Status == DocumentVersionStatus.Confirmed)
-                .OrderByDescending(v => v.VersionNumber)
-                .Select(v => (DateOnly?)v.DocumentDate)
-                .FirstOrDefaultAsync(cancellationToken);
-            var anchor = documentDate ?? DateOnly.FromDateTime(candidate.CreatedAt.UtcDateTime);
+            var currentVersion = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, candidate.Id, candidate.CurrentVersionId, cancellationToken);
+            var anchor = currentVersion?.DocumentDate ?? DateOnly.FromDateTime(candidate.CreatedAt.UtcDateTime);
             var dispositionDate = anchor.AddYears(candidate.RetentionYears);
 
             // A manager's extension pushes the effective disposition date out — that's what "overdue" compares.
@@ -246,12 +242,8 @@ public class RetentionController : ControllerBase
             return false;
         }
 
-        var documentDate = await _dbContext.DocumentVersions
-            .Where(v => v.DocumentId == document.Id && v.Status == DocumentVersionStatus.Confirmed)
-            .OrderByDescending(v => v.VersionNumber)
-            .Select(v => (DateOnly?)v.DocumentDate)
-            .FirstOrDefaultAsync(cancellationToken);
-        var anchor = documentDate ?? DateOnly.FromDateTime(document.CreatedAt.UtcDateTime);
+        var currentVersion = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, document.Id, document.CurrentVersionId, cancellationToken);
+        var anchor = currentVersion?.DocumentDate ?? DateOnly.FromDateTime(document.CreatedAt.UtcDateTime);
         var dispositionDate = anchor.AddYears(years);
         var effectiveDate = document.RetentionOverrideUntil is { } o && o > dispositionDate ? o : dispositionDate;
 

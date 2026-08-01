@@ -97,7 +97,9 @@
                 .Where(v => v.Status == "Confirmed")
                 .OrderByDescending(v => v.VersionNumber ?? 0)
                 .ToList();
-            var currentId = confirmed.FirstOrDefault()?.Id;
+            // The current version is the server's CurrentVersionId pointer (ADR "current-version pointer", issue
+            // #265), else the latest confirmed — not simply the newest row.
+            var currentId = resp?.CurrentVersionId ?? confirmed.FirstOrDefault()?.Id;
             _versions = confirmed.Select(v => new Row(
                 v.Id, v.VersionNumber ?? 0, v.DocumentDate ?? "", v.CreatedAt, v.CreatedByName ?? "",
                 Abs(Href(v.Links, "preview")) ?? Abs(Href(v.Links, "download")),
@@ -204,7 +206,7 @@
     }
 
     private record Row(Guid Id, int VersionNumber, string DocumentDate, DateTimeOffset Filed, string By, string? OpenUrl, string? DownloadUrl, string? RestoreUrl, bool IsCurrent);
-    private record VersionListResponse { public List<VersionResponse> Versions { get; set; } = []; }
+    private record VersionListResponse { public List<VersionResponse> Versions { get; set; } = []; public Guid? CurrentVersionId { get; set; } }
     private record VersionResponse
     {
         public Guid Id { get; set; }

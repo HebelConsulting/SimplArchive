@@ -55,13 +55,12 @@ public sealed partial class VersionsViewModel : ObservableObject
         }
 
         Versions.Clear();
-        var list = await _api.GetVersionsAsync(_documentId); // confirmed, newest first
-        var currentId = list.FirstOrDefault()?.Id;
+        var list = await _api.GetVersionsAsync(_documentId); // confirmed, newest first; IsCurrent = the server pointer
         foreach (var v in list)
         {
             Versions.Add(new VersionRowViewModel(v.Id, v.VersionNumber ?? 0, v.DocumentDate,
                 v.CreatedAt == default ? "" : v.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
-                v.CreatedByName, v.DownloadUrl, v.FileExtension, v.Id == currentId));
+                v.CreatedByName, v.DownloadUrl, v.FileExtension, v.IsCurrent));
         }
 
         Loaded = true;

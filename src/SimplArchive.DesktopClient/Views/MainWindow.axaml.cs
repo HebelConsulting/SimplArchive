@@ -504,12 +504,7 @@ public partial class MainWindow : Window
         var cvm = new CompareVersionsViewModel();
         await cvm.SetupAsync(api, node.Id, node.Name);
         var dialog = new CompareVersionsDialog(cvm);
-        cvm.RequestClose = dialog.Close;
-        await dialog.ShowDialog(this);
-        if (cvm.Restored)
-        {
-            await vm.ReloadSelectedDetailAsync(); // ADR "Version restore" — show the new current version
-        }
+        await dialog.ShowDialog(this); // compare is read-only now — "Make current" lives on the Versions dialog (#265)
     });
 
     private void OnManageAccess(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>

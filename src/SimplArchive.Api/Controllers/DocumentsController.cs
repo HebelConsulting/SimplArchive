@@ -170,19 +170,17 @@ public class DocumentsController : ControllerBase
             where d.Id == documentId && d.MaskVersionId != null
             join mv in _dbContext.MaskVersions on d.MaskVersionId equals mv.Id
             where mv.RetentionYears != null
-            select new { d.CreatedAt, RetentionYears = mv.RetentionYears!.Value }).FirstOrDefaultAsync(cancellationToken);
+            select new { d.CreatedAt, d.CurrentVersionId, RetentionYears = mv.RetentionYears!.Value }).FirstOrDefaultAsync(cancellationToken);
 
         if (row is null)
         {
             return null;
         }
 
-        var documentDate = await _dbContext.DocumentVersions
-            .Where(v => v.DocumentId == documentId && v.Status == DocumentVersionStatus.Confirmed)
-            .OrderByDescending(v => v.VersionNumber)
-            .Select(v => (DateOnly?)v.DocumentDate)
-            .FirstOrDefaultAsync(cancellationToken);
-        var anchor = documentDate ?? DateOnly.FromDateTime(row.CreatedAt.UtcDateTime);
+        // Anchor on the current version's DocumentDate honoring the CurrentVersionId pointer (issue #265), else
+        // the latest confirmed, falling back to when the document was filed.
+        var currentVersion = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, row.CurrentVersionId, cancellationToken);
+        var anchor = currentVersion?.DocumentDate ?? DateOnly.FromDateTime(row.CreatedAt.UtcDateTime);
 
         return new RetentionInfo
         {
@@ -1095,37 +1093,30 @@ public class DocumentsController : ControllerBase
                 _dbContext.LegalHoldItems.Any(i => i.DocumentId == d.Id && _dbContext.LegalHolds.Any(h => h.Id == i.LegalHoldId && h.ReleasedAt == null)),
                 d.CheckedOutByUserId,
                 _dbContext.Users.Where(u => u.Id == d.CheckedOutByUserId).Select(u => u.DisplayName).FirstOrDefault(),
-                // The latest confirmed version's object key — its extension is the document's file type (Name is
-                // a bare stem, ADR 0277), letting the client detect e.g. a .zip to browse.
-                _dbContext.DocumentVersions
-                    .Where(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed)
-                    .OrderByDescending(v => v.VersionNumber)
-                    .Select(v => v.ObjectKey)
-                    .FirstOrDefault(),
-                // List-row columns (ADR "List-row columns and sorting"): the assigned mask's name, and the latest
-                // confirmed version's document date + size.
+                // The CURRENT version's object key — the pinned version if CurrentVersionId is set (issue #265),
+                // else the latest confirmed. Its extension is the document's file type (Name is a bare stem, ADR
+                // 0277), letting the client detect e.g. a .zip to browse.
+                d.CurrentVersionId != null
+                    ? _dbContext.DocumentVersions.Where(v => v.Id == d.CurrentVersionId && v.DocumentId == d.Id).Select(v => v.ObjectKey).FirstOrDefault()
+                    : _dbContext.DocumentVersions.Where(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed).OrderByDescending(v => v.VersionNumber).Select(v => v.ObjectKey).FirstOrDefault(),
+                // List-row columns (ADR "List-row columns and sorting"): the assigned mask's name, and the CURRENT
+                // version's document date + size (pointer-aware, issue #265).
                 _dbContext.MaskVersions.Where(mv => mv.Id == d.MaskVersionId).Select(mv => mv.Name).FirstOrDefault(),
-                _dbContext.DocumentVersions
-                    .Where(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed)
-                    .OrderByDescending(v => v.VersionNumber)
-                    .Select(v => (DateOnly?)v.DocumentDate)
-                    .FirstOrDefault(),
-                _dbContext.DocumentVersions
-                    .Where(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed)
-                    .OrderByDescending(v => v.VersionNumber)
-                    .Select(v => v.SizeBytes)
-                    .FirstOrDefault(),
+                d.CurrentVersionId != null
+                    ? _dbContext.DocumentVersions.Where(v => v.Id == d.CurrentVersionId && v.DocumentId == d.Id).Select(v => (DateOnly?)v.DocumentDate).FirstOrDefault()
+                    : _dbContext.DocumentVersions.Where(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed).OrderByDescending(v => v.VersionNumber).Select(v => (DateOnly?)v.DocumentDate).FirstOrDefault(),
+                d.CurrentVersionId != null
+                    ? _dbContext.DocumentVersions.Where(v => v.Id == d.CurrentVersionId && v.DocumentId == d.Id).Select(v => v.SizeBytes).FirstOrDefault()
+                    : _dbContext.DocumentVersions.Where(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed).OrderByDescending(v => v.VersionNumber).Select(v => v.SizeBytes).FirstOrDefault(),
                 d.SensitivityLabelId,
                 d.SensitivityLabelId == null ? null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => l.Name).FirstOrDefault(),
                 d.SensitivityLabelId == null ? null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => l.Color).FirstOrDefault(),
                 // Confirmed-version count — gates the desktop "Compare versions" action (needs >= 2).
                 _dbContext.DocumentVersions.Count(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed),
-                // The latest confirmed version's CreatedAt (filing timestamp) — the "Created" contents-sort key.
-                _dbContext.DocumentVersions
-                    .Where(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed)
-                    .OrderByDescending(v => v.VersionNumber)
-                    .Select(v => (DateTimeOffset?)v.CreatedAt)
-                    .FirstOrDefault()))
+                // The CURRENT version's CreatedAt (filing timestamp) — the "Created" contents-sort key (pointer-aware).
+                d.CurrentVersionId != null
+                    ? _dbContext.DocumentVersions.Where(v => v.Id == d.CurrentVersionId && v.DocumentId == d.Id).Select(v => (DateTimeOffset?)v.CreatedAt).FirstOrDefault()
+                    : _dbContext.DocumentVersions.Where(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed).OrderByDescending(v => v.VersionNumber).Select(v => (DateTimeOffset?)v.CreatedAt).FirstOrDefault()))
             .ToListAsync(cancellationToken);
         var (page, hasMore) = Cursor.Split(fetched, pageSize);
 

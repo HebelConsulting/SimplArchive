@@ -19,9 +19,6 @@
                 <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:VersionOption"><TextBlock Text="{Binding Label}" /></DataTemplate></ComboBox.ItemTemplate>
             </ComboBox>
             <Button Content="Compare" Command="{Binding CompareCommand}" />
-            <Button Command="{Binding RestoreCommand}" ToolTip.Tip="Reinstate the 'From' version as the current version (keeps history)">
-                <TextBlock Text="{Binding FromVersion.Label, StringFormat='Restore {0}'}" />
-            </Button>
             <Button Content="Beyond Compare" Command="{Binding OpenInBeyondCompareCommand}" IsVisible="{Binding BeyondCompareAvailable}"
                     ToolTip.Tip="Open both versions in Beyond Compare (installed on this machine)" />
         </StackPanel>

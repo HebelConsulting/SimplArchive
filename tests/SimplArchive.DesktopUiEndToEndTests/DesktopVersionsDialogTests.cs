@@ -7,8 +7,8 @@ using SimplArchive.DesktopClient.ViewModels;
 namespace SimplArchive.UiEndToEndTests;
 
 // The desktop Versions dialog (ADR "Versions dialog") at the VM level over the real api client: a document with
-// two versions lists both (the latest marked current), and "Make current" on the older one reinstates it as a
-// new current version (a third row).
+// two versions lists both (the latest marked current), and "Make current" on the older one pins it via the
+// CurrentVersionId pointer (issue #265) — no new version, the older one is simply flagged current.
 [Collection(UiCollection.Name)]
 public class DesktopVersionsDialogTests
 {
@@ -47,12 +47,13 @@ public class DesktopVersionsDialogTests
         vm.SelectedVersion = v1;                               // an older version
         Assert.True(vm.CanMakeCurrentSelected);
 
-        // Make v1 current → a new version is created, so the list grows to three and it's marked changed.
-        // (The confirmation lives in the view; the VM command performs the restore.)
+        // Make v1 current → the pointer pins the existing v1 (no new version): the list stays at two, v1 is now
+        // flagged current, v2 no longer is, and the dialog is marked changed.
+        // (The confirmation lives in the view; the VM command performs the pointer set.)
         await ((IAsyncRelayCommand)vm.MakeCurrentCommand).ExecuteAsync(v1);
         Assert.True(vm.Changed);
-        Assert.Equal(3, vm.Versions.Count);
-        Assert.Equal(3, vm.Versions[0].VersionNumber);
-        Assert.True(vm.Versions[0].IsCurrent);
+        Assert.Equal(2, vm.Versions.Count);
+        Assert.True(vm.Versions.Single(r => r.VersionNumber == 1).IsCurrent);
+        Assert.False(vm.Versions.Single(r => r.VersionNumber == 2).IsCurrent);
     }
 }

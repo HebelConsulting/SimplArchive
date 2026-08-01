@@ -56,7 +56,7 @@ public sealed class OpenSearchDocumentIndexer : IDocumentIndexer
             // Default query filters apply: a soft-deleted or cross-tenant document reads as null → remove it.
             var doc = await _dbContext.Documents
                 .Where(d => d.Id == documentId)
-                .Select(d => new { d.Id, d.Name, d.TenantId, d.ParentId, d.CreatedAt, d.CreatedByUserId, d.CreatedByServiceAccountId, d.MaskVersionId, SensitivityLabelName = d.SensitivityLabelId == null ? null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => l.Name).FirstOrDefault(), SensitivityLabelRank = d.SensitivityLabelId == null ? (int?)null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => (int?)l.Rank).FirstOrDefault() })
+                .Select(d => new { d.Id, d.Name, d.TenantId, d.ParentId, d.CreatedAt, d.CreatedByUserId, d.CreatedByServiceAccountId, d.MaskVersionId, d.CurrentVersionId, SensitivityLabelName = d.SensitivityLabelId == null ? null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => l.Name).FirstOrDefault(), SensitivityLabelRank = d.SensitivityLabelId == null ? (int?)null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => (int?)l.Rank).FirstOrDefault() })
                 .SingleOrDefaultAsync(cancellationToken);
 
             if (doc is null)
@@ -79,11 +79,9 @@ public sealed class OpenSearchDocumentIndexer : IDocumentIndexer
             var indexValues = fieldData.Select(f => f.Value).ToList();
             var typedFields = SearchFieldMapper.BuildTypedFields(fieldData.Select(f => (f.Name, f.DataType, f.Value)));
 
-            var version = await _dbContext.DocumentVersions
-                .Where(v => v.DocumentId == documentId && v.Status == DocumentVersionStatus.Confirmed)
-                .OrderByDescending(v => v.VersionNumber)
-                .Select(v => new { v.Id, v.ObjectKey, v.CreatedAt, v.CreatedByUserId, v.CreatedByServiceAccountId, v.DocumentDate })
-                .FirstOrDefaultAsync(cancellationToken);
+            // Index the document's current version honoring the CurrentVersionId pointer (issue #265), else the
+            // latest confirmed — so search reflects the pinned version's content/fields after a restore.
+            var version = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, doc.CurrentVersionId, cancellationToken);
 
             var repositoryId = await ResolveRootAsync(documentId, cancellationToken);
             var allowedPrincipals = await _rightsCalculator.GetVisibilityPrincipalsAsync(documentId, cancellationToken);

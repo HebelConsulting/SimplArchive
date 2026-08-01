@@ -102,14 +102,11 @@ public sealed class WormLockService : IWormLockService
             return (null, mode);
         }
 
-        // The retention clock starts at the record's issuing date (latest confirmed version's DocumentDate),
-        // falling back to when it was filed — the same anchor the retention-disposition sweep uses.
-        var documentDate = await _dbContext.DocumentVersions
-            .Where(v => v.DocumentId == document.Id && v.Status == DocumentVersionStatus.Confirmed)
-            .OrderByDescending(v => v.VersionNumber)
-            .Select(v => (DateOnly?)v.DocumentDate)
-            .FirstOrDefaultAsync(cancellationToken);
-        var anchor = documentDate ?? DateOnly.FromDateTime(document.CreatedAt.UtcDateTime);
+        // The retention clock starts at the record's issuing date (the current version's DocumentDate honoring the
+        // CurrentVersionId pointer — issue #265, else the latest confirmed), falling back to when it was filed —
+        // the same anchor the retention-disposition sweep uses.
+        var currentVersion = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, document.Id, document.CurrentVersionId, cancellationToken);
+        var anchor = currentVersion?.DocumentDate ?? DateOnly.FromDateTime(document.CreatedAt.UtcDateTime);
         var retainUntil = new DateTimeOffset(anchor.AddYears(years).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         return (retainUntil, mode);
     }

@@ -248,6 +248,14 @@ public class DocumentVersionsController : ControllerBase
     public class DocumentVersionListResource : HypermediaResource
     {
         public List<DocumentVersionResource> Versions { get; set; } = [];
+
+        // The document's current version honoring the CurrentVersionId pointer (ADR "Version-restore via a
+        // current-version pointer", issue #265) — the clients read this instead of deriving "latest confirmed"
+        // themselves. Caller-aware: the pinned version if set + visible to this caller, else the caller's
+        // latest visible confirmed version (so ADR 0300 gating is respected). Null when the document has none.
+        public Guid? CurrentVersionId { get; set; }
+
+        public int? CurrentVersionNumber { get; set; }
     }
 
     // Cursor-based pagination (?cursor=&limit=), CreatedAt ascending / Id ascending as tiebreaker — same
@@ -260,7 +268,11 @@ public class DocumentVersionsController : ControllerBase
     {
         // Reads serve soft-deleted (recycle-bin) documents too (ADR "Recycle bin tab") — the detail pane's
         // preview needs a deleted item's versions; auth still applies, mutations keep the filter.
-        if (!await _dbContext.Documents.IgnoreQueryFilters(["SoftDeleteFilter"]).AnyAsync(d => d.Id == documentId, cancellationToken))
+        var docInfo = await _dbContext.Documents.IgnoreQueryFilters(["SoftDeleteFilter"])
+            .Where(d => d.Id == documentId)
+            .Select(d => new { d.CurrentVersionId })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (docInfo is null)
         {
             return NotFound();
         }
@@ -287,6 +299,10 @@ public class DocumentVersionsController : ControllerBase
                 ? query.Where(v => !_dbContext.WorkflowStates.Any(w => w.DocumentVersionId == v.Id && w.Status != WorkflowStatus.Released && w.AssignedToUserId != reviewerId))
                 : query.Where(v => !_dbContext.WorkflowStates.Any(w => w.DocumentVersionId == v.Id && w.Status != WorkflowStatus.Released));
         }
+
+        // The caller-aware current version: the pinned version if set + visible, else the caller's latest visible
+        // confirmed version (gating already applied to `query`) — issue #265.
+        var current = await CurrentVersion.ResolveAsync(query, documentId, docInfo.CurrentVersionId, cancellationToken);
 
         if (Cursor.TryDecode(cursor, out var cursorCreatedAt, out var cursorId))
         {
@@ -316,7 +332,13 @@ public class DocumentVersionsController : ControllerBase
             versions.Add(await BuildResourceAsync(row, documentName, cancellationToken));
         }
 
-        return Ok(new DocumentVersionListResource { Versions = versions, Links = links });
+        return Ok(new DocumentVersionListResource
+        {
+            Versions = versions,
+            Links = links,
+            CurrentVersionId = current?.Id,
+            CurrentVersionNumber = current?.VersionNumber,
+        });
     }
 
     // Standing convention: every GET action gets a companion HEAD action — a separate action, not
@@ -638,19 +660,17 @@ public class DocumentVersionsController : ControllerBase
         return Ok(await BuildResourceAsync(row, documentName, cancellationToken));
     }
 
-    // Restores an earlier version (roll back) by copying its content into a new confirmed version, which
-    // becomes current (ADR "Version restore"). Non-destructive — history is preserved. Gated on CanEditContent;
-    // refused while the document is frozen (legal hold), checked out by another, or has an approval workflow in
-    // progress. The restored version copies the source version's document date + OCR languages, then runs
-    // through the shared DocumentFinalizer (hash/number/quota/subscriber-notify/reindex/WORM).
+    // Makes an earlier version current (roll back) by setting the document's CurrentVersionId pointer to it —
+    // no blob copy, so the pinned version's annotations / document date / everything are preserved (ADR
+    // "Version-restore via a current-version pointer", issue #265). Non-destructive: history is untouched, no new
+    // version, no extra storage. Gated on CanEditContent; refused while the document is frozen (legal hold),
+    // checked out by another, or has an approval workflow in progress. Uploading a new version later clears the
+    // pointer back to null (DocumentFinalizer), so the new upload becomes current.
     [HttpPost("{versionId:guid}/restore")]
     public async Task<IActionResult> Restore(Guid documentId, Guid versionId, CancellationToken cancellationToken)
     {
-        var tenantId = await _dbContext.Documents
-            .Where(d => d.Id == documentId)
-            .Select(d => (Guid?)d.TenantId)
-            .SingleOrDefaultAsync(cancellationToken);
-        if (tenantId is null)
+        var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken);
+        if (document is null)
         {
             return NotFound();
         }
@@ -671,46 +691,22 @@ public class DocumentVersionsController : ControllerBase
         await EnsureNotCheckedOutByOtherAsync(documentId, cancellationToken);
         await EnsureNoWorkflowInProgressAsync(documentId, cancellationToken);
 
-        // Copy the source blob to a fresh key (server-side; no bytes leave storage).
-        var extension = Path.GetExtension(source.ObjectKey);
-        var newObjectKey = ObjectKeyBuilder.Build(tenantId.Value, DateTimeOffset.UtcNow, string.IsNullOrEmpty(extension) ? null : extension);
-        await _objectStorageClient.CopyObjectAsync(source.ObjectKey, newObjectKey, cancellationToken);
-
-        // Storage-quota pre-check (mirrors Finalize): a restore duplicates the blob, so it counts against quota.
-        var sizeBytes = await _objectStorageClient.GetObjectSizeAsync(newObjectKey, cancellationToken);
-        if (!await _storageQuota.CanStoreAsync(tenantId.Value, sizeBytes, cancellationToken))
+        // Idempotent: pinning the already-current version is a no-op that still returns 200.
+        if (document.CurrentVersionId != source.Id)
         {
-            await _objectStorageClient.DeleteObjectAsync(newObjectKey, cancellationToken);
-            throw new StorageQuotaExceededException("Restoring this version would exceed the tenant's storage quota.");
+            document.CurrentVersionId = source.Id;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _queue.EnqueueAsync(documentId, cancellationToken);            // the indexed "current" content changed
+            await _wormLock.ReconcileAsync(documentId, cancellationToken);        // the retention anchor (current version's date) moved
+
+            var documentName = await LoadDocumentNameAsync(documentId, cancellationToken);
+            await _audit.RecordAsync(AuditActions.DocumentVersionRestored, "Document", documentId, documentName,
+                $"Made version {source.VersionNumber} current", cancellationToken: cancellationToken);
         }
 
-        var (createdByUserId, createdByServiceAccountId) = GetCallerIdentity();
-        var restored = new DocumentVersion
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId.Value,
-            DocumentId = documentId,
-            Status = DocumentVersionStatus.Pending,
-            ObjectKey = newObjectKey,
-            CreatedByUserId = createdByUserId,
-            CreatedByServiceAccountId = createdByServiceAccountId,
-            CreatedAt = DateTimeOffset.UtcNow,
-            DocumentDate = source.DocumentDate,
-            OcrLanguages = source.OcrLanguages,
-        };
-        _dbContext.DocumentVersions.Add(restored);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        // Reuse the finalize pipeline (Confirmed + quota accounting + subscriber notify + reindex + WORM).
-        // Auto-classify is a no-op (the document already carries its mask).
-        await _finalizer.FinalizeAsync(restored, cancellationToken);
-
-        var documentName = await LoadDocumentNameAsync(documentId, cancellationToken);
-        await _audit.RecordAsync(AuditActions.DocumentVersionRestored, "Document", documentId, documentName,
-            $"Restored version {source.VersionNumber} as version {restored.VersionNumber}", cancellationToken: cancellationToken);
-
-        var row = new VersionRow(restored.Id, documentId, restored.Status, restored.VersionNumber, restored.ObjectKey, restored.Sha256Hash, restored.CreatedAt, restored.DocumentDate, restored.CreatedByUserId, restored.CreatedByServiceAccountId, restored.OcrLanguages);
-        return StatusCode(StatusCodes.Status201Created, await BuildResourceAsync(row, documentName, cancellationToken));
+        var name = await LoadDocumentNameAsync(documentId, cancellationToken);
+        var row = new VersionRow(source.Id, documentId, source.Status, source.VersionNumber, source.ObjectKey, source.Sha256Hash, source.CreatedAt, source.DocumentDate, source.CreatedByUserId, source.CreatedByServiceAccountId, source.OcrLanguages);
+        return Ok(await BuildResourceAsync(row, name, cancellationToken));
     }
 
     // Refuses an operation while the document has an approval workflow in progress — a version In Review or

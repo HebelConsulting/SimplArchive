@@ -950,11 +950,9 @@ public sealed partial class WebDavMiddleware
     private static async Task CopyDocumentAsync(SimplArchiveDbContext db, IObjectStorageClient storage, DocumentFinalizer finalizer, User user, Guid sourceId, Guid destParentId, string newName, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
-        var version = await db.DocumentVersions
-            .Where(v => v.DocumentId == sourceId && v.Status == DocumentVersionStatus.Confirmed)
-            .OrderByDescending(v => v.VersionNumber)
-            .Select(v => new { v.ObjectKey, v.DocumentDate })
-            .FirstOrDefaultAsync(ct);
+        // Copy the source's current version honoring the CurrentVersionId pointer (issue #265), else latest confirmed.
+        var sourcePointer = await db.Documents.Where(d => d.Id == sourceId).Select(d => d.CurrentVersionId).FirstOrDefaultAsync(ct);
+        var version = await CurrentVersion.ResolveAsync(db.DocumentVersions, sourceId, sourcePointer, ct);
 
         if (version is null)
         {
@@ -1137,11 +1135,8 @@ public sealed partial class WebDavMiddleware
         var result = new List<SpecialFile>();
         foreach (var doc in checkedOut)
         {
-            var version = await db.DocumentVersions
-                .Where(v => v.DocumentId == doc.Id && v.Status == DocumentVersionStatus.Confirmed)
-                .OrderByDescending(v => v.VersionNumber)
-                .Select(v => new { v.ObjectKey, v.SizeBytes })
-                .FirstOrDefaultAsync();
+            // Current version honoring the CurrentVersionId pointer (issue #265), else latest confirmed.
+            var version = await CurrentVersion.ResolveAsync(db.DocumentVersions, doc.Id, doc.CurrentVersionId);
             if (version is null)
             {
                 continue;
@@ -1282,11 +1277,8 @@ public sealed partial class WebDavMiddleware
 
     private static async Task<WebDavNode> NodeForAsync(SimplArchiveDbContext db, Document document)
     {
-        var version = await db.DocumentVersions
-            .Where(v => v.DocumentId == document.Id && v.Status == DocumentVersionStatus.Confirmed)
-            .OrderByDescending(v => v.VersionNumber)
-            .Select(v => new { v.ObjectKey, v.SizeBytes, v.CreatedAt })
-            .FirstOrDefaultAsync();
+        // The document's current version honoring the CurrentVersionId pointer (issue #265), else latest confirmed.
+        var version = await CurrentVersion.ResolveAsync(db.DocumentVersions, document.Id, document.CurrentVersionId);
 
         if (version is null)
         {

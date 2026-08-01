@@ -96,5 +96,14 @@ public class DocumentConfiguration : IEntityTypeConfiguration<Document>
         builder.HasIndex(d => new { d.TenantId, d.PersonalOfUserId })
             .IsUnique()
             .HasFilter("\"PersonalOfUserId\" IS NOT NULL");
+
+        // The explicit current-version pointer (ADR "Version-restore via a current-version pointer") is a **plain
+        // nullable column, NOT a FK**. A real Document→DocumentVersion FK forms a cycle with DocumentVersion→
+        // Document (Cascade) that reorders SQLite's delete cascade so a document's versions are deleted before its
+        // annotations — violating the annotation→version Restrict FK. Referential integrity is instead maintained
+        // by app logic (restore sets the pointer to a confirmed version of the same document; finalize clears it)
+        // and by `CurrentVersion.ResolveAsync`, which verifies the pinned version still exists + is confirmed and
+        // otherwise falls back to the latest confirmed. The only version-deletion path is a hard purge, which
+        // removes the whole document subtree, so a live document never carries a dangling pointer.
     }
 }

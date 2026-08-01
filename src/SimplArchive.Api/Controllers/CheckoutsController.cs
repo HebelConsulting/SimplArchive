@@ -124,7 +124,7 @@ public class CheckoutsController : ControllerBase
         var docs = await _dbContext.Documents
             .Where(d => d.CheckedOutByUserId == userId)
             .OrderByDescending(d => d.CheckedOutAt)
-            .Select(d => new { d.Id, d.Name, d.ParentId, CheckedOutAt = d.CheckedOutAt!.Value })
+            .Select(d => new { d.Id, d.Name, d.ParentId, d.CurrentVersionId, CheckedOutAt = d.CheckedOutAt!.Value })
             .ToListAsync(cancellationToken);
 
         var tenantId = _currentTenantAccessor.TenantId;
@@ -135,11 +135,8 @@ public class CheckoutsController : ControllerBase
         var items = new List<CheckoutResource>();
         foreach (var d in docs)
         {
-            var version = await _dbContext.DocumentVersions
-                .Where(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed)
-                .OrderByDescending(v => v.VersionNumber)
-                .Select(v => new { v.Sha256Hash, v.ObjectKey })
-                .FirstOrDefaultAsync(cancellationToken);
+            // The document's current version honoring the pointer (issue #265), else the latest confirmed.
+            var version = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, d.Id, d.CurrentVersionId, cancellationToken);
 
             var downloadUrl = version is null
                 ? null
@@ -295,12 +292,11 @@ public class CheckoutsController : ControllerBase
             throw new NoStashException();
         }
 
-        // The current version's extension keeps the new version's stored object typed correctly.
-        var currentExtension = System.IO.Path.GetExtension(await _dbContext.DocumentVersions
-            .Where(v => v.DocumentId == documentId && v.Status == DocumentVersionStatus.Confirmed)
-            .OrderByDescending(v => v.VersionNumber)
-            .Select(v => v.ObjectKey)
-            .FirstOrDefaultAsync(cancellationToken) ?? "");
+        // The current version's extension keeps the new version's stored object typed correctly (the pinned
+        // version if CurrentVersionId is set — issue #265 — else the latest confirmed).
+        var pointer = await _dbContext.Documents.Where(d => d.Id == documentId).Select(d => d.CurrentVersionId).FirstOrDefaultAsync(cancellationToken);
+        var currentVersion = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, pointer, cancellationToken);
+        var currentExtension = System.IO.Path.GetExtension(currentVersion?.ObjectKey ?? "");
 
         var now = DateTimeOffset.UtcNow;
         var objectKey = ObjectKeyBuilder.Build(tenantId, now, currentExtension);

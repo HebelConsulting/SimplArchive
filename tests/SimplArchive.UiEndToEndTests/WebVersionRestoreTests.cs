@@ -7,8 +7,9 @@ using static Microsoft.Playwright.Assertions;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// The web half of version restore (ADR "Version restore"): the Compare-versions dialog's Restore button rolls
-// back to the selected version, cross-checked against the backend (a new current version with the old content).
+// The web half of version restore (ADR "Version-restore via a current-version pointer", issue #265): the Versions
+// dialog's "Make current" pins an existing version via the pointer — cross-checked against the backend that NO new
+// version is created and the older version's content is served as current.
 [Collection(UiCollection.Name)]
 [Trait("Area", "ui-3")]
 public class WebVersionRestoreTests
@@ -18,7 +19,7 @@ public class WebVersionRestoreTests
     public WebVersionRestoreTests(SelfHostedAppFixture app) => _app = app;
 
     [Fact]
-    public async Task Restore_from_the_compare_dialog_makes_the_old_content_current()
+    public async Task Make_current_from_the_versions_dialog_serves_the_old_content_without_a_new_version()
     {
         var name = $"restore-{Guid.NewGuid().ToString("N")[..8]}";
         var contentA = $"A-{Guid.NewGuid():N}";
@@ -39,18 +40,24 @@ public class WebVersionRestoreTests
         await page.GetByText("Demo Repository").First.ClickAsync();
         await page.Locator("[data-pane='list'] .wb-list-row").Filter(new() { HasText = name }).ClickAsync();
 
-        // Open Compare versions → Restore the "From" version (defaults to v1).
-        await page.Locator("[data-pane='index']").GetByRole(AriaRole.Button, new() { Name = "Compare versions" }).ClickAsync();
+        // Open the Versions dialog → select the older version (last row) → Make current + confirm.
+        await page.GetByRole(AriaRole.Button, new() { Name = "Versions", Exact = true }).ClickAsync();
         var dialog = page.Locator(".mud-dialog");
         await Expect(dialog).ToBeVisibleAsync();
-        await dialog.GetByRole(AriaRole.Button, new() { Name = "Restore v1" }).ClickAsync();
-        await Expect(page.GetByText("Restored v1 as the current version.")).ToBeVisibleAsync();
+        await dialog.Locator(".wb-version-row").Last.ClickAsync();
+        await dialog.Locator(".wb-version-makecurrent").ClickAsync();
+        await page.RunAndWaitForResponseAsync(async () =>
+        {
+            await page.Locator(".mud-dialog").Last.GetByRole(AriaRole.Button, new() { Name = "Make current" }).ClickAsync();
+        }, r => r.Request.Method == "POST" && r.Url.Contains("/restore") && r.Status is >= 200 and < 300);
 
-        // A third (restored) version now exists whose content is version 1's (content A).
-        Assert.Equal(3, await VersionCountAsync());
-        var versions = (await http.GetFromJsonAsync<JsonElement>($"/api/documents/{docId}/versions")).GetProperty("versions").EnumerateArray().ToList();
-        var newest = versions.OrderByDescending(v => v.GetProperty("versionNumber").GetInt32()).First();
-        var download = newest.GetProperty("links").EnumerateArray().First(l => l.GetProperty("rel").GetString() == "download").GetProperty("href").GetString();
+        // No new version — still two — and the current version is v1 serving content A.
+        Assert.Equal(2, await VersionCountAsync());
+        var list = await http.GetFromJsonAsync<JsonElement>($"/api/documents/{docId}/versions");
+        var currentId = list.GetProperty("currentVersionId").GetGuid();
+        var current = list.GetProperty("versions").EnumerateArray().First(v => v.GetProperty("id").GetGuid() == currentId);
+        Assert.Equal(1, current.GetProperty("versionNumber").GetInt32());
+        var download = current.GetProperty("links").EnumerateArray().First(l => l.GetProperty("rel").GetString() == "download").GetProperty("href").GetString();
         using var storage = new HttpClient();
         Assert.Equal(contentA, await (await storage.GetAsync(download)).Content.ReadAsStringAsync());
     }

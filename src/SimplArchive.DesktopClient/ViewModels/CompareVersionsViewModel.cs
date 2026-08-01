@@ -30,31 +30,7 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
     // Only offered when Beyond Compare is actually installed (a native-client capability).
     public bool BeyondCompareAvailable { get; } = BeyondCompare.IsInstalled;
 
-    // Restore (roll back to) the selected "From" version (ADR "Version restore"). RequestClose is set by the
-    // dialog code-behind; Restored tells the caller to refresh the detail after the dialog closes.
-    public Action? RequestClose { get; set; }
-    public bool Restored { get; private set; }
-
-    [RelayCommand]
-    private async Task Restore()
-    {
-        if (_api is null || FromVersion is null)
-        {
-            return;
-        }
-
-        Status = Strings.Get("StRestoring");
-        try
-        {
-            await _api.RestoreVersionAsync(_documentId, FromVersion.Id);
-            Restored = true;
-            RequestClose?.Invoke();
-        }
-        catch (ApiActionException e)
-        {
-            Status = e.Message;
-        }
-    }
+    // Restore ("Make current") was moved out of the compare dialog (issue #265) — it lives on the Versions dialog.
 
     public async Task SetupAsync(SimplArchiveApiClient api, Guid documentId, string documentName)
     {

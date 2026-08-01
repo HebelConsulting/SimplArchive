@@ -78,7 +78,7 @@ public sealed class RetentionService : IRetentionService
             where d.MaskVersionId != null && !_dbContext.Documents.Any(c => c.ParentId == d.Id)
             join mv in _dbContext.MaskVersions on d.MaskVersionId equals mv.Id
             where mv.RetentionYears != null
-            select new { d.Id, d.Name, d.CreatedAt, d.RetentionOverrideUntil, RetentionYears = mv.RetentionYears!.Value })
+            select new { d.Id, d.Name, d.CreatedAt, d.RetentionOverrideUntil, d.CurrentVersionId, RetentionYears = mv.RetentionYears!.Value })
             .Take(MaxDisposalsPerTenantPerSweep)
             .ToListAsync(cancellationToken);
 
@@ -92,14 +92,11 @@ public sealed class RetentionService : IRetentionService
                 continue;
             }
 
-            // The retention clock starts at the record's own issuing date — the latest confirmed version's
-            // DocumentDate — falling back to when it was filed.
-            var documentDate = await _dbContext.DocumentVersions
-                .Where(v => v.DocumentId == candidate.Id && v.Status == DocumentVersionStatus.Confirmed)
-                .OrderByDescending(v => v.VersionNumber)
-                .Select(v => (DateOnly?)v.DocumentDate)
-                .FirstOrDefaultAsync(cancellationToken);
-            var anchor = documentDate ?? DateOnly.FromDateTime(candidate.CreatedAt.UtcDateTime);
+            // The retention clock starts at the record's own issuing date — the current version's DocumentDate
+            // honoring the CurrentVersionId pointer (issue #265), else the latest confirmed — falling back to when
+            // it was filed.
+            var currentVersion = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, candidate.Id, candidate.CurrentVersionId, cancellationToken);
+            var anchor = currentVersion?.DocumentDate ?? DateOnly.FromDateTime(candidate.CreatedAt.UtcDateTime);
 
             if (anchor.AddYears(candidate.RetentionYears) > today)
             {

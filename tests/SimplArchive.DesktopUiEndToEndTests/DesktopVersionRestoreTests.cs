@@ -4,8 +4,9 @@ using SimplArchive.DesktopClient.Services;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// The desktop half of version restore (ADR "Version restore"): the real SimplArchiveApiClient rolls back to an
-// older version, and the new current version's content equals that older version's.
+// The desktop half of version restore (ADR "Version-restore via a current-version pointer", issue #265): the real
+// SimplArchiveApiClient makes an older version current via the pointer — no new version is created, the older
+// version is flagged current, and its content is served as current.
 [Collection(UiCollection.Name)]
 public class DesktopVersionRestoreTests
 {
@@ -14,7 +15,7 @@ public class DesktopVersionRestoreTests
     public DesktopVersionRestoreTests(SelfHostedAppFixture app) => _app = app;
 
     [Fact]
-    public async Task Restore_makes_the_old_content_current()
+    public async Task Make_current_pins_the_old_version_without_creating_a_new_one()
     {
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
@@ -30,14 +31,24 @@ public class DesktopVersionRestoreTests
 
         var versions = await api.GetVersionsAsync(doc.Id);
         Assert.Equal(2, versions.Count);
+        Assert.True(versions.Single(v => v.VersionNumber == 2).IsCurrent); // v2 is current before the roll-back
         var v1 = versions.Single(v => v.VersionNumber == 1);
 
-        // Restore v1 → a v3 appears whose content is v1's (content A).
+        // Make v1 current → still exactly two versions, and v1 is now flagged current (no copy).
         await api.RestoreVersionAsync(doc.Id, v1.Id);
         var after = await api.GetVersionsAsync(doc.Id);
-        Assert.Equal(3, after.Count);
-        var newest = after.OrderByDescending(v => v.VersionNumber ?? 0).First();
-        var bytes = await api.DownloadVersionBytesAsync(newest.DownloadUrl!);
+        Assert.Equal(2, after.Count);
+        var current = after.Single(v => v.IsCurrent);
+        Assert.Equal(v1.Id, current.Id);
+
+        // Its content (served as current) equals version A.
+        var bytes = await api.DownloadVersionBytesAsync(current.DownloadUrl!);
         Assert.Equal(contentA, Encoding.UTF8.GetString(bytes));
+
+        // Uploading a new version takes over as current.
+        await api.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes($"C-{Guid.NewGuid():N}"), ".txt");
+        var final = await api.GetVersionsAsync(doc.Id);
+        Assert.Equal(3, final.Count);
+        Assert.Equal(3, final.Single(v => v.IsCurrent).VersionNumber);
     }
 }

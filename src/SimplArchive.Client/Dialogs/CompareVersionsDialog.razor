@@ -1,5 +1,4 @@
 @inject HttpClient Http
-@inject ISnackbar Snackbar
 
 @* Compare two versions of a document as an inline unified text diff (ADR "Document version comparison"). Two
    pickers + Compare; added lines green, removed red, unchanged default. "Not available" for binary formats.
@@ -25,9 +24,6 @@
                     }
                 </MudSelect>
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Difference" OnClick="CompareAsync" Disabled="@(_fromId == _toId || _busy)">@Strings.Get("CompareButton")</MudButton>
-                <MudTooltip Text="@Strings.Get("CompareRestoreTooltip")">
-                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Restore" OnClick="RestoreAsync" Disabled="@_busy">@string.Format(Strings.Get("CompareRestoreVersion"), FromNumber)</MudButton>
-                </MudTooltip>
             </div>
 
             @if (_busy)
@@ -94,39 +90,7 @@
         _busy = false;
     }
 
-    private int FromNumber => _versions.FirstOrDefault(v => v.Id == _fromId)?.VersionNumber ?? 0;
-
-    // Restore the selected "From" version (ADR "Version restore") — creates a new current version with its
-    // content. Closes returning true so the caller refreshes the detail/preview.
-    private async Task RestoreAsync()
-    {
-        _busy = true;
-        try
-        {
-            using var response = await Http.PostAsync($"api/documents/{DocumentId}/versions/{_fromId}/restore", null);
-            if (response.IsSuccessStatusCode)
-            {
-                Snackbar.Add(string.Format(Strings.Get("CompareRestored"), FromNumber), Severity.Success);
-                Dialog.Close(DialogResult.Ok(true));
-            }
-            else if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
-            {
-                Snackbar.Add(Strings.Get("CompareRestoreConflict"), Severity.Warning);
-            }
-            else
-            {
-                Snackbar.Add(Strings.Get("CompareRestoreError"), Severity.Error);
-            }
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("CompareRestoreError"), Severity.Error);
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
+    // Restore was moved out of the compare dialog (issue #265) — "Make current" lives on the Versions dialog.
 
     private static string LineStyle(int op) => op switch
     {

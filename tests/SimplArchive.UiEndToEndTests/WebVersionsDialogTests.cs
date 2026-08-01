@@ -46,8 +46,9 @@ public class WebVersionsDialogTests
         await Expect(dialog.Locator(".wb-version-row")).ToHaveCountAsync(2);
         await Expect(dialog.GetByText("Current", new() { Exact = true })).ToBeVisibleAsync();
 
-        // Make-current is now single-select + confirm: select the older version (last row), click the single
-        // "Make current" action, then confirm the message box → a new version is created (list grows to three).
+        // Make-current is single-select + confirm: select the older version (last row), click the single "Make
+        // current" action, then confirm the message box. The pointer approach (issue #265) pins the existing
+        // version — no new version — so the list stays at two, with the older one now labelled Current.
         await dialog.Locator(".wb-version-row").Last.ClickAsync();
         await dialog.Locator(".wb-version-makecurrent").ClickAsync();
         await page.RunAndWaitForResponseAsync(async () =>
@@ -55,7 +56,7 @@ public class WebVersionsDialogTests
             // The confirmation is a message box on top; its own "Make current" button confirms.
             await page.Locator(".mud-dialog").Last.GetByRole(AriaRole.Button, new() { Name = "Make current" }).ClickAsync();
         }, r => r.Request.Method == "POST" && r.Url.Contains("/restore") && r.Status is >= 200 and < 300);
-        await Expect(dialog.Locator(".wb-version-row")).ToHaveCountAsync(3);
+        await Expect(dialog.Locator(".wb-version-row")).ToHaveCountAsync(2);
 
         // The Compare launcher opens the compare dialog.
         await dialog.Locator(".wb-version-compare").ClickAsync();

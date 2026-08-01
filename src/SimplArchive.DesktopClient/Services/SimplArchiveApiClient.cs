@@ -689,17 +689,19 @@ public sealed class SimplArchiveApiClient
     // The always-shown system fields (ADR "System fields + OCR-language mask field"): Created/CreatedBy/
     // DocumentDate from the latest confirmed version; the OCR-language override + whether a TIFF source exists
     // from the latest confirmed TIFF version.
-    public async Task<SystemFields?> GetSystemFieldsAsync(Guid documentId, CancellationToken cancellationToken = default)
+    // The document's current version JsonElement honoring the server's currentVersionId pointer (ADR
+    // "Version-restore via a current-version pointer", issue #265), else the latest confirmed. Returns the
+    // element + its version number, or null when there's no confirmed version.
+    private static (JsonElement Version, int Number)? PickCurrentVersionElement(JsonElement response)
     {
-        var response = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/versions", cancellationToken);
-        if (!response.TryGetProperty("versions", out var versions))
+        if (!response.TryGetProperty("versions", out var versions) || versions.ValueKind != JsonValueKind.Array)
         {
             return null;
         }
 
-        JsonElement? current = null, tiff = null;
-        var currentNumber = -1;
-        var tiffNumber = -1;
+        Guid? pointer = response.TryGetProperty("currentVersionId", out var cid) && cid.ValueKind == JsonValueKind.String ? cid.GetGuid() : null;
+        JsonElement? latest = null, pinned = null;
+        int latestNumber = -1, pinnedNumber = -1;
         foreach (var v in versions.EnumerateArray())
         {
             if (v.GetProperty("status").GetString() != "Confirmed")
@@ -708,23 +710,46 @@ public sealed class SimplArchiveApiClient
             }
 
             var number = v.TryGetProperty("versionNumber", out var vn) && vn.ValueKind == JsonValueKind.Number ? vn.GetInt32() : 0;
-            if (number >= currentNumber)
-            {
-                currentNumber = number;
-                current = v;
-            }
-
-            var objectKey = v.TryGetProperty("objectKey", out var ok) ? ok.GetString() ?? "" : "";
-            if ((objectKey.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) || objectKey.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase)) && number >= tiffNumber)
-            {
-                tiffNumber = number;
-                tiff = v;
-            }
+            if (number >= latestNumber) { latestNumber = number; latest = v; }
+            if (pointer is { } p && v.GetProperty("id").GetGuid() == p) { pinned = v; pinnedNumber = number; }
         }
 
-        if (current is not { } cur)
+        if (pinned is { } pv) return (pv, pinnedNumber);
+        if (latest is { } lv) return (lv, latestNumber);
+        return null;
+    }
+
+    public async Task<SystemFields?> GetSystemFieldsAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/versions", cancellationToken);
+        if (PickCurrentVersionElement(response) is not { } picked)
         {
             return null;
+        }
+
+        var cur = picked.Version;
+        var currentNumber = picked.Number;
+
+        // The latest TIFF version — the OCR source, a separate concept from "current".
+        JsonElement? tiff = null;
+        var tiffNumber = -1;
+        if (response.TryGetProperty("versions", out var versions))
+        {
+            foreach (var v in versions.EnumerateArray())
+            {
+                if (v.GetProperty("status").GetString() != "Confirmed")
+                {
+                    continue;
+                }
+
+                var number = v.TryGetProperty("versionNumber", out var vn) && vn.ValueKind == JsonValueKind.Number ? vn.GetInt32() : 0;
+                var objectKey = v.TryGetProperty("objectKey", out var ok) ? ok.GetString() ?? "" : "";
+                if ((objectKey.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) || objectKey.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase)) && number >= tiffNumber)
+                {
+                    tiffNumber = number;
+                    tiff = v;
+                }
+            }
         }
 
         static string Str(JsonElement e, string name) => e.TryGetProperty(name, out var p) ? p.GetString() ?? "" : "";
@@ -1095,32 +1120,13 @@ public sealed class SimplArchiveApiClient
     public async Task<Preview> GetPreviewAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
         var response = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/versions", cancellationToken);
-        if (!response.TryGetProperty("versions", out var versions))
+        // The current version honoring the server's currentVersionId pointer (issue #265), else the latest confirmed.
+        if (PickCurrentVersionElement(response) is not { } picked)
         {
             return new Preview(null, false, null, null, null, "");
         }
 
-        JsonElement? latest = null;
-        var latestNumber = -1;
-        foreach (var version in versions.EnumerateArray())
-        {
-            if (version.GetProperty("status").GetString() != "Confirmed")
-            {
-                continue;
-            }
-
-            var number = version.TryGetProperty("versionNumber", out var vn) && vn.ValueKind == JsonValueKind.Number ? vn.GetInt32() : 0;
-            if (number >= latestNumber)
-            {
-                latestNumber = number;
-                latest = version;
-            }
-        }
-
-        if (latest is not { } confirmed)
-        {
-            return new Preview(null, false, null, null, null, "");
-        }
+        var confirmed = picked.Version;
 
         var converted = confirmed.TryGetProperty("previewConverted", out var pc) && pc.GetBoolean();
         var extension = confirmed.TryGetProperty("fileExtension", out var fe) ? fe.GetString() ?? "" : "";
@@ -2061,7 +2067,7 @@ public sealed class SimplArchiveApiClient
 
     // ---- Version comparison (ADR "Document version comparison") ----
     public sealed record VersionInfo(Guid Id, int? VersionNumber, string Status, string FileExtension, string? DownloadUrl,
-        string DocumentDate = "", DateTimeOffset CreatedAt = default, string CreatedByName = "");
+        string DocumentDate = "", DateTimeOffset CreatedAt = default, string CreatedByName = "", bool IsCurrent = false);
     public sealed record DiffLineInfo(int Op, string Text);
     public sealed record VersionComparison(bool Available, List<DiffLineInfo> Lines);
 
@@ -2109,7 +2115,11 @@ public sealed class SimplArchiveApiClient
             }
         }
 
-        return list.Where(v => v.Status == "Confirmed").OrderByDescending(v => v.VersionNumber ?? 0).ToList();
+        // Flag the current version = the server's CurrentVersionId pointer (issue #265), else the latest confirmed.
+        Guid? pointer = json.TryGetProperty("currentVersionId", out var cid) && cid.ValueKind == JsonValueKind.String ? cid.GetGuid() : null;
+        var confirmed = list.Where(v => v.Status == "Confirmed").OrderByDescending(v => v.VersionNumber ?? 0).ToList();
+        var currentId = pointer ?? confirmed.FirstOrDefault()?.Id;
+        return confirmed.Select(v => v with { IsCurrent = v.Id == currentId }).ToList();
     }
 
     public async Task<VersionComparison> GetVersionComparisonAsync(Guid documentId, Guid fromVersionId, Guid toVersionId, CancellationToken cancellationToken = default)

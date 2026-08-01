@@ -81,6 +81,15 @@ public class DocumentFinalizer
         version.Status = DocumentVersionStatus.Confirmed;
         version.SizeBytes = sizeBytes;
 
+        // A newly-confirmed version becomes current: clear any explicit current-version pointer (ADR
+        // "Version-restore via a current-version pointer", issue #265) so the document derives its current
+        // version as the latest confirmed — this new one — instead of staying pinned to an older restored version.
+        var document = await _dbContext.Documents.FirstOrDefaultAsync(d => d.Id == version.DocumentId, cancellationToken);
+        if (document is { CurrentVersionId: not null })
+        {
+            document.CurrentVersionId = null;
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
         await _storageQuota.AdjustUsageAsync(version.TenantId, sizeBytes, cancellationToken);
 

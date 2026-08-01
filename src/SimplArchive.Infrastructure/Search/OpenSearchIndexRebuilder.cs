@@ -217,7 +217,7 @@ public sealed class OpenSearchIndexRebuilder
     {
         var doc = await _dbContext.Documents
             .Where(d => d.Id == documentId)
-            .Select(d => new { d.Name, d.TenantId, d.ParentId, d.CreatedAt, d.CreatedByUserId, d.CreatedByServiceAccountId, d.MaskVersionId, SensitivityLabelName = d.SensitivityLabelId == null ? null : _dbContext.SensitivityLabelDefinitions.IgnoreQueryFilters().Where(l => l.Id == d.SensitivityLabelId).Select(l => l.Name).FirstOrDefault(), SensitivityLabelRank = d.SensitivityLabelId == null ? (int?)null : _dbContext.SensitivityLabelDefinitions.IgnoreQueryFilters().Where(l => l.Id == d.SensitivityLabelId).Select(l => (int?)l.Rank).FirstOrDefault() })
+            .Select(d => new { d.Name, d.TenantId, d.ParentId, d.CreatedAt, d.CreatedByUserId, d.CreatedByServiceAccountId, d.MaskVersionId, d.CurrentVersionId, SensitivityLabelName = d.SensitivityLabelId == null ? null : _dbContext.SensitivityLabelDefinitions.IgnoreQueryFilters().Where(l => l.Id == d.SensitivityLabelId).Select(l => l.Name).FirstOrDefault(), SensitivityLabelRank = d.SensitivityLabelId == null ? (int?)null : _dbContext.SensitivityLabelDefinitions.IgnoreQueryFilters().Where(l => l.Id == d.SensitivityLabelId).Select(l => (int?)l.Rank).FirstOrDefault() })
             .SingleOrDefaultAsync(cancellationToken);
 
         if (doc is null)
@@ -239,11 +239,8 @@ public sealed class OpenSearchIndexRebuilder
         var indexValues = fieldData.Select(f => f.Value).ToList();
         var typedFields = SearchFieldMapper.BuildTypedFields(fieldData.Select(f => (f.Name, f.DataType, f.Value)));
 
-        var version = await _dbContext.DocumentVersions
-            .Where(v => v.DocumentId == documentId && v.Status == DocumentVersionStatus.Confirmed)
-            .OrderByDescending(v => v.VersionNumber)
-            .Select(v => new { v.Id, v.ObjectKey, v.CreatedAt, v.CreatedByUserId, v.CreatedByServiceAccountId, v.DocumentDate })
-            .FirstOrDefaultAsync(cancellationToken);
+        // Current version honoring the CurrentVersionId pointer (issue #265), else latest confirmed.
+        var version = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, doc.CurrentVersionId, cancellationToken);
 
         var repositoryId = await ResolveRootAsync(documentId, cancellationToken);
         var allowedPrincipals = await _rightsCalculator.GetVisibilityPrincipalsAsync(documentId, cancellationToken);
