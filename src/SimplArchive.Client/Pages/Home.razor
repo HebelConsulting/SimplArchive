@@ -3235,7 +3235,16 @@
             // abort this block before the second import even ran.
             _selfRef = DotNetObjectReference.Create(this);
             _module = await JS.InvokeAsync<IJSObjectReference>("import", "./dropUpload.js");
-            _layoutModule = await JS.InvokeAsync<IJSObjectReference>("import", "./wbLayout.js");
+            try
+            {
+                _layoutModule = await JS.InvokeAsync<IJSObjectReference>("import", "./wbLayout.js");
+            }
+            catch (JSException ex)
+            {
+                // A missing wbLayout.js must not crash the workbench — the panes just stay at their CSS defaults
+                // (issue #267). Leaving _layoutModule null makes the interop below no-op.
+                Console.Error.WriteLine($"wbLayout.js failed to load: {ex.Message}");
+            }
         }
 
         // Wire the drop root and the resizable/collapsible panes on whichever render first has the real
@@ -3248,14 +3257,35 @@
             {
                 _dropRootWired = await _module.InvokeAsync<bool>("initDropRoot", _dropRoot, _selfRef);
             }
+            // Both wbLayout.js calls are wrapped so a stale cached copy missing an export (e.g. watchViewport,
+            // added in ADR "responsive web workbench") degrades quietly to the CSS-default layout instead of
+            // triggering the Blazor error UI, and stops retrying so it can't spam every render (issue #267).
             if (!_panesWired && _layoutModule is not null)
             {
-                _panesWired = await _layoutModule.InvokeAsync<bool>("attach", _layoutRoot);
+                try
+                {
+                    _panesWired = await _layoutModule.InvokeAsync<bool>("attach", _layoutRoot);
+                }
+                catch (JSException ex)
+                {
+                    _panesWired = true; // give up rather than retry-spam a broken/stale module
+                    Console.Error.WriteLine($"wbLayout.js attach failed (stale cache?): {ex.Message}");
+                }
             }
             if (!_viewportWatched && _layoutModule is not null)
             {
-                await _layoutModule.InvokeVoidAsync("watchViewport", _selfRef);
-                _viewportWatched = true;
+                try
+                {
+                    await _layoutModule.InvokeVoidAsync("watchViewport", _selfRef);
+                }
+                catch (JSException ex)
+                {
+                    Console.Error.WriteLine($"wbLayout.js watchViewport failed (stale cache?): {ex.Message}");
+                }
+                finally
+                {
+                    _viewportWatched = true;
+                }
             }
         }
 
