@@ -41,6 +41,13 @@ jobs:
       # migrations are marked `generated_code = true` in .editorconfig, so they're skipped.
       - name: Format check (whitespace)
         run: dotnet format whitespace SimplArchive.slnx --verify-no-changes
+      # Publish-machinery guard (ADR 0484): the private→public sync redacts withheld brand references from commit
+      # subjects (not just files). Unit-tests that filter. Private-repo-only — publish/ is withheld from the public
+      # mirror, so a false `if` skips this step cleanly there (the script is absent). (This step's wording avoids the
+      # brand itself, since ci.yml is a published file scanned by the same gate.)
+      - name: Publish subject-filter self-test
+        if: ${{ github.repository == 'HebelConsulting/SimplArchivePrivate' }}
+        run: bash publish/publish-public.sh --selftest
       # Security gate (ADR "Security and dependency scanning"): fail the build on any known-CVE dependency
       # (direct or transitive). Queries the NuGet advisory database.
       - name: Vulnerable dependency scan
