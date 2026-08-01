@@ -1,0 +1,88 @@
+# Auto-generated user manual (ADR 0502). Keeps manual/manual.typ's screenshots in step with the real app and gates
+# on the manual building.
+#
+#  - On a pull request: regenerate the DESKTOP screenshots (the Avalonia client's headless --screenshot hooks — no
+#    Docker/Chrome, cheap) and `typst compile` the manual against them + the committed web screenshots. A renamed/
+#    removed screen breaks the capture or a figure reference, failing the job — so a PR can't merge without updating
+#    the manual. This is the anti-staleness gate.
+#  - On push to main: additionally regenerate the WEB screenshots (the harness stands up the app via Testcontainers
+#    and drives system Chrome, like the heavy CI tier), recompile, and commit the refreshed PDF + screenshots back to
+#    main. The committed PDF (a published path) then rides the normal private -> public sync (ADR 0484).
+#
+# Runs ONLY on the private canonical repo (like the auto-publish workflow) — the Typst sources live under the
+# published manual/ dir, but the regenerate-and-commit step is a canonical-repo action; public receives the PDF via
+# the sync. The bot commit uses GITHUB_TOKEN, which by design does not trigger further workflow runs (no loop).
+name: User manual
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: manual-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # the push-to-main job commits the regenerated manual
+
+jobs:
+  manual:
+    name: Build the user manual
+    if: ${{ github.repository == 'HebelConsulting/SimplArchivePrivate' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Install Typst
+        uses: typst-community/setup-typst@v5
+
+      # The desktop client renders headless via Avalonia + Skia; on a Linux runner that needs fontconfig + fonts
+      # (the app embeds Inter via WithInterFont, but fall back to DejaVu/Noto for any other glyphs).
+      - name: Install fonts for headless desktop rendering
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libfontconfig1 fonts-dejavu-core fonts-noto-core
+
+      # Builds the harness and — via its project references — the API + desktop client, so the capture subprocesses
+      # can run with --no-build.
+      - name: Build the capture harness
+        run: dotnet build tests/SimplArchive.ManualCapture/SimplArchive.ManualCapture.csproj -c Debug
+
+      # Cheap, self-contained (in-process demo data — no backend). The gate on every PR.
+      - name: Capture desktop screens
+        run: dotnet run --project tests/SimplArchive.ManualCapture --no-build -- --desktop
+
+      # Heavy (Testcontainers + Chrome) — main only, so PRs stay cheap. The hosted Ubuntu image ships Docker +
+      # Google Chrome, which the self-host fleet + Playwright ("chrome" channel) use (same as the heavy CI tier).
+      - name: Capture web screens
+        if: ${{ github.event_name == 'push' }}
+        run: dotnet run --project tests/SimplArchive.ManualCapture --no-build -- --web
+
+      # Fails if a screen was renamed/removed so a figure has no PNG — the anti-staleness lock.
+      - name: Compile the manual
+        run: typst compile manual/manual.typ src/SimplArchive.Api/wwwroot/download/manual/SimplArchive-Manual.pdf --root .
+
+      # main only: commit the regenerated PDF + screenshots. GITHUB_TOKEN pushes do not trigger workflows, so no
+      # loop; [skip ci] is belt-and-suspenders. A no-op when nothing changed.
+      - name: Commit the regenerated manual
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          git config user.name "simplarchive-manual-bot"
+          git config user.email "manual-bot@users.noreply.github.com"
+          git add manual/screenshots src/SimplArchive.Api/wwwroot/download/manual/SimplArchive-Manual.pdf
+          if git diff --cached --quiet; then
+            echo "Manual unchanged — nothing to commit."
+          else
+            git commit -m "docs(manual): regenerate the user manual from the current app [skip ci]"
+            git push origin HEAD:main
+          fi
