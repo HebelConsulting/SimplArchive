@@ -420,6 +420,27 @@
   <data name="NotReferenced" xml:space="preserve">
     <value>This item isn't referenced anywhere.</value>
   </data>
+  <data name="RefPrimaryLocation" xml:space="preserve">
+    <value>Primary location</value>
+  </data>
+  <data name="RefMakePrimary" xml:space="preserve">
+    <value>Make primary</value>
+  </data>
+  <data name="RefMakePrimaryTitle" xml:space="preserve">
+    <value>Make primary location?</value>
+  </data>
+  <data name="RefMakePrimaryConfirm" xml:space="preserve">
+    <value>The document will be moved to “{0}” and its current home “{1}” will become a reference.</value>
+  </data>
+  <data name="RefReferencedInN" xml:space="preserve">
+    <value>Referenced in {0} folder(s).</value>
+  </data>
+  <data name="RefPrimaryLocationChanged" xml:space="preserve">
+    <value>Primary location changed.</value>
+  </data>
+  <data name="Open" xml:space="preserve">
+    <value>Open</value>
+  </data>
   <data name="CompareTitle" xml:space="preserve">
     <value>Compare versions — {0}</value>
   </data>

@@ -1653,6 +1653,28 @@ public sealed partial class MainWindowViewModel : ObservableObject
             ? new ReferencesViewModel(_api, item.Id, item.Name)
             : null;
 
+    // Promote a referenced folder to be the item's primary location (ADR 0506): one atomic server call, then
+    // reload the tree (the item moved) and navigate to its new home. Errors surface on the status line.
+    public async Task PromotePrimaryLocationAsync(Guid itemId, Guid folderId)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.SetPrimaryLocationAsync(itemId, folderId);
+            await ReloadTreeAsync();
+            await OpenFolderAsync(folderId, itemId);
+            Status = Strings.Get("RefPrimaryLocationChanged");
+        }
+        catch (ApiActionException e)
+        {
+            Status = e.Message;
+        }
+    }
+
     // ---- Inbox (ADR "S3-backed inbox", phase 2) -------------------------------------------------------
 
     // Still used by the Check-out tab (local working-copy folder) + native-open temp dir; the local INBOX half

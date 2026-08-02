@@ -1,32 +1,55 @@
 @inject HttpClient Http
+@inject IDialogService DialogService
 
-@* Lists the folders that reference an item (with full paths); Open returns the chosen folder id to navigate
-   to. See ADR "Web client move/reference/search UI" and "References-of-an-item list". *@
+@* Shows a document's real (primary) location prominently plus the folders that reference it, and lets the user
+   promote a reference to be the new primary location (ADR 0506). Open returns the chosen folder id to navigate
+   to; a promote returns the target folder id wrapped so Home performs the atomic move. See also ADR "References-
+   of-an-item list". *@
 <MudDialog>
     <TitleContent>
         <MudText Typo="Typo.h6">@string.Format(Strings.Get("ReferencesTitle"), ItemName)</MudText>
     </TitleContent>
     <DialogContent>
-        <div style="min-width: 460px; max-height: 400px; overflow: auto;">
+        <div style="min-width: 480px; max-height: 400px; overflow: auto;">
             @if (_loading)
             {
                 <MudProgressCircular Indeterminate="true" Size="Size.Small" />
             }
-            else if (_folders.Count == 0)
-            {
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("NotReferenced")</MudText>
-            }
             else
             {
-                @foreach (var f in _folders)
+                @if (_primary is not null)
                 {
-                    <div style="display:flex; align-items:center; gap:8px; padding:6px 0;">
+                    <div class="ref-primary-row" style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--mud-palette-divider); margin-bottom:6px;">
+                        <MudIcon Icon="@Icons.Material.Filled.Star" Color="Color.Primary" Size="Size.Small" />
                         <div style="flex:1 1 auto; min-width:0;">
-                            <MudText Typo="Typo.body1">@f.Name</MudText>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@f.Path</MudText>
+                            <MudText Typo="Typo.body1"><strong>@Strings.Get("RefPrimaryLocation")</strong> — @_primary.Name</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@_primary.Path</MudText>
                         </div>
-                        <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.FolderOpen" OnClick="@(() => Open(f.Id))">@Strings.Get("RibbonOpen")</MudButton>
+                        <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.FolderOpen" OnClick="@(() => Open(_primary.Id))">@Strings.Get("Open")</MudButton>
                     </div>
+                }
+
+                @if (_folders.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("NotReferenced")</MudText>
+                }
+                else
+                {
+                    @foreach (var f in _folders)
+                    {
+                        <div class="ref-row" style="display:flex; align-items:center; gap:8px; padding:6px 0;">
+                            <div style="flex:1 1 auto; min-width:0;">
+                                <MudText Typo="Typo.body1">@f.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@f.Path</MudText>
+                            </div>
+                            @if (_primary is not null)
+                            {
+                                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Star" Color="Color.Primary"
+                                           OnClick="@(() => MakePrimaryAsync(f))">@Strings.Get("RefMakePrimary")</MudButton>
+                            }
+                            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.FolderOpen" OnClick="@(() => Open(f.Id))">@Strings.Get("Open")</MudButton>
+                        </div>
+                    }
                 }
             }
         </div>
@@ -44,23 +67,51 @@
     [Parameter] public string ItemName { get; set; } = "";
 
     private List<Folder> _folders = [];
+    private Folder? _primary;
     private bool _loading = true;
+
+    // Result the dialog hands back to Home: a folder to open, or (Promote=true) the folder to make primary.
+    public record ReferencesResult(Guid FolderId, bool Promote);
 
     protected override async Task OnInitializedAsync()
     {
         var list = new List<Folder>();
         var url = $"api/documents/{ItemId}/referencing-folders";
+        var first = true;
         while (url is not null)
         {
             var page = await Http.GetFromJsonAsync<Resp>(url);
+            if (first)
+            {
+                _primary = page?.PrimaryLocation;
+                first = false;
+            }
+
             list.AddRange(page?.Folders ?? []);
             url = Next(page?.Links);
         }
+
         _folders = list;
         _loading = false;
     }
 
-    private void Open(Guid folderId) => Dialog.Close(DialogResult.Ok(folderId));
+    private void Open(Guid folderId) => Dialog.Close(DialogResult.Ok(new ReferencesResult(folderId, false)));
+
+    private async Task MakePrimaryAsync(Folder target)
+    {
+        var body = string.Format(Strings.Get("RefMakePrimaryConfirm"), target.Name, _primary!.Name);
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = Strings.Get("RefMakePrimaryTitle"),
+            Message = body,
+            YesText = Strings.Get("RefMakePrimary"),
+            CancelText = Strings.Get("Close"),
+        });
+        if (confirmed == true)
+        {
+            Dialog.Close(DialogResult.Ok(new ReferencesResult(target.Id, true)));
+        }
+    }
 
     private void Cancel() => Dialog.Cancel();
 
@@ -71,6 +122,6 @@
     }
 
     private record Link { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
-    private record Resp { public List<Folder> Folders { get; set; } = []; public List<Link> Links { get; set; } = []; }
+    private record Resp { public Folder? PrimaryLocation { get; set; } public List<Folder> Folders { get; set; } = []; public List<Link> Links { get; set; } = []; }
     private record Folder { public Guid Id { get; set; } public string Name { get; set; } = ""; public string Path { get; set; } = ""; }
 }

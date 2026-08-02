@@ -453,6 +453,7 @@ internal static class Program
                 .WithInterFont()
                 .SetupWithoutStarting();
             var refsVm = new ViewModels.ReferencesViewModel(new Services.SimplArchiveApiClient("headless"), Guid.Empty, "Quarterly Report.pdf");
+            refsVm.PrimaryLocation = new ViewModels.ReferencingFolderViewModel { Id = Guid.NewGuid(), Name = "Invoices", Path = "Repositories / Contracts / Invoices" };
             refsVm.Items.Add(new ViewModels.ReferencingFolderViewModel { Id = Guid.NewGuid(), Name = "2026", Path = "Repositories / Contracts / 2026" });
             refsVm.Items.Add(new ViewModels.ReferencingFolderViewModel { Id = Guid.NewGuid(), Name = "Shared", Path = "Repositories / Team / Shared" });
             refsVm.Status = "Referenced in 2 folder(s).";

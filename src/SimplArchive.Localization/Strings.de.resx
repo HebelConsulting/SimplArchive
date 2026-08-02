@@ -420,6 +420,27 @@
   <data name="NotReferenced" xml:space="preserve">
     <value>Dieses Element wird nirgends referenziert.</value>
   </data>
+  <data name="RefPrimaryLocation" xml:space="preserve">
+    <value>Primärer Speicherort</value>
+  </data>
+  <data name="RefMakePrimary" xml:space="preserve">
+    <value>Als primär festlegen</value>
+  </data>
+  <data name="RefMakePrimaryTitle" xml:space="preserve">
+    <value>Als primären Speicherort festlegen?</value>
+  </data>
+  <data name="RefMakePrimaryConfirm" xml:space="preserve">
+    <value>Das Dokument wird nach „{0}“ verschoben und sein aktueller Speicherort „{1}“ wird zu einer Referenz.</value>
+  </data>
+  <data name="RefReferencedInN" xml:space="preserve">
+    <value>In {0} Ordner(n) referenziert.</value>
+  </data>
+  <data name="RefPrimaryLocationChanged" xml:space="preserve">
+    <value>Primärer Speicherort geändert.</value>
+  </data>
+  <data name="Open" xml:space="preserve">
+    <value>Öffnen</value>
+  </data>
   <data name="CompareTitle" xml:space="preserve">
     <value>Versionen vergleichen — {0}</value>
   </data>

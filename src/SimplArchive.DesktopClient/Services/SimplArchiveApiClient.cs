@@ -7,7 +7,23 @@ using SimplArchive.Localization;
 namespace SimplArchive.DesktopClient.Services;
 
 // Raised for an Api action that failed with a message worth showing the user (duplicate name, no permission).
-public sealed class ApiActionException(string message) : Exception(message);
+// Base for a real error condition surfaced by SimplArchiveApiClient — carries a user-facing message the crash
+// guard / status line displays. No longer sealed: intent-named conditions subclass it (per CLAUDE.md's
+// exception-type rule) while the existing catch(ApiActionException) surfacing still picks them up.
+public class ApiActionException(string message) : Exception(message);
+
+// Set-primary-location / promote-a-reference errors (ADR 0506) — a small family under ApiActionException so a
+// caller can catch the whole group and the status line still shows the message. Each type fixes its own message.
+public class PrimaryLocationException(string message) : ApiActionException(message);
+
+public sealed class CannotSetPrimaryLocationException()
+    : PrimaryLocationException("Can't set that folder as the primary location.");
+
+public sealed class SetPrimaryLocationForbiddenException()
+    : PrimaryLocationException("You don't have permission to change this item's primary location.");
+
+public sealed class PrimaryLocationConcurrencyException()
+    : PrimaryLocationException("This item changed since you loaded it — refresh and try again.");
 
 // Raised by DeleteUserAsync when the user still holds pending review tasks and no replacement reviewer was
 // supplied (ADR "Workflow review reassignment") — the caller (Users & groups tab) prompts for a replacement
@@ -62,6 +78,10 @@ public sealed class SimplArchiveApiClient
 
     // A folder that references a given item, with its full display path — see ADR "References-of-an-item list".
     public sealed record ReferencingFolder(Guid Id, string Name, string Path);
+
+    // The references-of-an-item view: the document's real primary location (null when it's a repository root or
+    // the caller can't see the parent) plus the folders that reference it (ADR 0506).
+    public sealed record ReferencesView(ReferencingFolder? Primary, IReadOnlyList<ReferencingFolder> Folders);
 
     // A metadata-search hit — see ADR "Metadata search (first slice)". ParentId is the item's home folder
     // (null = a repository root), for navigating to it.
@@ -1594,6 +1614,73 @@ public sealed class SimplArchiveApiClient
     // The folders that reference a given item (with full paths) — see ADR "References-of-an-item list".
     public Task<List<ReferencingFolder>> GetReferencingFoldersAsync(Guid documentId, CancellationToken cancellationToken = default) =>
         LoadPagedAsync($"api/documents/{documentId}/referencing-folders", "folders", ParseReferencingFolder, cancellationToken);
+
+    // The full references view — the item's real primary location plus every referencing folder (ADR 0506). The
+    // primary location is a top-level object on the first page (not part of the paged array), so this can't reuse
+    // LoadPagedAsync; it walks the pages itself.
+    public async Task<ReferencesView> GetReferencesViewAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var folders = new List<ReferencingFolder>();
+        ReferencingFolder? primary = null;
+        string? next = $"api/documents/{documentId}/referencing-folders";
+        var first = true;
+
+        while (next is not null)
+        {
+            var page = await _http.GetFromJsonAsync<JsonElement>(next, cancellationToken);
+            if (first)
+            {
+                if (page.TryGetProperty("primaryLocation", out var pl) && pl.ValueKind == JsonValueKind.Object)
+                {
+                    primary = ParseReferencingFolder(pl);
+                }
+
+                first = false;
+            }
+
+            if (page.TryGetProperty("folders", out var array))
+            {
+                folders.AddRange(array.EnumerateArray().Select(ParseReferencingFolder));
+            }
+
+            next = FindLink(page, "next");
+        }
+
+        return new ReferencesView(primary, folders);
+    }
+
+    // Promotes a referenced folder to be the document's primary location (ADR 0506): atomic move + leave a
+    // reference at the former home. Same If-Match contract as MoveAsync.
+    public async Task SetPrimaryLocationAsync(Guid documentId, Guid folderId, CancellationToken cancellationToken = default)
+    {
+        var etag = await GetETagAsync(documentId, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"api/documents/{documentId}/primary-location")
+        {
+            Content = JsonContent.Create(new { folderId }),
+        };
+        if (etag is not null)
+        {
+            request.Headers.IfMatch.Add(etag);
+        }
+
+        using var response = await _http.SendAsync(request, cancellationToken);
+        if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict)
+        {
+            throw new CannotSetPrimaryLocationException();
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new SetPrimaryLocationForbiddenException();
+        }
+
+        if (response.StatusCode == HttpStatusCode.PreconditionFailed)
+        {
+            throw new PrimaryLocationConcurrencyException();
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
 
     // Free-text metadata search across the tenant (names + index-field values) — see ADR "Metadata search
     // (first slice)". Follows the next links to load all pages.

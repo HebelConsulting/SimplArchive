@@ -5877,10 +5877,43 @@
         };
         var dialog = await DialogService.ShowAsync<ReferencesDialog>("References", parameters);
         var result = await dialog.Result;
-        if (result is { Canceled: false, Data: Guid folderId })
+        if (result is { Canceled: false, Data: ReferencesDialog.ReferencesResult r })
         {
-            await NavigateToFolderAsync(folderId);
+            if (r.Promote)
+            {
+                await PromotePrimaryLocationAsync(node, r.FolderId);
+            }
+            else
+            {
+                await NavigateToFolderAsync(r.FolderId);
+            }
         }
+    }
+
+    // Promote a referenced folder to be the document's primary location (ADR 0506): one atomic server call
+    // (move + leave a reference at the old home). Same If-Match contract as MoveAsync.
+    private async Task PromotePrimaryLocationAsync(BrowseNode node, Guid folderId)
+    {
+        var etag = await GetETagAsync(node.Id);
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"api/documents/{node.Id}/primary-location")
+        {
+            Content = JsonContent.Create(new { folderId }),
+        };
+        if (etag is not null)
+        {
+            request.Headers.TryAddWithoutValidation("If-Match", etag);
+        }
+
+        var response = await Http.SendAsync(request);
+        if (!await HandleMutationAsync(response, $"'{node.Name}' now lives in the chosen folder.",
+            "Can't set that folder as the primary location.",
+            "An item with that name already exists in the target folder."))
+        {
+            return;
+        }
+
+        await RefreshAsync();
+        await NavigateToFolderAsync(folderId, node.Id);
     }
 
     private async Task<Guid?> PickFolderAsync(string title)

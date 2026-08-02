@@ -283,6 +283,7 @@ public class DocumentsController : ControllerBase
             new("references", $"/api/documents/{documentId}/references", "GET"),
             new("referencing-folders", Url.Action(nameof(ListReferencingFolders), new { documentId })!, "GET"),
             new("move", Url.Action(nameof(Move), new { documentId })!, "PUT"),
+            new("set-primary-location", Url.Action(nameof(SetPrimaryLocation), new { documentId })!, "PUT"),
             new("assignable-reviewers", Url.Action(nameof(AssignableReviewers), new { documentId })!, "GET"),
         };
 
@@ -549,6 +550,133 @@ public class DocumentsController : ControllerBase
         SetETag(document.ConcurrencyToken);
 
         await _audit.RecordAsync(AuditActions.DocumentMoved, "Document", documentId, document.Name, cancellationToken: cancellationToken);
+
+        return Ok(new DocumentResource
+        {
+            Id = documentId,
+            Name = document.Name,
+            Links = [new Link("self", Url.Action(nameof(Get), new { documentId })!, "GET")],
+        });
+    }
+
+    public class SetPrimaryLocationRequest
+    {
+        public Guid FolderId { get; set; }
+    }
+
+    // Promotes a referenced folder to be the document's primary location (ADR 0506): atomically moves the real
+    // document into {FolderId} and leaves a reference behind at the former parent, so the set of places the
+    // document appears is unchanged — only which one is the real home changes. Composes the Move + place-reference
+    // primitives in a single SaveChanges so they can't half-apply. Same guards as Move (CanMove on the item +
+    // CanCreateSubItems on the target AND on the old parent — the left-behind reference is a create there —
+    // legal-hold / check-out / If-Match / cycle). A redundant target-side reference (the shortcut being promoted)
+    // is dropped, since the document now really lives there.
+    [HttpPut("primary-location")]
+    public async Task<IActionResult> SetPrimaryLocation(Guid documentId, [FromBody] SetPrimaryLocationRequest request, CancellationToken cancellationToken)
+    {
+        var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken);
+        if (document is null)
+        {
+            return NotFound();
+        }
+
+        // A repository root has no primary home to demote to a reference.
+        if (document.ParentId is not { } oldParentId)
+        {
+            throw new CannotPromoteRepositoryRootException();
+        }
+
+        if (request.FolderId == oldParentId)
+        {
+            throw new PrimaryLocationUnchangedException();
+        }
+
+        if (!await _dbContext.Documents.AnyAsync(d => d.Id == request.FolderId, cancellationToken))
+        {
+            throw new MoveTargetNotFoundException();
+        }
+
+        var itemRights = await GetCallerRightsAsync(documentId, cancellationToken);
+        var targetRights = await GetCallerRightsAsync(request.FolderId, cancellationToken);
+        var oldParentRights = await GetCallerRightsAsync(oldParentId, cancellationToken);
+
+        // CanMove to re-home the item, CanCreateSubItems on the target (as Move requires) AND on the old parent
+        // (the left-behind reference is created there).
+        if (!itemRights.CanMove || !targetRights.CanCreateSubItems || !oldParentRights.CanCreateSubItems)
+        {
+            return Forbid();
+        }
+
+        await EnsureNotFrozenAsync(documentId, cancellationToken);
+        await EnsureNotCheckedOutByOtherAsync(documentId, cancellationToken);
+
+        if (!Request.Headers.TryGetValue("If-Match", out var ifMatchValues) || !TryParseETag(ifMatchValues.ToString(), out var ifMatchToken))
+        {
+            throw new IfMatchRequiredException();
+        }
+
+        if (await IsAncestorOrSelfAsync(documentId, request.FolderId, cancellationToken))
+        {
+            throw new InvalidMoveTargetException();
+        }
+
+        // Leave a reference at the former home — unless one already exists there (the unique index would reject a
+        // duplicate).
+        var (createdByUserId, createdByServiceAccountId) = GetCallerIdentity();
+        var alreadyReferencedAtOldParent = await _dbContext.DocumentReferences
+            .AnyAsync(r => r.ParentFolderId == oldParentId && r.TargetDocumentId == documentId, cancellationToken);
+        if (!alreadyReferencedAtOldParent)
+        {
+            _dbContext.DocumentReferences.Add(new DocumentReference
+            {
+                Id = Guid.NewGuid(),
+                TenantId = document.TenantId,
+                ParentFolderId = oldParentId,
+                TargetDocumentId = documentId,
+                CreatedByUserId = createdByUserId,
+                CreatedByServiceAccountId = createdByServiceAccountId,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
+        // The reference we're promoting (target folder → this doc) is now redundant — the doc really lives there.
+        var redundantReference = await _dbContext.DocumentReferences
+            .SingleOrDefaultAsync(r => r.ParentFolderId == request.FolderId && r.TargetDocumentId == documentId, cancellationToken);
+        var removedRedundantReference = redundantReference is not null;
+        if (redundantReference is not null)
+        {
+            _dbContext.DocumentReferences.Remove(redundantReference);
+        }
+
+        document.ParentId = request.FolderId;
+        _dbContext.Entry(document).Property(d => d.ConcurrencyToken).OriginalValue = ifMatchToken;
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw EtagMismatchException.ForDocument();
+        }
+        catch (InvalidOperationException)
+        {
+            throw DocumentNameConflictException.OnTargetFolder();
+        }
+
+        await _queue.EnqueueAsync(documentId, cancellationToken);
+        SetETag(document.ConcurrencyToken);
+
+        await _audit.RecordAsync(AuditActions.DocumentMoved, "Document", documentId, document.Name, "Primary location changed", cancellationToken: cancellationToken);
+        if (!alreadyReferencedAtOldParent)
+        {
+            await _audit.RecordAsync(AuditActions.ReferenceAdded, "Document", documentId, document.Name, "Reference left at former primary location", cancellationToken: cancellationToken);
+        }
+
+        if (removedRedundantReference)
+        {
+            await _audit.RecordAsync(AuditActions.ReferenceRemoved, "Document", documentId, document.Name, "Redundant reference removed at new primary location", cancellationToken: cancellationToken);
+        }
 
         return Ok(new DocumentResource
         {
@@ -1277,8 +1405,21 @@ public class DocumentsController : ControllerBase
         public string Path { get; set; } = "";
     }
 
+    // The document's real (primary) home folder — where it actually lives, as opposed to the folders that merely
+    // reference it (ADR 0506). Null when the item is a repository root, or when the caller can't see the parent.
+    public class PrimaryLocationResource : HypermediaResource
+    {
+        public Guid Id { get; set; }
+
+        public string Name { get; set; } = "";
+
+        public string Path { get; set; } = "";
+    }
+
     public class ReferencingFoldersResource : HypermediaResource
     {
+        public PrimaryLocationResource? PrimaryLocation { get; set; }
+
         public List<ReferencingFolderResource> Folders { get; set; } = [];
     }
 
@@ -1300,6 +1441,31 @@ public class DocumentsController : ControllerBase
         if (!await CanSeeAsync(documentId, cancellationToken))
         {
             return Forbid();
+        }
+
+        // The document's real home (ADR 0506): its parent folder, shown as the prominent "Primary location" row.
+        // Null when the item is a repository root (no parent) or when the caller can't see the parent — don't
+        // leak a location the caller has no access to.
+        var realParentId = await _dbContext.Documents
+            .Where(d => d.Id == documentId)
+            .Select(d => d.ParentId)
+            .SingleAsync(cancellationToken);
+
+        PrimaryLocationResource? primaryLocation = null;
+        if (realParentId is { } parentId && await CanSeeAsync(parentId, cancellationToken))
+        {
+            var parentName = await _dbContext.Documents
+                .Where(d => d.Id == parentId)
+                .Select(d => d.Name)
+                .SingleAsync(cancellationToken);
+
+            primaryLocation = new PrimaryLocationResource
+            {
+                Id = parentId,
+                Name = parentName,
+                Path = await BuildFolderPathAsync(parentId, cancellationToken),
+                Links = [new Link("open", $"/api/documents/{parentId}", "GET")],
+            };
         }
 
         var pageSize = PageSize.Resolve(limit);
@@ -1365,7 +1531,7 @@ public class DocumentsController : ControllerBase
             links.Add(new Link("next", Url.Action(nameof(ListReferencingFolders), new { documentId, cursor = nextCursor, limit = pageSize })!, "GET"));
         }
 
-        return Ok(new ReferencingFoldersResource { Folders = visible, Links = links });
+        return Ok(new ReferencingFoldersResource { PrimaryLocation = primaryLocation, Folders = visible, Links = links });
     }
 
     // Standing convention: every GET action gets a companion HEAD action.

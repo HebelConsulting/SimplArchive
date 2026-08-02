@@ -582,10 +582,19 @@ public partial class MainWindow : Window
         }
 
         await references.LoadAsync();
-        var folderId = await new ReferencesDialog { DataContext = references }.ShowDialog<Guid?>(this);
-        if (folderId is { } id)
+        var result = await new ReferencesDialog { DataContext = references }.ShowDialog<ReferencesDialogResult?>(this);
+        if (result is not { } r)
         {
-            await vm.OpenFolderAsync(id);
+            return;
+        }
+
+        if (r.Promote)
+        {
+            await vm.PromotePrimaryLocationAsync(references.ItemId, r.FolderId);
+        }
+        else
+        {
+            await vm.OpenFolderAsync(r.FolderId);
         }
     });
 
