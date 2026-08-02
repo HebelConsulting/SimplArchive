@@ -11,8 +11,14 @@
 #   - UNSIGNED in the Developer-ID sense / NOT notarized — Gatekeeper warns on first open (this fits the
 #     project's "Not for production" showcase posture; the workaround is printed at the end).
 #
-# Usage:   scripts/package-macos-dmg.sh [version]
-#            version  optional (default 0.1.0) — stamped into the bundle + the .dmg file names.
+# Usage:   scripts/package-macos-dmg.sh [version] [--upload]
+#            version   optional (default 0.1.0) — stamped into the bundle + the .dmg file names.
+#            --upload  after building, attach the two .dmgs to the existing GitHub Release v<version> on the
+#                      public repo (issue #306). The macOS .dmg CI job is opt-in (needs a pricey macos runner),
+#                      so in the common case you build + upload from a Mac; the release itself is created by the
+#                      desktop-packages workflow on the v* tag push (with the win/linux archives). Needs `gh`
+#                      authenticated with write access. The target repo defaults to HebelConsulting/SimplArchive
+#                      (override with RELEASE_REPO=…). Idempotent — re-runs replace the assets (--clobber).
 #
 # Output:  dist/SimplArchive-<version>-<arch>.dmg   (arch = arm64 | x64)
 #
@@ -20,7 +26,15 @@
 
 set -euo pipefail
 
-VERSION="${1:-0.1.0}"
+VERSION="0.1.0"
+UPLOAD=0
+for arg in "$@"; do
+  case "$arg" in
+    --upload) UPLOAD=1 ;;
+    -*) echo "error: unknown option '$arg' (usage: package-macos-dmg.sh [version] [--upload])." >&2; exit 2 ;;
+    *) VERSION="$arg" ;;
+  esac
+done
 
 APP_NAME="SimplArchive"
 EXE_NAME="SimplArchive.DesktopClient"          # the apphost `dotnet publish` produces (the project name)
@@ -97,9 +111,34 @@ PLIST
 build_one osx-arm64 arm64
 build_one osx-x64 x64
 
+arm_dmg="$OUT_DIR/${APP_NAME}-${VERSION}-arm64.dmg"
+x64_dmg="$OUT_DIR/${APP_NAME}-${VERSION}-x64.dmg"
+
 echo
 echo "Built:"
-ls -lh "$OUT_DIR"/*.dmg
+ls -lh "$arm_dmg" "$x64_dmg"
+
+# --upload (issue #306): attach the two version-matching .dmgs to the existing GitHub Release v<version> on the
+# public repo. Only the .dmgs named for THIS version are uploaded — a guard against attaching a stale build to
+# the wrong release.
+if [[ "$UPLOAD" == 1 ]]; then
+  tag="v${VERSION}"
+  release_repo="${RELEASE_REPO:-HebelConsulting/SimplArchive}"
+
+  command -v gh >/dev/null 2>&1 || { echo "error: '--upload' needs the GitHub CLI ('gh'), authenticated with write access to ${release_repo}." >&2; exit 1; }
+
+  echo
+  echo "==> Uploading the macOS .dmg(s) to release ${tag} on ${release_repo}…"
+  # The release must already exist (the desktop-packages workflow creates it on the v* tag push, with the
+  # win/linux archives); this only ADDS the macOS artifacts the opt-in macOS CI job would otherwise build.
+  if ! gh release view "$tag" --repo "$release_repo" >/dev/null 2>&1; then
+    echo "error: release '$tag' not found on ${release_repo}. Push the ${tag} tag first (it creates the release), then re-run with --upload." >&2
+    exit 1
+  fi
+
+  gh release upload "$tag" "$arm_dmg" "$x64_dmg" --clobber --repo "$release_repo"
+  echo "==> Uploaded $(basename "$arm_dmg") + $(basename "$x64_dmg") to ${release_repo} ${tag}."
+fi
 
 cat <<'NOTE'
 
