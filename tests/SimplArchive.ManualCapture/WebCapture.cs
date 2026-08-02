@@ -40,6 +40,10 @@ public static partial class WebCapture
         // Land on the SPA (DOMContentLoaded, not NetworkIdle — a Blazor WASM SPA never goes network-idle).
         await page.GotoAsync(app.BaseUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
         await page.GetByText("SimplArchive").First.WaitForAsync();
+        // The "SimplArchive" app-bar text renders before the landing content: the login prompt is inside an
+        // <AuthorizeView> that only fills in once the Blazor auth state resolves. Wait for the "Log in" button so
+        // the before-login shot captures the actual login page, not an empty body under the app bar.
+        await page.GetByText(LoginRegex()).First.WaitForAsync();
 
         foreach (var screen in Screens.Web.Where(s => s.BeforeLogin))
         {
