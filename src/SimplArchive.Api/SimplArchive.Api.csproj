@@ -18,36 +18,36 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Asp.Versioning.Mvc" Version="10.0.0" />
+    <PackageReference Include="Asp.Versioning.Mvc" Version="10.0.1" />
     <PackageReference Include="Fido2" Version="4.0.1" />
     <PackageReference Include="Fido2.AspNet" Version="4.0.1" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.9" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.10" />
     <!-- OpenAPI (ADR "OpenAPI definition endpoint"): Microsoft.AspNetCore.OpenApi generates /openapi/v1.json;
          Scalar renders the browsable UI. Both MIT. Microsoft.OpenApi is pinned to 2.0.1 (a transitive of
          Microsoft.AspNetCore.OpenApi, which floors it at the vulnerable 2.0.0) to 2.7.5 — the first patched
          release in the 2.x line (advisory GHSA-v5pm-xwqc-g5wc / NU1903, vulnerable ≤ 2.7.4) — to keep the CVE
          gate green, same transitive-security-pin pattern as System.Security.Cryptography.Xml. -->
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
-    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
-    <PackageReference Include="Scalar.AspNetCore" Version="2.16.16" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
+    <PackageReference Include="Microsoft.OpenApi" Version="3.9.0" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.16.17" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="OpenIddict.AspNetCore" Version="7.5.0" />
+    <PackageReference Include="OpenIddict.AspNetCore" Version="7.6.0" />
     <!-- Enterprise structured logging (ADR "Enterprise-grade structured logging with Serilog"). Serilog.AspNetCore
          (Apache-2.0) bundles the Serilog core, the console sink, the compact JSON formatter, request logging, and
          the host integration. Its six levels (Verbose/Debug/Information/Warning/Error/Fatal) are exactly the ones
          the logging principle in CLAUDE.md defines. -->
-    <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <!-- SignalR Valkey/Redis backplane (ADR "SignalR Valkey backplane") so real-time notifications fan out across
          API replicas. Microsoft.AspNetCore.SignalR.StackExchangeRedis + StackExchange.Redis are both MIT and speak
          the Redis protocol, so Valkey works unchanged. Only active when ConnectionStrings:Valkey is configured. -->
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.0.9" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.0.10" />
     <!-- Two-factor auth (ADR "MFA (interactive login, TOTP)"): Otp.NET generates/verifies TOTP codes, QRCoder
          renders the enrollment QR. Both MIT. -->
-    <PackageReference Include="Otp.NET" Version="1.4.0" />
-    <PackageReference Include="QRCoder" Version="1.6.0" />
+    <PackageReference Include="Otp.NET" Version="1.4.1" />
+    <PackageReference Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
 
   <PropertyGroup>

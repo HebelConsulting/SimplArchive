@@ -20,12 +20,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.3.18" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.3.18" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.18" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.18" />
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.1" />
     <!-- Headless render-to-PNG mode (Program screenshot flag), so the UI can be verified without a display. -->
-    <PackageReference Include="Avalonia.Headless" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Headless" Version="12.1.1" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <!-- Material Design icons for the ribbon/buttons (matches the web app's Material icons). Both packages
          MIT; the bundled Material Design Icons font is Apache-2.0. See ADR "Desktop client icon buttons". -->
@@ -36,7 +36,7 @@
          SkiaSharp dependency (avoids a conflict with Avalonia's SkiaSharp 2.88). See ADR "Desktop workbench UI". -->
     <PackageReference Include="Docnet.Core" Version="2.6.0" />
     <!-- Real-time notifications hub client (ADR "Real-time notifications (SignalR)"). -->
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.9" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>

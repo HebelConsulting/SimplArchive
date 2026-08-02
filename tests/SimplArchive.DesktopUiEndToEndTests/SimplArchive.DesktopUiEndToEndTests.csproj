@@ -11,15 +11,15 @@
        API over HTTP. No browser (Playwright) — split out from the web UI tests so the two run as parallel CI jobs
        and the desktop suite doesn't launch Chrome. -->
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" Version="6.0.4" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
-    <PackageReference Include="Npgsql" Version="9.0.4" />
+    <PackageReference Include="coverlet.collector" Version="10.0.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
     <!-- Compute a TOTP in the desktop MFA api-client test (ADR "MFA (interactive login, TOTP)"). -->
-    <PackageReference Include="Otp.NET" Version="1.4.0" />
-    <PackageReference Include="Testcontainers.PostgreSql" Version="4.0.0" />
-    <PackageReference Include="AWSSDK.S3" Version="4.0.100.3" />
+    <PackageReference Include="Otp.NET" Version="1.4.1" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.13.0" />
+    <PackageReference Include="AWSSDK.S3" Version="4.0.101.6" />
     <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
   </ItemGroup>
 
   <ItemGroup>
