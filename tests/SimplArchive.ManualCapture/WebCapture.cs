@@ -30,6 +30,10 @@ public static partial class WebCapture
             ViewportSize = new ViewportSize { Width = ViewportWidth, Height = ViewportHeight },
             ColorScheme = ColorScheme.Light,
         });
+        // Pre-dismiss the one-time post-logon desktop-client promo (ADR 0505): on a fresh context its modal
+        // would overlay the workbench and its scrim intercepts pointer events, breaking every post-login capture.
+        await context.AddInitScriptAsync("try { localStorage.setItem('sa.desktopClientNoticeDismissed', '1'); } catch (e) { }");
+
         var page = await context.NewPageAsync();
         page.SetDefaultTimeout(60000);
 
