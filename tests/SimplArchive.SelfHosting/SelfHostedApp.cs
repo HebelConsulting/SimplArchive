@@ -40,10 +40,12 @@ public sealed class SelfHostedApp : IAsyncDisposable
     private readonly IContainer _storage = new ContainerBuilder()
         .WithImage("chrislusf/seaweedfs@sha256:c7d6c721b30ae711db766bbbfd40192776e263d4e51e22f57baef7bef93c12c6")
         .WithResourceMapping(Encoding.UTF8.GetBytes(SeaweedS3Config), "/s3.json")
-        // -volume.max=500: SeaweedFS defaults to only 8 volume slots, but per-tenant buckets make every tenant's
-        // bucket its own collection → its own volume; past the 8th, an upload PUT gets a 500 ("no writable
-        // volume"). Volumes are created on demand, so a high slot cap costs nothing. (Same fix as E2EApiFactory.)
-        .WithCommand("server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/s3.json", "-volume.max=500")
+        // -volume.max: SeaweedFS defaults to only 8 volume slots, but per-tenant buckets make every tenant's
+        // bucket its own collection consuming volumes; when the cap is hit an upload PUT gets a 500 ("no writable
+        // volume"). Each bucket takes several volumes and the old cap of 500 sat right at the suite's peak — raised
+        // well above it for headroom. Volumes are created on demand, so a high slot cap costs nothing. (Same fix
+        // as E2EApiFactory.)
+        .WithCommand("server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/s3.json", "-volume.max=5000")
         .WithPortBinding(8333, true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("S3 API Server"))
         .Build();

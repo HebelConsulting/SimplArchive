@@ -255,9 +255,7 @@ public sealed partial class WebDavMiddleware
     {
         var folder = segments[1];
         var storage = services.GetRequiredService<IObjectStorageClient>();
-        var files = folder == InboxName
-            ? await InboxFilesAsync(storage, user)
-            : await CheckoutFilesAsync(storage, db, user);
+        var files = await SpecialFolderFilesAsync(storage, db, user, folder);
 
         if (segments.Count == 2)
         {
@@ -309,7 +307,7 @@ public sealed partial class WebDavMiddleware
 
         if (IsSpecialPath(segments))
         {
-            var files = segments[1] == InboxName ? await InboxFilesAsync(storage, user) : await CheckoutFilesAsync(storage, db, user);
+            var files = await SpecialFolderFilesAsync(storage, db, user, segments[1]);
             if (segments.Count != 3 || files.FirstOrDefault(f => f.Name == segments[2]) is not { } file)
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
@@ -722,23 +720,46 @@ public sealed partial class WebDavMiddleware
     {
         if (IsSpecialPath(segments))
         {
-            // Only a staged inbox item can be removed over WebDAV; a check-out is released via the client.
-            if (segments[1] != InboxName || segments.Count != 3)
+            if (segments.Count != 3)
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 return;
             }
 
             var storage = services.GetRequiredService<IObjectStorageClient>();
-            if ((await InboxFilesAsync(storage, user)).All(f => f.Name != segments[2]))
+            var name = segments[2];
+
+            if (segments[1] == InboxName)
             {
-                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                if ((await InboxFilesAsync(storage, user)).All(f => f.Name != name) && !IsLockFile(name))
+                {
+                    context.Response.StatusCode = StatusCodes.Status404NotFound;
+                    return;
+                }
+
+                await storage.DeleteObjectAsync(InboxPrefix(user) + name, context.RequestAborted);
+                try { await storage.DeleteObjectAsync(InboxPrefix(user) + name + ".mask.json", context.RequestAborted); } catch (Exception) { /* sidecar may not exist */ }
+                context.Response.StatusCode = StatusCodes.Status204NoContent;
                 return;
             }
 
-            await storage.DeleteObjectAsync(InboxPrefix(user) + segments[2], context.RequestAborted);
-            try { await storage.DeleteObjectAsync(InboxPrefix(user) + segments[2] + ".mask.json", context.RequestAborted); } catch (Exception) { /* sidecar may not exist */ }
-            context.Response.StatusCode = StatusCodes.Status204NoContent;
+            // Check-out (ADR 0508): deleting a checked-out doc's name is the editor's pre-rename delete — a no-op
+            // (the check-out is released only via the client); deleting a scratch temp/lock file removes it.
+            if ((await CheckoutFilesAsync(storage, db, user)).Any(f => f.Name == name))
+            {
+                context.Response.StatusCode = StatusCodes.Status204NoContent; // no-op: keep the check-out
+                return;
+            }
+
+            var scratchKey = CheckoutScratchPrefix(user) + name;
+            if (await storage.ExistsAsync(scratchKey, context.RequestAborted))
+            {
+                await storage.DeleteObjectAsync(scratchKey, context.RequestAborted);
+                context.Response.StatusCode = StatusCodes.Status204NoContent;
+                return;
+            }
+
+            context.Response.StatusCode = IsLockFile(name) ? StatusCodes.Status204NoContent : StatusCodes.Status404NotFound;
             return;
         }
 
@@ -791,7 +812,7 @@ public sealed partial class WebDavMiddleware
     {
         if (IsSpecialPath(segments))
         {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden; // moving items in/out of the special folders isn't supported
+            await HandleSpecialRenameAsync(context, services, db, user, segments, keepSource: false); // atomic-save rename within Inbox/Check-out (ADR 0508)
             return;
         }
 
@@ -851,6 +872,95 @@ public sealed partial class WebDavMiddleware
         context.Response.StatusCode = StatusCodes.Status201Created;
     }
 
+    // MOVE / COPY within a special folder — the rename/duplicate steps of an editor's atomic save (ADR 0508).
+    // keepSource=false for MOVE (rename), true for COPY (duplicate). The destination must be the SAME special
+    // folder (cross-folder moves aren't supported). In Check-out:
+    //  • scratch temp → a checked-out document = the commit (write the bytes to that document's stash);
+    //  • scratch temp → another name = duplicate/rename the temp;
+    //  • a checked-out document → a scratch name = copy the document's CURRENT working bytes out to a scratch
+    //    backup (macOS's replaceItemAtURL renames the original away before dropping the new file in) — the
+    //    document itself stays checked out and in place.
+    // In the Inbox it renames/duplicates the staged object. So every combination office/PDF editors emit —
+    // temp+rename, temp+copy, delete-then-rename, or the rename-original-to-backup dance — resolves correctly.
+    private async Task HandleSpecialRenameAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments, bool keepSource)
+    {
+        var destSegments = ParseDestination(context);
+        if (segments.Count != 3 || destSegments is not { Count: 3 } || !IsSpecialPath(destSegments)
+            || destSegments[0] != segments[0] || destSegments[1] != segments[1])
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden; // only same-special-folder renames are supported
+            return;
+        }
+
+        var storage = services.GetRequiredService<IObjectStorageClient>();
+        var (srcName, destName) = (segments[2], destSegments[2]);
+
+        if (segments[1] == InboxName)
+        {
+            var srcKey = InboxPrefix(user) + srcName;
+            if (!await storage.ExistsAsync(srcKey, context.RequestAborted))
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
+            var destKey = InboxPrefix(user) + destName;
+            var inboxDestExisted = await storage.ExistsAsync(destKey, context.RequestAborted);
+            await storage.CopyObjectAsync(srcKey, destKey, context.RequestAborted);
+            if (!keepSource) await storage.DeleteObjectAsync(srcKey, context.RequestAborted);
+            context.Response.StatusCode = inboxDestExisted ? StatusCodes.Status204NoContent : StatusCodes.Status201Created;
+            return;
+        }
+
+        // Check-out.
+        var docs = await CheckoutFilesAsync(storage, db, user);
+        var scratchSrcKey = CheckoutScratchPrefix(user) + srcName;
+        var srcIsScratch = await storage.ExistsAsync(scratchSrcKey, context.RequestAborted);
+
+        // Source is a checked-out document → copy its current working bytes out to a scratch backup; the document
+        // stays put (a document is never renamed/removed over WebDAV — the check-out is a client action).
+        if (!srcIsScratch && docs.FirstOrDefault(f => f.Name == srcName) is { } srcDoc)
+        {
+            if (docs.Any(f => f.Name == destName)) { context.Response.StatusCode = StatusCodes.Status403Forbidden; return; } // doc → doc unsupported
+            var backupKey = CheckoutScratchPrefix(user) + destName;
+            var backupExisted = await storage.ExistsAsync(backupKey, context.RequestAborted);
+            await storage.CopyObjectAsync(srcDoc.Key, backupKey, context.RequestAborted);
+            context.Response.StatusCode = backupExisted ? StatusCodes.Status204NoContent : StatusCodes.Status201Created;
+            return;
+        }
+
+        if (!srcIsScratch)
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        // Scratch → a checked-out document = the commit: write the scratch bytes to that document's stash.
+        if (docs.FirstOrDefault(f => f.Name == destName) is { } targetDoc)
+        {
+            using var buffered = new MemoryStream();
+            await using (var scratch = await storage.GetObjectAsync(scratchSrcKey, context.RequestAborted))
+            {
+                await scratch.CopyToAsync(buffered, context.RequestAborted);
+            }
+
+            buffered.Position = 0;
+            await storage.PutObjectAsync(
+                CheckoutStashKey.Build(user.TenantId, user.Id, targetDoc.DocumentId),
+                buffered, ContentTypes.ForExtension(Path.GetExtension(destName)), context.RequestAborted);
+            if (!keepSource) await storage.DeleteObjectAsync(scratchSrcKey, context.RequestAborted);
+            context.Response.StatusCode = StatusCodes.Status204NoContent;
+            return;
+        }
+
+        // Scratch → scratch = duplicate/rename the temp.
+        var scratchDestKey = CheckoutScratchPrefix(user) + destName;
+        var scratchDestExisted = await storage.ExistsAsync(scratchDestKey, context.RequestAborted);
+        await storage.CopyObjectAsync(scratchSrcKey, scratchDestKey, context.RequestAborted);
+        if (!keepSource) await storage.DeleteObjectAsync(scratchSrcKey, context.RequestAborted);
+        context.Response.StatusCode = scratchDestExisted ? StatusCodes.Status204NoContent : StatusCodes.Status201Created;
+    }
+
     // Parses the Destination header into WebDAV path segments (null when absent/unparseable).
     private static List<string>? ParseDestination(HttpContext context)
     {
@@ -872,7 +982,7 @@ public sealed partial class WebDavMiddleware
     {
         if (IsSpecialPath(segments))
         {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await HandleSpecialRenameAsync(context, services, db, user, segments, keepSource: true); // atomic-save copy within Inbox/Check-out (ADR 0508)
             return;
         }
 
@@ -1116,9 +1226,9 @@ public sealed partial class WebDavMiddleware
         foreach (var obj in await storage.ListObjectsAsync(prefix))
         {
             var name = obj.Key[prefix.Length..];
-            if (name.Length == 0 || name.Contains('/') || IsInboxLitter(name) || IsOsClutter(name))
+            if (name.Length == 0 || name.Contains('/') || IsInboxLitter(name) || IsOsClutter(name) || IsLockFile(name))
             {
-                continue; // the prefix placeholder, a nested key, a litter artifact, or OS clutter
+                continue; // the prefix placeholder, a nested key, a litter artifact, OS clutter, or a lock file
             }
 
             result.Add(new SpecialFile(name, obj.Size, obj.LastModified, Guid.Empty, obj.Key));
@@ -1129,6 +1239,48 @@ public sealed partial class WebDavMiddleware
 
     // The caller's checked-out documents, shown by name; the working copy is the cloud stash if present, else
     // the current confirmed version (ADR "Document check-out / check-in" stash).
+    // Office/LibreOffice owner + lock files (~$name / .~lock.name#) — hidden from the special-folder listings so
+    // they don't clutter the view while an edit is in flight (ADR 0508). They still PUT/DELETE like any file.
+    private static bool IsLockFile(string name) =>
+        name.StartsWith("~$", StringComparison.Ordinal)
+        || (name.StartsWith(".~lock.", StringComparison.Ordinal) && name.EndsWith("#", StringComparison.Ordinal));
+
+    // Per-user scratch area for the Check-out folder's in-flight atomic-save temp files (ADR 0508) — the same
+    // tier as inbox/ and checkout/ (ADR 0368). A temp is committed to the doc's stash on the rename MOVE.
+    private static string CheckoutScratchPrefix(User user) => $"tenants/{user.TenantId}/users/{user.Id}/checkout-scratch/";
+
+    private static async Task<List<SpecialFile>> CheckoutScratchFilesAsync(IObjectStorageClient storage, User user)
+    {
+        var prefix = CheckoutScratchPrefix(user);
+        var result = new List<SpecialFile>();
+        foreach (var obj in await storage.ListObjectsAsync(prefix))
+        {
+            var name = obj.Key[prefix.Length..];
+            if (name.Length == 0 || name.Contains('/') || IsLockFile(name))
+            {
+                continue; // the prefix placeholder, a nested key, or a hidden lock/owner file
+            }
+
+            result.Add(new SpecialFile(name, obj.Size, obj.LastModified, Guid.Empty, obj.Key));
+        }
+
+        return result;
+    }
+
+    // The files a special folder exposes over WebDAV: the Inbox's staged objects, or the Check-out's checked-out
+    // documents PLUS any in-flight atomic-save scratch temps (ADR 0508).
+    private static async Task<List<SpecialFile>> SpecialFolderFilesAsync(IObjectStorageClient storage, SimplArchiveDbContext db, User user, string folder)
+    {
+        if (folder == InboxName)
+        {
+            return await InboxFilesAsync(storage, user);
+        }
+
+        var files = await CheckoutFilesAsync(storage, db, user);
+        files.AddRange(await CheckoutScratchFilesAsync(storage, user));
+        return files;
+    }
+
     private static async Task<List<SpecialFile>> CheckoutFilesAsync(IObjectStorageClient storage, SimplArchiveDbContext db, User user)
     {
         var checkedOut = await db.Documents.Where(d => d.CheckedOutByUserId == user.Id).ToListAsync();
@@ -1194,17 +1346,22 @@ public sealed partial class WebDavMiddleware
             return;
         }
 
-        // Check-out: save the working copy to the caller's stash for an existing checked-out document (the
-        // "Save to cloud" path). Creating a check-out over WebDAV isn't supported.
+        // Check-out: a PUT onto a checked-out document's name saves the working copy to that doc's stash (the
+        // "Save to cloud" path). A PUT to any OTHER name is an atomic-save temp/lock/owner file — buffer it in the
+        // per-user scratch area so the later rename MOVE can commit it (ADR 0508). Creating a check-out over WebDAV
+        // is still not supported.
         var files = await CheckoutFilesAsync(storage, db, user);
-        if (files.FirstOrDefault(f => f.Name == name) is not { } file)
+        if (files.FirstOrDefault(f => f.Name == name) is { } file)
         {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await storage.PutObjectAsync(CheckoutStashKey.Build(user.TenantId, user.Id, file.DocumentId), buffered, contentType, context.RequestAborted);
+            context.Response.StatusCode = StatusCodes.Status204NoContent;
             return;
         }
 
-        await storage.PutObjectAsync(CheckoutStashKey.Build(user.TenantId, user.Id, file.DocumentId), buffered, contentType, context.RequestAborted);
-        context.Response.StatusCode = StatusCodes.Status204NoContent;
+        var scratchKey = CheckoutScratchPrefix(user) + name;
+        var scratchExisted = await storage.ExistsAsync(scratchKey, context.RequestAborted);
+        await storage.PutObjectAsync(scratchKey, buffered, contentType, context.RequestAborted);
+        context.Response.StatusCode = scratchExisted ? StatusCodes.Status204NoContent : StatusCodes.Status201Created;
     }
 
     private static PropStatXml CollectionProp(List<string> segments, string displayName)

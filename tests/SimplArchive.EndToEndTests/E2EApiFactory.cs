@@ -49,13 +49,15 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
     private readonly IContainer _storage = new ContainerBuilder()
         .WithImage("chrislusf/seaweedfs@sha256:c7d6c721b30ae711db766bbbfd40192776e263d4e51e22f57baef7bef93c12c6")
         .WithResourceMapping(System.Text.Encoding.UTF8.GetBytes(SeaweedS3Config), "/s3.json")
-        // -volume.max=500: SeaweedFS defaults to only 8 volume slots, but per-tenant buckets (ADR "Per-tenant
-        // object-storage bucket") make every test tenant's bucket its own collection → its own volume, and the
-        // full suite creates far more than 8 tenants. Past the 8th, SeaweedFS can't allocate a volume for a new
-        // bucket and returns 500 ("no writable volume") on the upload PUT — the deterministic burst of
-        // object-storage 500s seen on constrained runners. Volumes are created on demand (only ~one per bucket,
-        // growing as data is written), so a high slot cap costs nothing.
-        .WithCommand("server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/s3.json", "-volume.max=500")
+        // -volume.max: SeaweedFS defaults to only 8 volume slots, but per-tenant buckets (ADR "Per-tenant
+        // object-storage bucket") make every test tenant's bucket its own collection consuming SeaweedFS volumes,
+        // and the full suite creates hundreds of tenants. When the cap is hit, SeaweedFS can't allocate a volume
+        // for a new bucket and returns 500 ("no writable volume") on the upload PUT — a deterministic burst of
+        // object-storage 500s across every later test. Each bucket takes several volumes, so the suite sat right
+        // at the old cap of 500 (a single new test file tipped it over); this is raised well above the suite's
+        // peak so it has real headroom to grow. Volumes are created on demand (memory/disk scale with USED volumes,
+        // not the cap), so a high slot cap costs nothing until volumes are actually written.
+        .WithCommand("server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/s3.json", "-volume.max=5000")
         .WithPortBinding(8333, true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("S3 API Server"))
         .Build();
