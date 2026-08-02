@@ -4,6 +4,18 @@
 
 SimplArchive is a working, multi-tenant **Document Management System**, built end-to-end as a demonstration of AI-assisted software engineering: Clean Architecture, a hypermedia REST API, two clients (a Blazor WebAssembly web app and a cross-platform Avalonia desktop app), OAuth/OIDC auth with MFA and passkeys, full-text + OCR search, document previews, versioning, ACLs, workflow, audit trails, legal hold & retention, WebDAV, a **fully localized UI (English, German, Italian, Spanish)**, and a production Helm chart — with an extensive automated test suite (unit, integration, container-backed E2E, and browser/desktop UI E2E) and a hardened CI pipeline.
 
+## ▶ Try the live demo
+
+A live instance is running at **<https://demo.simplarchive.dev>** — log in and explore, nothing to install:
+
+| | |
+|---|---|
+| **URL** | **<https://demo.simplarchive.dev>** |
+| **Email** | `demo@simplarchive.dev` |
+| **Password** | `demo1234` |
+
+It resets to a clean, known state every night, so feel free to create, upload, workflow, and delete anything. The user manual is one click away at [demo.simplarchive.dev/download/manual/](https://demo.simplarchive.dev/download/manual/).
+
 > **Not for production as shipped.** The default stack uses development certificates and fixed demo credentials. It is an enterprise-grade *architecture and feature* showcase; a real production posture still requires hardening the deployment (real secrets/certificates, managed dependencies, and load/scale validation).
 
 ## Run it locally (Docker Compose)
