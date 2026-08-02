@@ -1075,7 +1075,7 @@
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload" HtmlTag="label" for="inbox-file-input">@Strings.Get("InboxUpload")</MudButton>
                         <InputFile id="inbox-file-input" OnChange="OnInboxInputChangeAsync" multiple style="display:none" />
                         <MudButton Variant="Variant.Text" OnClick="LoadInboxAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.Refresh">@Strings.Get("RibbonRefresh")</MudButton>
-                        <MudButton Variant="Variant.Text" OnClick="CopyWebDavPersonalUrlAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.ContentCopy">@Strings.Get("InboxCopyDav")</MudButton>
+                        <MudButton Variant="Variant.Text" OnClick="CopyWebDavUrlAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.ContentCopy">@Strings.Get("InboxCopyDav")</MudButton>
                         @if (_inboxChecked.Count >= 2)
                         {
                             <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="FileMultipleAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.DriveFileMove">@string.Format(Strings.Get("InboxFileN"), _inboxChecked.Count)</MudButton>
@@ -1238,6 +1238,8 @@
                     <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                         <MudText Typo="Typo.h6">@Strings.Get("CoHeader")</MudText>
                         <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadCheckoutsAsync" title="@Strings.Get("RibbonRefresh")" />
+                        @* Copy the SimplArchive WebDAV mount URL — parity with the Inbox tab (ADR 0509); the Check-out folder lives under the mounted resource. *@
+                        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="CopyWebDavUrlAsync" StartIcon="@Icons.Material.Filled.ContentCopy">@Strings.Get("InboxCopyDav")</MudButton>
                     </div>
                     @if (_checkouts.Count == 0)
                     {
@@ -7399,7 +7401,7 @@
     // Copies the WebDAV mount URL of the caller's Personal folder (which holds the Inbox, Check-out, and personal
     // archive) so the user can paste it into their OS "Connect to Server" dialog (ADR "WebDAV Inbox/Check-out
     // under Personal"). A browser can't mount WebDAV itself, so this is copy-to-clipboard rather than a launch.
-    private async Task CopyWebDavPersonalUrlAsync()
+    private async Task CopyWebDavUrlAsync()
     {
         try
         {
@@ -7410,9 +7412,11 @@
                 return;
             }
 
-            var personalUrl = $"{status.Url.TrimEnd('/')}/Personal";
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", personalUrl);
-            Snackbar.Add($"Copied WebDAV URL: {personalUrl}", Severity.Success);
+            // The single "SimplArchive" resource (ADR 0509) — mounting it lists the whole tree (Personal, with
+            // Inbox/Check-out, + the shared repositories).
+            var mountUrl = status.Url.TrimEnd('/');
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", mountUrl);
+            Snackbar.Add($"Copied WebDAV URL: {mountUrl}", Severity.Success);
         }
         catch (Exception)
         {

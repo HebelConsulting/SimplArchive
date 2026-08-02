@@ -345,7 +345,7 @@ public partial class MainWindow : Window
     // "Open in file manager" (Inbox tab): mount the user's Personal WebDAV folder (Inbox / Check-out / archive)
     // and open it in Finder / Explorer / Files. When WebDAV isn't set up yet, open the settings dialog so the
     // user can set a password there and then, instead of just hinting (ADR "Desktop inbox WebDAV buttons").
-    private void OnOpenWebDavInbox(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    private void OnOpenWebDavMount(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel { Api: { } api } vm)
         {
@@ -362,8 +362,10 @@ public partial class MainWindow : Window
                 return;
             }
 
-            vm.Status = "Opening your Personal folder (Inbox / Check-out / archive) in your file manager…";
-            var result = await OsFileManager.OpenWebDavAsync($"{status.Url.TrimEnd('/')}/Personal");
+            vm.Status = "Opening SimplArchive (your Personal space + repositories) in your file manager…";
+            // Mount the single "SimplArchive" resource — the whole tree (Personal, with Inbox/Check-out, + the
+            // shared repositories) — so the OS volume is named "SimplArchive" (ADR 0509).
+            var result = await OsFileManager.OpenWebDavAsync(status.Url.TrimEnd('/'));
             if (!result.Success)
             {
                 vm.Status = $"Could not open the WebDAV folder: {result.Error}";

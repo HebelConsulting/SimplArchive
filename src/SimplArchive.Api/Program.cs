@@ -731,8 +731,8 @@ app.UseSerilogRequestLogging(options =>
     };
 });
 
-// The WebDAV gateway (ADR "WebDAV gateway") handles /webdav with its own HTTP Basic auth, ahead of the normal
-// OIDC/JWT pipeline; it short-circuits for /webdav and passes everything else through.
+// The WebDAV gateway (ADRs "WebDAV gateway" / 0509) handles /SimplArchive (and the /webdav alias) with its own
+// HTTP Basic auth, ahead of the normal OIDC/JWT pipeline; it short-circuits for those and passes the rest through.
 app.UseMiddleware<SimplArchive.Api.WebDav.WebDavMiddleware>();
 
 app.UseBlazorFrameworkFiles();

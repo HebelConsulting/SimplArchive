@@ -21,7 +21,19 @@ namespace SimplArchive.Api.WebDav;
 // create-child paths as the API. Auth is HTTP Basic against the per-user app-specific WebDAV password.
 public sealed partial class WebDavMiddleware
 {
-    public const string BasePath = "/webdav";
+    // The single mounted resource is served at /SimplArchive so an OS mount (Finder / Explorer / Nautilus) is
+    // named "SimplArchive" — the OS takes the volume name from the URL's last path segment, not the DAV
+    // displayname (ADR 0509). The original /webdav path stays accepted for already-saved mounts; hrefs are always
+    // emitted under /SimplArchive (the canonical path).
+    public const string BasePath = "/SimplArchive";
+    private const string LegacyBasePath = "/webdav";
+
+    // The gateway answers at /SimplArchive (canonical) and /webdav (legacy). Returns whichever prefix the request
+    // used, or null when the path isn't the gateway's.
+    private static string? MatchedBase(string path) =>
+        path.Equals(BasePath, StringComparison.OrdinalIgnoreCase) || path.StartsWith(BasePath + "/", StringComparison.OrdinalIgnoreCase) ? BasePath
+        : path.Equals(LegacyBasePath, StringComparison.OrdinalIgnoreCase) || path.StartsWith(LegacyBasePath + "/", StringComparison.OrdinalIgnoreCase) ? LegacyBasePath
+        : null;
 
     // Two special folders nested under the caller's Personal repository (ADR "WebDAV Inbox + Check-out folders",
     // grouped under Personal by ADR "WebDAV Inbox/Check-out under Personal"): the per-user Inbox (an S3-backed
@@ -50,9 +62,22 @@ public sealed partial class WebDavMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         var path = context.Request.Path.Value ?? "";
-        if (!path.Equals(BasePath, StringComparison.OrdinalIgnoreCase) && !path.StartsWith(BasePath + "/", StringComparison.OrdinalIgnoreCase))
+        var matchedBase = MatchedBase(path);
+        if (matchedBase is null)
         {
             await _next(context);
+            return;
+        }
+
+        var method = context.Request.Method.ToUpperInvariant();
+
+        // Canonicalise a plain browser GET/HEAD of the legacy /webdav root to /SimplArchive (ADR 0509). A WebDAV
+        // client never GETs the collection root — it PROPFINDs — so this 301 only ever hits a human/browser and
+        // leaves real mounts (which use PROPFIND/PUT/… on /webdav, served directly as an alias) untouched.
+        if (matchedBase == LegacyBasePath && method is "GET" or "HEAD"
+            && path.TrimEnd('/').Equals(LegacyBasePath, StringComparison.OrdinalIgnoreCase))
+        {
+            context.Response.Redirect(BasePath, permanent: true);
             return;
         }
 
@@ -76,10 +101,10 @@ public sealed partial class WebDavMiddleware
         // root — ensure it exists (get-or-create, idempotent) before serving any request.
         await services.GetRequiredService<PersonalRepositoryProvisioner>().EnsureAsync(user.Id, user.TenantId, context.RequestAborted);
 
-        var segments = path[BasePath.Length..].Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries)
+        var segments = path[matchedBase.Length..].Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries)
             .Select(Uri.UnescapeDataString).ToList();
 
-        switch (context.Request.Method.ToUpperInvariant())
+        switch (method)
         {
             case "OPTIONS": HandleOptions(context); break;
             case "PROPFIND": await HandlePropFindAsync(context, services, db, user, segments); break;
@@ -972,8 +997,16 @@ public sealed partial class WebDavMiddleware
 
         var uri = new Uri(destination, UriKind.RelativeOrAbsolute);
         var absolute = uri.IsAbsoluteUri ? uri.AbsolutePath : destination;
+        // The Destination may use either the canonical /SimplArchive or the legacy /webdav prefix.
         var baseIndex = absolute.IndexOf(BasePath, StringComparison.OrdinalIgnoreCase);
-        var tail = baseIndex >= 0 ? absolute[(baseIndex + BasePath.Length)..] : absolute;
+        var matchedLength = BasePath.Length;
+        if (baseIndex < 0)
+        {
+            baseIndex = absolute.IndexOf(LegacyBasePath, StringComparison.OrdinalIgnoreCase);
+            matchedLength = LegacyBasePath.Length;
+        }
+
+        var tail = baseIndex >= 0 ? absolute[(baseIndex + matchedLength)..] : absolute;
         return tail.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.UnescapeDataString).ToList();
     }
 
@@ -1520,7 +1553,9 @@ public sealed partial class WebDavMiddleware
         public DateTimeOffset Created { get; init; }
         public DateTimeOffset Modified { get; init; }
 
-        public static WebDavNode Root() => new() { IsRoot = true, IsCollection = true, WebDavName = "webdav", Created = DateTimeOffset.UnixEpoch, Modified = DateTimeOffset.UnixEpoch };
+        // The single mounted resource is named "SimplArchive" and its children mirror the Repositories tree-pane
+        // exactly (ADR 0509): the Personal space, then the shared repositories the caller can see.
+        public static WebDavNode Root() => new() { IsRoot = true, IsCollection = true, WebDavName = "SimplArchive", Created = DateTimeOffset.UnixEpoch, Modified = DateTimeOffset.UnixEpoch };
 
         public static WebDavNode Collection(Document document) => new()
         {

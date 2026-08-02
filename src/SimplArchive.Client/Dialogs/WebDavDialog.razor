@@ -11,10 +11,10 @@
                 @Strings.Get("WebDavInfo")
             </MudText>
 
+            @* The single "SimplArchive" mount URL lists the whole tree (Personal, with Inbox/Check-out, + the
+               shared repositories) — one resource, ADR 0509. *@
             <MudTextField T="string" Label="@Strings.Get("WebDavMountUrl")" Value="@_url" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
                           Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy" OnAdornmentClick="() => CopyAsync(_url)" />
-            <MudTextField T="string" Label="@Strings.Get("WebDavPersonalFolder")" Value="@PersonalUrl" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2"
-                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy" OnAdornmentClick="() => CopyAsync(PersonalUrl)" />
             <MudTextField T="string" Label="@Strings.Get("WebDavUsername")" Value="@_username" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2" />
 
             @if (_generatedPassword is not null)
@@ -52,9 +52,6 @@
     private string _url = "";
     private string? _generatedPassword;
     private bool _busy;
-
-    // The Personal folder groups the Inbox, Check-out, and personal archive under one mountable path.
-    private string PersonalUrl => string.IsNullOrEmpty(_url) ? "" : $"{_url.TrimEnd('/')}/Personal";
 
     protected override async Task OnInitializedAsync()
     {

@@ -708,7 +708,7 @@
                             <Button Click="OnManageWebDav" Padding="10,4" ToolTip.Tip="{loc:Tr MwWebDavSettingsTip}">
                                 <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-cog-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwWebDavSettings}" /></StackPanel>
                             </Button>
-                            <Button Click="OnOpenWebDavInbox" Padding="10,4" ToolTip.Tip="{loc:Tr MwOpenWebDavTip}">
+                            <Button Click="OnOpenWebDavMount" Padding="10,4" ToolTip.Tip="{loc:Tr MwOpenWebDavTip}">
                                 <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-folder-network-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwOpenInFileManager}" /></StackPanel>
                             </Button>
                             <Button Click="OnInboxFileMultiple" Padding="10,4" IsVisible="{Binding CanFileMultiple}" ToolTip.Tip="{loc:Tr MwFileSelectedTip}">
@@ -846,6 +846,14 @@
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
                         <TextBlock Text="{loc:Tr CoHeader}" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center" />
                         <Button Command="{Binding Checkout.RefreshCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}" Padding="6,2"><i:Icon Value="mdi-refresh" /></Button>
+                        <!-- WebDAV access: settings dialog + mount-and-open the SimplArchive resource in the OS file
+                             manager (the Check-out folder lives under it) — parity with the Inbox tab (ADR 0509). -->
+                        <Button Click="OnManageWebDav" Padding="10,4" ToolTip.Tip="{loc:Tr MwWebDavSettingsTip}">
+                            <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-cog-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwWebDavSettings}" /></StackPanel>
+                        </Button>
+                        <Button Click="OnOpenWebDavMount" Padding="10,4" ToolTip.Tip="{loc:Tr MwOpenWebDavTip}">
+                            <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-folder-network-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwOpenInFileManager}" /></StackPanel>
+                        </Button>
                     </StackPanel>
 
                     <!-- Orphaned local copies (ADR "Web check-out + orphaned local copy"): the check-out was

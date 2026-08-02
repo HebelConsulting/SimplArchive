@@ -106,7 +106,9 @@ public class WebDavAccessController : ControllerBase
 
     private string MountUrl()
     {
+        // The single "SimplArchive" resource (ADR 0509): mounting it names the OS volume "SimplArchive" and lists
+        // the whole tree (Personal + the shared repositories the user can see). /webdav still works for old mounts.
         var baseUrl = (_configuration["App:BaseUrl"] ?? "").TrimEnd('/');
-        return $"{baseUrl}/webdav";
+        return $"{baseUrl}/SimplArchive";
     }
 }
