@@ -69,7 +69,7 @@ deps:
       limits: { cpu: "1", memory: 1Gi }
   gotenberg:
     enabled: false
-    image: gotenberg/gotenberg:8
+    image: gotenberg/gotenberg:8.34.0
     resources:
       requests: { cpu: 100m, memory: 256Mi }
       limits: { cpu: "1", memory: 768Mi }
@@ -90,7 +90,7 @@ deps:
   # Secret (idempotent via lookup); phase 3 moves them under OpenBao.
   postgres:
     enabled: false
-    image: postgres:16-alpine
+    image: postgres:16.14-alpine
     database: simplarchive
     storage: 5Gi
     resources:
@@ -105,7 +105,7 @@ deps:
       limits: { cpu: "1", memory: 512Mi }
   opensearch:
     enabled: false
-    image: opensearchproject/opensearch:2
+    image: opensearchproject/opensearch:2.19.6
     storage: 5Gi
     javaOpts: "-Xms512m -Xmx512m"
     # A privileged initContainer sets vm.max_map_count=262144 (OpenSearch requires it; the node must allow it).

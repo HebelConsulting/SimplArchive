@@ -13,7 +13,7 @@
 
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:16.14-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -28,7 +28,7 @@ services:
       retries: 10
 
   db-init:
-    image: postgres:16-alpine
+    image: postgres:16.14-alpine
     depends_on:
       db:
         condition: service_healthy
@@ -68,11 +68,11 @@ services:
       "
 
   gotenberg:
-    image: gotenberg/gotenberg:8
+    image: gotenberg/gotenberg:8.34.0
     restart: unless-stopped
 
   opensearch:
-    image: opensearchproject/opensearch:2
+    image: opensearchproject/opensearch:2.19.6
     restart: unless-stopped
     environment:
       discovery.type: single-node
@@ -240,7 +240,7 @@ services:
   # Public TLS reverse proxy (automatic Let's Encrypt). Its cert/ACME state lives in HOST bind-mounts (not named
   # volumes) so the daily reset.sh (`down -v`) never wipes the certificates — avoiding LE rate limits.
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.11.4-alpine
     restart: unless-stopped
     depends_on:
       api:

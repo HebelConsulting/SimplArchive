@@ -23,7 +23,7 @@
 
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:16.14-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -44,7 +44,7 @@ services:
   # existing objects (created by a prior dynamic role / postgres) to the owner. Runs as the postgres superuser
   # (which the db exposes for local dev) and is safe to re-run. Uses the postgres image for its psql client.
   db-init:
-    image: postgres:16-alpine
+    image: postgres:16.14-alpine
     depends_on:
       db:
         condition: service_healthy
@@ -118,12 +118,12 @@ services:
   # LibreOffice — see docs/adr/0228-office-document-preview-gotenberg.md. The Api POSTs the file and caches
   # the returned PDF as a rendition; keeps the Api image free of LibreOffice.
   gotenberg:
-    image: gotenberg/gotenberg:8
+    image: gotenberg/gotenberg:8.34.0
     restart: unless-stopped
 
   # Full-text search engine (ADR 0011). Single-node, security disabled — dev only.
   opensearch:
-    image: opensearchproject/opensearch:2
+    image: opensearchproject/opensearch:2.19.6
     environment:
       discovery.type: single-node
       DISABLE_SECURITY_PLUGIN: "true"
@@ -424,7 +424,7 @@ services:
   # (no mixed-content). PROXY_HOST = the host's LAN IP/hostname (default localhost). Caddy adds the
   # X-Forwarded-* headers and transparently proxies the SignalR WebSocket. Dev only.
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.11.4-alpine
     restart: unless-stopped
     depends_on:
       api:
