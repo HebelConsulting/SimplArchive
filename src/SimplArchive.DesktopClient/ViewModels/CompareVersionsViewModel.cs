@@ -93,6 +93,13 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
     [RelayCommand]
     private async Task OpenInBeyondCompare()
     {
+        // The button is always shown (ADR 0518) — if Beyond Compare isn't installed, send the user to the vendor.
+        if (!BeyondCompareAvailable)
+        {
+            SystemBrowser.Open("https://www.scootersoftware.com");
+            return;
+        }
+
         if (_api is null || FromVersion?.DownloadUrl is null || ToVersion?.DownloadUrl is null)
         {
             return;
