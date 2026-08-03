@@ -28,7 +28,7 @@ public class WebPersonalRepositoryTests
 
         // It's a real writable repository — New folder files into it and the folder shows in the contents pane.
         page.Dialog += (_, dialog) => { _ = dialog.AcceptAsync(folder); };
-        await page.Locator(".wb-ribbon").GetByText("New folder").First.ClickAsync();
+        await page.Locator(".wb-ribbon [aria-label=\"New folder\"]").First.ClickAsync();
         await Expect(page.Locator("[data-pane='list']").GetByText(folder)).ToBeVisibleAsync();
     }
 

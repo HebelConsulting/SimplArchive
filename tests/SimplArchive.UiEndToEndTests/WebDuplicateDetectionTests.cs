@@ -45,7 +45,7 @@ public class WebDuplicateDetectionTests
         var newName = $"dupnew-{tag}";
         var chooser = await page.RunAndWaitForFileChooserAsync(async () =>
         {
-            await page.Locator(".wb-ribbon").GetByText("Upload").First.ClickAsync();
+            await page.Locator(".wb-ribbon [aria-label=\"Upload\"]").First.ClickAsync();
         });
         await chooser.SetFilesAsync(new FilePayload { Name = newName + ".txt", MimeType = "text/plain", Buffer = Encoding.UTF8.GetBytes(content) });
 

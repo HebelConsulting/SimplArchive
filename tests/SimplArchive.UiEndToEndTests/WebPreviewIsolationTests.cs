@@ -58,7 +58,7 @@ public class WebPreviewIsolationTests
         await page.GetByText("Demo Repository").First.ClickAsync(); // select the repo so Upload targets it
         var chooser = await page.RunAndWaitForFileChooserAsync(async () =>
         {
-            await page.Locator(".wb-ribbon").GetByText("Upload").First.ClickAsync();
+            await page.Locator(".wb-ribbon [aria-label=\"Upload\"]").First.ClickAsync();
         });
         await chooser.SetFilesAsync(new FilePayload
         {

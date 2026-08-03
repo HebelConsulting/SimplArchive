@@ -27,13 +27,13 @@ public class WebRecoveredItemsTests
 
         // Create the parent folder at the repository root.
         await page.GetByText("Demo Repository").First.ClickAsync();
-        await page.Locator(".wb-ribbon").GetByText("New folder").First.ClickAsync();
+        await page.Locator(".wb-ribbon [aria-label=\"New folder\"]").First.ClickAsync();
         await Expect(list.GetByText(parent)).ToBeVisibleAsync();
 
         // Drill into the parent (double-click) and create the child folder inside it.
         nextFolder = child;
         await list.GetByText(parent).First.DblClickAsync();
-        await page.Locator(".wb-ribbon").GetByText("New folder").First.ClickAsync();
+        await page.Locator(".wb-ribbon [aria-label=\"New folder\"]").First.ClickAsync();
         await Expect(list.GetByText(child)).ToBeVisibleAsync();
 
         // Back to the root and delete the parent → the delete cascades to the child.

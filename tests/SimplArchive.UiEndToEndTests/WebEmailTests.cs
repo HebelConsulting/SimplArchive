@@ -24,7 +24,7 @@ public class WebEmailTests
         await page.GetByText("Demo Repository").First.ClickAsync();
         var chooser = await page.RunAndWaitForFileChooserAsync(async () =>
         {
-            await page.Locator(".wb-ribbon").GetByText("Upload").First.ClickAsync();
+            await page.Locator(".wb-ribbon [aria-label=\"Upload\"]").First.ClickAsync();
         });
         await chooser.SetFilesAsync(new FilePayload { Name = "email-" + Guid.NewGuid().ToString("N")[..8] + ".eml", MimeType = "message/rfc822", Buffer = BuildEml(subject) });
 

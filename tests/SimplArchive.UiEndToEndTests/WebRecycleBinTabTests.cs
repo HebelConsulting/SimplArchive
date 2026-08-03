@@ -28,7 +28,7 @@ public class WebRecycleBinTabTests
         await page.GetByText("Demo Repository").First.ClickAsync();
         var list = page.Locator("[data-pane='list']");
         page.Dialog += (_, dialog) => { _ = dialog.AcceptAsync(name); };
-        await page.Locator(".wb-ribbon").GetByText("New folder").First.ClickAsync();
+        await page.Locator(".wb-ribbon [aria-label=\"New folder\"]").First.ClickAsync();
         await Expect(list.GetByText(name)).ToBeVisibleAsync();
         var row = list.Locator(".wb-list-row").Filter(new() { HasText = name });
         await row.Locator("button").Last.ClickAsync();
@@ -75,7 +75,7 @@ public class WebRecycleBinTabTests
         foreach (var name in names)
         {
             currentFolderName = name;
-            await page.Locator(".wb-ribbon").GetByText("New folder").First.ClickAsync();
+            await page.Locator(".wb-ribbon [aria-label=\"New folder\"]").First.ClickAsync();
             await Expect(list.GetByText(name)).ToBeVisibleAsync();
         }
 
@@ -124,7 +124,7 @@ public class WebRecycleBinTabTests
         foreach (var name in names)
         {
             currentFolderName = name;
-            await page.Locator(".wb-ribbon").GetByText("New folder").First.ClickAsync();
+            await page.Locator(".wb-ribbon [aria-label=\"New folder\"]").First.ClickAsync();
             await Expect(list.GetByText(name)).ToBeVisibleAsync();
         }
 

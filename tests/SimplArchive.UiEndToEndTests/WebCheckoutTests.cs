@@ -25,7 +25,7 @@ public class WebCheckoutTests
         var list = page.Locator("[data-pane='list']");
         var chooser = await page.RunAndWaitForFileChooserAsync(async () =>
         {
-            await page.Locator(".wb-ribbon").GetByText("Upload").First.ClickAsync();
+            await page.Locator(".wb-ribbon [aria-label=\"Upload\"]").First.ClickAsync();
         });
         await chooser.SetFilesAsync(new FilePayload { Name = name + ".txt", MimeType = "text/plain", Buffer = Encoding.UTF8.GetBytes("checkout web") });
         await Expect(list.GetByText(name)).ToBeVisibleAsync();

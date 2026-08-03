@@ -21,6 +21,14 @@
        matching the preview-pane toolbar's wrapping behavior (both clients). */
     .wb-ribbon { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 12px;
         border-bottom: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
+    /* #305: the label sits after the icon inside the button; a small gap when it's shown. */
+    .wb-rib-btn .wb-rib-label { margin-left: 6px; }
+    /* Icon-only ribbon buttons on hover-capable computers — the label rides in the `title` tooltip, matching the
+       desktop client + the #298 tabs (ADR 0511). Touch devices keep the visible label. */
+    @@media (hover: hover) and (pointer: fine) {
+        .wb-rib-btn { min-width: 0; }
+        .wb-rib-btn .wb-rib-label { display: none; }
+    }
     .wb-cols { flex: 1 1 auto; min-height: 0; display: flex; }
     .wb-pane { overflow: auto; }
     /* Pane basis/collapsed state are set inline by wbLayout.js (persisted); these are the pre-JS fallbacks.
@@ -281,25 +289,46 @@
         <div class="wb" @ref="_dropRoot">
             @* ---- Ribbon (Repositories tab) ---- *@
             <div class="wb-ribbon">
+                @* Ribbon buttons (#305): icon-only on hover-capable computers with the label in a `title` tooltip +
+                   `aria-label`; touch keeps the visible .wb-rib-label. Matches the desktop client + the #298 tabs
+                   (ADR 0511). The icon + label are our own child content so hiding the label leaves a clean icon. *@
                 @if (_activeTab == Tab.Repositories)
                 {
-                    <MudButton StartIcon="@Icons.Material.Filled.Upload" Size="Size.Small" Disabled="@(_selectedFolder is null)" OnClick="UploadAsync">@Strings.Get("Upload")</MudButton>
-                    <MudButton StartIcon="@Icons.Material.Filled.CreateNewFolder" Size="Size.Small" Disabled="@(_selectedFolder is null)" OnClick="NewFolderAsync">@Strings.Get("NewFolder")</MudButton>
-                    <MudButton StartIcon="@Icons.Material.Filled.Download" Size="Size.Small" Disabled="@(_downloadUrl is null)" OnClick="DownloadAsync">@Strings.Get("Download")</MudButton>
-                    <MudButton StartIcon="@Icons.Material.Filled.History" Size="Size.Small" Disabled="@(_selectedItem is null)" OnClick="() => OpenVersionsAsync(_selectedItem!)">@Strings.Get("RibbonVersions")</MudButton>
-                    <MudButton StartIcon="@Icons.Material.Filled.AccountTree" Size="Size.Small" Disabled="@(_selectedItem is null)" OnClick="() => OpenWorkflowAsync(_selectedItem!.Id)">@Strings.Get("RibbonStartWorkflow")</MudButton>
-                    <MudButton StartIcon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RefreshAsync">@Strings.Get("RibbonRefresh")</MudButton>
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedFolder is null)" OnClick="UploadAsync" title="@Strings.Get("Upload")" aria-label="@Strings.Get("Upload")">
+                        <MudIcon Icon="@Icons.Material.Filled.Upload" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("Upload")</span>
+                    </MudButton>
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedFolder is null)" OnClick="NewFolderAsync" title="@Strings.Get("NewFolder")" aria-label="@Strings.Get("NewFolder")">
+                        <MudIcon Icon="@Icons.Material.Filled.CreateNewFolder" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("NewFolder")</span>
+                    </MudButton>
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_downloadUrl is null)" OnClick="DownloadAsync" title="@Strings.Get("Download")" aria-label="@Strings.Get("Download")">
+                        <MudIcon Icon="@Icons.Material.Filled.Download" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("Download")</span>
+                    </MudButton>
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedItem is null)" OnClick="() => OpenVersionsAsync(_selectedItem!)" title="@Strings.Get("RibbonVersions")" aria-label="@Strings.Get("RibbonVersions")">
+                        <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonVersions")</span>
+                    </MudButton>
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedItem is null)" OnClick="() => OpenWorkflowAsync(_selectedItem!.Id)" title="@Strings.Get("RibbonStartWorkflow")" aria-label="@Strings.Get("RibbonStartWorkflow")">
+                        <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonStartWorkflow")</span>
+                    </MudButton>
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="RefreshAsync" title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
+                        <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
+                    </MudButton>
                     @if (_isTenantAdmin)
                     {
-                        <MudButton StartIcon="@Icons.Material.Filled.PictureAsPdf" Size="Size.Small" OnClick="RunTiffBackfillAsync">@Strings.Get("RibbonConvertScans")</MudButton>
+                        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="RunTiffBackfillAsync" title="@Strings.Get("RibbonConvertScans")" aria-label="@Strings.Get("RibbonConvertScans")">
+                            <MudIcon Icon="@Icons.Material.Filled.PictureAsPdf" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonConvertScans")</span>
+                        </MudButton>
                     }
                     @if (_canExport)
                     {
-                        <MudButton StartIcon="@Icons.Material.Filled.Archive" Size="Size.Small" Disabled="@(_selectedFolder is null)" OnClick="OpenExportDialogAsync">@Strings.Get("HomeExport")</MudButton>
+                        <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedFolder is null)" OnClick="OpenExportDialogAsync" title="@Strings.Get("HomeExport")" aria-label="@Strings.Get("HomeExport")">
+                            <MudIcon Icon="@Icons.Material.Filled.Archive" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("HomeExport")</span>
+                        </MudButton>
                     }
                     @if (_canImport)
                     {
-                        <MudButton StartIcon="@Icons.Material.Filled.Unarchive" Size="Size.Small" OnClick="OpenImportDialogAsync">@Strings.Get("HomeImport")</MudButton>
+                        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="OpenImportDialogAsync" title="@Strings.Get("HomeImport")" aria-label="@Strings.Get("HomeImport")">
+                            <MudIcon Icon="@Icons.Material.Filled.Unarchive" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("HomeImport")</span>
+                        </MudButton>
                     }
                     @if (_uploading)
                     {

@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 
 namespace SimplArchive.UiEndToEndTests;
@@ -7,7 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // disposition, named after the document). Drives the real workbench end to end.
 [Collection(UiCollection.Name)]
 [Trait("Area", "ui-1")]
-public partial class WebDownloadTests
+public class WebDownloadTests
 {
     private readonly SelfHostedAppFixture _app;
 
@@ -29,7 +28,8 @@ public partial class WebDownloadTests
         // then handles it: SeaweedFS ignores the attachment override, so a PDF would open inline rather than firing
         // a browser "download" event). The actual byte download is covered server-side by the E2E DocumentDownloadTests.
         await page.EvaluateAsync("() => { window.__openedUrl = null; window.open = (u) => { window.__openedUrl = u; return null; }; }");
-        await page.Locator(".wb-ribbon").GetByText(DownloadRegex()).First.ClickAsync();
+        // Ribbon buttons are icon-only (#305) — select by aria-label, not the now-hidden text.
+        await page.Locator(".wb-ribbon [aria-label=\"Download\"]").First.ClickAsync();
         await page.WaitForFunctionAsync("() => window.__openedUrl !== null", null, new() { Timeout = 15000 });
 
         var url = Uri.UnescapeDataString(await page.EvaluateAsync<string>("() => window.__openedUrl"));
@@ -38,7 +38,4 @@ public partial class WebDownloadTests
         Assert.Contains("2025-001.pdf", url);
         Assert.Contains("attachment", url);
     }
-
-    [GeneratedRegex("^download$", RegexOptions.IgnoreCase)]
-    private static partial Regex DownloadRegex();
 }

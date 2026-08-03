@@ -22,7 +22,7 @@ public class WebExportTests
         await page.GetByText("Demo Repository").First.ClickAsync();
 
         // Ribbon Export… → the filter dialog (defaults: all versions) → the dialog Export triggers the download.
-        await page.Locator(".wb-ribbon").GetByText("Export").First.ClickAsync();
+        await page.Locator(".wb-ribbon [aria-label^=\"Export\"]").First.ClickAsync();
         var dialog = page.Locator(".mud-dialog");
         await Assertions.Expect(dialog).ToBeVisibleAsync();
 

@@ -27,7 +27,7 @@ public class WebLifecycleTests
 
         // New folder — the name comes from a window.prompt.
         page.Dialog += (_, dialog) => { _ = dialog.AcceptAsync(folder); };
-        await page.Locator(".wb-ribbon").GetByText("New folder").First.ClickAsync();
+        await page.Locator(".wb-ribbon [aria-label=\"New folder\"]").First.ClickAsync();
         await Expect(list.GetByText(folder)).ToBeVisibleAsync();
 
         // Rename via the row's ⋮ menu → dialog.

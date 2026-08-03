@@ -25,7 +25,7 @@ public class WebConvertedPreviewTests
         await page.GetByText("Demo Repository").First.ClickAsync();
         var chooser = await page.RunAndWaitForFileChooserAsync(async () =>
         {
-            await page.Locator(".wb-ribbon").GetByText("Upload").First.ClickAsync();
+            await page.Locator(".wb-ribbon [aria-label=\"Upload\"]").First.ClickAsync();
         });
         await chooser.SetFilesAsync(new FilePayload { Name = name + ".md", MimeType = "text/markdown", Buffer = Encoding.UTF8.GetBytes("# Title\n\nHello **Kriens** world.\n") });
         await list.GetByText(name).First.ClickAsync();

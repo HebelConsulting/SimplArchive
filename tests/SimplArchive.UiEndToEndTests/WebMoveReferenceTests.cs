@@ -29,7 +29,7 @@ public class WebMoveReferenceTests
         async Task NewFolderAsync(string name)
         {
             nextFolderName = name;
-            await page.Locator(".wb-ribbon").GetByText("New folder").First.ClickAsync();
+            await page.Locator(".wb-ribbon [aria-label=\"New folder\"]").First.ClickAsync();
             await Expect(list.GetByText(name)).ToBeVisibleAsync();
         }
 

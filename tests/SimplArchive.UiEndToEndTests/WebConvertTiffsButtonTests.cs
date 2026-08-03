@@ -22,7 +22,7 @@ public class WebConvertTiffsButtonTests
         var page = await Ui.LoginAsync(_app);
 
         // The button is present for the tenant admin (whoami.isTenantAdmin) on the Repositories ribbon.
-        await page.Locator(".wb-ribbon").GetByText("Convert scans").First.ClickAsync();
+        await page.Locator(".wb-ribbon [aria-label=\"Convert scans\"]").First.ClickAsync();
 
         // The seeded PDFs are candidates, so the confirm dialog appears (rather than the empty-state snackbar).
         await Expect(page.Locator(".mud-dialog")).ToContainTextAsync("scanned document");

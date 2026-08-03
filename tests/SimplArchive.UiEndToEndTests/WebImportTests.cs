@@ -19,7 +19,7 @@ public class WebImportTests
         await page.GetByText("Demo Repository").First.ClickAsync();
 
         // Export → grab the downloaded .zip path.
-        await page.Locator(".wb-ribbon").GetByText("Export").First.ClickAsync();
+        await page.Locator(".wb-ribbon [aria-label^=\"Export\"]").First.ClickAsync();
         var dialog = page.Locator(".mud-dialog");
         await Assertions.Expect(dialog).ToBeVisibleAsync();
         var download = await page.RunAndWaitForDownloadAsync(async () =>
@@ -30,7 +30,7 @@ public class WebImportTests
         Assert.NotNull(zipPath);
 
         // Import that archive back (grafted under the still-selected Demo Repository) via the Import dialog.
-        await page.Locator(".wb-ribbon").GetByText("Import").First.ClickAsync();
+        await page.Locator(".wb-ribbon [aria-label^=\"Import\"]").First.ClickAsync();
         var importDialog = page.Locator(".mud-dialog");
         await Assertions.Expect(importDialog).ToBeVisibleAsync();
         await importDialog.Locator("#import-dialog-input").SetInputFilesAsync(zipPath!);

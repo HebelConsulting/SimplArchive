@@ -25,7 +25,7 @@ public class WebJsonPreviewTests
         await page.GetByText("Demo Repository").First.ClickAsync();
         var chooser = await page.RunAndWaitForFileChooserAsync(async () =>
         {
-            await page.Locator(".wb-ribbon").GetByText("Upload").First.ClickAsync();
+            await page.Locator(".wb-ribbon [aria-label=\"Upload\"]").First.ClickAsync();
         });
         // Single-line source; the rendition re-indents it.
         await chooser.SetFilesAsync(new FilePayload { Name = name + ".json", MimeType = "application/json", Buffer = Encoding.UTF8.GetBytes($"{{\"marker\":\"{marker}\",\"nested\":{{\"a\":1}}}}") });
