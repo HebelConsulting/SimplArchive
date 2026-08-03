@@ -5,7 +5,7 @@ description: |
   its dependencies (PostgreSQL, S3-compatible object storage, OpenBao, OpenSearch+Tika, Gotenberg, OCR, SMTP) are
   expected to be external/managed in production and are configured via values. See docs/deploy/README.md.
 type: application
-version: 0.1.1
+version: 0.1.2
 # The application version this chart deploys by default (used as the image tag when image.tag is empty).
 appVersion: "latest"
 home: https://github.com/HebelConsulting/SimplArchive
