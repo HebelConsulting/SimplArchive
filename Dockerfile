@@ -20,7 +20,9 @@ COPY ["src/SimplArchive.Api/SimplArchive.Api.csproj", "src/SimplArchive.Api/"]
 RUN dotnet restore "src/SimplArchive.Api/SimplArchive.Api.csproj"
 
 COPY . .
-RUN dotnet publish "src/SimplArchive.Api/SimplArchive.Api.csproj" -c Release -o /app/publish --no-restore
+# -p:Version=$VERSION stamps the API assembly's InformationalVersion with the release tag so the /api discovery
+# document reports the real server version (ADR 0512, for the desktop self-update check); defaults to 0.1.0 locally.
+RUN dotnet publish "src/SimplArchive.Api/SimplArchive.Api.csproj" -c Release -o /app/publish --no-restore -p:Version=$VERSION
 
 # Bake the desktop-client packages into the served /download area so downloads stay in lock-step with this API
 # image (ADR 0490). Only win-x64 + linux-x64 — a Linux build can't produce the macOS .dmg (clients/macos/ links to

@@ -57,4 +57,16 @@ public class OpenApiEndpointTests
         var openApi = links.SingleOrDefault(l => l.GetProperty("rel").GetString() == "openApi");
         Assert.Equal("/openapi/v1.json", openApi.GetProperty("href").GetString());
     }
+
+    [Fact]
+    public async Task Root_discovery_document_carries_the_server_version()
+    {
+        using var anon = _factory.CreateClient();
+
+        // The desktop self-update check (issue #312, ADR 0512) reads serverVersion to decide whether the running
+        // client is behind THIS deployment before looking for a matching client release on GitHub.
+        var root = await TestJson.Get(anon, "/api");
+        Assert.True(root.TryGetProperty("serverVersion", out var version), "the /api root should expose serverVersion");
+        Assert.False(string.IsNullOrWhiteSpace(version.GetString()));
+    }
 }

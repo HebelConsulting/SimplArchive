@@ -19,6 +19,9 @@ public class RootController : ControllerBase
 {
     public class RootResource : HypermediaResource
     {
+        // The server's own build version (ADR 0512), so the desktop client's self-update check can tell whether it
+        // is behind THIS deployment before looking for a matching client release on GitHub. Read-only, informational.
+        public string ServerVersion { get; set; } = "";
     }
 
     [HttpGet]
@@ -26,6 +29,7 @@ public class RootController : ControllerBase
     {
         return Ok(new RootResource
         {
+            ServerVersion = ServerBuildInfo.Version,
             Links =
             [
                 new Link("self", "/api", "GET"),

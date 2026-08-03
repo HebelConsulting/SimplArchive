@@ -2,8 +2,9 @@ using SimplArchive.DesktopClient.Services;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// Pure logic for the self-update check (issue #271) + the "is this our server?" probe (issue #270) — no network:
-// version ordering, artifact-name parsing, and the API-root discovery-document shape check.
+// Pure logic for the self-update check (issue #312, GitHub-Releases-sourced) + the "is this our server?" probe
+// (issue #270) — no network: version ordering, /api server-version parsing, GitHub-release asset selection, and the
+// API-root discovery-document shape check.
 public class DesktopClientUpdateTests
 {
     [Theory]
@@ -20,34 +21,51 @@ public class DesktopClientUpdateTests
     }
 
     [Fact]
-    public void ParseOfferedBuild_extracts_the_version_from_a_directory_listing()
+    public void ParseServerVersion_extracts_the_server_version_from_the_discovery_document()
     {
-        // A UseDirectoryBrowser-style listing (only the anchor text matters here).
-        var html = """
-            <html><body><ul>
-              <li><a href="SimplArchive-1.4.2-win-x64.zip">SimplArchive-1.4.2-win-x64.zip</a></li>
-            </ul></body></html>
+        // The /api discovery document carries the server's own build version (ADR 0512) alongside its links.
+        var apiDoc = """
+            {"serverVersion":"0.1.1","links":[{"rel":"self","href":"/api","method":"GET"}]}
             """;
-
-        var offered = ClientUpdate.ParseOfferedBuild(html);
-        Assert.NotNull(offered);
-        Assert.Equal("1.4.2", offered!.Value.Version);
-        Assert.Equal("SimplArchive-1.4.2-win-x64.zip", offered.Value.FileName);
+        Assert.Equal("0.1.1", ClientUpdate.ParseServerVersion(apiDoc));
     }
 
     [Fact]
-    public void ParseOfferedBuild_picks_the_highest_semver_when_several_are_offered()
+    public void ParseServerVersion_returns_null_when_absent_or_not_json()
     {
-        // macOS ships arm64 + x64 of the same version; a stale one could linger — pick the newest.
-        var html = "SimplArchive-1.0.0-arm64.dmg SimplArchive-1.2.0-arm64.dmg SimplArchive-1.2.0-x64.dmg";
-        var offered = ClientUpdate.ParseOfferedBuild(html);
-        Assert.Equal("1.2.0", offered!.Value.Version);
+        Assert.Null(ClientUpdate.ParseServerVersion("""{"links":[]}"""));  // field absent
+        Assert.Null(ClientUpdate.ParseServerVersion("""{"serverVersion":""}"""));  // blank
+        Assert.Null(ClientUpdate.ParseServerVersion("<html>not our server</html>"));  // not JSON
     }
 
     [Fact]
-    public void ParseOfferedBuild_returns_null_when_nothing_matches()
+    public void PickAsset_finds_the_download_url_of_the_os_arch_matching_asset()
     {
-        Assert.Null(ClientUpdate.ParseOfferedBuild("<html><body>no client here</body></html>"));
+        // A GitHub Releases API payload for the tagged release, with one asset per platform.
+        var releaseJson = """
+            {"tag_name":"v0.1.1","assets":[
+              {"name":"SimplArchive-0.1.1-linux-x64.tar.gz","browser_download_url":"https://example.test/linux"},
+              {"name":"SimplArchive-0.1.1-win-x64.zip","browser_download_url":"https://example.test/win"},
+              {"name":"SimplArchive-0.1.1-arm64.dmg","browser_download_url":"https://example.test/arm"},
+              {"name":"SimplArchive-0.1.1-x64.dmg","browser_download_url":"https://example.test/intel"}
+            ]}
+            """;
+        Assert.Equal("https://example.test/win", ClientUpdate.PickAsset(releaseJson, "win-x64.zip"));
+        Assert.Equal("https://example.test/linux", ClientUpdate.PickAsset(releaseJson, "linux-x64.tar.gz"));
+        Assert.Equal("https://example.test/arm", ClientUpdate.PickAsset(releaseJson, "arm64.dmg"));
+        // The Intel .dmg suffix must NOT be caught by the arm64 asset (whose name ends "arm64.dmg", not "x64.dmg").
+        Assert.Equal("https://example.test/intel", ClientUpdate.PickAsset(releaseJson, "x64.dmg"));
+    }
+
+    [Fact]
+    public void PickAsset_returns_null_when_the_release_has_no_matching_asset()
+    {
+        // A release with only a Windows asset offers nothing to a Linux client (issue #312: don't nag).
+        var releaseJson = """
+            {"assets":[{"name":"SimplArchive-0.1.1-win-x64.zip","browser_download_url":"https://example.test/win"}]}
+            """;
+        Assert.Null(ClientUpdate.PickAsset(releaseJson, "linux-x64.tar.gz"));
+        Assert.Null(ClientUpdate.PickAsset("""{"tag_name":"v0.1.1"}""", "win-x64.zip"));  // no assets array
     }
 
     [Fact]
