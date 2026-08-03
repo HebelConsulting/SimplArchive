@@ -133,6 +133,14 @@ public static class OsFileManager
         return RunAsync(fileName, arguments, macOsChecksExit: Current == Platform.MacOs);
     }
 
+    // Opens a FOLDER inside the single WebDAV mount in the file manager (mounting the volume first) — e.g. the
+    // desktop Inbox / Check-out "Open in file manager" buttons open "Personal/Inbox" / "Personal/Check-out"
+    // directly, within the one "SimplArchive" mount (ADR 0509). Same mechanism as opening a file: on macOS `open`
+    // on a directory lands Finder there, on Windows `start` on the folder UNC opens Explorer, on Linux xdg-open
+    // opens the davs:// folder.
+    public static Task<OpenResult> OpenWebDavFolderAsync(string httpBaseUrl, string relativeFolder) =>
+        OpenWebDavFileAsync(httpBaseUrl, relativeFolder);
+
     // https://host:443/webdav/Inbox → davs://host:443/webdav/Inbox ; http → dav.
     private static string ToDavScheme(Uri uri) =>
         (uri.Scheme == "https" ? "davs://" : "dav://") + uri.Authority + uri.AbsolutePath;

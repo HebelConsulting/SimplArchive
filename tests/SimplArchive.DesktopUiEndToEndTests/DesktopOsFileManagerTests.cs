@@ -79,4 +79,20 @@ public class DesktopOsFileManagerTests
         Assert.Equal("cmd.exe", file);
         Assert.Contains(@"\\archive.example.com@SSL@8443\DavWWWRoot\SimplArchive\Personal\Check-out\Report Q1.txt", args);
     }
+
+    // The desktop Inbox / Check-out "Open in file manager" buttons deep-open a FOLDER within the single mount
+    // (OpenWebDavFolderAsync → BuildOpenWebDavFileCommand with a folder relative path).
+    [Fact]
+    public void Folder_deep_open_targets_the_subfolder_within_the_single_mount()
+    {
+        var (mac, macArgs) = OsFileManager.BuildOpenWebDavFileCommand(Base, "Personal/Check-out", OsFileManager.Platform.MacOs);
+        Assert.Equal("osascript", mac);
+        Assert.Contains("/Volumes/SimplArchive/Personal/Check-out", string.Join("\n", macArgs));
+
+        var (_, linuxArgs) = OsFileManager.BuildOpenWebDavFileCommand(Base, "Personal/Inbox", OsFileManager.Platform.Linux);
+        Assert.Contains("davs://archive.example.com:8443/SimplArchive/Personal/Inbox", linuxArgs);
+
+        var (_, winArgs) = OsFileManager.BuildOpenWebDavFileCommand(Base, "Personal/Check-out", OsFileManager.Platform.Windows);
+        Assert.Contains(@"\\archive.example.com@SSL@8443\DavWWWRoot\SimplArchive\Personal\Check-out", winArgs);
+    }
 }

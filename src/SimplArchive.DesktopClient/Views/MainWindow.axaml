@@ -708,7 +708,7 @@
                             <Button Click="OnManageWebDav" Padding="10,4" ToolTip.Tip="{loc:Tr MwWebDavSettingsTip}">
                                 <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-cog-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwWebDavSettings}" /></StackPanel>
                             </Button>
-                            <Button Click="OnOpenWebDavMount" Padding="10,4" ToolTip.Tip="{loc:Tr MwOpenWebDavTip}">
+                            <Button Click="OnOpenWebDavMount" Tag="Personal/Inbox" Padding="10,4" ToolTip.Tip="{loc:Tr MwOpenWebDavTip}">
                                 <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-folder-network-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwOpenInFileManager}" /></StackPanel>
                             </Button>
                             <Button Click="OnInboxFileMultiple" Padding="10,4" IsVisible="{Binding CanFileMultiple}" ToolTip.Tip="{loc:Tr MwFileSelectedTip}">
@@ -851,7 +851,7 @@
                         <Button Click="OnManageWebDav" Padding="10,4" ToolTip.Tip="{loc:Tr MwWebDavSettingsTip}">
                             <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-cog-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwWebDavSettings}" /></StackPanel>
                         </Button>
-                        <Button Click="OnOpenWebDavMount" Padding="10,4" ToolTip.Tip="{loc:Tr MwOpenWebDavTip}">
+                        <Button Click="OnOpenWebDavMount" Tag="Personal/Check-out" Padding="10,4" ToolTip.Tip="{loc:Tr MwOpenWebDavTip}">
                             <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-folder-network-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwOpenInFileManager}" /></StackPanel>
                         </Button>
                     </StackPanel>

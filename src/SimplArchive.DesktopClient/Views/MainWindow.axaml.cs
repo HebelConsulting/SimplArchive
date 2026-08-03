@@ -319,6 +319,10 @@ public partial class MainWindow : Window
             return;
         }
 
+        // The button's Tag names a subfolder to deep-open WITHIN the single mount (e.g. "Personal/Check-out"), so
+        // the Inbox / Check-out buttons land the user straight in that folder; absent → open the SimplArchive root.
+        var subFolder = (sender as Control)?.Tag as string;
+
         try
         {
             var status = await api.GetWebDavStatusAsync();
@@ -329,10 +333,22 @@ public partial class MainWindow : Window
                 return;
             }
 
-            vm.Status = "Opening SimplArchive (your Personal space + repositories) in your file manager…";
             // Mount the single "SimplArchive" resource — the whole tree (Personal, with Inbox/Check-out, + the
-            // shared repositories) — so the OS volume is named "SimplArchive" (ADR 0509).
-            var result = await OsFileManager.OpenWebDavAsync(status.Url.TrimEnd('/'));
+            // shared repositories) so the OS volume is named "SimplArchive" (ADR 0509) — then, when a subfolder is
+            // given, open straight into it within that one mount.
+            var baseUrl = status.Url.TrimEnd('/');
+            OsFileManager.OpenResult result;
+            if (string.IsNullOrWhiteSpace(subFolder))
+            {
+                vm.Status = "Opening SimplArchive (your Personal space + repositories) in your file manager…";
+                result = await OsFileManager.OpenWebDavAsync(baseUrl);
+            }
+            else
+            {
+                vm.Status = $"Opening {subFolder} in your file manager…";
+                result = await OsFileManager.OpenWebDavFolderAsync(baseUrl, subFolder);
+            }
+
             if (!result.Success)
             {
                 vm.Status = $"Could not open the WebDAV folder: {result.Error}";
