@@ -276,15 +276,39 @@ public sealed partial class WebDavMiddleware
     }
 
     // PROPFIND for the special Personal/Inbox and Personal/Check-out folders (segments = [Personal, folder, file?]).
+    // Resolves a single file inside a special (Inbox / Check-out) folder for GET/HEAD/PROPFIND. Beyond the listed
+    // files, this also resolves the hidden lock/owner sidecars (.~lock.name# / ~$name) directly from the store —
+    // they're kept out of the folder LISTING (so they don't clutter the view) but MUST round-trip, or LibreOffice /
+    // Office read back their own just-PUT lock file, get 404, and revert the document to read-only (ADR 0513).
+    private static async Task<SpecialFile?> ResolveSpecialFileAsync(IObjectStorageClient storage, SimplArchiveDbContext db, User user, string folder, string name)
+    {
+        var files = await SpecialFolderFilesAsync(storage, db, user, folder);
+        if (files.FirstOrDefault(f => f.Name == name) is { } listed)
+        {
+            return listed;
+        }
+
+        if (IsLockFile(name) && !name.Contains('/'))
+        {
+            var key = folder == InboxName ? InboxPrefix(user) + name : CheckoutScratchPrefix(user) + name;
+            if (await storage.ExistsAsync(key))
+            {
+                return new SpecialFile(name, await storage.GetObjectSizeAsync(key), DateTimeOffset.UtcNow, Guid.Empty, key);
+            }
+        }
+
+        return null;
+    }
+
     private async Task HandleSpecialPropFindAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments, string depth)
     {
         var folder = segments[1];
         var storage = services.GetRequiredService<IObjectStorageClient>();
-        var files = await SpecialFolderFilesAsync(storage, db, user, folder);
 
         if (segments.Count == 2)
         {
-            // The Inbox / Check-out collection itself, plus (Depth 1) its files.
+            // The Inbox / Check-out collection itself, plus (Depth 1) its files (lock/owner sidecars stay hidden).
+            var files = await SpecialFolderFilesAsync(storage, db, user, folder);
             var responses = new List<PropStatXml> { CollectionProp([segments[0], folder], folder) };
             if (depth != "0")
             {
@@ -295,8 +319,8 @@ public sealed partial class WebDavMiddleware
             return;
         }
 
-        // A single file inside the folder (flat — no deeper nesting).
-        if (segments.Count == 3 && files.FirstOrDefault(f => f.Name == segments[2]) is { } file)
+        // A single file inside the folder (flat — no deeper nesting), including a hidden lock/owner sidecar.
+        if (segments.Count == 3 && await ResolveSpecialFileAsync(storage, db, user, folder, segments[2]) is { } file)
         {
             await WriteMultiStatusAsync(context, [FileProp(segments, file.Size, file.Modified, ContentTypes.ForExtension(Path.GetExtension(file.Name)))]);
             return;
@@ -322,6 +346,7 @@ public sealed partial class WebDavMiddleware
         var modified = node.Modified.ToString("R", CultureInfo.InvariantCulture);
         props.Append($"<D:getlastmodified>{modified}</D:getlastmodified>");
         props.Append($"<D:creationdate>{node.Created.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture)}</D:creationdate>");
+        props.Append(SupportedLockXml); // advertise write-lock capability so editors open repository files read/write
         return new PropStatXml(href, "HTTP/1.1 200 OK", props.ToString());
     }
 
@@ -332,8 +357,7 @@ public sealed partial class WebDavMiddleware
 
         if (IsSpecialPath(segments))
         {
-            var files = await SpecialFolderFilesAsync(storage, db, user, segments[1]);
-            if (segments.Count != 3 || files.FirstOrDefault(f => f.Name == segments[2]) is not { } file)
+            if (segments.Count != 3 || await ResolveSpecialFileAsync(storage, db, user, segments[1], segments[2]) is not { } file)
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
                 return;
@@ -1397,9 +1421,19 @@ public sealed partial class WebDavMiddleware
         context.Response.StatusCode = scratchExisted ? StatusCodes.Status204NoContent : StatusCodes.Status201Created;
     }
 
+    // Advertise write-lock capability on every resource (exclusive + shared write locks). The server already sends
+    // DAV: 1, 2 on OPTIONS, but lock-checking editors (LibreOffice, MS Office) read the per-resource
+    // <D:supportedlock> property in PROPFIND to decide a file is writable — without it they open read-only even
+    // though a LOCK would succeed. (ADR 0508 WebDAV atomic-save; the LOCK/UNLOCK handlers back a real lock store.)
+    private const string SupportedLockXml =
+        "<D:supportedlock>" +
+        "<D:lockentry><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockentry>" +
+        "<D:lockentry><D:lockscope><D:shared/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockentry>" +
+        "</D:supportedlock>";
+
     private static PropStatXml CollectionProp(List<string> segments, string displayName)
     {
-        var props = $"<D:displayname>{Xml(displayName)}</D:displayname><D:resourcetype><D:collection/></D:resourcetype><D:getlastmodified>{DateTimeOffset.UnixEpoch.ToString("R", CultureInfo.InvariantCulture)}</D:getlastmodified>";
+        var props = $"<D:displayname>{Xml(displayName)}</D:displayname><D:resourcetype><D:collection/></D:resourcetype><D:getlastmodified>{DateTimeOffset.UnixEpoch.ToString("R", CultureInfo.InvariantCulture)}</D:getlastmodified>{SupportedLockXml}";
         return new PropStatXml(HrefFor(segments) + "/", "HTTP/1.1 200 OK", props);
     }
 
@@ -1410,6 +1444,7 @@ public sealed partial class WebDavMiddleware
         props.Append($"<D:getcontentlength>{size}</D:getcontentlength>");
         props.Append($"<D:getcontenttype>{Xml(contentType)}</D:getcontenttype>");
         props.Append($"<D:getlastmodified>{modified.ToString("R", CultureInfo.InvariantCulture)}</D:getlastmodified>");
+        props.Append(SupportedLockXml);
         return new PropStatXml(HrefFor(segments), "HTTP/1.1 200 OK", props.ToString());
     }
 

@@ -72,9 +72,12 @@ public class DavGatewayTests
         Assert.Equal(HttpStatusCode.OK, get.StatusCode);
         Assert.Equal("hello webdav", await get.Content.ReadAsStringAsync());
 
-        // PROPFIND the folder lists the file.
-        var folderList = await DavAsync("PROPFIND", $"/webdav/{repoName}/wd", headers: [("Depth", "1")]);
-        Assert.Contains("hello.txt", await folderList.Content.ReadAsStringAsync());
+        // PROPFIND the folder lists the file, and advertises write-lock capability per resource so lock-checking
+        // editors (LibreOffice / Office) open files read/write rather than read-only (issue: WebDAV read/write).
+        var folderXml = await (await DavAsync("PROPFIND", $"/webdav/{repoName}/wd", headers: [("Depth", "1")])).Content.ReadAsStringAsync();
+        Assert.Contains("hello.txt", folderXml);
+        Assert.Contains("<D:supportedlock>", folderXml);
+        Assert.Contains("<D:write/>", folderXml);
 
         // MOVE (rename) then DELETE.
         var move = await DavAsync("MOVE", $"/webdav/{repoName}/wd/hello.txt", headers: [("Destination", $"/webdav/{repoName}/wd/renamed.txt")]);
@@ -260,6 +263,18 @@ public class DavGatewayTests
         // PUT saves an edited working copy to the stash; GET then returns the stash.
         Assert.Equal(HttpStatusCode.NoContent, (await DavAsync("PUT", "/webdav/Personal/Check-out/codoc.txt", Encoding.UTF8.GetBytes("edited"))).StatusCode);
         Assert.Equal("edited", await (await DavAsync("GET", "/webdav/Personal/Check-out/codoc.txt")).Content.ReadAsStringAsync());
+
+        // LibreOffice's lock sidecar (.~lock.<file>#) must ROUND-TRIP — PUT then read it back — or the editor
+        // reverts the document to read-only (ADR 0513). It stays HIDDEN from the folder listing, though.
+        const string lockFile = "/webdav/Personal/Check-out/.~lock.codoc.txt%23"; // %23 = '#'
+        Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", lockFile, Encoding.UTF8.GetBytes(",user,host,"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await DavAsync("GET", lockFile)).StatusCode);
+        Assert.Equal(HttpStatusCode.MultiStatus, (await DavAsync("PROPFIND", lockFile, headers: [("Depth", "0")])).StatusCode);
+        // ...but it does NOT appear in the folder listing.
+        Assert.DoesNotContain(".~lock", await (await DavAsync("PROPFIND", "/webdav/Personal/Check-out", headers: [("Depth", "1")])).Content.ReadAsStringAsync());
+        // And it deletes cleanly.
+        Assert.Equal(HttpStatusCode.NoContent, (await DavAsync("DELETE", lockFile)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await DavAsync("GET", lockFile)).StatusCode);
     }
 
     [Fact]
