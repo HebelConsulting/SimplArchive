@@ -19,7 +19,7 @@ public class WebSearchTests
     {
         var page = await Ui.LoginAsync(_app);
 
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Search" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Search\"]").First.ClickAsync();
 
         var input = page.Locator("input[placeholder*='Search by name']");
         await input.FillAsync("Invoice");
@@ -31,7 +31,7 @@ public class WebSearchTests
 
         // Navigates to the Repositories tab and selects the document — its name shows in the detail pane (the
         // preview is a pdf.js canvas for the seeded invoice PDF, so assert on the index detail, not preview text).
-        await Expect(page.Locator(".wb-tab-active")).ToContainTextAsync("Repositories");
+        await Expect(page.Locator(".wb-tab-active")).ToHaveAttributeAsync("aria-label", "Repositories");
         await Expect(page.Locator(".wb-sysfields")).ToContainTextAsync("Invoice 2025-001");
     }
 }

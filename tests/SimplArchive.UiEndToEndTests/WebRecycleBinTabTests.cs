@@ -37,7 +37,7 @@ public class WebRecycleBinTabTests
         await Expect(list.GetByText(name)).Not.ToBeVisibleAsync(); // the soft-delete has committed
 
         // Recycle bin tab → the item is listed; select it (detail pane loads).
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Recycle bin" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Recycle bin\"]").First.ClickAsync();
         var bin = page.Locator(".wb-recyclebin");
         await Expect(bin).ToBeVisibleAsync();
         var binRow = bin.Locator("tr").Filter(new() { HasText = name });
@@ -90,7 +90,7 @@ public class WebRecycleBinTabTests
         }
 
         // Recycle bin tab → check both rows, then "Restore selected".
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Recycle bin" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Recycle bin\"]").First.ClickAsync();
         var bin = page.Locator(".wb-recyclebin");
         await Expect(bin).ToBeVisibleAsync();
         foreach (var name in names)
@@ -138,7 +138,7 @@ public class WebRecycleBinTabTests
         }
 
         // Recycle bin tab → check both rows, then "Purge selected" → the "I AGREE" gate.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Recycle bin" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Recycle bin\"]").First.ClickAsync();
         var bin = page.Locator(".wb-recyclebin");
         await Expect(bin).ToBeVisibleAsync();
         foreach (var name in names)

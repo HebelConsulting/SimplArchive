@@ -34,7 +34,7 @@ public class WebPreviewIsolationTests
 
         // Inbox: upload a distinctively-worded file, select it → its content renders, and the Repositories
         // document's content must NOT still be showing in the shared pane.
-        await page.Locator(".wb-tab").Filter(new LocatorFilterOptions { HasText = "Inbox" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Inbox\"]").First.ClickAsync();
         await page.SetInputFilesAsync("#inbox-file-input", new FilePayload
         {
             Name = "inbox-note.txt",
@@ -47,7 +47,7 @@ public class WebPreviewIsolationTests
 
         // Back to Repositories: re-select the document → its content renders, and the inbox item's content must
         // NOT have leaked into this pane.
-        await page.Locator(".wb-tab").Filter(new LocatorFilterOptions { HasText = "Repositories" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Repositories\"]").First.ClickAsync();
         await SelectRepoDocumentAsync(page);
         await Expect(preview).ToContainTextAsync(RepoMarker);
         await Expect(preview).Not.ToContainTextAsync(InboxMarker);

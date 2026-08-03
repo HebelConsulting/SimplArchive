@@ -46,7 +46,7 @@ public class WebRecoveredItemsTests
         await Expect(list.GetByText(parent)).Not.ToBeVisibleAsync();
 
         // Recycle bin tab lists both; restore ONLY the child (its parent stays deleted).
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Recycle bin" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Recycle bin\"]").First.ClickAsync();
         var bin = page.Locator(".wb-recyclebin");
         var childRow = bin.Locator("tr").Filter(new() { HasText = child });
         await Expect(childRow).ToBeVisibleAsync();
@@ -55,7 +55,7 @@ public class WebRecoveredItemsTests
 
         // The child is now under an auto-created "Recovered Items" folder at the root — go to Repositories
         // (which refreshes the list) and drill in.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Repositories" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Repositories\"]").First.ClickAsync();
         await page.GetByText("Demo Repository").First.ClickAsync();
         await Expect(list.GetByText("Recovered Items")).ToBeVisibleAsync();
         await list.GetByText("Recovered Items").First.DblClickAsync();

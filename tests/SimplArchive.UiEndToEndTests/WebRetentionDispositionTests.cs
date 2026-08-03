@@ -35,7 +35,7 @@ public class WebRetentionDispositionTests
         (await http.PutAsJsonAsync($"/api/documents/{docId}/mask", new { maskId })).EnsureSuccessStatusCode();
 
         var page = await Ui.LoginAsync(_app);
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Retention" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Retention\"]").First.ClickAsync();
 
         // The overdue document's row shows a Dispose action; click it and confirm.
         var row = page.Locator("tr").Filter(new() { HasText = docName });

@@ -40,7 +40,7 @@ public class WebProfilePhotoSelfServiceTests
         await Expect(page.Locator(".wb-appbar img")).ToBeVisibleAsync();
 
         // Remove it from the Users & groups tab → the avatar reverts to initials (no <img>).
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Users & groups" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Users & groups\"]").First.ClickAsync();
         await page.Locator(".wb-ug-rows").GetByText("Demo Admin", new() { Exact = true }).ClickAsync();
         await Expect(page.Locator(".wb-ug-photo img")).ToBeVisibleAsync();
         await page.GetByRole(AriaRole.Button, new() { Name = "Remove" }).ClickAsync();

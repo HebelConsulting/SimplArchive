@@ -39,7 +39,7 @@ public class WebCheckoutTests
         await Expect(list.GetByText($"[Demo Admin] {name}")).ToBeVisibleAsync();
 
         // The Check-out tab lists it.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Check-out" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Check-out\"]").First.ClickAsync();
         var checkout = page.Locator(".wb-checkout");
         await Expect(checkout).ToBeVisibleAsync();
         var checkoutRow = checkout.Locator("tr").Filter(new() { HasText = name });

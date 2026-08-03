@@ -21,7 +21,7 @@ public class WebInboxMaskTests
         var file = "maskme-" + Guid.NewGuid().ToString("N")[..8] + ".txt";
 
         // Upload to the inbox → the un-classified item shows in brackets.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Inbox" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Inbox\"]").First.ClickAsync();
         await page.SetInputFilesAsync("#inbox-file-input", new FilePayload { Name = file, MimeType = "text/plain", Buffer = Encoding.UTF8.GetBytes("mask me") });
         await Expect(page.GetByText("[" + file + "]")).ToBeVisibleAsync();
 

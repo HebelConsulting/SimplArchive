@@ -60,7 +60,8 @@ public static partial class WebCapture
             if (screen.Tab is { } tab)
             {
                 Console.WriteLine($"[web] opening tab '{tab}'");
-                await page.Locator(".wb-tab").Filter(new() { HasText = tab }).First.ClickAsync();
+                // Tabs are icon-only (#298) — the label is in aria-label, not visible text.
+                await page.Locator($".wb-tab[aria-label='{tab}']").First.ClickAsync();
                 // Let the tab's panel render + any first-load fetch settle before the shot.
                 await page.WaitForTimeoutAsync(1500);
             }
@@ -78,7 +79,7 @@ public static partial class WebCapture
     {
         try
         {
-            await page.Locator(".wb-tab").Filter(new() { HasText = "Repositories" }).First.ClickAsync();
+            await page.Locator(".wb-tab[aria-label='Repositories']").First.ClickAsync();
             await page.GetByText("Demo Repository").First.ClickAsync();
             var row = page.Locator(".wb-list-row").Filter(new() { HasText = "Offer 2025-014" });
             await row.First.WaitForAsync(new() { Timeout = 15000 });

@@ -20,7 +20,7 @@ public class WebImpersonationTests
         var userName = "imp-user-" + Guid.NewGuid().ToString("N")[..8];
 
         // Users & groups tab → create a user → select it.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Users & groups" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Users & groups\"]").First.ClickAsync();
         await Expect(page.Locator(".wb-ug")).ToBeVisibleAsync();
         await page.Locator(".wb-ug-toolbar").GetByRole(AriaRole.Button).First.ClickAsync();
         await page.GetByText("New user").ClickAsync();

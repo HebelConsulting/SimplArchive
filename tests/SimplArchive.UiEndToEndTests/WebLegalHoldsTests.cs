@@ -21,7 +21,7 @@ public class WebLegalHoldsTests
         var matter = $"Matter {Guid.NewGuid().ToString("N")[..8]}";
 
         // The tab is gated on whoami.canLegalHold — visible for the demo admin.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Legal holds" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Legal holds\"]").First.ClickAsync();
         await Expect(page.Locator(".wb-legalholds")).ToBeVisibleAsync();
 
         // Create a new matter via the dialog.

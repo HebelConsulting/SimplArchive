@@ -20,7 +20,7 @@ public class WebInboxDropTests
         var page = await Ui.LoginAsync(_app);
         var name = "webdrop-" + Guid.NewGuid().ToString("N")[..8];
 
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Inbox" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Inbox\"]").First.ClickAsync();
         var zone = page.Locator(".wb-inbox-drop");
         await Expect(zone).ToBeVisibleAsync();
         await Expect(zone).ToContainTextAsync("Drop files here");

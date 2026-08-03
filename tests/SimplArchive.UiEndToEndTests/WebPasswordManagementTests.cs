@@ -30,7 +30,7 @@ public class WebPasswordManagementTests
         await changeDialog.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
 
         // Admin reset: create a throwaway user, select it, Reset password → the generated password shows once.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Users & groups" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Users & groups\"]").First.ClickAsync();
         await page.Locator(".wb-ug-toolbar").GetByRole(AriaRole.Button).First.ClickAsync(); // New menu
         await page.GetByText("New user").ClickAsync();
         var newUser = page.Locator(".mud-dialog");

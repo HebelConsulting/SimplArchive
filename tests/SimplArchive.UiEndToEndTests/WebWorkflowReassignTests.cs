@@ -49,7 +49,7 @@ public class WebWorkflowReassignTests
 
         // --- Browser: deactivate R1 → the replacement dialog → pick R2 → R1 is deactivated. ---
         var page = await Ui.LoginAsync(_app);
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Users & groups" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Users & groups\"]").First.ClickAsync();
 
         var r1Row = page.Locator(".wb-list-row").Filter(new() { HasText = r1Name });
         await r1Row.First.ClickAsync();

@@ -20,7 +20,7 @@ public class WebAuditTests
         var page = await Ui.LoginAsync(_app);
 
         // The tab is gated on whoami.canViewAuditLog — visible for the demo admin.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Audit" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Audit\"]").First.ClickAsync();
         await Expect(page.Locator(".wb-audit")).ToBeVisibleAsync();
 
         // The interactive login recorded an Auth.LoggedIn event — it shows in the newest-first table.

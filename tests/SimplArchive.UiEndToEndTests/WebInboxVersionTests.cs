@@ -32,7 +32,7 @@ public class WebInboxVersionTests
         await list.GetByText(doc).First.ClickAsync();
 
         // Upload an inbox item and file it as a new version of the selected document.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Inbox" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Inbox\"]").First.ClickAsync();
         await page.SetInputFilesAsync("#inbox-file-input", new FilePayload { Name = inboxItem + ".txt", MimeType = "text/plain", Buffer = Encoding.UTF8.GetBytes("v2") });
 
         await page.Locator(".wb-list-row").Filter(new() { HasText = inboxItem }).Locator("button").Last.ClickAsync();
@@ -44,7 +44,7 @@ public class WebInboxVersionTests
         await Expect(page.Locator(".wb-list-row").Filter(new() { HasText = inboxItem })).Not.ToBeVisibleAsync();
 
         // Back on Repositories, the target document's feed shows the filing comment.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Repositories" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Repositories\"]").First.ClickAsync();
         await list.GetByText(doc).First.ClickAsync();
         await Expect(page.Locator(".wb-chat")).ToContainTextAsync("Filed a new document");
     }

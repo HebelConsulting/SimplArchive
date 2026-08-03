@@ -29,7 +29,7 @@ public class WebProfilePhotoTests
         await Expect(appbar).Not.ToContainTextAsync("demo@simplarchive.local");
 
         // Users & groups tab → select the Demo Admin user.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Users & groups" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Users & groups\"]").First.ClickAsync();
         await page.Locator(".wb-ug-rows").GetByText("Demo Admin", new() { Exact = true }).ClickAsync();
 
         // Change photo… → the dialog; pick an image, then Save (default centered crop).

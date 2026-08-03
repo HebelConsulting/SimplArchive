@@ -46,7 +46,7 @@ public class WebLifecycleTests
 
         // Recycle bin tab → the deleted folder is listed → Restore removes it from the bin. Scope to this
         // folder's own row — the tenant-wide bin is shared across the collection.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Recycle bin" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Recycle bin\"]").First.ClickAsync();
         var bin = page.Locator(".wb-recyclebin");
         var renamedRow = bin.Locator("tr").Filter(new() { HasText = renamed });
         await Expect(renamedRow).ToBeVisibleAsync();

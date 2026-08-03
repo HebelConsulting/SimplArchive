@@ -19,7 +19,7 @@ public class WebTenantSettingsTests
     {
         var page = await Ui.LoginAsync(_app);
 
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Tenant" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Tenant\"]").First.ClickAsync();
         await Expect(page.Locator(".wb-tenant")).ToBeVisibleAsync();
 
         var view = page.Locator(".wb-tenant");
@@ -57,7 +57,7 @@ public class WebTenantSettingsTests
     {
         var page = await Ui.LoginAsync(_app);
 
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Tenant" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Tenant\"]").First.ClickAsync();
         var view = page.Locator(".wb-tenant");
         await Expect(view).ToBeVisibleAsync();
 
@@ -86,7 +86,7 @@ public class WebTenantSettingsTests
     {
         var page = await Ui.LoginAsync(_app);
 
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Tenant" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Tenant\"]").First.ClickAsync();
         var view = page.Locator(".wb-tenant");
         await Expect(view).ToBeVisibleAsync();
 

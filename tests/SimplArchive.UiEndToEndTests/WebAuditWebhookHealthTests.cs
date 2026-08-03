@@ -31,7 +31,7 @@ public class WebAuditWebhookHealthTests
                 await cmd.ExecuteNonQueryAsync();
             }
 
-            await page.Locator(".wb-tab").Filter(new() { HasText = "Tenant" }).First.ClickAsync();
+            await page.Locator(".wb-tab[aria-label=\"Tenant\"]").First.ClickAsync();
             var view = page.Locator(".wb-tenant");
             await Expect(view).ToBeVisibleAsync();
 

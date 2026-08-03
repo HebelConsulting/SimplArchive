@@ -14,8 +14,9 @@ public class WebSmokeTests
     {
         var page = await Ui.LoginAsync(_app);
 
-        // The bottom tab bar and the seeded demo repository are visible once the workbench loads.
-        await page.GetByText("Repositories").First.WaitForAsync();
+        // The bottom tab bar and the seeded demo repository are visible once the workbench loads. Tabs are
+        // icon-only (#298), so identify the Repositories tab by its aria-label rather than visible text.
+        await page.Locator(".wb-tab[aria-label='Repositories']").First.WaitForAsync();
         await page.GetByText("Demo Repository").First.WaitForAsync();
     }
 }

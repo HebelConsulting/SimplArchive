@@ -21,7 +21,7 @@ public class WebInboxPreviewDeleteTests
         var marker = "brontosaurus" + Guid.NewGuid().ToString("N")[..6];
 
         // Upload a .txt to the inbox → it appears in the list.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Inbox" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Inbox\"]").First.ClickAsync();
         await page.SetInputFilesAsync("#inbox-file-input", new FilePayload
         {
             Name = name + ".txt",

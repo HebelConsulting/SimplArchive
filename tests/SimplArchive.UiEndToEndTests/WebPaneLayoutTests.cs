@@ -24,7 +24,7 @@ public class WebPaneLayoutTests
 
         // Reload → the workbench comes back (silent re-auth) and the pane is still collapsed.
         await page.ReloadAsync();
-        await Expect(page.Locator(".wb-tab").Filter(new() { HasText = "Repositories" }).First).ToBeVisibleAsync();
+        await Expect(page.Locator(".wb-tab[aria-label=\"Repositories\"]").First).ToBeVisibleAsync();
         await Expect(page.Locator("[data-pane='tree']")).ToHaveAttributeAsync("data-collapsed", "1");
     }
 }

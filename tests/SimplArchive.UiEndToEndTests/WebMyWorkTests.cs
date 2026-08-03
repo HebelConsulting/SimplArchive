@@ -38,7 +38,7 @@ public class WebMyWorkTests
         (await http.PutAsync($"/api/documents/{docId}/subscription", null)).EnsureSuccessStatusCode();
 
         var page = await Ui.LoginAsync(_app);
-        await page.Locator(".wb-tab").Filter(new() { HasText = "My work" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"My work\"]").First.ClickAsync();
 
         var dash = page.Locator(".wb-mywork");
         await Expect(dash).ToBeVisibleAsync();

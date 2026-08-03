@@ -20,7 +20,7 @@ public class WebSearchFieldFilterTests
     public async Task Index_field_filter_narrows_the_results()
     {
         var page = await Ui.LoginAsync(_app);
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Search" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Search\"]").First.ClickAsync();
 
         var input = page.Locator("input[placeholder*='Search by name']");
         var result = page.Locator(".wb-search-results .wb-list-row").Filter(new() { HasText = Doc });

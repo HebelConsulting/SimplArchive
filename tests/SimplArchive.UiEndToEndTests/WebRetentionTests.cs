@@ -19,7 +19,7 @@ public class WebRetentionTests
     {
         var page = await Ui.LoginAsync(_app);
 
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Retention" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Retention\"]").First.ClickAsync();
         await Expect(page.Locator(".wb-retention")).ToBeVisibleAsync();
 
         // The demo document (Basic Entry mask, 7-year retention) is on the schedule.

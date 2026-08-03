@@ -30,7 +30,7 @@ public class WebSavedSearchesTests
         try
         {
             var page = await Ui.LoginAsync(_app);
-            await page.Locator(".wb-tab").Filter(new() { HasText = "Search" }).First.ClickAsync();
+            await page.Locator(".wb-tab[aria-label=\"Search\"]").First.ClickAsync();
 
             // Run a search so "Save" is enabled.
             await page.FillAsync("input[placeholder*='Search by name']", term);

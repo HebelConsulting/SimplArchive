@@ -21,7 +21,7 @@ public class WebInboxBulkFilingTests
         var a = "bulk-a-" + Guid.NewGuid().ToString("N")[..8];
         var b = "bulk-b-" + Guid.NewGuid().ToString("N")[..8];
 
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Inbox" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Inbox\"]").First.ClickAsync();
         await page.SetInputFilesAsync("#inbox-file-input", new[]
         {
             new FilePayload { Name = a + ".txt", MimeType = "text/plain", Buffer = Encoding.UTF8.GetBytes("a") },
@@ -48,7 +48,7 @@ public class WebInboxBulkFilingTests
         await Expect(page.Locator(".wb-list-row").Filter(new() { HasText = b })).Not.ToBeVisibleAsync();
 
         // ...and both appear as documents in the repository.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Repositories" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Repositories\"]").First.ClickAsync();
         await page.GetByText("Demo Repository").First.ClickAsync();
         var list = page.Locator("[data-pane='list']");
         await Expect(list.GetByText(a)).ToBeVisibleAsync();

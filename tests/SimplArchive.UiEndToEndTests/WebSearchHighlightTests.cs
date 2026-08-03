@@ -18,7 +18,7 @@ public class WebSearchHighlightTests
     public async Task Content_match_shows_a_highlighted_snippet()
     {
         var page = await Ui.LoginAsync(_app);
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Search" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Search\"]").First.ClickAsync();
 
         var input = page.Locator("input[placeholder*='Search by name']");
         // "Acme" is only in the document's content, so a hit + highlight prove content extraction + indexing.

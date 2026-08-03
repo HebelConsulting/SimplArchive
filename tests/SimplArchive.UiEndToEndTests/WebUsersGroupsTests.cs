@@ -44,7 +44,7 @@ public class WebUsersGroupsTests
         await Expect(page.GetByText("Rights saved.")).ToBeVisibleAsync();
 
         // Re-enter the tab (forces a reload) and confirm the right persisted.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Repositories" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Repositories\"]").First.ClickAsync();
         await OpenTabAsync(page);
         await page.Locator(".wb-ug-rows").GetByText(userName).ClickAsync();
         await Expect(page.Locator(".wb-ug-right").Filter(new() { HasText = "Manage repositories" }).Locator("input")).ToBeCheckedAsync();
@@ -127,7 +127,7 @@ public class WebUsersGroupsTests
         await page.GetByRole(AriaRole.Button, new() { Name = "Save", Exact = true }).ClickAsync();
         await Expect(page.GetByText("Rights saved.")).ToBeVisibleAsync();
 
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Repositories" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Repositories\"]").First.ClickAsync();
         await OpenTabAsync(page);
         await page.Locator(".wb-ug-rows").GetByText(userName).ClickAsync();
         await Expect(page.Locator(".wb-ug-right").Filter(new() { HasText = "Export" }).First.Locator("input")).ToBeCheckedAsync();
@@ -135,7 +135,7 @@ public class WebUsersGroupsTests
 
     private static async Task OpenTabAsync(IPage page)
     {
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Users & groups" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Users & groups\"]").First.ClickAsync();
         await Expect(page.Locator(".wb-ug")).ToBeVisibleAsync();
     }
 

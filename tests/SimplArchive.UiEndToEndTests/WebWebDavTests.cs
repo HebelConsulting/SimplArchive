@@ -47,7 +47,7 @@ public class WebWebDavTests
         await dialog.GetByRole(AriaRole.Button, new() { Name = "Close" }).ClickAsync();
 
         // Inbox tab → Copy WebDAV URL → the single "SimplArchive" mount URL lands on the clipboard (ADR 0509).
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Inbox" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Inbox\"]").First.ClickAsync();
         await page.GetByRole(AriaRole.Button, new() { Name = "Copy WebDAV URL" }).ClickAsync();
         await Expect(page.GetByText("Copied WebDAV URL")).ToBeVisibleAsync();
         Assert.EndsWith("/SimplArchive", await page.EvaluateAsync<string>("() => navigator.clipboard.readText()"));

@@ -19,8 +19,8 @@ public class WebTagCatalogTests
         var tag = $"cat{Guid.NewGuid().ToString("N")[..8]}"; // fresh, lowercase, valid
 
         var page = await Ui.LoginAsync(_app);
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Tags" }).First.ClickAsync();
-        await Expect(page.Locator(".wb-tab-active")).ToContainTextAsync("Tags");
+        await page.Locator(".wb-tab[aria-label=\"Tags\"]").First.ClickAsync();
+        await Expect(page.Locator(".wb-tab-active")).ToHaveAttributeAsync("aria-label", "Tags");
 
         var panel = page.Locator(".wb-tags");
         await panel.Locator("input").First.FillAsync(tag);

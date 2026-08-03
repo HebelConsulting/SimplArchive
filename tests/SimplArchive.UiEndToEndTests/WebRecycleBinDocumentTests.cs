@@ -40,7 +40,7 @@ public class WebRecycleBinDocumentTests
         await Expect(list.GetByText(name)).Not.ToBeVisibleAsync();
 
         // Recycle bin tab → the deleted document is listed → Restore removes it from the bin.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Recycle bin" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Recycle bin\"]").First.ClickAsync();
         var bin = page.Locator(".wb-recyclebin");
         var docRow = bin.Locator("tr").Filter(new() { HasText = name });
         await Expect(docRow).ToBeVisibleAsync();

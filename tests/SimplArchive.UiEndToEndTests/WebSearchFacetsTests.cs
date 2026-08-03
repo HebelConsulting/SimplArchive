@@ -45,7 +45,7 @@ public class WebSearchFacetsTests
         });
 
         var page = await Ui.LoginAsync(_app);
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Search" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Search\"]").First.ClickAsync();
         await page.FillAsync(".wb-search-bar input", word);
         await page.GetByRole(AriaRole.Button, new() { Name = "Search", Exact = true }).ClickAsync();
 

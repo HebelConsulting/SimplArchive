@@ -22,7 +22,7 @@ public class WebInboxFilingTests
         var fileName = name + ".txt";
 
         // Inbox: upload a file → it appears in the inbox list.
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Inbox" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Inbox\"]").First.ClickAsync();
         await page.SetInputFilesAsync("#inbox-file-input", new FilePayload
         {
             Name = fileName,
@@ -44,7 +44,7 @@ public class WebInboxFilingTests
         await Expect(page.Locator(".wb-list-row").Filter(new() { HasText = name })).Not.ToBeVisibleAsync();
 
         // ...and shows up as a document in the target repository (named after the file stem, ADR 0277).
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Repositories" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Repositories\"]").First.ClickAsync();
         await page.GetByText("Demo Repository").First.ClickAsync();
         await Expect(page.Locator("[data-pane='list']").GetByText(name)).ToBeVisibleAsync();
     }

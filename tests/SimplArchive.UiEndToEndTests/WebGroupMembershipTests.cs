@@ -21,7 +21,7 @@ public class WebGroupMembershipTests
         var group = "mem-grp-" + suffix;
         var user = "Mem User " + suffix;
 
-        await page.Locator(".wb-tab").Filter(new() { HasText = "Users & groups" }).First.ClickAsync();
+        await page.Locator(".wb-tab[aria-label=\"Users & groups\"]").First.ClickAsync();
 
         // Create the user and the group.
         await CreateUserAsync(page, user, $"mem-{suffix}@example.test");

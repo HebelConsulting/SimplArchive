@@ -29,8 +29,10 @@ public class WebTabBarTests
     {
         var page = await Ui.LoginAsync(_app);
 
-        await page.Locator(".wb-tab").Filter(new() { HasText = tab }).First.ClickAsync();
-        await Expect(page.Locator(".wb-tab-active")).ToContainTextAsync(tab);
+        // Tabs are icon-only on hover-capable computers (#298) — the label lives in `title`/`aria-label`, not visible
+        // text — so identify each tab by its aria-label rather than its (now hidden) text.
+        await page.Locator($".wb-tab[aria-label='{tab}']").First.ClickAsync();
+        await Expect(page.Locator(".wb-tab-active")).ToHaveAttributeAsync("aria-label", tab);
 
         var tabs = await page.Locator(".wb-tabs").BoundingBoxAsync();
         var wb = await page.Locator(".wb").BoundingBoxAsync();
