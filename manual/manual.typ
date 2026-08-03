@@ -23,8 +23,12 @@
   #place(bottom + center)[
     #set text(size: 8.5pt, fill: gray)
     #align(center)[
-      © #datetime.today().year() by Hebel Consulting GmbH, Schweighofplatz 7, \
-      6010 Kriens (LU), Switzerland, contact: #link("mailto:support@simplarchive.dev")[support\@simplarchive.dev]
+      © #datetime.today().year() \
+      Hebel Consulting GmbH \
+      Schweighofplatz 7 \
+      6010 Kriens (LU) \
+      Switzerland \
+      #link("mailto:support@simplarchive.dev")[support\@simplarchive.dev]
     ]
   ]
 ]
