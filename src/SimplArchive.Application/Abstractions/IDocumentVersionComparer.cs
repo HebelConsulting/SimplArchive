@@ -5,7 +5,10 @@ namespace SimplArchive.Application.Abstractions;
 // Available is false when either side has no extractable text (a binary/image format, or Tika unavailable).
 public interface IDocumentVersionComparer
 {
-    Task<VersionComparison> CompareAsync(string fromObjectKey, string toObjectKey, CancellationToken cancellationToken = default);
+    // toExtensionHint: when the "to" object key carries no file extension (e.g. the extensionless check-out stash
+    // key, ADR 0517), the format to treat it as for the direct text-decode path — so a text-file compare doesn't
+    // fall back to Tika. Ignored when the key already has an extension. The "from" key always carries its own.
+    Task<VersionComparison> CompareAsync(string fromObjectKey, string toObjectKey, string? toExtensionHint = null, CancellationToken cancellationToken = default);
 }
 
 public enum DiffOp

@@ -860,7 +860,7 @@
                     <TextBlock DockPanel.Dock="Top" IsVisible="{Binding !Checkout.HasItems}" TextWrapping="Wrap"
                                Text="{loc:Tr MwCheckoutEmpty}"
                                Foreground="{DynamicResource WbFaint}" />
-                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,*,150,150,330" Margin="4,0,4,4" IsVisible="{Binding Checkout.HasItems}">
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,*,150,150,410" Margin="4,0,4,4" IsVisible="{Binding Checkout.HasItems}">
                         <TextBlock Grid.Column="0" Text="{loc:Tr ColDocument}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource WbMuted}" />
                         <TextBlock Grid.Column="1" Text="{loc:Tr CoColRepoPath}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource WbMuted}" />
                         <TextBlock Grid.Column="2" Text="{loc:Tr CoColAutoRelease}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource WbMuted}" />
@@ -871,7 +871,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:CheckoutRowViewModel">
                                     <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="4,8">
-                                        <Grid ColumnDefinitions="*,*,150,150,330">
+                                        <Grid ColumnDefinitions="*,*,150,150,410">
                                             <TextBlock Grid.Column="0" Text="{Binding DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Grid.Column="1" Text="{Binding Path}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Grid.Column="2" Text="{Binding ExpiresText}" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource WbMuted}" />
@@ -879,6 +879,7 @@
                                             <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
                                                 <Button Content="{loc:Tr CoEdit}" Padding="8,3" ToolTip.Tip="{loc:Tr CoEditTip}"
                                                         Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.EditCommand}" CommandParameter="{Binding}" />
+                                                <Button Content="{loc:Tr CoCompare}" Padding="8,3" IsVisible="{Binding CanCheckIn}" Tag="{Binding}" Click="OnCheckoutCompare" />
                                                 <Button Content="{loc:Tr CoCheckIn}" Padding="8,3" IsVisible="{Binding CanCheckIn}"
                                                         Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.CheckInCommand}" CommandParameter="{Binding}" />
                                                 <Button Content="{loc:Tr MwDiscard}" Padding="8,3" IsVisible="{Binding CanDiscard}" Tag="{Binding}" Click="OnCheckoutDiscard" />

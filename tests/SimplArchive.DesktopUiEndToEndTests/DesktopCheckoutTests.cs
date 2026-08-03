@@ -57,6 +57,35 @@ public class DesktopCheckoutTests
     }
 
     [Fact]
+    public async Task Compare_loads_the_unified_diff_of_the_working_copy_vs_the_current_version()
+    {
+        DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
+        var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
+
+        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var fileName = $"cmp-{Guid.NewGuid():N}.txt";
+        await api.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("line one\nline two\nline three\n"));
+        var doc = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
+
+        await api.CheckOutAsync(doc.Id);
+        await api.SaveWorkingCopyAsync(doc.Id, Encoding.UTF8.GetBytes("line one\nline two CHANGED\nline three\n"));
+
+        // Load the row (it carries StashDownloadUrl) and drive the compare VM exactly as the dialog does.
+        var tab = new CheckoutTabViewModel();
+        tab.Setup(api);
+        await tab.LoadAsync();
+        var row = tab.Items.Single(i => i.Id == doc.Id);
+        Assert.True(row.IsModified);
+
+        var vm = new CompareCheckoutViewModel();
+        await vm.SetupAsync(api, row.Id, row.DisplayName, row.FileExtension, row.StashDownloadUrl);
+
+        Assert.False(vm.NotAvailable);
+        Assert.Contains(vm.Lines, l => l.Op == 2 && l.Display.Contains("line two"));  // removed
+        Assert.Contains(vm.Lines, l => l.Op == 1 && l.Display.Contains("CHANGED"));   // added
+    }
+
+    [Fact]
     public async Task Unchanged_checkout_unlocks_without_a_new_version()
     {
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;

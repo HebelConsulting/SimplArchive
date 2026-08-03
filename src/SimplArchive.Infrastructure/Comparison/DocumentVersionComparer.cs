@@ -26,10 +26,10 @@ public sealed class DocumentVersionComparer : IDocumentVersionComparer
         _textExtractor = textExtractor;
     }
 
-    public async Task<VersionComparison> CompareAsync(string fromObjectKey, string toObjectKey, CancellationToken cancellationToken = default)
+    public async Task<VersionComparison> CompareAsync(string fromObjectKey, string toObjectKey, string? toExtensionHint = null, CancellationToken cancellationToken = default)
     {
-        var fromText = await ExtractTextAsync(fromObjectKey, cancellationToken);
-        var toText = await ExtractTextAsync(toObjectKey, cancellationToken);
+        var fromText = await ExtractTextAsync(fromObjectKey, null, cancellationToken);
+        var toText = await ExtractTextAsync(toObjectKey, toExtensionHint, cancellationToken);
 
         if (fromText is null || toText is null)
         {
@@ -48,12 +48,15 @@ public sealed class DocumentVersionComparer : IDocumentVersionComparer
     }
 
     // The version's text, or null when it can't be extracted (binary/image, or Tika unavailable → "").
-    private async Task<string?> ExtractTextAsync(string objectKey, CancellationToken cancellationToken)
+    // extensionHint supplies the format when objectKey has no extension of its own (the check-out stash, ADR 0517).
+    private async Task<string?> ExtractTextAsync(string objectKey, string? extensionHint, CancellationToken cancellationToken)
     {
         await using var stream = await _objectStorage.GetObjectAsync(objectKey, cancellationToken);
 
-        // A known text format: decode the bytes directly (reliable without Tika).
-        if (TextExtensions.Contains(Path.GetExtension(objectKey)))
+        // A known text format: decode the bytes directly (reliable without Tika). Prefer the key's own extension;
+        // fall back to the caller's hint for an extensionless key.
+        var extension = Path.GetExtension(objectKey) is { Length: > 0 } ext ? ext : extensionHint ?? "";
+        if (TextExtensions.Contains(extension))
         {
             using var reader = new StreamReader(stream, Encoding.UTF8);
             return await reader.ReadToEndAsync(cancellationToken);

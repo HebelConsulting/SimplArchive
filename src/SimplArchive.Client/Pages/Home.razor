@@ -1321,6 +1321,10 @@
                                             {
                                                 <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.MoreTime" OnClick="() => ExtendCheckoutAsync(c)">@Strings.Get("CoExtend")</MudButton>
                                             }
+                                            @if (c.IsModified)
+                                            {
+                                                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Difference" OnClick="() => OpenCompareCheckoutAsync(c)">@Strings.Get("CoCompare")</MudButton>
+                                            }
                                             <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Check" Disabled="@(!c.IsModified)" OnClick="() => CheckInFromStashAsync(c)">@Strings.Get("CoCheckIn")</MudButton>
                                             <MudButton Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Filled.LockOpen" OnClick="() => CancelCheckoutAsync(c)">@Strings.Get("CoCancel")</MudButton>
                                         </td>
@@ -4515,6 +4519,13 @@
             await ReloadCurrentFolderAsync();
         }
         catch (Exception) { Snackbar.Add("Could not check in.", Severity.Error); }
+    }
+
+    // Compare the working copy against the current version as an inline unified diff (ADR 0517). Modified rows only.
+    private async Task OpenCompareCheckoutAsync(CheckoutDto c)
+    {
+        var parameters = new DialogParameters { ["DocumentId"] = c.Id, ["DocumentName"] = c.Name };
+        await DialogService.ShowAsync<Dialogs.CompareCheckoutDialog>("Compare working copy", parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
     }
 
     // Extend my check-out: reset the auto-release idle timer (ADR "Self-service check-out extension").

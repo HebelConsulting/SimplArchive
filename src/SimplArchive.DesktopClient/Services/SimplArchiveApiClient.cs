@@ -2244,6 +2244,23 @@ public sealed class SimplArchiveApiClient
         return new VersionComparison(json.TryGetProperty("available", out var a) && a.ValueKind == JsonValueKind.True, lines);
     }
 
+    // Inline unified diff of a checked-out document's current version vs its working copy in check-out (ADR 0517).
+    // Holder-only; Available=false when there's no working-copy stash or a side has no extractable text.
+    public async Task<VersionComparison> GetCheckoutComparisonAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/checkouts/{documentId}/compare", cancellationToken);
+        var lines = new List<DiffLineInfo>();
+        if (json.TryGetProperty("lines", out var arr))
+        {
+            foreach (var l in arr.EnumerateArray())
+            {
+                lines.Add(new DiffLineInfo(l.GetProperty("op").GetInt32(), l.GetProperty("text").GetString() ?? ""));
+            }
+        }
+
+        return new VersionComparison(json.TryGetProperty("available", out var a) && a.ValueKind == JsonValueKind.True, lines);
+    }
+
     // A specific version's bytes (via its presigned download URL) — used to stage both versions to temp files for
     // an external diff tool (Beyond Compare).
     public async Task<byte[]> DownloadVersionBytesAsync(string downloadUrl, CancellationToken cancellationToken = default)

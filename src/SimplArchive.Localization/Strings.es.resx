@@ -1050,6 +1050,18 @@
   <data name="CoModified" xml:space="preserve">
     <value>Modificado</value>
   </data>
+  <data name="CoCompare" xml:space="preserve">
+    <value>Comparar</value>
+  </data>
+  <data name="CoCompareTitle" xml:space="preserve">
+    <value>Comparar copia de trabajo — {0}</value>
+  </data>
+  <data name="CoCompareCurrent" xml:space="preserve">
+    <value>Versión actual</value>
+  </data>
+  <data name="CoCompareWorking" xml:space="preserve">
+    <value>Tu copia de trabajo</value>
+  </data>
   <data name="CoEdit" xml:space="preserve">
     <value>Editar</value>
   </data>

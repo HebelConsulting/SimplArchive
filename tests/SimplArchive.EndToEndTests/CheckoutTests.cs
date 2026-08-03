@@ -249,6 +249,39 @@ public class CheckoutTests
     private static DateTimeOffset CheckedOutAt(JsonElement checkouts, Guid docId) =>
         checkouts.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("id").GetGuid() == docId).GetProperty("checkedOutAt").GetDateTimeOffset();
 
+    [Fact]
+    public async Task Compare_returns_a_unified_diff_of_the_working_copy_vs_the_current_version()
+    {
+        var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+
+        var repoId = (await TestJson.Post(owner, "/api/repositories", new { name = $"CMP {Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+        var docId = (await TestJson.Post(owner, $"/api/documents/{repoId}/children", new { name = "compare-doc" })).GetProperty("id").GetGuid();
+        await UploadConfirmedVersionAsync(owner, docId, "line one\nline two\nline three\n");
+
+        var (_, holder) = await SeedAdminAsync(tenantId);
+        await holder.PutAsync($"/api/documents/{docId}/checkout", null);
+
+        // With no working copy stashed yet, compare is not available (nothing to diff against).
+        Assert.False((await TestJson.Get(holder, $"/api/checkouts/{docId}/compare")).GetProperty("available").GetBoolean());
+
+        // Stash an edited working copy (middle line changed).
+        var uploadUrl = (await TestJson.Post(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
+        using var storage = new HttpClient();
+        (await storage.PutAsync(uploadUrl, new ByteArrayContent(Encoding.UTF8.GetBytes("line one\nline two CHANGED\nline three\n")))).EnsureSuccessStatusCode();
+
+        // The holder's compare now shows a unified diff: the changed line as a removed + added pair.
+        var cmp = await TestJson.Get(holder, $"/api/checkouts/{docId}/compare");
+        Assert.True(cmp.GetProperty("available").GetBoolean());
+        var lines = cmp.GetProperty("lines").EnumerateArray().ToList();
+        Assert.Contains(lines, l => l.GetProperty("op").GetInt32() == 2 && l.GetProperty("text").GetString()!.Contains("line two"));  // removed
+        Assert.Contains(lines, l => l.GetProperty("op").GetInt32() == 1 && l.GetProperty("text").GetString()!.Contains("CHANGED"));   // added
+
+        // A non-holder can't compare someone else's working copy.
+        var (_, bystander) = await SeedAdminAsync(tenantId);
+        Assert.Equal(HttpStatusCode.Forbidden, (await bystander.GetAsync($"/api/checkouts/{docId}/compare")).StatusCode);
+    }
+
     private async Task<(string Email, HttpClient Client)> SeedAdminAsync(Guid tenantId)
     {
         var email = $"co-{Guid.NewGuid():N}@e2e.local";

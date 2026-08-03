@@ -418,7 +418,7 @@ public class DocumentVersionsController : ControllerBase
             return Forbid();
         }
 
-        var comparison = await _comparer.CompareAsync(from.ObjectKey, to.ObjectKey, cancellationToken);
+        var comparison = await _comparer.CompareAsync(from.ObjectKey, to.ObjectKey, cancellationToken: cancellationToken);
 
         return Ok(new VersionComparisonResource
         {

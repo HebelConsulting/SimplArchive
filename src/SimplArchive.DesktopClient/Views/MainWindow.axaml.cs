@@ -502,6 +502,21 @@ public partial class MainWindow : Window
         await dialog.ShowDialog(this); // compare is read-only now — "Make current" lives on the Versions dialog (#265)
     });
 
+    // Compare a checked-out document's working copy against its current version (ADR 0517) — inline unified diff +
+    // an optional Beyond Compare launch. Shown only on modified rows (the row's Tag carries the CheckoutRowViewModel).
+    private void OnCheckoutCompare(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api ||
+            (sender as Control)?.Tag is not CheckoutRowViewModel row)
+        {
+            return;
+        }
+
+        var ccvm = new CompareCheckoutViewModel();
+        await ccvm.SetupAsync(api, row.Id, row.DisplayName, row.FileExtension, row.StashDownloadUrl);
+        await new CompareCheckoutDialog(ccvm).ShowDialog(this);
+    });
+
     private void OnManageAccess(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api || vm.SelectedItem is not { } node)

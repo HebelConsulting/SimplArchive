@@ -57,6 +57,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
                     FileExtension = item.FileExtension,
                     IsModified = item.IsModified,
                     ExpiresAt = item.ExpiresAt,
+                    StashDownloadUrl = item.StashDownloadUrl,
                 });
             }
 
@@ -220,6 +221,9 @@ public sealed class CheckoutRowViewModel
 
     // The working copy in check-out (the cloud stash) differs from the current version — computed server-side.
     public required bool IsModified { get; init; }
+
+    // Presigned GET for the working-copy stash (ADR 0517) — staged as the right-hand file for Beyond Compare.
+    public string? StashDownloadUrl { get; init; }
 
     // Name shown in the list, WITH extension (ADR 0513): the archive stores a bare stem.
     public string DisplayName => Name + FileExtension;

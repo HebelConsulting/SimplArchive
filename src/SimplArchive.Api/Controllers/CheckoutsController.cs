@@ -34,6 +34,7 @@ public class CheckoutsController : ControllerBase
     private readonly ILegalHoldService _legalHold;
     private readonly IAuditRecorder _audit;
     private readonly IUserSystemRightsResolver _userSystemRights;
+    private readonly IDocumentVersionComparer _comparer;
 
     public CheckoutsController(
         SimplArchiveDbContext dbContext,
@@ -43,7 +44,8 @@ public class CheckoutsController : ControllerBase
         Documents.DocumentFinalizer finalizer,
         ILegalHoldService legalHold,
         IAuditRecorder audit,
-        IUserSystemRightsResolver userSystemRights)
+        IUserSystemRightsResolver userSystemRights,
+        IDocumentVersionComparer comparer)
     {
         _dbContext = dbContext;
         _currentUserAccessor = currentUserAccessor;
@@ -53,6 +55,7 @@ public class CheckoutsController : ControllerBase
         _legalHold = legalHold;
         _audit = audit;
         _userSystemRights = userSystemRights;
+        _comparer = comparer;
     }
 
     // The per-user working-copy stash key (ADR "Check-out working-copy stash + exit guard"): a durable home for
@@ -101,6 +104,20 @@ public class CheckoutsController : ControllerBase
         public Uri UploadUrl { get; set; } = null!;
     }
 
+    // Inline unified text diff of the current version vs the working copy in check-out (the stash) — ADR 0513 slice 3.
+    public class CheckoutComparisonResource : HypermediaResource
+    {
+        // False when there's no stash (nothing changed) or a side has no extractable text (binary/image format).
+        public bool Available { get; set; }
+        public List<CheckoutDiffLine> Lines { get; set; } = [];
+    }
+
+    public class CheckoutDiffLine
+    {
+        public int Op { get; set; } // matches DiffOp: 0 unchanged, 1 inserted, 2 deleted
+        public string Text { get; set; } = "";
+    }
+
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
@@ -117,6 +134,61 @@ public class CheckoutsController : ControllerBase
     {
         await BuildAsync(cancellationToken);
         return NoContent();
+    }
+
+    // Inline unified text diff of the current version vs the working copy in check-out (the cloud stash) — ADR 0513
+    // slice 3, the "Compare" action. Holder-only. Reuses IDocumentVersionComparer (which works on object keys, so
+    // the stash is just another key). Available is false when there's no stash or a side has no extractable text.
+    [HttpGet("{documentId:guid}/compare")]
+    public async Task<IActionResult> Compare(Guid documentId, CancellationToken cancellationToken)
+    {
+        if (_currentUserAccessor.UserId is not { } userId || _currentTenantAccessor.TenantId is not { } tenantId)
+        {
+            return Forbid();
+        }
+
+        var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken);
+        if (document is null)
+        {
+            return NotFound();
+        }
+
+        if (document.CheckedOutByUserId != userId)
+        {
+            return Forbid(); // only the lock holder may compare their working copy
+        }
+
+        var selfLink = new Link("self", $"/api/checkouts/{documentId}/compare", "GET");
+        var stashKey = StashKey(tenantId, userId, documentId);
+        var version = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, document.CurrentVersionId, cancellationToken);
+        if (version is null || !await _objectStorage.ExistsAsync(stashKey, cancellationToken))
+        {
+            return Ok(new CheckoutComparisonResource { Available = false, Lines = [], Links = [selfLink] });
+        }
+
+        // The stash key is extensionless (ADR 0517) — hint the current version's extension so a text-file working
+        // copy decodes directly rather than depending on Tika.
+        var comparison = await _comparer.CompareAsync(version.ObjectKey, stashKey, System.IO.Path.GetExtension(version.ObjectKey), cancellationToken);
+        return Ok(new CheckoutComparisonResource
+        {
+            Available = comparison.Available,
+            Lines = comparison.Lines.Select(l => new CheckoutDiffLine { Op = (int)l.Op, Text = l.Text }).ToList(),
+            Links = [selfLink],
+        });
+    }
+
+    [HttpHead("{documentId:guid}/compare")]
+    public async Task<IActionResult> CompareHead(Guid documentId, CancellationToken cancellationToken)
+    {
+        if (_currentUserAccessor.UserId is not { } userId)
+        {
+            return Forbid();
+        }
+
+        var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken);
+        return document is null ? NotFound()
+            : document.CheckedOutByUserId == userId ? NoContent()
+            : Forbid();
     }
 
     private async Task<List<CheckoutResource>> BuildAsync(CancellationToken cancellationToken)
