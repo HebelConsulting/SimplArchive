@@ -148,8 +148,9 @@ onto the preview, and *follow* a document or folder to be *notified* of activity
 track everything assigned to you on the *My work* dashboard. To edit a document exclusively, *check it out* — others
 see it is locked — then *check in* your changes as a new version.
 
-#pair("screenshots/web-my-work.png", "screenshots/web-checkout.png",
-  [Left: the *My work* dashboard. Right: the *Check-out* tab listing documents locked for exclusive editing.])
+#pair("screenshots/web-my-work.png", "screenshots/desktop-checkout.png",
+  [Left: the *My work* dashboard. Right: the *Check-out* tab listing documents locked for exclusive editing —
+   here one edited (_Modified_) and one untouched (_Unchanged_).])
 
 = Workflow & records
 
