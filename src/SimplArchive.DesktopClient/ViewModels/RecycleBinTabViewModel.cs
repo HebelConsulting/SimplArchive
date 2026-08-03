@@ -384,8 +384,8 @@ public sealed partial class RecycleBinTabViewModel
     {
         IsTenantAdmin = true;
         Items.Clear();
-        Items.Add(new RecycleBinRowViewModel { Id = Guid.NewGuid(), Name = "Old draft", Path = "Repositories / Demo Repository / Drafts", DeletedAt = DateTimeOffset.Now.AddDays(-2), DeletedBy = "Demo Admin" });
-        Items.Add(new RecycleBinRowViewModel { Id = Guid.NewGuid(), Name = "Superseded invoice", Path = "Repositories / Demo Repository / Invoices", DeletedAt = DateTimeOffset.Now.AddHours(-5), DeletedBy = "Demo Admin" });
+        Items.Add(new RecycleBinRowViewModel { Id = Guid.NewGuid(), Name = "Old draft", Path = "Repositories / Demo Repository / Drafts", DeletedAt = MainWindowViewModel.ScreenshotClock.AddDays(-2), DeletedBy = "Demo Admin" });
+        Items.Add(new RecycleBinRowViewModel { Id = Guid.NewGuid(), Name = "Superseded invoice", Path = "Repositories / Demo Repository / Invoices", DeletedAt = MainWindowViewModel.ScreenshotClock.AddHours(-5), DeletedBy = "Demo Admin" });
         OnPropertyChanged(nameof(HasItems));
 
         DetailTitle = "Old draft";
@@ -396,7 +396,7 @@ public sealed partial class RecycleBinTabViewModel
         SysCreatedBy = "Demo Admin";
         MaskLine = "Mask: Basic Entry · version 1";
         IndexFields.Add(new IndexFieldViewModel { FieldName = "Keywords", Values = "draft, quarterly" });
-        Comments.Add(new CommentViewModel { Id = Guid.Empty, AuthorName = "demo@simplarchive.local", Body = "Replaced by the final version.", CreatedAt = DateTimeOffset.Now });
+        Comments.Add(new CommentViewModel { Id = Guid.Empty, AuthorName = "demo@simplarchive.local", Body = "Replaced by the final version.", CreatedAt = MainWindowViewModel.ScreenshotClock });
         Preview.Reset("Preview renders here (PDF/image/text).");
         SetSelectedForScreenshot(Items[0]);
         Status = string.Format(Strings.Get("StDeletedItems"), Items.Count);

@@ -69,8 +69,10 @@ jobs:
         run: dotnet run --project tests/SimplArchive.ManualCapture --no-build -- --web
 
       # Fails if a screen was renamed/removed so a figure has no PNG — the anti-staleness lock.
+      # SOURCE_DATE_EPOCH pins the PDF's internal timestamps + the datetime.today() year to the fixed
+      # capture clock (ADR 0510) so a rebuild with no content change is byte-identical — no spurious commits.
       - name: Compile the manual
-        run: typst compile manual/manual.typ src/SimplArchive.Api/wwwroot/download/manual/SimplArchive-Manual.pdf --root .
+        run: SOURCE_DATE_EPOCH=1780304400 typst compile manual/manual.typ src/SimplArchive.Api/wwwroot/download/manual/SimplArchive-Manual.pdf --root .
 
       # main only: commit the regenerated PDF + screenshots. GITHUB_TOKEN pushes do not trigger workflows, so no
       # loop; [skip ci] is belt-and-suspenders. A no-op when nothing changed.

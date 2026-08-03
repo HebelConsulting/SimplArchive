@@ -86,6 +86,11 @@ public sealed class SelfHostedApp : IAsyncDisposable
 
     public string BaseUrl { get; private set; } = "";
 
+    // When set (an ISO-8601 instant), the app's demo seed + audit recorder resolve "now" from a fixed clock instead
+    // of the wall clock (ADR 0510) — so the manual-capture harness gets byte-stable audit/tasks/my-work screens.
+    // The E2E fixtures leave this null and run against the real clock, exactly as before. Must be set before StartAsync.
+    public string? DemoClock { get; set; }
+
     // The self-hosted app's Postgres — exposed so a caller can clean up data it seeded.
     public string PostgresConnectionString => _postgres.GetConnectionString();
 
@@ -168,6 +173,11 @@ public sealed class SelfHostedApp : IAsyncDisposable
             ["Demo__Administrator__DisplayName"] = AdminDisplayName,
             ["Demo__RepositoryName"] = "Demo Repository",
         };
+        // Deterministic capture (ADR 0510): a fixed demo clock only when the caller asked for one.
+        if (!string.IsNullOrWhiteSpace(DemoClock))
+        {
+            env["Demo__Clock"] = DemoClock;
+        }
         foreach (var (k, v) in env)
         {
             psi.Environment[k] = v;

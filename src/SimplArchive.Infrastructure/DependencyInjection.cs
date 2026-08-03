@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Infrastructure.Acl;
 using SimplArchive.Infrastructure.Conversion;
@@ -26,6 +27,10 @@ public static class DependencyInjection
     {
         var connectionString = configuration.GetConnectionString("Default")
             ?? throw new InvalidOperationException("Missing required 'ConnectionStrings:Default' configuration value.");
+
+        // The real system clock by default (ADR 0510); the Api overrides this with a fixed clock for
+        // deterministic manual capture when Demo:Clock is set. TryAdd so that override (registered first) wins.
+        services.TryAddSingleton(TimeProvider.System);
 
         services.AddDbContext<SimplArchiveDbContext>(options => options.UseNpgsql(connectionString));
 

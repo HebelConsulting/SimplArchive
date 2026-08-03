@@ -18,7 +18,10 @@ public static partial class WebCapture
 
     public static async Task RunAsync(string outDir)
     {
-        await using var app = new SelfHostedApp();
+        // Freeze the app's demo clock so the audit / tasks / my-work screens are byte-stable run-to-run (ADR 0510).
+        // Matches the desktop capture's fixed clock (MainWindowViewModel.ScreenshotClock) so both halves of the
+        // manual read the same date.
+        await using var app = new SelfHostedApp { DemoClock = "2026-06-01T09:00:00Z" };
         Console.WriteLine("[web] booting the self-hosted app (Postgres + SeaweedFS + OpenSearch + Tika + Gotenberg + API)…");
         await app.StartAsync();
         Console.WriteLine($"[web] app ready at {app.BaseUrl}");

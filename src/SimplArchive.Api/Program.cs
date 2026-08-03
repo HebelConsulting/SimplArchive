@@ -100,6 +100,18 @@ builder.Services.AddControllers()
 // controllers/DTOs — no XML doc comments yet.
 builder.Services.AddOpenApi();
 
+// Clock (ADR 0510): production + the public kiosk use the real system clock. When `Demo:Clock` is a parseable
+// date — set only by the manual-capture harness — the demo seed + audit recorder resolve "now" from a fixed
+// instant, so the auto-generated manual's time-sensitive screens (audit / tasks / my-work) are byte-stable and
+// the regenerate-on-main step stops committing a new PDF every push.
+builder.Services.AddSingleton<TimeProvider>(_ =>
+    DateTimeOffset.TryParse(builder.Configuration["Demo:Clock"],
+        System.Globalization.CultureInfo.InvariantCulture,
+        System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+        out var fixedNow)
+        ? new SimplArchive.Api.Configuration.FixedTimeProvider(fixedNow)
+        : TimeProvider.System);
+
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddAuthServer(builder.Configuration, builder.Environment);
 
@@ -423,6 +435,11 @@ using (var scope = app.Services.CreateScope())
     {
         var dbContext = services.GetRequiredService<SimplArchiveDbContext>();
 
+        // All demo timestamps resolve from the injected TimeProvider, not the wall clock, so the auto-generated
+        // manual's audit/tasks/my-work screens are byte-stable run-to-run (ADR 0510). Production/kiosk leave
+        // Demo:Clock unset and get TimeProvider.System — the real clock — so nothing user-facing changes there.
+        var clock = services.GetRequiredService<TimeProvider>();
+
         if (!await dbContext.Tenants.AnyAsync(t => t.Name == demoTenantName && t.Status == TenantStatus.Active))
         {
             var provisioned = await services.GetRequiredService<ITenantProvisioningService>().ProvisionAsync(
@@ -452,7 +469,7 @@ using (var scope = app.Services.CreateScope())
                 Name = "Invoices",
                 MaskVersionId = await SimplArchive.Api.Documents.FolderMask.CurrentVersionIdAsync(dbContext, CancellationToken.None),
                 CreatedByUserId = provisioned.AdministratorId,
-                CreatedAt = DateTimeOffset.UtcNow,
+                CreatedAt = clock.GetUtcNow(),
             };
 
             var document = new Document
@@ -462,7 +479,7 @@ using (var scope = app.Services.CreateScope())
                 ParentId = folder.Id,
                 Name = "Invoice 2025-001",
                 CreatedByUserId = provisioned.AdministratorId,
-                CreatedAt = DateTimeOffset.UtcNow,
+                CreatedAt = clock.GetUtcNow(),
             };
 
             dbContext.Documents.Add(folder);
@@ -502,13 +519,13 @@ using (var scope = app.Services.CreateScope())
                 fileBytes = buffer.ToArray();
             }
 
-            var objectKey = ObjectKeyBuilder.Build(provisioned.TenantId, DateTimeOffset.UtcNow, ".pdf");
+            var objectKey = ObjectKeyBuilder.Build(provisioned.TenantId, clock.GetUtcNow(), ".pdf");
             using (var content = new MemoryStream(fileBytes))
             {
                 await objectStorage.PutObjectAsync(objectKey, content, "application/pdf");
             }
 
-            var now = DateTimeOffset.UtcNow;
+            var now = clock.GetUtcNow();
             var version = new DocumentVersion
             {
                 Id = Guid.NewGuid(),
@@ -621,7 +638,7 @@ using (var scope = app.Services.CreateScope())
                     bytes = buf.ToArray();
                 }
 
-                var key = ObjectKeyBuilder.Build(provisioned.TenantId, DateTimeOffset.UtcNow, ".pdf");
+                var key = ObjectKeyBuilder.Build(provisioned.TenantId, clock.GetUtcNow(), ".pdf");
                 using (var content = new MemoryStream(bytes))
                 {
                     await objectStorage.PutObjectAsync(key, content, "application/pdf");

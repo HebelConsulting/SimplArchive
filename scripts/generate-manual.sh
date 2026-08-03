@@ -41,6 +41,9 @@ echo "==> Capturing screenshots ($mode)…"
 dotnet run --project tests/SimplArchive.ManualCapture --no-build -- $mode --out manual/screenshots
 
 echo "==> Compiling the Typst manual → $pdf_out"
-typst compile manual/manual.typ "$pdf_out" --root .
+# Reproducible build (ADR 0510): pin the compile timestamp so the PDF's internal CreationDate/ModDate and the
+# `datetime.today()` copyright year are byte-stable, not the wall clock. Matches the fixed demo/screenshot clock
+# (2026-06-01T09:00:00Z) the screenshots were captured under.
+SOURCE_DATE_EPOCH=1780304400 typst compile manual/manual.typ "$pdf_out" --root .
 
 echo "==> Done. Served at /download/manual/ (browse /download or open $pdf_out)."

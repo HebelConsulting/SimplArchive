@@ -4183,6 +4183,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     // Mocks the Audit tab for the headless screenshot (ADR "Desktop audit viewer").
+    // A fixed reference "now" for the headless --screenshot demo stubs, so timestamps in the audit / tasks /
+    // recycle-bin screens don't shift with the wall clock between runs — that made the auto-generated manual's
+    // PDF differ on every regeneration (ADR 0510). The web capture freezes its demo clock the same way.
+    internal static readonly DateTimeOffset ScreenshotClock = new(2026, 6, 1, 9, 0, 0, TimeSpan.Zero);
+
     internal void PopulateAuditDemoForScreenshot()
     {
         IsLoggedIn = true;
@@ -4196,7 +4201,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         WormVerifyStatus = "WORM sealed intact (96 events, 3 segments)";
         WormVerifyValid = true;
         WormVerifyShown = true;
-        var now = DateTimeOffset.Now;
+        var now = ScreenshotClock;
         AuditEvents.Add(new AuditEventRowViewModel { Timestamp = now.AddMinutes(-2), ActorName = "Demo Admin", ActorType = "User", Action = "Auth.LoggedIn" });
         AuditEvents.Add(new AuditEventRowViewModel { Timestamp = now.AddMinutes(-9), ActorName = "Demo Admin", ActorType = "User", Action = "Document.Deleted", TargetType = "Document", TargetName = "Invoice 2025-001" });
         AuditEvents.Add(new AuditEventRowViewModel { Timestamp = now.AddMinutes(-15), ActorName = "Demo Admin", ActorType = "User", Action = "Acl.Granted", TargetType = "Document", TargetName = "Contracts", Details = "users …: CanSee, CanReadContent" });
@@ -4221,7 +4226,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         TenantOcrDisplay = "English, German, French, Italian";
         TenantId = Guid.NewGuid().ToString();
         TenantStatus = "Active";
-        TenantCreated = DateTimeOffset.Now.AddMonths(-8).LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+        TenantCreated = ScreenshotClock.AddMonths(-8).LocalDateTime.ToString("yyyy-MM-dd HH:mm");
         TenantSettingsLoaded = true;
     }
 
@@ -5165,7 +5170,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         IndexFields.Add(new IndexFieldViewModel { FieldName = "Keywords", Values = "invoice, reviewed" });
         Preview.PreviewConverted = false;
         Preview.Reset("Preview renders here (PDF/image/text).");
-        Comments.Add(new CommentViewModel { Id = Guid.Empty, AuthorName = "demo@simplarchive.local", Body = "Looks good.", CreatedAt = DateTimeOffset.Now });
+        Comments.Add(new CommentViewModel { Id = Guid.Empty, AuthorName = "demo@simplarchive.local", Body = "Looks good.", CreatedAt = ScreenshotClock });
         Status = "3 item(s).";
     }
 
@@ -5176,8 +5181,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         PopulateDemoForScreenshot();
 
-        Tasks.Add(new TaskItemViewModel { DocumentId = Guid.NewGuid(), DocumentName = "Q3 Invoice.pdf", VersionNumber = 2, AssignedAt = DateTimeOffset.Now.AddHours(-3) });
-        Tasks.Add(new TaskItemViewModel { DocumentId = Guid.NewGuid(), DocumentName = "Vendor Contract.docx", VersionNumber = 1, AssignedAt = DateTimeOffset.Now.AddDays(-1) });
+        Tasks.Add(new TaskItemViewModel { DocumentId = Guid.NewGuid(), DocumentName = "Q3 Invoice.pdf", VersionNumber = 2, AssignedAt = ScreenshotClock.AddHours(-3) });
+        Tasks.Add(new TaskItemViewModel { DocumentId = Guid.NewGuid(), DocumentName = "Vendor Contract.docx", VersionNumber = 1, AssignedAt = ScreenshotClock.AddDays(-1) });
         TaskCount = Tasks.Count;
     }
 

@@ -22,7 +22,7 @@ public class AuditRecorderTests
         CurrentUserAccessor userAccessor,
         CurrentServiceAccountAccessor serviceAccountAccessor,
         CurrentPlatformAdministratorAccessor platformAdministratorAccessor) =>
-        new(dbContext, userAccessor, serviceAccountAccessor, platformAdministratorAccessor, tenantAccessor, new CurrentImpersonationAccessor());
+        new(dbContext, userAccessor, serviceAccountAccessor, platformAdministratorAccessor, tenantAccessor, new CurrentImpersonationAccessor(), TimeProvider.System);
 
     [Fact]
     public async Task RecordAsync_appends_event_with_actor_name_snapshot_scoped_to_the_current_tenant()

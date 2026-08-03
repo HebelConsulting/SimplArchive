@@ -20,6 +20,7 @@ public class AuditRecorder : IAuditRecorder
     private readonly ICurrentPlatformAdministratorAccessor _currentPlatformAdministratorAccessor;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly ICurrentImpersonationAccessor _currentImpersonationAccessor;
+    private readonly TimeProvider _timeProvider;
 
     public AuditRecorder(
         SimplArchiveDbContext dbContext,
@@ -27,7 +28,8 @@ public class AuditRecorder : IAuditRecorder
         ICurrentServiceAccountAccessor currentServiceAccountAccessor,
         ICurrentPlatformAdministratorAccessor currentPlatformAdministratorAccessor,
         ICurrentTenantAccessor currentTenantAccessor,
-        ICurrentImpersonationAccessor currentImpersonationAccessor)
+        ICurrentImpersonationAccessor currentImpersonationAccessor,
+        TimeProvider timeProvider)
     {
         _dbContext = dbContext;
         _currentUserAccessor = currentUserAccessor;
@@ -35,6 +37,7 @@ public class AuditRecorder : IAuditRecorder
         _currentPlatformAdministratorAccessor = currentPlatformAdministratorAccessor;
         _currentTenantAccessor = currentTenantAccessor;
         _currentImpersonationAccessor = currentImpersonationAccessor;
+        _timeProvider = timeProvider;
     }
 
     public async Task RecordAsync(
@@ -57,7 +60,7 @@ public class AuditRecorder : IAuditRecorder
         {
             Id = Guid.NewGuid(),
             TenantId = effectiveTenant,
-            Timestamp = AuditEventHasher.TruncateToMicroseconds(DateTimeOffset.UtcNow),
+            Timestamp = AuditEventHasher.TruncateToMicroseconds(_timeProvider.GetUtcNow()),
             ActorType = actorType,
             ActorId = resolvedActorId,
             ActorName = actorName ?? "(unknown)",
@@ -86,7 +89,7 @@ public class AuditRecorder : IAuditRecorder
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
-            Timestamp = AuditEventHasher.TruncateToMicroseconds(DateTimeOffset.UtcNow),
+            Timestamp = AuditEventHasher.TruncateToMicroseconds(_timeProvider.GetUtcNow()),
             ActorType = actorType,
             ActorId = actorId,
             ActorName = actorName,
