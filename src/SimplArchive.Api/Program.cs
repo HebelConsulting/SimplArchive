@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Asp.Versioning;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.EntityFrameworkCore;
@@ -105,6 +106,15 @@ builder.Services.AddOpenApi();
 // `Demo:Clock` is set by the manual-capture harness, and only the demo seed + audit recorder read it, so the
 // manual's time-sensitive screens are byte-stable without freezing the auth clock.
 builder.Services.AddInfrastructure(builder.Configuration);
+
+// Persist Data Protection keys in Postgres (ADR 0514) via the EF Core key store, so antiforgery + auth cookies
+// survive an API restart and are SHARED across HPA replicas. The default ephemeral per-container key ring
+// otherwise regenerates on every restart — breaking the first login after a restart (the browser's antiforgery
+// cookie can't be decrypted) and every cookie across replicas. SetApplicationName pins the purpose strings.
+builder.Services.AddDataProtection()
+    .PersistKeysToDbContext<SimplArchive.Infrastructure.Persistence.SimplArchiveDbContext>()
+    .SetApplicationName("SimplArchive");
+
 builder.Services.AddAuthServer(builder.Configuration, builder.Environment);
 
 // Real-time in-app notifications (ADR "Real-time notifications (SignalR)"): a hub the clients subscribe to, plus

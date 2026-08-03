@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Reflection;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Abstractions;
@@ -20,8 +21,13 @@ namespace SimplArchive.Infrastructure.Persistence;
 /// kept provider-agnostic (Fluent API only, no provider-specific column types or JSON columns) so it
 /// behaves identically against PostgreSQL (production) and SQLite (tests) — see ADR: Testing / QA strategy.
 /// </summary>
-public class SimplArchiveDbContext : DbContext
+public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
 {
+    // ASP.NET Core Data Protection keys, persisted in Postgres (ADR 0514) so antiforgery/auth cookies survive API
+    // restarts and are shared across HPA replicas — the default ephemeral per-container key ring otherwise breaks
+    // the first login after a restart and every login across replicas.
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
+
     private static readonly MethodInfo SetTenantQueryFilterMethod =
         typeof(SimplArchiveDbContext).GetMethod(nameof(SetTenantQueryFilter), BindingFlags.NonPublic | BindingFlags.Instance)!;
 
