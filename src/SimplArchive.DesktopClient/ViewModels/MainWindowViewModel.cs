@@ -895,6 +895,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
+        // Navigating to a *different* folder resets the panes right of the list (index-data / preview / comments)
+        // so they don't keep showing the previously-selected document — parity with the web client, whose
+        // SelectFolderAsync clears the detail on every folder selection (ADR 0516). A same-folder reload (after an
+        // in-place operation such as a legal-hold toggle or an upload) deliberately keeps the current detail; the
+        // operation handlers that need to clear it call ClearDetail() themselves.
+        if (_currentFolderId != folderId)
+        {
+            SelectedItem = null;
+            ClearDetail();
+        }
+
         _archiveDocumentId = null; // leave any archive-browsing view
         _currentFolderId = folderId;
         CanCreateFolder = true;
@@ -5365,6 +5376,39 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // Re-tap the still-selected repo node in the tree: the fix reloads the list back to the repo.
         await ReselectTreeFolderAsync(repo);
         return (afterDrill, _currentFolderId!.Value, Items.Select(n => n.Name).ToArray());
+    }
+
+    // Navigating to a different folder clears the panes right of the list (index-data / preview / comments) so a
+    // freshly-selected folder doesn't keep showing the previously-viewed document — parity with the web client
+    // (ADR 0516). A same-folder reload keeps the current detail. Driven against the running Api; DetailTitle stands
+    // in for the populated detail panes (what a real selection sets and what ClearDetail resets).
+    internal async Task<(bool ClearedOnFolderChange, bool KeptOnSameFolderReload)> FolderChangeResetsPanesSelfTestAsync(string accessToken)
+    {
+        UseApi(new SimplArchiveApiClient(accessToken));
+        await LoadRootAsync();
+        var repo = Tree[0];
+        await LoadFolderContentsAsync(repo.Id);
+
+        // A guaranteed different folder to navigate into — create one if the shared demo tenant has none.
+        var sub = Items.FirstOrDefault(n => n.IsFolder && !n.IsReference);
+        if (sub is null)
+        {
+            await _api!.CreateFolderAsync(repo.Id, "panereset-" + Guid.NewGuid().ToString("N")[..8]);
+            await LoadFolderContentsAsync(repo.Id);
+            sub = Items.First(n => n.IsFolder && !n.IsReference);
+        }
+
+        // Populate the detail (as selecting a document does), then navigate to a DIFFERENT folder — must clear.
+        DetailTitle = "sentinel-A";
+        await LoadFolderContentsAsync(sub.Id);
+        var clearedOnFolderChange = string.IsNullOrEmpty(DetailTitle);
+
+        // A same-folder reload (e.g. after an in-place operation) must KEEP the current detail.
+        DetailTitle = "sentinel-B";
+        await LoadFolderContentsAsync(sub.Id);
+        var keptOnSameFolderReload = DetailTitle == "sentinel-B";
+
+        return (clearedOnFolderChange, keptOnSameFolderReload);
     }
 
     // Exercises the tree-pane folder context-menu actions (ADR "Desktop tree-pane folder context menu") end to
