@@ -856,29 +856,6 @@
                         </Button>
                     </StackPanel>
 
-                    <!-- Orphaned local copies (ADR "Web check-out + orphaned local copy"): the check-out was
-                         checked in from the web or force-released while this client held local edits. -->
-                    <Border DockPanel.Dock="Top" IsVisible="{Binding Checkout.HasOrphans}" Margin="0,0,0,12" Padding="10"
-                            Background="#22e5a300" BorderBrush="#e5a300" BorderThickness="1" CornerRadius="4">
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="{loc:Tr MwOrphanCheckout}"
-                                       TextWrapping="Wrap" FontWeight="SemiBold" />
-                            <ItemsControl ItemsSource="{Binding Checkout.Orphans}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:OrphanRowViewModel">
-                                        <Grid ColumnDefinitions="*,Auto" Margin="0,3">
-                                            <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-                                                <Button Content="{loc:Tr MwAddAsVersion}" Padding="8,3"
-                                                        Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.AddOrphanAsVersionCommand}" CommandParameter="{Binding}" />
-                                                <Button Content="{loc:Tr MwDiscard}" Padding="8,3" Tag="{Binding}" Click="OnDiscardOrphan" />
-                                            </StackPanel>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
                     <TextBlock DockPanel.Dock="Bottom" Text="{Binding Checkout.Status}" Foreground="{DynamicResource WbFaint}" FontSize="12" Margin="0,6,0,0" />
                     <TextBlock DockPanel.Dock="Top" IsVisible="{Binding !Checkout.HasItems}" TextWrapping="Wrap"
                                Text="{loc:Tr MwCheckoutEmpty}"
@@ -895,13 +872,13 @@
                                 <DataTemplate x:DataType="vm:CheckoutRowViewModel">
                                     <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="4,8">
                                         <Grid ColumnDefinitions="*,*,150,150,330">
-                                            <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="0" Text="{Binding DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Grid.Column="1" Text="{Binding Path}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Grid.Column="2" Text="{Binding ExpiresText}" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource WbMuted}" />
                                             <TextBlock Grid.Column="3" Text="{Binding StatusText}" VerticalAlignment="Center" FontSize="12" />
                                             <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                                                <Button Content="{loc:Tr MwSaveToCloud}" Padding="8,3" IsVisible="{Binding CanSaveToCloud}" ToolTip.Tip="{loc:Tr MwSaveToCloudTip}"
-                                                        Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.SaveToCloudCommand}" CommandParameter="{Binding}" />
+                                                <Button Content="{loc:Tr CoEdit}" Padding="8,3" ToolTip.Tip="{loc:Tr CoEditTip}"
+                                                        Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.EditCommand}" CommandParameter="{Binding}" />
                                                 <Button Content="{loc:Tr CoCheckIn}" Padding="8,3" IsVisible="{Binding CanCheckIn}"
                                                         Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.CheckInCommand}" CommandParameter="{Binding}" />
                                                 <Button Content="{loc:Tr MwDiscard}" Padding="8,3" IsVisible="{Binding CanDiscard}" Tag="{Binding}" Click="OnCheckoutDiscard" />

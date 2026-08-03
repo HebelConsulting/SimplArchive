@@ -1718,23 +1718,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
             {
                 _localFolders = new LocalFolders(tenantName, userName);
                 NativeFileOpener.TempDirectoryOverride = _localFolders.TempDirectory;
-                Checkout.Setup(_api, _localFolders); // the Check-out tab needs the local working-copy folder
+                Checkout.Setup(_api);
             }
 
             await LoadTasksAsync(); // for the Tasks tab count badge
             await LoadNotificationsAsync(); // for the notifications bell badge
             await StartRealtimeNotificationsAsync(); // live bell updates (ADR "Real-time notifications (SignalR)")
             await LoadSensitivityCatalogAsync(); // the tenant's sensitivity labels for the picker + admin
-            // Restore each check-out's working copy from the cloud stash (or the repo version) into the local
-            // folder — ADR "Check-out working-copy stash + exit guard".
-            await Checkout.ReconcileOnLoginAsync();
+            // The Check-out tab reads its modified state from the server (ADR 0513) — no local working copy to restore.
+            await Checkout.LoadAsync();
             OnPropertyChanged(nameof(CheckoutCount));
             OnPropertyChanged(nameof(HasCheckouts));
-            // Orphaned local copies (checked in from the web / force-released) need attention — surface the tab.
-            if (Checkout.HasOrphans)
-            {
-                SelectedTab = 2;
-            }
         }
         catch (Exception)
         {
@@ -1824,9 +1818,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         try
         {
             await _api.CheckOutAsync(item.Id);
-            // Download the current version into the local checkout folder for native editing.
-            var extension = await ResolveFileExtensionAsync(item.Id);
-            await Checkout.DownloadWorkingCopyAsync(item.Id, item.Name, extension);
+            // The lock is acquired server-side; editing happens via the WebDAV mount (ADR 0513) — no local copy.
             Status = string.Format(Strings.Get("StCheckedOut"), item.Name);
             await RefreshAfterCheckoutChangeAsync();
         }

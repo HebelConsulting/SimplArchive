@@ -1053,6 +1053,18 @@
   <data name="CoEdit" xml:space="preserve">
     <value>Editar</value>
   </data>
+  <data name="CoUnchanged" xml:space="preserve">
+    <value>Sin cambios</value>
+  </data>
+  <data name="CoEditNeedsWebDav" xml:space="preserve">
+    <value>Configura una contraseña WebDAV para editar archivos desprotegidos.</value>
+  </data>
+  <data name="CoEditing" xml:space="preserve">
+    <value>Abriendo '{0}' para editar…</value>
+  </data>
+  <data name="CoEditTip" xml:space="preserve">
+    <value>Abrir en el editor nativo a través del montaje WebDAV</value>
+  </data>
   <data name="CoNever" xml:space="preserve">
     <value>Nunca</value>
   </data>

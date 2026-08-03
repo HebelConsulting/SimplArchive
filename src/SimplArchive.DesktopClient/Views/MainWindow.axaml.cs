@@ -74,38 +74,16 @@ public partial class MainWindow : Window
         return result is null ? null : new PreviewViewModel.AnnotationDialogResult(result.Action, result.Text, result.Color);
     }
 
-    private bool _confirmedClose;
-
     // Persist the pane layout (incl. GridSplitter drag-resizes) when the window closes, and guard against losing
     // un-backed-up check-out edits (ADR "Check-out working-copy stash + exit guard"): if any checked-out document
     // has edits that aren't saved to the cloud or checked in, cancel the close, switch to the Check-out tab, and
     // ask the user to resolve them first. Closing is the desktop's only exit (there is no separate logout).
     protected override void OnClosing(WindowClosingEventArgs e)
     {
+        // Editing goes through the WebDAV mount, which saves straight to the cloud stash (ADR 0513), so there are no
+        // un-backed-up local edits to guard against on close — just persist the layout and let the window close.
         (DataContext as MainWindowViewModel)?.SaveLayout();
-
-        if (_confirmedClose || DataContext is not MainWindowViewModel vm || !vm.IsLoggedIn)
-        {
-            base.OnClosing(e);
-            return;
-        }
-
-        // Defer the decision: cancel now, check asynchronously, then either re-close or keep the window open.
-        e.Cancel = true;
-        Safe.Fire(async () =>
-        {
-            if (await vm.Checkout.HasUnsyncedEditsAsync())
-            {
-                vm.SelectedTab = 2; // Check-out tab
-                await new ConfirmDialog(
-                    "Some checked-out documents have edits that aren't saved to the cloud or checked in. Save them to the cloud or check them in before closing.",
-                    "OK").ShowDialog<bool>(this);
-                return; // stay open so the user can resolve them
-            }
-
-            _confirmedClose = true;
-            Close();
-        });
+        base.OnClosing(e);
     }
 
     // Ribbon "New folder": prompt for a name, then create it in the current folder.
@@ -177,23 +155,12 @@ public partial class MainWindow : Window
         }
     });
 
-    // Discard an orphaned local working copy (ADR "Web check-out + orphaned local copy") — confirmed, since it
-    // drops the local edits (the document was already checked in / released elsewhere).
-    private void OnDiscardOrphan(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel vm && sender is Button { Tag: OrphanRowViewModel orphan }
-            && await new ConfirmDialog($"Discard your local edits to '{orphan.Name}'? It was already checked in elsewhere.", "Discard").ShowDialog<bool>(this))
-        {
-            vm.Checkout.DiscardOrphan(orphan);
-        }
-    });
-
-    // Discard a checked-out document's local edits (ADR "Document check-out / check-in") — confirmed, since it
-    // abandons the working copy's changes and releases the lock without creating a new version.
+    // Discard a checked-out document's changes (ADR "Document check-out / check-in"; ADR 0513) — confirmed, since it
+    // abandons the working copy in check-out and releases the lock without creating a new version.
     private void OnCheckoutDiscard(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && sender is Button { Tag: CheckoutRowViewModel row }
-            && await new ConfirmDialog($"Discard your local edits to '{row.Name}' and release the check-out?", "Discard").ShowDialog<bool>(this))
+            && await new ConfirmDialog($"Discard the changes to '{row.Name}' and release the check-out?", "Discard").ShowDialog<bool>(this))
         {
             await vm.Checkout.DiscardAsync(row);
         }

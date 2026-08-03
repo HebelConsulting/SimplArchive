@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
@@ -51,7 +52,13 @@ public static class OsFileManager
     public static Task<OpenResult> OpenWebDavAsync(string httpUrl)
     {
         var (fileName, arguments) = BuildOpenCommand(httpUrl, Current);
-        var isMacOs = Current == Platform.MacOs;
+        return RunAsync(fileName, arguments, macOsChecksExit: Current == Platform.MacOs);
+    }
+
+    // Runs the mount/open command on a background thread and reports success/failure. On macOS a non-zero
+    // osascript exit (server unreachable / auth cancelled) is surfaced; explorer.exe/cmd/xdg-open just hand off.
+    private static Task<OpenResult> RunAsync(string fileName, string[] arguments, bool macOsChecksExit)
+    {
         return Task.Run(() =>
         {
             try
@@ -75,7 +82,7 @@ public static class OsFileManager
 
                 var stderr = process.StandardError.ReadToEnd();
                 process.WaitForExit();
-                if (isMacOs && process.ExitCode != 0)
+                if (macOsChecksExit && process.ExitCode != 0)
                 {
                     return new OpenResult(false, string.IsNullOrWhiteSpace(stderr) ? $"Mount failed (exit {process.ExitCode})." : stderr.Trim());
                 }
@@ -87,6 +94,43 @@ public static class OsFileManager
                 return new OpenResult(false, e.Message);
             }
         });
+    }
+
+    // The (executable, argument list) that opens a SINGLE file inside the WebDAV mount in its native application
+    // (ADR 0513, the Check-out Edit button) — mounting the share first if needed. `relativePath` is under the mount
+    // root, e.g. "Personal/Check-out/Invoice 2025-001.pdf". Pure (unit-tested); the run is OpenWebDavFileAsync.
+    //   • macOS  → osascript: mount the volume, then `open` the POSIX path /Volumes/<name>/<relativePath>.
+    //   • Windows → `cmd /c start` on the DavWWWRoot UNC file path (the WebClient redirector fetches + opens it).
+    //   • Linux  → `xdg-open` the davs:// file URL (GVFS mounts + opens it in the default app).
+    public static (string FileName, string[] Arguments) BuildOpenWebDavFileCommand(string httpBaseUrl, string relativePath, Platform platform)
+    {
+        var baseUri = new Uri(httpBaseUrl.TrimEnd('/'));
+        var rel = relativePath.Trim('/');
+        switch (platform)
+        {
+            case Platform.MacOs:
+                var volumeName = baseUri.AbsolutePath.Trim('/').Split('/')[^1];
+                var posixPath = $"/Volumes/{volumeName}/{rel}";
+                return ("osascript", new[]
+                {
+                    "-e",
+                    $"set d to (mount volume \"{httpBaseUrl.TrimEnd('/')}\")\ndo shell script \"open \" & quoted form of \"{posixPath}\"",
+                });
+            case Platform.Linux:
+                var escaped = string.Join('/', rel.Split('/').Select(Uri.EscapeDataString));
+                return ("xdg-open", new[] { ToDavScheme(baseUri) + "/" + escaped });
+            default:
+                var unc = ToWindowsUnc(baseUri) + "\\" + rel.Replace('/', '\\');
+                return ("cmd.exe", new[] { "/c", "start", "", unc });
+        }
+    }
+
+    // Opens a single file inside the WebDAV mount in its native application (ADR 0513). Reuses the same background
+    // runner as OpenWebDavAsync so the mount's credential prompt can't block the UI thread.
+    public static Task<OpenResult> OpenWebDavFileAsync(string httpBaseUrl, string relativePath)
+    {
+        var (fileName, arguments) = BuildOpenWebDavFileCommand(httpBaseUrl, relativePath, Current);
+        return RunAsync(fileName, arguments, macOsChecksExit: Current == Platform.MacOs);
     }
 
     // https://host:443/webdav/Inbox → davs://host:443/webdav/Inbox ; http → dav.

@@ -2044,7 +2044,7 @@ public sealed class SimplArchiveApiClient
 
     // ---- Check-out / check-in (ADR "Document check-out / check-in") -----------------------------------
 
-    public sealed record CheckoutItem(Guid Id, string Name, string Path, string Sha256, string FileExtension, bool HasStash, string? StashDownloadUrl, DateTimeOffset? ExpiresAt);
+    public sealed record CheckoutItem(Guid Id, string Name, string Path, string Sha256, string FileExtension, bool HasStash, bool IsModified, string? StashDownloadUrl, DateTimeOffset? ExpiresAt);
 
     // Acquire the exclusive edit lock. 409 = already held by someone else; 403 = no permission / not a User.
     public async Task CheckOutAsync(Guid documentId, CancellationToken cancellationToken = default)
@@ -2071,6 +2071,25 @@ public sealed class SimplArchiveApiClient
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to release this check-out.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Stash-based check-in (ADR 0513): the server promotes the cloud stash (the WebDAV-edited working copy) to a new
+    // confirmed version and releases the lock — the desktop no longer uploads a local file. Holder-only; 400 if
+    // there's no stash to check in (nothing changed).
+    public async Task CheckInFromStashAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync($"api/checkouts/{documentId}/checkin", new { }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to check in this document.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            throw new ApiActionException("There are no changes to check in.");
         }
 
         response.EnsureSuccessStatusCode();
@@ -2105,6 +2124,7 @@ public sealed class SimplArchiveApiClient
                     i.TryGetProperty("sha256", out var s) ? s.GetString() ?? "" : "",
                     i.TryGetProperty("fileExtension", out var fe) ? fe.GetString() ?? "" : "",
                     i.TryGetProperty("hasStash", out var hst) && hst.ValueKind == JsonValueKind.True,
+                    i.TryGetProperty("isModified", out var im) && im.ValueKind == JsonValueKind.True,
                     i.TryGetProperty("stashDownloadUrl", out var sdu) && sdu.ValueKind == JsonValueKind.String ? sdu.GetString() : null,
                     i.TryGetProperty("expiresAt", out var ea) && ea.ValueKind == JsonValueKind.String ? ea.GetDateTimeOffset() : null));
             }

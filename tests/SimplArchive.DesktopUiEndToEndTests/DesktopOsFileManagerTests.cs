@@ -47,4 +47,36 @@ public class DesktopOsFileManagerTests
         Assert.Contains("dav://localhost:8080/webdav/Inbox", args);
         Assert.DoesNotContain(args, a => a.Contains("davs://"));
     }
+
+    // The Check-out Edit button (ADR 0513) opens a SINGLE file inside the mount in its native app.
+    private const string Base = "https://archive.example.com:8443/SimplArchive";
+    private const string Rel = "Personal/Check-out/Report Q1.txt"; // a space, to exercise escaping
+
+    [Fact]
+    public void MacOs_edit_mounts_then_opens_the_posix_path_under_Volumes()
+    {
+        var (file, args) = OsFileManager.BuildOpenWebDavFileCommand(Base, Rel, OsFileManager.Platform.MacOs);
+        Assert.Equal("osascript", file);
+        var script = string.Join("\n", args);
+        Assert.Contains("mount volume \"https://archive.example.com:8443/SimplArchive\"", script);
+        // Volume name = the URL's last path segment; the file opens by its POSIX path under /Volumes.
+        Assert.Contains("/Volumes/SimplArchive/Personal/Check-out/Report Q1.txt", script);
+        Assert.Contains("open ", script);
+    }
+
+    [Fact]
+    public void Linux_edit_opens_the_url_encoded_davs_file_url()
+    {
+        var (file, args) = OsFileManager.BuildOpenWebDavFileCommand(Base, Rel, OsFileManager.Platform.Linux);
+        Assert.Equal("xdg-open", file);
+        Assert.Contains("davs://archive.example.com:8443/SimplArchive/Personal/Check-out/Report%20Q1.txt", args);
+    }
+
+    [Fact]
+    public void Windows_edit_starts_the_DavWWWRoot_unc_file_path()
+    {
+        var (file, args) = OsFileManager.BuildOpenWebDavFileCommand(Base, Rel, OsFileManager.Platform.Windows);
+        Assert.Equal("cmd.exe", file);
+        Assert.Contains(@"\\archive.example.com@SSL@8443\DavWWWRoot\SimplArchive\Personal\Check-out\Report Q1.txt", args);
+    }
 }
