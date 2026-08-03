@@ -100,18 +100,10 @@ builder.Services.AddControllers()
 // controllers/DTOs — no XML doc comments yet.
 builder.Services.AddOpenApi();
 
-// Clock (ADR 0510): production + the public kiosk use the real system clock. When `Demo:Clock` is a parseable
-// date — set only by the manual-capture harness — the demo seed + audit recorder resolve "now" from a fixed
-// instant, so the auto-generated manual's time-sensitive screens (audit / tasks / my-work) are byte-stable and
-// the regenerate-on-main step stops committing a new PDF every push.
-builder.Services.AddSingleton<TimeProvider>(_ =>
-    DateTimeOffset.TryParse(builder.Configuration["Demo:Clock"],
-        System.Globalization.CultureInfo.InvariantCulture,
-        System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
-        out var fixedNow)
-        ? new SimplArchive.Api.Configuration.FixedTimeProvider(fixedNow)
-        : TimeProvider.System);
-
+// Clock (ADR 0510): the app-wide TimeProvider is the real system clock (registered in AddInfrastructure) — auth
+// must track real time. A SEPARATE keyed "demo-clock" (also in AddInfrastructure) is a fixed instant only when
+// `Demo:Clock` is set by the manual-capture harness, and only the demo seed + audit recorder read it, so the
+// manual's time-sensitive screens are byte-stable without freezing the auth clock.
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddAuthServer(builder.Configuration, builder.Environment);
 
@@ -435,10 +427,10 @@ using (var scope = app.Services.CreateScope())
     {
         var dbContext = services.GetRequiredService<SimplArchiveDbContext>();
 
-        // All demo timestamps resolve from the injected TimeProvider, not the wall clock, so the auto-generated
-        // manual's audit/tasks/my-work screens are byte-stable run-to-run (ADR 0510). Production/kiosk leave
-        // Demo:Clock unset and get TimeProvider.System — the real clock — so nothing user-facing changes there.
-        var clock = services.GetRequiredService<TimeProvider>();
+        // Demo timestamps resolve from the keyed "demo-clock" (a fixed instant only under Demo:Clock), NOT the
+        // app-wide TimeProvider — so the manual's audit/tasks/my-work screens are byte-stable run-to-run (ADR 0510)
+        // while auth keeps the real clock. Production/kiosk leave Demo:Clock unset, so this is System there too.
+        var clock = services.GetRequiredKeyedService<TimeProvider>("demo-clock");
 
         if (!await dbContext.Tenants.AnyAsync(t => t.Name == demoTenantName && t.Status == TenantStatus.Active))
         {

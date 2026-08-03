@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,9 +29,20 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("Default")
             ?? throw new InvalidOperationException("Missing required 'ConnectionStrings:Default' configuration value.");
 
-        // The real system clock by default (ADR 0510); the Api overrides this with a fixed clock for
-        // deterministic manual capture when Demo:Clock is set. TryAdd so that override (registered first) wins.
+        // The app-wide clock is the real system clock for EVERYONE — including OpenIddict/auth, which must track
+        // real time: a frozen past instant makes issued tokens/cookies look already-expired to a real-time browser
+        // and breaks interactive login. TryAdd so a test host can still substitute its own wall clock.
         services.TryAddSingleton(TimeProvider.System);
+
+        // A SEPARATE, keyed clock used ONLY for demo-seed data + audit-event timestamps (the demo seed and
+        // AuditRecorder resolve it by the "demo-clock" key). It is a FIXED instant when Demo:Clock is a parseable
+        // date — set only by the manual-capture harness (ADR 0510) — so the manual's time-sensitive screens
+        // (audit / tasks / my-work) are byte-stable, WITHOUT freezing the auth clock. Everywhere else it is System.
+        var demoClock = DateTimeOffset.TryParse(configuration["Demo:Clock"], CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var fixedNow)
+            ? (TimeProvider)new FixedTimeProvider(fixedNow)
+            : TimeProvider.System;
+        services.AddKeyedSingleton("demo-clock", demoClock);
 
         services.AddDbContext<SimplArchiveDbContext>(options => options.UseNpgsql(connectionString));
 

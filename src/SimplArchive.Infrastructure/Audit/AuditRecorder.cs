@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Audit;
 using SimplArchive.Infrastructure.Persistence;
@@ -29,7 +30,7 @@ public class AuditRecorder : IAuditRecorder
         ICurrentPlatformAdministratorAccessor currentPlatformAdministratorAccessor,
         ICurrentTenantAccessor currentTenantAccessor,
         ICurrentImpersonationAccessor currentImpersonationAccessor,
-        TimeProvider timeProvider)
+        [FromKeyedServices("demo-clock")] TimeProvider timeProvider)
     {
         _dbContext = dbContext;
         _currentUserAccessor = currentUserAccessor;
