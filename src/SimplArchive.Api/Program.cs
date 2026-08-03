@@ -823,6 +823,28 @@ app.MapControllers();
 app.MapRazorPages();
 app.MapHub<SimplArchive.Api.Realtime.NotificationsHub>("/hubs/notifications");
 
+// Language selector on the server-rendered /Account/Login page (ADR 0515): set the culture cookie the
+// RequestLocalization CookieRequestCultureProvider reads, then return to the login page. Anonymous — it runs
+// before sign-in and only changes the display language, so a GET link (no antiforgery) is appropriate. The
+// return target is validated as a local URL to avoid an open redirect.
+app.MapGet("/Account/SetLanguage", (HttpContext http, string? culture, string? returnUrl) =>
+{
+    string[] supported = ["en", "de", "it", "es"];
+    var chosen = supported.Contains(culture) ? culture! : "en";
+    http.Response.Cookies.Append(
+        Microsoft.AspNetCore.Localization.CookieRequestCultureProvider.DefaultCookieName,
+        Microsoft.AspNetCore.Localization.CookieRequestCultureProvider.MakeCookieValue(
+            new Microsoft.AspNetCore.Localization.RequestCulture(chosen)),
+        new CookieOptions { Path = "/", Expires = DateTimeOffset.UtcNow.AddYears(1), IsEssential = true, SameSite = SameSiteMode.Lax });
+
+    var target = "/Account/Login";
+    if (!string.IsNullOrEmpty(returnUrl) && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//") && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
+    {
+        target = $"{target}?ReturnUrl={Uri.EscapeDataString(returnUrl)}";
+    }
+    return Results.LocalRedirect(target);
+}).AllowAnonymous();
+
 // No authentication — matches every other infrastructure-level route (GET /, /connect/token,
 // /.well-known/openid-configuration) rather than the resource controllers. Registered before
 // MapFallbackToFile purely for readability; explicit routes always take precedence over a fallback route

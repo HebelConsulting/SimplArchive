@@ -1797,6 +1797,12 @@
   <data name="LoginPasswordPlaceholder" xml:space="preserve">
     <value>Tu contraseña</value>
   </data>
+  <data name="LoginEmailPlaceholder" xml:space="preserve">
+    <value>you@example.com</value>
+  </data>
+  <data name="LoginLanguageLabel" xml:space="preserve">
+    <value>Idioma</value>
+  </data>
   <data name="LoginSignInPasskey" xml:space="preserve">
     <value>Iniciar sesión con una passkey</value>
   </data>
