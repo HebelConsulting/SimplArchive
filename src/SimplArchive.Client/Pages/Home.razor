@@ -1295,9 +1295,9 @@
                                 @foreach (var c in _checkouts)
                                 {
                                     <tr>
-                                        <td>@c.Name</td>
+                                        <td>@c.Name@c.FileExtension</td>
                                         <td class="mud-text-secondary">@c.Path</td>
-                                        <td>@(c.HasStash ? Strings.Get("CoInCloud") : "—")</td>
+                                        <td>@(c.IsModified ? Strings.Get("CoModified") : "—")</td>
                                         <td>
                                             @if (c.ExpiresAt is { } exp)
                                             {
@@ -1321,7 +1321,7 @@
                                             {
                                                 <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.MoreTime" OnClick="() => ExtendCheckoutAsync(c)">@Strings.Get("CoExtend")</MudButton>
                                             }
-                                            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Check" Disabled="@(!c.HasStash)" OnClick="() => CheckInFromStashAsync(c)">@Strings.Get("CoCheckIn")</MudButton>
+                                            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Check" Disabled="@(!c.IsModified)" OnClick="() => CheckInFromStashAsync(c)">@Strings.Get("CoCheckIn")</MudButton>
                                             <MudButton Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Filled.LockOpen" OnClick="() => CancelCheckoutAsync(c)">@Strings.Get("CoCancel")</MudButton>
                                         </td>
                                     </tr>
@@ -4563,6 +4563,7 @@
         public string Path { get; set; } = "";
         public string FileExtension { get; set; } = "";
         public bool HasStash { get; set; }
+        public bool IsModified { get; set; }
         public string? StashDownloadUrl { get; set; }
         public string? DownloadUrl { get; set; }
         public DateTimeOffset? ExpiresAt { get; set; }

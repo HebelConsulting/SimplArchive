@@ -103,9 +103,10 @@ public class CheckoutTests
         var (_, holder) = await SeedAdminAsync(tenantId);
         await holder.PutAsync($"/api/documents/{docId}/checkout", null);
 
-        // No stash yet.
+        // No stash yet — not modified (nothing to check in).
         var before = (await TestJson.Get(holder, "/api/checkouts")).GetProperty("items").EnumerateArray().Single(i => i.GetProperty("id").GetGuid() == docId);
         Assert.False(before.GetProperty("hasStash").GetBoolean());
+        Assert.False(before.GetProperty("isModified").GetBoolean());
 
         // Save to cloud: get a presigned PUT and upload the in-progress working copy.
         var uploadUrl = (await TestJson.Post(holder, $"/api/checkouts/{docId}/working-copy", new { })).GetProperty("uploadUrl").GetString()!;
@@ -116,6 +117,8 @@ public class CheckoutTests
         // Now the check-out reports a stash + a download URL whose bytes match what was uploaded.
         var after = (await TestJson.Get(holder, "/api/checkouts")).GetProperty("items").EnumerateArray().Single(i => i.GetProperty("id").GetGuid() == docId);
         Assert.True(after.GetProperty("hasStash").GetBoolean());
+        // The stash ("work in progress edits") differs from the version ("original") → modified (ADR 0513).
+        Assert.True(after.GetProperty("isModified").GetBoolean());
         var downloadUrl = after.GetProperty("stashDownloadUrl").GetString()!;
         Assert.Equal(wip, await storage.GetStringAsync(downloadUrl));
 

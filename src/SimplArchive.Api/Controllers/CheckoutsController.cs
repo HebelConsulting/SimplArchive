@@ -79,6 +79,11 @@ public class CheckoutsController : ControllerBase
         // A cloud working-copy stash exists for this check-out (ADR "Check-out working-copy stash") — the client
         // re-downloads it on login. StashDownloadUrl is a presigned GET, present only when HasStash.
         public bool HasStash { get; set; }
+
+        // The working copy in check-out (the cloud stash) differs from the current version — i.e. there's an edit to
+        // check in. Computed server-side by hashing the stash vs Sha256 (ADR 0513); both clients gate Check-in on it.
+        public bool IsModified { get; set; }
+
         public string? StashDownloadUrl { get; set; }
 
         // A presigned download of the current repository version — the web "Download from stash" falls back to
@@ -143,8 +148,11 @@ public class CheckoutsController : ControllerBase
                 : (await _objectStorage.GetPresignedDownloadUrlAsync(version.ObjectKey, PresignedUrlExpiry, cancellationToken: cancellationToken)).ToString();
 
             // Is there a cloud stash (in-progress working copy) for this check-out? If so, offer its download URL
-            // so the client restores it on login.
+            // so the client restores it on login, and decide whether it's actually MODIFIED — the working copy in
+            // check-out differs from the current version — by hashing the stash and comparing to the version's
+            // SHA-256 (the single source of "modified" for both clients; the desktop no longer keeps a local copy).
             var hasStash = false;
+            var isModified = false;
             string? stashDownloadUrl = null;
             if (tenantId is { } tid)
             {
@@ -153,6 +161,12 @@ public class CheckoutsController : ControllerBase
                 if (hasStash)
                 {
                     stashDownloadUrl = (await _objectStorage.GetPresignedDownloadUrlAsync(stashKey, PresignedUrlExpiry, cancellationToken: cancellationToken)).ToString();
+                    if (version is not null)
+                    {
+                        await using var stashStream = await _objectStorage.GetObjectAsync(stashKey, cancellationToken);
+                        var stashSha = Convert.ToHexStringLower(await System.Security.Cryptography.SHA256.HashDataAsync(stashStream, cancellationToken));
+                        isModified = !string.Equals(stashSha, version.Sha256Hash, StringComparison.OrdinalIgnoreCase);
+                    }
                 }
             }
 
@@ -166,6 +180,7 @@ public class CheckoutsController : ControllerBase
                 CheckedOutAt = d.CheckedOutAt,
                 ExpiresAt = ttlDays > 0 ? d.CheckedOutAt.AddDays(ttlDays) : null,
                 HasStash = hasStash,
+                IsModified = isModified,
                 StashDownloadUrl = stashDownloadUrl,
                 DownloadUrl = downloadUrl,
                 Links =

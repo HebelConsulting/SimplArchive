@@ -1047,6 +1047,12 @@
   <data name="CoInCloud" xml:space="preserve">
     <value>In cloud</value>
   </data>
+  <data name="CoModified" xml:space="preserve">
+    <value>Modified</value>
+  </data>
+  <data name="CoEdit" xml:space="preserve">
+    <value>Edit</value>
+  </data>
   <data name="CoNever" xml:space="preserve">
     <value>Never</value>
   </data>
