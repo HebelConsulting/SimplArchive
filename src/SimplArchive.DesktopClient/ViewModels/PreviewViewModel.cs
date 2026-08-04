@@ -411,7 +411,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         foreach (var page in PreviewPages)
         {
             page.Notes = NotesVisible
-                ? _annotations.Where(a => a.PageIndex == page.PageIndex).Select(a => new NoteBox(a.Id, a.Kind, a.PositionX, a.PositionY, a.Width ?? 0, a.Height ?? 0, a.Color, a.CanEdit, a.Text, _selectedAnnotationIds.Contains(a.Id))).ToList()
+                ? _annotations.Where(a => a.PageIndex == page.PageIndex).Select(a => new NoteBox(a.Id, a.Kind, a.PositionX, a.PositionY, a.Width ?? 0, a.Height ?? 0, a.Color, a.CanEdit, a.Text, _selectedAnnotationIds.Contains(a.Id), a.Points)).ToList()
                 : [];
         }
     }
@@ -586,9 +586,10 @@ public sealed partial class PreviewViewModel : ObservableObject
             {
                 var nx = Math.Clamp(a.PositionX + offset, 0, 1);
                 var ny = Math.Clamp(a.PositionY + offset, 0, 1);
-                var w = a.Width ?? (a.Kind == 0 ? 0.22 : 0.1);
-                var h = a.Height ?? (a.Kind == 0 ? 0.06 : 0.05);
-                await Api.CreateAnnotationAsync(_annotationsUrl, a.PageIndex, a.Kind, nx, ny, w, h, a.Text, a.Color);
+                // Freehand (kind 7) has no box extent — carry its poly-line points instead of a width/height.
+                var w = a.Kind == 7 ? (double?)null : a.Width ?? (a.Kind == 0 ? 0.22 : 0.1);
+                var h = a.Kind == 7 ? (double?)null : a.Height ?? (a.Kind == 0 ? 0.06 : 0.05);
+                await Api.CreateAnnotationAsync(_annotationsUrl, a.PageIndex, a.Kind, nx, ny, w, h, a.Text, a.Color, a.Points);
             }
         }
         catch (Exception e)

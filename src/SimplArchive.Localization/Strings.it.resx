@@ -325,7 +325,7 @@
     <value>Commento (facoltativo)</value>
   </data>
   <data name="FilingCommentPlaceholder" xml:space="preserve">
-    <value>Lascia vuoto per pubblicare "Nuovo documento archiviato."</value>
+    <value>Perché questa versione? (facoltativo)</value>
   </data>
   <data name="FilingFile" xml:space="preserve">
     <value>Archivia</value>
@@ -527,6 +527,9 @@
   </data>
   <data name="VerColBy" xml:space="preserve">
     <value>Da</value>
+  </data>
+  <data name="VerColComment" xml:space="preserve">
+    <value>Commento</value>
   </data>
   <data name="VerColActions" xml:space="preserve">
     <value>Azioni</value>

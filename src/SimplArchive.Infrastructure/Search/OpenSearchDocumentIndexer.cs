@@ -89,6 +89,13 @@ public sealed class OpenSearchDocumentIndexer : IDocumentIndexer
             // Free-form tags (ADR "Document tags") — indexed as a keyword array for the Tags facet + system[tag] filter.
             var tags = await _dbContext.DocumentTags.Where(t => t.DocumentId == documentId).Select(t => t.Tag).ToListAsync(cancellationToken);
 
+            // Annotation text (ADR 0526) — note bodies + stamp captions + text-box content across the document's
+            // versions, joined into one searchable field so a query matches text a user pinned onto the page.
+            var annotationText = string.Join(" ", await _dbContext.DocumentAnnotations
+                .Where(a => a.DocumentId == documentId && a.Text != "")
+                .Select(a => a.Text)
+                .ToListAsync(cancellationToken));
+
             // System fields (ADR "System-field search"): creator names resolved from ids, plus document /
             // version dates and the issuing date. Version fields are null for folders (no version).
             var createdBy = await ResolveCreatorNameAsync(doc.CreatedByUserId, doc.CreatedByServiceAccountId, cancellationToken);
@@ -126,6 +133,7 @@ public sealed class OpenSearchDocumentIndexer : IDocumentIndexer
                 name = doc.Name,
                 indexValues = string.Join(" ", indexValues),
                 content,
+                annotations = annotationText,
                 allowedPrincipals,
                 fields = typedFields,
                 createdAt = doc.CreatedAt,

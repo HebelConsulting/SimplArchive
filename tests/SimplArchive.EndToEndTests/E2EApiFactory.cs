@@ -259,7 +259,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
     }
 
     // Seeds an active User (with a password) into a tenant, for the interactive-login flow. Returns the user id.
-    public async Task<Guid> SeedUserAsync(Guid tenantId, string email, string password, string displayName, bool canViewAuditLog = false, bool canManageUsers = false, bool canResetMfa = false, bool canExport = false, bool canImport = false)
+    public async Task<Guid> SeedUserAsync(Guid tenantId, string email, string password, string displayName, bool canViewAuditLog = false, bool canManageUsers = false, bool canResetMfa = false, bool canExport = false, bool canImport = false, bool canManageServiceAccounts = false, bool canManageRepositories = false)
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
@@ -275,6 +275,8 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
             CanResetMfa = canResetMfa,
             CanExport = canExport,
             CanImport = canImport,
+            CanManageServiceAccounts = canManageServiceAccounts,
+            CanManageRepositories = canManageRepositories,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         user.PasswordHash = new PasswordHasher<User>().HashPassword(user, password);

@@ -72,6 +72,10 @@ public class ServiceAccountsController : ControllerBase
         public bool CanManageMasks { get; set; }
 
         public bool CanManageServiceAccounts { get; set; }
+
+        public bool CanImport { get; set; }
+
+        public bool CanExport { get; set; }
     }
 
     public class CreateServiceAccountResource : ServiceAccountResource
@@ -95,6 +99,10 @@ public class ServiceAccountsController : ControllerBase
         public bool CanManageMasks { get; set; }
 
         public bool CanManageServiceAccounts { get; set; }
+
+        public bool CanImport { get; set; }
+
+        public bool CanExport { get; set; }
     }
 
     public class RotateSecretResource : HypermediaResource
@@ -119,7 +127,9 @@ public class ServiceAccountsController : ControllerBase
         // extracting a generic mechanism for three fields.
         if ((request.CanManageRepositories && !caller.CanManageRepositories)
             || (request.CanManageMasks && !caller.CanManageMasks)
-            || (request.CanManageServiceAccounts && !caller.CanManageServiceAccounts))
+            || (request.CanManageServiceAccounts && !caller.CanManageServiceAccounts)
+            || (request.CanImport && !caller.CanImport)
+            || (request.CanExport && !caller.CanExport))
         {
             throw InsufficientRightsToGrantException.OnServiceAccount();
         }
@@ -138,6 +148,8 @@ public class ServiceAccountsController : ControllerBase
             CanManageRepositories = request.CanManageRepositories,
             CanManageMasks = request.CanManageMasks,
             CanManageServiceAccounts = request.CanManageServiceAccounts,
+            CanImport = request.CanImport,
+            CanExport = request.CanExport,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -176,6 +188,8 @@ public class ServiceAccountsController : ControllerBase
             CanManageRepositories = serviceAccount.CanManageRepositories,
             CanManageMasks = serviceAccount.CanManageMasks,
             CanManageServiceAccounts = serviceAccount.CanManageServiceAccounts,
+            CanImport = serviceAccount.CanImport,
+            CanExport = serviceAccount.CanExport,
             Links = [new Link("self", $"/api/service-accounts/{serviceAccount.Id}", "GET")],
         };
 
@@ -359,14 +373,22 @@ public class ServiceAccountsController : ControllerBase
             CanManageRepositories = serviceAccount.CanManageRepositories,
             CanManageMasks = serviceAccount.CanManageMasks,
             CanManageServiceAccounts = serviceAccount.CanManageServiceAccounts,
+            CanImport = serviceAccount.CanImport,
+            CanExport = serviceAccount.CanExport,
             Links = [new Link("self", $"/api/service-accounts/{serviceAccount.Id}", "GET")],
         };
     }
 
-    // Same 3 field names whether the caller is a ServiceAccount or a User — every existing caller.CanManageX
-    // check and the escalation-cap logic in Create needed no further changes beyond this one resolution
-    // method. See ADR "User support for ServiceAccount/User/Group/Mask management endpoints".
-    private record CallerRights(bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts);
+    // The caller's rights relevant to this controller — the same field names whether the caller is a
+    // ServiceAccount or a User. CanImport/CanExport join the three management rights so they can be
+    // escalation-capped when granted at creation (ADR 0523). See ADR "User support for ServiceAccount/User/
+    // Group/Mask management endpoints".
+    private record CallerRights(
+        bool CanManageRepositories,
+        bool CanManageMasks,
+        bool CanManageServiceAccounts,
+        bool CanImport,
+        bool CanExport);
 
     private async Task<CallerRights?> GetCallerRightsAsync(CancellationToken cancellationToken)
     {
@@ -374,7 +396,7 @@ public class ServiceAccountsController : ControllerBase
         {
             return await _dbContext.ServiceAccounts
                 .Where(s => s.Id == serviceAccountId)
-                .Select(s => new CallerRights(s.CanManageRepositories, s.CanManageMasks, s.CanManageServiceAccounts))
+                .Select(s => new CallerRights(s.CanManageRepositories, s.CanManageMasks, s.CanManageServiceAccounts, s.CanImport, s.CanExport))
                 .SingleOrDefaultAsync(cancellationToken);
         }
 
@@ -383,7 +405,7 @@ public class ServiceAccountsController : ControllerBase
             // Effective rights (own ∪ groups) so a management right held via a group takes effect (and is
             // grantable by the escalation cap) — ADR "Enforce group system rights for members".
             var r = await _userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken);
-            return new CallerRights(r.CanManageRepositories, r.CanManageMasks, r.CanManageServiceAccounts);
+            return new CallerRights(r.CanManageRepositories, r.CanManageMasks, r.CanManageServiceAccounts, r.CanImport, r.CanExport);
         }
 
         return null;

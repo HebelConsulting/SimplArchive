@@ -577,8 +577,27 @@ using (var scope = app.Services.CreateScope())
                 PositionY = 0.300,
                 Width = 0.300,
                 Height = 0.085,
-                Text = "Pos. 1: Preis gemäss Rahmenvertrag geprüft ✓",
+                Text = "Line 1: price checked against the framework agreement ✓",
                 Color = "#fff59d",
+                CreatedByUserId = provisioned.AdministratorId,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            // A stamp (ADR 0525) so the demo shows the extended annotation kinds live on a real page.
+            dbContext.DocumentAnnotations.Add(new DocumentAnnotation
+            {
+                Id = Guid.NewGuid(),
+                TenantId = provisioned.TenantId,
+                DocumentId = document.Id,
+                DocumentVersionId = version.Id,
+                PageIndex = 0,
+                Kind = AnnotationKind.Stamp,
+                PositionX = 0.680,
+                PositionY = 0.120,
+                Width = 0.230,
+                Height = 0.090,
+                Text = "APPROVED",
+                Color = "#2e7d32",
                 CreatedByUserId = provisioned.AdministratorId,
                 CreatedAt = now,
                 UpdatedAt = now,

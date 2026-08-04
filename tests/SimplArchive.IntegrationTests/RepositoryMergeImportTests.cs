@@ -103,7 +103,7 @@ public class RepositoryMergeImportTests
         // ---- Merge the archive into "Dest" ----
         using (var db = Ctx(connection, accessor))
         {
-            await new RepositoryImporter(db, storage, accessor, new WellKnownMaskSeeder(db), new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance))
+            await new RepositoryImporter(db, storage, accessor, new WellKnownMaskSeeder(db), new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance), NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance)
                 .ImportAsync(zip, destId, updateExisting: false, includePermissions: false, merge: true, SimplArchive.Api.Documents.LeafMergeMode.Rename, CancellationToken.None);
         }
 
@@ -180,7 +180,7 @@ public class RepositoryMergeImportTests
 
         using (var db = Ctx(connection, accessor))
         {
-            await new RepositoryImporter(db, storage, accessor, new WellKnownMaskSeeder(db), new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance))
+            await new RepositoryImporter(db, storage, accessor, new WellKnownMaskSeeder(db), new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance), NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance)
                 .ImportAsync(zip, destId, updateExisting: false, includePermissions: false, merge: true, mode, CancellationToken.None);
         }
 

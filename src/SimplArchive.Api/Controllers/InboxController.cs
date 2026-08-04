@@ -572,6 +572,8 @@ public class InboxController : ControllerBase
             CreatedByUserId = userId,
             CreatedAt = now,
             DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
+            // The filing comment is the version's "why this revision" note (ADR 0528), not a chat post.
+            Comment = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim(),
         };
 
         _dbContext.Documents.Add(document);
@@ -584,7 +586,6 @@ public class InboxController : ControllerBase
 
         // The item left the inbox — sweep its staged-mask sidecar + cached preview artifacts so they don't orphan.
         await PurgeItemArtifactsAsync(tenantId, userId, name, cancellationToken);
-        await PostFilingCommentAsync(tenantId, userId, documentId, request.Comment, cancellationToken);
         await _audit.RecordAsync(AuditActions.DocumentFiled, "Document", documentId, document.Name, "Filed from inbox as a new document", cancellationToken: cancellationToken);
 
         return CreatedAtAction(nameof(DocumentsController.Get), "Documents", new { documentId }, new { id = documentId, name = document.Name });
@@ -635,6 +636,8 @@ public class InboxController : ControllerBase
             CreatedByUserId = userId,
             CreatedAt = now,
             DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
+            // The check-in comment is the new version's "why this revision" note (ADR 0528), not a chat post.
+            Comment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim(),
         };
 
         _dbContext.DocumentVersions.Add(version);
@@ -642,36 +645,9 @@ public class InboxController : ControllerBase
 
         await _finalizer.FinalizeAsync(version, cancellationToken); // no staged draft — existing document keeps its mask
         await PurgeItemArtifactsAsync(tenantId, userId, name, cancellationToken);
-        await PostFilingCommentAsync(tenantId, userId, documentId, comment, cancellationToken);
         await _audit.RecordAsync(AuditActions.DocumentFiled, "Document", documentId, document.Name, "Filed from inbox as a new version", cancellationToken: cancellationToken);
 
         return CreatedAtAction(nameof(DocumentsController.Get), "Documents", new { documentId }, new { id = documentId, name = document.Name });
-    }
-
-    // Posts a feed comment on the filed document (ADR "Filing posts a feed comment"): the caller's comment
-    // verbatim, or a default "Filed a new document." when none was given (the author name is already shown in
-    // the feed, so the body doesn't repeat it). Best-effort — a filed document shouldn't fail over its feed entry.
-    private async Task PostFilingCommentAsync(Guid tenantId, Guid userId, Guid documentId, string? comment, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var body = string.IsNullOrWhiteSpace(comment) ? "Filed a new document." : comment.Trim();
-
-            _dbContext.DocumentComments.Add(new DocumentComment
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                DocumentId = documentId,
-                Body = body,
-                CreatedByUserId = userId,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (Exception)
-        {
-            // Best-effort — the document is filed regardless of the feed comment.
-        }
     }
 
     [HttpDelete("{name}")]

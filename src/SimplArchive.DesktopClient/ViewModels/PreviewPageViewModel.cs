@@ -18,12 +18,14 @@ public sealed record AnnotationSwatch(string Hex)
 public sealed record HighlightBox(string Text, double X, double Y, double Width, double Height);
 
 // A sticky-note box OR a markup shape in normalized 0..1 page coordinates (ADR "Document annotations" +
-// "Annotation markup" + "Post-it note boxes"). Kind 0 = a note — an always-visible coloured box at (X,Y) sized
-// Width×Height showing its Text (draggable + resizable if CanEdit); Kind 1/2/3 = highlight box / rectangle /
-// arrow, whose Width/Height give the extent (box size, or signed arrow end-offset).
+// "Annotation markup" + "Post-it note boxes" + 0525). Kind 0 = a note — an always-visible coloured box at (X,Y)
+// sized Width×Height showing its Text (draggable + resizable if CanEdit); Kind 1/2/3 = highlight box / rectangle /
+// arrow, whose Width/Height give the extent (box size, or signed arrow end-offset); Kind 4/5/6 = stamp /
+// strikethrough / text-box, also box-extent shapes (stamp + text-box render their Text); Kind 7 = a freehand
+// poly-line built from Points ("x,y x,y …", each coord 0..1), which has null Width/Height (not a box).
 // Selected carries the multi-select state (ADR "Annotation multi-select") so the overlay draws a selection
 // outline; the selected set is owned by the PreviewViewModel and re-flowed onto the notes on every change.
-public sealed record NoteBox(Guid Id, int Kind, double X, double Y, double Width, double Height, string Color, bool CanEdit, string Text = "", bool Selected = false);
+public sealed record NoteBox(Guid Id, int Kind, double X, double Y, double Width, double Height, string Color, bool CanEdit, string Text = "", bool Selected = false, string? Points = null);
 
 // Carried by the overlay's note-placement command when the user clicks a spot in add-note mode.
 public sealed record NotePlacement(int PageIndex, double X, double Y);

@@ -53,4 +53,8 @@ public class DocumentVersion : ITenantScoped
     // tenant's maintained StorageUsedBytes counter (added at confirm, subtracted at purge). Null for a pending
     // version or one written before the feature landed.
     public long? SizeBytes { get; set; }
+
+    // An optional per-version comment — the "why this revision" note (ADR 0528). Its author is the version's
+    // own CreatedBy; shown in the versions dialog. Null when none was given.
+    public string? Comment { get; set; }
 }

@@ -19,6 +19,9 @@ public class DocumentVersionConfiguration : IEntityTypeConfiguration<DocumentVer
         // inherits the tenant default.
         builder.Property(v => v.OcrLanguages).HasMaxLength(200);
 
+        // Optional per-version comment (ADR 0528) — the "why this revision" note.
+        builder.Property(v => v.Comment).HasMaxLength(2000);
+
         builder.HasIndex(v => new { v.DocumentId, v.VersionNumber });
 
         // Exactly one of CreatedByUserId/CreatedByServiceAccountId is set — see ADR "Document version

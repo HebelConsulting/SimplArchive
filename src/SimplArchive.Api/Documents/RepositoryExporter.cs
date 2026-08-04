@@ -244,6 +244,7 @@ public sealed class RepositoryExporter
             sha256 = v.Sha256Hash,
             fileExtension = Path.GetExtension(v.ObjectKey),
             ocrLanguages = v.OcrLanguages,
+            comment = v.Comment,
             blobRef = v.Sha256Hash,
         }), cancellationToken);
 
@@ -276,6 +277,7 @@ public sealed class RepositoryExporter
             positionY = a.PositionY,
             width = a.Width,
             height = a.Height,
+            points = a.Points,
             text = a.Text,
             color = a.Color,
             createdByUserId = a.CreatedByUserId,

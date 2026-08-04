@@ -38,18 +38,30 @@ public sealed class RepositoryImporter
     private readonly ICurrentTenantAccessor _tenant;
     private readonly IWellKnownMaskSeeder _seeder;
     private readonly IStorageQuotaService _storageQuota;
+    private readonly IDocumentIndexQueue _indexQueue;
+    private readonly ISearchablePdfQueue _searchablePdfQueue;
+
+    // A confirmed TIFF (always) or PDF (if it's a scan) gets an auto-generated searchable-PDF successor — the same
+    // extensions DocumentFinalizer triggers on (ADR "Searchable PDF successor for TIFFs").
+    private static readonly HashSet<string> SearchablePdfSourceExtensions =
+        new(StringComparer.OrdinalIgnoreCase) { ".tif", ".tiff", ".pdf" };
 
     // Running total of imported blob bytes (ADR "Per-tenant storage quota") — added to the tenant counter once at
     // the end of the import.
     private long _importedBytes;
 
-    public RepositoryImporter(SimplArchiveDbContext dbContext, IObjectStorageClient objectStorage, ICurrentTenantAccessor tenant, IWellKnownMaskSeeder seeder, IStorageQuotaService storageQuota)
+    // Imported versions eligible for a searchable-PDF successor (ADR 0527) — enqueued once at the end.
+    private readonly List<SearchablePdfJob> _searchablePdfJobs = [];
+
+    public RepositoryImporter(SimplArchiveDbContext dbContext, IObjectStorageClient objectStorage, ICurrentTenantAccessor tenant, IWellKnownMaskSeeder seeder, IStorageQuotaService storageQuota, IDocumentIndexQueue indexQueue, ISearchablePdfQueue searchablePdfQueue)
     {
         _dbContext = dbContext;
         _objectStorage = objectStorage;
         _tenant = tenant;
         _seeder = seeder;
         _storageQuota = storageQuota;
+        _indexQueue = indexQueue;
+        _searchablePdfQueue = searchablePdfQueue;
     }
 
     public sealed record ImportResult(Guid RootDocumentId, string RootName, int Documents, int Versions, int Comments, int Skipped);
@@ -306,6 +318,7 @@ public sealed class RepositoryImporter
                 PositionY = annotation.PositionY,
                 Width = annotation.Width,
                 Height = annotation.Height,
+                Points = annotation.Points,
                 Text = annotation.Text,
                 Color = annotation.Color,
                 CreatedByUserId = userId,
@@ -439,6 +452,15 @@ public sealed class RepositoryImporter
         // Add the imported blobs' bytes to the tenant's used-storage counter (ADR "Per-tenant storage quota").
         await _storageQuota.AdjustUsageAsync(tenantId, _importedBytes, cancellationToken);
 
+        // Enqueue every created/updated document for search indexing — without this the imported documents exist in
+        // the database but are invisible to full-text search (ADR 0526 reindex path; the same enqueue the normal
+        // create/upload paths use).
+        await _indexQueue.EnqueueManyAsync(touchedDocs.Select(d => docMap[d.Id]).ToList(), cancellationToken);
+
+        // Trigger the TIFF/PDF → searchable-PDF (OCR) conversion for the imported versions (ADR 0527) — the same
+        // successor an uploaded TIFF/PDF gets; the worker does the OCR off the request path.
+        await _searchablePdfQueue.EnqueueManyAsync(_searchablePdfJobs, cancellationToken);
+
         return new ImportResult(docMap[rootDoc.Id], rootDoc.Name, docMap.Count, versions.Count(v => createdIds.Contains(v.DocumentId)), commentMap.Count, existingByOrigin.Count);
     }
 
@@ -568,10 +590,17 @@ public sealed class RepositoryImporter
             CreatedAt = version.FiledAt,
             DocumentDate = DateOnly.ParseExact(version.DocumentDate, "yyyy-MM-dd"),
             OcrLanguages = version.OcrLanguages,
+            Comment = version.Comment,
             SizeBytes = bytes.Length, // storage-quota accounting (ADR "Per-tenant storage quota")
         });
         versionMap[version.Id] = newVersionId; // for annotations (ADR "Annotations in export/import")
         _importedBytes += bytes.Length;
+
+        // A TIFF/PDF version gets a searchable-PDF (OCR) successor, like an uploaded one (ADR 0527) — enqueued at end.
+        if (SearchablePdfSourceExtensions.Contains(Path.GetExtension(objectKey)))
+        {
+            _searchablePdfJobs.Add(new SearchablePdfJob(tenantId, newDocId, newVersionId));
+        }
     }
 
     private void AddComment(ArchiveComment comment, Dictionary<Guid, Guid> commentMap, IReadOnlyDictionary<Guid, Guid> docMap, Guid tenantId, Guid? parentCommentId, IReadOnlyDictionary<Guid, PrincipalRef> userMap)
@@ -831,10 +860,10 @@ public sealed class RepositoryImporter
     private sealed record ArchiveMembership(Guid GroupId, Guid UserId);
     private sealed record ArchiveAcl(Guid DocumentId, Guid? UserId, Guid? GroupId, Guid? ServiceAccountId, bool CanSee, bool CanReadContent, bool CanEditContent, bool CanEditIndexData, bool CanDelete, bool CanCreateSubItems, bool CanMove, bool CanManagePermissions, bool CanAnnotate);
     private sealed record ArchiveDocument(Guid Id, Guid? ParentId, string Name, Guid? MaskVersionId, string? SensitivityLabel, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt, bool BreaksInheritance);
-    private sealed record ArchiveVersion(Guid Id, Guid DocumentId, int? VersionNumber, string DocumentDate, DateTimeOffset FiledAt, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, string? Sha256, string? FileExtension, string? OcrLanguages, string? BlobRef);
+    private sealed record ArchiveVersion(Guid Id, Guid DocumentId, int? VersionNumber, string DocumentDate, DateTimeOffset FiledAt, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, string? Sha256, string? FileExtension, string? OcrLanguages, string? Comment, string? BlobRef);
     private sealed record ArchiveComment(Guid Id, Guid DocumentId, Guid? ParentCommentId, string Body, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt);
 
-    private sealed record ArchiveAnnotation(Guid Id, Guid DocumentId, Guid DocumentVersionId, int PageIndex, int Kind, double PositionX, double PositionY, double? Width, double? Height, string Text, string Color, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt);
+    private sealed record ArchiveAnnotation(Guid Id, Guid DocumentId, Guid DocumentVersionId, int PageIndex, int Kind, double PositionX, double PositionY, double? Width, double? Height, string? Points, string Text, string Color, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt);
     private sealed record ArchiveReference(Guid Id, Guid ParentFolderId, Guid TargetDocumentId, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt);
     private sealed record ArchiveIndexValue(Guid DocumentId, Guid FieldDefinitionId, string Value);
 }

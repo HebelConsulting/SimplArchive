@@ -60,7 +60,7 @@ public sealed partial class VersionsViewModel : ObservableObject
         {
             Versions.Add(new VersionRowViewModel(v.Id, v.VersionNumber ?? 0, v.DocumentDate,
                 v.CreatedAt == default ? "" : v.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
-                v.CreatedByName, v.DownloadUrl, v.FileExtension, v.IsCurrent));
+                v.CreatedByName, v.DownloadUrl, v.FileExtension, v.IsCurrent, v.Comment));
         }
 
         Loaded = true;
@@ -91,7 +91,7 @@ public sealed partial class VersionsViewModel : ObservableObject
 }
 
 // One row in the Versions dialog.
-public sealed record VersionRowViewModel(Guid Id, int VersionNumber, string DocumentDate, string Filed, string By, string? DownloadUrl, string FileExtension, bool IsCurrent)
+public sealed record VersionRowViewModel(Guid Id, int VersionNumber, string DocumentDate, string Filed, string By, string? DownloadUrl, string FileExtension, bool IsCurrent, string? Comment = null)
 {
     public string Label => $"v{VersionNumber}";
     public bool CanMakeCurrent => !IsCurrent;

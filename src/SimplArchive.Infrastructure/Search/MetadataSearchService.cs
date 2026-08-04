@@ -5,7 +5,8 @@ using SimplArchive.Infrastructure.Persistence;
 namespace SimplArchive.Infrastructure.Search;
 
 // Metadata-only search fallback (ADR "Metadata search (first slice)", 0249) — used when OpenSearch isn't
-// configured. A case-insensitive query against existing Postgres data (Document.Name + FieldValue.Value);
+// configured. A case-insensitive query against existing Postgres data (Document.Name + FieldValue.Value +
+// DocumentAnnotation.Text, ADR 0526);
 // nothing new is stored. Ordered by Name (a stable, provider-agnostic order — no relevance, unlike the
 // OpenSearch implementation). Tenant scope + soft-delete exclusion come from the DbContext query filters.
 public class MetadataSearchService : ISearchService
@@ -42,7 +43,8 @@ public class MetadataSearchService : ISearchService
 
         var matched = documents.Where(d =>
             d.Name.ToLower().Contains(term)
-            || _dbContext.FieldValues.Any(fv => fv.DocumentId == d.Id && fv.Value.ToLower().Contains(term)));
+            || _dbContext.FieldValues.Any(fv => fv.DocumentId == d.Id && fv.Value.ToLower().Contains(term))
+            || _dbContext.DocumentAnnotations.Any(a => a.DocumentId == d.Id && a.Text.ToLower().Contains(term)));
 
         var rows = await matched
             .OrderBy(d => d.Name).ThenBy(d => d.Id)

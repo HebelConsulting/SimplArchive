@@ -466,11 +466,14 @@ public sealed class HighlightOverlay : Control
                         sh = Math.Max(0.01, _shapeResizePoint.Y / height - note.Y);
                     }
 
-                    DrawShape(context, note.Kind, sx, sy, sw, sh, width, height, ParseColor(note.Color), preview: false);
+                    DrawShape(context, note.Kind, sx, sy, sw, sh, width, height, ParseColor(note.Color), preview: false, note.Text, note.Points);
                     if (note.Selected)
                     {
-                        var bb = new Rect(Math.Min(sx, sx + sw) * width - 3, Math.Min(sy, sy + sh) * height - 3,
-                            Math.Abs(sw) * width + 6, Math.Abs(sh) * height + 6);
+                        // Freehand (kind 7) has no box extent — outline the poly-line's own bounds instead.
+                        var bb = note.Kind == 7
+                            ? FreehandBounds(note.Points, width, height).Inflate(3)
+                            : new Rect(Math.Min(sx, sx + sw) * width - 3, Math.Min(sy, sy + sh) * height - 3,
+                                Math.Abs(sw) * width + 6, Math.Abs(sh) * height + 6);
                         context.DrawRectangle(null, SelectionPen, bb);
                     }
 
@@ -530,9 +533,11 @@ public sealed class HighlightOverlay : Control
         }
     }
 
-    // Draws a markup shape (1 highlight fill, 2 rectangle outline, 3 arrow) from normalized geometry (x,y start /
-    // top-left; w,h signed extent) scaled to the page pixels.
-    private static void DrawShape(DrawingContext ctx, int kind, double x, double y, double w, double h, double pw, double ph, Color color, bool preview)
+    // Draws a markup shape from normalized geometry (x,y start / top-left; w,h signed extent) scaled to the page
+    // pixels. Kinds: 1 highlight fill, 2 rectangle outline, 3 arrow, 4 stamp (bordered box + centred uppercase
+    // bold caption), 5 strikethrough (a mid-height line across the box), 6 text-box (bordered box + its text),
+    // 7 freehand (a poly-line from Points) — ADR 0525. Text is used by 4/6; points by 7.
+    private static void DrawShape(DrawingContext ctx, int kind, double x, double y, double w, double h, double pw, double ph, Color color, bool preview, string text = "", string? points = null)
     {
         if (kind == 3)
         {
@@ -548,14 +553,107 @@ public sealed class HighlightOverlay : Control
             return;
         }
 
-        var rect = new Rect(Math.Min(x, x + w) * pw, Math.Min(y, y + h) * ph, Math.Abs(w) * pw, Math.Abs(h) * ph);
-        if (kind == 1)
+        // Freehand (ADR 0525): a poly-line built from the normalized "x,y x,y …" points, scaled to page pixels.
+        // It has no box extent, so the x/y/w/h are ignored here.
+        if (kind == 7)
         {
-            ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(preview ? (byte)0x40 : (byte)0x60, color.R, color.G, color.B)), null, rect, 2, 2);
+            var pts = ParsePoints(points, pw, ph);
+            if (pts.Count >= 2)
+            {
+                var pen = new Pen(new SolidColorBrush(color), 1.5) { LineJoin = PenLineJoin.Round, LineCap = PenLineCap.Round };
+                ctx.DrawGeometry(null, pen, new PolylineGeometry(pts, false));
+            }
+
+            return;
         }
-        else
+
+        var rect = new Rect(Math.Min(x, x + w) * pw, Math.Min(y, y + h) * ph, Math.Abs(w) * pw, Math.Abs(h) * ph);
+        switch (kind)
         {
-            ctx.DrawRectangle(null, new Pen(new SolidColorBrush(color), 2), rect);
+            case 1: // highlight — a translucent fill in the annotation colour
+                ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(preview ? (byte)0x40 : (byte)0x60, color.R, color.G, color.B)), null, rect, 2, 2);
+                break;
+            case 5: // strikethrough — a horizontal line through the box's vertical middle, in the annotation colour
+                var midY = rect.Y + rect.Height / 2;
+                ctx.DrawLine(new Pen(new SolidColorBrush(color), 2), new Point(rect.X, midY), new Point(rect.Right, midY));
+                break;
+            case 4: // stamp — a bordered box with a centred, uppercase, bold caption in the annotation colour
+                ctx.DrawRectangle(null, new Pen(new SolidColorBrush(color), 2), rect, 3, 3);
+                DrawBoxText(ctx, rect, text, color, bold: true, centre: true, upper: true);
+                break;
+            case 6: // text-box — a bordered box on a translucent-white ground showing its text
+                ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0xC0, 0xFF, 0xFF, 0xFF)), new Pen(new SolidColorBrush(color), 1), rect);
+                DrawBoxText(ctx, rect, text, Color.FromArgb(0xFF, 0x22, 0x22, 0x22), bold: false, centre: false, upper: false);
+                break;
+            default: // 2 — rectangle outline
+                ctx.DrawRectangle(null, new Pen(new SolidColorBrush(color), 2), rect);
+                break;
+        }
+    }
+
+    // Parses a normalized "x,y x,y …" poly-line (each coord 0..1, invariant-culture) into page-pixel points.
+    private static List<Point> ParsePoints(string? points, double pw, double ph)
+    {
+        var result = new List<Point>();
+        if (string.IsNullOrWhiteSpace(points))
+        {
+            return result;
+        }
+
+        foreach (var pair in points.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var xy = pair.Split(',');
+            if (xy.Length == 2 &&
+                double.TryParse(xy[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var px) &&
+                double.TryParse(xy[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var py))
+            {
+                result.Add(new Point(px * pw, py * ph));
+            }
+        }
+
+        return result;
+    }
+
+    // The pixel bounding box of a freehand poly-line (ADR 0525) — used to outline it when selected.
+    private static Rect FreehandBounds(string? points, double pw, double ph)
+    {
+        var pts = ParsePoints(points, pw, ph);
+        if (pts.Count == 0)
+        {
+            return default;
+        }
+
+        var bb = new Rect(pts[0], pts[0]);
+        foreach (var p in pts)
+        {
+            bb = bb.Union(new Rect(p, p));
+        }
+
+        return bb;
+    }
+
+    // Draws a caption inside a shape's box, clipped to it (stamp / text-box, ADR 0525): optionally uppercased,
+    // bold, and horizontally centred + vertically centred (stamp) or top-left (text-box).
+    private static void DrawBoxText(DrawingContext ctx, Rect rect, string text, Color color, bool bold, bool centre, bool upper)
+    {
+        if (string.IsNullOrEmpty(text) || rect.Width < 6 || rect.Height < 6)
+        {
+            return;
+        }
+
+        var content = upper ? text.ToUpperInvariant() : text;
+        var typeface = bold ? new Typeface(FontFamily.Default, FontStyle.Normal, FontWeight.Bold) : Typeface.Default;
+        var ft = new FormattedText(content, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            typeface, 11, new SolidColorBrush(color))
+        {
+            MaxTextWidth = Math.Max(4, rect.Width - 6),
+            MaxTextHeight = Math.Max(4, rect.Height - 4),
+            TextAlignment = centre ? TextAlignment.Center : TextAlignment.Left,
+        };
+        using (ctx.PushClip(rect))
+        {
+            var ty = centre ? rect.Y + Math.Max(0, (rect.Height - ft.Height) / 2) : rect.Y + 2;
+            ctx.DrawText(ft, new Point(rect.X + 3, ty));
         }
     }
 

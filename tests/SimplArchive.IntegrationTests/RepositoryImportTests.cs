@@ -110,7 +110,7 @@ public class RepositoryImportTests
         RepositoryImporter.ImportResult result;
         using (var db = Ctx(connection, accessor))
         {
-            result = await new RepositoryImporter(db, storage, accessor, new WellKnownMaskSeeder(db), new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance)).ImportAsync(zip, null, updateExisting: false, includePermissions: false, merge: false, SimplArchive.Api.Documents.LeafMergeMode.Rename, CancellationToken.None);
+            result = await new RepositoryImporter(db, storage, accessor, new WellKnownMaskSeeder(db), new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance), NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance).ImportAsync(zip, null, updateExisting: false, includePermissions: false, merge: false, SimplArchive.Api.Documents.LeafMergeMode.Rename, CancellationToken.None);
         }
 
         Assert.Equal("Src", result.RootName);

@@ -169,9 +169,10 @@ public sealed class SearchablePdfWorker : BackgroundService
             .Select(v => v.VersionNumber)
             .MaxAsync(cancellationToken) ?? 1;
 
+        var successorVersionId = Guid.NewGuid();
         dbContext.DocumentVersions.Add(new DocumentVersion
         {
-            Id = Guid.NewGuid(),
+            Id = successorVersionId,
             TenantId = source.TenantId,
             DocumentId = source.DocumentId,
             Status = DocumentVersionStatus.Confirmed,
@@ -184,6 +185,19 @@ public sealed class SearchablePdfWorker : BackgroundService
             CreatedAt = DateTimeOffset.UtcNow,
             SizeBytes = pdfBytes.Length, // storage-quota accounting (ADR "Per-tenant storage quota")
         });
+
+        // Carry the source version's annotations onto the searchable-PDF successor (ADR 0527). The successor
+        // becomes the current version, so without this an annotated source (e.g. an imported TIFF) would appear
+        // to lose its annotations. The PDF is the same page images with an OCR text layer, so page index +
+        // normalized geometry transfer 1:1; author/date/kind/colour/points are preserved.
+        var sourceAnnotations = await dbContext.DocumentAnnotations
+            .Where(a => a.DocumentVersionId == source.Id)
+            .ToListAsync(cancellationToken);
+        foreach (var a in sourceAnnotations)
+        {
+            dbContext.DocumentAnnotations.Add(AnnotationCarryOver.ForSuccessorVersion(a, successorVersionId));
+        }
+
         dbContext.SearchablePdfOutbox.Remove(row);
         await dbContext.SaveChangesAsync(cancellationToken);
         await storageQuota.AdjustUsageAsync(source.TenantId, pdfBytes.Length, cancellationToken);

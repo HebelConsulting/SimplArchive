@@ -590,8 +590,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // folders and documents alike; the dialog self-gates on the caller's CanManagePermissions (ADR 0486).
     public bool CanManageAccess => SelectedItem is { IsReference: false, IsArchiveEntry: false, IsArchiveBack: false };
 
+    // Set while a search-hit reveal selects the parent folder's tree node after it has *already* loaded the folder
+    // contents + selected the document itself (issue #340) — so the reactive load below doesn't re-fetch the folder
+    // and clobber that document selection.
+    private bool _suppressTreeSelectionLoad;
+
     async partial void OnSelectedTreeNodeChanged(TreeNodeViewModel? value)
     {
+        if (_suppressTreeSelectionLoad)
+        {
+            return;
+        }
+
         // The Inbox / Check-out launcher nodes under Personal switch to their bottom tab (ADR "GUI-tree Personal
         // space grouping"), where the full staging / check-out UX lives.
         if (value is { IsLauncher: true })
@@ -794,7 +804,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
             Tree.Add(new TreeNodeViewModel(personal.Id, personal.Name, hasSubfolders: true, LoadPersonalChildrenAsync, isPersonal: true));
         }
 
-        foreach (var repository in repositories)
+        // Shared repositories sorted alphabetically (issue #339); Personal stays pinned above them.
+        foreach (var repository in repositories.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase))
         {
             Tree.Add(new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync));
         }
@@ -873,14 +884,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // The tree shows folders only — real child folders plus references whose target is a folder (a
         // shortcut node whose Id is the target folder, so it expands the target's subtree). See ADR
         // "Referenced folder in the tree".
+        // Folders are always sorted alphabetically in the tree (issue #339) — the children endpoint orders by
+        // creation for its cursor, so re-sort by name here (all pages are loaded).
         var children = await _api!.GetChildrenAsync(folderId);
         var folderNodes = children
             .Where(c => !c.HasVersions)
+            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
             .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync));
 
         var references = await _api.GetReferencesAsync(folderId);
         var referenceNodes = references
             .Where(r => !r.HasVersions)
+            .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
             .Select(r => new TreeNodeViewModel(r.TargetId, r.Name, r.HasSubfolders, LoadTreeChildrenAsync, isReference: true));
 
         return folderNodes.Concat(referenceNodes);
@@ -1019,12 +1034,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        // Folders on top, then documents — each group ordered by the active criterion.
+        // Folders on top (always alphabetical, issue #339), then documents ordered by the active criterion (the
+        // default is DocumentDate). A column-header click is an explicit ephemeral override of the whole list.
         var folders = Items.Where(n => n.IsFolder);
         var docs = Items.Where(n => !n.IsFolder);
         var sorted = _headerSortActive
             ? HeaderSort(folders).Concat(HeaderSort(docs)).ToList()
-            : FolderSort(folders).Concat(FolderSort(docs)).ToList();
+            : folders.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase).Concat(FolderSort(docs)).ToList();
         Items.Clear();
         foreach (var n in sorted)
         {
@@ -2946,15 +2962,85 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         if (result.IsFolder)
         {
-            await OpenFolderAsync(result.Id);
+            // Reveal the folder itself: expand its ancestors + select it in the tree (which loads its contents).
+            await RevealFolderInTreeAsync(result.Id);
         }
         else if (result.ParentId is { } parentId)
         {
-            await OpenFolderAsync(parentId, result.Id);
+            // Reveal the document in context: expand + select its parent folder in the tree, load the folder into
+            // the list pane, and select the document there (issue #340).
+            await RevealDocumentInTreeAsync(result.Id, parentId);
         }
         else
         {
-            await OpenFolderAsync(result.Id);
+            // A document filed at a repository root is itself a top-level tree node.
+            await RevealFolderInTreeAsync(result.Id);
+        }
+    }
+
+    // Expands the tree along an ordered ancestor id chain (repository-root first), returning the last node — or null
+    // if a link in the chain isn't in the visible tree (e.g. a reference-only path the tree doesn't mirror). The
+    // repository roots are top-level Tree nodes carrying their real ids, and real subfolders nest by real id, so the
+    // synthetic grouping nodes (Personal launchers / Administration, all Guid.Empty) never match a real ancestor.
+    private async Task<TreeNodeViewModel?> ExpandTreePathAsync(IReadOnlyList<Guid> chain)
+    {
+        IReadOnlyList<TreeNodeViewModel> level = Tree;
+        TreeNodeViewModel? node = null;
+        foreach (var id in chain)
+        {
+            node = level.FirstOrDefault(n => n.Id == id);
+            if (node is null)
+            {
+                return null;
+            }
+
+            await node.EnsureExpandedAsync();
+            level = node.Children;
+        }
+
+        return node;
+    }
+
+    // Reveal a folder (or a root-level item): expand its ancestors, then select it in the tree so its contents load.
+    private async Task RevealFolderInTreeAsync(Guid folderId)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        var chain = await _api.GetAncestorsAsync(folderId);
+        chain.Add(folderId); // ancestors are up to the parent; append the folder itself as the reveal target
+        var node = await ExpandTreePathAsync(chain);
+        if (node is not null)
+        {
+            SelectedTreeNode = node; // OnSelectedTreeNodeChanged loads the folder's contents
+        }
+        else
+        {
+            await OpenFolderAsync(folderId); // not mirrored in the tree — fall back to a contents-only open
+        }
+    }
+
+    // Reveal a document: expand + select its parent folder in the tree, load the folder into the list, select the doc.
+    private async Task RevealDocumentInTreeAsync(Guid documentId, Guid parentFolderId)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        var node = await ExpandTreePathAsync(await _api.GetAncestorsAsync(documentId));
+
+        // Load the parent folder into the list + select the document (+ its preview) regardless of the tree outcome.
+        await OpenFolderAsync(parentFolderId, documentId);
+
+        // Then reflect it in the tree — select the parent node without re-loading the folder (already loaded above).
+        if (node is not null)
+        {
+            _suppressTreeSelectionLoad = true;
+            SelectedTreeNode = node;
+            _suppressTreeSelectionLoad = false;
         }
     }
 
@@ -5376,6 +5462,80 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // Re-tap the still-selected repo node in the tree: the fix reloads the list back to the repo.
         await ReselectTreeFolderAsync(repo);
         return (afterDrill, _currentFolderId!.Value, Items.Select(n => n.Name).ToArray());
+    }
+
+    // Search-hit reveal-in-tree (issue #340): activating a document search hit expands + selects its parent folder
+    // in the tree, loads that folder into the list, and selects the document there. Seeds a nested doc so the reveal
+    // has a real ancestor chain (repo → subfolder → doc), collapses the tree + moves the list away, then drives the
+    // real OpenSearchResultAsync and reports whether the tree, list, and list-selection all landed on the target.
+    internal async Task<(bool TreeSelectedParent, bool ListHasDoc, bool ListSelectedDoc)> SearchRevealSelfTestAsync(string accessToken)
+    {
+        UseApi(new SimplArchiveApiClient(accessToken));
+        await LoadRootAsync();
+        var repo = Tree[0];
+
+        // Seed a subfolder + a document inside it (independent of test ordering).
+        var subName = "reveal-" + Guid.NewGuid().ToString("N")[..8];
+        await _api!.CreateFolderAsync(repo.Id, subName);
+        await LoadFolderContentsAsync(repo.Id);
+        var sub = Items.First(n => n.IsFolder && !n.IsReference && n.Name == subName);
+        var docName = "reveal-doc-" + Guid.NewGuid().ToString("N")[..8] + ".txt";
+        var docId = await _api.UploadFileAsync(sub.Id, docName, System.Text.Encoding.UTF8.GetBytes("reveal me"));
+
+        // Start from a clean slate: nothing selected in the tree, the list showing the repo root (not the subfolder).
+        await LoadFolderContentsAsync(repo.Id);
+#pragma warning disable MVVMTK0034 // set the backing field so the reveal's selection is a real change, not a no-op
+        _selectedTreeNode = null;
+#pragma warning restore MVVMTK0034
+
+        // Activate the search hit for the seeded document — the real path a double-click drives.
+        await OpenSearchResultAsync(new SearchResultViewModel
+        {
+            Id = docId,
+            Name = docName,
+            IsFolder = false,
+            ParentId = sub.Id,
+            Path = "",
+        });
+
+        return (
+            SelectedTreeNode?.Id == sub.Id,                               // parent folder revealed + selected in the tree
+            Items.Any(n => n.Id == docId && !n.IsReference),             // the document is listed in the list pane
+            SelectedItem?.Id == docId);                                  // …and selected there
+    }
+
+    // Repository sort order (issue #339): folders always come first, alphabetically, then documents; the tree's
+    // folder children are alphabetical too. Seeds subfolders in NON-alphabetical creation order + a document, then
+    // checks the list order and the tree-child order both landed alphabetically-folders-first.
+    internal async Task<(bool ListFoldersAlphaThenDoc, bool TreeFoldersAlpha)> RepositorySortSelfTestAsync(string accessToken)
+    {
+        UseApi(new SimplArchiveApiClient(accessToken));
+        await LoadRootAsync();
+        var repo = Tree[0];
+
+        var parentName = "sort-" + Guid.NewGuid().ToString("N")[..8];
+        await _api!.CreateFolderAsync(repo.Id, parentName);
+        await LoadFolderContentsAsync(repo.Id);
+        var parent = Items.First(n => n.IsFolder && !n.IsReference && n.Name == parentName);
+
+        // Subfolders created out of alphabetical order + a document filed alongside them.
+        await _api.CreateFolderAsync(parent.Id, "Zebra");
+        await _api.CreateFolderAsync(parent.Id, "Apple");
+        await _api.CreateFolderAsync(parent.Id, "Mango");
+        await _api.UploadFileAsync(parent.Id, "a-document.txt", System.Text.Encoding.UTF8.GetBytes("doc"));
+
+        // List: folders first (alphabetical), then the document — regardless of creation order.
+        await LoadFolderContentsAsync(parent.Id);
+        var listOk = Items.Select(n => n.Name).SequenceEqual(["Apple", "Mango", "Zebra", "a-document"]);
+
+        // Tree: expand the parent; its folder children are alphabetical (the document isn't a tree node).
+        await repo.EnsureExpandedAsync();
+        var parentNode = repo.Children.First(n => n.Id == parent.Id);
+        await parentNode.EnsureExpandedAsync();
+        var treeOk = parentNode.Children.Where(n => !n.IsLauncher && !n.IsSynthetic)
+            .Select(n => n.Name).SequenceEqual(["Apple", "Mango", "Zebra"]);
+
+        return (listOk, treeOk);
     }
 
     // Navigating to a different folder clears the panes right of the list (index-data / preview / comments) so a

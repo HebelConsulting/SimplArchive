@@ -156,7 +156,7 @@ public sealed class OpenSearchService : ISearchService
 
         // A free-text query when present; otherwise a filter-only search (match_all + the base filters above).
         object mustClause = hasQuery
-            ? new { multi_match = new { query, fields = new[] { "name^3", "indexValues^2", "content" } } }
+            ? new { multi_match = new { query, fields = new[] { "name^3", "indexValues^2", "annotations^2", "content" } } }
             : new { match_all = new { } };
 
         // Result highlighting (ADR "Search result highlighting"): only when there's a free-text query — a
@@ -172,6 +172,7 @@ public sealed class OpenSearchService : ISearchService
                 {
                     ["content"] = new { fragment_size = 160, number_of_fragments = 1 },
                     ["indexValues"] = new { number_of_fragments = 0 },
+                    ["annotations"] = new { number_of_fragments = 0 },
                     ["name"] = new { number_of_fragments = 0 },
                 },
             }
@@ -321,7 +322,7 @@ public sealed class OpenSearchService : ISearchService
             return null;
         }
 
-        foreach (var field in new[] { "content", "indexValues", "name" })
+        foreach (var field in new[] { "content", "indexValues", "annotations", "name" })
         {
             if (highlight.TryGetProperty(field, out var fragments)
                 && fragments.ValueKind == JsonValueKind.Array

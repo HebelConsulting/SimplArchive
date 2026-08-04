@@ -26,8 +26,9 @@ public class DocumentAnnotation : ITenantScoped, IConcurrencyTracked
     // 0-based index of the rendered page the note sits on.
     public int PageIndex { get; set; }
 
-    // The markup kind (ADR "Annotation markup: highlight + shapes") — Note (a point) or a shape (Highlight /
-    // Rectangle / Arrow, carrying Width/Height). Default Note keeps existing rows unchanged.
+    // The markup kind (ADR "Annotation markup: highlight + shapes"; extended in ADR 0525) — Note (a point), a shape
+    // (Highlight / Rectangle / Strikethrough / Arrow / Stamp / TextBox, carrying Width/Height) or Freehand (a stroke
+    // path in Points). Default Note keeps existing rows unchanged.
     public AnnotationKind Kind { get; set; }
 
     // Normalized position of the note's anchor within the page, 0..1, top-left origin. For a box shape this is
@@ -42,8 +43,12 @@ public class DocumentAnnotation : ITenantScoped, IConcurrencyTracked
 
     public double? Height { get; set; }
 
-    // The note text; empty for a shape (shapes are optional-label markup).
+    // The note text; empty for a shape (shapes are optional-label markup). Carries the caption for Stamp/TextBox.
     public required string Text { get; set; }
+
+    // A Freehand stroke's path: normalized points as space-separated "x,y" pairs ("0.10,0.20 0.11,0.22 …"), each
+    // coordinate in [0,1]. Null for every other kind (which use PositionX/Y + Width/Height instead). ADR 0525.
+    public string? Points { get; set; }
 
     // A short colour token (a hex like "#FFEB3B") from a small palette validated in the controller.
     public required string Color { get; set; }

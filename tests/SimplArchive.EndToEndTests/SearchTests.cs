@@ -54,6 +54,33 @@ public class SearchTests
         await PollAsync(async () => !(await SearchIdsAsync(owner, word, repoA)).Contains(docA), "docA removed from the index after delete");
     }
 
+    [Fact]
+    public async Task Search_finds_a_document_by_its_annotation_text()
+    {
+        // A distinctive token placed ONLY in an annotation's text (never the name/content), unique per run.
+        var word = $"annofind{Guid.NewGuid():N}";
+
+        var (clientId, secret, _) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+
+        var (_, docId) = await CreateRepoWithDocAsync(owner, "search-anno", "anno-doc", "nothing notable here");
+        var versionId = (await TestJson.Get(owner, $"/api/documents/{docId}/versions")).GetProperty("versions").EnumerateArray().First().GetProperty("id").GetGuid();
+
+        // A note whose text carries the token → the document becomes findable by it (ADR 0526).
+        var anno = await TestJson.Post(owner, $"/api/documents/{docId}/versions/{versionId}/annotations",
+            new { pageIndex = 0, kind = 0, positionX = 0.1, positionY = 0.1, width = 0.2, height = 0.06, text = $"stamp says {word}", color = "#FFEB3B" });
+        var annoId = anno.GetProperty("id").GetGuid();
+
+        await PollAsync(async () => (await SearchIdsAsync(owner, word)).Contains(docId), "document indexed by its annotation text");
+
+        // Removing the annotation drops the token from the index → the document is no longer found by it.
+        using var del = new HttpRequestMessage(HttpMethod.Delete, $"/api/documents/{docId}/versions/{versionId}/annotations/{annoId}");
+        del.Headers.TryAddWithoutValidation("If-Match", $"\"{anno.GetProperty("etag").GetString()}\"");
+        (await owner.SendAsync(del)).EnsureSuccessStatusCode();
+
+        await PollAsync(async () => !(await SearchIdsAsync(owner, word)).Contains(docId), "document dropped from the index after the annotation is removed");
+    }
+
     // ---- helpers -------------------------------------------------------------------------------------------
 
     private async Task<(Guid RepoId, Guid DocId)> CreateRepoWithDocAsync(HttpClient owner, string repoPrefix, string docName, string content)

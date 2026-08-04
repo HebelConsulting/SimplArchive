@@ -95,6 +95,28 @@ public class DocumentAnnotationApiTests
     }
 
     [Fact]
+    public async Task Extended_kinds_stamp_and_freehand_round_trip_and_validate()
+    {
+        var api = await AuthedClientAsync();
+        var (docId, versionId) = await SeedConfirmedDocumentAsync(api);
+        var url = $"/api/documents/{docId}/versions/{versionId}/annotations";
+
+        // A stamp (kind 4): a box carrying its caption.
+        var stamp = await PostJson(api, url, new { pageIndex = 0, kind = 4, positionX = 0.6, positionY = 0.1, width = 0.25, height = 0.09, text = "APPROVED", color = "#2E7D32" });
+        Assert.Equal(4, stamp.GetProperty("kind").GetInt32());
+        Assert.Equal("APPROVED", stamp.GetProperty("text").GetString());
+
+        // A freehand stroke (kind 7): a path of normalized points, no extent.
+        var freehand = await PostJson(api, url, new { pageIndex = 0, kind = 7, positionX = 0.1, positionY = 0.2, points = "0.1,0.2 0.3,0.4 0.5,0.35", text = "", color = "#F44336" });
+        Assert.Equal(7, freehand.GetProperty("kind").GetInt32());
+        Assert.Equal("0.1,0.2 0.3,0.4 0.5,0.35", freehand.GetProperty("points").GetString());
+
+        // Validation: a stamp with no caption → EMPTY_ANNOTATION; a freehand with < 2 points → INVALID_ANNOTATION_POINTS.
+        await AssertBadRequest(api, url, new { pageIndex = 0, kind = 4, positionX = 0.2, positionY = 0.2, width = 0.2, height = 0.1, text = "", color = "#2E7D32" }, "EMPTY_ANNOTATION");
+        await AssertBadRequest(api, url, new { pageIndex = 0, kind = 7, positionX = 0.2, positionY = 0.2, points = "0.2,0.2", text = "", color = "#F44336" }, "INVALID_ANNOTATION_POINTS");
+    }
+
+    [Fact]
     public async Task Confirmed_version_advertises_an_annotations_link()
     {
         var api = await AuthedClientAsync();

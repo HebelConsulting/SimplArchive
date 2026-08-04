@@ -104,15 +104,7 @@ public sealed class DocumentTextLayoutService : IDocumentTextLayoutService
         return buffer.ToArray();
     }
 
-    // "<dir>/<stem>.textlayout.json" — same directory as the original, its extension replaced (mirrors the
-    // rendition key scheme, so all derived artefacts sit alongside the object).
-    private static string SidecarKey(string objectKey)
-    {
-        var lastSlash = objectKey.LastIndexOf('/');
-        var directory = lastSlash >= 0 ? objectKey[..(lastSlash + 1)] : string.Empty;
-        var fileName = lastSlash >= 0 ? objectKey[(lastSlash + 1)..] : objectKey;
-        var lastDot = fileName.LastIndexOf('.');
-        var stem = lastDot >= 0 ? fileName[..lastDot] : fileName;
-        return $"{directory}{stem}.textlayout.json";
-    }
+    // "<dir>/<stem>.textlayout.json" — same directory as the original, its extension replaced (the shared derived-
+    // artefact key scheme, ObjectKeyBuilder issue #338, so all derived artefacts sit alongside the object).
+    private static string SidecarKey(string objectKey) => ObjectKeyBuilder.DerivedKey(objectKey, ".textlayout.json");
 }

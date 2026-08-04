@@ -77,6 +77,12 @@
     .wb-pv-arrow { overflow: visible; cursor: move; }
     .wb-pv-arrow line { stroke: #F44336; stroke-width: .8; vector-effect: non-scaling-stroke; }
     .wb-pv-arrow polygon { fill: #F44336; }
+    .wb-pv-stamp { border: 2px solid #F44336; background: transparent; color: #F44336; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 700; text-transform: uppercase; font-size: .8rem; letter-spacing: .05em; opacity: .85; border-radius: 3px; overflow: hidden; cursor: move; }
+    .wb-pv-textbox { border: 1px solid #1976D2; background: rgba(255,255,255,.75); color: #222; padding: 2px 4px; font-size: .72rem; overflow: hidden; cursor: move; }
+    .wb-pv-strike { cursor: move; }
+    .wb-pv-strike::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; border-top: 2px solid currentColor; }
+    .wb-pv-freehand { overflow: visible; cursor: move; }
+    .wb-pv-freehand polyline { fill: none; stroke: #F44336; stroke-width: .8; vector-effect: non-scaling-stroke; }
     /* A resize grip on a box shape (highlight/rectangle), like the note grip. */
     .wb-pv-shape-grip { position: absolute; right: -3px; bottom: -3px; width: 12px; height: 12px; cursor: nwse-resize; background: rgba(0,0,0,.55); border: 1px solid #fff; border-radius: 2px; pointer-events: auto; }
     /* Toolbar colour palette (ADR "Highlighting redesign"). */
@@ -2304,14 +2310,15 @@
 
     private IEnumerable<BrowseNode> SortedContents()
     {
-        // Folders on top, then documents — each group ordered by the active criterion.
+        // Folders on top (always alphabetical, issue #339), then documents ordered by the active criterion (default
+        // DocumentDate). A column-header click is an explicit ephemeral override of the whole list.
         var folders = _folderContents.Where(n => n.IsFolder);
         var docs = _folderContents.Where(n => !n.IsFolder);
         if (_headerSortActive)
         {
             return ApplyHeaderSort(folders).Concat(ApplyHeaderSort(docs));
         }
-        return ApplyFolderSort(folders).Concat(ApplyFolderSort(docs));
+        return folders.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase).Concat(ApplyFolderSort(docs));
     }
 
     private IEnumerable<BrowseNode> ApplyFolderSort(IEnumerable<BrowseNode> items) => _folderSortOrder switch
@@ -2631,7 +2638,7 @@
         }
 
         var markers = _annotationsVisible
-            ? _annotations.Select(a => new { id = a.Id, pageIndex = a.PageIndex, kind = a.Kind, x = a.PositionX, y = a.PositionY, w = a.Width, h = a.Height, text = a.Text, color = a.Color, canEdit = a.CanEdit, selected = _selectedAnnotationIds.Contains(a.Id) }).ToArray()
+            ? _annotations.Select(a => new { id = a.Id, pageIndex = a.PageIndex, kind = a.Kind, x = a.PositionX, y = a.PositionY, w = a.Width, h = a.Height, text = a.Text, color = a.Color, canEdit = a.CanEdit, points = a.Points, selected = _selectedAnnotationIds.Contains(a.Id) }).ToArray()
             : [];
         // Cast to object: InvokeVoidAsync's last parameter is `params object?[]`, so passing the array directly
         // would spread its elements as separate JS arguments instead of passing the whole array as `annos`.
@@ -3039,6 +3046,7 @@
         public string Etag { get; set; } = "";
         public bool CanEdit { get; set; }
         public bool CanDelete { get; set; }
+        public string? Points { get; set; }
     }
 
     // Toggles the preview pane's in-app full-screen (a fixed overlay stopping above the tab bar, ADR 0295).
@@ -4770,6 +4778,7 @@
                 nodes.Add(PersonalTreeItem(personal));
             }
 
+            var shared = new List<TreeItemData<BrowseNode>>();
             var url = "api/repositories";
             while (url is not null)
             {
@@ -4777,10 +4786,13 @@
                 foreach (var r in page?.Repositories ?? [])
                 {
                     // A repository is its own repository scope.
-                    nodes.Add(ToTreeItem(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, RepositoryId: r.Id)));
+                    shared.Add(ToTreeItem(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, RepositoryId: r.Id)));
                 }
                 url = RelativeHref(page?.Links, "next");
             }
+
+            // Shared repositories sorted alphabetically (issue #339); Personal stays pinned above them.
+            nodes.AddRange(shared.OrderBy(n => n.Value!.DisplayName, StringComparer.OrdinalIgnoreCase));
 
             // Tenant admins get a synthetic "Administration → Users" branch (ADR "Tenant-admin Administration →
             // Users view") to browse every user's personal space; its children load from the admin endpoint.
@@ -4843,7 +4855,10 @@
             return await LoadAdminChildrenAsync(node);
         }
 
-        var children = (await LoadContentsAsync(node.Id, node.RepositoryId)).Where(c => !c.HasVersions).Select(ToTreeItem).ToList();
+        // Folders are always sorted alphabetically in the tree (issue #339); the contents load orders for its list
+        // default, so re-sort the folder nodes by name here.
+        var children = (await LoadContentsAsync(node.Id, node.RepositoryId)).Where(c => !c.HasVersions)
+            .OrderBy(c => c.DisplayName, StringComparer.OrdinalIgnoreCase).Select(ToTreeItem).ToList();
 
         // The Personal repository nests the Inbox + Check-out launcher nodes above its real subfolders,
         // mirroring /webdav/Personal (ADR "GUI-tree Personal space grouping"). Clicking a launcher switches to
@@ -7278,18 +7293,13 @@
     {
         try
         {
-            (await Http.PutAsync($"api/documents/{documentId}/versions/{versionId}", null)).EnsureSuccessStatusCode();
+            // The filing comment is the version's "why this revision" note (ADR 0528) — set on the version at
+            // finalize (the drop-upload created it first), not posted to the chat feed as it used to be.
+            var versionComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
+            (await Http.PutAsJsonAsync($"api/documents/{documentId}/versions/{versionId}", new { comment = versionComment })).EnsureSuccessStatusCode();
 
             // The server assigns the mask at finalize (eMail for .eml/.msg, else Basic Entry) — see ADR
             // "Email auto-classification"; the client no longer classifies.
-
-            // Optional feed comment when the file was filed via the list-pane drop dialog (ADR "List-pane drop
-            // filing" / "Filing posts a feed comment"). Best-effort — never fails the upload.
-            if (!string.IsNullOrWhiteSpace(comment) && Guid.TryParse(documentId, out var docGuid))
-            {
-                try { await Http.PostAsJsonAsync($"api/documents/{docGuid}/comments", new { body = comment.Trim() }); }
-                catch (Exception) { /* ignore */ }
-            }
 
             Snackbar.Add($"Uploaded '{fileName}'.", Severity.Success);
         }
@@ -7368,13 +7378,10 @@
     {
         try
         {
-            (await Http.PutAsync($"api/documents/{documentId}/versions/{versionId}", null)).EnsureSuccessStatusCode();
-
-            if (!string.IsNullOrWhiteSpace(comment) && Guid.TryParse(documentId, out var docGuid))
-            {
-                try { await Http.PostAsJsonAsync($"api/documents/{docGuid}/comments", new { body = comment.Trim() }); }
-                catch (Exception) { /* ignore */ }
-            }
+            // The check-in comment is the new version's "why this revision" note (ADR 0528) — set on the version
+            // at finalize, not posted to the chat feed.
+            var versionComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
+            (await Http.PutAsJsonAsync($"api/documents/{documentId}/versions/{versionId}", new { comment = versionComment })).EnsureSuccessStatusCode();
 
             Snackbar.Add($"Filed '{fileName}' as a new version.", Severity.Success);
         }

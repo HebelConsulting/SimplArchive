@@ -116,7 +116,8 @@ public sealed class SimplArchiveApiClient
 
     // A sticky note / positional annotation (ADR "Document annotations"). Etag is the optimistic-concurrency
     // token to send back as If-Match on edit/delete; CanEdit/CanDelete are the server's per-caller hints.
-    public sealed record AnnotationInfo(Guid Id, int PageIndex, int Kind, double PositionX, double PositionY, double? Width, double? Height, string Text, string Color, string AuthorName, string Etag, bool CanEdit, bool CanDelete);
+    // Points is the normalized "x,y x,y …" (each 0..1) poly-line for a Freehand (kind 7), null otherwise (ADR 0525).
+    public sealed record AnnotationInfo(Guid Id, int PageIndex, int Kind, double PositionX, double PositionY, double? Width, double? Height, string Text, string Color, string AuthorName, string Etag, bool CanEdit, bool CanDelete, string? Points = null);
 
     public sealed record TextLayoutPageInfo(IReadOnlyList<TextLayoutBox> Words);
 
@@ -386,6 +387,26 @@ public sealed class SimplArchiveApiClient
 
     public Task<List<Node>> GetChildrenAsync(Guid folderId, CancellationToken cancellationToken = default) =>
         LoadPagedAsync($"api/documents/{folderId}/children", "children", ParseNode, cancellationToken);
+
+    // The item's ancestor folder ids, repository-root first down to its immediate parent (issue #340) — used to
+    // reveal a search hit in the lazy tree. Empty for an item filed at a repository root.
+    public async Task<List<Guid>> GetAncestorsAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/ancestors", cancellationToken);
+        var ids = new List<Guid>();
+        if (json.TryGetProperty("ancestors", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var a in arr.EnumerateArray())
+            {
+                if (a.TryGetProperty("id", out var idEl) && idEl.TryGetGuid(out var id))
+                {
+                    ids.Add(id);
+                }
+            }
+        }
+
+        return ids;
+    }
 
     // The folder's persisted default contents sort order (ADR "Per-folder contents sort order") from the children
     // listing envelope — 0=Name / 1=DocumentDate / 2=Created; DocumentDate (1) when unavailable.
@@ -1179,7 +1200,8 @@ public sealed class SimplArchiveApiClient
                     a.TryGetProperty("authorName", out var an) ? an.GetString() ?? "" : "",
                     a.TryGetProperty("etag", out var et) ? et.GetString() ?? "" : "",
                     a.TryGetProperty("canEdit", out var ce) && ce.GetBoolean(),
-                    a.TryGetProperty("canDelete", out var cd) && cd.GetBoolean()));
+                    a.TryGetProperty("canDelete", out var cd) && cd.GetBoolean(),
+                    a.TryGetProperty("points", out var pts) && pts.ValueKind == JsonValueKind.String ? pts.GetString() : null));
             }
         }
 
@@ -1187,12 +1209,13 @@ public sealed class SimplArchiveApiClient
     }
 
     public async Task CreateAnnotationAsync(string annotationsUrl, int pageIndex, double x, double y, string text, string color, CancellationToken cancellationToken = default)
-        => await CreateAnnotationAsync(annotationsUrl, pageIndex, 0, x, y, null, null, text, color, cancellationToken);
+        => await CreateAnnotationAsync(annotationsUrl, pageIndex, 0, x, y, null, null, text, color, cancellationToken: cancellationToken);
 
-    // Create a note (kind 0) or a markup shape (kind 1/2/3 with width/height) — ADR "Annotation markup".
-    public async Task CreateAnnotationAsync(string annotationsUrl, int pageIndex, int kind, double x, double y, double? width, double? height, string text, string color, CancellationToken cancellationToken = default)
+    // Create a note (kind 0) or a markup shape (kind 1/2/3 with width/height; 4/5/6 stamp/strike/text-box; 7
+    // freehand with points) — ADRs "Annotation markup" / 0525.
+    public async Task CreateAnnotationAsync(string annotationsUrl, int pageIndex, int kind, double x, double y, double? width, double? height, string text, string color, string? points = null, CancellationToken cancellationToken = default)
     {
-        var response = await _http.PostAsJsonAsync(annotationsUrl.TrimStart('/'), new { pageIndex, kind, positionX = x, positionY = y, width, height, text, color }, cancellationToken);
+        var response = await _http.PostAsJsonAsync(annotationsUrl.TrimStart('/'), new { pageIndex, kind, positionX = x, positionY = y, width, height, text, color, points }, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException("Could not add the markup.");
@@ -2016,7 +2039,10 @@ public sealed class SimplArchiveApiClient
         createResponse.EnsureSuccessStatusCode();
         var documentId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken)).GetProperty("id").GetGuid();
 
-        using var versionResponse = await _http.PostAsJsonAsync($"api/documents/{documentId}/versions", new { fileExtension = extension }, cancellationToken);
+        // The filing comment is the first version's "why this revision" note (ADR 0528) — set on the version,
+        // not posted to the chat feed as it used to be.
+        var versionComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
+        using var versionResponse = await _http.PostAsJsonAsync($"api/documents/{documentId}/versions", new { fileExtension = extension, comment = versionComment }, cancellationToken);
         versionResponse.EnsureSuccessStatusCode();
         var version = await versionResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         var versionId = version.GetProperty("id").GetGuid();
@@ -2032,12 +2058,6 @@ public sealed class SimplArchiveApiClient
 
         // The server assigns the mask at finalize (eMail for .eml/.msg, else Basic Entry) — ADR "Email
         // auto-classification"; the client no longer classifies.
-
-        if (!string.IsNullOrWhiteSpace(comment))
-        {
-            try { await PostCommentAsync(documentId, comment.Trim(), null, cancellationToken); }
-            catch (Exception) { /* best-effort feed comment, ADR "Filing posts a feed comment" */ }
-        }
 
         return documentId;
     }
@@ -2174,7 +2194,8 @@ public sealed class SimplArchiveApiClient
 
     // ---- Version comparison (ADR "Document version comparison") ----
     public sealed record VersionInfo(Guid Id, int? VersionNumber, string Status, string FileExtension, string? DownloadUrl,
-        string DocumentDate = "", DateTimeOffset CreatedAt = default, string CreatedByName = "", bool IsCurrent = false);
+        string DocumentDate = "", DateTimeOffset CreatedAt = default, string CreatedByName = "", bool IsCurrent = false,
+        string? Comment = null);
     public sealed record DiffLineInfo(int Op, string Text);
     public sealed record VersionComparison(bool Available, List<DiffLineInfo> Lines);
 
@@ -2218,7 +2239,8 @@ public sealed class SimplArchiveApiClient
                     download,
                     v.TryGetProperty("documentDate", out var dd) ? dd.GetString() ?? "" : "",
                     v.TryGetProperty("createdAt", out var ca) && ca.ValueKind == JsonValueKind.String ? ca.GetDateTimeOffset() : default,
-                    v.TryGetProperty("createdByName", out var cb) ? cb.GetString() ?? "" : ""));
+                    v.TryGetProperty("createdByName", out var cb) ? cb.GetString() ?? "" : "",
+                    Comment: v.TryGetProperty("comment", out var cm) && cm.ValueKind == JsonValueKind.String ? cm.GetString() : null));
             }
         }
 
@@ -2273,7 +2295,10 @@ public sealed class SimplArchiveApiClient
     // → finalize. Distinct from UploadFileAsync, which creates a new document.
     public async Task UploadNewVersionAsync(Guid documentId, byte[] bytes, string fileExtension, string? comment = null, CancellationToken cancellationToken = default)
     {
-        using var versionResponse = await _http.PostAsJsonAsync($"api/documents/{documentId}/versions", new { fileExtension }, cancellationToken);
+        // The check-in comment is the new version's "why this revision" note (ADR 0528) — set on the version
+        // itself, not posted to the chat feed as it used to be.
+        var versionComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
+        using var versionResponse = await _http.PostAsJsonAsync($"api/documents/{documentId}/versions", new { fileExtension, comment = versionComment }, cancellationToken);
         if (versionResponse.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException("This document is checked out by another user or under a legal hold.");
@@ -2291,13 +2316,6 @@ public sealed class SimplArchiveApiClient
 
         using var finalizeResponse = await _http.PutAsync($"api/documents/{documentId}/versions/{versionId}", null, cancellationToken);
         finalizeResponse.EnsureSuccessStatusCode();
-
-        // Optional feed comment (ADR "Filing posts a feed comment") — used by list-pane drop-as-version.
-        if (!string.IsNullOrWhiteSpace(comment))
-        {
-            try { await PostCommentAsync(documentId, comment.Trim(), null, cancellationToken); }
-            catch (Exception) { /* best-effort */ }
-        }
     }
 
     private static string GuessContentType(string fileName) => Path.GetExtension(fileName).ToLowerInvariant() switch

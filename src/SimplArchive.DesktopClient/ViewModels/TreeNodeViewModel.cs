@@ -89,6 +89,21 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         }
     }
 
+    // Expands this node, loading its children first if not already loaded — awaitable (unlike the IsExpanded
+    // setter's fire-and-forget handler), so a caller revealing a deep path can walk it level by level and know the
+    // children are present before descending (issue #340).
+    public async Task EnsureExpandedAsync()
+    {
+        if (!_loaded && _loadChildren is not null)
+        {
+            await ReloadChildrenAsync(); // loads children + sets IsExpanded (and marks _loaded so nothing double-loads)
+        }
+        else
+        {
+            IsExpanded = true;
+        }
+    }
+
     // Re-fetch this node's children in place and keep it expanded — used after a structural change under this
     // folder (e.g. a new subfolder) so the tree reflects it WITHOUT a full rebuild that would collapse everything
     // (ADR "Keep the tree expanded on a structural change"). No-op for a node that can't have children.

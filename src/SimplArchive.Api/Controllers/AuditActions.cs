@@ -26,6 +26,10 @@ public static class AuditActions
     public const string DocumentMaskCleared = "Document.MaskCleared";
     public const string DocumentIndexDataUpdated = "Document.IndexDataUpdated";
 
+    // External-system correlation key set/cleared on a document (ADR 0520).
+    public const string DocumentOriginSet = "Document.OriginSet";
+    public const string DocumentOriginCleared = "Document.OriginCleared";
+
     public const string DocumentTagsUpdated = "Document.TagsUpdated";
     public const string DocumentDateChanged = "Document.DocumentDateChanged";
     public const string DocumentContentsSortOrderChanged = "Document.ContentsSortOrderChanged";

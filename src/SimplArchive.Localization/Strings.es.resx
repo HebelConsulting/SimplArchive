@@ -325,7 +325,7 @@
     <value>Comentario (opcional)</value>
   </data>
   <data name="FilingCommentPlaceholder" xml:space="preserve">
-    <value>Deja en blanco para publicar "Documento archivado."</value>
+    <value>¿Por qué esta versión? (opcional)</value>
   </data>
   <data name="FilingFile" xml:space="preserve">
     <value>Archivar</value>
@@ -527,6 +527,9 @@
   </data>
   <data name="VerColBy" xml:space="preserve">
     <value>Por</value>
+  </data>
+  <data name="VerColComment" xml:space="preserve">
+    <value>Comentario</value>
   </data>
   <data name="VerColActions" xml:space="preserve">
     <value>Acciones</value>

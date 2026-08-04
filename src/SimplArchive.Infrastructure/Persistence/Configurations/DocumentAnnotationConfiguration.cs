@@ -14,6 +14,7 @@ public class DocumentAnnotationConfiguration : IEntityTypeConfiguration<Document
         builder.HasKey(a => a.Id);
         builder.Property(a => a.Text).IsRequired();
         builder.Property(a => a.Color).IsRequired();
+        builder.Property(a => a.Points); // Freehand stroke path ("x,y x,y …"); null for every other kind (ADR 0525).
 
         // Lists a version's notes (per page); TenantId leads for tenant-scoped locality.
         builder.HasIndex(a => new { a.TenantId, a.DocumentVersionId, a.PageIndex });
@@ -41,9 +42,16 @@ public class DocumentAnnotationConfiguration : IEntityTypeConfiguration<Document
                 "CK_DocumentAnnotations_Extent",
                 "(\"Width\" IS NULL OR (\"Width\" >= -1 AND \"Width\" <= 1)) AND " +
                 "(\"Height\" IS NULL OR (\"Height\" >= -1 AND \"Height\" <= 1))");
+            // A box shape must carry an extent; Note (0) is a point and Freehand (7) uses Points instead — both
+            // are exempt (ADR 0525).
             t.HasCheckConstraint(
                 "CK_DocumentAnnotations_ShapeExtent",
-                "\"Kind\" = 0 OR (\"Width\" IS NOT NULL AND \"Height\" IS NOT NULL)");
+                "\"Kind\" IN (0, 7) OR (\"Width\" IS NOT NULL AND \"Height\" IS NOT NULL)");
+
+            // Freehand (7) must carry its stroke path; every other kind leaves Points null (ADR 0525).
+            t.HasCheckConstraint(
+                "CK_DocumentAnnotations_FreehandPoints",
+                "(\"Kind\" = 7 AND \"Points\" IS NOT NULL) OR (\"Kind\" <> 7 AND \"Points\" IS NULL)");
         });
 
         builder.HasOne<Tenant>()

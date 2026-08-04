@@ -395,6 +395,71 @@ public class DocumentsController : ControllerBase
         public string DisplayName { get; set; } = "";
     }
 
+    // The item's ancestor folders, repository-root first down to its immediate parent (the item itself excluded) —
+    // so a client can reveal it in the lazy-loaded tree: expand each ancestor, then select the parent (issue #340).
+    // Requires CanSee on the item; the ancestors are the folders it already lives under, so no extra per-ancestor
+    // check. An item filed at a repository root returns an empty list.
+    [HttpGet("ancestors")]
+    public async Task<IActionResult> ListAncestors(Guid documentId, CancellationToken cancellationToken)
+    {
+        if (!await _dbContext.Documents.AnyAsync(d => d.Id == documentId, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        if (!await CanSeeAsync(documentId, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var ancestors = new List<AncestorResource>();
+        var currentId = await _dbContext.Documents
+            .Where(d => d.Id == documentId).Select(d => d.ParentId).FirstAsync(cancellationToken);
+        // Walk up ParentId to the root. The guard is a defensive backstop — SaveChanges already forbids cycles.
+        for (var guard = 0; currentId is { } id && guard < 256; guard++)
+        {
+            var folder = await _dbContext.Documents
+                .Where(d => d.Id == id).Select(d => new { d.Id, d.Name, d.ParentId }).FirstOrDefaultAsync(cancellationToken);
+            if (folder is null)
+            {
+                break;
+            }
+
+            ancestors.Add(new AncestorResource { Id = folder.Id, Name = folder.Name });
+            currentId = folder.ParentId;
+        }
+
+        ancestors.Reverse(); // repository-root first
+        return Ok(new AncestorsResource
+        {
+            Ancestors = ancestors,
+            Links = [new Link("self", $"/api/documents/{documentId}/ancestors", "GET")],
+        });
+    }
+
+    [HttpHead("ancestors")]
+    public async Task<IActionResult> AncestorsHead(Guid documentId, CancellationToken cancellationToken)
+    {
+        if (!await _dbContext.Documents.AnyAsync(d => d.Id == documentId, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        return await CanSeeAsync(documentId, cancellationToken) ? NoContent() : Forbid();
+    }
+
+    public class AncestorsResource : HypermediaResource
+    {
+        public List<AncestorResource> Ancestors { get; set; } = [];
+    }
+
+    public class AncestorResource
+    {
+        public Guid Id { get; set; }
+
+        public string Name { get; set; } = "";
+    }
+
     // Lets a client check the current ETag before a PUT without transferring the full representation —
     // a separate action, since ASP.NET Core doesn't automatically strip GET's body for a HEAD request.
     [HttpHead]
@@ -480,6 +545,198 @@ public class DocumentsController : ControllerBase
             Name = document.Name,
             Links = [new Link("self", Url.Action(nameof(Get), new { documentId })!, "GET")],
         });
+    }
+
+    // ── Origin key: generic external-system correlation (ADR 0349/0520) ────────────────────────────────────
+    // Records the (source system, source record) a document was imported from, so a re-import can skip/update
+    // instead of duplicating. Generic — not tied to any specific source system; reusable by any external import.
+
+    public class SetOriginRequest
+    {
+        public Guid OriginTenantId { get; set; }
+        public Guid OriginDocumentId { get; set; }
+    }
+
+    public class OriginResource : HypermediaResource
+    {
+        [System.Xml.Serialization.XmlElement(IsNullable = true)] public Guid? OriginTenantId { get; set; }
+        [System.Xml.Serialization.XmlElement(IsNullable = true)] public Guid? OriginDocumentId { get; set; }
+    }
+
+    private OriginResource BuildOriginResource(Guid documentId, Guid? tenantId, Guid? documentIdOrigin) => new()
+    {
+        OriginTenantId = tenantId,
+        OriginDocumentId = documentIdOrigin,
+        Links = [new Link("self", $"/api/documents/{documentId}/origin", "GET")],
+    };
+
+    // Set/replace the document's origin key. Gated on CanImport, If-Match like any mutation.
+    [HttpPut("origin")]
+    public async Task<IActionResult> SetOrigin(Guid documentId, [FromBody] SetOriginRequest request, CancellationToken cancellationToken)
+    {
+        var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken);
+        if (document is null)
+        {
+            return NotFound();
+        }
+
+        if (!await HasImportRightAsync(cancellationToken))
+        {
+            return Forbid();
+        }
+
+        await EnsureNotFrozenAsync(documentId, cancellationToken);
+
+        if (!Request.Headers.TryGetValue("If-Match", out var ifMatchValues) || !TryParseETag(ifMatchValues.ToString(), out var ifMatchToken))
+        {
+            throw new IfMatchRequiredException();
+        }
+
+        document.OriginTenantId = request.OriginTenantId;
+        document.OriginDocumentId = request.OriginDocumentId;
+        _dbContext.Entry(document).Property(d => d.ConcurrencyToken).OriginalValue = ifMatchToken;
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw EtagMismatchException.ForDocument();
+        }
+
+        await _audit.RecordAsync(AuditActions.DocumentOriginSet, "Document", documentId, document.Name,
+            $"Origin set to {request.OriginTenantId}/{request.OriginDocumentId}", cancellationToken: cancellationToken);
+        SetETag(document.ConcurrencyToken);
+        return Ok(BuildOriginResource(documentId, document.OriginTenantId, document.OriginDocumentId));
+    }
+
+    [HttpGet("origin")]
+    public async Task<IActionResult> GetOrigin(Guid documentId, CancellationToken cancellationToken)
+    {
+        var document = await _dbContext.Documents.Where(d => d.Id == documentId)
+            .Select(d => new { d.OriginTenantId, d.OriginDocumentId, d.ConcurrencyToken }).SingleOrDefaultAsync(cancellationToken);
+        if (document is null)
+        {
+            return NotFound();
+        }
+
+        if (!(await GetCallerRightsAsync(documentId, cancellationToken)).CanSee)
+        {
+            return Forbid();
+        }
+
+        SetETag(document.ConcurrencyToken);
+        return Ok(BuildOriginResource(documentId, document.OriginTenantId, document.OriginDocumentId));
+    }
+
+    [HttpHead("origin")]
+    public async Task<IActionResult> HeadOrigin(Guid documentId, CancellationToken cancellationToken)
+    {
+        var document = await _dbContext.Documents.Where(d => d.Id == documentId)
+            .Select(d => new { d.ConcurrencyToken }).SingleOrDefaultAsync(cancellationToken);
+        if (document is null)
+        {
+            return NotFound();
+        }
+
+        if (!(await GetCallerRightsAsync(documentId, cancellationToken)).CanSee)
+        {
+            return Forbid();
+        }
+
+        SetETag(document.ConcurrencyToken);
+        return NoContent();
+    }
+
+    // Clear the document's origin key. Gated on CanImport, If-Match.
+    [HttpDelete("origin")]
+    public async Task<IActionResult> ClearOrigin(Guid documentId, CancellationToken cancellationToken)
+    {
+        var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken);
+        if (document is null)
+        {
+            return NotFound();
+        }
+
+        if (!await HasImportRightAsync(cancellationToken))
+        {
+            return Forbid();
+        }
+
+        await EnsureNotFrozenAsync(documentId, cancellationToken);
+
+        if (!Request.Headers.TryGetValue("If-Match", out var ifMatchValues) || !TryParseETag(ifMatchValues.ToString(), out var ifMatchToken))
+        {
+            throw new IfMatchRequiredException();
+        }
+
+        document.OriginTenantId = null;
+        document.OriginDocumentId = null;
+        _dbContext.Entry(document).Property(d => d.ConcurrencyToken).OriginalValue = ifMatchToken;
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw EtagMismatchException.ForDocument();
+        }
+
+        await _audit.RecordAsync(AuditActions.DocumentOriginCleared, "Document", documentId, document.Name, "Origin cleared", cancellationToken: cancellationToken);
+        SetETag(document.ConcurrencyToken);
+        return NoContent();
+    }
+
+    // Resolve the single document for an origin key, so an importer can skip/update instead of duplicating
+    // (ADR 0520). Absolute route — escapes the controller's {documentId:guid} prefix. Gated on CanImport;
+    // tenant-scoped by the query filter, and unique per (TenantId, OriginTenantId, OriginDocumentId).
+    [HttpGet("/api/documents/by-origin/{originTenantId:guid}/{originDocumentId:guid}")]
+    public async Task<IActionResult> ResolveByOrigin(Guid originTenantId, Guid originDocumentId, CancellationToken cancellationToken)
+    {
+        if (!await HasImportRightAsync(cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var doc = await _dbContext.Documents
+            .Where(d => d.OriginTenantId == originTenantId && d.OriginDocumentId == originDocumentId)
+            .Select(d => new { d.Id, d.Name, d.ConcurrencyToken })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (doc is null)
+        {
+            return NotFound();
+        }
+
+        SetETag(doc.ConcurrencyToken);
+        return Ok(new DocumentResource
+        {
+            Id = doc.Id,
+            Name = doc.Name,
+            Links = [new Link("self", $"/api/documents/{doc.Id}", "GET")],
+        });
+    }
+
+    [HttpHead("/api/documents/by-origin/{originTenantId:guid}/{originDocumentId:guid}")]
+    public async Task<IActionResult> HeadByOrigin(Guid originTenantId, Guid originDocumentId, CancellationToken cancellationToken)
+    {
+        if (!await HasImportRightAsync(cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var doc = await _dbContext.Documents
+            .Where(d => d.OriginTenantId == originTenantId && d.OriginDocumentId == originDocumentId)
+            .Select(d => new { d.ConcurrencyToken })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (doc is null)
+        {
+            return NotFound();
+        }
+
+        SetETag(doc.ConcurrencyToken);
+        return NoContent();
     }
 
     public class MoveRequest

@@ -24,7 +24,7 @@
             {
                 <MudSimpleTable Dense="true" Hover="true" Style="overflow-x:auto;">
                     <thead>
-                        <tr><th>@Strings.Get("VerColVersion")</th><th>@Strings.Get("VerColDocDate")</th><th>@Strings.Get("VerColFiled")</th><th>@Strings.Get("VerColBy")</th><th style="text-align:right;">@Strings.Get("VerColActions")</th></tr>
+                        <tr><th>@Strings.Get("VerColVersion")</th><th>@Strings.Get("VerColDocDate")</th><th>@Strings.Get("VerColFiled")</th><th>@Strings.Get("VerColBy")</th><th>@Strings.Get("VerColComment")</th><th style="text-align:right;">@Strings.Get("VerColActions")</th></tr>
                     </thead>
                     <tbody>
                         @foreach (var v in _versions)
@@ -42,6 +42,7 @@
                                 <td>@v.DocumentDate</td>
                                 <td>@v.Filed.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
                                 <td>@v.By</td>
+                                <td style="max-width:16rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="@v.Comment">@v.Comment</td>
                                 <td style="text-align:right; white-space:nowrap;">
                                     @if (v.OpenUrl is not null)
                                     {
@@ -105,7 +106,7 @@
                 Abs(Href(v.Links, "preview")) ?? Abs(Href(v.Links, "download")),
                 Abs(Href(v.Links, "download")),
                 Href(v.Links, "restore"),
-                v.Id == currentId)).ToList();
+                v.Id == currentId, v.Comment)).ToList();
         }
         catch (Exception)
         {
@@ -205,7 +206,7 @@
         return $"{baseUri}/{href.TrimStart('/')}";
     }
 
-    private record Row(Guid Id, int VersionNumber, string DocumentDate, DateTimeOffset Filed, string By, string? OpenUrl, string? DownloadUrl, string? RestoreUrl, bool IsCurrent);
+    private record Row(Guid Id, int VersionNumber, string DocumentDate, DateTimeOffset Filed, string By, string? OpenUrl, string? DownloadUrl, string? RestoreUrl, bool IsCurrent, string? Comment);
     private record VersionListResponse { public List<VersionResponse> Versions { get; set; } = []; public Guid? CurrentVersionId { get; set; } }
     private record VersionResponse
     {
@@ -215,6 +216,7 @@
         public DateTimeOffset CreatedAt { get; set; }
         public string? CreatedByName { get; set; }
         public string? DocumentDate { get; set; }
+        public string? Comment { get; set; }
         public List<LinkResponse> Links { get; set; } = [];
     }
     private record LinkResponse { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }

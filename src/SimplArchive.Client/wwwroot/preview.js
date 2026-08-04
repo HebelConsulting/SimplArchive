@@ -159,16 +159,19 @@ export function setAnnotations(annos) {
         const p = state.pages[a.pageIndex];
         if (!p) continue;
 
-        // Markup shapes (highlight / rectangle / arrow, ADR "Annotation markup") vs the original sticky note.
+        // Markup shapes (highlight / rectangle / arrow / stamp / strikethrough / text-box / freehand, ADR 0525)
+        // vs the original sticky note.
         if (a.kind && a.kind > 0) {
-            const s = shapeEl(a.kind);
-            layoutShape(s, a.kind, a.x, a.y, a.w || 0, a.h || 0, a.color);
+            const s = a.kind === 7 ? freehandEl(a.points, a.color) : shapeEl(a.kind);
+            if (a.kind !== 7) layoutShape(s, a.kind, a.x, a.y, a.w || 0, a.h || 0, a.color);
             s.style.pointerEvents = 'auto';
+            // Stamp + text-box show their caption/content as a centered label.
+            if (a.kind === 4 || a.kind === 6) s.textContent = a.text || '';
             s.title = a.text || '';
             if (a.selected) s.classList.add('wb-pv-selected');
             attachInteract(s, p, a, false);
-            // A box shape (highlight/rectangle) gets a corner resize grip; arrows (kind 3) are move-only.
-            if (a.canEdit && (a.kind === 1 || a.kind === 2)) {
+            // Box shapes get a corner resize grip; arrows (3) + freehand (7) are move-only.
+            if (a.canEdit && (a.kind === 1 || a.kind === 2 || a.kind === 4 || a.kind === 5 || a.kind === 6)) {
                 const grip = el('div', 'wb-pv-shape-grip');
                 makeShapeResizable(grip, s, p, a);
                 s.appendChild(grip);
@@ -323,7 +326,23 @@ function shapeEl(kind) {
         svg.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'polygon'));
         return svg;
     }
-    return el('div', 'wb-pv-shape ' + (kind === 1 ? 'wb-pv-hl' : 'wb-pv-rect'));
+    const cls = kind === 1 ? 'wb-pv-hl' : kind === 4 ? 'wb-pv-stamp' : kind === 5 ? 'wb-pv-strike' : kind === 6 ? 'wb-pv-textbox' : 'wb-pv-rect';
+    return el('div', 'wb-pv-shape ' + cls);
+}
+
+// A freehand stroke as a full-page SVG polyline built from normalized "x,y x,y …" points (ADR 0525). Move-only.
+function freehandEl(points, color) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'wb-pv-shape wb-pv-freehand');
+    svg.setAttribute('viewBox', '0 0 100 100');
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.style.left = '0'; svg.style.top = '0'; svg.style.width = '100%'; svg.style.height = '100%';
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    const pts = (points || '').split(' ').map(pr => { const [px, py] = pr.split(','); return `${(+px) * 100},${(+py) * 100}`; }).join(' ');
+    line.setAttribute('points', pts);
+    if (color) line.style.stroke = color;
+    svg.appendChild(line);
+    return svg;
 }
 
 // Positions/sizes a shape from normalized geometry (x,y = start/top-left; w,h = signed extent).
@@ -345,7 +364,11 @@ function layoutShape(elm, kind, x, y, w, h, color) {
     const left = Math.min(x, x + w), top = Math.min(y, y + h);
     elm.style.left = `${left * 100}%`; elm.style.top = `${top * 100}%`;
     elm.style.width = `${Math.abs(w) * 100}%`; elm.style.height = `${Math.abs(h) * 100}%`;
-    if (color) { if (kind === 1) { elm.style.background = color; } else { elm.style.borderColor = color; } }
+    if (color) {
+        if (kind === 1) { elm.style.background = color; }         // highlight fill
+        else if (kind === 5) { elm.style.color = color; }         // strikethrough: the CSS mid-line uses currentColor
+        else { elm.style.borderColor = color; }                   // rectangle / stamp / text-box border
+    }
 }
 
 // Draw a shape by dragging on a page overlay (ADR "Annotation markup"). On release, calls back with the

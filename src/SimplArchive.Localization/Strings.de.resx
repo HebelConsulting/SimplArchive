@@ -325,7 +325,7 @@
     <value>Kommentar (optional)</value>
   </data>
   <data name="FilingCommentPlaceholder" xml:space="preserve">
-    <value>Leer lassen für "Neues Dokument abgelegt."</value>
+    <value>Warum diese Version? (optional)</value>
   </data>
   <data name="FilingFile" xml:space="preserve">
     <value>Ablegen</value>
@@ -527,6 +527,9 @@
   </data>
   <data name="VerColBy" xml:space="preserve">
     <value>Von</value>
+  </data>
+  <data name="VerColComment" xml:space="preserve">
+    <value>Kommentar</value>
   </data>
   <data name="VerColActions" xml:space="preserve">
     <value>Aktionen</value>

@@ -325,7 +325,7 @@
     <value>Comment (optional)</value>
   </data>
   <data name="FilingCommentPlaceholder" xml:space="preserve">
-    <value>Leave blank to post "Filed a new document."</value>
+    <value>Why this version? (optional)</value>
   </data>
   <data name="FilingFile" xml:space="preserve">
     <value>File</value>
@@ -527,6 +527,9 @@
   </data>
   <data name="VerColBy" xml:space="preserve">
     <value>By</value>
+  </data>
+  <data name="VerColComment" xml:space="preserve">
+    <value>Comment</value>
   </data>
   <data name="VerColActions" xml:space="preserve">
     <value>Actions</value>

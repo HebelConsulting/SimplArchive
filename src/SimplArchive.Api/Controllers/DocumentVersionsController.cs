@@ -61,6 +61,7 @@ public class DocumentVersionsController : ControllerBase
         IWormLockService wormLock,
         IStorageQuotaService storageQuota,
         IAuditRecorder audit,
+        IUserSystemRightsResolver userSystemRights,
         IDocumentVersionComparer comparer)
     {
         _dbContext = dbContext;
@@ -76,7 +77,27 @@ public class DocumentVersionsController : ControllerBase
         _wormLock = wormLock;
         _storageQuota = storageQuota;
         _audit = audit;
+        _userSystemRights = userSystemRights;
         _comparer = comparer;
+    }
+
+    private readonly IUserSystemRightsResolver _userSystemRights;
+
+    // The caller's effective CanImport (ADR 0403/0520) — a User's own-∪-groups rights or a ServiceAccount's column.
+    // Gates backdating a version's filing date (a past FiledAt); an omitted/now FiledAt needs only CanEditContent.
+    private async Task<bool> HasImportRightAsync(CancellationToken cancellationToken)
+    {
+        if (_currentUserAccessor.UserId is { } userId)
+        {
+            return (await _userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken)).CanImport;
+        }
+
+        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
+        {
+            return await _dbContext.ServiceAccounts.Where(s => s.Id == serviceAccountId).Select(s => s.CanImport).SingleOrDefaultAsync(cancellationToken);
+        }
+
+        return false;
     }
 
     private readonly IDocumentVersionComparer _comparer;
@@ -134,6 +155,14 @@ public class DocumentVersionsController : ControllerBase
         public string? DocumentDate { get; set; }
 
         public string? FileExtension { get; set; }
+
+        // Optional filing date (ADR 0520) — when supplied, drives BOTH the object-key year
+        // (tenants/{t}/{filingYear}/…) and DocumentVersion.CreatedAt, so an import honours the original filing date
+        // (e.g. 2003) instead of "now". Omitted → now. A PAST filing date requires CanImport (backdating).
+        public string? FiledAt { get; set; }
+
+        // Optional per-version comment (ADR 0528) — the "why this revision" note, shown in the versions dialog.
+        public string? Comment { get; set; }
     }
 
     [HttpPost]
@@ -164,11 +193,29 @@ public class DocumentVersionsController : ControllerBase
         var fileExtension = string.IsNullOrWhiteSpace(request?.FileExtension)
             ? Path.GetExtension(document.Name)
             : request.FileExtension;
-        var objectKey = ObjectKeyBuilder.Build(document.TenantId, DateTimeOffset.UtcNow, fileExtension);
+        // Filing date (ADR 0520): a supplied FiledAt drives BOTH the object-key year (tenants/{t}/{filingYear}/…)
+        // and CreatedAt, so an import honours the original filing date (e.g. 2003); omitted → now. Backdating (a
+        // filing date before today) is an import concern and requires CanImport.
+        var now = DateTimeOffset.UtcNow;
+        var filedAt = now;
+        if (!string.IsNullOrWhiteSpace(request?.FiledAt))
+        {
+            if (!DateTimeOffset.TryParse(request.FiledAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out filedAt))
+            {
+                throw new InvalidFilingDateException($"'{request.FiledAt}' is not a valid filing date/time.");
+            }
+
+            if (filedAt.UtcDateTime.Date < now.UtcDateTime.Date && !await HasImportRightAsync(cancellationToken))
+            {
+                throw new FilingDateBackdatingRequiresImportRightException();
+            }
+        }
+
+        var objectKey = ObjectKeyBuilder.Build(document.TenantId, filedAt, fileExtension);
         var uploadUrl = await _objectStorageClient.GetPresignedUploadUrlAsync(objectKey, PresignedUrlExpiry, cancellationToken);
 
         var (createdByUserId, createdByServiceAccountId) = GetCallerIdentity();
-        var createdAt = DateTimeOffset.UtcNow;
+        var createdAt = filedAt;
 
         // Issuing date: the client-supplied date, else the filing date (CreatedAt) by default.
         DateOnly documentDate;
@@ -192,6 +239,7 @@ public class DocumentVersionsController : ControllerBase
             CreatedByServiceAccountId = createdByServiceAccountId,
             CreatedAt = createdAt,
             DocumentDate = documentDate,
+            Comment = string.IsNullOrWhiteSpace(request?.Comment) ? null : request.Comment.Trim(),
         };
 
         _dbContext.DocumentVersions.Add(version);
@@ -238,12 +286,15 @@ public class DocumentVersionsController : ControllerBase
         // The file extension (e.g. ".tif"), derived from the object key — a read-only system field now that
         // Document.Name no longer carries it (ADR "Extension off Document.Name, derived from the object key").
         public string FileExtension { get; set; } = "";
+
+        // The optional per-version comment (ADR 0528) — the "why this revision" note, shown in the versions dialog.
+        public string? Comment { get; set; }
     }
 
     private record VersionRow(
         Guid Id, Guid DocumentId, DocumentVersionStatus Status, int? VersionNumber, string ObjectKey,
         string? Sha256Hash, DateTimeOffset CreatedAt, DateOnly DocumentDate,
-        Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, string? OcrLanguages);
+        Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, string? OcrLanguages, string? Comment);
 
     public class DocumentVersionListResource : HypermediaResource
     {
@@ -312,7 +363,7 @@ public class DocumentVersionsController : ControllerBase
         var fetched = await query
             .OrderBy(v => v.CreatedAt).ThenBy(v => v.Id)
             .Take(pageSize + 1)
-            .Select(v => new VersionRow(v.Id, v.DocumentId, v.Status, v.VersionNumber, v.ObjectKey, v.Sha256Hash, v.CreatedAt, v.DocumentDate, v.CreatedByUserId, v.CreatedByServiceAccountId, v.OcrLanguages))
+            .Select(v => new VersionRow(v.Id, v.DocumentId, v.Status, v.VersionNumber, v.ObjectKey, v.Sha256Hash, v.CreatedAt, v.DocumentDate, v.CreatedByUserId, v.CreatedByServiceAccountId, v.OcrLanguages, v.Comment))
             .ToListAsync(cancellationToken);
 
         var (page, hasMore) = Cursor.Split(fetched, pageSize);
@@ -609,8 +660,15 @@ public class DocumentVersionsController : ControllerBase
         public double Height { get; set; }
     }
 
+    // Optional finalize body — carries the version comment (ADR 0528) when the caller only has it at finalize time
+    // (the browser drop-upload creates the version first, then finalizes with the filing comment).
+    public class FinalizeVersionRequest
+    {
+        public string? Comment { get; set; }
+    }
+
     [HttpPut("{versionId:guid}")]
-    public async Task<IActionResult> Finalize(Guid documentId, Guid versionId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Finalize(Guid documentId, Guid versionId, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] FinalizeVersionRequest? request, CancellationToken cancellationToken)
     {
         var version = await _dbContext.DocumentVersions.SingleOrDefaultAsync(v => v.Id == versionId && v.DocumentId == documentId, cancellationToken);
 
@@ -622,6 +680,12 @@ public class DocumentVersionsController : ControllerBase
         if (!await CanEditContentAsync(documentId, cancellationToken))
         {
             return Forbid();
+        }
+
+        // Set the version comment from the finalize body when it wasn't given at create (don't overwrite one).
+        if (!string.IsNullOrWhiteSpace(request?.Comment) && string.IsNullOrEmpty(version.Comment))
+        {
+            version.Comment = request.Comment.Trim();
         }
 
         // Storage-quota enforcement (ADR "Per-tenant storage quota"): reject a not-yet-confirmed upload that would
@@ -646,7 +710,7 @@ public class DocumentVersionsController : ControllerBase
         var wasPending = version.Status == DocumentVersionStatus.Pending;
         await _finalizer.FinalizeAsync(version, cancellationToken);
 
-        var row = new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages);
+        var row = new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment);
 
         var documentName = await LoadDocumentNameAsync(documentId, cancellationToken);
 
@@ -705,7 +769,7 @@ public class DocumentVersionsController : ControllerBase
         }
 
         var name = await LoadDocumentNameAsync(documentId, cancellationToken);
-        var row = new VersionRow(source.Id, documentId, source.Status, source.VersionNumber, source.ObjectKey, source.Sha256Hash, source.CreatedAt, source.DocumentDate, source.CreatedByUserId, source.CreatedByServiceAccountId, source.OcrLanguages);
+        var row = new VersionRow(source.Id, documentId, source.Status, source.VersionNumber, source.ObjectKey, source.Sha256Hash, source.CreatedAt, source.DocumentDate, source.CreatedByUserId, source.CreatedByServiceAccountId, source.OcrLanguages, source.Comment);
         return Ok(await BuildResourceAsync(row, name, cancellationToken));
     }
 
@@ -754,7 +818,7 @@ public class DocumentVersionsController : ControllerBase
         await _queue.EnqueueAsync(documentId, cancellationToken);
         await _wormLock.ReconcileAsync(documentId, cancellationToken); // the retention anchor (document date) moved
 
-        var row = new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages);
+        var row = new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment);
         var documentName = await LoadDocumentNameAsync(documentId, cancellationToken);
         await _audit.RecordAsync(AuditActions.DocumentDateChanged, "Document", documentId, documentName, $"Document date set to {date:yyyy-MM-dd} (version {version.VersionNumber})", cancellationToken: cancellationToken);
         return Ok(await BuildResourceAsync(row, documentName, cancellationToken));
@@ -775,7 +839,7 @@ public class DocumentVersionsController : ControllerBase
 
         var version = await _dbContext.DocumentVersions
             .Where(v => v.Id == versionId && v.DocumentId == documentId)
-            .Select(v => new { v.Status, v.VersionNumber, v.ObjectKey, v.Sha256Hash, v.CreatedAt, v.DocumentDate, v.CreatedByUserId, v.CreatedByServiceAccountId, v.OcrLanguages })
+            .Select(v => new { v.Status, v.VersionNumber, v.ObjectKey, v.Sha256Hash, v.CreatedAt, v.DocumentDate, v.CreatedByUserId, v.CreatedByServiceAccountId, v.OcrLanguages, v.Comment })
             .SingleOrDefaultAsync(cancellationToken);
 
         if (version is null)
@@ -783,7 +847,7 @@ public class DocumentVersionsController : ControllerBase
             return null;
         }
 
-        return new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages);
+        return new VersionRow(versionId, documentId, version.Status, version.VersionNumber, version.ObjectKey, version.Sha256Hash, version.CreatedAt, version.DocumentDate, version.CreatedByUserId, version.CreatedByServiceAccountId, version.OcrLanguages, version.Comment);
     }
 
     // The document's Name — used as the download filename (never the opaque object key). Loaded once per
@@ -868,6 +932,7 @@ public class DocumentVersionsController : ControllerBase
             DocumentDate = version.DocumentDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             OcrLanguages = version.OcrLanguages,
             FileExtension = Path.GetExtension(version.ObjectKey),
+            Comment = version.Comment,
             Links = links,
         };
     }

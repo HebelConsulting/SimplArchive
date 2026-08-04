@@ -110,6 +110,8 @@ public sealed class OpenSearchIndexRebuilder
                     name = new { type = "text" },
                     indexValues = new { type = "text" },
                     content = new { type = "text" },
+                    // Annotation text — note bodies, stamp captions, text-box content (ADR 0526), searchable.
+                    annotations = new { type = "text" },
                     allowedPrincipals = new { type = "keyword" },
                     // Typed index-field values for filtering (ADR 0043). Nested so a filter matches name +
                     // typed value on the *same* field; text always present, number/date/bool when parseable.

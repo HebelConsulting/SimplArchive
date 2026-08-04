@@ -33,18 +33,21 @@ public partial class DocumentAnnotationsController : ControllerBase
     private readonly IEffectiveRightsCalculator _effectiveRightsCalculator;
     private readonly ICurrentServiceAccountAccessor _currentServiceAccountAccessor;
     private readonly ICurrentUserAccessor _currentUserAccessor;
+    private readonly IDocumentIndexQueue _indexQueue;
 
     public DocumentAnnotationsController(
         SimplArchiveDbContext dbContext,
         IEffectiveRightsCalculator effectiveRightsCalculator,
         ICurrentServiceAccountAccessor currentServiceAccountAccessor,
         ICurrentUserAccessor currentUserAccessor,
+        IDocumentIndexQueue indexQueue,
         IAuditRecorder audit)
     {
         _dbContext = dbContext;
         _effectiveRightsCalculator = effectiveRightsCalculator;
         _currentServiceAccountAccessor = currentServiceAccountAccessor;
         _currentUserAccessor = currentUserAccessor;
+        _indexQueue = indexQueue;
         _audit = audit;
     }
 
@@ -66,6 +69,8 @@ public partial class DocumentAnnotationsController : ControllerBase
         // The shape extent (null for a Note); box size for Highlight/Rectangle, signed end-offset for an Arrow.
         public double? Width { get; set; }
         public double? Height { get; set; }
+        // A Freehand stroke's normalized path ("x,y x,y …"); null for every other kind (ADR 0525).
+        public string? Points { get; set; }
         public string Text { get; set; } = "";
         public string Color { get; set; } = "";
         public string AuthorName { get; set; } = "";
@@ -90,11 +95,12 @@ public partial class DocumentAnnotationsController : ControllerBase
     public class CreateAnnotationRequest
     {
         public int PageIndex { get; set; }
-        public int Kind { get; set; } // 0 = Note (default); 1/2/3 = Highlight/Rectangle/Arrow
+        public int Kind { get; set; } // 0=Note; 1/2/3=Highlight/Rectangle/Arrow; 4/5/6/7=Stamp/Strikethrough/TextBox/Freehand
         public double PositionX { get; set; }
         public double PositionY { get; set; }
         public double? Width { get; set; }
         public double? Height { get; set; }
+        public string? Points { get; set; } // Freehand only: "x,y x,y …"
         public string Text { get; set; } = "";
         public string Color { get; set; } = "";
     }
@@ -106,13 +112,14 @@ public partial class DocumentAnnotationsController : ControllerBase
         public double PositionY { get; set; }
         public double? Width { get; set; }
         public double? Height { get; set; }
+        public string? Points { get; set; } // Freehand only: "x,y x,y …"
         public string Text { get; set; } = "";
         public string Color { get; set; } = "";
     }
 
     private record AnnotationRow(
         Guid Id, int PageIndex, AnnotationKind Kind, double PositionX, double PositionY, double? Width, double? Height,
-        string Text, string Color,
+        string? Points, string Text, string Color,
         Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt,
         Guid ConcurrencyToken, string? AuthorName);
 
@@ -136,7 +143,7 @@ public partial class DocumentAnnotationsController : ControllerBase
             .Where(a => a.DocumentVersionId == versionId)
             .OrderBy(a => a.PageIndex).ThenBy(a => a.CreatedAt).ThenBy(a => a.Id)
             .Select(a => new AnnotationRow(
-                a.Id, a.PageIndex, a.Kind, a.PositionX, a.PositionY, a.Width, a.Height, a.Text, a.Color,
+                a.Id, a.PageIndex, a.Kind, a.PositionX, a.PositionY, a.Width, a.Height, a.Points, a.Text, a.Color,
                 a.CreatedByUserId, a.CreatedByServiceAccountId, a.CreatedAt, a.UpdatedAt, a.ConcurrencyToken,
                 a.CreatedByUserId != null
                     ? _dbContext.Users.Where(u => u.Id == a.CreatedByUserId).Select(u => u.DisplayName).FirstOrDefault()
@@ -182,7 +189,7 @@ public partial class DocumentAnnotationsController : ControllerBase
         }
 
         var kind = (AnnotationKind)request.Kind;
-        ValidateAnnotation(kind, request.PageIndex, request.PositionX, request.PositionY, request.Width, request.Height, request.Text, request.Color);
+        var points = ValidateAnnotation(kind, request.PageIndex, request.PositionX, request.PositionY, request.Width, request.Height, request.Points, request.Text, request.Color);
 
         var (createdByUserId, createdByServiceAccountId) = GetCallerIdentity();
         var now = DateTimeOffset.UtcNow;
@@ -198,9 +205,10 @@ public partial class DocumentAnnotationsController : ControllerBase
             PositionX = request.PositionX,
             PositionY = request.PositionY,
             // A note may now carry an optional size so it renders as an always-visible box (ADR "Post-it note
-            // boxes"); a shape always carries one. Both persist the caller's extent verbatim.
-            Width = request.Width,
-            Height = request.Height,
+            // boxes"); a box shape always carries one; Freehand carries Points instead (null extent).
+            Width = kind == AnnotationKind.Freehand ? null : request.Width,
+            Height = kind == AnnotationKind.Freehand ? null : request.Height,
+            Points = points,
             Text = request.Text.Trim(),
             Color = request.Color,
             CreatedByUserId = createdByUserId,
@@ -213,6 +221,7 @@ public partial class DocumentAnnotationsController : ControllerBase
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await _audit.RecordAsync(AuditActions.AnnotationAdded, "Document", documentId, await DocNameAsync(documentId, cancellationToken), $"Annotation added on page {request.PageIndex + 1}", cancellationToken: cancellationToken);
+        await _indexQueue.EnqueueAsync(documentId, cancellationToken); // annotation text is searchable (ADR 0526)
 
         var authorName = await ResolveAuthorNameAsync(createdByUserId, createdByServiceAccountId, cancellationToken);
         var resource = ToResource(documentId, versionId, ToRow(annotation, authorName), canEditContent: true);
@@ -245,15 +254,16 @@ public partial class DocumentAnnotationsController : ControllerBase
         }
 
         // Kind is fixed at creation — an edit moves/resizes/re-colours/relabels, keeping the same kind.
-        ValidateAnnotation(annotation.Kind, request.PageIndex, request.PositionX, request.PositionY, request.Width, request.Height, request.Text, request.Color);
+        var points = ValidateAnnotation(annotation.Kind, request.PageIndex, request.PositionX, request.PositionY, request.Width, request.Height, request.Points, request.Text, request.Color);
 
         var ifMatch = RequireIfMatch();
 
         annotation.PageIndex = request.PageIndex;
         annotation.PositionX = request.PositionX;
         annotation.PositionY = request.PositionY;
-        annotation.Width = request.Width;
-        annotation.Height = request.Height;
+        annotation.Width = annotation.Kind == AnnotationKind.Freehand ? null : request.Width;
+        annotation.Height = annotation.Kind == AnnotationKind.Freehand ? null : request.Height;
+        annotation.Points = points;
         annotation.Text = request.Text.Trim();
         annotation.Color = request.Color;
         annotation.UpdatedAt = DateTimeOffset.UtcNow;
@@ -263,6 +273,7 @@ public partial class DocumentAnnotationsController : ControllerBase
         await SaveWithConcurrencyAsync(cancellationToken);
 
         await _audit.RecordAsync(AuditActions.AnnotationEdited, "Document", documentId, await DocNameAsync(documentId, cancellationToken), "Annotation edited", cancellationToken: cancellationToken);
+        await _indexQueue.EnqueueAsync(documentId, cancellationToken); // annotation text is searchable (ADR 0526)
 
         var authorName = await ResolveAuthorNameAsync(annotation.CreatedByUserId, annotation.CreatedByServiceAccountId, cancellationToken);
         SetETag(annotation.ConcurrencyToken);
@@ -300,6 +311,7 @@ public partial class DocumentAnnotationsController : ControllerBase
         await SaveWithConcurrencyAsync(cancellationToken);
 
         await _audit.RecordAsync(AuditActions.AnnotationRemoved, "Document", documentId, await DocNameAsync(documentId, cancellationToken), "Annotation removed", cancellationToken: cancellationToken);
+        await _indexQueue.EnqueueAsync(documentId, cancellationToken); // annotation text is searchable (ADR 0526)
 
         return NoContent();
     }
@@ -311,7 +323,10 @@ public partial class DocumentAnnotationsController : ControllerBase
     private Task<string?> DocNameAsync(Guid documentId, CancellationToken cancellationToken) =>
         _dbContext.Documents.Where(d => d.Id == documentId).Select(d => d.Name).FirstOrDefaultAsync(cancellationToken);
 
-    private void ValidateAnnotation(AnnotationKind kind, int pageIndex, double x, double y, double? width, double? height, string text, string color)
+    // Validates an annotation and returns the canonical Freehand points to store (null for every other kind).
+    // Kinds (ADR 0525): Note is a point + text; Stamp/TextBox are boxes carrying a caption/text; Highlight/
+    // Rectangle/Strikethrough/Arrow are boxes; Freehand is a stroke path (Points), no extent, no text.
+    private string? ValidateAnnotation(AnnotationKind kind, int pageIndex, double x, double y, double? width, double? height, string? points, string text, string color)
     {
         if (!Enum.IsDefined(kind))
         {
@@ -333,31 +348,67 @@ public partial class DocumentAnnotationsController : ControllerBase
             throw new InvalidAnnotationColorException();
         }
 
+        if (kind == AnnotationKind.Freehand)
+        {
+            // A stroke path of ≥ 2 normalized points; no box extent, no text.
+            return CanonicalizePoints(points);
+        }
+
+        // A caption-bearing box (Stamp/TextBox) or a plain Note requires text; the other shapes don't.
+        if (kind is AnnotationKind.Note or AnnotationKind.Stamp or AnnotationKind.TextBox && string.IsNullOrWhiteSpace(text))
+        {
+            throw new EmptyAnnotationException();
+        }
+
         if (kind == AnnotationKind.Note)
         {
-            // A note carries text (shapes are optional-label markup with no empty-text rule).
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                throw new EmptyAnnotationException();
-            }
-
-            // A note's size is optional (a legacy note has none); when present it must be a normalized extent
-            // in [-1,1], matching the CK_DocumentAnnotations_Extent DB constraint (ADR "Post-it note boxes").
+            // A note's size is optional (a legacy note has none); when present it must be a normalized extent in
+            // [-1,1], matching the CK_DocumentAnnotations_Extent DB constraint (ADR "Post-it note boxes").
             if ((width is { } nw && (nw < -1 || nw > 1)) || (height is { } nh && (nh < -1 || nh > 1)))
             {
                 throw new InvalidAnnotationExtentException();
             }
 
-            return;
+            return null;
         }
 
-        // A shape needs a normalized extent in [-1,1] that isn't degenerate (near-zero in both dimensions).
+        // A box shape needs a normalized extent in [-1,1] that isn't degenerate (near-zero in both dimensions).
         if (width is not { } w || height is not { } h
             || w < -1 || w > 1 || h < -1 || h > 1
             || (Math.Abs(w) < 0.001 && Math.Abs(h) < 0.001))
         {
             throw new InvalidAnnotationExtentException();
         }
+
+        return null;
+    }
+
+    // Parse a Freehand path "x,y x,y …" into ≥ 2 normalized points (each in [0,1]) and re-emit it canonically
+    // (invariant culture, 4 decimals). Throws InvalidAnnotationPoints on a malformed/too-short/out-of-range path.
+    private static string CanonicalizePoints(string? points)
+    {
+        var pairs = (points ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (pairs.Length < 2)
+        {
+            throw new InvalidAnnotationPointsException();
+        }
+
+        var canonical = new List<string>(pairs.Length);
+        foreach (var pair in pairs)
+        {
+            var xy = pair.Split(',');
+            if (xy.Length != 2
+                || !double.TryParse(xy[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var px)
+                || !double.TryParse(xy[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var py)
+                || px < 0 || px > 1 || py < 0 || py > 1)
+            {
+                throw new InvalidAnnotationPointsException();
+            }
+
+            canonical.Add($"{px.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)},{py.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}");
+        }
+
+        return string.Join(' ', canonical);
     }
 
     private Guid RequireIfMatch()
@@ -407,6 +458,7 @@ public partial class DocumentAnnotationsController : ControllerBase
             PositionY = row.PositionY,
             Width = row.Width,
             Height = row.Height,
+            Points = row.Points,
             Text = row.Text,
             Color = row.Color,
             AuthorName = row.AuthorName ?? "Unknown",
@@ -420,7 +472,7 @@ public partial class DocumentAnnotationsController : ControllerBase
     }
 
     private static AnnotationRow ToRow(DocumentAnnotation a, string? authorName) => new(
-        a.Id, a.PageIndex, a.Kind, a.PositionX, a.PositionY, a.Width, a.Height, a.Text, a.Color,
+        a.Id, a.PageIndex, a.Kind, a.PositionX, a.PositionY, a.Width, a.Height, a.Points, a.Text, a.Color,
         a.CreatedByUserId, a.CreatedByServiceAccountId, a.CreatedAt, a.UpdatedAt, a.ConcurrencyToken, authorName);
 
     private async Task<bool> VersionExistsAsync(Guid documentId, Guid versionId, CancellationToken cancellationToken) =>

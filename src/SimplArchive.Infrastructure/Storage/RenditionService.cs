@@ -439,16 +439,6 @@ public class RenditionService : IDocumentPreviewService
     });
 
     // Replaces the object key's file extension with a derived suffix, keeping it in the same directory — the
-    // scheme all derived artefacts (renditions, per-page images, text-layout) share.
-    private static string WithSuffix(string objectKey, string suffix)
-    {
-        var lastSlash = objectKey.LastIndexOf('/');
-        var directory = lastSlash >= 0 ? objectKey[..(lastSlash + 1)] : string.Empty;
-        var fileName = lastSlash >= 0 ? objectKey[(lastSlash + 1)..] : objectKey;
-
-        var lastDot = fileName.LastIndexOf('.');
-        var stem = lastDot >= 0 ? fileName[..lastDot] : fileName;
-
-        return $"{directory}{stem}{suffix}";
-    }
+    // scheme all derived artefacts (renditions, per-page images, text-layout) share (ObjectKeyBuilder, issue #338).
+    private static string WithSuffix(string objectKey, string suffix) => ObjectKeyBuilder.DerivedKey(objectKey, suffix);
 }
