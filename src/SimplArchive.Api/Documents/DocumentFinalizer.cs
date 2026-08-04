@@ -348,7 +348,10 @@ public class DocumentFinalizer
 
         var childId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
-        var objectKey = ObjectKeyBuilder.Build(email.TenantId, now, extension);
+        // The key groups by the new child document (ADR 0530): its filing year + a fresh storage folder, version id leaf.
+        var storageFolderId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        var objectKey = ObjectKeyBuilder.Build(email.TenantId, now, storageFolderId, versionId, extension);
 
         await using (var content = new MemoryStream(attachment.Content))
         {
@@ -364,11 +367,12 @@ public class DocumentFinalizer
             CreatedByUserId = createdByUserId,
             CreatedByServiceAccountId = createdByServiceAccountId,
             CreatedAt = now,
+            StorageFolderId = storageFolderId,
         };
 
         var version = new DocumentVersion
         {
-            Id = Guid.NewGuid(),
+            Id = versionId,
             TenantId = email.TenantId,
             DocumentId = childId,
             Status = DocumentVersionStatus.Confirmed,

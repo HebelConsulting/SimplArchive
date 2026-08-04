@@ -170,7 +170,7 @@ public class DocumentVersionsController : ControllerBase
     {
         var document = await _dbContext.Documents
             .Where(d => d.Id == documentId)
-            .Select(d => new { d.TenantId, d.Name })
+            .Select(d => new { d.TenantId, d.Name, d.CreatedAt, d.StorageFolderId })
             .SingleOrDefaultAsync(cancellationToken);
 
         if (document is null)
@@ -211,7 +211,11 @@ public class DocumentVersionsController : ControllerBase
             }
         }
 
-        var objectKey = ObjectKeyBuilder.Build(document.TenantId, filedAt, fileExtension);
+        // The key groups by the document's storage folder (ADR 0530), bucketed by the VERSION's filing year (ADR
+        // 0520) — versions of one year share a folder; the new version's id is the leaf. A backdated filing date
+        // (needs CanImport) therefore also drives the bucket year, matching the version's CreatedAt.
+        var versionId = Guid.NewGuid();
+        var objectKey = ObjectKeyBuilder.Build(document.TenantId, filedAt, document.StorageFolderId, versionId, fileExtension);
         var uploadUrl = await _objectStorageClient.GetPresignedUploadUrlAsync(objectKey, PresignedUrlExpiry, cancellationToken);
 
         var (createdByUserId, createdByServiceAccountId) = GetCallerIdentity();
@@ -230,7 +234,7 @@ public class DocumentVersionsController : ControllerBase
 
         var version = new DocumentVersion
         {
-            Id = Guid.NewGuid(),
+            Id = versionId,
             TenantId = document.TenantId,
             DocumentId = documentId,
             Status = DocumentVersionStatus.Pending,

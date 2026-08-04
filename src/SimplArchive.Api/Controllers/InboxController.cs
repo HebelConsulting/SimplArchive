@@ -546,8 +546,11 @@ public class InboxController : ControllerBase
                 draft.OcrLanguages is { Count: > 0 } langs ? string.Join("+", langs) : null);
         }
 
-        // Move the object out of the inbox to a normal document key (server-side copy within the bucket).
-        var objectKey = ObjectKeyBuilder.Build(tenantId, now, extension);
+        // Move the object out of the inbox to a normal document key (server-side copy within the bucket). The key
+        // groups by the new document (ADR 0530): its filing year + a fresh storage folder, with the version id leaf.
+        var storageFolderId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        var objectKey = ObjectKeyBuilder.Build(tenantId, now, storageFolderId, versionId, extension);
         await _objectStorageClient.CopyObjectAsync(inboxKey, objectKey, cancellationToken);
         await _objectStorageClient.DeleteObjectAsync(inboxKey, cancellationToken);
 
@@ -560,11 +563,12 @@ public class InboxController : ControllerBase
             Name = documentName,
             CreatedByUserId = userId,
             CreatedAt = now,
+            StorageFolderId = storageFolderId,
         };
 
         var version = new DocumentVersion
         {
-            Id = Guid.NewGuid(),
+            Id = versionId,
             TenantId = tenantId,
             DocumentId = documentId,
             Status = DocumentVersionStatus.Pending,
@@ -622,13 +626,16 @@ public class InboxController : ControllerBase
         }
 
         var now = DateTimeOffset.UtcNow;
-        var objectKey = ObjectKeyBuilder.Build(tenantId, now, Path.GetExtension(name));
+        // The key groups by the document's storage folder (ADR 0530), bucketed by the VERSION's filing year (ADR
+        // 0520) — filed now — with the new version id as the leaf.
+        var versionId = Guid.NewGuid();
+        var objectKey = ObjectKeyBuilder.Build(tenantId, now, document.StorageFolderId, versionId, Path.GetExtension(name));
         await _objectStorageClient.CopyObjectAsync(inboxKey, objectKey, cancellationToken);
         await _objectStorageClient.DeleteObjectAsync(inboxKey, cancellationToken);
 
         var version = new DocumentVersion
         {
-            Id = Guid.NewGuid(),
+            Id = versionId,
             TenantId = tenantId,
             DocumentId = documentId,
             Status = DocumentVersionStatus.Pending,

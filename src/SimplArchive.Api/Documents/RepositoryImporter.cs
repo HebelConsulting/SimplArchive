@@ -571,11 +571,17 @@ public sealed class RepositoryImporter
             throw new ArchiveBlobCorruptException();
         }
 
-        var objectKey = ObjectKeyBuilder.Build(tenantId, version.FiledAt, version.FileExtension);
+        // The key groups by the imported document's storage folder (ADR 0530), bucketed by the VERSION's filing
+        // year (ADR 0520). The StorageFolderId comes from the document — freshly added earlier in this import
+        // (tracked in Local) OR an existing document we're appending a version onto (NewVersion leaf-merge, ADR
+        // "Leaf-document merge modes"), which isn't in the change tracker — so read it from whichever applies.
+        var newVersionId = Guid.NewGuid();
+        var storageFolderId = _dbContext.Documents.Local.FirstOrDefault(d => d.Id == newDocId)?.StorageFolderId
+            ?? await _dbContext.Documents.Where(d => d.Id == newDocId).Select(d => d.StorageFolderId).FirstAsync(cancellationToken);
+        var objectKey = ObjectKeyBuilder.Build(tenantId, version.FiledAt, storageFolderId, newVersionId, version.FileExtension);
         await _objectStorage.PutObjectAsync(objectKey, new MemoryStream(bytes), "application/octet-stream", cancellationToken);
 
         var (userId, svcId) = ResolveCreator(version.CreatedByUserId, version.CreatedByServiceAccountId, userMap);
-        var newVersionId = Guid.NewGuid();
         _dbContext.DocumentVersions.Add(new DocumentVersion
         {
             Id = newVersionId,

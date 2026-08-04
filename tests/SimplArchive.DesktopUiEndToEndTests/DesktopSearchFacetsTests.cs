@@ -32,11 +32,22 @@ public class DesktopSearchFacetsTests
         var a2 = await UploadClassifiedAsync(api, repo.Id, $"a2-{suffix}", word, maskA.Id);
         var b1 = await UploadClassifiedAsync(api, repo.Id, $"b1-{suffix}", word, maskB.Id);
 
-        // Wait until all three are content-indexed.
+        // Wait until all three are content-indexed AND their mask assignments have re-indexed. SetMaskAsync
+        // re-indexes asynchronously and separately from the content, so the document-type facet counts settle a
+        // beat after the docs become searchable — otherwise b1 is transiently still counted under its upload-time
+        // default mask, inflating maskA's count (a real flake: expected 2, actual 3).
         await PollAsync(async () =>
         {
-            var ids = (await api.SearchWithFiltersAsync($"q={word}")).Select(r => r.Id).ToHashSet();
-            return ids.Contains(a1) && ids.Contains(a2) && ids.Contains(b1);
+            var facets = await api.SearchWithFacetsAsync($"q={word}");
+            var ids = facets.Results.Select(r => r.Id).ToHashSet();
+            if (!(ids.Contains(a1) && ids.Contains(a2) && ids.Contains(b1)))
+            {
+                return false;
+            }
+
+            var aCount = facets.Facets.DocumentTypes.Where(f => f.Value == maskA.Name).Select(f => f.Count).FirstOrDefault();
+            var bCount = facets.Facets.DocumentTypes.Where(f => f.Value == maskB.Name).Select(f => f.Count).FirstOrDefault();
+            return aCount == 2 && bCount == 1;
         });
 
         var page = await api.SearchWithFacetsAsync($"q={word}");

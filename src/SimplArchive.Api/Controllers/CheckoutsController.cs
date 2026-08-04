@@ -386,12 +386,15 @@ public class CheckoutsController : ControllerBase
         var currentExtension = System.IO.Path.GetExtension(currentVersion?.ObjectKey ?? "");
 
         var now = DateTimeOffset.UtcNow;
-        var objectKey = ObjectKeyBuilder.Build(tenantId, now, currentExtension);
+        // The key groups by the document's storage folder (ADR 0530), bucketed by the VERSION's filing year (ADR
+        // 0520) — the check-in is filed now — with the new version id as the leaf.
+        var versionId = Guid.NewGuid();
+        var objectKey = ObjectKeyBuilder.Build(tenantId, now, document.StorageFolderId, versionId, currentExtension);
         await _objectStorage.CopyObjectAsync(stashKey, objectKey, cancellationToken);
 
         var version = new DocumentVersion
         {
-            Id = Guid.NewGuid(),
+            Id = versionId,
             TenantId = tenantId,
             DocumentId = documentId,
             Status = DocumentVersionStatus.Pending,

@@ -15,6 +15,11 @@ public class DocumentConfiguration : IEntityTypeConfiguration<Document>
         builder.HasKey(d => d.Id);
         builder.Property(d => d.Name).IsRequired().HasMaxLength(200);
 
+        // The opaque per-document object-storage folder segment (ADR 0530). Required; no model-level default (the
+        // app assigns it at construction, ADR 0064 opacity) — the migration backfills existing rows. Not indexed:
+        // never queried by it (read off the already-loaded document at key-generation time).
+        builder.Property(d => d.StorageFolderId).IsRequired();
+
         // Per-folder default contents sort order (ADR "Per-folder contents sort order"). Store default
         // DocumentDate so the migration backfills existing folders to it; new documents get it from the entity
         // default. Only meaningful for a folder.

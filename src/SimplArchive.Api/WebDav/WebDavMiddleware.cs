@@ -524,7 +524,23 @@ public sealed partial class WebDavMiddleware
         var storage = services.GetRequiredService<IObjectStorageClient>();
         var finalizer = services.GetRequiredService<DocumentFinalizer>();
         var now = DateTimeOffset.UtcNow;
-        var objectKey = ObjectKeyBuilder.Build(user.TenantId, now, extension);
+        // The key groups by the document (ADR 0530): an existing document reuses its filing year + storage folder;
+        // a new document gets `now` + a fresh storage folder. The version id is the leaf either way, generated up
+        // front so the DocumentVersion below reuses it.
+        var versionId = Guid.NewGuid();
+        DateTimeOffset keyYear;
+        Guid keyStorageFolderId;
+        if (existing is { Document: { } existingDoc, IsCollection: false })
+        {
+            keyYear = existingDoc.CreatedAt;
+            keyStorageFolderId = existingDoc.StorageFolderId;
+        }
+        else
+        {
+            keyYear = now;
+            keyStorageFolderId = Guid.NewGuid();
+        }
+        var objectKey = ObjectKeyBuilder.Build(user.TenantId, keyYear, keyStorageFolderId, versionId, extension);
         // Buffer the body so object storage has a known content length (the request stream may be
         // chunked / non-seekable).
         await using var buffered = new MemoryStream();
@@ -565,7 +581,7 @@ public sealed partial class WebDavMiddleware
         else
         {
             if (!rights.CanCreateSubItems) { context.Response.StatusCode = StatusCodes.Status403Forbidden; return; }
-            document = new Document { Id = Guid.NewGuid(), TenantId = user.TenantId, ParentId = parentDoc.Id, Name = stem, CreatedByUserId = user.Id, CreatedAt = now };
+            document = new Document { Id = Guid.NewGuid(), TenantId = user.TenantId, ParentId = parentDoc.Id, Name = stem, CreatedByUserId = user.Id, CreatedAt = now, StorageFolderId = keyStorageFolderId };
             db.Documents.Add(document);
             try { await db.SaveChangesAsync(context.RequestAborted); }
             catch (InvalidOperationException) { context.Response.StatusCode = StatusCodes.Status409Conflict; return; } // sibling-name clash
@@ -573,7 +589,7 @@ public sealed partial class WebDavMiddleware
 
         var version = new DocumentVersion
         {
-            Id = Guid.NewGuid(),
+            Id = versionId,
             DocumentId = document.Id,
             TenantId = user.TenantId,
             Status = DocumentVersionStatus.Pending,
@@ -661,7 +677,10 @@ public sealed partial class WebDavMiddleware
 
         var destName = destSegments[^1];
         var now = DateTimeOffset.UtcNow;
-        var objectKey = ObjectKeyBuilder.Build(user.TenantId, now, Path.GetExtension(destName));
+        // The key groups by the new document (ADR 0530): its filing year + a fresh storage folder, version id leaf.
+        var storageFolderId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        var objectKey = ObjectKeyBuilder.Build(user.TenantId, now, storageFolderId, versionId, Path.GetExtension(destName));
 
         // Server-side copy the staged blob to a real version key, then create the Document + finalize.
         await storage.CopyObjectAsync(tempKey, objectKey, context.RequestAborted);
@@ -674,6 +693,7 @@ public sealed partial class WebDavMiddleware
             Name = Path.GetFileNameWithoutExtension(destName),
             CreatedByUserId = user.Id,
             CreatedAt = now,
+            StorageFolderId = storageFolderId,
         };
         db.Documents.Add(document);
         try { await db.SaveChangesAsync(context.RequestAborted); }
@@ -686,7 +706,7 @@ public sealed partial class WebDavMiddleware
 
         var version = new DocumentVersion
         {
-            Id = Guid.NewGuid(),
+            Id = versionId,
             DocumentId = document.Id,
             TenantId = user.TenantId,
             Status = DocumentVersionStatus.Pending,
@@ -1145,16 +1165,20 @@ public sealed partial class WebDavMiddleware
             return;
         }
 
-        var newKey = ObjectKeyBuilder.Build(user.TenantId, now, Path.GetExtension(version.ObjectKey));
+        // A copy is a brand-new document, so it groups under a fresh storage folder (ADR 0530): `now` + a new
+        // storage folder, the new version id as the leaf.
+        var storageFolderId = Guid.NewGuid();
+        var newVersionId = Guid.NewGuid();
+        var newKey = ObjectKeyBuilder.Build(user.TenantId, now, storageFolderId, newVersionId, Path.GetExtension(version.ObjectKey));
         await storage.CopyObjectAsync(version.ObjectKey, newKey, ct);
 
-        var doc = new Document { Id = Guid.NewGuid(), TenantId = user.TenantId, ParentId = destParentId, Name = newName, CreatedByUserId = user.Id, CreatedAt = now };
+        var doc = new Document { Id = Guid.NewGuid(), TenantId = user.TenantId, ParentId = destParentId, Name = newName, CreatedByUserId = user.Id, CreatedAt = now, StorageFolderId = storageFolderId };
         db.Documents.Add(doc);
         await db.SaveChangesAsync(ct);
 
         var newVersion = new DocumentVersion
         {
-            Id = Guid.NewGuid(),
+            Id = newVersionId,
             DocumentId = doc.Id,
             TenantId = user.TenantId,
             Status = DocumentVersionStatus.Pending,

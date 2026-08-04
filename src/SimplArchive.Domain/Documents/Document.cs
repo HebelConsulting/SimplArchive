@@ -16,6 +16,13 @@ public class Document : ITenantScoped, IConcurrencyTracked, ISoftDeletable
 
     public Guid TenantId { get; set; }
 
+    // The stable, opaque folder segment for all of this document's object-storage files — content + every derived
+    // artifact of every version group under `tenants/{t}/{docYear}/{StorageFolderId}/{versionId}{ext}` (ADR 0530).
+    // A random twin of the document id (generated once, never changed), so the storage layer carries no business
+    // identifier (ADR 0064 opacity) yet a document's files all live in one folder. Defaulted here so every
+    // construction gets one; EF overwrites it with the stored value when materialising an existing row.
+    public Guid StorageFolderId { get; set; } = Guid.NewGuid();
+
     public Guid? ParentId { get; set; }
 
     public required string Name { get; set; }

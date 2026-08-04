@@ -102,16 +102,17 @@ services:
       AWS_ACCESS_KEY_ID: storageadmin
       AWS_SECRET_ACCESS_KEY: storageadmin
       AWS_DEFAULT_REGION: us-east-1
+    # Readiness gate only: waits until SeaweedFS's S3 API answers, then exits (the api's depends_on gates on this).
+    # It does NOT create a base bucket — every object lives in a per-tenant bucket `simplarchive-{tenantId}` that the
+    # app creates on demand at tenant provisioning (EnsureTenantBucketAsync, with its own object-lock + CORS + tags,
+    # ADR 0372). A bare `simplarchive` bucket is never written to, so creating it here was a pre-0372 leftover.
     entrypoint: >
       /bin/sh -c "
       aws configure set default.s3.addressing_style path;
       until aws --endpoint-url http://seaweedfs:8333 s3api list-buckets >/dev/null 2>&1; do
         echo 'waiting for object store...'; sleep 1;
       done;
-      aws --endpoint-url http://seaweedfs:8333 s3api head-bucket --bucket simplarchive 2>/dev/null ||
-        aws --endpoint-url http://seaweedfs:8333 s3api create-bucket --bucket simplarchive --object-lock-enabled-for-bucket;
-      aws --endpoint-url http://seaweedfs:8333 s3api put-bucket-cors --bucket simplarchive --cors-configuration 'CORSRules=[{AllowedOrigins=[\"*\"],AllowedMethods=[GET,PUT,HEAD],AllowedHeaders=[\"*\"]}]';
-      echo 'bucket ready';
+      echo 'object store ready (per-tenant buckets are created by the app at provisioning)';
       "
 
   # Converts office/OpenDocument files (docx/xlsx/pptx/odt/ods) to PDF for preview via its bundled headless

@@ -1289,7 +1289,11 @@ public class DocumentsController : ControllerBase
     // Imports an export archive (ADR "Repository import") grafted as a new sub-tree under this folder. Requires
     // CanImport (ADR "Dedicated CanExport/CanImport rights"). The root is auto-renamed if its name collides with
     // an existing child.
+    // A real migration archive can be gigabytes, so lift the default 30 MB Kestrel + multipart limits (CanImport
+    // gates it; the large IFormFile buffers to a temp file, not memory).
     [HttpPost("import")]
+    [DisableRequestSizeLimit]
+    [RequestFormLimits(MultipartBodyLengthLimit = long.MaxValue)]
     public async Task<IActionResult> Import(Guid documentId, IFormFile file, [FromQuery] bool updateExisting, [FromQuery] bool includePermissions, [FromQuery] bool merge, [FromQuery] string? leafConflict, CancellationToken cancellationToken)
     {
         if (!await HasImportRightAsync(cancellationToken))

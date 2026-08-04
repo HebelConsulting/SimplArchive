@@ -681,7 +681,12 @@ public class RepositoriesController : ControllerBase
     // Imports an export archive (ADR "Repository import") as a brand-new top-level repository (the archive root
     // becomes a root document). Requires CanImport (ADR "Dedicated CanExport/CanImport rights"). The root is
     // auto-renamed if its name collides with an existing repository.
+    // A real export/migration archive can be gigabytes (a whole legacy-DMS subtree of scanned TIFFs/PDFs), so lift the
+    // default 30 MB Kestrel + multipart limits on this upload — CanImport already gates it. ASP.NET buffers the
+    // large IFormFile to a temp file, so this doesn't hold the archive in memory.
     [HttpPost("import")]
+    [DisableRequestSizeLimit]
+    [RequestFormLimits(MultipartBodyLengthLimit = long.MaxValue)]
     public async Task<IActionResult> Import(IFormFile file, [FromQuery] bool updateExisting, [FromQuery] bool includePermissions, CancellationToken cancellationToken)
     {
         if (!await HasImportRightAsync(cancellationToken))

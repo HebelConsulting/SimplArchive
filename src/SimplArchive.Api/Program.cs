@@ -474,6 +474,9 @@ using (var scope = app.Services.CreateScope())
                 CreatedAt = clock.GetUtcNow(),
             };
 
+            // The document's opaque storage folder (ADR 0530) — the object key groups this document's content +
+            // derived artifacts under it, so declare it explicitly and reuse it for the key below.
+            var documentStorageFolderId = Guid.NewGuid();
             var document = new Document
             {
                 Id = Guid.NewGuid(),
@@ -482,6 +485,7 @@ using (var scope = app.Services.CreateScope())
                 Name = "Invoice 2025-001",
                 CreatedByUserId = provisioned.AdministratorId,
                 CreatedAt = clock.GetUtcNow(),
+                StorageFolderId = documentStorageFolderId,
             };
 
             dbContext.Documents.Add(folder);
@@ -521,7 +525,8 @@ using (var scope = app.Services.CreateScope())
                 fileBytes = buffer.ToArray();
             }
 
-            var objectKey = ObjectKeyBuilder.Build(provisioned.TenantId, clock.GetUtcNow(), ".pdf");
+            var versionId = Guid.NewGuid();
+            var objectKey = ObjectKeyBuilder.Build(provisioned.TenantId, document.CreatedAt, documentStorageFolderId, versionId, ".pdf");
             using (var content = new MemoryStream(fileBytes))
             {
                 await objectStorage.PutObjectAsync(objectKey, content, "application/pdf");
@@ -530,7 +535,7 @@ using (var scope = app.Services.CreateScope())
             var now = clock.GetUtcNow();
             var version = new DocumentVersion
             {
-                Id = Guid.NewGuid(),
+                Id = versionId,
                 TenantId = provisioned.TenantId,
                 DocumentId = document.Id,
                 Status = DocumentVersionStatus.Confirmed,
@@ -635,6 +640,8 @@ using (var scope = app.Services.CreateScope())
             // has something to show live on the demo login + in the manual (ADR 0502). The two versions differ in
             // real, extractable text (a changed quantity + an added line item + updated totals), so Tika extracts
             // each version's text and the inline diff highlights the changes.
+            // Both revisions belong to one document, so they group under a single storage folder (ADR 0530).
+            var offerStorageFolderId = Guid.NewGuid();
             var offer = new Document
             {
                 Id = Guid.NewGuid(),
@@ -644,6 +651,7 @@ using (var scope = app.Services.CreateScope())
                 MaskVersionId = basicEntryVersion.Id,
                 CreatedByUserId = provisioned.AdministratorId,
                 CreatedAt = now,
+                StorageFolderId = offerStorageFolderId,
             };
             dbContext.Documents.Add(offer);
             await dbContext.SaveChangesAsync();
@@ -659,7 +667,8 @@ using (var scope = app.Services.CreateScope())
                     bytes = buf.ToArray();
                 }
 
-                var key = ObjectKeyBuilder.Build(provisioned.TenantId, clock.GetUtcNow(), ".pdf");
+                var vId = Guid.NewGuid();
+                var key = ObjectKeyBuilder.Build(provisioned.TenantId, offer.CreatedAt, offerStorageFolderId, vId, ".pdf");
                 using (var content = new MemoryStream(bytes))
                 {
                     await objectStorage.PutObjectAsync(key, content, "application/pdf");
@@ -667,7 +676,7 @@ using (var scope = app.Services.CreateScope())
 
                 var v = new DocumentVersion
                 {
-                    Id = Guid.NewGuid(),
+                    Id = vId,
                     TenantId = provisioned.TenantId,
                     DocumentId = offer.Id,
                     Status = DocumentVersionStatus.Confirmed,

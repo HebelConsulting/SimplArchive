@@ -154,9 +154,11 @@ public sealed class SearchablePdfWorker : BackgroundService
             return row.Attempts >= MaxAttempts; // made "progress" only if we dropped it; otherwise back off
         }
 
-        // Store the PDF under a fresh object key, then create the successor version and remove the outbox row
-        // in one commit — so a crash can't produce a duplicate version (an orphan PDF object is harmless).
-        var pdfKey = ObjectKeyBuilder.Build(row.TenantId, source.CreatedAt, ".pdf");
+        // Store the PDF under a fresh object key in the SAME document folder as the source (ADR 0530), then create
+        // the successor version and remove the outbox row in one commit — so a crash can't produce a duplicate
+        // version (an orphan PDF object is harmless).
+        var successorVersionId = Guid.NewGuid();
+        var pdfKey = ObjectKeyBuilder.SiblingVersionKey(source.ObjectKey, successorVersionId, ".pdf");
         using (var pdfStream = new MemoryStream(pdfBytes))
         {
             await storage.PutObjectAsync(pdfKey, pdfStream, "application/pdf", cancellationToken);
@@ -168,8 +170,6 @@ public sealed class SearchablePdfWorker : BackgroundService
             .Where(v => v.DocumentId == source.DocumentId && v.VersionNumber != null)
             .Select(v => v.VersionNumber)
             .MaxAsync(cancellationToken) ?? 1;
-
-        var successorVersionId = Guid.NewGuid();
         dbContext.DocumentVersions.Add(new DocumentVersion
         {
             Id = successorVersionId,

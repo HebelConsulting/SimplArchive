@@ -10,21 +10,26 @@ public class ObjectKeyBuilderTests
         var tenantId = Guid.NewGuid();
         var filingDate = new DateTimeOffset(2026, 3, 15, 0, 0, 0, TimeSpan.Zero);
 
-        var key = ObjectKeyBuilder.Build(tenantId, filingDate);
+        var key = ObjectKeyBuilder.Build(tenantId, filingDate, Guid.NewGuid(), Guid.NewGuid());
 
         Assert.StartsWith($"tenants/{tenantId}/2026/", key);
     }
 
     [Fact]
-    public void Produces_a_different_key_each_call_even_for_the_same_tenant_and_date()
+    public void Produces_a_different_key_for_each_version_in_the_same_document_folder()
     {
+        // Uniqueness now comes from the version id leaf, not an internally-generated GUID (ADR 0530): two versions
+        // of the same document share the tenant/year/storageFolder directory but differ by their version id.
         var tenantId = Guid.NewGuid();
         var filingDate = DateTimeOffset.UtcNow;
+        var storageFolderId = Guid.NewGuid();
 
-        var first = ObjectKeyBuilder.Build(tenantId, filingDate);
-        var second = ObjectKeyBuilder.Build(tenantId, filingDate);
+        var first = ObjectKeyBuilder.Build(tenantId, filingDate, storageFolderId, Guid.NewGuid());
+        var second = ObjectKeyBuilder.Build(tenantId, filingDate, storageFolderId, Guid.NewGuid());
 
         Assert.NotEqual(first, second);
+        // …but both nest under the same document folder.
+        Assert.Equal(first[..(first.LastIndexOf('/') + 1)], second[..(second.LastIndexOf('/') + 1)]);
     }
 
     [Theory]
@@ -32,14 +37,16 @@ public class ObjectKeyBuilderTests
     [InlineData("txt")] // a bare extension is normalized to include the leading dot
     public void Appends_the_file_extension_to_the_inner_content_filename(string extension)
     {
-        var key = ObjectKeyBuilder.Build(Guid.NewGuid(), DateTimeOffset.UtcNow, extension);
+        var versionId = Guid.NewGuid();
+        var key = ObjectKeyBuilder.Build(Guid.NewGuid(), DateTimeOffset.UtcNow, Guid.NewGuid(), versionId, extension);
 
         var normalized = extension.StartsWith('.') ? extension : $".{extension}";
-        Assert.EndsWith($"/content{normalized}", key);
+        Assert.EndsWith($"/{versionId}{normalized}", key);
     }
 
-    // Issue #338: the GUID is its own directory segment and content lives under it — "…/{year}/{guid}/content{ext}"
-    // — so a document's files group under one folder instead of a flat pile of "{guid}.<something>" siblings.
+    // Issue #338 / ADR 0530: the storage folder is its own directory segment and the version's content lives under
+    // it — "…/{year}/{storageFolderId}/{versionId}{ext}" — so a document's files (every version + derived artifact)
+    // group under one folder instead of a flat pile of "{guid}.<something>" siblings.
     [Theory]
     [InlineData(".pdf")]
     [InlineData(null)]
@@ -47,22 +54,24 @@ public class ObjectKeyBuilderTests
     {
         var tenantId = Guid.NewGuid();
         var filingDate = new DateTimeOffset(2017, 6, 1, 0, 0, 0, TimeSpan.Zero);
+        var storageFolderId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
 
-        var segments = ObjectKeyBuilder.Build(tenantId, filingDate, extension).Split('/');
+        var segments = ObjectKeyBuilder.Build(tenantId, filingDate, storageFolderId, versionId, extension).Split('/');
 
         Assert.Equal("tenants", segments[0]);
         Assert.Equal(tenantId.ToString(), segments[1]);
         Assert.Equal("2017", segments[2]);                          // 4-digit filing year
         Assert.Equal(filingDate.Year, int.Parse(segments[2]));
-        Assert.True(Guid.TryParse(segments[3], out _));             // the GUID segment is a pure GUID…
+        Assert.Equal(storageFolderId.ToString(), segments[3]);      // the storage-folder segment is a pure GUID…
         Assert.DoesNotContain('.', segments[3]);                    // …with no extension glued to it (the #338 guard)
-        Assert.StartsWith("content", segments[4]);                  // content leaf under the GUID folder
+        Assert.StartsWith(versionId.ToString(), segments[4]);       // the version content leaf under the folder
         Assert.Equal(5, segments.Length);
     }
 
     // Cross-cutting guard over the shared derived-artefact key scheme (renditions / per-page / text-layout all use
-    // ObjectKeyBuilder.DerivedKey): every derived key nests under the SAME "{tenant}/{year}/{guid}/" folder as the
-    // content and never reintroduces a "{guid}.<something>" flat sibling.
+    // ObjectKeyBuilder.DerivedKey): every derived key nests under the SAME "{tenant}/{year}/{storageFolderId}/" folder
+    // as the content and never reintroduces a "{guid}.<something>" flat sibling.
     [Theory]
     [InlineData(".preview.png")]
     [InlineData(".preview.p3.png")]
@@ -72,16 +81,16 @@ public class ObjectKeyBuilderTests
     {
         var tenantId = Guid.NewGuid();
         var filingDate = new DateTimeOffset(2017, 6, 1, 0, 0, 0, TimeSpan.Zero);
-        var contentKey = ObjectKeyBuilder.Build(tenantId, filingDate, ".pdf");
-        var guidFolder = contentKey[..(contentKey.LastIndexOf('/') + 1)]; // "tenants/{t}/2017/{guid}/"
+        var contentKey = ObjectKeyBuilder.Build(tenantId, filingDate, Guid.NewGuid(), Guid.NewGuid(), ".pdf");
+        var folder = contentKey[..(contentKey.LastIndexOf('/') + 1)]; // "tenants/{t}/2017/{storageFolderId}/"
 
         var derived = ObjectKeyBuilder.DerivedKey(contentKey, suffix);
 
-        Assert.StartsWith(guidFolder, derived);
+        Assert.StartsWith(folder, derived);
         Assert.EndsWith(suffix, derived);
-        // The GUID segment stays a pure directory — the derived key is never "…/{guid}.<something>".
-        var guidSegment = guidFolder.TrimEnd('/').Split('/')[^1];
-        Assert.DoesNotContain('.', guidSegment);
+        // The storage-folder segment stays a pure directory — the derived key is never "…/{guid}.<something>".
+        var folderSegment = folder.TrimEnd('/').Split('/')[^1];
+        Assert.DoesNotContain('.', folderSegment);
     }
 
     // The same helper is collision-safe for the name-based inbox staging keys (no GUID folder): it derives
