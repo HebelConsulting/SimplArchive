@@ -9,11 +9,45 @@ let state = null; // { host, pages:[{overlay, words, hits:[]}], dotNetRef, activ
 
 const el = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
 
+// ── Zoom (#357) ─────────────────────────────────────────────────────────────────────────────────────────────
+// Zoom is a single CSS var on the host: .wb-pv-page { max-width: calc(100% * var(--wb-pv-zoom)) }. At 1 it's the
+// fit-width default; above 1 the pages grow past the host and the existing overflow:auto scrolls. The hit/annotation
+// overlays are percentage-based, so they scale with the page for free — no overlay math changes. Clamped 1..4 (the
+// canvas is rasterized at 2×, so ~2× is the crisp ceiling; 4 allows a closer, softer look). State lives on the host
+// dataset so each preview host (detail / fullscreen / recycle-bin) zooms independently.
+const ZOOM_MIN = 1, ZOOM_MAX = 4;
+
+function applyZoom(host, z) {
+    z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+    host.dataset.zoom = z;
+    host.style.setProperty('--wb-pv-zoom', z);
+    host.classList.toggle('wb-pv-zoomed', z > 1.001);
+}
+
+export function zoomBy(host, mult) { applyZoom(host, parseFloat(host.dataset.zoom || '1') * mult); }
+export function zoomReset(host) { applyZoom(host, 1); }
+
+// Wire two-finger pinch + Ctrl/⌘-wheel zoom once per host (the host element persists across loads; only its
+// children are replaced, so guard against re-wiring). Single-finger touch still pans via native overflow scroll —
+// touch-action:pan-x pan-y (CSS) keeps that while suppressing the browser's own pinch-zoom so ours wins.
+function wireZoomGestures(host) {
+    if (host.dataset.zoomWired) return;
+    host.dataset.zoomWired = '1';
+    const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    let pinch = null;
+    host.addEventListener('touchstart', e => { if (e.touches.length === 2) pinch = { d: dist(e.touches), z: parseFloat(host.dataset.zoom || '1') }; }, { passive: true });
+    host.addEventListener('touchmove', e => { if (pinch && e.touches.length === 2) { e.preventDefault(); applyZoom(host, pinch.z * dist(e.touches) / pinch.d); } }, { passive: false });
+    host.addEventListener('touchend', e => { if (e.touches.length < 2) pinch = null; });
+    host.addEventListener('wheel', e => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); applyZoom(host, parseFloat(host.dataset.zoom || '1') * (e.deltaY < 0 ? 1.1 : 0.9)); } }, { passive: false });
+}
+
 // Renders the preview at `url` into `host`; `layout` is the per-page word boxes (or null). Returns the kind
 // ('image'|'pdf'|'text'|'unsupported'|'error') plus the text for a text preview.
 export async function load(host, url, layout, dotNetRef) {
     host.innerHTML = '';
     state = { host, pages: [], dotNetRef, active: -1 };
+    applyZoom(host, 1);        // each new document opens at fit-width
+    wireZoomGestures(host);    // idempotent — wires pinch/⌘-wheel once per host
     if (!url) return { kind: 'unsupported', text: '' };
 
     try {

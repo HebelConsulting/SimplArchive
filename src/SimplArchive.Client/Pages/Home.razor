@@ -54,8 +54,14 @@
     .wb-preview { flex: 1 1 auto; min-width: 0; display: flex; position: relative; }
     .wb-preview iframe { width: 100%; height: 100%; border: 0; }
     /* pdf.js / image preview with search hit-overlay + click-to-copy (ADRs 0268/0269/0282). */
-    .wb-pv-host { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px; background: var(--mud-palette-background-grey); text-align: center; }
-    .wb-pv-page { position: relative; display: inline-block; margin: 0 auto 8px; max-width: 100%; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+    /* touch-action: allow native single-finger pan/scroll but suppress the browser's own pinch-zoom, so preview.js'
+       two-finger pinch controls the preview zoom instead of the whole page (#357). */
+    .wb-pv-host { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px; background: var(--mud-palette-background-grey); text-align: center; touch-action: pan-x pan-y; }
+    /* Zoom (#357): --wb-pv-zoom (1..4, set by preview.js) scales the page's max-width; at 1 this is the fit-width
+       default. When zoomed, left-align so an overflowing page is scrollable to both edges (centering can strand the
+       left edge under overflow). */
+    .wb-pv-host.wb-pv-zoomed { text-align: left; }
+    .wb-pv-page { position: relative; display: inline-block; margin: 0 auto 8px; width: calc(100% * var(--wb-pv-zoom, 1)); box-shadow: 0 1px 4px rgba(0,0,0,.2); }
     .wb-pv-media { display: block; width: 100%; height: auto; }
     .wb-pv-overlay { position: absolute; inset: 0; cursor: pointer; }
     .wb-pv-hit { position: absolute; background: rgba(255,213,0,.4); outline: 1px solid rgba(224,164,0,.8); }
@@ -92,7 +98,8 @@
     .wb-pv-shape-preview { opacity: .6; pointer-events: none; }
     .wb-pv-drawing .wb-pv-overlay { cursor: crosshair; }
     .wb-pv-findbar { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--mud-palette-lines-default); }
-    .wb-pv-findbar .wb-pv-fs-btn { margin-left: auto; }
+    /* Right-aligned control group (zoom + fullscreen) at the end of the preview toolbar (#357). */
+    .wb-pv-findbar .wb-pv-rightgrp { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; }
     /* In-app full-screen: the preview pane becomes a fixed overlay over the workbench, stopping just above the
        bottom tab bar (`--wb-tab-h`, measured by preview.js on enter) so the tabs stay visible and clickable.
        z-index sits above the app bar (1100) but below MudBlazor's snackbar (1400) so the click-to-copy toast
@@ -874,7 +881,16 @@
                                                                OnClick="DeleteSelectedAnnotationsAsync" title="@Strings.Get("DeleteAnnotationsTip")" />
                                             }
                                         }
-                                        <MudIconButton Class="wb-pv-fs-btn" Icon="@(_pvFullscreen ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)" Size="Size.Small" OnClick="TogglePreviewFullscreenAsync" title="@(_pvFullscreen ? Strings.Get("PvExitFullscreen") : Strings.Get("PvFullscreen"))" />
+                                        <span class="wb-pv-rightgrp">
+                                            @if (_pv.HasPages)
+                                            {
+                                                @* Preview zoom (#357): fit ↔ 4×; pinch + ⌘/Ctrl-wheel also zoom (preview.js). *@
+                                                <MudIconButton Class="wb-pv-zoom-out" Icon="@Icons.Material.Filled.Remove" Size="Size.Small" OnClick="@(() => PvZoomAsync(1d / 1.25))" title="@Strings.Get("PvZoomOut")" />
+                                                <MudIconButton Class="wb-pv-zoom-reset" Icon="@Icons.Material.Filled.FilterCenterFocus" Size="Size.Small" OnClick="PvZoomResetAsync" title="@Strings.Get("PvZoomReset")" />
+                                                <MudIconButton Class="wb-pv-zoom-in" Icon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => PvZoomAsync(1.25))" title="@Strings.Get("PvZoomIn")" />
+                                            }
+                                            <MudIconButton Class="wb-pv-fs-btn" Icon="@(_pvFullscreen ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)" Size="Size.Small" OnClick="TogglePreviewFullscreenAsync" title="@(_pvFullscreen ? Strings.Get("PvExitFullscreen") : Strings.Get("PvFullscreen"))" />
+                                        </span>
                                     </div>
                                     <div class="wb-pv-host" @ref="_pvHost" style="@(_pv.HasPages ? "" : "display:none;")"></div>
                                     @if (_detailSensitivityWatermark && (_pv.HasPages || _pv.Kind == "text"))
@@ -1292,7 +1308,15 @@
                                                 <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Disabled="@(_pv.Count == 0)" OnClick="FindPrevAsync" />
                                                 <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Disabled="@(_pv.Count == 0)" OnClick="FindNextAsync" />
                                             }
-                                            <MudIconButton Class="wb-pv-fs-btn" Icon="@(_pvFullscreen ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)" Size="Size.Small" OnClick="TogglePreviewFullscreenAsync" title="@(_pvFullscreen ? Strings.Get("PvExitFullscreen") : Strings.Get("PvFullscreen"))" />
+                                            <span class="wb-pv-rightgrp">
+                                                @if (_pv.HasPages)
+                                                {
+                                                    <MudIconButton Class="wb-pv-zoom-out" Icon="@Icons.Material.Filled.Remove" Size="Size.Small" OnClick="@(() => PvZoomAsync(1d / 1.25))" title="@Strings.Get("PvZoomOut")" />
+                                                    <MudIconButton Class="wb-pv-zoom-reset" Icon="@Icons.Material.Filled.FilterCenterFocus" Size="Size.Small" OnClick="PvZoomResetAsync" title="@Strings.Get("PvZoomReset")" />
+                                                    <MudIconButton Class="wb-pv-zoom-in" Icon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => PvZoomAsync(1.25))" title="@Strings.Get("PvZoomIn")" />
+                                                }
+                                                <MudIconButton Class="wb-pv-fs-btn" Icon="@(_pvFullscreen ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)" Size="Size.Small" OnClick="TogglePreviewFullscreenAsync" title="@(_pvFullscreen ? Strings.Get("PvExitFullscreen") : Strings.Get("PvFullscreen"))" />
+                                            </span>
                                         </div>
                                         <div class="wb-pv-host" @ref="_pvHost" style="@(_pv.HasPages ? "" : "display:none;")"></div>
                                         @if (!_pv.HasPages)
@@ -3104,6 +3128,24 @@
         if (_previewModule is not null && _pvSelfRef is not null)
         {
             await _previewModule.InvokeVoidAsync("setFullscreen", _pvSelfRef, _pvFullscreen);
+        }
+    }
+
+    // Preview zoom (#357): multiply the current zoom (clamped 1..4 in preview.js), or reset to fit. The zoom state
+    // lives on the host in JS, so this just nudges it — pinch / ⌘-wheel drive the same applyZoom.
+    private async Task PvZoomAsync(double multiplier)
+    {
+        if (_previewModule is not null)
+        {
+            await _previewModule.InvokeVoidAsync("zoomBy", _pvHost, multiplier);
+        }
+    }
+
+    private async Task PvZoomResetAsync()
+    {
+        if (_previewModule is not null)
+        {
+            await _previewModule.InvokeVoidAsync("zoomReset", _pvHost);
         }
     }
 

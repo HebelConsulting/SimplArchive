@@ -996,6 +996,15 @@
   <data name="PvFullscreen" xml:space="preserve">
     <value>Schermo intero</value>
   </data>
+  <data name="PvZoomIn" xml:space="preserve">
+    <value>Ingrandisci</value>
+  </data>
+  <data name="PvZoomOut" xml:space="preserve">
+    <value>Riduci</value>
+  </data>
+  <data name="PvZoomReset" xml:space="preserve">
+    <value>Adatta alla larghezza</value>
+  </data>
   <data name="PvExitFullscreen" xml:space="preserve">
     <value>Esci dallo schermo intero (Esc)</value>
   </data>
