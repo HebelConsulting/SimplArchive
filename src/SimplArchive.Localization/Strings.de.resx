@@ -1026,6 +1026,42 @@
   <data name="InboxEmailAutoMask" xml:space="preserve">
     <value>Maske wird beim Ablegen automatisch vom System zugewiesen.</value>
   </data>
+  <data name="InboxSendTitle" xml:space="preserve">
+    <value>Senden an…</value>
+  </data>
+  <data name="InboxSendPrompt" xml:space="preserve">
+    <value>„{0}“ in einen anderen Eingang verschieben:</value>
+  </data>
+  <data name="InboxDestination" xml:space="preserve">
+    <value>Ziel</value>
+  </data>
+  <data name="InboxSendEmpty" xml:space="preserve">
+    <value>Keine Gruppen oder anderen Benutzer verfügbar.</value>
+  </data>
+  <data name="InboxSend" xml:space="preserve">
+    <value>Senden</value>
+  </data>
+  <data name="InboxClaimToMine" xml:space="preserve">
+    <value>In meinen Eingang verschieben</value>
+  </data>
+  <data name="InboxShowGroups" xml:space="preserve">
+    <value>Gruppeneingänge anzeigen</value>
+  </data>
+  <data name="InboxUserPicker" xml:space="preserve">
+    <value>Benutzereingang öffnen</value>
+  </data>
+  <data name="InboxMine" xml:space="preserve">
+    <value>Mein Eingang</value>
+  </data>
+  <data name="InboxGroupTag" xml:space="preserve">
+    <value>Gruppe</value>
+  </data>
+  <data name="InboxUserTag" xml:space="preserve">
+    <value>Benutzer</value>
+  </data>
+  <data name="RightManageInboxes" xml:space="preserve">
+    <value>Eingänge verwalten</value>
+  </data>
   <data name="NoMask" xml:space="preserve">
     <value>(Keine Maske)</value>
   </data>

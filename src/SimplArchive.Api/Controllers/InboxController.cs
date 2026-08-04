@@ -126,6 +126,19 @@ public class InboxController : ControllerBase
         public List<InboxGroupResource> Groups { get; set; } = [];
     }
 
+    // A user in the tenant — a "Send to a user" / admin user-picker choice (ADR 0532).
+    public class InboxUserResource
+    {
+        public Guid Id { get; set; }
+
+        public string Name { get; set; } = "";
+    }
+
+    public class InboxUsersResource : HypermediaResource
+    {
+        public List<InboxUserResource> Users { get; set; } = [];
+    }
+
     public class UploadInboxRequest
     {
         public string FileName { get; set; } = "";
@@ -423,6 +436,29 @@ public class InboxController : ControllerBase
 
     [HttpHead("groups")]
     public IActionResult GroupsHead() => Scope() is null ? Forbid() : NoContent();
+
+    // The tenant's other users (id + name) — the "Send to a user" picker choices, and the CanManageInboxes admin's
+    // user-picker for opening a user's inbox (ADR 0532). Any authenticated caller (a hand-off to a colleague);
+    // active users only, excluding the caller.
+    [HttpGet("users")]
+    public async Task<IActionResult> Users(CancellationToken cancellationToken)
+    {
+        if (Scope() is not var (_, userId))
+        {
+            return Forbid();
+        }
+
+        var users = await _dbContext.Users
+            .Where(u => u.IsActive && u.Id != userId)
+            .OrderBy(u => u.DisplayName)
+            .Select(u => new InboxUserResource { Id = u.Id, Name = u.DisplayName })
+            .ToListAsync(cancellationToken);
+
+        return Ok(new InboxUsersResource { Users = users, Links = [new Link("self", "/api/inbox/users", "GET")] });
+    }
+
+    [HttpHead("users")]
+    public IActionResult UsersHead() => Scope() is null ? Forbid() : NoContent();
 
     // Standing convention: every GET action gets a companion HEAD action.
     [HttpHead]

@@ -758,6 +758,30 @@ public partial class MainWindow : Window
         }
     });
 
+    // "Send to…" (ADR 0532): hand an own item to a chosen group or user via the picker dialog.
+    private void OnInboxSend(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || InboxItemFrom(sender) is not { } item)
+        {
+            return;
+        }
+
+        var targets = await vm.GetInboxSendTargetsAsync();
+        if (await new SendToInboxDialog(item.Name, targets).ShowDialog<SimplArchiveApiClient.InboxTargetInfo?>(this) is { } target)
+        {
+            await vm.SendInboxItemAsync(item, target);
+        }
+    });
+
+    // "Move to my inbox" (ADR 0532): claim a group / other-user item into my own inbox.
+    private void OnInboxMoveToMine(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && InboxItemFrom(sender) is { } item)
+        {
+            await vm.MoveInboxItemToMineAsync(item);
+        }
+    });
+
     // Edit the OCR languages (system field): the ordered multi-select picker (ADR "System fields +
     // OCR-language mask field").
     private void OnEditOcrLanguages(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>

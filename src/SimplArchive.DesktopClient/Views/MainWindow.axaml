@@ -677,7 +677,7 @@
 
                     <!-- Left column: the server inbox (the S3-backed staging area) + actions. The old local-inbox
                          sync is replaced by opening the Inbox as a WebDAV folder (ADR "Desktop inbox via WebDAV"). -->
-                    <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto">
+                    <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*,Auto">
                         <!-- Inbox header -->
                         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
@@ -686,25 +686,47 @@
                             </StackPanel>
                             <Button Grid.Column="1" Margin="8,0,0,0" Command="{Binding RefreshInboxCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" /></Button>
                         </Grid>
-                        <ListBox Grid.Row="1" x:Name="ServerInboxList" ItemsSource="{Binding ServerInbox}" SelectedItem="{Binding SelectedServerInboxItem}"
+                        <!-- View filters (ADR 0532): own-items-only by default; a toggle reveals my group inboxes,
+                             and a CanManageInboxes holder gets a user-picker to open another user's inbox. -->
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,0,0,6" VerticalAlignment="Center">
+                            <CheckBox Content="{loc:Tr InboxShowGroups}" IsChecked="{Binding InboxIncludeGroups}"
+                                      IsEnabled="{Binding !InboxViewUserId, FallbackValue=True}" />
+                            <ComboBox IsVisible="{Binding CanManageInboxes}" MinWidth="180"
+                                      ItemsSource="{Binding InboxUsers}" SelectedItem="{Binding SelectedInboxUser}"
+                                      PlaceholderText="{loc:Tr InboxUserPicker}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:InboxUserPickerItem">
+                                        <TextBlock Text="{Binding Name}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </StackPanel>
+                        <ListBox Grid.Row="2" x:Name="ServerInboxList" ItemsSource="{Binding ServerInbox}" SelectedItem="{Binding SelectedServerInboxItem}"
                                  DragDrop.AllowDrop="True"
                                  SelectionMode="Multiple" SelectionChanged="OnServerInboxSelectionChanged" DoubleTapped="OnInboxItemDoubleTapped">
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:InboxItemViewModel">
-                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="0,2">
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,2">
                                         <i:Icon Grid.Column="0" Value="{Binding IconValue}" Foreground="#5b4ee5" VerticalAlignment="Center" Margin="0,0,8,0" />
                                         <TextBlock Grid.Column="1" Text="{Binding DisplayName}" VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="2" Text="{Binding SizeText}" Foreground="{DynamicResource WbFaint}" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
-                                        <Button Grid.Column="3" ToolTip.Tip="{loc:Tr MwOpen}" Click="OnInboxOpen" Tag="{Binding}"><i:Icon Value="mdi-open-in-new" /></Button>
-                                        <Button Grid.Column="4" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwFileIntoFolder}" Click="OnInboxFile" Tag="{Binding}"><i:Icon Value="mdi-file-move-outline" /></Button>
-                                        <Button Grid.Column="5" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr UgDelete}" Click="OnInboxDelete" Tag="{Binding}"><i:Icon Value="mdi-delete-outline" /></Button>
+                                        <!-- Source chip: whose queue a non-own item came from (a group, or a user for an admin view). -->
+                                        <Border Grid.Column="2" IsVisible="{Binding HasSource}" Background="{DynamicResource WbBorder}" CornerRadius="3" Padding="5,1" Margin="0,0,8,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding SourceLabel}" FontSize="10" Foreground="{DynamicResource WbMuted}" />
+                                        </Border>
+                                        <TextBlock Grid.Column="3" Text="{Binding SizeText}" Foreground="{DynamicResource WbFaint}" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                        <!-- Own item → "Send to…"; a group / other-user item → "Move to my inbox" (ADR 0532). -->
+                                        <Button Grid.Column="4" IsVisible="{Binding IsOwn}" ToolTip.Tip="{loc:Tr InboxSendTitle}" Click="OnInboxSend" Tag="{Binding}"><i:Icon Value="mdi-send-outline" /></Button>
+                                        <Button Grid.Column="4" IsVisible="{Binding !IsOwn}" ToolTip.Tip="{loc:Tr InboxClaimToMine}" Click="OnInboxMoveToMine" Tag="{Binding}"><i:Icon Value="mdi-inbox-arrow-down-outline" /></Button>
+                                        <Button Grid.Column="5" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwOpen}" Click="OnInboxOpen" Tag="{Binding}"><i:Icon Value="mdi-open-in-new" /></Button>
+                                        <Button Grid.Column="6" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwFileIntoFolder}" Click="OnInboxFile" Tag="{Binding}"><i:Icon Value="mdi-file-move-outline" /></Button>
+                                        <Button Grid.Column="7" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr UgDelete}" Click="OnInboxDelete" Tag="{Binding}"><i:Icon Value="mdi-delete-outline" /></Button>
                                     </Grid>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
                         <!-- Actions: WebDAV settings (access/password dialog) + mount-and-open in the OS file manager
                              over WebDAV (ADR "Desktop inbox WebDAV buttons"); file the current selection. -->
-                        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
+                        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
                             <Button Click="OnManageWebDav" Padding="10,4" ToolTip.Tip="{loc:Tr MwWebDavSettingsTip}">
                                 <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-cog-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwWebDavSettings}" /></StackPanel>
                             </Button>

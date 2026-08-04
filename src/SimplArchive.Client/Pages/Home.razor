@@ -1124,6 +1124,23 @@
                         <InputFile id="inbox-file-input" OnChange="OnInboxInputChangeAsync" multiple style="display:none" />
                         <MudButton Variant="Variant.Text" OnClick="LoadInboxAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.Refresh">@Strings.Get("RibbonRefresh")</MudButton>
                         <MudButton Variant="Variant.Text" OnClick="CopyWebDavUrlAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.ContentCopy">@Strings.Get("InboxCopyDav")</MudButton>
+                        @* Own-items-only by default; the switch reveals my group inboxes (ADR 0532). Disabled while
+                           viewing another user's inbox — the two selectors are mutually exclusive. *@
+                        <MudSwitch T="bool" Value="_inboxIncludeGroups" ValueChanged="ToggleInboxGroupsAsync" Color="Color.Primary"
+                                   Class="ml-3" Disabled="@(_inboxViewUserId is not null)" Label="@Strings.Get("InboxShowGroups")" />
+                        @if (_canManageInboxes)
+                        {
+                            @* CanManageInboxes: open any user's inbox for triage; "My inbox" resets to own. *@
+                            <MudSelect T="Guid?" Value="_inboxViewUserId" ValueChanged="ViewUserInboxAsync" Dense="true"
+                                       Margin="Margin.Dense" Variant="Variant.Outlined" Class="ml-3" Style="min-width:210px;"
+                                       Label="@Strings.Get("InboxUserPicker")">
+                                <MudSelectItem T="Guid?" Value="@((Guid?)null)">@Strings.Get("InboxMine")</MudSelectItem>
+                                @foreach (var u in _inboxUsers)
+                                {
+                                    <MudSelectItem T="Guid?" Value="@((Guid?)u.Id)">@u.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        }
                         @if (_inboxChecked.Count >= 2)
                         {
                             <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="FileMultipleAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.DriveFileMove">@string.Format(Strings.Get("InboxFileN"), _inboxChecked.Count)</MudButton>
@@ -1145,12 +1162,27 @@
                                     <div @onclick:stopPropagation="true">
                                         <MudCheckBox T="bool" Value="_inboxChecked.Contains(item)" ValueChanged="@(v => ToggleInboxCheck(item, v))" Dense="true" Size="Size.Small" />
                                     </div>
-                                    <MudIcon Icon="@Icons.Material.Filled.InsertDriveFile" Size="Size.Small" />
+                                    <MudIcon Icon="@(item.GroupId is not null ? Icons.Material.Filled.Group : item.UserId is not null ? Icons.Material.Filled.Person : Icons.Material.Filled.InsertDriveFile)" Size="Size.Small" />
                                     <span style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@item.DisplayName</span>
+                                    @if (!item.IsOwn && item.SourceLabel is { } src)
+                                    {
+                                        @* Whose queue this item came from (a group, or — for an admin view — another user). *@
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default" Class="ma-0">@src</MudChip>
+                                    }
                                     <span class="mud-text-secondary" style="font-size:.8em;">@FormatSize(item.Size)</span>
                                     <div @onclick:stopPropagation="true">
                                         <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
                                             <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => FileInboxItemAsync(item)">@Strings.Get("InboxFileToFolder")</MudMenuItem>
+                                            @if (item.IsOwn)
+                                            {
+                                                @* Own items can be handed to a group or another user (ADR 0532). *@
+                                                <MudMenuItem Icon="@Icons.Material.Filled.Send" OnClick="() => SendInboxItemAsync(item)">@Strings.Get("InboxSendTitle")</MudMenuItem>
+                                            }
+                                            else
+                                            {
+                                                @* A group/other-user item can be claimed into my own inbox. *@
+                                                <MudMenuItem Icon="@Icons.Material.Filled.MoveToInbox" OnClick="() => MoveToMyInboxAsync(item)">@Strings.Get("InboxClaimToMine")</MudMenuItem>
+                                            }
                                             <MudMenuItem Icon="@Icons.Material.Filled.Download" OnClick="() => DownloadInboxItemAsync(item)">@Strings.Get("Download")</MudMenuItem>
                                             <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteInboxItemAsync(item)">@Strings.Get("RibbonDelete")</MudMenuItem>
                                         </MudMenu>
@@ -3180,6 +3212,8 @@
             _canImpersonate = me?.CanImpersonate ?? false;
             _canExport = me?.CanExport ?? false;
             _canImport = me?.CanImport ?? false;
+            _canManageInboxes = me?.CanManageInboxes ?? false;
+            _myUserId = me?.UserId;
             _viewerName = me?.UserName ?? "";
         }
         catch (Exception)
@@ -3228,6 +3262,8 @@
     private bool _canImpersonate;
     private bool _canExport;
     private bool _canImport;
+    private bool _canManageInboxes;
+    private Guid? _myUserId;
 
     // Impersonate the selected non-admin user (ADR "User impersonation"). On success ImpersonationService
     // force-reloads the app as that user; the server enforces the actual rules.
@@ -3238,7 +3274,7 @@
             Snackbar.Add("Could not impersonate this user.", Severity.Error);
         }
     }
-    private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public string UserName { get; set; } = ""; }
+    private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public bool CanManageInboxes { get; set; } public Guid? UserId { get; set; } public string UserName { get; set; } = ""; }
     // The logged-in user's display name — used in the sensitivity watermark (ADR "Document watermarking").
     private string _viewerName = "";
     private record BackfillResponse { public int Count { get; set; } }
@@ -6156,6 +6192,7 @@
         new("View audit log", r => r.CanViewAuditLog, (r, v) => r.CanViewAuditLog = v),
         new("Export", r => r.CanExport, (r, v) => r.CanExport = v),
         new("Import", r => r.CanImport, (r, v) => r.CanImport = v),
+        new("Manage inboxes", r => r.CanManageInboxes, (r, v) => r.CanManageInboxes = v),
     ];
 
     private async Task LoadPrincipalsAsync()
@@ -6675,6 +6712,7 @@
         public bool CanViewAuditLog { get; set; }
         public bool CanExport { get; set; }
         public bool CanImport { get; set; }
+        public bool CanManageInboxes { get; set; }
         public int ClearanceRank { get; set; }
     }
 
@@ -7531,14 +7569,27 @@
     private string _inboxStatus = "";
     private bool _inboxBusy;
     private InboxItem? _selectedInboxItem;
-    private record InboxItem(string Name, long Size, bool HasMask, string DownloadHref, string PreviewHref, string FileHref, string DeleteHref, Guid? GroupId, string? GroupName)
+    // Inbox view filters (ADR 0532): own-items-only by default; a toggle reveals my group inboxes, and a
+    // CanManageInboxes holder can open a specific user's inbox via the user-picker (mutually exclusive with groups).
+    private bool _inboxIncludeGroups;
+    private Guid? _inboxViewUserId;
+    private List<InboxUserOption> _inboxUsers = []; // the admin user-picker's choices (CanManageInboxes only)
+    private sealed record InboxUserOption(Guid Id, string Name);
+    private record InboxItem(string Name, long Size, bool HasMask, string DownloadHref, string PreviewHref, string FileHref, string DeleteHref, string MoveHref, Guid? GroupId, string? GroupName, Guid? UserId, string? UserName)
     {
         // Un-classified items (no staged mask sidecar) show in square brackets (ADRs 0279/0281).
         public string DisplayName => HasMask ? Name : $"[{Name}]";
 
-        // A group-inbox item (ADR 0532): the `?group=` query is appended to the item endpoints the client builds
-        // from Name (preview / mask); GroupName labels the row so the shared source is obvious.
-        public string GroupQuery => GroupId is { } g ? $"?group={g}" : "";
+        // A non-own item's source (ADR 0532): its `?group=`/`?user=` query is appended to the item endpoints the
+        // client builds from Name (preview / mask); the group/user name labels the row.
+        public string SourceQuery => GroupId is { } g ? $"?group={g}" : UserId is { } u ? $"?user={u}" : "";
+
+        // True for the caller's own items (no group/user source) — they get the "Send to…" action; non-own items
+        // get "Move to my inbox".
+        public bool IsOwn => GroupId is null && UserId is null;
+
+        // The `[GroupName]` / `[UserName]` source label shown before the name; null for own items.
+        public string? SourceLabel => GroupName ?? UserName;
     }
 
     private async Task LoadInboxAsync()
@@ -7548,12 +7599,23 @@
         _inboxChecked.Clear();
         try
         {
-            var response = await Http.GetFromJsonAsync<InboxResponse>("api/inbox");
+            // A CanManageInboxes holder gets a user-picker; load the tenant's users once for it.
+            if (_canManageInboxes && _inboxUsers.Count == 0)
+            {
+                var users = await Http.GetFromJsonAsync<InboxUsersResponse>("api/inbox/users");
+                _inboxUsers = users?.Users ?? [];
+            }
+
+            var url = _inboxViewUserId is { } viewUser
+                ? $"api/inbox?user={viewUser}"
+                : _inboxIncludeGroups ? "api/inbox?includeGroups=true" : "api/inbox";
+            var response = await Http.GetFromJsonAsync<InboxResponse>(url);
             _inboxItems = (response?.Items ?? []).Select(i => new InboxItem(
                 i.Name, i.Size, i.HasMask,
                 RelativeHref(i.Links, "download") ?? "", RelativeHref(i.Links, "preview") ?? "",
                 RelativeHref(i.Links, "file") ?? "", RelativeHref(i.Links, "self") ?? "",
-                i.GroupId, i.GroupName)).ToList();
+                RelativeHref(i.Links, "move") ?? "",
+                i.GroupId, i.GroupName, i.UserId, i.UserName)).ToList();
             _inboxStatus = _inboxItems.Count == 0 ? "Your inbox is empty. Upload files to file them into a repository." : $"{_inboxItems.Count} item(s).";
         }
         catch (Exception)
@@ -7711,7 +7773,7 @@
         // the shared pdf.js host with the hit-overlay. 204 = no preview available.
         try
         {
-            using var r = await Http.GetAsync($"api/inbox/{Uri.EscapeDataString(item.Name)}/preview{item.GroupQuery}");
+            using var r = await Http.GetAsync($"api/inbox/{Uri.EscapeDataString(item.Name)}/preview{item.SourceQuery}");
             if (r.IsSuccessStatusCode && r.StatusCode != HttpStatusCode.NoContent)
             {
                 var preview = await r.Content.ReadFromJsonAsync<InboxPreviewResponse>();
@@ -7735,7 +7797,7 @@
         try
         {
             _inboxStgMasks = (await Http.GetFromJsonAsync<MaskListResponse>("api/masks"))?.Masks ?? [];
-            var draft = await Http.GetFromJsonAsync<InboxMaskDraft>($"api/inbox/{Uri.EscapeDataString(item.Name)}/mask");
+            var draft = await Http.GetFromJsonAsync<InboxMaskDraft>($"api/inbox/{Uri.EscapeDataString(item.Name)}/mask{item.SourceQuery}");
             _inboxStgName = string.IsNullOrEmpty(draft?.Name) ? System.IO.Path.GetFileNameWithoutExtension(item.Name) : draft.Name;
             _inboxStgDate = DateTime.TryParse(draft?.DocumentDate, out var d) ? d.Date : null;
             _inboxDraftValues = (draft?.Fields ?? []).ToDictionary(f => f.FieldDefinitionId, f => f.Values);
@@ -7814,7 +7876,7 @@
                 ocrLanguages = _inboxStgScannable && _inboxStgOcrCodes.Count > 0 ? _inboxStgOcrCodes : null,
             };
 
-            var resp = await Http.PutAsJsonAsync($"api/inbox/{Uri.EscapeDataString(item.Name)}/mask", body);
+            var resp = await Http.PutAsJsonAsync($"api/inbox/{Uri.EscapeDataString(item.Name)}/mask{item.SourceQuery}", body);
             if (resp.IsSuccessStatusCode)
             {
                 Snackbar.Add("Saved to the inbox item.", Severity.Success);
@@ -7927,6 +7989,67 @@
 
     private async Task DownloadInboxItemAsync(InboxItem item) => await JS.InvokeVoidAsync("open", item.DownloadHref, "_blank");
 
+    // Send an OWN item into another inbox (ADR 0532): pick a group or a user, then move it there.
+    private async Task SendInboxItemAsync(InboxItem item)
+    {
+        var parameters = new DialogParameters<Dialogs.InboxSendDialog> { { x => x.ItemName, item.Name } };
+        var dialog = await DialogService.ShowAsync<Dialogs.InboxSendDialog>(Strings.Get("InboxSendTitle"), parameters);
+        if ((await dialog.Result) is { Canceled: false, Data: Dialogs.InboxSendDialog.SendTarget t })
+        {
+            await MoveInboxItemAsync(item, t.TargetGroupId, t.TargetUserId);
+        }
+    }
+
+    // Move a NON-own item (a group's, or another user's for an admin) into my own inbox to work it privately.
+    private async Task MoveToMyInboxAsync(InboxItem item)
+    {
+        if (_myUserId is { } me)
+        {
+            await MoveInboxItemAsync(item, null, me);
+        }
+    }
+
+    private async Task MoveInboxItemAsync(InboxItem item, Guid? targetGroupId, Guid? targetUserId)
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync(item.MoveHref, new { targetGroupId, targetUserId });
+            if (!response.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"Could not move the item ({(int)response.StatusCode}).", Severity.Error);
+                return;
+            }
+
+            Snackbar.Add($"Moved '{item.Name}'.", Severity.Success);
+            ClearInboxSelection(item);
+            await LoadInboxAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Could not move the item.", Severity.Error);
+        }
+    }
+
+    // The "show group inboxes" filter (ADR 0532) — off by default; clears any admin user-view when toggled.
+    private async Task ToggleInboxGroupsAsync(bool on)
+    {
+        _inboxIncludeGroups = on;
+        _inboxViewUserId = null;
+        await LoadInboxAsync();
+    }
+
+    // The admin user-picker (CanManageInboxes) — open a chosen user's inbox, or back to my own (null).
+    private async Task ViewUserInboxAsync(Guid? userId)
+    {
+        _inboxViewUserId = userId;
+        if (userId is not null)
+        {
+            _inboxIncludeGroups = false;
+        }
+
+        await LoadInboxAsync();
+    }
+
     private async Task DeleteInboxItemAsync(InboxItem item)
     {
         var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
@@ -7962,11 +8085,12 @@
     }
 
     private record InboxResponse { public List<InboxItemDto> Items { get; set; } = []; }
-    private record InboxItemDto { public string Name { get; set; } = ""; public long Size { get; set; } public bool HasMask { get; set; } public Guid? GroupId { get; set; } public string? GroupName { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record InboxItemDto { public string Name { get; set; } = ""; public long Size { get; set; } public bool HasMask { get; set; } public Guid? GroupId { get; set; } public string? GroupName { get; set; } public Guid? UserId { get; set; } public string? UserName { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record InboxMaskDraft { public string? Name { get; set; } public string? DocumentDate { get; set; } public Guid? MaskId { get; set; } public List<InboxDraftField> Fields { get; set; } = []; public List<string>? OcrLanguages { get; set; } }
     private record InboxPreviewResponse { public string? PreviewUrl { get; set; } public bool PreviewConverted { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record InboxDraftField { public Guid FieldDefinitionId { get; set; } public List<string> Values { get; set; } = []; }
     private record UploadInboxResponse { public string Name { get; set; } = ""; public string UploadUrl { get; set; } = ""; }
+    private record InboxUsersResponse { public List<InboxUserOption> Users { get; set; } = []; }
 
     private static string? RelativeHref(List<LinkResponse>? links, string rel)
     {

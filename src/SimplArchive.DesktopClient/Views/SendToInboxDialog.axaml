@@ -1,0 +1,17 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.SendToInboxDialog"
+        Title="{loc:Tr InboxSendTitle}" Width="420" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="12">
+        <TextBlock x:Name="PromptText" TextWrapping="Wrap" />
+        <TextBlock x:Name="EmptyText" Text="{loc:Tr InboxSendEmpty}" Foreground="{DynamicResource WbMuted}"
+                   TextWrapping="Wrap" IsVisible="False" />
+        <ComboBox x:Name="TargetBox" HorizontalAlignment="Stretch" />
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button x:Name="SendButton" Content="{loc:Tr InboxSend}" Click="OnSend" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

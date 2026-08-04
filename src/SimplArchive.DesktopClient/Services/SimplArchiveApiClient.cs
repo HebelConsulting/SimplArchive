@@ -132,7 +132,7 @@ public sealed class SimplArchiveApiClient
 
     // The signed-in principal's ids + display names (ADR "S3-backed inbox") — names drive the local folder
     // path. IsTenantAdmin gates admin-only actions (e.g. the searchable-PDF backfill).
-    public sealed record WhoAmIInfo(Guid? UserId, Guid? TenantId, string? TenantName, string? UserName, bool IsTenantAdmin, bool CanManageUsers, bool HasPhoto, bool CanViewAuditLog, bool MfaEnabled, bool CanResetMfa, bool CanLegalHold, bool CanManageClassification, bool CanOverrideCheckout = false, bool CanImpersonate = false, string? ImpersonatedBy = null, bool CanExport = false, bool CanImport = false);
+    public sealed record WhoAmIInfo(Guid? UserId, Guid? TenantId, string? TenantName, string? UserName, bool IsTenantAdmin, bool CanManageUsers, bool HasPhoto, bool CanViewAuditLog, bool MfaEnabled, bool CanResetMfa, bool CanLegalHold, bool CanManageClassification, bool CanOverrideCheckout = false, bool CanImpersonate = false, string? ImpersonatedBy = null, bool CanExport = false, bool CanImport = false, bool CanManageInboxes = false);
 
     // Tenant-wide system-level rights, mirroring the User/Group columns (ADR "Users & groups administration
     // tab"). Backs the rights matrix on the Users & groups tab.
@@ -140,6 +140,8 @@ public sealed class SimplArchiveApiClient
         bool IsTenantAdmin, bool CanImpersonate, bool CanOverrideCheckout, bool CanLegalHold,
         bool CanManageClassification, bool CanResetMfa, bool CanManageRepositories, bool CanManageMasks,
         bool CanManageServiceAccounts, bool CanManageUsers, bool CanViewAuditLog, bool CanExport, bool CanImport,
+        // Tenant-wide inbox triage (ADR 0532). Defaulted so existing 13-bool construction sites keep compiling.
+        bool CanManageInboxes = false,
         // Data-classification clearance (ADR "Sensitivity clearance enforcement"). Defaulted so existing
         // construction sites (e.g. a copied-rights bundle) keep compiling.
         int ClearanceRank = 0);
@@ -149,8 +151,24 @@ public sealed class SimplArchiveApiClient
     public sealed record PrincipalInfo(bool IsGroup, Guid Id, string Name, bool IsActive, SystemRightsData Rights, bool MfaEnabled = false);
 
     // A server-inbox item — a staged file (ADR "S3-backed inbox"). Download is a presigned URL; HasMask tells
-    // whether a `{name}.mask.json` staging sidecar exists (ADR "Inbox item classification + preview").
-    public sealed record InboxItemInfo(string Name, long Size, string DownloadUrl, bool HasMask);
+    // whether a `{name}.mask.json` staging sidecar exists (ADR "Inbox item classification + preview"). Group/User
+    // label a non-own item's source queue (ADR 0532); MoveUrl is its move action, source query already baked in.
+    public sealed record InboxItemInfo(string Name, long Size, string DownloadUrl, bool HasMask,
+        Guid? GroupId = null, string? GroupName = null, Guid? UserId = null, string? UserName = null, string MoveUrl = "")
+    {
+        // Own items (no group/user source) get "Send to…"; a group/other-user item gets "Move to my inbox".
+        public bool IsOwn => GroupId is null && UserId is null;
+
+        // Appended to the name-based item endpoints (preview / mask) so they resolve against the right source
+        // prefix; empty for own items.
+        public string SourceQuery => GroupId is { } g ? $"?group={g}" : UserId is { } u ? $"?user={u}" : "";
+
+        // The `GroupName` / `UserName` shown as a source chip; null for own items.
+        public string? SourceLabel => GroupName ?? UserName;
+    }
+
+    // A destination for the "Send to…" dialog (ADR 0532) — a group the caller belongs to, or another tenant user.
+    public sealed record InboxTargetInfo(Guid Id, string Name, bool IsGroup);
 
     // A staged mask/index-data draft for an inbox item (the `{name}.mask.json` sidecar content). Name +
     // DocumentDate ("yyyy-MM-dd") are the staged system fields (ADR "Staged Name + Document date on inbox items").
@@ -469,7 +487,8 @@ public sealed class SimplArchiveApiClient
             json.TryGetProperty("canImpersonate", out var ci) && ci.ValueKind == JsonValueKind.True,
             json.TryGetProperty("impersonatedBy", out var ib) && ib.ValueKind == JsonValueKind.String ? ib.GetString() : null,
             json.TryGetProperty("canExport", out var ce) && ce.ValueKind == JsonValueKind.True,
-            json.TryGetProperty("canImport", out var cim) && cim.ValueKind == JsonValueKind.True);
+            json.TryGetProperty("canImport", out var cim) && cim.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("canManageInboxes", out var cmi) && cmi.ValueKind == JsonValueKind.True);
     }
 
     // The count of existing "current TIFF" documents with no searchable-PDF successor yet (ADR "Backfill
@@ -489,10 +508,12 @@ public sealed class SimplArchiveApiClient
         return json.TryGetProperty("count", out var c) ? c.GetInt32() : 0;
     }
 
-    // Lists the caller's server-inbox items (ADR "S3-backed inbox").
-    public async Task<IReadOnlyList<InboxItemInfo>> GetInboxAsync(CancellationToken cancellationToken = default)
+    // Lists inbox items (ADR "S3-backed inbox"). Own-items-only by default; includeGroups also aggregates the
+    // caller's group inboxes, and user opens a specific user's inbox for a CanManageInboxes holder (ADR 0532).
+    public async Task<IReadOnlyList<InboxItemInfo>> GetInboxAsync(bool includeGroups = false, Guid? user = null, CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/inbox", cancellationToken);
+        var url = user is { } viewUser ? $"api/inbox?user={viewUser}" : includeGroups ? "api/inbox?includeGroups=true" : "api/inbox";
+        var json = await _http.GetFromJsonAsync<JsonElement>(url, cancellationToken);
         var items = new List<InboxItemInfo>();
         if (json.TryGetProperty("items", out var array))
         {
@@ -501,22 +522,61 @@ public sealed class SimplArchiveApiClient
                 string Link(string rel) => item.TryGetProperty("links", out var links)
                     ? links.EnumerateArray().FirstOrDefault(l => l.GetProperty("rel").GetString() == rel).GetProperty("href").GetString() ?? ""
                     : "";
+                Guid? Id(string prop) => item.TryGetProperty(prop, out var p) && p.ValueKind == JsonValueKind.String ? p.GetGuid() : null;
+                string? Str(string prop) => item.TryGetProperty(prop, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
                 items.Add(new InboxItemInfo(
                     item.GetProperty("name").GetString() ?? "",
                     item.TryGetProperty("size", out var s) ? s.GetInt64() : 0,
                     Link("download"),
-                    item.TryGetProperty("hasMask", out var hm) && hm.GetBoolean()));
+                    item.TryGetProperty("hasMask", out var hm) && hm.GetBoolean(),
+                    Id("groupId"), Str("groupName"), Id("userId"), Str("userName"), Link("move")));
             }
         }
 
         return items;
     }
 
+    // The caller's effective group inboxes (ADR 0532) — the "Send to a group" choices.
+    public Task<IReadOnlyList<InboxTargetInfo>> GetInboxGroupsAsync(CancellationToken cancellationToken = default) =>
+        GetInboxTargetsAsync("api/inbox/groups", "groups", isGroup: true, cancellationToken);
+
+    // The other active tenant users (ADR 0532) — the "Send to a user" choices, and the admin user-picker list.
+    public Task<IReadOnlyList<InboxTargetInfo>> GetInboxUsersAsync(CancellationToken cancellationToken = default) =>
+        GetInboxTargetsAsync("api/inbox/users", "users", isGroup: false, cancellationToken);
+
+    private async Task<IReadOnlyList<InboxTargetInfo>> GetInboxTargetsAsync(string url, string arrayProp, bool isGroup, CancellationToken cancellationToken)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>(url, cancellationToken);
+        var targets = new List<InboxTargetInfo>();
+        if (json.TryGetProperty(arrayProp, out var array) && array.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var t in array.EnumerateArray())
+            {
+                targets.Add(new InboxTargetInfo(t.GetProperty("id").GetGuid(), t.GetProperty("name").GetString() ?? "", isGroup));
+            }
+        }
+
+        return targets;
+    }
+
+    // Moves an inbox item into another inbox (ADR 0532): exactly one target — a group or a user. moveUrl is the
+    // item's server-built move action (its source `?group=`/`?user=` already baked in).
+    public async Task MoveInboxItemAsync(string moveUrl, Guid? targetGroupId, Guid? targetUserId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync(moveUrl, new { targetGroupId, targetUserId }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to move that item there.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
     // The inbox item's preview (renditions on the object key) — same Preview shape as a document's, so it feeds
     // the same rendering + hit-overlay pipeline. 204 (no preview available) yields an all-null Preview.
-    public async Task<Preview> GetInboxPreviewAsync(string name, CancellationToken cancellationToken = default)
+    public async Task<Preview> GetInboxPreviewAsync(string name, string sourceQuery = "", CancellationToken cancellationToken = default)
     {
-        using var response = await _http.GetAsync($"api/inbox/{Uri.EscapeDataString(name)}/preview", cancellationToken);
+        using var response = await _http.GetAsync($"api/inbox/{Uri.EscapeDataString(name)}/preview{sourceQuery}", cancellationToken);
         if (response.StatusCode == HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
         {
             return new Preview(null, false, null, null, null, "");
@@ -537,9 +597,9 @@ public sealed class SimplArchiveApiClient
     }
 
     // Reads an inbox item's staged mask/index-data draft (the `{name}.mask.json` sidecar); MaskId null = none.
-    public async Task<InboxMaskDraft> GetInboxMaskAsync(string name, CancellationToken cancellationToken = default)
+    public async Task<InboxMaskDraft> GetInboxMaskAsync(string name, string sourceQuery = "", CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/inbox/{Uri.EscapeDataString(name)}/mask", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>($"api/inbox/{Uri.EscapeDataString(name)}/mask{sourceQuery}", cancellationToken);
         return ParseInboxMaskDraft(json);
     }
 
@@ -571,10 +631,10 @@ public sealed class SimplArchiveApiClient
     // Writes (or, when nothing is staged, clears) an inbox item's staged mask/index-data draft. Name +
     // documentDate ("yyyy-MM-dd", or null) are the staged system fields.
     public async Task SetInboxMaskAsync(string name, string? stagedName, string? documentDate, Guid? maskId,
-        IEnumerable<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> fields, IReadOnlyList<string>? ocrLanguages = null, CancellationToken cancellationToken = default)
+        IEnumerable<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> fields, IReadOnlyList<string>? ocrLanguages = null, string sourceQuery = "", CancellationToken cancellationToken = default)
     {
         var body = new { name = stagedName, documentDate, maskId, fields = fields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.Values }), ocrLanguages = ocrLanguages is { Count: > 0 } o ? o : null };
-        (await _http.PutAsJsonAsync($"api/inbox/{Uri.EscapeDataString(name)}/mask", body, cancellationToken)).EnsureSuccessStatusCode();
+        (await _http.PutAsJsonAsync($"api/inbox/{Uri.EscapeDataString(name)}/mask{sourceQuery}", body, cancellationToken)).EnsureSuccessStatusCode();
     }
 
     // Uploads a local file into the server inbox: POST for a presigned URL, then PUT the bytes to it.
@@ -586,9 +646,9 @@ public sealed class SimplArchiveApiClient
         (await Anonymous.PutAsync(uploadUrl, content, cancellationToken)).EnsureSuccessStatusCode();
     }
 
-    public async Task FileInboxItemAsync(string name, Guid folderId, string? comment = null, CancellationToken cancellationToken = default)
+    public async Task FileInboxItemAsync(string name, Guid folderId, string? comment = null, string sourceQuery = "", CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync($"api/inbox/{Uri.EscapeDataString(name)}/file", new { folderId, comment }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync($"api/inbox/{Uri.EscapeDataString(name)}/file{sourceQuery}", new { folderId, comment }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to file into that folder.");
@@ -598,9 +658,9 @@ public sealed class SimplArchiveApiClient
     }
 
     // Files the inbox item as a new version of an existing document (ADR "Context-aware inbox filing dialog").
-    public async Task FileInboxItemAsVersionAsync(string name, Guid documentId, string? comment = null, CancellationToken cancellationToken = default)
+    public async Task FileInboxItemAsVersionAsync(string name, Guid documentId, string? comment = null, string sourceQuery = "", CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync($"api/inbox/{Uri.EscapeDataString(name)}/file", new { documentId, comment }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync($"api/inbox/{Uri.EscapeDataString(name)}/file{sourceQuery}", new { documentId, comment }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to add a version to that document.");
@@ -609,8 +669,8 @@ public sealed class SimplArchiveApiClient
         response.EnsureSuccessStatusCode();
     }
 
-    public Task DeleteInboxItemAsync(string name, CancellationToken cancellationToken = default) =>
-        _http.DeleteAsync($"api/inbox/{Uri.EscapeDataString(name)}", cancellationToken);
+    public Task DeleteInboxItemAsync(string name, string sourceQuery = "", CancellationToken cancellationToken = default) =>
+        _http.DeleteAsync($"api/inbox/{Uri.EscapeDataString(name)}{sourceQuery}", cancellationToken);
 
     public async Task<string> GetDocumentNameAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
@@ -3224,6 +3284,7 @@ public sealed class SimplArchiveApiClient
             B("isTenantAdmin"), B("canImpersonate"), B("canOverrideCheckout"), B("canLegalHold"),
             B("canManageClassification"), B("canResetMfa"), B("canManageRepositories"), B("canManageMasks"),
             B("canManageServiceAccounts"), B("canManageUsers"), B("canViewAuditLog"), B("canExport"), B("canImport"),
+            B("canManageInboxes"),
             r.TryGetProperty("clearanceRank", out var cr) && cr.ValueKind == JsonValueKind.Number ? cr.GetInt32() : 0);
     }
 

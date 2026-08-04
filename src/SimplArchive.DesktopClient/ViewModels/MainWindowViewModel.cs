@@ -1770,6 +1770,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             CanImpersonate = me.CanImpersonate;
             HasExportRight = me.CanExport;
             HasImportRight = me.CanImport;
+            CanManageInboxes = me.CanManageInboxes;
             IsImpersonating = me.ImpersonatedBy is not null;
             ImpersonatedName = me.ImpersonatedBy is not null ? me.UserName : null;
             _currentUserId = me.UserId;
@@ -1810,6 +1811,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty] private bool _hasExportRight;
 
     [ObservableProperty] private bool _hasImportRight;
+
+    // Whether the caller holds CanManageInboxes (own or via a group) — gates the inbox user-picker that opens
+    // another user's inbox for triage (ADR 0532); set from whoami on login.
+    [ObservableProperty] private bool _canManageInboxes;
 
     // User impersonation (ADR "User impersonation"): CanImpersonate gates the "Impersonate" action; while
     // IsImpersonating, a banner shows ImpersonatedName + a Stop button. _adminApi is the pre-impersonation client
@@ -2002,9 +2007,30 @@ public sealed partial class MainWindowViewModel : ObservableObject
         ServerInbox.Clear();
         try
         {
-            foreach (var item in await _api.GetInboxAsync())
+            // The admin user-picker's choices (CanManageInboxes only) — loaded once, "My inbox" first (null id).
+            if (CanManageInboxes && InboxUsers.Count == 0)
             {
-                ServerInbox.Add(new InboxItemViewModel { Name = item.Name, Size = item.Size, DownloadUrl = item.DownloadUrl, HasMask = item.HasMask });
+                InboxUsers.Add(new InboxUserPickerItem(null, Strings.Get("InboxMine")));
+                foreach (var u in await _api.GetInboxUsersAsync())
+                {
+                    InboxUsers.Add(new InboxUserPickerItem(u.Id, u.Name));
+                }
+            }
+
+            foreach (var item in await _api.GetInboxAsync(InboxIncludeGroups, InboxViewUserId))
+            {
+                ServerInbox.Add(new InboxItemViewModel
+                {
+                    Name = item.Name,
+                    Size = item.Size,
+                    DownloadUrl = item.DownloadUrl,
+                    HasMask = item.HasMask,
+                    GroupId = item.GroupId,
+                    GroupName = item.GroupName,
+                    UserId = item.UserId,
+                    UserName = item.UserName,
+                    MoveUrl = item.MoveUrl,
+                });
             }
         }
         catch (Exception ex)
@@ -2016,6 +2042,58 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         // A refresh rebuilds the list, so nothing is focused — clear the right panes.
         SelectedServerInboxItem = null;
+    }
+
+    // ---- Inbox view filters (ADR 0532): own-items-only by default; a toggle reveals group inboxes, and a
+    // CanManageInboxes holder can open a specific user's inbox via the picker (mutually exclusive with groups). ----
+
+    [ObservableProperty] private bool _inboxIncludeGroups;
+    [ObservableProperty] private Guid? _inboxViewUserId;
+
+    // The user-picker choices (only populated for a CanManageInboxes holder); the first is "My inbox" (null id).
+    public ObservableCollection<InboxUserPickerItem> InboxUsers { get; } = [];
+
+    [ObservableProperty] private InboxUserPickerItem? _selectedInboxUser;
+
+    // Suppresses the reentrant refresh when one filter handler adjusts the other (the two are mutually exclusive).
+    private bool _adjustingInboxFilters;
+
+    // The "Show group inboxes" checkbox — reveals my group inboxes; clears any admin user-view (they're exclusive).
+    async partial void OnInboxIncludeGroupsChanged(bool value)
+    {
+        if (_adjustingInboxFilters)
+        {
+            return;
+        }
+
+        _adjustingInboxFilters = true;
+        if (value)
+        {
+            InboxViewUserId = null;
+            SelectedInboxUser = InboxUsers.Count > 0 ? InboxUsers[0] : null; // back to "My inbox"
+        }
+
+        _adjustingInboxFilters = false;
+        await RefreshInboxAsync();
+    }
+
+    // The admin user-picker — open a chosen user's inbox, or (null id) back to my own.
+    async partial void OnSelectedInboxUserChanged(InboxUserPickerItem? value)
+    {
+        if (_adjustingInboxFilters)
+        {
+            return;
+        }
+
+        _adjustingInboxFilters = true;
+        InboxViewUserId = value?.UserId;
+        if (value is { UserId: not null })
+        {
+            InboxIncludeGroups = false;
+        }
+
+        _adjustingInboxFilters = false;
+        await RefreshInboxAsync();
     }
 
     // Upload OS files dropped onto the inbox file-list straight into the S3-backed inbox (ADR "Inbox file-list
@@ -2096,10 +2174,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await InboxPreview.RenderAsync(await _api.GetInboxPreviewAsync(value.Name));
+            await InboxPreview.RenderAsync(await _api.GetInboxPreviewAsync(value.Name, value.SourceQuery));
             if (!InboxIsEmail)
             {
-                await LoadInboxMaskAsync(value.Name);
+                await LoadInboxMaskAsync(value.Name, value.SourceQuery);
             }
 
             InboxItemFocused = true;
@@ -2110,7 +2188,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    private async Task LoadInboxMaskAsync(string name)
+    private async Task LoadInboxMaskAsync(string name, string sourceQuery)
     {
         _loadingInboxMask = true;
         try
@@ -2122,7 +2200,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 InboxAvailableMasks.Add(new MaskChoiceViewModel(mask.Id, mask.Name));
             }
 
-            var draft = await _api.GetInboxMaskAsync(name);
+            var draft = await _api.GetInboxMaskAsync(name, sourceQuery);
             _inboxDraftValues = draft.Fields.ToDictionary(f => f.FieldDefinitionId, f => f.Values);
             InboxName = string.IsNullOrEmpty(draft.Name) ? Path.GetFileNameWithoutExtension(name) : draft.Name;
             InboxDocumentDate = DateTime.TryParse(draft.DocumentDate, out var d) ? d.Date : null;
@@ -2195,7 +2273,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             var stagedName = string.IsNullOrWhiteSpace(InboxName) ? null : InboxName.Trim();
             var docDate = InboxDocumentDate?.ToString("yyyy-MM-dd");
             var ocr = InboxStgScannable && _inboxStgOcrCodes.Count > 0 ? _inboxStgOcrCodes : null;
-            await _api.SetInboxMaskAsync(item.Name, stagedName, docDate, maskId, fields, ocr);
+            await _api.SetInboxMaskAsync(item.Name, stagedName, docDate, maskId, fields, ocr, item.SourceQuery);
             item.HasMask = maskId is not null || fields.Any(f => f.Item2.Count > 0) || stagedName is not null || docDate is not null || ocr is not null;
             Status = Strings.Get("StMaskSaved");
         }
@@ -2270,7 +2348,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.FileInboxItemAsync(item.Name, folderId, comment);
+            await _api.FileInboxItemAsync(item.Name, folderId, comment, item.SourceQuery);
             Status = string.Format(Strings.Get("StFiled"), item.Name);
             await RefreshInboxAsync();
         }
@@ -2290,7 +2368,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.FileInboxItemAsVersionAsync(item.Name, documentId, comment);
+            await _api.FileInboxItemAsVersionAsync(item.Name, documentId, comment, item.SourceQuery);
             Status = string.Format(Strings.Get("StFiledVersion"), item.Name);
             await RefreshInboxAsync();
 
@@ -2327,7 +2405,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             try
             {
-                await _api.FileInboxItemAsync(item.Name, folderId, comment);
+                await _api.FileInboxItemAsync(item.Name, folderId, comment, item.SourceQuery);
                 filed++;
             }
             catch (Exception)
@@ -2347,8 +2425,61 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        await _api.DeleteInboxItemAsync(item.Name);
+        await _api.DeleteInboxItemAsync(item.Name, item.SourceQuery);
         await RefreshInboxAsync();
+    }
+
+    // The "Send to…" destinations for the dialog (ADR 0532): the caller's groups followed by the other users.
+    public async Task<IReadOnlyList<SimplArchiveApiClient.InboxTargetInfo>> GetInboxSendTargetsAsync()
+    {
+        if (_api is null)
+        {
+            return [];
+        }
+
+        var groups = await _api.GetInboxGroupsAsync();
+        var users = await _api.GetInboxUsersAsync();
+        return groups.Concat(users).ToList();
+    }
+
+    // Sends an own item into a chosen group or user's inbox (ADR 0532), then refreshes.
+    public async Task SendInboxItemAsync(InboxItemViewModel item, SimplArchiveApiClient.InboxTargetInfo target)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.MoveInboxItemAsync(item.MoveUrl, target.IsGroup ? target.Id : null, target.IsGroup ? null : target.Id);
+            Status = string.Format(Strings.Get("StMoved"), item.Name);
+            await RefreshInboxAsync();
+        }
+        catch (ApiActionException e)
+        {
+            Status = e.Message;
+        }
+    }
+
+    // Claims a non-own (group / other-user) item into my own inbox (ADR 0532), then refreshes.
+    public async Task MoveInboxItemToMineAsync(InboxItemViewModel item)
+    {
+        if (_api is null || _currentUserId is not { } me)
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.MoveInboxItemAsync(item.MoveUrl, null, me);
+            Status = string.Format(Strings.Get("StMoved"), item.Name);
+            await RefreshInboxAsync();
+        }
+        catch (ApiActionException e)
+        {
+            Status = e.Message;
+        }
     }
 
     // Builds the filing dialog VM, passing the Repositories tab's selected document (if any) so the dialog can
@@ -3358,6 +3489,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         "Tenant administrator", "Impersonate", "Override checkout", "Legal hold",
         "Manage classification", "Reset MFA", "Manage repositories", "Manage masks",
         "Manage service accounts", "Manage users & groups", "View audit log", "Export", "Import",
+        "Manage inboxes",
     ];
 
     async partial void OnSelectedPrincipalChanged(PrincipalRowViewModel? value)
@@ -4240,7 +4372,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         9 => r.CanManageUsers,
         10 => r.CanViewAuditLog,
         11 => r.CanExport,
-        _ => r.CanImport,
+        12 => r.CanImport,
+        _ => r.CanManageInboxes,
     };
 
     private SimplArchiveApiClient.SystemRightsData CurrentMatrixRights() => new(
@@ -4248,7 +4381,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         PrincipalRights[3].IsChecked, PrincipalRights[4].IsChecked, PrincipalRights[5].IsChecked,
         PrincipalRights[6].IsChecked, PrincipalRights[7].IsChecked, PrincipalRights[8].IsChecked,
         PrincipalRights[9].IsChecked, PrincipalRights[10].IsChecked, PrincipalRights[11].IsChecked,
-        PrincipalRights[12].IsChecked, SelectedPrincipalClearance);
+        PrincipalRights[12].IsChecked, PrincipalRights[13].IsChecked, SelectedPrincipalClearance);
 
     public async Task LoadPrincipalsAsync()
     {
@@ -5720,6 +5853,38 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var present = ServerInbox.Any(i => i.Name == name);
         await _api!.DeleteInboxItemAsync(name);
         return present;
+    }
+
+    // Headless exercise of inbox send + admin triage (ADR 0532, see DesktopInboxSendTests): the admin uploads an
+    // own item, hands it to a freshly-created user via the send-target list, and — as a CanManageInboxes holder —
+    // sees it in that user's inbox via ?user=. Cleans up the item + the user so the shared demo stays tidy.
+    internal async Task<bool> InboxSendSelfTestAsync(string accessToken)
+    {
+        UseApi(new SimplArchiveApiClient(accessToken));
+        CanManageInboxes = (await _api!.GetWhoAmIAsync()).CanManageInboxes;
+
+        var recipientId = await _api.CreateUserAsync($"send-{Guid.NewGuid():N}@e2e.local", "Send Recipient");
+
+        var name = "send-" + Guid.NewGuid().ToString("N")[..8] + ".txt";
+        await UploadFilesToInboxAsync(new[] { (name, System.Text.Encoding.UTF8.GetBytes("hand-off")) });
+        if (ServerInbox.FirstOrDefault(i => i.Name == name) is not { } item)
+        {
+            return false;
+        }
+
+        var target = (await GetInboxSendTargetsAsync()).FirstOrDefault(t => !t.IsGroup && t.Id == recipientId);
+        if (target is null)
+        {
+            return false;
+        }
+
+        await SendInboxItemAsync(item, target);
+        var leftOwnInbox = ServerInbox.All(i => i.Name != name);                                  // gone from mine
+        var inRecipientInbox = (await _api.GetInboxAsync(user: recipientId)).Any(i => i.Name == name); // now theirs
+
+        await _api.DeleteInboxItemAsync(name, $"?user={recipientId}");
+        await _api.DeleteUserAsync(recipientId);
+        return leftOwnInbox && inRecipientInbox;
     }
 
     // Headless exercise of the Personal-space grouping (ADR "GUI-tree Personal space grouping", see

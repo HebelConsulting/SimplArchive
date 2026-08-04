@@ -1026,6 +1026,42 @@
   <data name="InboxEmailAutoMask" xml:space="preserve">
     <value>Maschera assegnata automaticamente dal sistema al momento dell'archiviazione.</value>
   </data>
+  <data name="InboxSendTitle" xml:space="preserve">
+    <value>Invia a…</value>
+  </data>
+  <data name="InboxSendPrompt" xml:space="preserve">
+    <value>Sposta "{0}" in un'altra casella:</value>
+  </data>
+  <data name="InboxDestination" xml:space="preserve">
+    <value>Destinazione</value>
+  </data>
+  <data name="InboxSendEmpty" xml:space="preserve">
+    <value>Nessun gruppo o altro utente disponibile.</value>
+  </data>
+  <data name="InboxSend" xml:space="preserve">
+    <value>Invia</value>
+  </data>
+  <data name="InboxClaimToMine" xml:space="preserve">
+    <value>Sposta nella mia casella</value>
+  </data>
+  <data name="InboxShowGroups" xml:space="preserve">
+    <value>Mostra caselle dei gruppi</value>
+  </data>
+  <data name="InboxUserPicker" xml:space="preserve">
+    <value>Apri casella dell'utente</value>
+  </data>
+  <data name="InboxMine" xml:space="preserve">
+    <value>La mia casella</value>
+  </data>
+  <data name="InboxGroupTag" xml:space="preserve">
+    <value>Gruppo</value>
+  </data>
+  <data name="InboxUserTag" xml:space="preserve">
+    <value>Utente</value>
+  </data>
+  <data name="RightManageInboxes" xml:space="preserve">
+    <value>Gestisci caselle</value>
+  </data>
   <data name="NoMask" xml:space="preserve">
     <value>(Nessuna maschera)</value>
   </data>
