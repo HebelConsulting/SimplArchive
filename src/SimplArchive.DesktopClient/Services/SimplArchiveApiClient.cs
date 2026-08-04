@@ -996,6 +996,9 @@ public sealed class SimplArchiveApiClient
     public Task<BulkResult> BulkMoveAsync(IEnumerable<Guid> ids, Guid parentId, CancellationToken cancellationToken = default) =>
         PostBulkAsync("api/documents/bulk/move", new { ids = ids.ToArray(), parentId }, cancellationToken);
 
+    public Task<BulkResult> BulkReferenceAsync(IEnumerable<Guid> ids, Guid parentId, CancellationToken cancellationToken = default) =>
+        PostBulkAsync("api/documents/bulk/reference", new { ids = ids.ToArray(), parentId }, cancellationToken);
+
     public Task<BulkResult> BulkDeleteAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default) =>
         PostBulkAsync("api/documents/bulk/delete", new { ids = ids.ToArray() }, cancellationToken);
 

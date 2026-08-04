@@ -4971,9 +4971,28 @@
     // A folder row is a drop target that files into itself; a document row is a drop target that opens the
     // inbox-style filing dialog (ADR "List-pane drop filing"). For a reference, node.Id is the target's id.
     private static Dictionary<string, object> DropAttributes(BrowseNode? node)
-        => node is null ? EmptyAttributes
-           : node.HasVersions ? new() { ["data-drop-doc"] = node.Id.ToString() }
-           : new() { ["data-drop-folder"] = node.Id.ToString() };
+    {
+        if (node is null)
+        {
+            return EmptyAttributes;
+        }
+
+        var attrs = node.HasVersions
+            ? new Dictionary<string, object> { ["data-drop-doc"] = node.Id.ToString() }
+            : new Dictionary<string, object> { ["data-drop-folder"] = node.Id.ToString() };
+
+        // A real document/folder is also an internal drag source — dragging it onto a folder moves or references
+        // it (mirrors the desktop client, ADR "Desktop drag-and-drop move and reference"). Synthetic admin /
+        // personal-space / launcher nodes aren't movable, so they're not drag sources.
+        if (node is { AdminKind: "", PersonalKind: "" })
+        {
+            attrs["draggable"] = "true";
+            attrs["data-node-id"] = node.Id.ToString();
+            attrs["data-node-ref"] = node.IsReference ? "true" : "false";
+        }
+
+        return attrs;
+    }
 
     // Makes the whole contents pane a drop target for the currently-selected folder.
     private Dictionary<string, object> ListDropAttributes()
@@ -5902,6 +5921,63 @@
 
     private record BulkResultDto { public int Succeeded { get; set; } public int Skipped { get; set; } }
 
+    // An internal node drag (a list row or a tree folder) was dropped on a folder — move or reference the dragged
+    // set into it (ADR "Desktop drag-and-drop move and reference", web parity). Called from dropUpload.js. The set
+    // is the whole multi-selection when the grabbed row belongs to a ≥2 selection, else just the grabbed node; an
+    // all-shortcuts drag only ever places references, otherwise a Move/Reference prompt is shown. The repo-root
+    // gate and cycle/duplicate skips live server-side in the bulk endpoints.
+    [JSInvokable]
+    public async Task PerformNodeDropAsync(string targetFolderId, string draggedNodeId, bool draggedIsRef)
+    {
+        if (!Guid.TryParse(targetFolderId, out var targetId) || !Guid.TryParse(draggedNodeId, out var draggedId))
+        {
+            return;
+        }
+
+        var draggedInBulk = _bulkIds.Count >= 2 && _bulkIds.Contains(draggedId);
+        var ids = (draggedInBulk ? _bulkIds.ToList() : [draggedId])
+            .Where(id => id != targetId)
+            .ToList();
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        bool IsRef(Guid id) => _folderContents.FirstOrDefault(n => n.Id == id)?.IsReference ?? false;
+        var allRefs = draggedInBulk ? ids.All(IsRef) : draggedIsRef;
+        if (allRefs)
+        {
+            await RunBulkAsync("/api/documents/bulk/reference", new { ids, parentId = targetId }, "referenced");
+            return;
+        }
+
+        var them = ids.Count == 1 ? "it" : "them";
+        var where = ids.Count == 1 ? "it is" : "they are";
+        var label = ids.Count == 1 ? "this item" : $"{ids.Count} items";
+        var choice = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = "Move or reference",
+            Message = $"Move {label} here, or place a reference (shortcut) that leaves {them} where {where}?",
+            YesText = "Move",
+            NoText = "Reference",
+            CancelText = "Cancel",
+        });
+
+        switch (choice)
+        {
+            case true:
+                await RunBulkAsync("/api/documents/bulk/move", new { ids, parentId = targetId }, "moved");
+                break;
+            case false:
+                await RunBulkAsync("/api/documents/bulk/reference", new { ids, parentId = targetId }, "referenced");
+                break;
+        }
+
+        // A [JSInvokable] call doesn't auto-render the component (unlike a Blazor event handler), so refresh the UI
+        // explicitly after RunBulkAsync updated the folder listing — same pattern as OnUploadsCompleteAsync.
+        StateHasChanged();
+    }
+
     private async Task PlaceReferenceAsync(BrowseNode node)
     {
         if (await PickFolderAsync("Place reference in folder") is not { } folderId)
@@ -5978,7 +6054,9 @@
             }
             else
             {
-                await NavigateToFolderAsync(r.FolderId);
+                // Open the chosen folder AND select the item for viewing — its real row in the primary location,
+                // or its reference (shortcut) row in a referencing folder.
+                await NavigateToFolderAsync(r.FolderId, node.Id);
             }
         }
     }
@@ -6715,7 +6793,11 @@
         var name = await GetDocumentNameAsync(folderId) ?? "(folder)";
         await SelectFolderAsync(new BrowseNode(folderId, name, true, false, false));
 
-        if (selectItemId is { } id && _folderContents.FirstOrDefault(n => n.Id == id && !n.IsReference) is { } target)
+        // Prefer the item's real row; fall back to its reference (shortcut) row when the folder holds only a
+        // shortcut (a referencing folder) — selecting a reference loads the target document for viewing.
+        if (selectItemId is { } id
+            && (_folderContents.FirstOrDefault(n => n.Id == id && !n.IsReference)
+                ?? _folderContents.FirstOrDefault(n => n.Id == id)) is { } target)
         {
             await SelectRowAsync(target);
         }

@@ -55,4 +55,43 @@ public class DesktopBulkActionsTests
         var deleted = await api.BulkDeleteAsync(ids);
         Assert.Equal(3, deleted.Succeeded);
     }
+
+    // The desktop drag-drop "Reference" action places shortcuts for the whole dragged set in one call
+    // (ADR "Desktop drag-and-drop move and reference"); a repeat drop is idempotent (no duplicate shortcuts).
+    [Fact]
+    public async Task Bulk_reference_places_shortcuts_for_the_whole_set()
+    {
+        DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
+        var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
+
+        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var targetName = $"RefTarget-{Guid.NewGuid():N}";
+        await api.CreateFolderAsync(repo.Id, targetName);
+
+        var prefix = $"ref-{Guid.NewGuid():N}";
+        for (var i = 0; i < 2; i++)
+        {
+            await api.UploadFileAsync(repo.Id, $"{prefix}-{i}.txt", Encoding.UTF8.GetBytes("x"));
+        }
+        var children = await api.GetChildrenAsync(repo.Id);
+        var targetId = children.Single(n => n.Name == targetName).Id;
+        var ids = children.Where(n => n.Name.StartsWith(prefix)).Select(n => n.Id).ToList();
+        Assert.Equal(2, ids.Count);
+
+        var referenced = await api.BulkReferenceAsync(ids, targetId);
+        Assert.Equal(2, referenced.Succeeded);
+
+        // The originals stay put, and the target now holds a shortcut to each.
+        var stillHome = (await api.GetChildrenAsync(repo.Id)).Select(n => n.Id).ToHashSet();
+        Assert.Contains(ids[0], stillHome);
+        Assert.Contains(ids[1], stillHome);
+        var refs = (await api.GetReferencesAsync(targetId)).Select(r => r.TargetId).ToHashSet();
+        Assert.Contains(ids[0], refs);
+        Assert.Contains(ids[1], refs);
+
+        // Idempotent: dropping the same set again places no duplicates.
+        var again = await api.BulkReferenceAsync(ids, targetId);
+        Assert.Equal(0, again.Succeeded);
+        Assert.Equal(2, again.Skipped);
+    }
 }

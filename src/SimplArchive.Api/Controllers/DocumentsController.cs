@@ -133,6 +133,23 @@ public class DocumentsController : ControllerBase
         return false;
     }
 
+    // The caller's CanManageRepositories system right (User own∪groups, or ServiceAccount) — gates demoting a
+    // repository by moving a root document into a folder (ADR "Repository creation endpoint").
+    private async Task<bool> HasManageRepositoriesRightAsync(CancellationToken cancellationToken)
+    {
+        if (_currentUserAccessor.UserId is { } userId)
+        {
+            return (await _userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken)).CanManageRepositories;
+        }
+
+        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
+        {
+            return await _dbContext.ServiceAccounts.Where(s => s.Id == serviceAccountId).Select(s => s.CanManageRepositories).SingleOrDefaultAsync(cancellationToken);
+        }
+
+        return false;
+    }
+
     // Refuses a mutation on a document frozen by an active legal hold (ADR "Legal hold & retention
     // enforcement"). Called at every alteration site — rename/move/mask/index-data/ocr; delete checks the
     // whole subtree separately.
@@ -769,6 +786,13 @@ public class DocumentsController : ControllerBase
         var targetRights = await GetCallerRightsAsync(request.ParentId, cancellationToken);
 
         if (!itemRights.CanMove || !targetRights.CanCreateSubItems)
+        {
+            return Forbid();
+        }
+
+        // Moving a root document (a repository, ParentId == null) into a folder demotes the repository — a structural
+        // change gated on CanManageRepositories, beyond the per-document CanMove (ADR "Repository creation endpoint").
+        if (document.ParentId is null && !await HasManageRepositoriesRightAsync(cancellationToken))
         {
             return Forbid();
         }

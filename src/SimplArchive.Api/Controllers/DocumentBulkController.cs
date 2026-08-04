@@ -34,6 +34,7 @@ public class DocumentBulkController : ControllerBase
     private readonly ILegalHoldService _legalHold;
     private readonly IDocumentIndexQueue _queue;
     private readonly IAuditRecorder _audit;
+    private readonly IUserSystemRightsResolver _userSystemRights;
 
     public DocumentBulkController(
         SimplArchiveDbContext dbContext,
@@ -42,7 +43,8 @@ public class DocumentBulkController : ControllerBase
         ICurrentUserAccessor currentUserAccessor,
         ILegalHoldService legalHold,
         IDocumentIndexQueue queue,
-        IAuditRecorder audit)
+        IAuditRecorder audit,
+        IUserSystemRightsResolver userSystemRights)
     {
         _dbContext = dbContext;
         _effectiveRightsCalculator = effectiveRightsCalculator;
@@ -51,12 +53,19 @@ public class DocumentBulkController : ControllerBase
         _legalHold = legalHold;
         _queue = queue;
         _audit = audit;
+        _userSystemRights = userSystemRights;
     }
 
     public class BulkMoveRequest
     {
         public List<Guid> Ids { get; set; } = [];
         public Guid ParentId { get; set; }
+    }
+
+    public class BulkReferenceRequest
+    {
+        public List<Guid> Ids { get; set; } = [];
+        public Guid ParentId { get; set; } // the folder the references are filed into
     }
 
     public class BulkDeleteRequest
@@ -99,6 +108,10 @@ public class DocumentBulkController : ControllerBase
             return Forbid();
         }
 
+        // Moving a root document (a repository) into a folder demotes the repository — needs CanManageRepositories
+        // (ADR "Repository creation endpoint"), resolved once for the caller. A root item is skipped without it.
+        var hasManageRepositories = await HasManageRepositoriesRightAsync(cancellationToken);
+
         var succeeded = 0;
         var skipped = 0;
         foreach (var id in ids)
@@ -106,6 +119,7 @@ public class DocumentBulkController : ControllerBase
             if (id == request.ParentId
                 || await GetDocumentAsync(id, cancellationToken) is not { } document
                 || !(await GetCallerRightsAsync(id, cancellationToken)).CanMove
+                || (document.ParentId is null && !hasManageRepositories)
                 || await _legalHold.IsFrozenAsync(id, cancellationToken)
                 || await IsCheckedOutByOtherAsync(id, cancellationToken)
                 || await IsAncestorOrSelfAsync(id, request.ParentId, cancellationToken))
@@ -128,6 +142,71 @@ public class DocumentBulkController : ControllerBase
 
             await _queue.EnqueueAsync(id, cancellationToken);
             await _audit.RecordAsync(AuditActions.DocumentMoved, "Document", id, document.Name, cancellationToken: cancellationToken);
+            succeeded++;
+        }
+
+        return Ok(Result(succeeded, skipped));
+    }
+
+    // Reference every selected item into one target folder (a shortcut, ADR "Desktop drag-and-drop move and
+    // reference") — the bulk mirror of POST /api/documents/{folderId}/references. The target folder's existence +
+    // CanCreateSubItems are validated once; each item needs CanSee, must not reference into itself / the folder's own
+    // subtree, and must not already be referenced there — else skipped. No repository right is needed (a reference
+    // leaves the item where it is, unlike a move).
+    [HttpPost("reference")]
+    public async Task<IActionResult> Reference([FromBody] BulkReferenceRequest request, CancellationToken cancellationToken)
+    {
+        var ids = Distinct(request.Ids);
+        var folder = await _dbContext.Documents
+            .Where(d => d.Id == request.ParentId).Select(d => new { d.TenantId }).SingleOrDefaultAsync(cancellationToken);
+        if (folder is null)
+        {
+            throw new MoveTargetNotFoundException();
+        }
+
+        if (!(await GetCallerRightsAsync(request.ParentId, cancellationToken)).CanCreateSubItems)
+        {
+            return Forbid();
+        }
+
+        var (createdByUserId, createdByServiceAccountId) = GetCallerIdentity();
+        var succeeded = 0;
+        var skipped = 0;
+        foreach (var id in ids)
+        {
+            if (id == request.ParentId
+                || await GetDocumentAsync(id, cancellationToken) is not { } document
+                || !(await GetCallerRightsAsync(id, cancellationToken)).CanSee
+                || await IsAncestorOrSelfAsync(id, request.ParentId, cancellationToken)
+                || await _dbContext.DocumentReferences.AnyAsync(r => r.ParentFolderId == request.ParentId && r.TargetDocumentId == id, cancellationToken))
+            {
+                skipped++;
+                continue;
+            }
+
+            var reference = new DocumentReference
+            {
+                Id = Guid.NewGuid(),
+                TenantId = folder.TenantId,
+                ParentFolderId = request.ParentId,
+                TargetDocumentId = id,
+                CreatedByUserId = createdByUserId,
+                CreatedByServiceAccountId = createdByServiceAccountId,
+                CreatedAt = DateTimeOffset.UtcNow,
+            };
+            _dbContext.DocumentReferences.Add(reference);
+            try
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (Exception e) when (e is InvalidOperationException or DbUpdateException)
+            {
+                _dbContext.Entry(reference).State = EntityState.Detached; // a race lost the uniqueness — leave it out
+                skipped++;
+                continue;
+            }
+
+            await _audit.RecordAsync(AuditActions.ReferenceAdded, "Document", id, document.Name, "Reference added", cancellationToken: cancellationToken);
             succeeded++;
         }
 
@@ -343,4 +422,24 @@ public class DocumentBulkController : ControllerBase
 
         return new EffectiveRights(false, false, false, false, false, false, false, false, false);
     }
+
+    // The caller's CanManageRepositories system right (User own∪groups, or ServiceAccount) — gates moving a root.
+    private async Task<bool> HasManageRepositoriesRightAsync(CancellationToken cancellationToken)
+    {
+        if (_currentUserAccessor.UserId is { } userId)
+        {
+            return (await _userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken)).CanManageRepositories;
+        }
+
+        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
+        {
+            return await _dbContext.ServiceAccounts.Where(s => s.Id == serviceAccountId).Select(s => s.CanManageRepositories).SingleOrDefaultAsync(cancellationToken);
+        }
+
+        return false;
+    }
+
+    // The creating principal for a new DocumentReference — exactly one of user/service-account is set.
+    private (Guid? CreatedByUserId, Guid? CreatedByServiceAccountId) GetCallerIdentity() =>
+        _currentServiceAccountAccessor.ServiceAccountId is { } saId ? ((Guid?)null, saId) : (_currentUserAccessor.UserId, (Guid?)null);
 }

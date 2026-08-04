@@ -5,6 +5,9 @@
 // to the presigned MinIO URL (never proxied through the Api — ADR 0006/0184); .NET does only the metadata
 // API calls (create child, create version, finalize, index-data, mask).
 
+// Custom drag MIME for an internal move/reference drag — distinguishes a node drag from an OS-file drop.
+const NODE_MIME = 'application/x-simplarchive-node';
+
 // Returns true once wired (or already wired), false if `root` isn't a real element yet — the workbench DOM
 // lives inside <Authorized>, so on a page reload auth may still be resolving when this is first called.
 export function initDropRoot(root, dotNetRef) {
@@ -26,8 +29,31 @@ export function initDropRoot(root, dotNetRef) {
         active?.classList.add('drop-target-active');
     };
 
+    // An internal move/reference drag (a list row or a tree folder) carries our custom MIME type "<id>|<isRef>";
+    // an OS-file drag carries "Files". The two paths never mix. See ADR "Desktop drag-and-drop move and reference".
+    const isInternalDrag = (e) => e.dataTransfer && [...e.dataTransfer.types].includes(NODE_MIME);
+
+    root.addEventListener('dragstart', (e) => {
+        const src = e.target.closest('[data-node-id]');
+        if (src) {
+            const isRef = src.getAttribute('data-node-ref') === 'true';
+            e.dataTransfer.setData(NODE_MIME, `${src.getAttribute('data-node-id')}|${isRef}`);
+            e.dataTransfer.effectAllowed = 'copyMove';
+        }
+    });
+
     root.addEventListener('dragover', (e) => {
-        // A document row (data-drop-doc) offers the filing dialog; a folder row (data-drop-folder) files into it.
+        // Internal drag: only a folder (data-drop-folder) accepts it — never a document row.
+        if (isInternalDrag(e)) {
+            const folder = e.target.closest('[data-drop-folder]');
+            if (folder) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                setActive(folder);
+            }
+            return;
+        }
+        // OS-file drag: a document row (data-drop-doc) offers the filing dialog; a folder row files into it.
         const target = e.target.closest('[data-drop-doc]') || e.target.closest('[data-drop-folder]');
         if (target) {
             e.preventDefault();
@@ -44,6 +70,21 @@ export function initDropRoot(root, dotNetRef) {
     });
 
     root.addEventListener('drop', async (e) => {
+        // Internal move/reference drag: hand the dragged node + target folder to .NET, which prompts + bulk-moves.
+        if (isInternalDrag(e)) {
+            const folder = e.target.closest('[data-drop-folder]');
+            setActive(null);
+            if (!folder) {
+                return;
+            }
+            e.preventDefault();
+            const [nodeId, isRef] = (e.dataTransfer.getData(NODE_MIME) || '').split('|');
+            if (nodeId) {
+                await dotNetRef.invokeMethodAsync('PerformNodeDropAsync', folder.getAttribute('data-drop-folder'), nodeId, isRef === 'true');
+            }
+            return;
+        }
+
         // A document row wins over its containing folder pane (closest() finds the nearest [data-drop-doc]).
         const docTarget = e.target.closest('[data-drop-doc]');
         const folderTarget = e.target.closest('[data-drop-folder]');

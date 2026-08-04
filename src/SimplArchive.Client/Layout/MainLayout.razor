@@ -47,6 +47,18 @@
     .wb-body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
     .wb-impersonation { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 4px 16px;
         background: #b26a00; color: #fff; font-size: .85rem; }
+    /* The self-service avatar is the last (rightmost) app-bar item, so in the non-wrapping header it's the first
+       to be pushed off-screen when the bar overflows on a narrow viewport. Pin it (never shrink) and, on
+       tablet/phone, shed the widest optional items (the display name, then the brand) + tighten spacing so the bar
+       always fits and the avatar stays reachable (matches the workbench breakpoints, ADR 0491). */
+    .wb-userbox { flex: 0 0 auto; }
+    @@media (max-width: 1199px) {
+        .wb-user { display: none; }
+    }
+    @@media (max-width: 767px) {
+        .wb-brand { display: none; }
+        .wb-appbar { gap: 4px; padding: 0 6px; }
+    }
 </style>
 
 <div class="wb-shell">

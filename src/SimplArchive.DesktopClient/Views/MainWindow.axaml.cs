@@ -16,8 +16,24 @@ public partial class MainWindow : Window
     // "Desktop drag-and-drop move and reference".
     private const string NodeDragFormat = "simplarchive/node";
 
+    // One dragged item — the internal drag carries a LIST of these (the whole selection, or a single tree folder),
+    // so a drop moves/references all of them. Id is the underlying item (a reference's target), used for the ops.
+    private sealed record DragNode(Guid Id, string Name, bool IsFolder, bool IsReference);
+
+    // The nodes of an in-flight internal move/reference drag, held in a field (NOT as a DataObject format) so the
+    // drag's DataObject carries ONLY the staged OS files — then the macOS drag badge shows the real item count
+    // instead of the number of data formats (which was always 2: node-format + files). Set at drag-start, read by
+    // the drop handlers to tell an internal drag from an OS-file drop, cleared when the gesture ends.
+    private List<DragNode>? _internalDrag;
+
     private NodeViewModel? _dragCandidate;
     private Point _dragStart;
+    // The multi-selection captured at pointer-PRESS. A plain press on an already-selected row makes the ListBox
+    // collapse its selection to that one row before the drag threshold is crossed, so reading SelectedItems at
+    // drag-start would see only one item. The tunnel press handler fires before that collapse, so we snapshot here.
+    private List<NodeViewModel> _dragSelection = [];
+    private TreeNodeViewModel? _treeDragCandidate;
+    private Point _treeDragStart;
 
     public MainWindow()
     {
@@ -37,9 +53,14 @@ public partial class MainWindow : Window
         // handler so it fires regardless of focus.
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
 
-        // The folder tree is a drop target too (drop onto any folder, incl. a repository root).
+        // The folder tree is a drop target too (drop onto any folder, incl. a repository root) AND a drag source
+        // (drag a folder onto another folder to move/reference it). Tunnel pointer handlers mirror the list's, so
+        // a plain click still selects/expands and only a past-threshold drag starts a move.
         FolderTree.AddHandler(DragDrop.DragOverEvent, OnTreeDragOver);
         FolderTree.AddHandler(DragDrop.DropEvent, OnTreeDrop);
+        FolderTree.AddHandler(PointerPressedEvent, OnTreePointerPressed, RoutingStrategies.Tunnel);
+        FolderTree.AddHandler(PointerMovedEvent, OnTreePointerMoved, RoutingStrategies.Tunnel);
+        FolderTree.AddHandler(PointerReleasedEvent, OnTreePointerReleased, RoutingStrategies.Tunnel);
 
         // The inbox file-list is a drop target for OS files — dropping uploads them into the S3-backed inbox
         // (ADR "Inbox file-list drop-zone").
@@ -594,7 +615,9 @@ public partial class MainWindow : Window
         }
         else
         {
-            await vm.OpenFolderAsync(r.FolderId);
+            // Open the chosen folder AND select the item for viewing — its real row in the primary location, or its
+            // reference (shortcut) row in a referencing folder.
+            await vm.OpenFolderAsync(r.FolderId, references.ItemId);
         }
     });
 
@@ -1311,6 +1334,8 @@ public partial class MainWindow : Window
         {
             _dragCandidate = node;
             _dragStart = e.GetPosition(ContentsList);
+            // Snapshot the full multi-selection now — the ListBox is about to collapse it to the pressed row.
+            _dragSelection = ContentsList.SelectedItems?.OfType<NodeViewModel>().ToList() ?? [];
         }
     }
 
@@ -1338,17 +1363,42 @@ public partial class MainWindow : Window
         }
 
         _dragCandidate = null;
+
+        // The drag carries the whole multi-selection when the grabbed row is part of it (else just that row), so a
+        // drop moves/references ALL of them — not only the one under the cursor. We use the press-time snapshot
+        // (_dragSelection), since the ListBox has since collapsed its live selection to the pressed row. Archive
+        // rows can't be dragged.
+        var source = (_dragSelection.Count > 1 && _dragSelection.Contains(node) ? _dragSelection : [node])
+            .Where(n => !n.IsArchiveEntry && !n.IsArchiveBack).ToList();
+        if (source.Count == 0)
+        {
+            return;
+        }
+
+        // Re-apply the multi-selection the ListBox collapsed to the pressed row on press, so the dragged items stay
+        // visibly highlighted (and the bulk bar stays up) throughout the drag — the user can see exactly what will
+        // move/reference.
+        if (source.Count > 1 && ContentsList.SelectedItems is { } sel)
+        {
+            sel.Clear();
+            foreach (var n in source)
+            {
+                sel.Add(n);
+            }
+        }
+
+        _internalDrag = source.Select(n => new DragNode(n.Id, n.Name, n.IsFolder, n.IsReference)).ToList();
         var data = new DataObject();
-        data.Set(NodeDragFormat, node);
 
         // Also stage the selection as OS files so a drop OUTSIDE the app copies them to the filesystem (issue
         // #266): a document as its current-version file (<stem><ext>), a folder as a recursive .zip. Real
         // docs/folders only — a reference stays an internal-only drag. The files must exist before DoDragDrop, so
         // stage (await) first, with a brief "preparing…" status (an async download can't run during the gesture).
+        // Only the staged files ride the DataObject — the internal payload lives in _internalDrag — so the drag
+        // badge counts items, not formats.
+        var fileCount = 0;
         if (DataContext is MainWindowViewModel dragVm && dragVm.Api is { } dragApi)
         {
-            var selected = ContentsList.SelectedItems?.OfType<NodeViewModel>().ToList() ?? [];
-            List<NodeViewModel> source = selected.Count > 1 && selected.Contains(node) ? selected : [node];
             var items = source.Where(n => !n.IsReference).Select(n => new DragOutItem(n.Id, n.Name, n.IsFolder)).ToList();
             if (items.Count > 0)
             {
@@ -1359,6 +1409,7 @@ public partial class MainWindow : Window
                     if (files.Count > 0)
                     {
                         data.Set(DataFormats.FileNames, files);
+                        fileCount = files.Count;
                     }
                 }
                 catch (Exception)
@@ -1372,14 +1423,106 @@ public partial class MainWindow : Window
             }
         }
 
-        await DragDrop.DoDragDrop(e, data, DragDropEffects.Move | DragDropEffects.Copy);
+        // An all-references drag stages no files; give the DataObject the node format so the OS still starts a drag.
+        if (fileCount == 0)
+        {
+            data.Set(NodeDragFormat, _internalDrag);
+        }
+
+        try
+        {
+            await DragDrop.DoDragDrop(e, data, DragDropEffects.Move | DragDropEffects.Copy);
+        }
+        finally
+        {
+            _internalDrag = null;
+        }
     });
 
     private void OnListPointerReleased(object? sender, PointerReleasedEventArgs e) => _dragCandidate = null;
 
-    private static void OnDragOver(object? sender, DragEventArgs e)
+    // A real tree folder can be dragged onto another folder to move/reference it (synthetic/launcher/personal
+    // nodes aren't real, movable folders, so they're not drag sources). Mirrors the list's candidate+threshold so
+    // a plain click still selects/expands.
+    private void OnTreePointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        e.DragEffects = e.Data.Contains(DataFormats.Files) || e.Data.Contains(NodeDragFormat)
+        if (e.GetCurrentPoint(FolderTree).Properties.IsLeftButtonPressed
+            && FindDataContext<TreeNodeViewModel>(e.Source) is { IsSynthetic: false, IsLauncher: false, IsPersonal: false } node)
+        {
+            _treeDragCandidate = node;
+            _treeDragStart = e.GetPosition(FolderTree);
+        }
+    }
+
+    private void OnTreePointerMoved(object? sender, PointerEventArgs e) => Safe.Fire(async () =>
+    {
+        if (_treeDragCandidate is not { } node)
+        {
+            return;
+        }
+
+        if (!e.GetCurrentPoint(FolderTree).Properties.IsLeftButtonPressed)
+        {
+            _treeDragCandidate = null;
+            return;
+        }
+
+        var delta = e.GetPosition(FolderTree) - _treeDragStart;
+        if (Math.Abs(delta.X) < 6 && Math.Abs(delta.Y) < 6)
+        {
+            return;
+        }
+
+        _treeDragCandidate = null;
+
+        _internalDrag = [new DragNode(node.Id, node.Name, true, node.IsReference)];
+        var data = new DataObject();
+
+        // Stage the folder as a recursive .zip so a drop OUTSIDE the app copies it out (issue #266), unless it's a
+        // shortcut (internal-only). Only the staged file rides the DataObject (the payload is in _internalDrag).
+        var fileCount = 0;
+        if (!node.IsReference && DataContext is MainWindowViewModel dragVm && dragVm.Api is { } dragApi)
+        {
+            dragVm.Status = Strings.Get("StPreparingDrag");
+            try
+            {
+                var files = await DragOutStager.StageAsync(dragApi, [new DragOutItem(node.Id, node.Name, true)]);
+                if (files.Count > 0)
+                {
+                    data.Set(DataFormats.FileNames, files);
+                    fileCount = files.Count;
+                }
+            }
+            catch (Exception)
+            {
+                // Best-effort — the internal move/reference drag still works even if staging fails.
+            }
+            finally
+            {
+                dragVm.Status = "";
+            }
+        }
+
+        if (fileCount == 0)
+        {
+            data.Set(NodeDragFormat, _internalDrag);
+        }
+
+        try
+        {
+            await DragDrop.DoDragDrop(e, data, DragDropEffects.Move | DragDropEffects.Copy);
+        }
+        finally
+        {
+            _internalDrag = null;
+        }
+    });
+
+    private void OnTreePointerReleased(object? sender, PointerReleasedEventArgs e) => _treeDragCandidate = null;
+
+    private void OnDragOver(object? sender, DragEventArgs e)
+    {
+        e.DragEffects = _internalDrag is not null || e.Data.Contains(DataFormats.Files) || e.Data.Contains(NodeDragFormat)
             ? DragDropEffects.Copy | DragDropEffects.Move
             : DragDropEffects.None;
     }
@@ -1391,9 +1534,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Internal move/reference drag: a row dropped on a folder row files into that folder; dropped
-        // anywhere else in the pane files into the currently-open folder.
-        if (e.Data.Get(NodeDragFormat) is NodeViewModel dragged)
+        // Internal move/reference drag (identified by the in-flight _internalDrag field, not a DataObject format):
+        // the dragged items dropped on a folder row file into that folder; dropped anywhere else in the pane file
+        // into the currently-open folder.
+        if (_internalDrag is { } dragged)
         {
             var node = FindDataContext<NodeViewModel>(e.Source);
             var targetFolderId = node is { IsFolder: true } ? node.Id : vm.CurrentFolderId;
@@ -1434,13 +1578,16 @@ public partial class MainWindow : Window
 
     private void OnTreeDragOver(object? sender, DragEventArgs e)
     {
-        e.DragEffects = e.Data.Contains(NodeDragFormat) ? DragDropEffects.Copy | DragDropEffects.Move : DragDropEffects.None;
+        // The tree accepts an internal move/reference drag (the _internalDrag field) — never an OS-file drop.
+        e.DragEffects = _internalDrag is not null || e.Data.Contains(NodeDragFormat)
+            ? DragDropEffects.Copy | DragDropEffects.Move
+            : DragDropEffects.None;
     }
 
     private void OnTreeDrop(object? sender, DragEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm
-            && e.Data.Get(NodeDragFormat) is NodeViewModel dragged
+            && _internalDrag is { } dragged
             && FindDataContext<TreeNodeViewModel>(e.Source) is { } treeNode)
         {
             await PerformDropAsync(vm, dragged, treeNode.Id);
@@ -1448,27 +1595,39 @@ public partial class MainWindow : Window
     });
 #pragma warning restore CS0618
 
-    // A dragged real item offers Move or Reference; a dragged shortcut only ever places another shortcut
-    // (moving the real target when you grabbed a shortcut would be surprising).
-    private async Task PerformDropAsync(MainWindowViewModel vm, NodeViewModel dragged, Guid targetFolderId)
+    // Dragged real items offer Move or Reference; a drag of only shortcuts only ever places more shortcuts (moving
+    // the real targets when you grabbed shortcuts would be surprising). Drops onto self are filtered out; the
+    // backend additionally skips a folder dropped into its own subtree (cycle) and no-op re-references.
+    private async Task PerformDropAsync(MainWindowViewModel vm, IReadOnlyList<DragNode> dragged, Guid targetFolderId)
     {
-        if (dragged.IsReference)
+        var items = dragged.Where(d => d.Id != targetFolderId).ToList();
+        if (items.Count == 0)
         {
-            await vm.ReferenceNodeAsync(dragged, targetFolderId);
             return;
         }
 
+        var ids = items.Select(d => d.Id).ToList();
+
+        // An all-shortcuts drag only ever places references.
+        if (items.All(d => d.IsReference))
+        {
+            await vm.BulkReferenceNodesAsync(ids, targetFolderId);
+            return;
+        }
+
+        var label = items.Count == 1 ? $"'{items[0].Name}'" : $"{items.Count} items";
+        var where = items.Count == 1 ? "it is" : "they are";
         var action = await new DropActionDialog(
-            $"Move '{dragged.Name}' here, or place a reference (shortcut) that leaves it where it is?")
+            $"Move {label} here, or place a reference (shortcut) that leaves {(items.Count == 1 ? "it" : "them")} where {where}?")
             .ShowDialog<DropAction?>(this);
 
         switch (action)
         {
             case DropAction.Move:
-                await vm.MoveNodeAsync(dragged, targetFolderId);
+                await vm.BulkMoveNodesAsync(ids, targetFolderId);
                 break;
             case DropAction.Reference:
-                await vm.ReferenceNodeAsync(dragged, targetFolderId);
+                await vm.BulkReferenceNodesAsync(ids, targetFolderId);
                 break;
         }
     }

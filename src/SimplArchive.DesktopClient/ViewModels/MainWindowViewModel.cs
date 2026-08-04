@@ -1627,6 +1627,37 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    // Move / reference a specific set of dragged item ids into a target folder — used by drag-drop, which operates
+    // on the DRAGGED selection (which may differ from the persisted multi-selection that RunBulkAsync uses).
+    public Task BulkMoveNodesAsync(IReadOnlyList<Guid> ids, Guid targetFolderId) =>
+        RunDroppedBulkAsync(() => _api!.BulkMoveAsync(ids, targetFolderId), "moved", ids.Count);
+
+    public Task BulkReferenceNodesAsync(IReadOnlyList<Guid> ids, Guid targetFolderId) =>
+        RunDroppedBulkAsync(() => _api!.BulkReferenceAsync(ids, targetFolderId), "referenced", ids.Count);
+
+    private async Task RunDroppedBulkAsync(Func<Task<SimplArchiveApiClient.BulkResult>> action, string verb, int count)
+    {
+        if (_api is null || _currentFolderId is not { } folderId || count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await action();
+            Status = string.Format(Strings.Get("StBulkResult"), result.Succeeded, verb) + (result.Skipped > 0 ? string.Format(Strings.Get("StBulkSkipped"), result.Skipped) : ".");
+            await LoadFolderContentsAsync(folderId);
+        }
+        catch (Services.ApiActionException e)
+        {
+            Status = e.Message;
+        }
+        catch (Exception e)
+        {
+            Status = string.Format(Strings.Get("StErrBulk"), e.Message);
+        }
+    }
+
     // "Go to …" on a reference: navigate the contents pane to the target's real home folder and select it.
     public async Task GoToReferenceAsync(NodeViewModel node)
     {
@@ -1665,7 +1696,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             Breadcrumbs.Add(new BreadcrumbViewModel { Name = name, FolderId = folderId, ShowSeparator = true });
             if (selectTargetId is { } targetId)
             {
-                SelectedItem = Items.FirstOrDefault(i => i.Id == targetId && !i.IsReference);
+                // Prefer the item's real row; fall back to its reference (shortcut) row when the folder holds only
+                // a shortcut (a referencing folder) — selecting a reference loads the target document for viewing.
+                SelectedItem = Items.FirstOrDefault(i => i.Id == targetId && !i.IsReference)
+                    ?? Items.FirstOrDefault(i => i.Id == targetId);
             }
         }
         catch (Exception e)
@@ -5502,6 +5536,36 @@ public sealed partial class MainWindowViewModel : ObservableObject
             SelectedTreeNode?.Id == sub.Id,                               // parent folder revealed + selected in the tree
             Items.Any(n => n.Id == docId && !n.IsReference),             // the document is listed in the list pane
             SelectedItem?.Id == docId);                                  // …and selected there
+    }
+
+    // The references dialog's "Open" must open the chosen folder AND select the item for viewing — its real row in
+    // the primary location, and its reference (shortcut) row in a referencing folder (that reference row was
+    // previously skipped because the selection filtered out references). Drives OpenFolderAsync exactly as the
+    // dialog's Open path does.
+    internal async Task<(bool SelectedInPrimary, bool SelectedReferenceInRefFolder)> OpenReferenceSelectsDocumentSelfTestAsync(string accessToken)
+    {
+        UseApi(new SimplArchiveApiClient(accessToken));
+        await LoadRootAsync();
+        var repo = Tree[0];
+
+        // A document filed at the repo root (its primary location) and a subfolder that references it.
+        var refFolderName = "refopen-" + Guid.NewGuid().ToString("N")[..8];
+        await _api!.CreateFolderAsync(repo.Id, refFolderName);
+        await LoadFolderContentsAsync(repo.Id);
+        var refFolder = Items.First(n => n.IsFolder && !n.IsReference && n.Name == refFolderName);
+        var docName = "refopen-doc-" + Guid.NewGuid().ToString("N")[..8] + ".txt";
+        var docId = await _api.UploadFileAsync(repo.Id, docName, System.Text.Encoding.UTF8.GetBytes("body"));
+        await _api.CreateReferenceAsync(refFolder.Id, docId);
+
+        // Open the primary location selecting the doc → its real (non-reference) row is selected.
+        await OpenFolderAsync(repo.Id, docId);
+        var primaryOk = SelectedItem is { IsReference: false } primary && primary.Id == docId;
+
+        // Open the referencing folder selecting the doc → its reference (shortcut) row is selected for viewing.
+        await OpenFolderAsync(refFolder.Id, docId);
+        var refOk = SelectedItem is { IsReference: true } shortcut && shortcut.Id == docId;
+
+        return (primaryOk, refOk);
     }
 
     // Repository sort order (issue #339): folders always come first, alphabetically, then documents; the tree's

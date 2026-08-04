@@ -84,4 +84,59 @@ public class BulkActionsTests
         Assert.Equal(0, result.GetProperty("succeeded").GetInt32());
         Assert.Equal(1, result.GetProperty("skipped").GetInt32());
     }
+
+    [Fact]
+    public async Task Bulk_reference_creates_shortcuts_and_is_idempotent()
+    {
+        var (clientId, secret, _) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+
+        var repoId = (await TestJson.Post(owner, "/api/repositories", new { name = $"Ref-{Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+        var folderId = (await TestJson.Post(owner, $"/api/documents/{repoId}/children", new { name = "Shortcuts" })).GetProperty("id").GetGuid();
+        var ids = new List<Guid>();
+        for (var i = 0; i < 3; i++)
+        {
+            ids.Add((await TestJson.Post(owner, $"/api/documents/{repoId}/children", new { name = $"item-{i}" })).GetProperty("id").GetGuid());
+        }
+
+        // Reference all three into the folder (shortcuts — the items stay under the repo).
+        var referenced = await TestJson.Post(owner, "/api/documents/bulk/reference", new { ids, parentId = folderId });
+        Assert.Equal(3, referenced.GetProperty("succeeded").GetInt32());
+        Assert.Equal(0, referenced.GetProperty("skipped").GetInt32());
+        Assert.Equal(3, (await TestJson.Get(owner, $"/api/documents/{folderId}/references")).GetProperty("references").GetArrayLength());
+
+        // Idempotent: the same references already exist → all skipped.
+        var again = await TestJson.Post(owner, "/api/documents/bulk/reference", new { ids, parentId = folderId });
+        Assert.Equal(0, again.GetProperty("succeeded").GetInt32());
+        Assert.Equal(3, again.GetProperty("skipped").GetInt32());
+    }
+
+    [Fact]
+    public async Task Bulk_moving_a_repository_root_needs_manage_repositories_right()
+    {
+        var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+
+        var repoA = (await TestJson.Post(owner, "/api/repositories", new { name = $"A-{Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+        var repoB = (await TestJson.Post(owner, "/api/repositories", new { name = $"B-{Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+
+        // A user WITHOUT CanManageRepositories, granted the ACL rights to move repoA into repoB.
+        var email = $"mover-{Guid.NewGuid():N}@e2e.local";
+        const string password = "mover1234";
+        var moverId = await _factory.SeedUserAsync(tenantId, email, password, "Mover", canManageRepositories: false);
+        (await owner.PutAsJsonAsync($"/api/documents/{repoA}/acl-entries/users/{moverId}", new { canSee = true, canReadContent = true, canMove = true })).EnsureSuccessStatusCode();
+        (await owner.PutAsJsonAsync($"/api/documents/{repoB}/acl-entries/users/{moverId}", new { canSee = true, canReadContent = true, canCreateSubItems = true })).EnsureSuccessStatusCode();
+        using var mover = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, password));
+
+        // Moving the repository root is skipped without CanManageRepositories (the ACL rights alone aren't enough).
+        var blocked = await TestJson.Post(mover, "/api/documents/bulk/move", new { ids = new[] { repoA }, parentId = repoB });
+        Assert.Equal(0, blocked.GetProperty("succeeded").GetInt32());
+        Assert.Equal(1, blocked.GetProperty("skipped").GetInt32());
+
+        // The owner (CanManageRepositories) can demote it into repoB.
+        var ok = await TestJson.Post(owner, "/api/documents/bulk/move", new { ids = new[] { repoA }, parentId = repoB });
+        Assert.Equal(1, ok.GetProperty("succeeded").GetInt32());
+        var children = (await TestJson.Get(owner, $"/api/documents/{repoB}/children")).GetProperty("children").EnumerateArray().Select(c => c.GetProperty("id").GetGuid()).ToHashSet();
+        Assert.Contains(repoA, children);
+    }
 }
