@@ -15,6 +15,13 @@ const el = (tag, cls) => { const e = document.createElement(tag); if (cls) e.cla
 // overlays are percentage-based, so they scale with the page for free — no overlay math changes. Clamped 1..4 (the
 // canvas is rasterized at 2×, so ~2× is the crisp ceiling; 4 allows a closer, softer look). State lives on the host
 // dataset so each preview host (detail / fullscreen / recycle-bin) zooms independently.
+// A touch-ONLY device (no hover, coarse pointer) — true on phones/tablets, FALSE on a hybrid with a mouse (its
+// primary pointer is fine). Annotation authoring (draw / move / resize / marquee) is gated off on such devices
+// (#349): the precise drag + hover affordances don't work by finger, so existing annotations stay read-only-
+// visible but can't be created/edited/moved. The toolbar's authoring buttons are hidden in Blazor by the same test.
+const TOUCH_ONLY = typeof window !== 'undefined' && window.matchMedia
+    && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+
 const ZOOM_MIN = 1, ZOOM_MAX = 4;
 
 function applyZoom(host, z) {
@@ -268,7 +275,7 @@ function attachInteract(elm, p, a, isNote) {
     // Block the click from reaching the overlay (which would try to copy a word under the box).
     elm.addEventListener('click', e => e.stopPropagation());
     elm.addEventListener('pointerdown', e => {
-        if (e.button !== 0) return;
+        if (TOUCH_ONLY || e.button !== 0) return;
         e.stopPropagation();
         const box = elm.getBoundingClientRect();
         const group = a.selected && (state.selectedCount || 0) > 1;
@@ -322,7 +329,7 @@ function attachInteract(elm, p, a, isNote) {
 function makeShapeResizable(grip, elm, p, a) {
     let active = false;
     grip.addEventListener('pointerdown', e => {
-        if (e.button !== 0) return;
+        if (TOUCH_ONLY || e.button !== 0) return;
         e.stopPropagation();
         e.preventDefault();
         active = true;
@@ -410,7 +417,7 @@ function layoutShape(elm, kind, x, y, w, h, color) {
 function attachDraw(overlay, p) {
     let start = null, preview = null;
     overlay.addEventListener('pointerdown', e => {
-        if (e.button !== 0 || !state || !state.drawKind) return;
+        if (TOUCH_ONLY || e.button !== 0 || !state || !state.drawKind) return;
         const rect = overlay.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) return;
         e.stopPropagation(); e.preventDefault();
@@ -454,7 +461,7 @@ const clamp01 = v => Math.max(0, Math.min(1, v));
 function attachMarquee(overlay, p) {
     let start = null, boxEl = null, moved = false;
     overlay.addEventListener('pointerdown', e => {
-        if (e.button !== 0 || !state || state.drawKind || state.addMode) return;
+        if (TOUCH_ONLY || e.button !== 0 || !state || state.drawKind || state.addMode) return;
         const rect = overlay.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) return;
         start = { x: e.clientX, y: e.clientY, rect };
@@ -499,7 +506,7 @@ function attachMarquee(overlay, p) {
 function makeResizable(grip, m, p, id) {
     let start = null;
     grip.addEventListener('pointerdown', e => {
-        if (e.button !== 0) return;
+        if (TOUCH_ONLY || e.button !== 0) return;
         e.stopPropagation();
         e.preventDefault();
         const box = m.getBoundingClientRect();

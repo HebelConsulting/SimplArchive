@@ -49,6 +49,12 @@ export function watchViewport(dotNetRef) {
     reportViewport();
 }
 
+// A touch-ONLY device: no hover + coarse pointer. True on phones/tablets, FALSE on a hybrid with a mouse. Used to
+// gate annotation authoring (#349) — a device capability, so read once (it doesn't change with viewport resize).
+export function isTouchOnly() {
+    return !!(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
+}
+
 function loadState() {
     let s;
     try { s = JSON.parse(localStorage.getItem(KEY)); } catch { /* ignore */ }

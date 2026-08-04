@@ -845,7 +845,7 @@
                                         {
                                             @* Sticky notes (ADR "Document annotations"): add a note (only with CanAnnotate,
                                                ADR "CanAnnotate right"), and show/hide the markers (viewing needs only read). *@
-                                            @if (_annotationsCanCreate)
+                                            @if (_annotationsCanCreate && !_isTouchOnly)
                                             {
                                                 <MudIconButton Class="wb-pv-note-add" Icon="@Icons.Material.Filled.AddComment" Size="Size.Small" Color="@(_annotationAddMode ? Color.Primary : Color.Default)"
                                                                OnClick="StartAddNoteAsync" title="@Strings.Get("AddStickyNote")" />
@@ -871,7 +871,7 @@
                                             <MudIconButton Class="wb-pv-note-toggle" Icon="@(_annotationsVisible ? Icons.Material.Filled.StickyNote2 : Icons.Material.Outlined.StickyNote2)" Size="Size.Small"
                                                            OnClick="ToggleAnnotationsAsync" title="@(_annotationsVisible ? Strings.Get("PvHideNotes") : Strings.Get("PvShowNotes"))" />
                                             @* Multi-select actions (ADR "Annotation multi-select" web parity): Ctrl-click / marquee to select, then copy / paste / delete. *@
-                                            @if (_annotationsCanCreate)
+                                            @if (_annotationsCanCreate && !_isTouchOnly)
                                             {
                                                 <MudIconButton Class="wb-pv-anno-copy" Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Disabled="@(!_hasAnnotationSelection)"
                                                                OnClick="CopySelectedAnnotations" title="@Strings.Get("CopyAnnotationsTip")" />
@@ -3209,6 +3209,9 @@
     // a selected document opens a full-screen detail overlay with Preview/Details/Comments sub-tabs.
     private bool _isPhone;
     private bool _viewportWatched;
+    // A touch-only device (no hover, coarse pointer) — hides the annotation authoring tools (#349); captured once
+    // from wbLayout.js (a device capability). False on a hybrid with a mouse, so those keep full authoring.
+    private bool _isTouchOnly;
     private bool _treeDrawerOpen;
     private string _phoneDetailTab = "preview";
 
@@ -3446,6 +3449,9 @@
                 try
                 {
                     await _layoutModule.InvokeVoidAsync("watchViewport", _selfRef);
+                    // Capture the touch-only-device flag once (gates the annotation authoring tools, #349). Guarded
+                    // in the same try so a stale cached module missing the export degrades quietly to false.
+                    _isTouchOnly = await _layoutModule.InvokeAsync<bool>("isTouchOnly");
                 }
                 catch (JSException ex)
                 {
