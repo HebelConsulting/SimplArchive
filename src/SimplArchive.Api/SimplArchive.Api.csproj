@@ -7,6 +7,19 @@
     <EmbeddedResource Include="DemoData/sample-invoice.pdf" LogicalName="DemoInvoice.pdf" />
     <EmbeddedResource Include="DemoData/sample-offer-v1.pdf" LogicalName="DemoOfferV1.pdf" />
     <EmbeddedResource Include="DemoData/sample-offer-v2.pdf" LogicalName="DemoOfferV2.pdf" />
+    <!-- Richer demo tree (ADR 0214, issue #354): Business Years / Contracts / General folders with varied file
+         types. PDFs compile from the .typ sources with Typst; the office/email files are checked-in fixtures. -->
+    <EmbeddedResource Include="DemoData/choc-invoice-v1.pdf" LogicalName="DemoChocInvoiceV1.pdf" />
+    <EmbeddedResource Include="DemoData/choc-invoice-v2.pdf" LogicalName="DemoChocInvoiceV2.pdf" />
+    <EmbeddedResource Include="DemoData/telekom-contract.pdf" LogicalName="DemoTelekomContract.pdf" />
+    <EmbeddedResource Include="DemoData/telekom-invoice-jan.pdf" LogicalName="DemoTelekomInvoiceJan.pdf" />
+    <EmbeddedResource Include="DemoData/telekom-invoice-feb.pdf" LogicalName="DemoTelekomInvoiceFeb.pdf" />
+    <EmbeddedResource Include="DemoData/telekom-invoice-mar.pdf" LogicalName="DemoTelekomInvoiceMar.pdf" />
+    <EmbeddedResource Include="DemoData/contoso-forecast.xlsx" LogicalName="DemoContosoForecast.xlsx" />
+    <EmbeddedResource Include="DemoData/rental-complaint.docx" LogicalName="DemoRentalComplaint.docx" />
+    <EmbeddedResource Include="DemoData/letterhead-template.odt" LogicalName="DemoLetterheadTemplate.odt" />
+    <EmbeddedResource Include="DemoData/invoice-template.ods" LogicalName="DemoInvoiceTemplate.ods" />
+    <EmbeddedResource Include="DemoData/transport-ticket.eml" LogicalName="DemoTransportTicket.eml" />
   </ItemGroup>
 
   <ItemGroup>

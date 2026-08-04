@@ -1,0 +1,24 @@
+From: billing@citytransit.example
+To: demo@simplarchive.local
+Subject: Your public transport ticket — invoice TT-2026-02-0155
+Date: Mon, 09 Feb 2026 08:14:00 +0100
+Message-ID: <tt-2026-02-0155@citytransit.example>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Dear customer,
+
+Thank you for your purchase. Please find your public transport ticket invoice below.
+
+  Invoice no.:   TT-2026-02-0155
+  Date:          09 February 2026
+  Item:          Day pass, Zones 10 + 20
+  Amount:        CHF 8.80 (incl. 8.1% VAT)
+  Payment:       Credit card ending 4417
+
+This e-mail is your receipt. No separate invoice will be sent.
+
+Kind regards,
+CityTransit Billing
+billing@citytransit.example

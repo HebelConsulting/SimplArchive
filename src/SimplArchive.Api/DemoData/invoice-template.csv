@@ -1,0 +1,13 @@
+INVOICE TEMPLATE,,,
+Your Company AG,,,
+Street 1 · 6000 City,,,
+,,,
+Bill to:,<customer>,,
+Invoice No.:,<number>,Date:,<yyyy-mm-dd>
+,,,
+Pos,Description,Qty,Amount
+1,,,
+2,,,
+,,,Subtotal,
+,,,VAT 8.1%,
+,,,Total,

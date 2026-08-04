@@ -1,0 +1,8 @@
+Contoso Cloud — 2026 Cost Forecast,,,
+Service,Monthly (CHF),Annual (CHF),Notes
+Compute (VMs),420,5040,3 reserved instances
+Object storage,85,1020,~2 TB
+Egress bandwidth,60,720,estimate
+CI/CD minutes,110,1320,team of 5
+Support plan,200,2400,Business tier
+Total,875,10500,excl. VAT
