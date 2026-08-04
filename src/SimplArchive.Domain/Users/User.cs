@@ -57,6 +57,10 @@ public class User : ITenantScoped
 
     public bool CanManageRepositories { get; set; }
 
+    // Manage other users' inboxes (ADR 0532): see + move any user's inbox items tenant-wide (a triage right). Not
+    // implied by IsTenantAdmin, same as every other right here.
+    public bool CanManageInboxes { get; set; }
+
     public bool CanManageServiceAccounts { get; set; }
 
     // Mask management is tenant-wide structural configuration, same tier as CanManageRepositories — see

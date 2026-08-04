@@ -7531,10 +7531,14 @@
     private string _inboxStatus = "";
     private bool _inboxBusy;
     private InboxItem? _selectedInboxItem;
-    private record InboxItem(string Name, long Size, bool HasMask, string DownloadHref, string PreviewHref, string FileHref, string DeleteHref)
+    private record InboxItem(string Name, long Size, bool HasMask, string DownloadHref, string PreviewHref, string FileHref, string DeleteHref, Guid? GroupId, string? GroupName)
     {
         // Un-classified items (no staged mask sidecar) show in square brackets (ADRs 0279/0281).
         public string DisplayName => HasMask ? Name : $"[{Name}]";
+
+        // A group-inbox item (ADR 0532): the `?group=` query is appended to the item endpoints the client builds
+        // from Name (preview / mask); GroupName labels the row so the shared source is obvious.
+        public string GroupQuery => GroupId is { } g ? $"?group={g}" : "";
     }
 
     private async Task LoadInboxAsync()
@@ -7548,7 +7552,8 @@
             _inboxItems = (response?.Items ?? []).Select(i => new InboxItem(
                 i.Name, i.Size, i.HasMask,
                 RelativeHref(i.Links, "download") ?? "", RelativeHref(i.Links, "preview") ?? "",
-                RelativeHref(i.Links, "file") ?? "", RelativeHref(i.Links, "self") ?? "")).ToList();
+                RelativeHref(i.Links, "file") ?? "", RelativeHref(i.Links, "self") ?? "",
+                i.GroupId, i.GroupName)).ToList();
             _inboxStatus = _inboxItems.Count == 0 ? "Your inbox is empty. Upload files to file them into a repository." : $"{_inboxItems.Count} item(s).";
         }
         catch (Exception)
@@ -7706,7 +7711,7 @@
         // the shared pdf.js host with the hit-overlay. 204 = no preview available.
         try
         {
-            using var r = await Http.GetAsync($"api/inbox/{Uri.EscapeDataString(item.Name)}/preview");
+            using var r = await Http.GetAsync($"api/inbox/{Uri.EscapeDataString(item.Name)}/preview{item.GroupQuery}");
             if (r.IsSuccessStatusCode && r.StatusCode != HttpStatusCode.NoContent)
             {
                 var preview = await r.Content.ReadFromJsonAsync<InboxPreviewResponse>();
@@ -7957,7 +7962,7 @@
     }
 
     private record InboxResponse { public List<InboxItemDto> Items { get; set; } = []; }
-    private record InboxItemDto { public string Name { get; set; } = ""; public long Size { get; set; } public bool HasMask { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record InboxItemDto { public string Name { get; set; } = ""; public long Size { get; set; } public bool HasMask { get; set; } public Guid? GroupId { get; set; } public string? GroupName { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record InboxMaskDraft { public string? Name { get; set; } public string? DocumentDate { get; set; } public Guid? MaskId { get; set; } public List<InboxDraftField> Fields { get; set; } = []; public List<string>? OcrLanguages { get; set; } }
     private record InboxPreviewResponse { public string? PreviewUrl { get; set; } public bool PreviewConverted { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record InboxDraftField { public Guid FieldDefinitionId { get; set; } public List<string> Values { get; set; } = []; }

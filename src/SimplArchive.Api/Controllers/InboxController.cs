@@ -14,6 +14,7 @@ using SimplArchive.Api.Errors.Exceptions.Storage;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
+using SimplArchive.Infrastructure.Acl;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Controllers;
@@ -61,7 +62,8 @@ public class InboxController : ControllerBase
         DocumentFinalizer finalizer,
         ILegalHoldService legalHold,
         IStorageQuotaService storageQuota,
-        IAuditRecorder audit)
+        IAuditRecorder audit,
+        IUserSystemRightsResolver userSystemRights)
     {
         _dbContext = dbContext;
         _objectStorageClient = objectStorageClient;
@@ -74,11 +76,13 @@ public class InboxController : ControllerBase
         _legalHold = legalHold;
         _storageQuota = storageQuota;
         _audit = audit;
+        _userSystemRights = userSystemRights;
     }
 
     private readonly ILegalHoldService _legalHold;
     private readonly IStorageQuotaService _storageQuota;
     private readonly IAuditRecorder _audit;
+    private readonly IUserSystemRightsResolver _userSystemRights;
 
     public class InboxItemResource : HypermediaResource
     {
@@ -90,11 +94,36 @@ public class InboxController : ControllerBase
 
         // True when a `{name}.mask.json` sidecar exists — the item has a staged mask/index-data draft.
         public bool HasMask { get; set; }
+
+        // The source of a group-inbox item (ADR 0532): the group's id + name, so the client labels it `[GroupName]`
+        // and its action links already carry `?group=`. Null for the caller's own inbox items.
+        public Guid? GroupId { get; set; }
+
+        public string? GroupName { get; set; }
+
+        // The source of another user's inbox item (ADR 0532), shown only to a CanManageInboxes holder viewing a
+        // user's inbox: the user's id + name, so the client labels it and its links carry `?user=`. Null otherwise.
+        public Guid? UserId { get; set; }
+
+        public string? UserName { get; set; }
     }
 
     public class InboxResource : HypermediaResource
     {
         public List<InboxItemResource> Items { get; set; } = [];
+    }
+
+    // A group the caller belongs to — an upload-target choice for a group inbox (ADR 0532).
+    public class InboxGroupResource
+    {
+        public Guid Id { get; set; }
+
+        public string Name { get; set; } = "";
+    }
+
+    public class InboxGroupsResource : HypermediaResource
+    {
+        public List<InboxGroupResource> Groups { get; set; } = [];
     }
 
     public class UploadInboxRequest
@@ -123,6 +152,15 @@ public class InboxController : ControllerBase
         // Optional feed comment posted on the resulting document (ADR "Filing posts a feed comment"); when
         // blank, a default "@{DisplayName} filed a new document." is posted.
         public string? Comment { get; set; }
+    }
+
+    // Move an inbox item into another inbox (ADR 0532) — exactly one target: a group's inbox (any group in the
+    // tenant) or a user's inbox (any user). Both null / both set is a 400.
+    public class MoveInboxRequest
+    {
+        public Guid? TargetGroupId { get; set; }
+
+        public Guid? TargetUserId { get; set; }
     }
 
     public class InboxPreviewResource : HypermediaResource
@@ -198,6 +236,57 @@ public class InboxController : ControllerBase
 
     private static string Prefix(Guid tenantId, Guid userId) => $"tenants/{tenantId}/users/{userId}/inbox/";
 
+    // A group inbox is the exact peer of the per-user inbox, keyed by group (ADR 0532) — implicit for every group,
+    // access = effective group membership.
+    private static string GroupPrefix(Guid tenantId, Guid groupId) => $"tenants/{tenantId}/groups/{groupId}/inbox/";
+
+    private sealed record InboxScope(Guid TenantId, Guid UserId, string Prefix);
+
+    // Resolves + authorizes the storage scope of an inbox item addressed by name + an optional source selector
+    // (ADR 0532): own inbox (neither set), a group inbox the caller is an effective member of (`group`), or a
+    // specific user's inbox (`user`) — the caller's own, or any user's if the caller holds CanManageInboxes.
+    // null → the caller may not act on it (Forbid); item existence stays a separate NotFound check. A mask sidecar
+    // is never addressable as an item. Scope.UserId is always the CALLER (filing attribution / rights checks);
+    // Scope.Prefix is where the object actually lives.
+    private async Task<InboxScope?> ResolveScopeAsync(Guid? group, Guid? user, string name, CancellationToken cancellationToken)
+    {
+        if (Scope() is not var (tenantId, callerId) || IsMaskSidecar(name))
+        {
+            return null;
+        }
+
+        if (group is { } groupId)
+        {
+            var groups = await GroupMembershipExpansion.GetEffectiveGroupIdsForUserAsync(_dbContext, callerId, cancellationToken);
+            return groups.Contains(groupId) ? new InboxScope(tenantId, callerId, GroupPrefix(tenantId, groupId)) : null;
+        }
+
+        if (user is { } userId && userId != callerId)
+        {
+            // Another user's inbox — admin-gated (CanManageInboxes).
+            return await CanManageInboxesAsync(callerId, cancellationToken)
+                ? new InboxScope(tenantId, callerId, Prefix(tenantId, userId))
+                : null;
+        }
+
+        // Neither source (or ?user= is the caller themselves) → the caller's own inbox.
+        return new InboxScope(tenantId, callerId, Prefix(tenantId, callerId));
+    }
+
+    private async Task<bool> CanManageInboxesAsync(Guid userId, CancellationToken cancellationToken) =>
+        (await _userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken)).CanManageInboxes;
+
+    // The `?group=`/`?user=` source query for an item's action links, so the client keeps acting on the right
+    // prefix; own-inbox items carry no query.
+    private static string SourceQuery(Guid? group, Guid? user) =>
+        group is { } g ? $"?group={g}" : user is { } u ? $"?user={u}" : "";
+
+    private static string ItemHref(string name, string suffix, Guid? group, Guid? user)
+    {
+        var path = suffix.Length == 0 ? $"/api/inbox/{Uri.EscapeDataString(name)}" : $"/api/inbox/{Uri.EscapeDataString(name)}/{suffix}";
+        return path + SourceQuery(group, user);
+    }
+
     private static bool IsMaskSidecar(string name) => name.EndsWith(MaskSidecarSuffix, StringComparison.OrdinalIgnoreCase);
 
     private static string SidecarName(string name) => name + MaskSidecarSuffix;
@@ -208,15 +297,63 @@ public class InboxController : ControllerBase
     private static bool IsDerivedArtifact(string name) =>
         name.Contains(".preview.", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".textlayout.json", StringComparison.OrdinalIgnoreCase);
 
+    // The caller's inbox. By default shows only the caller's OWN items (ADR 0532's "show own only" filter, on by
+    // default). `?includeGroups=true` also aggregates the inbox of every group the caller is an effective member of
+    // (each item labelled `[GroupName]`, carrying `?group=` on its links). `?user={id}` opens a specific user's
+    // inbox instead — the caller's own, or any user's for a CanManageInboxes holder (else 403).
     [HttpGet]
-    public async Task<IActionResult> List(CancellationToken cancellationToken)
+    public async Task<IActionResult> List([FromQuery] bool includeGroups, [FromQuery] Guid? user, CancellationToken cancellationToken)
     {
-        if (Scope() is not var (tenantId, userId))
+        if (Scope() is not var (tenantId, callerId))
         {
             return Forbid();
         }
 
-        var prefix = Prefix(tenantId, userId);
+        // A CanManageInboxes holder viewing another user's inbox (the user-picker path).
+        if (user is { } targetUserId && targetUserId != callerId)
+        {
+            if (!await CanManageInboxesAsync(callerId, cancellationToken))
+            {
+                return Forbid();
+            }
+
+            var targetName = await _dbContext.Users.Where(u => u.Id == targetUserId).Select(u => u.DisplayName).SingleOrDefaultAsync(cancellationToken);
+            if (targetName is null)
+            {
+                return NotFound();
+            }
+
+            var userItems = await ListPrefixItemsAsync(Prefix(tenantId, targetUserId), group: null, groupName: null, user: targetUserId, userName: targetName, cancellationToken);
+            return Ok(new InboxResource { Items = userItems, Links = [new Link("self", "/api/inbox", "GET")] });
+        }
+
+        // The caller's own inbox, plus — opt-in via the filter — their group inboxes (alphabetical, stable order).
+        var items = await ListPrefixItemsAsync(Prefix(tenantId, callerId), group: null, groupName: null, user: null, userName: null, cancellationToken);
+
+        if (includeGroups)
+        {
+            var groupIds = await GroupMembershipExpansion.GetEffectiveGroupIdsForUserAsync(_dbContext, callerId, cancellationToken);
+            if (groupIds.Count > 0)
+            {
+                var groups = await _dbContext.Groups
+                    .Where(g => groupIds.Contains(g.Id))
+                    .Select(g => new { g.Id, g.Name })
+                    .ToListAsync(cancellationToken);
+                foreach (var g in groups.OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase))
+                {
+                    items.AddRange(await ListPrefixItemsAsync(GroupPrefix(tenantId, g.Id), g.Id, g.Name, user: null, userName: null, cancellationToken));
+                }
+            }
+        }
+
+        return Ok(new InboxResource { Items = items, Links = [new Link("self", "/api/inbox", "GET")] });
+    }
+
+    // Lists the (non-sidecar, non-derived) items under one inbox prefix — the caller's own (both null), a group's
+    // (group + name), or another user's (user + name, admin-only). Each item carries its source so the client
+    // labels + addresses it correctly, and a `move` link for the Send-to / Move-to-my-inbox actions (ADR 0532).
+    private async Task<List<InboxItemResource>> ListPrefixItemsAsync(string prefix, Guid? group, string? groupName, Guid? user, string? userName, CancellationToken cancellationToken)
+    {
         var objects = await _objectStorageClient.ListObjectsAsync(prefix, cancellationToken);
 
         // Names present in the prefix (used to answer "does this item have a mask sidecar?").
@@ -239,22 +376,53 @@ public class InboxController : ControllerBase
             items.Add(new InboxItemResource
             {
                 Name = name,
+                GroupId = group,
+                GroupName = groupName,
+                UserId = user,
+                UserName = userName,
                 Size = storageObject.Size,
                 LastModified = storageObject.LastModified,
                 HasMask = names.Contains(SidecarName(name)),
                 Links =
                 [
                     new Link("download", download.ToString(), "GET"),
-                    new Link("preview", $"/api/inbox/{Uri.EscapeDataString(name)}/preview", "GET"),
-                    new Link("mask", $"/api/inbox/{Uri.EscapeDataString(name)}/mask", "GET"),
-                    new Link("file", $"/api/inbox/{Uri.EscapeDataString(name)}/file", "POST"),
-                    new Link("self", $"/api/inbox/{Uri.EscapeDataString(name)}", "DELETE"),
+                    new Link("preview", ItemHref(name, "preview", group, user), "GET"),
+                    new Link("mask", ItemHref(name, "mask", group, user), "GET"),
+                    new Link("file", ItemHref(name, "file", group, user), "POST"),
+                    new Link("move", ItemHref(name, "move", group, user), "POST"),
+                    new Link("self", ItemHref(name, "", group, user), "DELETE"),
                 ],
             });
         }
 
-        return Ok(new InboxResource { Items = items, Links = [new Link("self", "/api/inbox", "GET")] });
+        return items;
     }
+
+    // The groups the caller is an effective member of (ADR 0532) — the upload-target choices for a group inbox
+    // (a group's inbox exists implicitly, so a member can drop into it even while it's empty and wouldn't yet
+    // appear as a source in the aggregated listing).
+    [HttpGet("groups")]
+    public async Task<IActionResult> Groups(CancellationToken cancellationToken)
+    {
+        if (Scope() is not var (_, userId))
+        {
+            return Forbid();
+        }
+
+        var groupIds = await GroupMembershipExpansion.GetEffectiveGroupIdsForUserAsync(_dbContext, userId, cancellationToken);
+        var groups = groupIds.Count == 0
+            ? []
+            : await _dbContext.Groups
+                .Where(g => groupIds.Contains(g.Id))
+                .OrderBy(g => g.Name)
+                .Select(g => new InboxGroupResource { Id = g.Id, Name = g.Name })
+                .ToListAsync(cancellationToken);
+
+        return Ok(new InboxGroupsResource { Groups = groups, Links = [new Link("self", "/api/inbox/groups", "GET")] });
+    }
+
+    [HttpHead("groups")]
+    public IActionResult GroupsHead() => Scope() is null ? Forbid() : NoContent();
 
     // Standing convention: every GET action gets a companion HEAD action.
     [HttpHead]
@@ -263,20 +431,22 @@ public class InboxController : ControllerBase
     // Returns a presigned PUT URL so the client uploads a file straight into the inbox prefix (the Api never
     // proxies bytes). MinIO CORS (the same wildcard the drag-drop upload uses) allows the browser PUT.
     [HttpPost]
-    public async Task<IActionResult> Upload([FromBody] UploadInboxRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Upload([FromBody] UploadInboxRequest request, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken)
     {
-        if (Scope() is not var (tenantId, userId))
-        {
-            return Forbid();
-        }
-
         var name = Path.GetFileName(request.FileName?.Trim() ?? "");
         if (string.IsNullOrWhiteSpace(name))
         {
             throw new InboxFilenameRequiredException();
         }
 
-        var key = Prefix(tenantId, userId) + name;
+        // Own inbox when `group` is absent, else a group inbox the caller is an effective member of (ADR 0532) —
+        // a non-member (or a `.mask.json` name) resolves to Forbid.
+        if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)
+        {
+            return Forbid();
+        }
+
+        var key = scope.Prefix + name;
         var uploadUrl = await _objectStorageClient.GetPresignedUploadUrlAsync(key, PresignedUrlExpiry, cancellationToken);
 
         return Ok(new UploadInboxResource
@@ -290,14 +460,14 @@ public class InboxController : ControllerBase
     // Inline preview for the item, via the rendition service on the inbox object key (renditions for TIFF/
     // office/email, else the object shown as-is). 204 when no preview is available.
     [HttpGet("{name}/preview")]
-    public async Task<IActionResult> Preview(string name, CancellationToken cancellationToken)
+    public async Task<IActionResult> Preview(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken)
     {
-        if (Scope() is not var (tenantId, userId) || IsMaskSidecar(name))
+        if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)
         {
             return Forbid();
         }
 
-        var key = Prefix(tenantId, userId) + name;
+        var key = scope.Prefix + name;
         if (!await _objectStorageClient.ExistsAsync(key, cancellationToken))
         {
             return NotFound();
@@ -315,34 +485,34 @@ public class InboxController : ControllerBase
             PreviewConverted = preview.IsConverted,
             Links =
             [
-                new Link("self", $"/api/inbox/{Uri.EscapeDataString(name)}/preview", "GET"),
-                new Link("preview-pages", $"/api/inbox/{Uri.EscapeDataString(name)}/preview-pages", "GET"),
-                new Link("text-layout", $"/api/inbox/{Uri.EscapeDataString(name)}/text-layout", "GET"),
+                new Link("self", ItemHref(name, "preview", group, user), "GET"),
+                new Link("preview-pages", ItemHref(name, "preview-pages", group, user), "GET"),
+                new Link("text-layout", ItemHref(name, "text-layout", group, user), "GET"),
             ],
         });
     }
 
     [HttpHead("{name}/preview")]
-    public async Task<IActionResult> PreviewHead(string name, CancellationToken cancellationToken)
+    public async Task<IActionResult> PreviewHead(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken)
     {
-        if (Scope() is not var (tenantId, userId) || IsMaskSidecar(name))
+        if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)
         {
             return Forbid();
         }
 
-        return await _objectStorageClient.ExistsAsync(Prefix(tenantId, userId) + name, cancellationToken) ? NoContent() : NotFound();
+        return await _objectStorageClient.ExistsAsync(scope.Prefix + name, cancellationToken) ? NoContent() : NotFound();
     }
 
     // Ordered per-page image URLs for a multi-page TIFF; 204 for every other format (the client uses `preview`).
     [HttpGet("{name}/preview-pages")]
-    public async Task<IActionResult> PreviewPages(string name, CancellationToken cancellationToken)
+    public async Task<IActionResult> PreviewPages(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken)
     {
-        if (Scope() is not var (tenantId, userId) || IsMaskSidecar(name))
+        if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)
         {
             return Forbid();
         }
 
-        var key = Prefix(tenantId, userId) + name;
+        var key = scope.Prefix + name;
         if (!await _objectStorageClient.ExistsAsync(key, cancellationToken))
         {
             return NotFound();
@@ -358,24 +528,24 @@ public class InboxController : ControllerBase
         {
             Converted = pages.IsConverted,
             Pages = pages.Urls.Select(u => new InboxPreviewPageResource { Url = u.ToString() }).ToList(),
-            Links = [new Link("self", $"/api/inbox/{Uri.EscapeDataString(name)}/preview-pages", "GET")],
+            Links = [new Link("self", ItemHref(name, "preview-pages", group, user), "GET")],
         });
     }
 
     [HttpHead("{name}/preview-pages")]
-    public async Task<IActionResult> PreviewPagesHead(string name, CancellationToken cancellationToken) =>
-        await PreviewHead(name, cancellationToken);
+    public async Task<IActionResult> PreviewPagesHead(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken) =>
+        await PreviewHead(name, group, user, cancellationToken);
 
     // Per-page word boxes for hit-overlay / find-in-document, via the text-layout service on the object key.
     [HttpGet("{name}/text-layout")]
-    public async Task<IActionResult> TextLayout(string name, CancellationToken cancellationToken)
+    public async Task<IActionResult> TextLayout(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken)
     {
-        if (Scope() is not var (tenantId, userId) || IsMaskSidecar(name))
+        if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)
         {
             return Forbid();
         }
 
-        var key = Prefix(tenantId, userId) + name;
+        var key = scope.Prefix + name;
         if (!await _objectStorageClient.ExistsAsync(key, cancellationToken))
         {
             return NotFound();
@@ -397,55 +567,55 @@ public class InboxController : ControllerBase
                         .ToList(),
                 })
                 .ToList(),
-            Links = [new Link("self", $"/api/inbox/{Uri.EscapeDataString(name)}/text-layout", "GET")],
+            Links = [new Link("self", ItemHref(name, "text-layout", group, user), "GET")],
         });
     }
 
     [HttpHead("{name}/text-layout")]
-    public async Task<IActionResult> TextLayoutHead(string name, CancellationToken cancellationToken) =>
-        await PreviewHead(name, cancellationToken);
+    public async Task<IActionResult> TextLayoutHead(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken) =>
+        await PreviewHead(name, group, user, cancellationToken);
 
     // Reads the staged mask/index-data draft from the `{name}.mask.json` sidecar; an empty draft (no sidecar).
     [HttpGet("{name}/mask")]
-    public async Task<IActionResult> GetMask(string name, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetMask(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken)
     {
-        if (Scope() is not var (tenantId, userId) || IsMaskSidecar(name))
+        if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)
         {
             return Forbid();
         }
 
-        var itemKey = Prefix(tenantId, userId) + name;
+        var itemKey = scope.Prefix + name;
         if (!await _objectStorageClient.ExistsAsync(itemKey, cancellationToken))
         {
             return NotFound();
         }
 
-        var draft = await ReadMaskSidecarAsync(tenantId, userId, name, cancellationToken) ?? new InboxMaskResource();
-        draft.Links = [new Link("self", $"/api/inbox/{Uri.EscapeDataString(name)}/mask", "GET")];
+        var draft = await ReadMaskSidecarAsync(scope.Prefix, name, cancellationToken) ?? new InboxMaskResource();
+        draft.Links = [new Link("self", ItemHref(name, "mask", group, user), "GET")];
         return Ok(draft);
     }
 
     [HttpHead("{name}/mask")]
-    public async Task<IActionResult> GetMaskHead(string name, CancellationToken cancellationToken) =>
-        await PreviewHead(name, cancellationToken);
+    public async Task<IActionResult> GetMaskHead(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken) =>
+        await PreviewHead(name, group, user, cancellationToken);
 
     // Writes (or, for "(No mask)", clears) the staged mask/index-data draft sidecar. A staging draft, not a
     // filed document, so no required-field/format validation runs here — that happens if/when the item is filed.
     [HttpPut("{name}/mask")]
-    public async Task<IActionResult> SetMask(string name, [FromBody] InboxMaskResource request, CancellationToken cancellationToken)
+    public async Task<IActionResult> SetMask(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, [FromBody] InboxMaskResource request, CancellationToken cancellationToken)
     {
-        if (Scope() is not var (tenantId, userId) || IsMaskSidecar(name))
+        if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)
         {
             return Forbid();
         }
 
-        var itemKey = Prefix(tenantId, userId) + name;
+        var itemKey = scope.Prefix + name;
         if (!await _objectStorageClient.ExistsAsync(itemKey, cancellationToken))
         {
             return NotFound();
         }
 
-        var sidecarKey = Prefix(tenantId, userId) + SidecarName(name);
+        var sidecarKey = scope.Prefix + SidecarName(name);
 
         // No mask, no field values, no name and no date → nothing staged, so remove the sidecar and the item
         // reads as un-classified (square brackets).
@@ -474,9 +644,9 @@ public class InboxController : ControllerBase
         return NoContent();
     }
 
-    private async Task<InboxMaskResource?> ReadMaskSidecarAsync(Guid tenantId, Guid userId, string name, CancellationToken cancellationToken)
+    private async Task<InboxMaskResource?> ReadMaskSidecarAsync(string prefix, string name, CancellationToken cancellationToken)
     {
-        var sidecarKey = Prefix(tenantId, userId) + SidecarName(name);
+        var sidecarKey = prefix + SidecarName(name);
         if (!await _objectStorageClient.ExistsAsync(sidecarKey, cancellationToken))
         {
             return null;
@@ -489,14 +659,15 @@ public class InboxController : ControllerBase
     // Files an inbox item into a repository folder: moves its object to a normal document key (server-side
     // copy + delete) and creates a Document + Confirmed version via the shared auto-classifying finalize path.
     [HttpPost("{name}/file")]
-    public async Task<IActionResult> File(string name, [FromBody] FileInboxRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> File(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, [FromBody] FileInboxRequest request, CancellationToken cancellationToken)
     {
-        if (Scope() is not var (tenantId, userId) || IsMaskSidecar(name))
+        if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)
         {
             return Forbid();
         }
 
-        var inboxKey = Prefix(tenantId, userId) + name;
+        var (tenantId, userId, prefix) = scope;
+        var inboxKey = prefix + name;
         if (!await _objectStorageClient.ExistsAsync(inboxKey, cancellationToken))
         {
             return NotFound();
@@ -514,7 +685,7 @@ public class InboxController : ControllerBase
         // File as a new version of an existing document instead of as a new document in a folder.
         if (request.DocumentId is { } targetDocumentId)
         {
-            return await FileAsVersionAsync(tenantId, userId, name, inboxKey, targetDocumentId, request.Comment, cancellationToken);
+            return await FileAsVersionAsync(tenantId, userId, name, inboxKey, targetDocumentId, request.Comment, prefix, cancellationToken);
         }
 
         if (!await _dbContext.Documents.AnyAsync(d => d.Id == request.FolderId, cancellationToken))
@@ -538,7 +709,7 @@ public class InboxController : ControllerBase
         // Emails are never staged (they aren't offered a mask in the inbox) — they always auto-classify.
         var isEmail = extension is ".eml" or ".msg";
         StagedClassification? staged = null;
-        if (!isEmail && await ReadMaskSidecarAsync(tenantId, userId, name, cancellationToken) is { } draft)
+        if (!isEmail && await ReadMaskSidecarAsync(prefix, name, cancellationToken) is { } draft)
         {
             staged = new StagedClassification(
                 draft.Name, draft.DocumentDate, draft.MaskId,
@@ -589,8 +760,8 @@ public class InboxController : ControllerBase
         await _finalizer.FinalizeAsync(version, cancellationToken, staged);
 
         // The item left the inbox — sweep its staged-mask sidecar + cached preview artifacts so they don't orphan.
-        await PurgeItemArtifactsAsync(tenantId, userId, name, cancellationToken);
-        await _audit.RecordAsync(AuditActions.DocumentFiled, "Document", documentId, document.Name, "Filed from inbox as a new document", cancellationToken: cancellationToken);
+        await PurgeItemArtifactsAsync(prefix, name, cancellationToken);
+        await _audit.RecordAsync(AuditActions.DocumentFiled, "Document", documentId, document.Name, group is null ? "Filed from inbox as a new document" : "Filed from a group inbox as a new document", cancellationToken: cancellationToken);
 
         return CreatedAtAction(nameof(DocumentsController.Get), "Documents", new { documentId }, new { id = documentId, name = document.Name });
     }
@@ -598,7 +769,7 @@ public class InboxController : ControllerBase
     // Files the inbox item as the next Confirmed version of an existing document (ADR "Context-aware inbox
     // filing dialog"): moves the object to a document key and finalizes a new version. The document keeps its
     // existing classification (no re-classify, and a staged sidecar is ignored — it's an existing document).
-    private async Task<IActionResult> FileAsVersionAsync(Guid tenantId, Guid userId, string name, string inboxKey, Guid documentId, string? comment, CancellationToken cancellationToken)
+    private async Task<IActionResult> FileAsVersionAsync(Guid tenantId, Guid userId, string name, string inboxKey, Guid documentId, string? comment, string prefix, CancellationToken cancellationToken)
     {
         var document = await _dbContext.Documents.FirstOrDefaultAsync(d => d.Id == documentId, cancellationToken);
         if (document is null)
@@ -651,36 +822,99 @@ public class InboxController : ControllerBase
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await _finalizer.FinalizeAsync(version, cancellationToken); // no staged draft — existing document keeps its mask
-        await PurgeItemArtifactsAsync(tenantId, userId, name, cancellationToken);
+        await PurgeItemArtifactsAsync(prefix, name, cancellationToken);
         await _audit.RecordAsync(AuditActions.DocumentFiled, "Document", documentId, document.Name, "Filed from inbox as a new version", cancellationToken: cancellationToken);
 
         return CreatedAtAction(nameof(DocumentsController.Get), "Documents", new { documentId }, new { id = documentId, name = document.Name });
     }
 
     [HttpDelete("{name}")]
-    public async Task<IActionResult> Delete(string name, CancellationToken cancellationToken)
+    public async Task<IActionResult> Delete(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken)
     {
-        if (Scope() is not var (tenantId, userId) || IsMaskSidecar(name))
+        if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)
         {
             return Forbid();
         }
 
-        var key = Prefix(tenantId, userId) + name;
+        var key = scope.Prefix + name;
         if (!await _objectStorageClient.ExistsAsync(key, cancellationToken))
         {
             return NotFound();
         }
 
         await _objectStorageClient.DeleteObjectAsync(key, cancellationToken);
-        await PurgeItemArtifactsAsync(tenantId, userId, name, cancellationToken);
+        await PurgeItemArtifactsAsync(scope.Prefix, name, cancellationToken);
+        return NoContent();
+    }
+
+    // Moves an inbox item from its source (own / a group I'm a member of / a user's — admin) into a target inbox:
+    // any group or any user in the tenant (ADR 0532). A move — the object + its staged-mask sidecar relocate; the
+    // source's cached preview artifacts are swept. Idempotent under contention (a vanished source → 404).
+    [HttpPost("{name}/move")]
+    public async Task<IActionResult> Move(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, [FromBody] MoveInboxRequest request, CancellationToken cancellationToken)
+    {
+        if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)
+        {
+            return Forbid();
+        }
+
+        // Exactly one target (both-null or both-set is invalid).
+        if (request.TargetGroupId is null == request.TargetUserId is null)
+        {
+            throw new InboxMoveTargetRequiredException();
+        }
+
+        var (tenantId, _, sourcePrefix) = scope;
+        var sourceKey = sourcePrefix + name;
+        if (!await _objectStorageClient.ExistsAsync(sourceKey, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        string targetPrefix;
+        if (request.TargetGroupId is { } targetGroupId)
+        {
+            if (!await _dbContext.Groups.AnyAsync(g => g.Id == targetGroupId, cancellationToken))
+            {
+                return NotFound();
+            }
+
+            targetPrefix = GroupPrefix(tenantId, targetGroupId);
+        }
+        else
+        {
+            var targetUserId = request.TargetUserId!.Value;
+            if (!await _dbContext.Users.AnyAsync(u => u.Id == targetUserId && u.IsActive, cancellationToken))
+            {
+                return NotFound();
+            }
+
+            targetPrefix = Prefix(tenantId, targetUserId);
+        }
+
+        if (targetPrefix == sourcePrefix)
+        {
+            return NoContent(); // already there — a no-op
+        }
+
+        // Relocate the object + its staged-mask sidecar, then sweep the source (its sidecar + cached preview
+        // artifacts) so nothing orphans; the preview/text-layout regenerate on demand at the target.
+        await _objectStorageClient.CopyObjectAsync(sourceKey, targetPrefix + name, cancellationToken);
+        var sidecarKey = sourcePrefix + SidecarName(name);
+        if (await _objectStorageClient.ExistsAsync(sidecarKey, cancellationToken))
+        {
+            await _objectStorageClient.CopyObjectAsync(sidecarKey, targetPrefix + SidecarName(name), cancellationToken);
+        }
+
+        await _objectStorageClient.DeleteObjectAsync(sourceKey, cancellationToken);
+        await PurgeItemArtifactsAsync(sourcePrefix, name, cancellationToken);
         return NoContent();
     }
 
     // Sweeps an item's derived objects when it leaves the inbox: its `{name}.mask.json` staging sidecar plus
     // every cached preview/text-layout artifact sharing its stem (`<stem>.preview.*`, `<stem>.textlayout.json`).
-    private async Task PurgeItemArtifactsAsync(Guid tenantId, Guid userId, string name, CancellationToken cancellationToken)
+    private async Task PurgeItemArtifactsAsync(string prefix, string name, CancellationToken cancellationToken)
     {
-        var prefix = Prefix(tenantId, userId);
         var lastDot = name.LastIndexOf('.');
         var stem = lastDot >= 0 ? name[..lastDot] : name;
 

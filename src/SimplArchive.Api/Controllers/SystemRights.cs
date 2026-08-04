@@ -34,6 +34,9 @@ public class SystemRights
 
     public bool CanImport { get; set; }
 
+    // Manage other users' inboxes (ADR 0532): see + move any user's inbox items tenant-wide.
+    public bool CanManageInboxes { get; set; }
+
     // Data-classification clearance (ADR "Sensitivity clearance enforcement") — not a boolean right but carried
     // in the same bundle so the Users & groups tab sets it alongside the rights. 0 = lowest (unlabelled only).
     public int ClearanceRank { get; set; }
@@ -78,7 +81,8 @@ public static class SystemRightsPolicy
             && IsGrantAllowed(caller.CanManageUsers, current.CanManageUsers, proposed.CanManageUsers)
             && IsGrantAllowed(caller.CanViewAuditLog, current.CanViewAuditLog, proposed.CanViewAuditLog)
             && IsGrantAllowed(caller.CanExport, current.CanExport, proposed.CanExport)
-            && IsGrantAllowed(caller.CanImport, current.CanImport, proposed.CanImport);
+            && IsGrantAllowed(caller.CanImport, current.CanImport, proposed.CanImport)
+            && IsGrantAllowed(caller.CanManageInboxes, current.CanManageInboxes, proposed.CanManageInboxes);
     }
 
     private static bool IsGrantAllowed(bool callerHolds, bool current, bool proposed)

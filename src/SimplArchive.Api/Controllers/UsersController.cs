@@ -816,6 +816,7 @@ public class UsersController : ControllerBase
         CanViewAuditLog = u.CanViewAuditLog,
         CanExport = u.CanExport,
         CanImport = u.CanImport,
+        CanManageInboxes = u.CanManageInboxes,
         ClearanceRank = u.ClearanceRank,
     };
 
@@ -834,6 +835,7 @@ public class UsersController : ControllerBase
         u.CanViewAuditLog = r.CanViewAuditLog;
         u.CanExport = r.CanExport;
         u.CanImport = r.CanImport;
+        u.CanManageInboxes = r.CanManageInboxes;
         u.ClearanceRank = r.ClearanceRank;
     }
 
@@ -852,7 +854,7 @@ public class UsersController : ControllerBase
         {
             var sa = await _dbContext.ServiceAccounts
                 .Where(s => s.Id == serviceAccountId)
-                .Select(s => new { s.CanManageRepositories, s.CanManageMasks, s.CanManageServiceAccounts, s.CanManageUsers, s.CanViewAuditLog, s.CanExport, s.CanImport })
+                .Select(s => new { s.CanManageRepositories, s.CanManageMasks, s.CanManageServiceAccounts, s.CanManageUsers, s.CanViewAuditLog, s.CanExport, s.CanImport, s.CanManageInboxes })
                 .SingleAsync(cancellationToken);
 
             var caller = new SystemRights
@@ -864,6 +866,7 @@ public class UsersController : ControllerBase
                 CanViewAuditLog = sa.CanViewAuditLog,
                 CanExport = sa.CanExport,
                 CanImport = sa.CanImport,
+                CanManageInboxes = sa.CanManageInboxes,
             };
             caller.ClearanceRank = (await _clearanceResolver.GetForServiceAccountAsync(serviceAccountId, cancellationToken)).Rank;
             return caller;
@@ -897,6 +900,7 @@ public class UsersController : ControllerBase
         CanViewAuditLog = r.CanViewAuditLog,
         CanExport = r.CanExport,
         CanImport = r.CanImport,
+        CanManageInboxes = r.CanManageInboxes,
     };
 
     // Checks ServiceAccount.CanManageUsers first, then User.CanManageUsers — see ADR "User support for

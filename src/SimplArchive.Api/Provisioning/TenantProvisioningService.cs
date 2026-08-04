@@ -129,6 +129,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             CanViewAuditLog = true,
             CanExport = true,
             CanImport = true,
+            CanManageInboxes = true,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

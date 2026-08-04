@@ -24,6 +24,9 @@ public class ServiceAccount : ITenantScoped
     // (no interactive User login flow exists yet). Not implied by anything else on ServiceAccount.
     public bool CanManageRepositories { get; set; }
 
+    // Manage other users' inboxes (ADR 0532) — mirrors User.CanManageInboxes for a ServiceAccount caller.
+    public bool CanManageInboxes { get; set; }
+
     // Mirrors User.CanManageMasks — built on both principals from the start this time, learning from
     // CanManageRepositories only getting a ServiceAccount mirror after the fact. See ADR "Mask creation
     // endpoint".

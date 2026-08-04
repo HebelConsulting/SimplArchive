@@ -18,9 +18,10 @@ public sealed record SystemRightsSet(
     bool CanManageUsers,
     bool CanViewAuditLog,
     bool CanExport,
-    bool CanImport)
+    bool CanImport,
+    bool CanManageInboxes)
 {
-    public static readonly SystemRightsSet None = new(false, false, false, false, false, false, false, false, false, false, false, false, false);
+    public static readonly SystemRightsSet None = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false);
 
     // Boolean OR of every right — the union of two bundles.
     public SystemRightsSet Union(SystemRightsSet other) => new(
@@ -36,5 +37,6 @@ public sealed record SystemRightsSet(
         CanManageUsers || other.CanManageUsers,
         CanViewAuditLog || other.CanViewAuditLog,
         CanExport || other.CanExport,
-        CanImport || other.CanImport);
+        CanImport || other.CanImport,
+        CanManageInboxes || other.CanManageInboxes);
 }

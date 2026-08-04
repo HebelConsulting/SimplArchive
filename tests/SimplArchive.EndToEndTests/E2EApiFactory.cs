@@ -259,7 +259,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
     }
 
     // Seeds an active User (with a password) into a tenant, for the interactive-login flow. Returns the user id.
-    public async Task<Guid> SeedUserAsync(Guid tenantId, string email, string password, string displayName, bool canViewAuditLog = false, bool canManageUsers = false, bool canResetMfa = false, bool canExport = false, bool canImport = false, bool canManageServiceAccounts = false, bool canManageRepositories = false)
+    public async Task<Guid> SeedUserAsync(Guid tenantId, string email, string password, string displayName, bool canViewAuditLog = false, bool canManageUsers = false, bool canResetMfa = false, bool canExport = false, bool canImport = false, bool canManageServiceAccounts = false, bool canManageRepositories = false, bool canManageInboxes = false)
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
@@ -277,6 +277,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
             CanImport = canImport,
             CanManageServiceAccounts = canManageServiceAccounts,
             CanManageRepositories = canManageRepositories,
+            CanManageInboxes = canManageInboxes,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         user.PasswordHash = new PasswordHasher<User>().HashPassword(user, password);
@@ -296,6 +297,15 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         db.GroupMemberships.Add(new SimplArchive.Domain.Groups.GroupMembership { TenantId = tenantId, GroupId = group.Id, UserId = userId });
         await db.SaveChangesAsync();
         return group.Id;
+    }
+
+    // Adds another member to an existing group (for a multi-member group-inbox test).
+    public async Task AddGroupMemberAsync(Guid tenantId, Guid groupId, Guid userId)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+        db.GroupMemberships.Add(new SimplArchive.Domain.Groups.GroupMembership { TenantId = tenantId, GroupId = groupId, UserId = userId });
+        await db.SaveChangesAsync();
     }
 
     // Grants CanLegalHold to a seeded user by email (there's no API to grant an arbitrary system right without

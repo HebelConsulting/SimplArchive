@@ -122,6 +122,10 @@ public class DiagnosticsController : ControllerBase
 
         public bool CanImport { get; set; }
 
+        // Whether the User caller may manage other users' inboxes (ADR 0532) — gates the clients' inbox
+        // user-picker / cross-user triage. True for a User holding CanManageInboxes (own or via a group).
+        public bool CanManageInboxes { get; set; }
+
         // The acting admin's display name when this is an impersonation session (else null) — drives the
         // clients' impersonation banner.
         public string? ImpersonatedBy { get; set; }
@@ -148,6 +152,7 @@ public class DiagnosticsController : ControllerBase
         var canImpersonate = false;
         var canExport = false;
         var canImport = false;
+        var canManageInboxes = false;
         var hasPhoto = false;
         var mfaEnabled = false;
         if (_currentUserAccessor.UserId is { } userId)
@@ -171,6 +176,7 @@ public class DiagnosticsController : ControllerBase
             canImpersonate = rights.CanImpersonate;
             canExport = rights.CanExport;
             canImport = rights.CanImport;
+            canManageInboxes = rights.CanManageInboxes;
             hasPhoto = await _dbContext.UserProfilePhotos.AnyAsync(p => p.UserId == userId, cancellationToken);
         }
 
@@ -200,6 +206,7 @@ public class DiagnosticsController : ControllerBase
             CanImpersonate = canImpersonate,
             CanExport = canExport,
             CanImport = canImport,
+            CanManageInboxes = canManageInboxes,
             ImpersonatedBy = impersonatedBy,
             HasPhoto = hasPhoto,
             Links = [new Link("self", Url.Action(nameof(WhoAmI))!, "GET")],
