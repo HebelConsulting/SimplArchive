@@ -17,14 +17,18 @@ internal static partial class Ui
     // Close the previous test's context on each login so at most one is alive; memory stays flat.
     private static IBrowserContext? _previousContext;
 
-    public static async Task<IPage> LoginAsync(SelfHostedAppFixture app, string[]? permissions = null, bool dismissDesktopPromo = true)
+    public static async Task<IPage> LoginAsync(SelfHostedAppFixture app, string[]? permissions = null, bool dismissDesktopPromo = true, Action<BrowserNewContextOptions>? configureContext = null)
     {
         if (_previousContext is not null)
         {
             try { await _previousContext.CloseAsync(); } catch { /* best effort — the run is ending anyway */ }
         }
 
-        var context = await app.Browser.NewContextAsync(new BrowserNewContextOptions { AcceptDownloads = true, Permissions = permissions });
+        // configureContext lets a test opt into e.g. a touch-emulated phone context (HasTouch + a phone viewport)
+        // so touch-tier behaviour is exercised, not just a narrow desktop viewport (touch test tier, #360).
+        var contextOptions = new BrowserNewContextOptions { AcceptDownloads = true, Permissions = permissions };
+        configureContext?.Invoke(contextOptions);
+        var context = await app.Browser.NewContextAsync(contextOptions);
         _previousContext = context;
 
         // The post-logon desktop-client promo (ADR 0505) shows a one-time modal on a fresh browser (empty

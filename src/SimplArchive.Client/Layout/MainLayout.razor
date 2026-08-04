@@ -23,7 +23,11 @@
     /* Full-height DMS shell: fixed top app bar, the workbench fills the rest (see ADR "Repositories
        workbench UI"). */
     html, body { height: 100%; margin: 0; }
-    .wb-shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    /* height: use the DYNAMIC viewport height on mobile (100dvh) so the shell matches the *visible* area. Plain
+       100vh on iOS Safari / Android Chrome is the LARGE viewport (excludes the dynamic URL/toolbar), so the shell
+       is taller than what's on screen and the bottom tab bar is pushed off under the browser chrome — the #350
+       "tab bar disappears on touch" bug. 100vh stays as the fallback for browsers without dvh. */
+    .wb-shell { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
     .wb-appbar {
         flex: 0 0 auto;
         display: flex;
@@ -58,6 +62,11 @@
     @@media (max-width: 767px) {
         .wb-brand { display: none; }
         .wb-appbar { gap: 4px; padding: 0 6px; }
+        /* Every dialog body sets a fixed px min-width (e.g. 620/560/480…) that overflows a phone (#358). Cap the
+           dialog to the viewport and neutralise the inline min-width so the content reflows/scrolls inside the
+           dialog instead of forcing horizontal page scroll. Stylesheet !important beats the inline min-width. */
+        .mud-dialog { max-width: calc(100vw - 16px) !important; }
+        .mud-dialog-content [style*="min-width"] { min-width: 0 !important; max-width: 100% !important; }
     }
 </style>
 

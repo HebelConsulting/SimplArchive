@@ -182,6 +182,19 @@
     .wb-list-row { display: flex; align-items: center; gap: 8px; padding: 5px 12px; cursor: pointer; user-select: none; }
     .wb-list-row:hover { background: var(--mud-palette-action-default-hover); }
     .wb-list-row-selected { background: var(--mud-palette-primary-hover); }
+    /* Touch (coarse pointer): enlarge the primary tap targets toward the ~44px guideline (#359). ADDITIVE — keyed
+       off `pointer: coarse` (not `hover: none`), so a hybrid device with a mouse keeps the denser layout and every
+       feature; a finger just gets bigger hit areas. The dead resize gutters (drag is mouse-only) lose their
+       resize cursor/borders, but the collapse/expand toggle they host is enlarged so it stays usable. */
+    @@media (pointer: coarse) {
+        .wb-list-row { padding: 11px 12px; }
+        .wb-tab { padding: 12px 20px; }
+        .wb-list-row .mud-icon-button, .wb-chead .mud-icon-button { min-width: 40px; min-height: 40px; }
+        .wb-gutter-toggle { width: 34px; height: 34px; font-size: 15px; border-radius: 6px; }
+        .wb-gutter-v { cursor: default; }
+        .wb-gutter-h { cursor: default; }
+        .mud-treeview-item-content { min-height: 42px; }
+    }
     .wb-placeholder { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; color: var(--mud-palette-text-secondary); }
     /* Fill the space between the ribbon and the bottom tab bar (and scroll internally), so the tab bar stays
        pinned — same as .wb-cols/.wb-search. Without this the content-sized panel lets the tab bar ride up or
