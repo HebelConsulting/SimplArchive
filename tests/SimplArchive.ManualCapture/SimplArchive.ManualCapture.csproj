@@ -9,7 +9,7 @@
        emits a deterministic set of PNGs from the real app so the Typst manual is always in step with the UI.
        Lives under tests/ (published to the public mirror) — NOT tools/, which the sync pipeline withholds (0484). -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.Playwright" Version="1.49.0" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.61.0" />
   </ItemGroup>
 
   <ItemGroup>

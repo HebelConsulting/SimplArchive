@@ -6,8 +6,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="OpenIddict.AspNetCore" Version="7.5.0" />
-    <PackageReference Include="OpenIddict.EntityFrameworkCore" Version="7.5.0" />
+    <PackageReference Include="OpenIddict.AspNetCore" Version="7.6.0" />
+    <PackageReference Include="OpenIddict.EntityFrameworkCore" Version="7.6.0" />
     <!-- Security-driven transitive pin (ADR "Security and dependency scanning"): OpenIddict pulls
          System.Security.Cryptography.Xml transitively; 10.0.7 has High-severity advisories (GHSA-mmjf-rqrv-855v
          and others), fixed in 10.0.10. The CI vulnerable-dependency gate would otherwise fail. Re-check on the
