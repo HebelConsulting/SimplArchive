@@ -37,12 +37,10 @@
     /* The tree row's ⋮ button (ADR "Tree-pane folder context menu"): the touch-reachable path to the context
        menu, since touch has no right-click. Hidden until the row is hovered/focused on a fine pointer so the
        tree stays clean — but ALWAYS shown on a coarse pointer, where there is no hover to reveal it (ADR 0491:
-       a hover-only affordance can't be the only cue on touch). visibility (not display) keeps the row height
-       stable so nothing jumps on hover. */
-    /* The ⋮ is absolutely positioned OVER the row's trailing edge rather than taking a flex slot, so folder
-       names keep the full pane width (reserving ~28px truncated "Demo Repository" at the default 240px) and
-       nothing reflows when it appears. background:inherit chains up to the row so it masks the label's tail
-       cleanly on a hovered/selected row too. */
+       a hover-only affordance can't be the only cue on touch). It is absolutely positioned OVER the row's
+       trailing edge rather than taking a flex slot, so folder names keep the full pane width (reserving ~28px
+       truncated "Demo Repository" at the default 240px) and nothing reflows when it appears; background:inherit
+       chains up to the row so it masks the label's tail cleanly on a hovered/selected row too. */
     .wb-tree-row { position: relative; display: flex; align-items: center; flex: 1 1 auto; min-width: 0;
         background: inherit; }
     .wb-tree-row .mud-treeview-item-label { flex: 1 1 auto; min-width: 0; overflow: hidden;
@@ -52,6 +50,15 @@
     .wb-tree .mud-treeview-item-content:hover .wb-tree-menu-btn,
     .wb-tree .mud-treeview-item-content:focus-within .wb-tree-menu-btn { visibility: visible; }
     @@media (pointer: coarse) { .wb-tree .wb-tree-menu-btn { visibility: visible; } }
+    /* An EMPTY folder's glyph gets a pastel tint so you can spot it without expanding (ADR "Empty-folder tree
+       icon", issue #352). The direct-child chain is deliberate: a MudTreeViewItem renders its children inside
+       itself (nested under .mud-collapse-container), so a descendant selector would tint every subfolder too.
+       One mid-tone pastel serves both themes — pale enough to read as "nothing here" on light, bright enough to
+       stay visible on dark — so it needs no per-theme override. The four-class chain out-specifies MudBlazor's
+       own .mud-icon-default colour; the svg has no fill, so it inherits currentColor. */
+    .wb-tree-empty > .mud-treeview-item > .mud-treeview-item-content > .mud-treeview-item-icon > .mud-icon-root {
+        color: #8fb4d9;
+    }
     .wb-list { flex: 0 0 300px; container-type: inline-size; }
     .wb-detail { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
     .wb-index { flex: 0 0 280px; overflow: auto; padding: 10px 14px; }
@@ -425,7 +432,8 @@
                                        "Tree-pane context menu"): a MudTreeViewItem renders its children INSIDE
                                        itself, so stopPropagation is what makes a right-click on a subfolder open
                                        that subfolder's menu instead of also firing its ancestors' handlers. *@
-                                    <div class="wb-tree-node" @oncontextmenu="@(e => OnTreeContextMenuAsync(item.Value, e))"
+                                    <div class="wb-tree-node @(item.Value?.IsEmptyFolder == true ? "wb-tree-empty" : "")"
+                                         @oncontextmenu="@(e => OnTreeContextMenuAsync(item.Value, e))"
                                          @oncontextmenu:preventDefault="true" @oncontextmenu:stopPropagation="true">
                                         <MudTreeViewItem Value="@item.Value" Text="@item.Text" Icon="@item.Icon"
                                                          CanExpand="@item.Expandable" Items="@item.Children"
@@ -2423,6 +2431,14 @@
         DateTimeOffset? VersionCreatedAt = null)
     {
         public bool IsFolder => !HasVersions;
+
+        // An EMPTY folder — no subfolders and no documents (ADR "Empty-folder tree icon", issue #352). The tree
+        // tints its glyph so you can see at a glance which folders hold nothing, without expanding them.
+        // HasChildren (any child) is the right flag, not HasSubfolders (which only drives the expander caret): a
+        // folder holding only documents is a tree leaf but is NOT empty. The pseudo-nodes are excluded — the
+        // Administration branch and the Inbox / Check-out launchers aren't folders, and the Personal root always
+        // holds those launchers.
+        public bool IsEmptyFolder => IsFolder && !HasChildren && AdminKind == "" && PersonalKind == "";
 
         // A checked-out document is shown as "[holder] name" (ADR "Check-out working-copy stash").
         public string DisplayName => CheckedOut && !string.IsNullOrEmpty(CheckedOutByName) ? $"[{CheckedOutByName}] {Name}" : Name;

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace SimplArchive.DesktopClient.ViewModels;
@@ -10,7 +11,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     private readonly Func<Guid, Task<IEnumerable<TreeNodeViewModel>>>? _loadChildren;
     private bool _loaded;
 
-    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<Guid, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false)
+    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<Guid, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false, bool hasChildren = true)
     {
         Id = id;
         Name = name;
@@ -20,6 +21,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         SyntheticIcon = syntheticIcon;
         PersonalKind = personalKind;
         HasReferences = hasReferences;
+        HasChildren = hasChildren;
 
         // A placeholder child makes the expander appear before the real children are loaded.
         if (hasSubfolders)
@@ -61,6 +63,17 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     // The bottom-tab index the launcher activates: Inbox = 1, Check-out = 2 (ADR "Document check-out / check-in").
     public int LauncherTab => PersonalKind switch { "inbox" => 1, "checkout" => 2, _ => 0 };
 
+    // Whether this folder holds ANYTHING — subfolders or documents. Defaults to true so the pseudo-nodes
+    // (Administration, the Inbox / Check-out launchers, the demo/screenshot stubs) never render as "empty".
+    public bool HasChildren { get; }
+
+    // An EMPTY folder — nothing at all inside (ADR "Empty-folder tree icon", issue #352). Note this is NOT the
+    // same as "no subfolders": a folder holding only documents is a leaf in the folders-only tree but is not
+    // empty. The caller's OWN Personal root is never empty (it always holds the Inbox / Check-out launchers) so
+    // it's constructed with the default hasChildren: true; an admin-browsed other user's personal repo has no
+    // launchers and passes its real flag.
+    public bool IsEmptyFolder => !HasChildren && !IsSynthetic && !IsLauncher;
+
     // Material Design Icons glyph — a launcher's own glyph, a synthetic admin node's own icon, a person icon for
     // the personal repository, a shortcut variant for a referenced folder, else a plain folder.
     public string IconValue => PersonalKind switch
@@ -69,6 +82,13 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         "checkout" => "mdi-lock-open-variant-outline",
         _ => SyntheticIcon ?? (IsPersonal ? "mdi-account" : IsReference ? "mdi-folder-arrow-right" : "mdi-folder"),
     };
+
+    // The tree's folder glyphs are gold; an empty one is tinted a pastel blue instead so it's spottable without
+    // expanding. One mid-tone pastel serves light and dark alike, matching the web client's `.wb-tree-empty`.
+    public IBrush IconBrush => IsEmptyFolder ? EmptyFolderBrush : FolderBrush;
+
+    private static readonly IBrush FolderBrush = new SolidColorBrush(Color.FromRgb(0xd9, 0xa4, 0x00));
+    private static readonly IBrush EmptyFolderBrush = new SolidColorBrush(Color.FromRgb(0x8f, 0xb4, 0xd9));
 
     // Set when this node is loaded as a child (used to build the breadcrumb path from a tree selection).
     public TreeNodeViewModel? Parent { get; private set; }

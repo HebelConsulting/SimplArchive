@@ -275,7 +275,7 @@
                             <TreeView.DataTemplates>
                                 <TreeDataTemplate DataType="vm:TreeNodeViewModel" ItemsSource="{Binding Children}">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <i:Icon Value="{Binding IconValue}" Foreground="#d9a400" />
+                                        <i:Icon Value="{Binding IconValue}" Foreground="{Binding IconBrush}" />
                                         <TextBlock Text="{Binding Name}" />
                                     </StackPanel>
                                 </TreeDataTemplate>

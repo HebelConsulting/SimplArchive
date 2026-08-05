@@ -813,7 +813,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // Shared repositories sorted alphabetically (issue #339); Personal stays pinned above them.
         foreach (var repository in repositories.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase))
         {
-            Tree.Add(new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync, hasReferences: repository.HasReferences));
+            Tree.Add(new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync, hasReferences: repository.HasReferences, hasChildren: repository.HasChildren));
         }
 
         // Tenant admins get a synthetic "Administration → Users" branch (ADR "Tenant-admin Administration → Users
@@ -869,7 +869,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
             r.UserIsActive ? r.DisplayName : $"{r.DisplayName} (inactive)",
             r.HasSubfolders,
             LoadTreeChildrenAsync,
-            isPersonal: true));
+            isPersonal: true,
+            hasChildren: r.HasChildren));
     }
 
     // The Personal repository nests the Inbox + Check-out launcher nodes above its real subfolders, mirroring
@@ -896,13 +897,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var folderNodes = children
             .Where(c => !c.HasVersions)
             .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync, hasReferences: c.HasReferences));
+            .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync, hasReferences: c.HasReferences, hasChildren: c.HasChildren));
 
         var references = await _api.GetReferencesAsync(folderId);
         var referenceNodes = references
             .Where(r => !r.HasVersions)
             .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(r => new TreeNodeViewModel(r.TargetId, r.Name, r.HasSubfolders, LoadTreeChildrenAsync, isReference: true, hasReferences: r.HasReferences));
+            .Select(r => new TreeNodeViewModel(r.TargetId, r.Name, r.HasSubfolders, LoadTreeChildrenAsync, isReference: true, hasReferences: r.HasReferences, hasChildren: r.HasChildren));
 
         return folderNodes.Concat(referenceNodes);
     }
@@ -5466,7 +5467,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // synthetic Administration branch (ADR 0377), around the shared repositories.
         Tree.Add(new TreeNodeViewModel(Guid.Empty, "Personal", true, null, isPersonal: true));
         Tree.Add(new TreeNodeViewModel(Guid.Empty, "Demo Repository", true, null));
-        Tree.Add(new TreeNodeViewModel(Guid.Empty, "Invoices", false, null));
+        Tree.Add(new TreeNodeViewModel(Guid.Empty, "Invoices", false, null, hasChildren: false)); // an EMPTY folder — shows the pastel glyph (ADR "Empty-folder tree icon")
         Tree.Add(new TreeNodeViewModel(Guid.Empty, "Shared (ref)", false, null, isReference: true));
         Tree.Add(new TreeNodeViewModel(Guid.Empty, "Administration", true, null, syntheticIcon: "mdi-shield-account"));
         Items.Add(new NodeViewModel { Id = Guid.Empty, Name = "Invoices", HasChildren = true, HasVersions = false });
@@ -5884,6 +5885,29 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         await DeleteFolderByIdAsync(destination.Id); // clean up (takes the subject with it)
         return (moved, referenced);
+    }
+
+    // Exercises the empty-folder tree icon (ADR "Empty-folder tree icon", issue #352) against the real Api: a
+    // freshly-created folder is empty; the same folder holding only a DOCUMENT is not (the distinction the flag
+    // must not get wrong, since a documents-only folder is still a leaf in the folders-only tree).
+    internal async Task<(bool EmptyWhenNew, bool NotEmptyWithADocument)> EmptyFolderIconSelfTestAsync(string accessToken)
+    {
+        UseApi(new SimplArchiveApiClient(accessToken));
+        await LoadRootAsync();
+        var root = Tree.First(n => n is { IsSynthetic: false, IsLauncher: false, IsPersonal: false });
+
+        var name = "treeempty-" + Guid.NewGuid().ToString("N")[..8];
+        await CreateSubfolderAsync(root.Id, name);
+        await root.ReloadChildrenAsync();
+        var emptyWhenNew = root.Children.First(c => c.Name == name).IsEmptyFolder;
+
+        var folderId = root.Children.First(c => c.Name == name).Id;
+        await _api!.UploadFileAsync(folderId, "a-document.txt", System.Text.Encoding.UTF8.GetBytes("doc"));
+        await root.ReloadChildrenAsync();
+        var notEmptyWithADocument = !root.Children.First(c => c.Name == name).IsEmptyFolder;
+
+        await DeleteFolderByIdAsync(folderId); // clean up
+        return (emptyWhenNew, notEmptyWithADocument);
     }
 
     private async Task<bool> GrantAndRevokeAsync(Guid documentId, Guid granteeId, SimplArchiveApiClient.AclRights rights)
