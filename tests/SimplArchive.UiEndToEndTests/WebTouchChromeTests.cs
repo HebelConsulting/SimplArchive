@@ -16,9 +16,15 @@ public class WebTouchChromeTests
     public WebTouchChromeTests(SelfHostedAppFixture app) => _app = app;
 
     [Theory]
-    [InlineData(390, 844)]  // iPhone 12/13/14
+    // Phones
     [InlineData(360, 740)]  // small Android
-    [InlineData(768, 1024)] // portrait tablet
+    [InlineData(390, 844)]  // iPhone 12/13/14
+    [InlineData(428, 926)]  // iPhone 13 Pro Max
+    [InlineData(430, 932)]  // iPhone 14 Pro Max
+    [InlineData(448, 998)]  // Google Pixel 10 Pro (approx. — 6.3" 1280×2856 @ ~2.86 dpr)
+    // Tablets
+    [InlineData(768, 1024)] // portrait tablet (classic iPad)
+    [InlineData(834, 1210)] // iPad Pro 11" (M4), portrait
     public async Task App_bar_and_tab_bar_stay_within_the_viewport_on_touch(int width, int height)
     {
         // Log in touch-enabled but at the default desktop viewport (the login helper waits for the display name,
