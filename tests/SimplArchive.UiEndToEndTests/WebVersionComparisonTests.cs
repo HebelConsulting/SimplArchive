@@ -43,11 +43,26 @@ public class WebVersionComparisonTests
         await page.GetByRole(AriaRole.Button, new() { Name = "Compare versions" }).ClickAsync();
         var dialog = page.Locator(".mud-dialog");
         await Expect(dialog).ToBeVisibleAsync();
+
+        // Nothing runs on open (ADR "Explicit compare", issue #371) — the result area shows the hint.
+        var hint = dialog.Locator("[data-testid='compare-hint']");
+        await Expect(hint).ToBeVisibleAsync();
+
         await dialog.GetByRole(AriaRole.Button, new() { Name = "Compare", Exact = true }).ClickAsync();
 
         // The diff shows the added line (with its "+" marker) and the removed line.
         await Expect(dialog.GetByText("+ BANANA split")).ToBeVisibleAsync();
         await Expect(dialog.GetByText("- banana")).ToBeVisibleAsync();
+        await Expect(hint).ToBeHiddenAsync();
+
+        // Changing a picker discards the diff and returns to the hint, so a stale diff is never attributed to the
+        // new selection. Picking the SAME version on both sides also disables Compare.
+        await dialog.Locator(".mud-input-control").First.ClickAsync(); // the "From" MudSelect opens via its input-control
+        await page.Locator(".mud-list-item").Filter(new() { HasText = "v2" }).First.ClickAsync();
+
+        await Expect(hint).ToBeVisibleAsync();
+        await Expect(dialog.GetByText("+ BANANA split")).ToBeHiddenAsync();
+        await Expect(dialog.GetByRole(AriaRole.Button, new() { Name = "Compare", Exact = true })).ToBeDisabledAsync();
     }
 
     private static async Task AddVersionAsync(HttpClient http, Guid docId, string content)

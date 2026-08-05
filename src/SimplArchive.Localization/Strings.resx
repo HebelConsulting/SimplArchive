@@ -459,6 +459,9 @@
   <data name="CompareRestoreVersion" xml:space="preserve">
     <value>Restore v{0}</value>
   </data>
+  <data name="CompareHint" xml:space="preserve">
+    <value>Select two versions and click Compare to run the comparison.</value>
+  </data>
   <data name="CompareNotAvailable" xml:space="preserve">
     <value>Comparison isn't available for this format (only text-extractable documents can be diffed).</value>
   </data>

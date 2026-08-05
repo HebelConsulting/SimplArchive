@@ -18,7 +18,7 @@
             <ComboBox ItemsSource="{Binding Versions}" SelectedItem="{Binding ToVersion}" MinWidth="90">
                 <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:VersionOption"><TextBlock Text="{Binding Label}" /></DataTemplate></ComboBox.ItemTemplate>
             </ComboBox>
-            <Button Content="Compare" Command="{Binding CompareCommand}" />
+            <Button Content="{loc:Tr CompareButton}" Command="{Binding CompareCommand}" />
             <Button Content="Beyond Compare" Command="{Binding OpenInBeyondCompareCommand}"
                     ToolTip.Tip="Open both versions in Beyond Compare — or get it from scootersoftware.com" />
         </StackPanel>
@@ -27,17 +27,25 @@
         <Button DockPanel.Dock="Bottom" Content="{loc:Tr Close}" Click="OnClose" HorizontalAlignment="Right" Margin="0,10,0,0" />
 
         <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="4">
-            <ScrollViewer>
-                <ItemsControl ItemsSource="{Binding Lines}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:DiffLineViewModel">
-                            <Border Background="{Binding Background}">
-                                <TextBlock Text="{Binding Display}" FontFamily="Cascadia Code,Menlo,Consolas,monospace" FontSize="12.5" TextWrapping="Wrap" Padding="8,0" />
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+            <Grid>
+                <ScrollViewer>
+                    <ItemsControl ItemsSource="{Binding Lines}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:DiffLineViewModel">
+                                <Border Background="{Binding Background}">
+                                    <TextBlock Text="{Binding Display}" FontFamily="Cascadia Code,Menlo,Consolas,monospace" FontSize="12.5" TextWrapping="Wrap" Padding="8,0" />
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <!-- Nothing compared yet (or the selection changed since) — say so rather than leaving the panel
+                     blank, which would read as "these two versions are identical". -->
+                <TextBlock Text="{loc:Tr CompareHint}" IsVisible="{Binding ShowHint}"
+                           Foreground="{DynamicResource WbMuted}" FontSize="13" TextWrapping="Wrap" TextAlignment="Center"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="380" Margin="24" />
+            </Grid>
         </Border>
     </DockPanel>
 </Window>

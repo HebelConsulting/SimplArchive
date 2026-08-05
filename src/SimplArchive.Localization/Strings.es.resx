@@ -459,6 +459,9 @@
   <data name="CompareRestoreVersion" xml:space="preserve">
     <value>Restaurar v{0}</value>
   </data>
+  <data name="CompareHint" xml:space="preserve">
+    <value>Seleccione dos versiones y haga clic en Comparar para ejecutar la comparación.</value>
+  </data>
   <data name="CompareNotAvailable" xml:space="preserve">
     <value>La comparación no está disponible para este formato (solo se pueden comparar documentos con texto extraíble).</value>
   </data>

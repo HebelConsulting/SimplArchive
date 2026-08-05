@@ -12,6 +12,9 @@ namespace SimplArchive.DesktopClient.ViewModels;
 
 // Backs the desktop Compare-versions dialog (ADR "Document version comparison") — two version pickers + an inline
 // unified diff, plus an optional "Beyond Compare" launch when that tool is installed on the machine.
+// The comparison NEVER runs on its own (ADR "Explicit compare"): the result area shows a hint until Compare is
+// clicked, the button is disabled until two DIFFERENT versions are picked, and changing a picker after a run
+// clears the result back to the hint so a stale diff can't be mistaken for the current selection's.
 public sealed partial class CompareVersionsViewModel : ObservableObject
 {
     private SimplArchiveApiClient? _api;
@@ -24,8 +27,15 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
     public ObservableCollection<VersionOption> Versions { get; } = [];
     public ObservableCollection<DiffLineViewModel> Lines { get; } = [];
 
+    [NotifyCanExecuteChangedFor(nameof(CompareCommand))]
     [ObservableProperty] private VersionOption? _fromVersion;
+
+    [NotifyCanExecuteChangedFor(nameof(CompareCommand))]
     [ObservableProperty] private VersionOption? _toVersion;
+
+    // Shown in the (empty) result area whenever there's nothing compared yet — leaving it blank would read as
+    // "these two versions are identical".
+    [ObservableProperty] private bool _showHint = true;
 
     // Only offered when Beyond Compare is actually installed (a native-client capability).
     public bool BeyondCompareAvailable { get; } = BeyondCompare.IsInstalled;
@@ -46,17 +56,38 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
 
         if (Versions.Count >= 2)
         {
+            // Default the pickers to latest-vs-penultimate, but do NOT run the comparison — diffing two versions
+            // means fetching and text-extracting both blobs, so the cost stays behind a deliberate click.
             ToVersion = Versions[0];   // newest
             FromVersion = Versions[1]; // penultimate
-            await Compare();           // show the default diff (latest vs penultimate) immediately, no click needed
+            ResetToHint();
         }
         else
         {
+            ShowHint = false;
             Status = Strings.Get("StOneVersion");
         }
     }
 
-    [RelayCommand]
+    // Two DIFFERENT versions are needed for a diff — until then the button stays disabled rather than failing
+    // silently on click.
+    private bool CanCompare() => FromVersion is not null && ToVersion is not null && FromVersion.Id != ToVersion.Id;
+
+    // Changing either picker discards the rendered diff: it belongs to the old pair, and leaving it up would
+    // misattribute it to the new selection.
+    partial void OnFromVersionChanged(VersionOption? value) => ResetToHint();
+
+    partial void OnToVersionChanged(VersionOption? value) => ResetToHint();
+
+    private void ResetToHint()
+    {
+        Lines.Clear();
+        NotAvailable = false;
+        ShowHint = true;
+        Status = Strings.Get("CompareHint");
+    }
+
+    [RelayCommand(CanExecute = nameof(CanCompare))]
     private async Task Compare()
     {
         if (_api is null || FromVersion is null || ToVersion is null || FromVersion.Id == ToVersion.Id)
@@ -66,6 +97,7 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
 
         Lines.Clear();
         NotAvailable = false;
+        ShowHint = false;
         Status = Strings.Get("StComparing");
         try
         {

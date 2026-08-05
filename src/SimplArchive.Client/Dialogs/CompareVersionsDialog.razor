@@ -2,7 +2,9 @@
 
 @* Compare two versions of a document as an inline unified text diff (ADR "Document version comparison"). Two
    pickers + Compare; added lines green, removed red, unchanged default. "Not available" for binary formats.
-   Also offers restoring the selected "From" version as the new current version (ADR "Version restore"). *@
+   The comparison NEVER runs on its own (ADR "Explicit compare"): the result area shows a hint until Compare is
+   clicked, the button is disabled until two DIFFERENT versions are picked, and changing a picker after a run
+   clears the result back to the hint so a stale diff can't be mistaken for the current selection's. *@
 <MudDialog>
     <TitleContent>
         <MudText Typo="Typo.h6">@string.Format(Strings.Get("CompareTitle"), DocumentName)</MudText>
@@ -10,14 +12,14 @@
     <DialogContent>
         <div style="min-width: 620px;">
             <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
-                <MudSelect T="Guid" @bind-Value="_fromId" Label="@Strings.Get("CompareFrom")" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:180px;">
+                <MudSelect T="Guid" Value="_fromId" ValueChanged="OnFromChanged" Label="@Strings.Get("CompareFrom")" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:180px;">
                     @foreach (var v in _versions)
                     {
                         <MudSelectItem T="Guid" Value="@v.Id">v@(v.VersionNumber)</MudSelectItem>
                     }
                 </MudSelect>
                 <MudIcon Icon="@Icons.Material.Filled.ArrowForward" />
-                <MudSelect T="Guid" @bind-Value="_toId" Label="@Strings.Get("CompareTo")" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:180px;">
+                <MudSelect T="Guid" Value="_toId" ValueChanged="OnToChanged" Label="@Strings.Get("CompareTo")" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:180px;">
                     @foreach (var v in _versions)
                     {
                         <MudSelectItem T="Guid" Value="@v.Id">v@(v.VersionNumber)</MudSelectItem>
@@ -39,6 +41,16 @@
                 <div style="max-height:52vh; overflow:auto; border:1px solid var(--mud-palette-lines-default); border-radius:4px;">
                     <pre style="margin:0; font-size:12.5px; line-height:1.5; font-family:var(--mud-typography-monospace-family, monospace);">@foreach (var line in r.Lines)
 {<span style="display:block; padding:0 8px; white-space:pre-wrap; @LineStyle(line.Op)">@Prefix(line.Op)@line.Text</span>}</pre>
+                </div>
+            }
+            else
+            {
+                @* Nothing has been compared yet (or the selection changed since) — say so instead of leaving the
+                   panel blank, which would read as "these versions are identical". *@
+                <div data-testid="compare-hint"
+                     style="display:flex; align-items:center; justify-content:center; min-height:120px; padding:16px; text-align:center;
+                            border:1px dashed var(--mud-palette-lines-default); border-radius:4px;">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("CompareHint")</MudText>
                 </div>
             }
         </div>
@@ -73,6 +85,20 @@
             _toId = _versions[0].Id;      // latest
             _fromId = _versions[1].Id;    // previous
         }
+    }
+
+    // Changing either picker discards the rendered diff — it belongs to the old pair, and leaving it up would
+    // misattribute it to the new selection. The user re-runs with Compare.
+    private void OnFromChanged(Guid id)
+    {
+        _fromId = id;
+        _result = null;
+    }
+
+    private void OnToChanged(Guid id)
+    {
+        _toId = id;
+        _result = null;
     }
 
     private async Task CompareAsync()

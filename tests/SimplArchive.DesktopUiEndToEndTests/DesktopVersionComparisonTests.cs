@@ -41,12 +41,26 @@ public class DesktopVersionComparisonTests
         Assert.Contains(cmp.Lines, l => l.Op == 1 && l.Text == "TWO edited"); // added
         Assert.Contains(cmp.Lines, l => l.Op == 1 && l.Text == "four");    // added
 
-        // The dialog VM defaults to latest-vs-penultimate and auto-runs the diff (ADR "Compare-versions gating
-        // + default"): To = newest, From = penultimate, and Lines are populated without a manual Compare click.
+        // The dialog VM defaults the pickers to latest-vs-penultimate but does NOT run the diff (ADR "Explicit
+        // compare", issue #371): the result area shows the hint and Compare is enabled, waiting for a click.
         var cvm = new CompareVersionsViewModel();
         await cvm.SetupAsync(api, doc.Id, "cmp");
         Assert.Equal(versions[0].Id, cvm.ToVersion!.Id);   // newest
         Assert.Equal(versions[1].Id, cvm.FromVersion!.Id); // penultimate
-        Assert.NotEmpty(cvm.Lines);                        // auto-ran the comparison
+        Assert.Empty(cvm.Lines);                           // nothing compared yet
+        Assert.True(cvm.ShowHint);
+        Assert.True(cvm.CompareCommand.CanExecute(null));  // two different versions are selected
+
+        // Clicking Compare is what runs it.
+        await cvm.CompareCommand.ExecuteAsync(null);
+        Assert.NotEmpty(cvm.Lines);
+        Assert.False(cvm.ShowHint);
+
+        // Changing a picker discards the diff and returns to the hint — a stale diff must never be attributed to
+        // the new selection. Picking the SAME version on both sides also disables Compare.
+        cvm.FromVersion = cvm.ToVersion;
+        Assert.Empty(cvm.Lines);
+        Assert.True(cvm.ShowHint);
+        Assert.False(cvm.CompareCommand.CanExecute(null));
     }
 }
