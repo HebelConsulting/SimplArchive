@@ -100,6 +100,7 @@ public static class AuditActions
     public const string GroupMemberRemoved = "Group.MemberRemoved";
 
     public const string ServiceAccountCreated = "ServiceAccount.Created";
+    public const string ServiceAccountUpdated = "ServiceAccount.Updated";
     public const string ServiceAccountSecretRotated = "ServiceAccount.SecretRotated";
     public const string ServiceAccountRevoked = "ServiceAccount.Revoked";
 

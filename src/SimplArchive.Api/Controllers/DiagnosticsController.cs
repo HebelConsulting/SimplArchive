@@ -82,6 +82,10 @@ public class DiagnosticsController : ControllerBase
         // holding CanManageUsers; false for a ServiceAccount / PlatformAdministrator caller.
         public bool CanManageUsers { get; set; }
 
+        // Whether the User caller may manage service accounts — gates the clients' service-accounts management UI
+        // (create / rotate-secret / revoke). True for a tenant admin or a User holding CanManageServiceAccounts.
+        public bool CanManageServiceAccounts { get; set; }
+
         // Whether the User caller has a profile photo — the clients show it (else initials) in the corner
         // alongside DisplayName (ADR "User profile photo"), fetched from GET /api/users/{id}/photo.
         public bool HasPhoto { get; set; }
@@ -144,6 +148,7 @@ public class DiagnosticsController : ControllerBase
         string? userName = null;
         var isTenantAdmin = false;
         var canManageUsers = false;
+        var canManageServiceAccounts = false;
         var canViewAuditLog = false;
         var canResetMfa = false;
         var canLegalHold = false;
@@ -168,6 +173,7 @@ public class DiagnosticsController : ControllerBase
             var rights = await _userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken);
             isTenantAdmin = rights.IsTenantAdmin;
             canManageUsers = rights.CanManageUsers;
+            canManageServiceAccounts = rights.CanManageServiceAccounts;
             canViewAuditLog = rights.CanViewAuditLog;
             canResetMfa = rights.CanResetMfa;
             canLegalHold = rights.CanLegalHold;
@@ -197,6 +203,7 @@ public class DiagnosticsController : ControllerBase
             UserName = userName,
             IsTenantAdmin = isTenantAdmin,
             CanManageUsers = canManageUsers,
+            CanManageServiceAccounts = canManageServiceAccounts,
             CanViewAuditLog = canViewAuditLog,
             MfaEnabled = mfaEnabled,
             CanResetMfa = canResetMfa,

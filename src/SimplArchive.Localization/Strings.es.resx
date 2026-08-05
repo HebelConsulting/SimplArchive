@@ -2904,4 +2904,55 @@
   <data name="StPreparingDrag" xml:space="preserve">
     <value>Preparando los archivos para arrastrar…</value>
   </data>
+  <data name="SaManage" xml:space="preserve">
+    <value>Cuentas de servicio</value>
+  </data>
+  <data name="SaNewName" xml:space="preserve">
+    <value>Nombre de la nueva cuenta de servicio</value>
+  </data>
+  <data name="SaRights" xml:space="preserve">
+    <value>Permisos</value>
+  </data>
+  <data name="SaRightExport" xml:space="preserve">
+    <value>Exportar</value>
+  </data>
+  <data name="SaRightImport" xml:space="preserve">
+    <value>Importar</value>
+  </data>
+  <data name="SaRightRepositories" xml:space="preserve">
+    <value>Gestionar repositorios</value>
+  </data>
+  <data name="SaRightMasks" xml:space="preserve">
+    <value>Gestionar máscaras</value>
+  </data>
+  <data name="SaRightServiceAccounts" xml:space="preserve">
+    <value>Gestionar cuentas de servicio</value>
+  </data>
+  <data name="SaEditTitle" xml:space="preserve">
+    <value>Editar cuenta de servicio</value>
+  </data>
+  <data name="SaRotate" xml:space="preserve">
+    <value>Rotar secreto</value>
+  </data>
+  <data name="SaRevoke" xml:space="preserve">
+    <value>Revocar</value>
+  </data>
+  <data name="SaRevoked" xml:space="preserve">
+    <value>revocada</value>
+  </data>
+  <data name="SaRevokeConfirm" xml:space="preserve">
+    <value>¿Revocar '{0}'? Sus credenciales dejan de funcionar inmediatamente.</value>
+  </data>
+  <data name="SaSecretTitle" xml:space="preserve">
+    <value>Secreto de la cuenta de servicio</value>
+  </data>
+  <data name="SaSecretHint" xml:space="preserve">
+    <value>El secreto de cliente se muestra una sola vez: cópialo ahora; no se puede recuperar después.</value>
+  </data>
+  <data name="SaClientId" xml:space="preserve">
+    <value>ID de cliente</value>
+  </data>
+  <data name="SaClientSecret" xml:space="preserve">
+    <value>Secreto de cliente</value>
+  </data>
 </root>

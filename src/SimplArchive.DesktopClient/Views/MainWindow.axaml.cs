@@ -237,6 +237,16 @@ public partial class MainWindow : Window
         }
     });
 
+    // Service accounts (machine-to-machine, ADR 0534) — a self-contained manager window that talks to the API
+    // via the shared client; gated on CanManageServiceAccounts (the server enforces it on every call too).
+    private void OnManageServiceAccounts(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel { Api: { } api })
+        {
+            await new ServiceAccountsWindow(api).ShowDialog(this);
+        }
+    });
+
     // Profile photo (ADR "User profile photo") — the crop dialog lives in the view; the VM uploads.
     private void OnChangeMyPhoto(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {

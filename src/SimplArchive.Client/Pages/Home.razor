@@ -1754,6 +1754,11 @@
                             <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Disabled="@(_selectedPrincipal is null)" OnClick="CopyPrincipalAsync" title="@Strings.Get("UgCopy")" />
                             <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Disabled="@(_selectedPrincipal is null)" OnClick="DeletePrincipalAsync" title="@Strings.Get("UgDelete")" />
                             <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadPrincipalsAsync" title="@Strings.Get("RibbonRefresh")" />
+                            @* Service accounts (machine-to-machine) management — ADR 0534, gated on CanManageServiceAccounts. *@
+                            @if (_canManageServiceAccounts)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Api" Size="Size.Small" OnClick="OpenServiceAccountsAsync" title="@Strings.Get("SaManage")" />
+                            }
                         </div>
                         <div class="wb-ug-rows">
                             @foreach (var p in _principals)
@@ -3262,6 +3267,7 @@
             var me = await Http.GetFromJsonAsync<WhoAmIResponse>("api/diagnostics/whoami");
             _isTenantAdmin = me?.IsTenantAdmin ?? false;
             _canManageUsers = me?.CanManageUsers ?? false;
+            _canManageServiceAccounts = me?.CanManageServiceAccounts ?? false;
             _canViewAuditLog = me?.CanViewAuditLog ?? false;
             _canResetMfa = me?.CanResetMfa ?? false;
             _canLegalHold = me?.CanLegalHold ?? false;
@@ -3278,6 +3284,7 @@
         {
             _isTenantAdmin = false;
             _canManageUsers = false;
+            _canManageServiceAccounts = false;
             _canViewAuditLog = false;
             _canResetMfa = false;
             _canLegalHold = false;
@@ -3312,6 +3319,7 @@
 
     private bool _isTenantAdmin;
     private bool _canManageUsers;
+    private bool _canManageServiceAccounts;
     private bool _canViewAuditLog;
     private bool _canResetMfa;
     private bool _canLegalHold;
@@ -3332,7 +3340,7 @@
             Snackbar.Add("Could not impersonate this user.", Severity.Error);
         }
     }
-    private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public bool CanManageInboxes { get; set; } public Guid? UserId { get; set; } public string UserName { get; set; } = ""; }
+    private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanManageServiceAccounts { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public bool CanManageInboxes { get; set; } public Guid? UserId { get; set; } public string UserName { get; set; } = ""; }
     // The logged-in user's display name — used in the sensitivity watermark (ADR "Document watermarking").
     private string _viewerName = "";
     private record BackfillResponse { public int Count { get; set; } }
@@ -6544,6 +6552,14 @@
         {
             await CreatePrincipalAsync(isGroup, result.Name, result.Email, null);
         }
+    }
+
+    // Open the service-accounts manager (ADR 0534) — list / create / edit-rights / rotate-secret / revoke. The
+    // dialog talks to /api/service-accounts directly; the API enforces CanManageServiceAccounts on every call.
+    private async Task OpenServiceAccountsAsync()
+    {
+        await DialogService.ShowAsync<Dialogs.ServiceAccountsDialog>(Strings.Get("SaManage"),
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
     }
 
     // Copy = the New dialog pre-filled from the selection; the created principal then gets the copied rights.

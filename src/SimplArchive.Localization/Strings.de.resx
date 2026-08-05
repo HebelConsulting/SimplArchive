@@ -2904,4 +2904,55 @@
   <data name="StPreparingDrag" xml:space="preserve">
     <value>Dateien zum Ziehen werden vorbereitet…</value>
   </data>
+  <data name="SaManage" xml:space="preserve">
+    <value>Servicekonten</value>
+  </data>
+  <data name="SaNewName" xml:space="preserve">
+    <value>Name des neuen Servicekontos</value>
+  </data>
+  <data name="SaRights" xml:space="preserve">
+    <value>Rechte</value>
+  </data>
+  <data name="SaRightExport" xml:space="preserve">
+    <value>Exportieren</value>
+  </data>
+  <data name="SaRightImport" xml:space="preserve">
+    <value>Importieren</value>
+  </data>
+  <data name="SaRightRepositories" xml:space="preserve">
+    <value>Repositorys verwalten</value>
+  </data>
+  <data name="SaRightMasks" xml:space="preserve">
+    <value>Masken verwalten</value>
+  </data>
+  <data name="SaRightServiceAccounts" xml:space="preserve">
+    <value>Servicekonten verwalten</value>
+  </data>
+  <data name="SaEditTitle" xml:space="preserve">
+    <value>Servicekonto bearbeiten</value>
+  </data>
+  <data name="SaRotate" xml:space="preserve">
+    <value>Secret erneuern</value>
+  </data>
+  <data name="SaRevoke" xml:space="preserve">
+    <value>Widerrufen</value>
+  </data>
+  <data name="SaRevoked" xml:space="preserve">
+    <value>widerrufen</value>
+  </data>
+  <data name="SaRevokeConfirm" xml:space="preserve">
+    <value>„{0}“ widerrufen? Die Anmeldedaten funktionieren sofort nicht mehr.</value>
+  </data>
+  <data name="SaSecretTitle" xml:space="preserve">
+    <value>Servicekonto-Secret</value>
+  </data>
+  <data name="SaSecretHint" xml:space="preserve">
+    <value>Das Client-Secret wird nur einmal angezeigt – kopieren Sie es jetzt; es kann nicht erneut abgerufen werden.</value>
+  </data>
+  <data name="SaClientId" xml:space="preserve">
+    <value>Client-ID</value>
+  </data>
+  <data name="SaClientSecret" xml:space="preserve">
+    <value>Client-Secret</value>
+  </data>
 </root>

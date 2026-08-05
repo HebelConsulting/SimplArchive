@@ -132,7 +132,7 @@ public sealed class SimplArchiveApiClient
 
     // The signed-in principal's ids + display names (ADR "S3-backed inbox") — names drive the local folder
     // path. IsTenantAdmin gates admin-only actions (e.g. the searchable-PDF backfill).
-    public sealed record WhoAmIInfo(Guid? UserId, Guid? TenantId, string? TenantName, string? UserName, bool IsTenantAdmin, bool CanManageUsers, bool HasPhoto, bool CanViewAuditLog, bool MfaEnabled, bool CanResetMfa, bool CanLegalHold, bool CanManageClassification, bool CanOverrideCheckout = false, bool CanImpersonate = false, string? ImpersonatedBy = null, bool CanExport = false, bool CanImport = false, bool CanManageInboxes = false);
+    public sealed record WhoAmIInfo(Guid? UserId, Guid? TenantId, string? TenantName, string? UserName, bool IsTenantAdmin, bool CanManageUsers, bool HasPhoto, bool CanViewAuditLog, bool MfaEnabled, bool CanResetMfa, bool CanLegalHold, bool CanManageClassification, bool CanOverrideCheckout = false, bool CanImpersonate = false, string? ImpersonatedBy = null, bool CanExport = false, bool CanImport = false, bool CanManageInboxes = false, bool CanManageServiceAccounts = false);
 
     // Tenant-wide system-level rights, mirroring the User/Group columns (ADR "Users & groups administration
     // tab"). Backs the rights matrix on the Users & groups tab.
@@ -149,6 +149,14 @@ public sealed class SimplArchiveApiClient
     // A user or group in the combined admin list (ADR "Users & groups administration tab"). IsActive is
     // meaningful only for a user (a group has no active/inactive concept).
     public sealed record PrincipalInfo(bool IsGroup, Guid Id, string Name, bool IsActive, SystemRightsData Rights, bool MfaEnabled = false);
+
+    // A machine-to-machine service account (ADR 0203/0534). ClientId is the OAuth client_id; the client_secret is
+    // only ever returned once on create/rotate (see NewSecret) and is never carried on a list/read.
+    public sealed record ServiceAccountInfo(Guid Id, string Name, string ClientId, bool IsActive,
+        bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts, bool CanImport, bool CanExport);
+
+    // The one-time client_id + client_secret shown after create/rotate — never retrievable again.
+    public sealed record ServiceAccountSecret(string ClientId, string ClientSecret);
 
     // A server-inbox item — a staged file (ADR "S3-backed inbox"). Download is a presigned URL; HasMask tells
     // whether a `{name}.mask.json` staging sidecar exists (ADR "Inbox item classification + preview"). Group/User
@@ -488,7 +496,8 @@ public sealed class SimplArchiveApiClient
             json.TryGetProperty("impersonatedBy", out var ib) && ib.ValueKind == JsonValueKind.String ? ib.GetString() : null,
             json.TryGetProperty("canExport", out var ce) && ce.ValueKind == JsonValueKind.True,
             json.TryGetProperty("canImport", out var cim) && cim.ValueKind == JsonValueKind.True,
-            json.TryGetProperty("canManageInboxes", out var cmi) && cmi.ValueKind == JsonValueKind.True);
+            json.TryGetProperty("canManageInboxes", out var cmi) && cmi.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("canManageServiceAccounts", out var cmsa) && cmsa.ValueKind == JsonValueKind.True);
     }
 
     // The count of existing "current TIFF" documents with no searchable-PDF successor yet (ADR "Backfill
@@ -2729,6 +2738,95 @@ public sealed class SimplArchiveApiClient
         }
 
         response.EnsureSuccessStatusCode();
+    }
+
+    // ---- Service accounts (ADR 0203/0534) -----------------------------------------------------------
+
+    public Task<List<ServiceAccountInfo>> GetServiceAccountsAsync(CancellationToken cancellationToken = default) =>
+        LoadPagedAsync("api/service-accounts", "serviceAccounts", ParseServiceAccount, cancellationToken);
+
+    // Create a service account with its rights; returns the one-time client_id + client_secret (shown once).
+    public async Task<ServiceAccountSecret> CreateServiceAccountAsync(string name, SystemRightsData rights, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync("api/service-accounts", ToServiceAccountBody(name, rights), cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException($"A service account named '{name}' already exists.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You can only grant rights you hold yourself.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return new ServiceAccountSecret(json.GetProperty("clientId").GetString() ?? "", json.GetProperty("clientSecret").GetString() ?? "");
+    }
+
+    // Edit an existing account's name + rights (PUT, ADR 0534) — escalation-capped server-side like create.
+    public async Task UpdateServiceAccountAsync(Guid id, string name, SystemRightsData rights, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PutAsJsonAsync($"api/service-accounts/{id}", ToServiceAccountBody(name, rights), cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException($"A service account named '{name}' already exists.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You can only grant rights you hold yourself.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // Rotate the secret — mints a new client_secret and invalidates the old one; returns the one-time secret.
+    public async Task<ServiceAccountSecret> RotateServiceAccountSecretAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync($"api/service-accounts/{id}/rotate-secret", null, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to manage service accounts.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return new ServiceAccountSecret(json.GetProperty("clientId").GetString() ?? "", json.GetProperty("clientSecret").GetString() ?? "");
+    }
+
+    // Revoke — one-way, sets IsActive = false; the credentials stop working immediately.
+    public async Task RevokeServiceAccountAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.DeleteAsync($"api/service-accounts/{id}", cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to manage service accounts.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    // The create/update body — the five grantable rights, camelCase over the wire (name + booleans).
+    private static object ToServiceAccountBody(string name, SystemRightsData rights) => new
+    {
+        name,
+        canManageRepositories = rights.CanManageRepositories,
+        canManageMasks = rights.CanManageMasks,
+        canManageServiceAccounts = rights.CanManageServiceAccounts,
+        canImport = rights.CanImport,
+        canExport = rights.CanExport,
+    };
+
+    private static ServiceAccountInfo ParseServiceAccount(JsonElement e)
+    {
+        bool B(string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
+        return new ServiceAccountInfo(
+            e.GetProperty("id").GetGuid(),
+            e.GetProperty("name").GetString() ?? "",
+            e.TryGetProperty("clientId", out var c) ? c.GetString() ?? "" : "",
+            !e.TryGetProperty("isActive", out var a) || a.ValueKind == JsonValueKind.True,
+            B("canManageRepositories"), B("canManageMasks"), B("canManageServiceAccounts"), B("canImport"), B("canExport"));
     }
 
     // ---- Passwords (ADR "User password management") -------------------------------------------------

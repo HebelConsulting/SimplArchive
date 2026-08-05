@@ -722,6 +722,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // Reset the right-gated tabs so the next user's rights apply cleanly.
         IsTenantAdmin = false;
         CanManageUsers = false;
+        CanManageServiceAccounts = false;
         CanImpersonate = false;
         IsImpersonating = false;
         ImpersonatedName = null;
@@ -1761,6 +1762,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             IsTenantAdmin = me.IsTenantAdmin;
             RecycleBin.IsTenantAdmin = me.IsTenantAdmin;
             CanManageUsers = me.CanManageUsers;
+            CanManageServiceAccounts = me.CanManageServiceAccounts;
             CanViewAuditLog = me.CanViewAuditLog;
             MfaEnabled = me.MfaEnabled;
             CanResetMfa = me.CanResetMfa;
@@ -3440,6 +3442,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // Gates the Users & groups tab (set from whoami on login); true for a tenant admin / CanManageUsers holder.
     [ObservableProperty] private bool _canManageUsers;
+    [ObservableProperty] private bool _canManageServiceAccounts;
 
     public ObservableCollection<PrincipalRowViewModel> Principals { get; } = [];
     public ObservableCollection<PrincipalRightViewModel> PrincipalRights { get; } = [];

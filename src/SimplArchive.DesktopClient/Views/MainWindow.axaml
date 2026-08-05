@@ -1353,6 +1353,8 @@
                             <Button ToolTip.Tip="{loc:Tr UgCopy}" Padding="6,2" Click="OnCopyPrincipal" IsEnabled="{Binding HasSelectedPrincipal}"><i:Icon Value="mdi-content-copy" /></Button>
                             <Button ToolTip.Tip="{loc:Tr UgDelete}" Padding="6,2" Click="OnDeletePrincipal" IsEnabled="{Binding HasSelectedPrincipal}"><i:Icon Value="mdi-delete" /></Button>
                             <Button ToolTip.Tip="{loc:Tr RibbonRefresh}" Padding="6,2" Command="{Binding RefreshPrincipalsCommand}"><i:Icon Value="mdi-refresh" /></Button>
+                            <!-- Service accounts (machine-to-machine) — ADR 0534, gated on CanManageServiceAccounts. -->
+                            <Button ToolTip.Tip="{loc:Tr SaManage}" Padding="6,2" Click="OnManageServiceAccounts" IsVisible="{Binding CanManageServiceAccounts}"><i:Icon Value="mdi-api" /></Button>
                         </StackPanel>
                         <ListBox ItemsSource="{Binding Principals}" SelectedItem="{Binding SelectedPrincipal}">
                             <ListBox.ItemTemplate>

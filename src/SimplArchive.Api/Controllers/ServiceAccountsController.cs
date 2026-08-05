@@ -105,6 +105,23 @@ public class ServiceAccountsController : ControllerBase
         public bool CanExport { get; set; }
     }
 
+    // Edit an existing account's name + rights (ADR 0534). Same shape as create minus the secret — a plain
+    // full-replace PUT (SA carries no ConcurrencyToken, so no If-Match, matching this controller's other mutations).
+    public class UpdateServiceAccountRequest
+    {
+        public string Name { get; set; } = "";
+
+        public bool CanManageRepositories { get; set; }
+
+        public bool CanManageMasks { get; set; }
+
+        public bool CanManageServiceAccounts { get; set; }
+
+        public bool CanImport { get; set; }
+
+        public bool CanExport { get; set; }
+    }
+
     public class RotateSecretResource : HypermediaResource
     {
         public string ClientId { get; set; } = "";
@@ -287,6 +304,58 @@ public class ServiceAccountsController : ControllerBase
         var exists = await _dbContext.ServiceAccounts.AnyAsync(s => s.Id == serviceAccountId, cancellationToken);
 
         return exists ? NoContent() : NotFound();
+    }
+
+    // Edit an existing account's name + rights (ADR 0534) — a full-replace PUT. Escalation-capped exactly like
+    // Create: a caller can only SET a right to true that it holds itself, so it can never authorise an account
+    // beyond its own reach. The secret is untouched (rotate-secret owns that); revoked accounts can still be
+    // edited but stay revoked (IsActive is not a right here).
+    [HttpPut("{serviceAccountId:guid}")]
+    public async Task<IActionResult> Update(Guid serviceAccountId, [FromBody] UpdateServiceAccountRequest request, CancellationToken cancellationToken)
+    {
+        var caller = await GetCallerRightsAsync(cancellationToken);
+
+        if (caller is null || !caller.CanManageServiceAccounts)
+        {
+            return Forbid();
+        }
+
+        if ((request.CanManageRepositories && !caller.CanManageRepositories)
+            || (request.CanManageMasks && !caller.CanManageMasks)
+            || (request.CanManageServiceAccounts && !caller.CanManageServiceAccounts)
+            || (request.CanImport && !caller.CanImport)
+            || (request.CanExport && !caller.CanExport))
+        {
+            throw InsufficientRightsToGrantException.OnServiceAccount();
+        }
+
+        var serviceAccount = await _dbContext.ServiceAccounts.SingleOrDefaultAsync(s => s.Id == serviceAccountId, cancellationToken);
+
+        if (serviceAccount is null)
+        {
+            return NotFound();
+        }
+
+        serviceAccount.Name = request.Name;
+        serviceAccount.CanManageRepositories = request.CanManageRepositories;
+        serviceAccount.CanManageMasks = request.CanManageMasks;
+        serviceAccount.CanManageServiceAccounts = request.CanManageServiceAccounts;
+        serviceAccount.CanImport = request.CanImport;
+        serviceAccount.CanExport = request.CanExport;
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // (TenantId, Name) is a real DB unique index — a rename onto an existing name collides here.
+            throw new ServiceAccountNameConflictException();
+        }
+
+        await _audit.RecordAsync(AuditActions.ServiceAccountUpdated, "ServiceAccount", serviceAccount.Id, serviceAccount.Name, cancellationToken: cancellationToken);
+
+        return Ok(BuildResource(serviceAccount));
     }
 
     // An action endpoint, not idempotent — each call mints a genuinely new secret and immediately

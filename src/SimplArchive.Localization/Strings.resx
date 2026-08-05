@@ -2904,4 +2904,55 @@
   <data name="StPreparingDrag" xml:space="preserve">
     <value>Preparing files to drag…</value>
   </data>
+  <data name="SaManage" xml:space="preserve">
+    <value>Service accounts</value>
+  </data>
+  <data name="SaNewName" xml:space="preserve">
+    <value>New service account name</value>
+  </data>
+  <data name="SaRights" xml:space="preserve">
+    <value>Rights</value>
+  </data>
+  <data name="SaRightExport" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="SaRightImport" xml:space="preserve">
+    <value>Import</value>
+  </data>
+  <data name="SaRightRepositories" xml:space="preserve">
+    <value>Manage repositories</value>
+  </data>
+  <data name="SaRightMasks" xml:space="preserve">
+    <value>Manage masks</value>
+  </data>
+  <data name="SaRightServiceAccounts" xml:space="preserve">
+    <value>Manage service accounts</value>
+  </data>
+  <data name="SaEditTitle" xml:space="preserve">
+    <value>Edit service account</value>
+  </data>
+  <data name="SaRotate" xml:space="preserve">
+    <value>Rotate secret</value>
+  </data>
+  <data name="SaRevoke" xml:space="preserve">
+    <value>Revoke</value>
+  </data>
+  <data name="SaRevoked" xml:space="preserve">
+    <value>revoked</value>
+  </data>
+  <data name="SaRevokeConfirm" xml:space="preserve">
+    <value>Revoke '{0}'? Its credentials stop working immediately.</value>
+  </data>
+  <data name="SaSecretTitle" xml:space="preserve">
+    <value>Service account secret</value>
+  </data>
+  <data name="SaSecretHint" xml:space="preserve">
+    <value>The client secret is shown once — copy it now; it can't be retrieved again.</value>
+  </data>
+  <data name="SaClientId" xml:space="preserve">
+    <value>Client ID</value>
+  </data>
+  <data name="SaClientSecret" xml:space="preserve">
+    <value>Client secret</value>
+  </data>
 </root>
