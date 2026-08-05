@@ -224,17 +224,44 @@
                                     <MenuItem Header="{loc:Tr MwNewSubfolder}" Click="OnTreeNewFolder">
                                         <MenuItem.Icon><i:Icon Value="mdi-folder-plus-outline" /></MenuItem.Icon>
                                     </MenuItem>
+                                    <MenuItem Header="{loc:Tr Upload}" Click="OnTreeUpload">
+                                        <MenuItem.Icon><i:Icon Value="mdi-upload-outline" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator />
                                     <MenuItem Header="{loc:Tr CtxRename}" Click="OnTreeRename">
                                         <MenuItem.Icon><i:Icon Value="mdi-rename-box" /></MenuItem.Icon>
                                     </MenuItem>
+                                    <MenuItem Header="{loc:Tr CtxMoveTo}" Click="OnTreeMove">
+                                        <MenuItem.Icon><i:Icon Value="mdi-file-move-outline" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{loc:Tr FolderSortLabel}" Click="OnTreeFolderSort">
+                                        <MenuItem.Icon><i:Icon Value="mdi-sort" /></MenuItem.Icon>
+                                    </MenuItem>
                                     <MenuItem Header="{loc:Tr UgDelete}" Click="OnTreeDelete">
                                         <MenuItem.Icon><i:Icon Value="mdi-delete" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator />
+                                    <MenuItem Header="{loc:Tr MaManageAccess}" Click="OnTreeManageAccess">
+                                        <MenuItem.Icon><i:Icon Value="mdi-shield-account-outline" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{loc:Tr CtxPlaceLegalHold}" Click="OnTreePlaceLegalHold" IsVisible="{Binding CanLegalHold}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-gavel" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator />
+                                    <MenuItem Header="{loc:Tr CtxPlaceReference}" Click="OnTreePlaceReference">
+                                        <MenuItem.Icon><i:Icon Value="mdi-link-variant" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{loc:Tr MwReferences}" Click="OnTreeReferences" IsVisible="{Binding TreeContextHasReferences}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-share-variant-outline" /></MenuItem.Icon>
                                     </MenuItem>
                                     <Separator />
                                     <MenuItem Header="{loc:Tr MwFollowFolder}" Click="OnTreeToggleFollow">
                                         <MenuItem.Icon><i:Icon Value="mdi-bell-outline" /></MenuItem.Icon>
                                     </MenuItem>
                                     <Separator />
+                                    <MenuItem Header="{loc:Tr HomeExport}" Click="OnExport" IsVisible="{Binding CanExport}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-archive-arrow-down-outline" /></MenuItem.Icon>
+                                    </MenuItem>
                                     <MenuItem Header="{loc:Tr RibbonRefresh}" Click="OnTreeRefresh">
                                         <MenuItem.Icon><i:Icon Value="mdi-refresh" /></MenuItem.Icon>
                                     </MenuItem>

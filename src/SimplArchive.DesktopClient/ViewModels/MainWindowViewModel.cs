@@ -590,6 +590,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // folders and documents alike; the dialog self-gates on the caller's CanManagePermissions (ADR 0486).
     public bool CanManageAccess => SelectedItem is { IsReference: false, IsArchiveEntry: false, IsArchiveBack: false };
 
+    // The tree context menu's "References …" entry mirrors SelectedHasReferences, but for the RIGHT-CLICKED tree
+    // node rather than the contents-list selection (ADR "Tree-pane context menu"). MainWindow sets it before the
+    // menu opens.
+    [ObservableProperty] private bool _treeContextHasReferences;
+
     // Set while a search-hit reveal selects the parent folder's tree node after it has *already* loaded the folder
     // contents + selected the document itself (issue #340) — so the reactive load below doesn't re-fetch the folder
     // and clobber that document selection.
@@ -808,7 +813,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // Shared repositories sorted alphabetically (issue #339); Personal stays pinned above them.
         foreach (var repository in repositories.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase))
         {
-            Tree.Add(new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync));
+            Tree.Add(new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync, hasReferences: repository.HasReferences));
         }
 
         // Tenant admins get a synthetic "Administration → Users" branch (ADR "Tenant-admin Administration → Users
@@ -891,13 +896,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var folderNodes = children
             .Where(c => !c.HasVersions)
             .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync));
+            .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync, hasReferences: c.HasReferences));
 
         var references = await _api.GetReferencesAsync(folderId);
         var referenceNodes = references
             .Where(r => !r.HasVersions)
             .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(r => new TreeNodeViewModel(r.TargetId, r.Name, r.HasSubfolders, LoadTreeChildrenAsync, isReference: true));
+            .Select(r => new TreeNodeViewModel(r.TargetId, r.Name, r.HasSubfolders, LoadTreeChildrenAsync, isReference: true, hasReferences: r.HasReferences));
 
         return folderNodes.Concat(referenceNodes);
     }
@@ -1402,6 +1407,54 @@ public sealed partial class MainWindowViewModel : ObservableObject
         catch (Exception e) { Status = string.Format(Strings.Get("StErrRename"), e.Message); }
     }
 
+    // Move a TREE folder (and its subtree) under another folder, by id — the tree context menu's "Move to…"
+    // (ADR "Tree-pane context menu"). Unlike MoveNodeAsync (a dragged contents-list row) the tree itself
+    // changes shape, so this reloads the tree as well as the open folder's contents.
+    public async Task MoveFolderByIdAsync(Guid folderId, string folderName, Guid targetFolderId)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.MoveAsync(folderId, targetFolderId);
+            Status = string.Format(Strings.Get("StMoved"), folderName);
+            await ReloadTreeAsync();
+            if (_currentFolderId is { } current)
+            {
+                await LoadFolderContentsAsync(current);
+            }
+        }
+        catch (Services.ApiActionException e) { Status = e.Message; }
+        catch (Exception e) { Status = string.Format(Strings.Get("StErrMove"), e.Message); }
+    }
+
+    // Place a reference (shortcut) to a TREE folder into another folder, by id — the tree context menu's
+    // "Place reference…". The referenced folder shows up in the target's subtree (ADR "Referenced folder in the
+    // tree"), so the tree is reloaded too.
+    public async Task PlaceReferenceAsync(Guid folderId, string folderName, Guid targetFolderId)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.CreateReferenceAsync(targetFolderId, folderId);
+            Status = string.Format(Strings.Get("StPlacedRef"), folderName);
+            await ReloadTreeAsync();
+            if (_currentFolderId is { } current)
+            {
+                await LoadFolderContentsAsync(current);
+            }
+        }
+        catch (Services.ApiActionException e) { Status = e.Message; }
+        catch (Exception e) { Status = string.Format(Strings.Get("StErrPlaceRef"), e.Message); }
+    }
+
     // Soft-delete a tree folder (and its subtree) to the recycle bin by id.
     public async Task DeleteFolderByIdAsync(Guid folderId)
     {
@@ -1714,6 +1767,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _api is not null && SelectedItem is { } item
             ? new ReferencesViewModel(_api, item.Id, item.Name)
             : null;
+
+    // Same dialog for an explicit item — the tree context menu's "References…" acts on the right-clicked folder,
+    // which is not a contents-list row.
+    public ReferencesViewModel? CreateReferencesViewModel(Guid itemId, string itemName) =>
+        _api is not null ? new ReferencesViewModel(_api, itemId, itemName) : null;
 
     // Promote a referenced folder to be the item's primary location (ADR 0506): one atomic server call, then
     // reload the tree (the item moved) and navigate to its new home. Errors surface on the status line.
@@ -5769,6 +5827,72 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var keptOnSameFolderReload = DetailTitle == "sentinel-B";
 
         return (clearedOnFolderChange, keptOnSameFolderReload);
+    }
+
+    // Exercises the tree-pane context menu's Manage-access action (ADR "Tree-pane context menu with
+    // manage-access") on the node kinds only the TREE exposes: a repository ROOT (never a contents-list row, so
+    // the list-row menu could never reach it) and a nested subfolder. Returns the ACL round-trip result for each,
+    // proving a tree node's Id is a valid ACL target the way OnTreeManageAccess uses it.
+    internal async Task<(bool RootGranted, bool SubfolderGranted)> TreeManageAccessSelfTestAsync(string accessToken)
+    {
+        UseApi(new SimplArchiveApiClient(accessToken));
+        await LoadRootAsync();
+        var root = Tree.First(n => n is { IsSynthetic: false, IsLauncher: false, IsPersonal: false });
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var name = "treeacl-" + suffix;
+        await CreateSubfolderAsync(root.Id, name);
+        await root.ReloadChildrenAsync();
+        var sub = root.Children.First(c => c.Name == name);
+
+        var granteeId = await _api!.CreateUserAsync($"treeacl-{suffix}@simplarchive.local", $"TreeAcl {suffix}");
+        var viewer = new SimplArchiveApiClient.AclRights(
+            CanSee: true, CanReadContent: true, CanEditContent: false, CanEditIndexData: false,
+            CanCreateSubItems: false, CanDelete: false, CanMove: false, CanAnnotate: false, CanManagePermissions: false);
+
+        var rootGranted = await GrantAndRevokeAsync(root.Id, granteeId, viewer);
+        var subGranted = await GrantAndRevokeAsync(sub.Id, granteeId, viewer);
+
+        await DeleteFolderByIdAsync(sub.Id); // clean up
+        return (rootGranted, subGranted);
+    }
+
+    // Exercises the tree context menu's folder actions that act on the RIGHT-CLICKED node rather than the
+    // contents-list selection (ADR "Tree-pane context menu"): move a tree folder under another folder, and place
+    // a reference (shortcut) to it elsewhere. Returns whether each landed where it should.
+    internal async Task<(bool Moved, bool Referenced)> TreeFolderMoveAndReferenceSelfTestAsync(string accessToken)
+    {
+        UseApi(new SimplArchiveApiClient(accessToken));
+        await LoadRootAsync();
+        var root = Tree.First(n => n is { IsSynthetic: false, IsLauncher: false, IsPersonal: false });
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var subjectName = $"treemove-{suffix}";
+        var destinationName = $"treedest-{suffix}";
+        await CreateSubfolderAsync(root.Id, subjectName);
+        await CreateSubfolderAsync(root.Id, destinationName);
+        var children = await _api!.GetChildrenAsync(root.Id);
+        var subject = children.First(c => c.Name == subjectName);
+        var destination = children.First(c => c.Name == destinationName);
+
+        await MoveFolderByIdAsync(subject.Id, subject.Name, destination.Id);
+        var moved = (await _api.GetChildrenAsync(destination.Id)).Any(c => c.Id == subject.Id);
+
+        // Place a reference to the moved folder back under the repository root.
+        await PlaceReferenceAsync(subject.Id, subject.Name, root.Id);
+        var referenced = (await _api.GetReferencesAsync(root.Id)).Any(r => r.TargetId == subject.Id);
+
+        await DeleteFolderByIdAsync(destination.Id); // clean up (takes the subject with it)
+        return (moved, referenced);
+    }
+
+    private async Task<bool> GrantAndRevokeAsync(Guid documentId, Guid granteeId, SimplArchiveApiClient.AclRights rights)
+    {
+        await _api!.SetAclEntryAsync(documentId, "users", granteeId, rights);
+        var granted = (await _api.GetAclAsync(documentId)).Entries
+            .Any(e => e.PrincipalType == "users" && e.PrincipalId == granteeId && e.Rights.CanSee);
+        await _api.RevokeAclEntryAsync(documentId, "users", granteeId);
+        return granted;
     }
 
     // Exercises the tree-pane folder context-menu actions (ADR "Desktop tree-pane folder context menu") end to

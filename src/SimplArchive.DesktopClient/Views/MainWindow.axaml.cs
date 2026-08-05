@@ -1272,6 +1272,7 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel vm && _treeContextNode is { } node)
         {
             vm.SelectedTreeNode = node;
+            vm.TreeContextHasReferences = node.HasReferences;
         }
     }
 
@@ -1310,6 +1311,121 @@ public partial class MainWindow : Window
         {
             await vm.DeleteFolderByIdAsync(node.Id);
         }
+    });
+
+    // ---- The rest of the tree context menu's folder actions (ADR "Tree-pane context menu") ----------------
+    // Each targets the RIGHT-CLICKED node (_treeContextNode), not the contents-list SelectedItem — a tree
+    // right-click means "this folder". The selection-scoped ones (Export, folder sort) work off the fact that
+    // OnTreeContextRequested has already made the node the current selection.
+
+    // Upload files into the right-clicked folder. Reuses the drag-and-drop path (UploadDroppedFilesAsync), so
+    // duplicate detection and per-file error reporting behave identically to a drop.
+    private void OnTreeUpload(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node)
+        {
+            return;
+        }
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = SimplArchive.Localization.Strings.Get("Upload"),
+            AllowMultiple = true,
+        });
+        if (files.Count > 0)
+        {
+            await vm.UploadDroppedFilesAsync(files, node.Id);
+        }
+    });
+
+    private void OnTreeMove(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node
+            || vm.CreateMoveTargetPickerViewModel() is not { } picker)
+        {
+            return;
+        }
+
+        if (await new FolderPickerDialog { DataContext = picker }.ShowDialog<FilingResult?>(this) is { } result)
+        {
+            await vm.MoveFolderByIdAsync(node.Id, node.Name, result.TargetId);
+        }
+    });
+
+    // Puts the detail pane's folder-settings row into edit mode for the right-clicked folder (its contents sort
+    // order) — the same editor its "Edit" button opens.
+    private void OnTreeFolderSort(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm)
+        {
+            vm.BeginFolderSortEditCommand.Execute(null);
+        }
+    }
+
+    private void OnTreePlaceLegalHold(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node)
+        {
+            return;
+        }
+
+        if (await new LegalHoldDialog(node.Name).ShowDialog<LegalHoldDialog.Result?>(this) is { } result)
+        {
+            await vm.CreateLegalHoldAsync(result.Name, result.Reason, node.Id);
+        }
+    });
+
+    // Place a reference (shortcut) to the right-clicked folder in another folder — the picker chooses where.
+    private void OnTreePlaceReference(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node
+            || vm.CreateMoveTargetPickerViewModel() is not { } picker)
+        {
+            return;
+        }
+
+        if (await new FolderPickerDialog { DataContext = picker }.ShowDialog<FilingResult?>(this) is { } result)
+        {
+            await vm.PlaceReferenceAsync(node.Id, node.Name, result.TargetId);
+        }
+    });
+
+    private void OnTreeReferences(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node
+            || vm.CreateReferencesViewModel(node.Id, node.Name) is not { } references)
+        {
+            return;
+        }
+
+        await references.LoadAsync();
+        var result = await new ReferencesDialog { DataContext = references }.ShowDialog<ReferencesDialogResult?>(this);
+        if (result is { } r)
+        {
+            if (r.Promote)
+            {
+                await vm.PromotePrimaryLocationAsync(references.ItemId, r.FolderId);
+            }
+            else
+            {
+                await vm.OpenFolderAsync(r.FolderId, references.ItemId);
+            }
+        }
+    });
+
+    // Manage access on the right-clicked TREE folder (ADR "Tree-pane context menu with manage-access"). The
+    // contents-list menu's OnManageAccess acts on SelectedItem; a tree node isn't a list row, so this targets
+    // _treeContextNode instead. The dialog self-gates on the caller's own CanManagePermissions.
+    private void OnTreeManageAccess(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api || _treeContextNode is not { } node)
+        {
+            return;
+        }
+
+        var mvm = new ManageAccessViewModel();
+        await mvm.SetupAsync(api, node.Id, node.Name);
+        await new ManageAccessDialog(mvm).ShowDialog(this);
     });
 
     private void OnTreeRefresh(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>

@@ -10,7 +10,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     private readonly Func<Guid, Task<IEnumerable<TreeNodeViewModel>>>? _loadChildren;
     private bool _loaded;
 
-    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<Guid, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null)
+    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<Guid, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false)
     {
         Id = id;
         Name = name;
@@ -19,6 +19,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         IsPersonal = isPersonal;
         SyntheticIcon = syntheticIcon;
         PersonalKind = personalKind;
+        HasReferences = hasReferences;
 
         // A placeholder child makes the expander appear before the real children are loaded.
         if (hasSubfolders)
@@ -52,6 +53,10 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     public string? PersonalKind { get; }
 
     public bool IsLauncher => PersonalKind is not null;
+
+    // At least one reference (shortcut) points at this folder — gates the tree context menu's "References…"
+    // entry, exactly as SelectedHasReferences gates the contents-list one.
+    public bool HasReferences { get; }
 
     // The bottom-tab index the launcher activates: Inbox = 1, Check-out = 2 (ADR "Document check-out / check-in").
     public int LauncherTab => PersonalKind switch { "inbox" => 1, "checkout" => 2, _ => 0 };
