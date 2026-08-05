@@ -25,13 +25,13 @@ public class WebSearchTests
         await input.FillAsync("Invoice");
         await input.PressAsync("Enter");
 
-        var result = page.Locator(".wb-search-results .wb-list-row").Filter(new() { HasText = "Invoice 2025-001" });
+        var result = page.Locator(".wb-search-results .wb-list-row").Filter(new() { HasText = "Invoice 2026-003" });
         await Expect(result).ToBeVisibleAsync();
         await result.First.ClickAsync();
 
         // Navigates to the Repositories tab and selects the document — its name shows in the detail pane (the
         // preview is a pdf.js canvas for the seeded invoice PDF, so assert on the index detail, not preview text).
         await Expect(page.Locator(".wb-tab-active")).ToHaveAttributeAsync("aria-label", "Repositories");
-        await Expect(page.Locator(".wb-sysfields")).ToContainTextAsync("Invoice 2025-001");
+        await Expect(page.Locator(".wb-sysfields")).ToContainTextAsync("Invoice 2026-003");
     }
 }

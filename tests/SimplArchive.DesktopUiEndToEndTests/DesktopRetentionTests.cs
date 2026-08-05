@@ -21,7 +21,7 @@ public class DesktopRetentionTests
 
         var schedule = (await api.GetRetentionScheduleAsync()).Items;
 
-        var demoDoc = schedule.FirstOrDefault(i => i.DocumentName == "Invoice 2025-001");
+        var demoDoc = schedule.FirstOrDefault(i => i.DocumentName == "Invoice 2026-003");
         Assert.NotNull(demoDoc);
         Assert.Equal(7, demoDoc!.RetentionYears);
         Assert.False(string.IsNullOrEmpty(demoDoc.DispositionDate));

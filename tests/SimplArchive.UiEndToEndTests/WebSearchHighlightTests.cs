@@ -22,7 +22,7 @@ public class WebSearchHighlightTests
 
         var input = page.Locator("input[placeholder*='Search by name']");
         // "Acme" is only in the document's content, so a hit + highlight prove content extraction + indexing.
-        var snippet = page.Locator(".wb-search-results .wb-list-row", new() { HasText = "Invoice 2025-001" }).Locator(".wb-search-snippet");
+        var snippet = page.Locator(".wb-search-results .wb-list-row", new() { HasText = "Invoice 2026-003" }).Locator(".wb-search-snippet");
 
         for (var i = 0; i < 30; i++)
         {

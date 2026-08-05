@@ -95,12 +95,17 @@ public static class DemoDataSeeder
         basicEntryVersion.RetentionYears = 7;
         await dbContext.SaveChangesAsync();
 
-        // ── The original showcase document: "Invoice 2025-001" in an "Invoices" folder, in the approval workflow
-        // with a highlight + sticky note + stamp, so the demo login lands on live workflow + annotations. ─────────
-        var invoicesFolder = await AddFolderAsync(dbContext, tenantId, repositoryId, "Invoices", adminId, now, folderMaskVersionId);
-        var invoice = await AddDocumentAsync(dbContext, objectStorage, assembly, tenantId, invoicesFolder.Id,
-            "Invoice 2025-001", adminId, now, basicEntryVersion.Id, "DemoInvoice.pdf", ".pdf", "application/pdf",
-            DateOnly.FromDateTime(now.UtcDateTime));
+        // ── The realistic filing tree (issue #354): Business Years / Contracts / General. Built first so the
+        // "Contracts / Acme Corp" customer folder + the month folders exist for the showcase documents below. ────
+        var (acmeCorp, march2026) = await SeedRichTreeAsync(dbContext, objectStorage, assembly, tenantId, repositoryId, adminId, now, basicEntryVersion.Id, folderMaskVersionId);
+
+        // ── Showcase customer "Contracts / Acme Corp": an invoice ("Invoice 2026-003", document-dated March 2026)
+        // with a highlight + sticky note + stamp and in the approval workflow — so the demo login lands on live
+        // workflow + annotations — and *referenced* (multi-filed) into its Business-Years month; plus an offer
+        // ("Offer 2026-014", document-dated January 2026) with two PDF revisions for the Compare-versions feature. ─
+        var invoice = await AddDocumentAsync(dbContext, objectStorage, assembly, tenantId, acmeCorp.Id,
+            "Invoice 2026-003", adminId, now, basicEntryVersion.Id, "DemoInvoice.pdf", ".pdf", "application/pdf",
+            new DateOnly(2026, 3, 3));
         var invoiceVersion = await dbContext.DocumentVersions.SingleAsync(v => v.DocumentId == invoice.Id);
 
         AddAnnotation(dbContext, tenantId, invoice.Id, invoiceVersion.Id, adminId, now, AnnotationKind.Highlight, 0.575, 0.490, 0.345, 0.030, string.Empty, "#ffd54a");
@@ -110,14 +115,15 @@ public static class DemoDataSeeder
 
         await AddInReviewWorkflowAsync(dbContext, tenantId, invoiceVersion.Id, adminId, now);
 
-        // A second document ("Offer 2025-014") with TWO PDF revisions for the "Compare versions" feature (the two
-        // revisions differ in real, extractable text so the inline diff highlights the changes).
-        var offer = await AddDocumentAsync(dbContext, objectStorage, assembly, tenantId, repositoryId,
-            "Offer 2025-014", adminId, now, basicEntryVersion.Id, "DemoOfferV1.pdf", ".pdf", "application/pdf",
-            DateOnly.FromDateTime(now.UtcDateTime));
+        // Multi-file the invoice into its Business-Years month — a shortcut in 2026 / 03 March (ADR "…move and reference").
+        await AddReferenceAsync(dbContext, tenantId, march2026.Id, invoice.Id, adminId, now);
+
+        var offer = await AddDocumentAsync(dbContext, objectStorage, assembly, tenantId, acmeCorp.Id,
+            "Offer 2026-014", adminId, now, basicEntryVersion.Id, "DemoOfferV1.pdf", ".pdf", "application/pdf",
+            new DateOnly(2026, 1, 14));
         offer.CurrentVersionId = (await AddVersionAsync(dbContext, objectStorage, assembly, offer, adminId, now,
             offer.StorageFolderId, "DemoOfferV2.pdf", ".pdf", "application/pdf",
-            DateOnly.FromDateTime(now.UtcDateTime), 2)).Id;
+            new DateOnly(2026, 1, 14), 2)).Id;
         await dbContext.SaveChangesAsync();
 
         // A small colour-coded tag catalog + a couple of tags on the invoice (ADR "Tag controlled vocabulary" 0422).
@@ -133,16 +139,14 @@ public static class DemoDataSeeder
 
         await dbContext.SaveChangesAsync();
 
-        // ── The richer realistic tree (issue #354): Business Years / Contracts / General with varied file types
-        // and a cross-folder reference showcase. ────────────────────────────────────────────────────────────────
-        await SeedRichTreeAsync(dbContext, objectStorage, assembly, tenantId, repositoryId, adminId, now, basicEntryVersion.Id, folderMaskVersionId);
-
         // ── Two extra users + a shared "Scan Team" group inbox (the group-inbox showcase, ADR 0532). ─────────────
         await SeedTeamAsync(dbContext, objectStorage, assembly, tenantId, repositoryId, adminId, now, demoPassword);
     }
 
-    // The business-filing tree from issue #354. Returns nothing — everything is persisted as it goes.
-    private static async Task SeedRichTreeAsync(
+    // The business-filing tree from issue #354. Returns the "Contracts / Acme Corp" customer folder + the
+    // "Business Years / 2026 / 03 March" month folder — the showcase invoice + offer are filed into Acme Corp and
+    // the invoice is also referenced (multi-filed) into March by the caller.
+    private static async Task<(Document AcmeCorp, Document March)> SeedRichTreeAsync(
         SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
         Guid tenantId, Guid repositoryId, Guid adminId, DateTimeOffset now, Guid basicEntryVersionId, Guid? folderMaskVersionId)
     {
@@ -177,6 +181,9 @@ public static class DemoDataSeeder
 
         // Contracts / …
         var contracts = await FolderAsync(repositoryId, "Contracts");
+        // Acme Corp — a customer folder holding their offer (2-version compare showcase) + an invoice; filled by
+        // the caller after this tree exists.
+        var acmeCorp = await FolderAsync(contracts.Id, "Acme Corp");
         var contoso = await FolderAsync(contracts.Id, "Contoso Cloud");
         await DocAsync(contoso.Id, "Contoso Cloud — 2026 cost forecast", "DemoContosoForecast.xlsx", ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", new DateOnly(2026, 1, 15));
 
@@ -206,6 +213,8 @@ public static class DemoDataSeeder
         var templates = await FolderAsync(general.Id, "Templates");
         await DocAsync(templates.Id, "Letterhead template", "DemoLetterheadTemplate.odt", ".odt", "application/vnd.oasis.opendocument.text", new DateOnly(2026, 1, 1));
         await DocAsync(templates.Id, "Invoice template", "DemoInvoiceTemplate.ods", ".ods", "application/vnd.oasis.opendocument.spreadsheet", new DateOnly(2026, 1, 1));
+
+        return (acmeCorp, monthFolders[3]);
     }
 
     // Two extra users (an editor + a clerk) and a shared "Scan Team" group with a seeded group-inbox item — so the

@@ -24,7 +24,7 @@ public class WebRetentionTests
 
         // The demo document (Basic Entry mask, 7-year retention) is on the schedule.
         var view = page.Locator(".wb-retention");
-        await Expect(view.GetByText("Invoice 2025-001").First).ToBeVisibleAsync();
+        await Expect(view.GetByText("Invoice 2026-003").First).ToBeVisibleAsync();
         await Expect(view.GetByText("7 years").First).ToBeVisibleAsync();
         await Expect(view.GetByText("Scheduled").First).ToBeVisibleAsync();
     }

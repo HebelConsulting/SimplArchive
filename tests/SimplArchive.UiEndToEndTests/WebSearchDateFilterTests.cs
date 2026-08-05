@@ -4,13 +4,13 @@ using static Microsoft.Playwright.Assertions;
 namespace SimplArchive.UiEndToEndTests;
 
 // A UI flow (ADRs 0264/0258): a document-date range filter narrows the search. Setting "document date from" to a
-// future month excludes the seeded document (whose document date is today). OpenSearch is in the fixture;
+// future month excludes the seeded document (whose document date is March 2026). OpenSearch is in the fixture;
 // indexing is async, so the initial search polls.
 [Collection(UiCollection.Name)]
 [Trait("Area", "ui-1")]
 public class WebSearchDateFilterTests
 {
-    private const string Doc = "Invoice 2025-001";
+    private const string Doc = "Invoice 2026-003";
 
     private readonly SelfHostedAppFixture _app;
 

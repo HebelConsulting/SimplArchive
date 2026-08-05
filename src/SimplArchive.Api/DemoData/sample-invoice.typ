@@ -1,5 +1,5 @@
 // Demo invoice for the SimplArchive showcase (ADR 0214 demo seed / ADR 0502 manual).
-// Compiled to sample-invoice.pdf (an embedded resource the demo seed uploads as "Invoice 2025-001").
+// Compiled to sample-invoice.pdf (an embedded resource the demo seed uploads as "Invoice 2026-003").
 // Real, selectable text — so full-text search (Tika + OpenSearch) and search-highlighting work on it.
 // Contains "Acme Corp AG" (relied on by WebSearchHighlightTests) and several *distinctive, rare* line-item
 // terms (Wolframcarbid, Neodym, Zirkoniumoxid, Molybdändraht) that are well-suited to demonstrate content search
@@ -35,9 +35,9 @@
     #text(size: 22pt, weight: "bold", fill: accent)[RECHNUNG]
     #v(4pt)
     #table(columns: 2, stroke: none, inset: (x: 0pt, y: 2pt), align: (left, right),
-      [Rechnungs-Nr.], [*Invoice 2025-001*],
-      [Rechnungsdatum], [31.01.2025],
-      [Fällig bis], [28.02.2025],
+      [Rechnungs-Nr.], [*Invoice 2026-003*],
+      [Rechnungsdatum], [03.03.2026],
+      [Fällig bis], [02.04.2026],
       [Kunden-Nr.], [KD-4471],
     )
   ],
@@ -76,7 +76,7 @@
   #text(size: 9pt)[
     *Zahlbar innert 30 Tagen netto* auf IBAN CH93 0076 2011 6238 5295 7, lautend auf Acme Corp AG.
     Bei Fragen zu dieser Rechnung wenden Sie sich bitte an debitoren\@acme-corp.example unter Angabe der
-    Rechnungsnummer *Invoice 2025-001*. Alle Positionen wurden gemäss Lieferschein LS-8841 geliefert und geprüft.
+    Rechnungsnummer *Invoice 2026-003*. Alle Positionen wurden gemäss Lieferschein LS-8841 geliefert und geprüft.
   ]
 ]
 

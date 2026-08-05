@@ -21,8 +21,9 @@ public class WebUiTogglesTests
         // full-screen control the rest of this test exercises.
         await page.GetByText("Demo Repository").First.ClickAsync();
         var list = page.Locator("[data-pane='list']");
-        await list.GetByText("Invoices").First.DblClickAsync();
-        await list.GetByText("Invoice 2025-001").First.ClickAsync();
+        await list.GetByText("Contracts").First.DblClickAsync();
+        await list.GetByText("Acme Corp").First.DblClickAsync();
+        await list.GetByText("Invoice 2026-003").First.ClickAsync();
         await Expect(page.Locator(".wb-pv-fs-btn").First).ToBeVisibleAsync();
 
         // Maximize → the preview gets the full-screen overlay class; restore removes it.

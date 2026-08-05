@@ -10,7 +10,7 @@ namespace SimplArchive.UiEndToEndTests;
 [Collection(UiCollection.Name)]
 public class WebSearchFilterTests
 {
-    private const string Doc = "Invoice 2025-001";
+    private const string Doc = "Invoice 2026-003";
 
     private readonly SelfHostedAppFixture _app;
 

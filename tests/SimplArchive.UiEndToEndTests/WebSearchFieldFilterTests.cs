@@ -10,7 +10,7 @@ namespace SimplArchive.UiEndToEndTests;
 [Trait("Area", "ui-1")]
 public class WebSearchFieldFilterTests
 {
-    private const string Doc = "Invoice 2025-001";
+    private const string Doc = "Invoice 2026-003";
 
     private readonly SelfHostedAppFixture _app;
 

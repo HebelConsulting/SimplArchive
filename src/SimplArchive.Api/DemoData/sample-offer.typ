@@ -2,7 +2,7 @@
 // "Compare versions" inline text diff (ADR 0502). Compile twice:
 //   typst compile --input rev=1 sample-offer.typ sample-offer-v1.pdf
 //   typst compile --input rev=2 sample-offer.typ sample-offer-v2.pdf
-// Both embedded resources the demo seed uploads as version 1 and version 2 of "Offer 2025-014". The revisions
+// Both embedded resources the demo seed uploads as version 1 and version 2 of "Offer 2026-014". The revisions
 // differ in real, extractable text (a changed quantity + an added line item + updated totals), so Tika extracts
 // each version's text and DiffPlex shows +/- lines.
 
@@ -35,10 +35,10 @@
     #text(size: 22pt, weight: "bold", fill: accent)[ANGEBOT]
     #v(4pt)
     #table(columns: 2, stroke: none, inset: (x: 0pt, y: 2pt), align: (left, right),
-      [Angebots-Nr.], [*Offer 2025-014*],
+      [Angebots-Nr.], [*Offer 2026-014*],
       [Revision], [#if v2 [*2 (revidiert)*] else [*1*]],
-      [Datum], [#if v2 [14.02.2025] else [07.02.2025]],
-      [Gültig bis], [31.03.2025],
+      [Datum], [#if v2 [14.01.2026] else [07.01.2026]],
+      [Gültig bis], [31.03.2026],
     )
   ],
 )
@@ -82,9 +82,9 @@
   #text(size: 9pt)[
     #if v2 [
       *Revision 2:* Menge Pos. 2 auf 80 Stk erhöht und Pos. 4 (Montagehalterung Typ MH-12) ergänzt.
-      Angebot freibleibend, gültig bis 31.03.2025. Lieferung ab Lager Zürich innert 5 Arbeitstagen.
+      Angebot freibleibend, gültig bis 31.03.2026. Lieferung ab Lager Zürich innert 5 Arbeitstagen.
     ] else [
-      Angebot freibleibend, gültig bis 31.03.2025. Lieferung ab Lager Zürich innert 5 Arbeitstagen.
+      Angebot freibleibend, gültig bis 31.03.2026. Lieferung ab Lager Zürich innert 5 Arbeitstagen.
       Preise exklusive Fracht.
     ]
   ]

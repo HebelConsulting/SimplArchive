@@ -73,7 +73,7 @@ public static partial class WebCapture
         await CaptureVersionCompareAsync(page, outDir);
     }
 
-    // Opens the "Compare versions" dialog on the two-revision demo document ("Offer 2025-014", ADR 0502) and shots
+    // Opens the "Compare versions" dialog on the two-revision demo document ("Offer 2026-014", ADR 0502) and shots
     // the inline diff — the feature figure for the manual's versioning chapter.
     private static async Task CaptureVersionCompareAsync(IPage page, string outDir)
     {
@@ -81,7 +81,14 @@ public static partial class WebCapture
         {
             await page.Locator(".wb-tab[aria-label='Repositories']").First.ClickAsync();
             await page.GetByText("Demo Repository").First.ClickAsync();
-            var row = page.Locator(".wb-list-row").Filter(new() { HasText = "Offer 2025-014" });
+            // The offer lives in Contracts → Acme Corp (ADR 0502); drill into it before selecting the document.
+            var contracts = page.Locator(".wb-list-row").Filter(new() { HasText = "Contracts" });
+            await contracts.First.WaitForAsync(new() { Timeout = 15000 });
+            await contracts.First.DblClickAsync();
+            var acme = page.Locator(".wb-list-row").Filter(new() { HasText = "Acme Corp" });
+            await acme.First.WaitForAsync(new() { Timeout = 15000 });
+            await acme.First.DblClickAsync();
+            var row = page.Locator(".wb-list-row").Filter(new() { HasText = "Offer 2026-014" });
             await row.First.WaitForAsync(new() { Timeout = 15000 });
             await row.First.ClickAsync();
             await page.GetByRole(AriaRole.Button, new() { Name = "Compare versions" }).ClickAsync();
@@ -98,8 +105,8 @@ public static partial class WebCapture
     }
 
     // Screen-specific interactions that populate a tab with real content before the shot, so the web figures aren't
-    // empty "nothing selected" states. Driven off the demo seed (ADR 0214): Demo Repository → Invoices → the
-    // "Invoice 2025-001" document. Best-effort — a failure here shouldn't abort the whole capture, so each block is
+    // empty "nothing selected" states. Driven off the demo seed (ADR 0214): Demo Repository → Contracts → Acme Corp
+    // → the "Invoice 2026-003" document. Best-effort — a failure here shouldn't abort the whole capture, so each block is
     // guarded (the tab still gets shot in its default state).
     private static async Task EnrichAsync(IPage page, string name)
     {
@@ -108,13 +115,16 @@ public static partial class WebCapture
             switch (name)
             {
                 case "repositories":
-                    // Drill Demo Repository → Invoices → select the document, so the detail + preview panes fill
-                    // (the seeded invoice PDF renders via pdf.js, with the seeded highlight + sticky note on it).
+                    // Drill Demo Repository → Contracts → Acme Corp → select the document, so the detail + preview panes
+                    // fill (the seeded invoice PDF renders via pdf.js, with the seeded highlight + sticky note on it).
                     await page.GetByText("Demo Repository").First.ClickAsync();
-                    var invoices = page.Locator(".wb-list-row").Filter(new() { HasText = "Invoices" });
-                    await invoices.First.WaitForAsync(new() { Timeout = 15000 });
-                    await invoices.First.DblClickAsync();
-                    var doc = page.Locator(".wb-list-row").Filter(new() { HasText = "Invoice 2025-001" });
+                    var contracts = page.Locator(".wb-list-row").Filter(new() { HasText = "Contracts" });
+                    await contracts.First.WaitForAsync(new() { Timeout = 15000 });
+                    await contracts.First.DblClickAsync();
+                    var acme = page.Locator(".wb-list-row").Filter(new() { HasText = "Acme Corp" });
+                    await acme.First.WaitForAsync(new() { Timeout = 15000 });
+                    await acme.First.DblClickAsync();
+                    var doc = page.Locator(".wb-list-row").Filter(new() { HasText = "Invoice 2026-003" });
                     await doc.First.WaitForAsync(new() { Timeout = 15000 });
                     await doc.First.ClickAsync();
                     await page.Locator(".wb-sysfields").First.WaitForAsync(new() { Timeout = 15000 });

@@ -24,7 +24,7 @@ public class WebWorkflowTests
         // The Tasks tab lists the pending review — with an overdue badge (the demo review's deadline is in the
         // past, ADR "Workflow escalation / SLA reminders").
         await page.Locator(".wb-tab[aria-label=\"Tasks\"]").First.ClickAsync();
-        await Expect(page.GetByText("Invoice 2025-001").First).ToBeVisibleAsync();
+        await Expect(page.GetByText("Invoice 2026-003").First).ToBeVisibleAsync();
         await Expect(page.Locator(".wb-tasks").GetByText("Overdue").First).ToBeVisibleAsync();
 
         // The task's Open navigates to the document (Repositories tab, doc selected).
