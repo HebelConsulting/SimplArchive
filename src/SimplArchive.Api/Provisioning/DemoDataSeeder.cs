@@ -74,6 +74,9 @@ public static class DemoDataSeeder
         var adminId = provisioned.AdministratorId;
         var repositoryId = provisioned.RepositoryId;
         var objectStorage = services.GetRequiredService<IObjectStorageClient>();
+        // Demo versions are confirmed through the SAME finalizer an interactive upload uses (ADR 0545), so the
+        // demo exercises the real path and gets its automatic chat entries instead of a silent parallel one.
+        var finalizer = services.GetRequiredService<Documents.DocumentFinalizer>();
         var assembly = typeof(DemoDataSeeder).Assembly;
         var now = clock.GetUtcNow();
 
@@ -97,7 +100,7 @@ public static class DemoDataSeeder
 
         // ── The realistic filing tree (issue #354): Business Years / Contracts / General. Built first so the
         // "Contracts / Acme Corp" customer folder + the month folders exist for the showcase documents below. ────
-        var (acmeCorp, march2026) = await SeedRichTreeAsync(dbContext, objectStorage, assembly, tenantId, repositoryId, adminId, now, basicEntryVersion.Id, folderMaskVersionId);
+        var (acmeCorp, march2026) = await SeedRichTreeAsync(dbContext, objectStorage, assembly, tenantId, repositoryId, adminId, now, basicEntryVersion.Id, folderMaskVersionId, finalizer);
 
         // ── Showcase customer "Contracts / Acme Corp": an invoice ("Invoice 2026-003", document-dated March 2026)
         // with a highlight + sticky note + stamp and in the approval workflow — so the demo login lands on live
@@ -105,7 +108,7 @@ public static class DemoDataSeeder
         // ("Offer 2026-014", document-dated January 2026) with two PDF revisions for the Compare-versions feature. ─
         var invoice = await AddDocumentAsync(dbContext, objectStorage, assembly, tenantId, acmeCorp.Id,
             "Invoice 2026-003", adminId, now, basicEntryVersion.Id, "DemoInvoice.pdf", ".pdf", "application/pdf",
-            new DateOnly(2026, 3, 3));
+            new DateOnly(2026, 3, 3), finalizer);
         var invoiceVersion = await dbContext.DocumentVersions.SingleAsync(v => v.DocumentId == invoice.Id);
 
         AddAnnotation(dbContext, tenantId, invoice.Id, invoiceVersion.Id, adminId, now, AnnotationKind.Highlight, 0.575, 0.490, 0.345, 0.030, string.Empty, "#ffd54a");
@@ -120,10 +123,10 @@ public static class DemoDataSeeder
 
         var offer = await AddDocumentAsync(dbContext, objectStorage, assembly, tenantId, acmeCorp.Id,
             "Offer 2026-014", adminId, now, basicEntryVersion.Id, "DemoOfferV1.pdf", ".pdf", "application/pdf",
-            new DateOnly(2026, 1, 14));
+            new DateOnly(2026, 1, 14), finalizer);
         offer.CurrentVersionId = (await AddVersionAsync(dbContext, objectStorage, assembly, offer, adminId, now,
             offer.StorageFolderId, "DemoOfferV2.pdf", ".pdf", "application/pdf",
-            new DateOnly(2026, 1, 14), 2)).Id;
+            new DateOnly(2026, 1, 14), finalizer)).Id;
         await dbContext.SaveChangesAsync();
 
         // A small colour-coded tag catalog + a couple of tags on the invoice (ADR "Tag controlled vocabulary" 0422).
@@ -148,13 +151,14 @@ public static class DemoDataSeeder
     // the invoice is also referenced (multi-filed) into March by the caller.
     private static async Task<(Document AcmeCorp, Document March)> SeedRichTreeAsync(
         SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
-        Guid tenantId, Guid repositoryId, Guid adminId, DateTimeOffset now, Guid basicEntryVersionId, Guid? folderMaskVersionId)
+        Guid tenantId, Guid repositoryId, Guid adminId, DateTimeOffset now, Guid basicEntryVersionId, Guid? folderMaskVersionId,
+        Documents.DocumentFinalizer finalizer)
     {
         async Task<Document> FolderAsync(Guid parentId, string name) =>
             await AddFolderAsync(dbContext, tenantId, parentId, name, adminId, now, folderMaskVersionId);
 
         Task<Document> DocAsync(Guid parentId, string name, string resource, string ext, string contentType, DateOnly date) =>
-            AddDocumentAsync(dbContext, storage, assembly, tenantId, parentId, name, adminId, now, basicEntryVersionId, resource, ext, contentType, date);
+            AddDocumentAsync(dbContext, storage, assembly, tenantId, parentId, name, adminId, now, basicEntryVersionId, resource, ext, contentType, date, finalizer);
 
         // Business Years / 2026 / 01..12 <Month>.
         var businessYears = await FolderAsync(repositoryId, "Business Years");
@@ -172,7 +176,7 @@ public static class DemoDataSeeder
         // March holds the chocolate-gift invoice as a PDF with TWO versions + a highlight and a sticky note — a
         // second Compare-versions + annotations sample living inside the Business Years tree (for the manual).
         var chocolate = await DocAsync(monthFolders[3].Id, "Invoice for customer's chocolate gift", "DemoChocInvoiceV1.pdf", ".pdf", "application/pdf", new DateOnly(2026, 3, 16));
-        var chocV2 = await AddVersionAsync(dbContext, storage, assembly, chocolate, adminId, now, chocolate.StorageFolderId, "DemoChocInvoiceV2.pdf", ".pdf", "application/pdf", new DateOnly(2026, 3, 16), 2);
+        var chocV2 = await AddVersionAsync(dbContext, storage, assembly, chocolate, adminId, now, chocolate.StorageFolderId, "DemoChocInvoiceV2.pdf", ".pdf", "application/pdf", new DateOnly(2026, 3, 16), finalizer);
         chocolate.CurrentVersionId = chocV2.Id;
         await dbContext.SaveChangesAsync();
         AddAnnotation(dbContext, tenantId, chocolate.Id, chocV2.Id, adminId, now, AnnotationKind.Highlight, 0.560, 0.470, 0.360, 0.030, string.Empty, "#ffd54a");
@@ -294,7 +298,8 @@ public static class DemoDataSeeder
     private static async Task<Document> AddDocumentAsync(
         SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
         Guid tenantId, Guid parentId, string name, Guid adminId, DateTimeOffset at, Guid maskVersionId,
-        string resourceName, string ext, string contentType, DateOnly documentDate)
+        string resourceName, string ext, string contentType, DateOnly documentDate,
+        Documents.DocumentFinalizer finalizer)
     {
         var storageFolderId = Guid.NewGuid();
         var document = new Document
@@ -311,14 +316,15 @@ public static class DemoDataSeeder
         dbContext.Documents.Add(document);
         await dbContext.SaveChangesAsync();
 
-        await AddVersionAsync(dbContext, storage, assembly, document, adminId, at, storageFolderId, resourceName, ext, contentType, documentDate, 1);
+        await AddVersionAsync(dbContext, storage, assembly, document, adminId, at, storageFolderId, resourceName, ext, contentType, documentDate, finalizer);
         return document;
     }
 
     private static async Task<DocumentVersion> AddVersionAsync(
         SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
         Document document, Guid adminId, DateTimeOffset at, Guid storageFolderId,
-        string resourceName, string ext, string contentType, DateOnly documentDate, int versionNumber)
+        string resourceName, string ext, string contentType, DateOnly documentDate,
+        Documents.DocumentFinalizer finalizer)
     {
         var bytes = await ReadResourceAsync(assembly, resourceName);
         var versionId = Guid.NewGuid();
@@ -328,14 +334,21 @@ public static class DemoDataSeeder
             await storage.PutObjectAsync(objectKey, content, contentType);
         }
 
+        // Created PENDING and confirmed through DocumentFinalizer — the same path an interactive upload takes,
+        // rather than a parallel one that writes a Confirmed row directly. That is what gives the demo its
+        // automatic chat entries (ADR 0545): the seeder produced none precisely because it bypassed the finalizer.
+        //
+        // The finalizer owns what it computes, so the fields below are deliberately NOT set here: it assigns the
+        // version number (from the existing versions, which yields the same sequence the callers used to pass),
+        // hashes the blob server-side from object storage rather than trusting a value we hand it, and stamps
+        // SizeBytes. It also counts the blob toward the demo tenant's 250 MB quota, so the quota UI now shows
+        // real usage instead of zero.
         var version = new DocumentVersion
         {
             Id = versionId,
             TenantId = document.TenantId,
             DocumentId = document.Id,
-            Status = DocumentVersionStatus.Confirmed,
-            VersionNumber = versionNumber,
-            Sha256Hash = Convert.ToHexStringLower(SHA256.HashData(bytes)),
+            Status = DocumentVersionStatus.Pending,
             ObjectKey = objectKey,
             CreatedByUserId = adminId,
             DocumentDate = documentDate,
@@ -343,6 +356,8 @@ public static class DemoDataSeeder
         };
         dbContext.DocumentVersions.Add(version);
         await dbContext.SaveChangesAsync();
+
+        await finalizer.FinalizeAsync(version, CancellationToken.None);
         return version;
     }
 
