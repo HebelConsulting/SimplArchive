@@ -660,14 +660,90 @@
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="vm:ChatMessageViewModel">
                                                         <StackPanel Margin="0,6">
-                                                            <TextBlock Text="{Binding Meta}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                                <Button Classes="link" IsVisible="{Binding HasAuthorCard}" Padding="0" FontSize="11"
+                                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ShowAuthorCardCommand}"
+                                                                        CommandParameter="{Binding}" Content="{Binding AuthorName}">
+                                                                    <!-- The identity card (ADR 0544). Clicking runs the command (which follows the
+                                                                         advertised card href) and opens this flyout; it binds to the window VM, since
+                                                                         only one card is open at a time. -->
+                                                                    <Button.Flyout>
+                                                                        <Flyout Placement="Bottom">
+                                                                            <StackPanel MinWidth="220" Margin="4" Orientation="Horizontal" Spacing="12"
+                                                                                        DataContext="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext)}">
+                                                                                <Border IsVisible="{Binding AuthorCard, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                                                        Width="56" Height="56" CornerRadius="28" ClipToBounds="True"
+                                                                                        Background="{DynamicResource WbChrome}">
+                                                                                    <Panel>
+                                                                                        <TextBlock Text="{Binding AuthorCard.Initials}" HorizontalAlignment="Center"
+                                                                                                   VerticalAlignment="Center" FontSize="20"
+                                                                                                   IsVisible="{Binding !AuthorCard.HasPhoto}" />
+                                                                                        <Image Source="{Binding AuthorCard.PhotoImage}" Stretch="UniformToFill"
+                                                                                               IsVisible="{Binding AuthorCard.HasPhoto}" />
+                                                                                    </Panel>
+                                                                                </Border>
+                                                                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                                                    <TextBlock Text="{Binding AuthorCard.DisplayName}" FontWeight="SemiBold" FontSize="13" />
+                                                                                    <TextBlock Text="{Binding AuthorCard.Email}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                                                                    <TextBlock Text="{loc:Tr UserCardDeactivated}" Foreground="{DynamicResource WbMuted}"
+                                                                                               FontSize="11" IsVisible="{Binding !AuthorCard.IsActive}" />
+                                                                                    <TextBlock Text="{loc:Tr UserCardLoadFailed}" Foreground="{DynamicResource WbMuted}"
+                                                                                               FontSize="11" TextWrapping="Wrap" MaxWidth="200"
+                                                                                               IsVisible="{Binding AuthorCardFailed}" />
+                                                                                </StackPanel>
+                                                                            </StackPanel>
+                                                                        </Flyout>
+                                                                    </Button.Flyout>
+                                                                </Button>
+                                                                <TextBlock IsVisible="{Binding HasNoAuthorCard}" Text="{Binding AuthorName}"
+                                                                           Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                                <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                            </StackPanel>
                                                             <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" />
                                                             <ItemsControl ItemsSource="{Binding Replies}" Margin="16,4,0,0">
                                                                 <ItemsControl.ItemTemplate>
                                                                     <DataTemplate x:DataType="vm:ChatMessageViewModel">
                                                                         <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0" Padding="8,2" Margin="0,3">
                                                                             <StackPanel>
-                                                                                <TextBlock Text="{Binding Meta}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                                <Button Classes="link" IsVisible="{Binding HasAuthorCard}" Padding="0" FontSize="11"
+                                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ShowAuthorCardCommand}"
+                                                                        CommandParameter="{Binding}" Content="{Binding AuthorName}">
+                                                                    <!-- The identity card (ADR 0544). Clicking runs the command (which follows the
+                                                                         advertised card href) and opens this flyout; it binds to the window VM, since
+                                                                         only one card is open at a time. -->
+                                                                    <Button.Flyout>
+                                                                        <Flyout Placement="Bottom">
+                                                                            <StackPanel MinWidth="220" Margin="4" Orientation="Horizontal" Spacing="12"
+                                                                                        DataContext="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext)}">
+                                                                                <Border IsVisible="{Binding AuthorCard, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                                                        Width="56" Height="56" CornerRadius="28" ClipToBounds="True"
+                                                                                        Background="{DynamicResource WbChrome}">
+                                                                                    <Panel>
+                                                                                        <TextBlock Text="{Binding AuthorCard.Initials}" HorizontalAlignment="Center"
+                                                                                                   VerticalAlignment="Center" FontSize="20"
+                                                                                                   IsVisible="{Binding !AuthorCard.HasPhoto}" />
+                                                                                        <Image Source="{Binding AuthorCard.PhotoImage}" Stretch="UniformToFill"
+                                                                                               IsVisible="{Binding AuthorCard.HasPhoto}" />
+                                                                                    </Panel>
+                                                                                </Border>
+                                                                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                                                    <TextBlock Text="{Binding AuthorCard.DisplayName}" FontWeight="SemiBold" FontSize="13" />
+                                                                                    <TextBlock Text="{Binding AuthorCard.Email}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                                                                    <TextBlock Text="{loc:Tr UserCardDeactivated}" Foreground="{DynamicResource WbMuted}"
+                                                                                               FontSize="11" IsVisible="{Binding !AuthorCard.IsActive}" />
+                                                                                    <TextBlock Text="{loc:Tr UserCardLoadFailed}" Foreground="{DynamicResource WbMuted}"
+                                                                                               FontSize="11" TextWrapping="Wrap" MaxWidth="200"
+                                                                                               IsVisible="{Binding AuthorCardFailed}" />
+                                                                                </StackPanel>
+                                                                            </StackPanel>
+                                                                        </Flyout>
+                                                                    </Button.Flyout>
+                                                                </Button>
+                                                                <TextBlock IsVisible="{Binding HasNoAuthorCard}" Text="{Binding AuthorName}"
+                                                                           Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                                <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                            </StackPanel>
                                                                                 <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" />
                                                                             </StackPanel>
                                                                         </Border>
@@ -1288,14 +1364,90 @@
                                                         <ItemsControl.ItemTemplate>
                                                             <DataTemplate x:DataType="vm:ChatMessageViewModel">
                                                                 <StackPanel Margin="0,6">
-                                                                    <TextBlock Text="{Binding Meta}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                                <Button Classes="link" IsVisible="{Binding HasAuthorCard}" Padding="0" FontSize="11"
+                                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ShowAuthorCardCommand}"
+                                                                        CommandParameter="{Binding}" Content="{Binding AuthorName}">
+                                                                    <!-- The identity card (ADR 0544). Clicking runs the command (which follows the
+                                                                         advertised card href) and opens this flyout; it binds to the window VM, since
+                                                                         only one card is open at a time. -->
+                                                                    <Button.Flyout>
+                                                                        <Flyout Placement="Bottom">
+                                                                            <StackPanel MinWidth="220" Margin="4" Orientation="Horizontal" Spacing="12"
+                                                                                        DataContext="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext)}">
+                                                                                <Border IsVisible="{Binding AuthorCard, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                                                        Width="56" Height="56" CornerRadius="28" ClipToBounds="True"
+                                                                                        Background="{DynamicResource WbChrome}">
+                                                                                    <Panel>
+                                                                                        <TextBlock Text="{Binding AuthorCard.Initials}" HorizontalAlignment="Center"
+                                                                                                   VerticalAlignment="Center" FontSize="20"
+                                                                                                   IsVisible="{Binding !AuthorCard.HasPhoto}" />
+                                                                                        <Image Source="{Binding AuthorCard.PhotoImage}" Stretch="UniformToFill"
+                                                                                               IsVisible="{Binding AuthorCard.HasPhoto}" />
+                                                                                    </Panel>
+                                                                                </Border>
+                                                                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                                                    <TextBlock Text="{Binding AuthorCard.DisplayName}" FontWeight="SemiBold" FontSize="13" />
+                                                                                    <TextBlock Text="{Binding AuthorCard.Email}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                                                                    <TextBlock Text="{loc:Tr UserCardDeactivated}" Foreground="{DynamicResource WbMuted}"
+                                                                                               FontSize="11" IsVisible="{Binding !AuthorCard.IsActive}" />
+                                                                                    <TextBlock Text="{loc:Tr UserCardLoadFailed}" Foreground="{DynamicResource WbMuted}"
+                                                                                               FontSize="11" TextWrapping="Wrap" MaxWidth="200"
+                                                                                               IsVisible="{Binding AuthorCardFailed}" />
+                                                                                </StackPanel>
+                                                                            </StackPanel>
+                                                                        </Flyout>
+                                                                    </Button.Flyout>
+                                                                </Button>
+                                                                <TextBlock IsVisible="{Binding HasNoAuthorCard}" Text="{Binding AuthorName}"
+                                                                           Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                                <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                            </StackPanel>
                                                                     <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" />
                                                                     <ItemsControl ItemsSource="{Binding Replies}" Margin="16,4,0,0">
                                                                         <ItemsControl.ItemTemplate>
                                                                             <DataTemplate x:DataType="vm:ChatMessageViewModel">
                                                                                 <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0" Padding="8,2" Margin="0,3">
                                                                                     <StackPanel>
-                                                                                        <TextBlock Text="{Binding Meta}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                                                <Button Classes="link" IsVisible="{Binding HasAuthorCard}" Padding="0" FontSize="11"
+                                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ShowAuthorCardCommand}"
+                                                                        CommandParameter="{Binding}" Content="{Binding AuthorName}">
+                                                                    <!-- The identity card (ADR 0544). Clicking runs the command (which follows the
+                                                                         advertised card href) and opens this flyout; it binds to the window VM, since
+                                                                         only one card is open at a time. -->
+                                                                    <Button.Flyout>
+                                                                        <Flyout Placement="Bottom">
+                                                                            <StackPanel MinWidth="220" Margin="4" Orientation="Horizontal" Spacing="12"
+                                                                                        DataContext="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext)}">
+                                                                                <Border IsVisible="{Binding AuthorCard, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                                                        Width="56" Height="56" CornerRadius="28" ClipToBounds="True"
+                                                                                        Background="{DynamicResource WbChrome}">
+                                                                                    <Panel>
+                                                                                        <TextBlock Text="{Binding AuthorCard.Initials}" HorizontalAlignment="Center"
+                                                                                                   VerticalAlignment="Center" FontSize="20"
+                                                                                                   IsVisible="{Binding !AuthorCard.HasPhoto}" />
+                                                                                        <Image Source="{Binding AuthorCard.PhotoImage}" Stretch="UniformToFill"
+                                                                                               IsVisible="{Binding AuthorCard.HasPhoto}" />
+                                                                                    </Panel>
+                                                                                </Border>
+                                                                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                                                    <TextBlock Text="{Binding AuthorCard.DisplayName}" FontWeight="SemiBold" FontSize="13" />
+                                                                                    <TextBlock Text="{Binding AuthorCard.Email}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                                                                    <TextBlock Text="{loc:Tr UserCardDeactivated}" Foreground="{DynamicResource WbMuted}"
+                                                                                               FontSize="11" IsVisible="{Binding !AuthorCard.IsActive}" />
+                                                                                    <TextBlock Text="{loc:Tr UserCardLoadFailed}" Foreground="{DynamicResource WbMuted}"
+                                                                                               FontSize="11" TextWrapping="Wrap" MaxWidth="200"
+                                                                                               IsVisible="{Binding AuthorCardFailed}" />
+                                                                                </StackPanel>
+                                                                            </StackPanel>
+                                                                        </Flyout>
+                                                                    </Button.Flyout>
+                                                                </Button>
+                                                                <TextBlock IsVisible="{Binding HasNoAuthorCard}" Text="{Binding AuthorName}"
+                                                                           Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                                <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                                            </StackPanel>
                                                                                         <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" />
                                                                                     </StackPanel>
                                                                                 </Border>

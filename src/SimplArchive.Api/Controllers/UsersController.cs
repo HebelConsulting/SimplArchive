@@ -72,6 +72,23 @@ public class UsersController : ControllerBase
 
     // Plain mutable classes, not records — System.Xml.Serialization.XmlSerializer (ADR "JSON/XML content
     // negotiation") needs a parameterless constructor and settable properties.
+    // The tenant-visible identity card (ADR 0544) — a deliberately small projection of a User. Plain mutable
+    // class with a parameterless ctor, like every resource here (XmlSerializer, ADR "JSON/XML content negotiation").
+    public class UserCardResource : HypermediaResource
+    {
+        public Guid UserId { get; set; }
+
+        public string DisplayName { get; set; } = "";
+
+        public string Email { get; set; } = "";
+
+        // A deactivated colleague still authored past messages, so the card renders but can say so.
+        public bool IsActive { get; set; }
+
+        // Whether a photo exists; the bytes come from the "photo" rel, which is only present when this is true.
+        public bool HasPhoto { get; set; }
+    }
+
     public class UserResource : HypermediaResource
     {
         public Guid Id { get; set; }
@@ -673,14 +690,13 @@ public class UsersController : ControllerBase
         return await StorePhotoAsync(userId, cancellationToken);
     }
 
+    // Readable by ANY member of the tenant, not just the user themself or a CanManageUsers holder (ADR 0544).
+    // A profile photo is how colleagues recognise each other in the chat thread's author card; gating it to
+    // administrators made the card useless for exactly the people who read the thread. The tenant query filter
+    // is the boundary — a userId from another tenant resolves to nothing and returns 404, not someone's face.
     [HttpGet("{userId:guid}/photo")]
     public async Task<IActionResult> GetPhoto(Guid userId, CancellationToken cancellationToken)
     {
-        if (userId != _currentUserAccessor.UserId && !await CanManageUsersAsync(cancellationToken))
-        {
-            return Forbid();
-        }
-
         var photo = await _dbContext.UserProfilePhotos
             .Where(p => p.UserId == userId)
             .Select(p => p.Photo)
@@ -692,14 +708,55 @@ public class UsersController : ControllerBase
     [HttpHead("{userId:guid}/photo")]
     public async Task<IActionResult> HeadPhoto(Guid userId, CancellationToken cancellationToken)
     {
-        if (userId != _currentUserAccessor.UserId && !await CanManageUsersAsync(cancellationToken))
-        {
-            return Forbid();
-        }
-
         var exists = await _dbContext.UserProfilePhotos.AnyAsync(p => p.UserId == userId, cancellationToken);
         return exists ? NoContent() : NotFound();
     }
+
+    // ---- Identity card (ADR 0544) ----------------------------------------------------------------------
+    // The small "who is this?" card behind an author name in the chat thread (and, later, an @-mention): display
+    // name, email, and whether a photo exists. Readable by ANY member of the tenant.
+    //
+    // Deliberately a SEPARATE resource from GET /api/users/{id}, which is the administrative user record and stays
+    // gated on CanManageUsers. This one exposes only the three fields a card renders, so widening its audience to
+    // the whole tenant does not also widen access to rights flags, MFA state or activation status.
+    //
+    // Tenant isolation needs no explicit check: the Users query filter scopes the lookup, so an id from another
+    // tenant is simply not found.
+    [HttpGet("{userId:guid}/card")]
+    public async Task<IActionResult> GetCard(Guid userId, CancellationToken cancellationToken)
+    {
+        var card = await _dbContext.Users
+            .Where(u => u.Id == userId)
+            .Select(u => new UserCardResource
+            {
+                UserId = u.Id,
+                DisplayName = u.DisplayName,
+                Email = u.Email,
+                IsActive = u.IsActive,
+                HasPhoto = _dbContext.UserProfilePhotos.Any(p => p.UserId == u.Id),
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (card is null)
+        {
+            return NotFound();
+        }
+
+        card.Links =
+        [
+            new Link("self", $"/api/users/{userId}/card", "GET"),
+            // Only advertised when there is one to fetch, so a client follows the rel rather than probing for a
+            // 404 — absence of the rel is the answer (ADR 0543).
+            .. card.HasPhoto ? new[] { new Link("photo", $"/api/users/{userId}/photo", "GET") } : [],
+        ];
+
+        return Ok(card);
+    }
+
+    // Standing convention: every GET action gets a companion HEAD action.
+    [HttpHead("{userId:guid}/card")]
+    public async Task<IActionResult> HeadCard(Guid userId, CancellationToken cancellationToken) =>
+        await _dbContext.Users.AnyAsync(u => u.Id == userId, cancellationToken) ? NoContent() : NotFound();
 
     [HttpDelete("{userId:guid}/photo")]
     public async Task<IActionResult> DeletePhoto(Guid userId, CancellationToken cancellationToken)

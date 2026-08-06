@@ -1722,6 +1722,15 @@
   <data name="NoActions" xml:space="preserve">
     <value>Nessuna azione disponibile.</value>
   </data>
+  <data name="UserCardDeactivated" xml:space="preserve">
+    <value>Disattivato</value>
+  </data>
+  <data name="UserCardServiceAccount" xml:space="preserve">
+    <value>Account di servizio</value>
+  </data>
+  <data name="UserCardLoadFailed" xml:space="preserve">
+    <value>Impossibile caricare i dettagli di questa persona.</value>
+  </data>
   <data name="NoCommentsYet" xml:space="preserve">
     <value>Ancora nessun commento. Avvia la conversazione.</value>
   </data>

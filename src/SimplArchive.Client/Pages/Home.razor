@@ -165,6 +165,11 @@
     .wb-comment { padding: 6px 0; }
     .wb-comment-reply { margin-left: 18px; border-left: 2px solid var(--mud-palette-lines-default); padding-left: 10px; }
     .wb-comment-meta { font-size: .72rem; color: var(--mud-palette-text-secondary); }
+    /* An author whose card can be opened (ADR 0544). A ServiceAccount author has no card and stays plain text,
+       so the affordance itself tells you whether there is a person behind the name. */
+    .wb-author-link { color: var(--mud-palette-primary); cursor: pointer; }
+    .wb-author-link:hover { text-decoration: underline; }
+    .wb-author-card { max-width: 22rem; }
     .wb-comment-body { font-size: .9rem; white-space: pre-wrap; }
     .wb-reply-link { font-size: .72rem; color: var(--mud-palette-primary); cursor: pointer; user-select: none; }
     .wb-compose { flex: 0 0 auto; border-top: 1px solid var(--mud-palette-lines-default); padding: 8px 12px; }
@@ -1040,6 +1045,41 @@
                                             </MudTooltip>
                                         }
                                     </div>
+                                    @* The author identity card (ADR 0544) — opened from an author name in the
+                                       thread. One popover reused for whichever author was clicked, since only
+                                       one can be open at a time. *@
+                                    <MudPopover Open="@_authorCardOpen" Fixed="true" Class="wb-author-card pa-4"
+                                                AnchorOrigin="Origin.CenterCenter" TransformOrigin="Origin.CenterCenter">
+                                        @if (_authorCard is { } card)
+                                        {
+                                            <div class="d-flex align-center gap-3">
+                                                @if (_authorCardPhoto is not null)
+                                                {
+                                                    <MudAvatar Size="Size.Large"><MudImage Src="@_authorCardPhoto" /></MudAvatar>
+                                                }
+                                                else
+                                                {
+                                                    <MudAvatar Size="Size.Large" Color="Color.Primary">@Initials(card.DisplayName)</MudAvatar>
+                                                }
+                                                <div>
+                                                    <MudText Typo="Typo.subtitle1">@card.DisplayName</MudText>
+                                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@card.Email</MudText>
+                                                    @if (!card.IsActive)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">@Strings.Get("UserCardDeactivated")</MudChip>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.body2">@Strings.Get("UserCardLoadFailed")</MudText>
+                                        }
+                                    </MudPopover>
+                                    @if (_authorCardOpen)
+                                    {
+                                        <MudOverlay Visible="true" AutoClose="false" @onclick="CloseAuthorCard" />
+                                    }
                                     <div class="wb-chat-thread">
                                         @if (_comments.Count == 0)
                                         {
@@ -1048,14 +1088,14 @@
                                         @foreach (var c in _comments.Where(x => x.ParentMessageId is null).OrderBy(x => x.CreatedAt))
                                         {
                                             <div class="wb-comment">
-                                                <div class="wb-comment-meta">@c.AuthorName · @c.CreatedAt.ToLocalTime().ToString("g")</div>
+                                                <div class="wb-comment-meta">@AuthorMarkup(c) · @c.CreatedAt.ToLocalTime().ToString("g")</div>
                                                 <div class="wb-comment-body">@c.Body</div>
                                                 <span class="wb-reply-link" @onclick="() => ToggleReply(c.Id)">@Strings.Get("ReplyBtn")</span>
                                             </div>
                                             @foreach (var r in _comments.Where(x => x.ParentMessageId == c.Id).OrderBy(x => x.CreatedAt))
                                             {
                                                 <div class="wb-comment wb-comment-reply">
-                                                    <div class="wb-comment-meta">@r.AuthorName · @r.CreatedAt.ToLocalTime().ToString("g")</div>
+                                                    <div class="wb-comment-meta">@AuthorMarkup(r) · @r.CreatedAt.ToLocalTime().ToString("g")</div>
                                                     <div class="wb-comment-body">@r.Body</div>
                                                 </div>
                                             }
@@ -5938,6 +5978,70 @@
         }
     }
 
+    // ---- Author identity card (ADR 0544) -------------------------------------------------------------
+
+    // The author label. A message that advertises an "author-card" rel renders a clickable name; one that does
+    // not (a ServiceAccount posted it) renders plain text. The ABSENCE of the rel is the signal — the client
+    // never decides for itself whether an author is a person (ADR 0543/0544).
+    private RenderFragment AuthorMarkup(ChatMessageResponse message) => builder =>
+    {
+        var cardHref = RelativeHref(message.Links, "author-card");
+        if (cardHref is null)
+        {
+            builder.AddContent(0, message.AuthorName);
+            return;
+        }
+
+        builder.OpenElement(1, "span");
+        builder.AddAttribute(2, "class", "wb-author-link");
+        builder.AddAttribute(3, "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, () => OpenAuthorCardAsync(cardHref)));
+        builder.AddContent(4, message.AuthorName);
+        builder.CloseElement();
+    };
+
+    private UserCardResponse? _authorCard;
+    private string? _authorCardPhoto;
+    private bool _authorCardOpen;
+
+    private void CloseAuthorCard() => _authorCardOpen = false;
+
+    // Initials fallback when a colleague has no photo — the same treatment MainLayout gives the current user.
+    private static string Initials(string displayName) =>
+        string.Concat(displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => part[0])).ToUpperInvariant();
+
+    private async Task OpenAuthorCardAsync(string cardHref)
+    {
+        _authorCard = null;
+        _authorCardPhoto = null;
+        _authorCardOpen = true;
+
+        try
+        {
+            _authorCard = await Http.GetFromJsonAsync<UserCardResponse>(cardHref);
+        }
+        catch (HttpRequestException)
+        {
+            _authorCardOpen = true; // keep it open so the failure is visible rather than a dead click
+            return;
+        }
+
+        // The photo rel is present only when there is one, so this never probes for a 404 (ADR 0543). The bytes
+        // are bearer-protected, so a raw <img src> would 401 — fetch and render a data URL, as MainLayout does.
+        if (RelativeHref(_authorCard?.Links, "photo") is { } photoHref)
+        {
+            try
+            {
+                _authorCardPhoto = "data:image/png;base64," + Convert.ToBase64String(await Http.GetByteArrayAsync(photoHref));
+            }
+            catch (HttpRequestException)
+            {
+                _authorCardPhoto = null;
+            }
+        }
+
+        StateHasChanged();
+    }
+
     // ---- Chat thread ---------------------------------------------------------------------------------
 
     // Prefers the server-advertised "chat" rel and only composes a URL when the node came from a list that does
@@ -8340,6 +8444,7 @@
     private enum FolderContentsSortOrder { Name = 0, DocumentDate = 1, Created = 2 }
     private record DocumentChildrenResponse { public List<DocumentSummary> Children { get; set; } = []; public FolderContentsSortOrder ContentsSortOrder { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record DocumentSummary { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool HasReferences { get; set; } public bool OnLegalHold { get; set; } public bool CheckedOut { get; set; } public bool CheckedOutByMe { get; set; } public string CheckedOutByName { get; set; } = ""; public string FileExtension { get; set; } = ""; public string DocumentType { get; set; } = ""; public DateOnly? DocumentDate { get; set; } public long? SizeBytes { get; set; } public List<string> Tags { get; set; } = []; public Guid? SensitivityLabelId { get; set; } public string SensitivityLabelName { get; set; } = ""; public string? SensitivityLabelColor { get; set; } public int VersionCount { get; set; } public DateTimeOffset? VersionCreatedAt { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record UserCardResponse { public Guid UserId { get; set; } public string DisplayName { get; set; } = ""; public string Email { get; set; } = ""; public bool IsActive { get; set; } public bool HasPhoto { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record ReferenceListResponse { public List<ReferenceSummary> References { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
     private record ReferenceSummary { public Guid ReferenceId { get; set; } public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool HasReferences { get; set; } public Guid? RealParentId { get; set; } }
     private record DocNameResponse { public string Name { get; set; } = ""; }
@@ -8486,5 +8591,5 @@
         };
     }
     private record ChatMessageListResponse { public List<ChatMessageResponse> Messages { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-    private record ChatMessageResponse { public Guid Id { get; set; } public Guid? ParentMessageId { get; set; } public string Body { get; set; } = ""; public string AuthorName { get; set; } = ""; public DateTimeOffset CreatedAt { get; set; } }
+    private record ChatMessageResponse { public Guid Id { get; set; } public Guid? ParentMessageId { get; set; } public string Body { get; set; } = ""; public string AuthorName { get; set; } = ""; public Guid? AuthorUserId { get; set; } public DateTimeOffset CreatedAt { get; set; } public List<LinkResponse> Links { get; set; } = []; }
 }

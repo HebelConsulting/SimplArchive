@@ -60,6 +60,10 @@ public class DocumentChatController : ControllerBase
 
         public string AuthorName { get; set; } = "";
 
+        // Null when a ServiceAccount authored the message. A client uses the "author-card" rel rather than
+        // composing a URL from this, but the id identifies the author (e.g. to group or highlight own posts).
+        public Guid? AuthorUserId { get; set; }
+
         public DateTimeOffset CreatedAt { get; set; }
     }
 
@@ -75,7 +79,11 @@ public class DocumentChatController : ControllerBase
         public Guid? ParentMessageId { get; set; }
     }
 
-    private record ChatMessageRow(Guid Id, Guid? ParentMessageId, string Body, DateTimeOffset CreatedAt, string? AuthorName);
+    // AuthorUserId / AuthorServiceAccountId: exactly one is set, mirroring the entity. The id is what lets a
+    // client fetch the author's card (ADR 0544); the name alone was not enough to identify anyone.
+    private record ChatMessageRow(
+        Guid Id, Guid? ParentMessageId, string Body, DateTimeOffset CreatedAt, string? AuthorName,
+        Guid? AuthorUserId, Guid? AuthorServiceAccountId);
 
     // Cursor-based pagination (?cursor=&limit=), CreatedAt ascending / Id ascending — same shape as every
     // other list endpoint. Threaded rendering (grouping replies under parents) is the client's job; a reply
@@ -113,9 +121,13 @@ public class DocumentChatController : ControllerBase
                 c.ParentMessageId,
                 c.Body,
                 c.CreatedAt,
+                // DisplayName, not Email: the thread shows a person's NAME, and the email now lives on the card
+                // behind it (ADR 0544). This previously rendered the raw email address as the author label.
                 c.CreatedByUserId != null
-                    ? _dbContext.Users.Where(u => u.Id == c.CreatedByUserId).Select(u => u.Email).FirstOrDefault()
-                    : _dbContext.ServiceAccounts.Where(s => s.Id == c.CreatedByServiceAccountId).Select(s => s.Name).FirstOrDefault()))
+                    ? _dbContext.Users.Where(u => u.Id == c.CreatedByUserId).Select(u => u.DisplayName).FirstOrDefault()
+                    : _dbContext.ServiceAccounts.Where(s => s.Id == c.CreatedByServiceAccountId).Select(s => s.Name).FirstOrDefault(),
+                c.CreatedByUserId,
+                c.CreatedByServiceAccountId))
             .ToListAsync(cancellationToken);
 
         var (page, hasMore) = Cursor.Split(fetched, pageSize);
@@ -204,8 +216,10 @@ public class DocumentChatController : ControllerBase
         _dbContext.ChatMessages.Add(comment);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        // DisplayName, matching the list projection — the thread shows a person's NAME, and their email now lives
+        // on the card behind it (ADR 0544). Both paths previously rendered the raw email address as the label.
         var authorName = createdByUserId is { } uid
-            ? await _dbContext.Users.Where(u => u.Id == uid).Select(u => u.Email).SingleAsync(cancellationToken)
+            ? await _dbContext.Users.Where(u => u.Id == uid).Select(u => u.DisplayName).SingleAsync(cancellationToken)
             : await _dbContext.ServiceAccounts.Where(s => s.Id == createdByServiceAccountId).Select(s => s.Name).SingleAsync(cancellationToken);
 
         // Notify the person the comment lands on: a reply notifies the parent comment's author; a top-level
@@ -228,7 +242,8 @@ public class DocumentChatController : ControllerBase
         await _audit.RecordAsync(AuditActions.ChatMessagePosted, "Document", documentId, document.Name,
             request.ParentMessageId is null ? "Comment posted" : "Reply posted", cancellationToken: cancellationToken);
 
-        var resource = ToResource(new ChatMessageRow(comment.Id, comment.ParentMessageId, comment.Body, comment.CreatedAt, authorName));
+        var resource = ToResource(new ChatMessageRow(comment.Id, comment.ParentMessageId, comment.Body, comment.CreatedAt, authorName,
+            comment.CreatedByUserId, comment.CreatedByServiceAccountId));
 
         return StatusCode(StatusCodes.Status201Created, resource);
     }
@@ -241,7 +256,14 @@ public class DocumentChatController : ControllerBase
         ParentMessageId = row.ParentMessageId,
         Body = row.Body,
         AuthorName = row.AuthorName ?? "Unknown",
+        AuthorUserId = row.AuthorUserId,
         CreatedAt = row.CreatedAt,
+        // The author's card, as a REL rather than a URL the client rebuilds (ADR 0543). Present only for a human
+        // author: a ServiceAccount is an automation with no card to open, and its absence is how a client knows
+        // to render the name as plain text (ADR 0544).
+        Links = row.AuthorUserId is { } authorId
+            ? [new Link("author-card", $"/api/users/{authorId}/card", "GET")]
+            : [],
     };
 
     private async Task<bool> CanSeeAsync(Guid documentId, CancellationToken cancellationToken)

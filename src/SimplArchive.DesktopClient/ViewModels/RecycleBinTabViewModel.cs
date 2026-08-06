@@ -158,7 +158,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
         var comments = await _api!.GetCommentsAsync(documentId);
         var byId = comments.ToDictionary(
             c => c.Id,
-            c => new ChatMessageViewModel { Id = c.Id, AuthorName = c.AuthorName, Body = c.Body, CreatedAt = c.CreatedAt });
+            c => new ChatMessageViewModel { Id = c.Id, AuthorName = c.AuthorName, Body = c.Body, CreatedAt = c.CreatedAt, AuthorCardHref = c.AuthorCardHref });
 
         Comments.Clear();
         foreach (var comment in comments.Where(c => c.ParentMessageId is null))

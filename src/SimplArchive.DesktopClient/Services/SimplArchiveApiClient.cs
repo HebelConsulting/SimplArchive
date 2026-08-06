@@ -123,7 +123,11 @@ public sealed class SimplArchiveApiClient
 
     public sealed record TextLayoutInfo(IReadOnlyList<TextLayoutPageInfo> Pages);
 
-    public sealed record Comment(Guid Id, Guid? ParentMessageId, string Body, string AuthorName, DateTimeOffset CreatedAt);
+    // AuthorCardHref: the "author-card" rel as the server advertised it, or null for a ServiceAccount author
+    // (ADR 0543/0544).
+    public sealed record Comment(Guid Id, Guid? ParentMessageId, string Body, string AuthorName, DateTimeOffset CreatedAt, string? AuthorCardHref);
+
+    public sealed record UserCard(string DisplayName, string Email, bool IsActive, string? PhotoHref);
 
     public sealed record RecycleBinItem(Guid Id, string Name, DateTimeOffset DeletedAt);
 
@@ -2495,7 +2499,64 @@ public sealed class SimplArchiveApiClient
         item.TryGetProperty("parentMessageId", out var p) && p.ValueKind != JsonValueKind.Null ? p.GetGuid() : null,
         item.GetProperty("body").GetString() ?? "",
         item.TryGetProperty("authorName", out var a) ? a.GetString() ?? "" : "",
-        item.GetProperty("createdAt").GetDateTimeOffset());
+        item.GetProperty("createdAt").GetDateTimeOffset(),
+        RelHref(item, "author-card"));
+
+    // The href a resource advertises for a rel, or null when it doesn't offer one. A missing rel is meaningful —
+    // it means "not available here" — so callers branch on null rather than composing a URL (ADR 0543).
+    private static string? RelHref(JsonElement resource, string rel)
+    {
+        if (!resource.TryGetProperty("links", out var links) || links.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var link in links.EnumerateArray())
+        {
+            if (link.TryGetProperty("rel", out var r) && r.GetString() == rel
+                && link.TryGetProperty("href", out var h) && h.GetString() is { Length: > 0 } href)
+            {
+                return href.TrimStart('/');
+            }
+        }
+
+        return null;
+    }
+
+    // Fetch an author's identity card by FOLLOWING the href the message advertised (ADR 0544).
+    public async Task<(UserCard Card, byte[]? Photo)?> GetUserCardAsync(string cardHref, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.GetAsync(cardHref, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        var root = doc.RootElement;
+        var card = new UserCard(
+            root.GetProperty("displayName").GetString() ?? "",
+            root.GetProperty("email").GetString() ?? "",
+            root.TryGetProperty("isActive", out var active) && active.GetBoolean(),
+            RelHref(root, "photo"));
+
+        // The photo rel is present only when one exists, so this never probes for a 404. The endpoint is
+        // bearer-protected, so the bytes must come through the authenticated client.
+        byte[]? photo = null;
+        if (card.PhotoHref is { } photoHref)
+        {
+            try
+            {
+                photo = await _http.GetByteArrayAsync(photoHref, cancellationToken);
+            }
+            catch (HttpRequestException)
+            {
+                photo = null;
+            }
+        }
+
+        return (card, photo);
+    }
 
     // ---- Workflow + tasks (ADR "Workflow / document state model", 0009) -----------------------------------
 

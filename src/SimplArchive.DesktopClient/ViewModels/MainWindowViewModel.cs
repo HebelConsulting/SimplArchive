@@ -5378,12 +5378,51 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // parity" — the Recycle bin has its own).
     private async Task LoadPreviewAsync(Guid documentId) => await Preview.RenderAsync(await _api!.GetPreviewAsync(documentId));
 
+    // ---- Author identity card (ADR 0544) -------------------------------------------------------------
+
+    // The card currently shown in the author flyout. One at a time, so a single property serves every message.
+    [ObservableProperty]
+    private UserCardViewModel? _authorCard;
+
+    [ObservableProperty]
+    private bool _authorCardFailed;
+
+    // Opens the card for a message's author by FOLLOWING the href the message advertised — the client never
+    // builds that URL (ADR 0543). Only reachable from a message that has a card: an automation's name is not
+    // a button at all.
+    [RelayCommand]
+    private async Task ShowAuthorCardAsync(ChatMessageViewModel? message)
+    {
+        AuthorCard = null;
+        AuthorCardFailed = false;
+
+        if (message?.AuthorCardHref is not { } href || _api is null)
+        {
+            return;
+        }
+
+        var loaded = await _api.GetUserCardAsync(href);
+        if (loaded is not { } result)
+        {
+            AuthorCardFailed = true;
+            return;
+        }
+
+        AuthorCard = new UserCardViewModel
+        {
+            DisplayName = result.Card.DisplayName,
+            Email = result.Card.Email,
+            IsActive = result.Card.IsActive,
+            Photo = result.Photo,
+        };
+    }
+
     private async Task LoadCommentsAsync(Guid documentId)
     {
         var comments = await _api!.GetCommentsAsync(documentId);
         var byId = comments.ToDictionary(
             c => c.Id,
-            c => new ChatMessageViewModel { Id = c.Id, AuthorName = c.AuthorName, Body = c.Body, CreatedAt = c.CreatedAt });
+            c => new ChatMessageViewModel { Id = c.Id, AuthorName = c.AuthorName, Body = c.Body, CreatedAt = c.CreatedAt, AuthorCardHref = c.AuthorCardHref });
 
         Comments.Clear();
         foreach (var comment in comments.Where(c => c.ParentMessageId is null))
