@@ -48,8 +48,8 @@ public class WebRealtimeNotificationsTests
         await Expect(badge).ToBeHiddenAsync();
         await page.WaitForTimeoutAsync(2500);
 
-        // The second user comments on the admin's doc → the admin gets a CommentPosted notification, pushed live.
-        (await user.PostAsJsonAsync($"api/documents/{docId}/comments", new { body = "live ping" })).EnsureSuccessStatusCode();
+        // The second user comments on the admin's doc → the admin gets a ChatMessagePosted notification, pushed live.
+        (await user.PostAsJsonAsync($"api/documents/{docId}/chat", new { body = "live ping" })).EnsureSuccessStatusCode();
 
         // The badge appears with "1" live — no page reload, proving the SignalR push.
         await Expect(badge).ToHaveTextAsync("1", new() { Timeout = 15000 });

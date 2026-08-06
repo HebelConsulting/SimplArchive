@@ -1045,14 +1045,14 @@
                                         {
                                             <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("NoCommentsYet")</MudText>
                                         }
-                                        @foreach (var c in _comments.Where(x => x.ParentCommentId is null).OrderBy(x => x.CreatedAt))
+                                        @foreach (var c in _comments.Where(x => x.ParentMessageId is null).OrderBy(x => x.CreatedAt))
                                         {
                                             <div class="wb-comment">
                                                 <div class="wb-comment-meta">@c.AuthorName · @c.CreatedAt.ToLocalTime().ToString("g")</div>
                                                 <div class="wb-comment-body">@c.Body</div>
                                                 <span class="wb-reply-link" @onclick="() => ToggleReply(c.Id)">@Strings.Get("ReplyBtn")</span>
                                             </div>
-                                            @foreach (var r in _comments.Where(x => x.ParentCommentId == c.Id).OrderBy(x => x.CreatedAt))
+                                            @foreach (var r in _comments.Where(x => x.ParentMessageId == c.Id).OrderBy(x => x.CreatedAt))
                                             {
                                                 <div class="wb-comment wb-comment-reply">
                                                     <div class="wb-comment-meta">@r.AuthorName · @r.CreatedAt.ToLocalTime().ToString("g")</div>
@@ -2428,7 +2428,11 @@
         int VersionCount = 0,
         // The latest confirmed version's CreatedAt (filing timestamp) — the "Created" contents-sort key (ADR
         // "Per-folder contents sort order"). Null for a folder / version-less doc.
-        DateTimeOffset? VersionCreatedAt = null)
+        DateTimeOffset? VersionCreatedAt = null,
+        // The thread's URL as the SERVER advertised it (the "chat" rel), not one this client composed — see
+        // ADR 0543. Null for a synthetic tree node, and for a node from a list that doesn't emit the rel yet;
+        // those fall back to a composed URL, which is what the hypermedia guard's allowlist is burning down.
+        string? ChatHref = null)
     {
         public bool IsFolder => !HasVersions;
 
@@ -3297,7 +3301,7 @@
     // The node whose comment thread is shown — a selected folder OR document (comments work on any Document,
     // ADR 0222), unlike the index/preview panes which are document-only (_selectedItem).
     private BrowseNode? _commentTarget;
-    private List<CommentResponse> _comments = [];
+    private List<ChatMessageResponse> _comments = [];
     private string _newComment = "";
     private Guid? _replyingTo;
     private string _replyText = "";
@@ -3692,7 +3696,7 @@
     private RecycleBinDto? _rbSelected;
     private string? _rbMaskName;
     private List<FieldGroup>? _rbIndexData;
-    private List<CommentResponse> _rbComments = new();
+    private List<ChatMessageResponse> _rbComments = new();
     // A dedicated preview host + state, completely separate from the Repositories/Inbox _pv/_pvHost so the
     // recycle-bin preview is never entangled with the others.
     private readonly PreviewPaneState _rbPv = new();
@@ -3737,7 +3741,7 @@
         {
             _rbMaskName = (await Http.GetFromJsonAsync<MaskResponse>($"api/documents/{item.Id}/mask"))?.Name;
             _rbIndexData = (await Http.GetFromJsonAsync<IndexDataResponse>($"api/documents/{item.Id}/index-data"))?.Fields ?? [];
-            _rbComments = (await Http.GetFromJsonAsync<CommentListResponse>($"api/documents/{item.Id}/comments"))?.Comments ?? new();
+            _rbComments = (await Http.GetFromJsonAsync<ChatMessageListResponse>($"api/documents/{item.Id}/chat"))?.Messages ?? new();
 
             var versions = await Http.GetFromJsonAsync<VersionListResponse>($"api/documents/{item.Id}/versions");
             var latest = PickCurrent(versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [], versions?.CurrentVersionId);
@@ -5110,7 +5114,8 @@
             {
                 nodes.Add(new BrowseNode(c.Id, c.Name, c.HasChildren, c.HasVersions, c.HasSubfolders, c.HasReferences, RepositoryId: repositoryId, FileExtension: c.FileExtension, OnLegalHold: c.OnLegalHold,
                     CheckedOut: c.CheckedOut, CheckedOutByMe: c.CheckedOutByMe, CheckedOutByName: c.CheckedOutByName,
-                    DocumentType: c.DocumentType, DocumentDate: c.DocumentDate, SizeBytes: c.SizeBytes, Tags: c.Tags, SensitivityLabelName: c.SensitivityLabelName, SensitivityLabelColor: c.SensitivityLabelColor, VersionCount: c.VersionCount, VersionCreatedAt: c.VersionCreatedAt));
+                    DocumentType: c.DocumentType, DocumentDate: c.DocumentDate, SizeBytes: c.SizeBytes, Tags: c.Tags, SensitivityLabelName: c.SensitivityLabelName, SensitivityLabelColor: c.SensitivityLabelColor, VersionCount: c.VersionCount, VersionCreatedAt: c.VersionCreatedAt,
+                    ChatHref: RelativeHref(c.Links, "chat")));
             }
             url = RelativeHref(page?.Links, "next");
         }
@@ -5278,7 +5283,7 @@
         {
             _commentTarget = folder;
             await LoadFolderSubscriptionAsync(folder);
-            await LoadCommentsAsync(folder.Id);
+            await LoadCommentsAsync(folder);
         }
     }
 
@@ -5433,7 +5438,7 @@
         ClearDetail();
         _commentTarget = folder;
         await LoadFolderSubscriptionAsync(folder);
-        await LoadCommentsAsync(folder.Id);
+        await LoadCommentsAsync(folder);
     }
 
     private async Task SelectItemAsync(BrowseNode item)
@@ -5503,7 +5508,7 @@
             _detailIndexData ??= [];
         }
 
-        await LoadCommentsAsync(item.Id);
+        await LoadCommentsAsync(item);
     }
 
     private void ClearDetail()
@@ -5933,19 +5938,23 @@
         }
     }
 
-    // ---- Comment thread ------------------------------------------------------------------------------
+    // ---- Chat thread ---------------------------------------------------------------------------------
 
-    private async Task LoadCommentsAsync(Guid documentId)
+    // Prefers the server-advertised "chat" rel and only composes a URL when the node came from a list that does
+    // not emit it yet (ADR 0543). Every composed URL here is an entry in the hypermedia guard's allowlist.
+    private string ChatUrlFor(BrowseNode node) => node.ChatHref ?? $"api/documents/{node.Id}/chat";
+
+    private async Task LoadCommentsAsync(BrowseNode node)
     {
         _comments = [];
         _replyingTo = null;
         try
         {
-            var url = $"api/documents/{documentId}/comments";
+            var url = ChatUrlFor(node);
             while (url is not null)
             {
-                var page = await Http.GetFromJsonAsync<CommentListResponse>(url);
-                _comments.AddRange(page?.Comments ?? []);
+                var page = await Http.GetFromJsonAsync<ChatMessageListResponse>(url);
+                _comments.AddRange(page?.Messages ?? []);
                 url = RelativeHref(page?.Links, "next");
             }
         }
@@ -5968,11 +5977,11 @@
             return;
         }
 
-        var response = await Http.PostAsJsonAsync($"api/documents/{item.Id}/comments", new { body = _newComment });
+        var response = await Http.PostAsJsonAsync(ChatUrlFor(item), new { body = _newComment });
         if (response.IsSuccessStatusCode)
         {
             _newComment = "";
-            await LoadCommentsAsync(item.Id);
+            await LoadCommentsAsync(item);
         }
         else
         {
@@ -5980,19 +5989,19 @@
         }
     }
 
-    private async Task PostReplyAsync(Guid parentCommentId)
+    private async Task PostReplyAsync(Guid parentMessageId)
     {
         if (_commentTarget is not { } item || string.IsNullOrWhiteSpace(_replyText))
         {
             return;
         }
 
-        var response = await Http.PostAsJsonAsync($"api/documents/{item.Id}/comments", new { body = _replyText, parentCommentId });
+        var response = await Http.PostAsJsonAsync(ChatUrlFor(item), new { body = _replyText, parentMessageId });
         if (response.IsSuccessStatusCode)
         {
             _replyText = "";
             _replyingTo = null;
-            await LoadCommentsAsync(item.Id);
+            await LoadCommentsAsync(item);
         }
         else
         {
@@ -8330,7 +8339,7 @@
     // Mirrors the server FolderContentsSortOrder enum (ADR "Per-folder contents sort order").
     private enum FolderContentsSortOrder { Name = 0, DocumentDate = 1, Created = 2 }
     private record DocumentChildrenResponse { public List<DocumentSummary> Children { get; set; } = []; public FolderContentsSortOrder ContentsSortOrder { get; set; } public List<LinkResponse> Links { get; set; } = []; }
-    private record DocumentSummary { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool HasReferences { get; set; } public bool OnLegalHold { get; set; } public bool CheckedOut { get; set; } public bool CheckedOutByMe { get; set; } public string CheckedOutByName { get; set; } = ""; public string FileExtension { get; set; } = ""; public string DocumentType { get; set; } = ""; public DateOnly? DocumentDate { get; set; } public long? SizeBytes { get; set; } public List<string> Tags { get; set; } = []; public Guid? SensitivityLabelId { get; set; } public string SensitivityLabelName { get; set; } = ""; public string? SensitivityLabelColor { get; set; } public int VersionCount { get; set; } public DateTimeOffset? VersionCreatedAt { get; set; } }
+    private record DocumentSummary { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool HasReferences { get; set; } public bool OnLegalHold { get; set; } public bool CheckedOut { get; set; } public bool CheckedOutByMe { get; set; } public string CheckedOutByName { get; set; } = ""; public string FileExtension { get; set; } = ""; public string DocumentType { get; set; } = ""; public DateOnly? DocumentDate { get; set; } public long? SizeBytes { get; set; } public List<string> Tags { get; set; } = []; public Guid? SensitivityLabelId { get; set; } public string SensitivityLabelName { get; set; } = ""; public string? SensitivityLabelColor { get; set; } public int VersionCount { get; set; } public DateTimeOffset? VersionCreatedAt { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record ReferenceListResponse { public List<ReferenceSummary> References { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
     private record ReferenceSummary { public Guid ReferenceId { get; set; } public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool HasReferences { get; set; } public Guid? RealParentId { get; set; } }
     private record DocNameResponse { public string Name { get; set; } = ""; }
@@ -8476,6 +8485,6 @@
             _ => string.IsNullOrWhiteSpace(TextValue) ? [] : [TextValue.Trim()],
         };
     }
-    private record CommentListResponse { public List<CommentResponse> Comments { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-    private record CommentResponse { public Guid Id { get; set; } public Guid? ParentCommentId { get; set; } public string Body { get; set; } = ""; public string AuthorName { get; set; } = ""; public DateTimeOffset CreatedAt { get; set; } }
+    private record ChatMessageListResponse { public List<ChatMessageResponse> Messages { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
+    private record ChatMessageResponse { public Guid Id { get; set; } public Guid? ParentMessageId { get; set; } public string Body { get; set; } = ""; public string AuthorName { get; set; } = ""; public DateTimeOffset CreatedAt { get; set; } }
 }

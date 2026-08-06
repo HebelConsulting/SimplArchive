@@ -93,7 +93,10 @@ public sealed class RepositoryImporter
         var documents = ReadLines<ArchiveDocument>(archive, "tree/documents.jsonl");
         var versions = ReadLines<ArchiveVersion>(archive, "tree/versions.jsonl");
         var indexValues = ReadLines<ArchiveIndexValue>(archive, "tree/index-data.jsonl");
-        var comments = ReadLines<ArchiveComment>(archive, "tree/comments.jsonl");
+        // The chat thread lives in "tree/chat.jsonl" since issue #382 (it was "tree/comments.jsonl", with a
+        // "parentCommentId" field). No compatibility shim: FormatVersion was bumped instead, so a pre-#382
+        // archive is rejected loudly by the check above rather than importing with its threads silently missing.
+        var comments = ReadLines<ArchiveChatMessage>(archive, "tree/chat.jsonl");
         var annotations = ReadLines<ArchiveAnnotation>(archive, "tree/annotations.jsonl");
         var references = ReadLines<ArchiveReference>(archive, "tree/references.jsonl");
         var aclEntries = includePermissions ? ReadLines<ArchiveAcl>(archive, "acl/acl.jsonl") : [];
@@ -328,17 +331,17 @@ public sealed class RepositoryImporter
             });
         }
 
-        // Comments + references are recreated only for brand-new documents (they carry no origin key, so
+        // Chat messages + references are recreated only for brand-new documents (they carry no origin key, so
         // re-importing them onto a matched document would duplicate them).
-        var commentMap = new Dictionary<Guid, Guid>();
-        foreach (var comment in comments.Where(c => c.ParentCommentId is null && createdIds.Contains(c.DocumentId)))
+        var messageMap = new Dictionary<Guid, Guid>();
+        foreach (var message in comments.Where(c => c.ParentMessageId is null && createdIds.Contains(c.DocumentId)))
         {
-            AddComment(comment, commentMap, docMap, tenantId, null, userMap);
+            AddChatMessage(message, messageMap, docMap, tenantId, null, userMap);
         }
 
-        foreach (var comment in comments.Where(c => c.ParentCommentId is not null && createdIds.Contains(c.DocumentId) && commentMap.ContainsKey(c.ParentCommentId!.Value)))
+        foreach (var message in comments.Where(c => c.ParentMessageId is not null && createdIds.Contains(c.DocumentId) && messageMap.ContainsKey(c.ParentMessageId!.Value)))
         {
-            AddComment(comment, commentMap, docMap, tenantId, commentMap[comment.ParentCommentId!.Value], userMap);
+            AddChatMessage(message, messageMap, docMap, tenantId, messageMap[message.ParentMessageId!.Value], userMap);
         }
 
         foreach (var reference in references.Where(r => createdIds.Contains(r.ParentFolderId) && docMap.ContainsKey(r.TargetDocumentId)))
@@ -461,7 +464,7 @@ public sealed class RepositoryImporter
         // successor an uploaded TIFF/PDF gets; the worker does the OCR off the request path.
         await _searchablePdfQueue.EnqueueManyAsync(_searchablePdfJobs, cancellationToken);
 
-        return new ImportResult(docMap[rootDoc.Id], rootDoc.Name, docMap.Count, versions.Count(v => createdIds.Contains(v.DocumentId)), commentMap.Count, existingByOrigin.Count);
+        return new ImportResult(docMap[rootDoc.Id], rootDoc.Name, docMap.Count, versions.Count(v => createdIds.Contains(v.DocumentId)), messageMap.Count, existingByOrigin.Count);
     }
 
     // Matches each archived group by name, creating a deactivated (empty) placeholder if absent — so an ACL grant
@@ -609,21 +612,21 @@ public sealed class RepositoryImporter
         }
     }
 
-    private void AddComment(ArchiveComment comment, Dictionary<Guid, Guid> commentMap, IReadOnlyDictionary<Guid, Guid> docMap, Guid tenantId, Guid? parentCommentId, IReadOnlyDictionary<Guid, PrincipalRef> userMap)
+    private void AddChatMessage(ArchiveChatMessage message, Dictionary<Guid, Guid> messageMap, IReadOnlyDictionary<Guid, Guid> docMap, Guid tenantId, Guid? parentMessageId, IReadOnlyDictionary<Guid, PrincipalRef> userMap)
     {
-        var (userId, svcId) = ResolveCreator(comment.CreatedByUserId, comment.CreatedByServiceAccountId, userMap);
+        var (userId, svcId) = ResolveCreator(message.CreatedByUserId, message.CreatedByServiceAccountId, userMap);
         var newId = Guid.NewGuid();
-        commentMap[comment.Id] = newId;
-        _dbContext.DocumentComments.Add(new DocumentComment
+        messageMap[message.Id] = newId;
+        _dbContext.ChatMessages.Add(new ChatMessage
         {
             Id = newId,
             TenantId = tenantId,
-            DocumentId = docMap[comment.DocumentId],
-            ParentCommentId = parentCommentId,
-            Body = comment.Body,
+            DocumentId = docMap[message.DocumentId],
+            ParentMessageId = parentMessageId,
+            Body = message.Body,
             CreatedByUserId = userId,
             CreatedByServiceAccountId = svcId,
-            CreatedAt = comment.CreatedAt,
+            CreatedAt = message.CreatedAt,
         });
     }
 
@@ -867,7 +870,8 @@ public sealed class RepositoryImporter
     private sealed record ArchiveAcl(Guid DocumentId, Guid? UserId, Guid? GroupId, Guid? ServiceAccountId, bool CanSee, bool CanReadContent, bool CanEditContent, bool CanEditIndexData, bool CanDelete, bool CanCreateSubItems, bool CanMove, bool CanManagePermissions, bool CanAnnotate);
     private sealed record ArchiveDocument(Guid Id, Guid? ParentId, string Name, Guid? MaskVersionId, string? SensitivityLabel, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt, bool BreaksInheritance);
     private sealed record ArchiveVersion(Guid Id, Guid DocumentId, int? VersionNumber, string DocumentDate, DateTimeOffset FiledAt, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, string? Sha256, string? FileExtension, string? OcrLanguages, string? Comment, string? BlobRef);
-    private sealed record ArchiveComment(Guid Id, Guid DocumentId, Guid? ParentCommentId, string Body, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt);
+    private sealed record ArchiveChatMessage(Guid Id, Guid DocumentId, Guid? ParentMessageId, string Body, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt);
+
 
     private sealed record ArchiveAnnotation(Guid Id, Guid DocumentId, Guid DocumentVersionId, int PageIndex, int Kind, double PositionX, double PositionY, double? Width, double? Height, string? Points, string Text, string Color, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt);
     private sealed record ArchiveReference(Guid Id, Guid ParentFolderId, Guid TargetDocumentId, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt);

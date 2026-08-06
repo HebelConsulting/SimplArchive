@@ -339,7 +339,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public ObservableCollection<TreeNodeViewModel> Tree { get; } = [];
     public ObservableCollection<NodeViewModel> Items { get; } = [];
     public ObservableCollection<IndexFieldViewModel> IndexFields { get; } = [];
-    public ObservableCollection<CommentViewModel> Comments { get; } = [];
+    public ObservableCollection<ChatMessageViewModel> Comments { get; } = [];
 
     [ObservableProperty] private TreeNodeViewModel? _selectedTreeNode;
 
@@ -5383,13 +5383,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var comments = await _api!.GetCommentsAsync(documentId);
         var byId = comments.ToDictionary(
             c => c.Id,
-            c => new CommentViewModel { Id = c.Id, AuthorName = c.AuthorName, Body = c.Body, CreatedAt = c.CreatedAt });
+            c => new ChatMessageViewModel { Id = c.Id, AuthorName = c.AuthorName, Body = c.Body, CreatedAt = c.CreatedAt });
 
         Comments.Clear();
-        foreach (var comment in comments.Where(c => c.ParentCommentId is null))
+        foreach (var comment in comments.Where(c => c.ParentMessageId is null))
         {
             var vm = byId[comment.Id];
-            foreach (var reply in comments.Where(c => c.ParentCommentId == comment.Id))
+            foreach (var reply in comments.Where(c => c.ParentMessageId == comment.Id))
             {
                 vm.Replies.Add(byId[reply.Id]);
             }
@@ -5488,7 +5488,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         IndexFields.Add(new IndexFieldViewModel { FieldName = "Keywords", Values = "invoice, reviewed" });
         Preview.PreviewConverted = false;
         Preview.Reset("Preview renders here (PDF/image/text).");
-        Comments.Add(new CommentViewModel { Id = Guid.Empty, AuthorName = "demo@simplarchive.local", Body = "Looks good.", CreatedAt = ScreenshotClock });
+        Comments.Add(new ChatMessageViewModel { Id = Guid.Empty, AuthorName = "demo@simplarchive.local", Body = "Looks good.", CreatedAt = ScreenshotClock });
         Status = "3 item(s).";
     }
 

@@ -123,7 +123,7 @@ public sealed class SimplArchiveApiClient
 
     public sealed record TextLayoutInfo(IReadOnlyList<TextLayoutPageInfo> Pages);
 
-    public sealed record Comment(Guid Id, Guid? ParentCommentId, string Body, string AuthorName, DateTimeOffset CreatedAt);
+    public sealed record Comment(Guid Id, Guid? ParentMessageId, string Body, string AuthorName, DateTimeOffset CreatedAt);
 
     public sealed record RecycleBinItem(Guid Id, string Name, DateTimeOffset DeletedAt);
 
@@ -1392,14 +1392,14 @@ public sealed class SimplArchiveApiClient
     public string? GetDownloadUrl(Preview preview) => preview.DownloadUrl;
 
     public Task<List<Comment>> GetCommentsAsync(Guid documentId, CancellationToken cancellationToken = default) =>
-        LoadPagedAsync($"api/documents/{documentId}/comments", "comments", ParseComment, cancellationToken);
+        LoadPagedAsync($"api/documents/{documentId}/chat", "messages", ParseComment, cancellationToken);
 
     public async Task PostCommentAsync(Guid documentId, string body, Guid? parentCommentId, CancellationToken cancellationToken = default)
     {
         var payload = parentCommentId is { } parent
-            ? new { body, parentCommentId = parent }
+            ? new { body, parentMessageId = parent }
             : (object)new { body };
-        using var response = await _http.PostAsJsonAsync($"api/documents/{documentId}/comments", payload, cancellationToken);
+        using var response = await _http.PostAsJsonAsync($"api/documents/{documentId}/chat", payload, cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
@@ -2492,7 +2492,7 @@ public sealed class SimplArchiveApiClient
 
     private static Comment ParseComment(JsonElement item) => new(
         item.GetProperty("id").GetGuid(),
-        item.TryGetProperty("parentCommentId", out var p) && p.ValueKind != JsonValueKind.Null ? p.GetGuid() : null,
+        item.TryGetProperty("parentMessageId", out var p) && p.ValueKind != JsonValueKind.Null ? p.GetGuid() : null,
         item.GetProperty("body").GetString() ?? "",
         item.TryGetProperty("authorName", out var a) ? a.GetString() ?? "" : "",
         item.GetProperty("createdAt").GetDateTimeOffset());

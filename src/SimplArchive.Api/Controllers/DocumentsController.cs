@@ -297,6 +297,9 @@ public class DocumentsController : ControllerBase
             new("mask", Url.Action(nameof(GetMask), new { documentId })!, "GET"),
             new("index-data", Url.Action(nameof(GetIndexData), new { documentId })!, "GET"),
             new("versions", $"/api/documents/{documentId}/versions", "GET"),
+            // The document's collaboration thread (issue #382). Its absence is why renaming the route from
+            // /comments to /chat broke both clients at all: with the rel, a route move is invisible to them.
+            new("chat", $"/api/documents/{documentId}/chat", "GET"),
             new("references", $"/api/documents/{documentId}/references", "GET"),
             new("referencing-folders", Url.Action(nameof(ListReferencingFolders), new { documentId })!, "GET"),
             new("move", Url.Action(nameof(Move), new { documentId })!, "PUT"),
@@ -1572,7 +1575,7 @@ public class DocumentsController : ControllerBase
                 SensitivityLabelColor = d.SensitivityLabelColor,
                 VersionCount = d.VersionCount,
                 VersionCreatedAt = d.VersionCreatedAt,
-                Links = new List<Link> { new("self", $"/api/documents/{d.Id}", "GET") },
+                Links = new List<Link> { new("self", $"/api/documents/{d.Id}", "GET"), new("chat", $"/api/documents/{d.Id}/chat", "GET") },
             }).ToList(),
             ContentsSortOrder = folderSortOrder.Value,
             Links = links,

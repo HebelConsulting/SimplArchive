@@ -84,18 +84,18 @@ public class NotificationsTests
         using var author = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(authorEmail, password));
         var docId = (await TestJson.Post(author, $"/api/documents/{repoId}/children", new { name = "authored-doc" })).GetProperty("id").GetGuid();
 
-        // The commenter posts three top-level comments → three CommentPosted events for the author, coalesced.
+        // The commenter posts three top-level comments → three ChatMessagePosted events for the author, coalesced.
         using var commenter = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(commenterEmail, password));
         for (var i = 0; i < 3; i++)
         {
-            (await commenter.PostAsJsonAsync($"/api/documents/{docId}/comments", new { body = $"comment {i}" })).EnsureSuccessStatusCode();
+            (await commenter.PostAsJsonAsync($"/api/documents/{docId}/chat", new { body = $"comment {i}" })).EnsureSuccessStatusCode();
         }
 
-        // The three comments collapsed into a SINGLE CommentPosted notification carrying eventCount 3 (the
+        // The three comments collapsed into a SINGLE ChatMessagePosted notification carrying eventCount 3 (the
         // author also has one AccessGranted notification from the earlier grant — a discrete, non-coalesced type).
         var inbox = await TestJson.Get(author, "/api/notifications");
         var notifications = inbox.GetProperty("notifications").EnumerateArray().ToList();
-        var comment = notifications.Single(n => n.GetProperty("type").GetString() == "CommentPosted");
+        var comment = notifications.Single(n => n.GetProperty("type").GetString() == "ChatMessagePosted");
         Assert.Equal(3, comment.GetProperty("eventCount").GetInt32());
         Assert.Single(notifications, n => n.GetProperty("type").GetString() == "AccessGranted");
         Assert.Equal(2, inbox.GetProperty("unreadCount").GetInt32()); // the coalesced comment + the access grant

@@ -38,7 +38,12 @@ public static class AuditActions
     public const string DocumentSensitivityChanged = "Document.SensitivityChanged";
 
     // Collaboration events (ADR "Audit collaboration events" — the second half of every-mutation coverage).
-    public const string CommentPosted = "Comment.Posted";
+    // Renamed from "Comment.Posted" with the rest of the model (issue #382). Changing a stored audit value is
+    // normally the wrong move — the log is append-only and hash-chained, and its segments go to WORM storage, so
+    // past events genuinely cannot be rewritten and one activity would end up with two irreconcilable names. It
+    // is done here only because no deployment carries productive audit data yet, which is the single window in
+    // which this is free. Once one does, this constant's value is frozen.
+    public const string ChatMessagePosted = "Chat.MessagePosted";
     public const string ReferenceAdded = "Reference.Added";
     public const string ReferenceRemoved = "Reference.Removed";
     public const string AnnotationAdded = "Annotation.Added";

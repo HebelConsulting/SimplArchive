@@ -3,7 +3,7 @@ using System.Collections.ObjectModel;
 namespace SimplArchive.DesktopClient.ViewModels;
 
 // A comment in the chat pane. Top-level comments carry their replies (one level, like the web thread).
-public sealed class CommentViewModel
+public sealed class ChatMessageViewModel
 {
     public required Guid Id { get; init; }
 
@@ -15,5 +15,5 @@ public sealed class CommentViewModel
 
     public string Meta => $"{AuthorName} · {CreatedAt.ToLocalTime():g}";
 
-    public ObservableCollection<CommentViewModel> Replies { get; } = [];
+    public ObservableCollection<ChatMessageViewModel> Replies { get; } = [];
 }

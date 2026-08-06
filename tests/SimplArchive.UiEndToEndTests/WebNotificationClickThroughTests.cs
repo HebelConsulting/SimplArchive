@@ -7,7 +7,7 @@ using static Microsoft.Playwright.Assertions;
 namespace SimplArchive.UiEndToEndTests;
 
 // The web half of notification click-through (ADR "Notification viewer + click-through"). Setup over the API: a
-// second user comments on the demo admin's document, so the admin gets a CommentPosted notification carrying the
+// second user comments on the demo admin's document, so the admin gets a ChatMessagePosted notification carrying the
 // document's parent folder. The browser then opens the bell and clicks the notification, which navigates the
 // workbench to the document.
 [Collection(UiCollection.Name)]
@@ -39,7 +39,7 @@ public class WebNotificationClickThroughTests
 
         using var other = new HttpClient { BaseAddress = new Uri(_app.BaseUrl) };
         other.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await Ui.GetUserTokenAsync(_app.BaseUrl, otherEmail, password));
-        (await other.PostAsJsonAsync($"/api/documents/{docId}/comments", new { body = "please review" })).EnsureSuccessStatusCode();
+        (await other.PostAsJsonAsync($"/api/documents/{docId}/chat", new { body = "please review" })).EnsureSuccessStatusCode();
 
         // Wait until the admin's notification (with the parent) is queryable.
         await Eventually(async () =>

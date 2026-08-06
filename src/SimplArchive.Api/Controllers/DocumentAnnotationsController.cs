@@ -16,7 +16,7 @@ namespace SimplArchive.Api.Controllers;
 /// <summary>
 /// Sticky notes / positional annotations pinned to a page of a document version — see
 /// ADR "Document annotations (sticky notes)". Distinct from the per-document comment thread
-/// (DocumentCommentsController): a note is pinned to a (page, x, y) spot on the rendered page and is editable.
+/// (DocumentChatController): a note is pinned to a (page, x, y) spot on the rendered page and is editable.
 ///
 /// Reading requires CanReadContent; creating (POST) + editing (PUT) require CanAnnotate (ADR "CanAnnotate
 /// right") — edit is additionally author-only; deleting (DELETE) is the author OR a CanEditContent holder /

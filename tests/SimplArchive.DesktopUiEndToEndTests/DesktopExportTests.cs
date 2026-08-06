@@ -36,7 +36,7 @@ public class DesktopExportTests
 
         using var manifestReader = new StreamReader(archive.GetEntry("manifest.json")!.Open());
         var manifest = JsonDocument.Parse(await manifestReader.ReadToEndAsync()).RootElement;
-        Assert.Equal(1, manifest.GetProperty("formatVersion").GetInt32());
+        Assert.Equal(2, manifest.GetProperty("formatVersion").GetInt32()); // 2 since the chat rename (#382)
         Assert.Equal(1, manifest.GetProperty("counts").GetProperty("versions").GetInt32());
 
         var blob = Assert.Single(archive.Entries, e => e.FullName.StartsWith("blobs/"));

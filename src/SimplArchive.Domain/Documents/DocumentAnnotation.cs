@@ -4,12 +4,12 @@ namespace SimplArchive.Domain.Documents;
 
 // A sticky note / positional annotation placed *on a page* of a document version —
 // see ADR "Document annotations (sticky notes)". Distinct from the per-document comment/feed thread
-// (DocumentComment): a comment is a message in a conversation, an annotation is pinned to a spot on the
+// (ChatMessage): a comment is a message in a conversation, an annotation is pinned to a spot on the
 // rendered page. Anchored to a specific DocumentVersion + page + a normalized (0..1, top-left origin)
 // position, the same coordinate convention as the search hit-overlay word boxes.
 //
 // Editable (unlike the append-only comment thread), so it is IConcurrencyTracked — PUT/DELETE carry
-// ETag/If-Match. Author is a User or a ServiceAccount, exactly one, the same pattern as DocumentComment.
+// ETag/If-Match. Author is a User or a ServiceAccount, exactly one, the same pattern as ChatMessage.
 public class DocumentAnnotation : ITenantScoped, IConcurrencyTracked
 {
     public Guid Id { get; set; }
@@ -17,7 +17,7 @@ public class DocumentAnnotation : ITenantScoped, IConcurrencyTracked
     public Guid TenantId { get; set; }
 
     // The document the note belongs to (denormalized for the "has notes" indicator + document-scoped
-    // queries; the delete cascade flows through this FK, as with DocumentComment).
+    // queries; the delete cascade flows through this FK, as with ChatMessage).
     public Guid DocumentId { get; set; }
 
     // The specific version the note is pinned to — a new version starts with a clean page.

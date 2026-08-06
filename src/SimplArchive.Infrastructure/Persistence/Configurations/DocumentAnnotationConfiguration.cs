@@ -40,7 +40,7 @@ public class DocumentAnnotationConfiguration : IEntityTypeConfiguration<Document
         // Lists a version's notes (per page); TenantId leads for tenant-scoped locality.
         builder.HasIndex(a => new { a.TenantId, a.DocumentVersionId, a.PageIndex });
 
-        // Exactly one creator — same CASE WHEN "exactly one" shape as DocumentComment/DocumentVersion.
+        // Exactly one creator — same CASE WHEN "exactly one" shape as ChatMessage/DocumentVersion.
         builder.ToTable(t =>
         {
             t.HasCheckConstraint(

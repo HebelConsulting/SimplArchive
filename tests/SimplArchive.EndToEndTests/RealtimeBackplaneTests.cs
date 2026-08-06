@@ -50,7 +50,7 @@ public class RealtimeBackplaneTests
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
                 RecipientUserId = recipientId,
-                Type = NotificationType.CommentPosted,
+                Type = NotificationType.ChatMessagePosted,
                 Title = "cross-replica",
                 Body = "delivered via the Valkey backplane",
                 CreatedAt = DateTimeOffset.UtcNow,

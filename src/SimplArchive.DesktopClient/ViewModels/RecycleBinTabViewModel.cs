@@ -62,7 +62,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
     [ObservableProperty] private string _sysOcrLanguages = "";
 
     public ObservableCollection<IndexFieldViewModel> IndexFields { get; } = [];
-    public ObservableCollection<CommentViewModel> Comments { get; } = [];
+    public ObservableCollection<ChatMessageViewModel> Comments { get; } = [];
 
     private void Report(string message)
     {
@@ -158,13 +158,13 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
         var comments = await _api!.GetCommentsAsync(documentId);
         var byId = comments.ToDictionary(
             c => c.Id,
-            c => new CommentViewModel { Id = c.Id, AuthorName = c.AuthorName, Body = c.Body, CreatedAt = c.CreatedAt });
+            c => new ChatMessageViewModel { Id = c.Id, AuthorName = c.AuthorName, Body = c.Body, CreatedAt = c.CreatedAt });
 
         Comments.Clear();
-        foreach (var comment in comments.Where(c => c.ParentCommentId is null))
+        foreach (var comment in comments.Where(c => c.ParentMessageId is null))
         {
             var vm = byId[comment.Id];
-            foreach (var reply in comments.Where(c => c.ParentCommentId == comment.Id))
+            foreach (var reply in comments.Where(c => c.ParentMessageId == comment.Id))
             {
                 vm.Replies.Add(byId[reply.Id]);
             }
@@ -396,7 +396,7 @@ public sealed partial class RecycleBinTabViewModel
         SysCreatedBy = "Demo Admin";
         MaskLine = "Mask: Basic Entry · version 1";
         IndexFields.Add(new IndexFieldViewModel { FieldName = "Keywords", Values = "draft, quarterly" });
-        Comments.Add(new CommentViewModel { Id = Guid.Empty, AuthorName = "demo@simplarchive.local", Body = "Replaced by the final version.", CreatedAt = MainWindowViewModel.ScreenshotClock });
+        Comments.Add(new ChatMessageViewModel { Id = Guid.Empty, AuthorName = "demo@simplarchive.local", Body = "Replaced by the final version.", CreatedAt = MainWindowViewModel.ScreenshotClock });
         Preview.Reset("Preview renders here (PDF/image/text).");
         SetSelectedForScreenshot(Items[0]);
         Status = string.Format(Strings.Get("StDeletedItems"), Items.Count);

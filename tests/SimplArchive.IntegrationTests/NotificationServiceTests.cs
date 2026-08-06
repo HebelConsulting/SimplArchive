@@ -178,7 +178,7 @@ public class NotificationServiceTests
         Assert.All(notifications, n => Assert.Equal(leaf.Id, n.DocumentId));     // links to the changed document
     }
 
-    // ADR "Notification digest / coalescing": a burst of coalescable events (CommentPosted / SubscribedActivity) on
+    // ADR "Notification digest / coalescing": a burst of coalescable events (ChatMessagePosted / SubscribedActivity) on
     // one document while its notification is unread merges into a single growing row (EventCount++); reading it
     // ends the digest; a non-coalescable type stays one-per-event; and an event past the window starts fresh.
     [Fact]
@@ -203,9 +203,9 @@ public class NotificationServiceTests
         {
             var service = CreateService(act, tenantAccessor, userAccessor);
             // Three comments on the same document → one coalesced row.
-            await service.NotifyAsync(recipient.Id, NotificationType.CommentPosted, "New comment", "c1", doc.Id);
-            await service.NotifyAsync(recipient.Id, NotificationType.CommentPosted, "New comment", "c2", doc.Id);
-            await service.NotifyAsync(recipient.Id, NotificationType.CommentPosted, "New comment", "c3", doc.Id);
+            await service.NotifyAsync(recipient.Id, NotificationType.ChatMessagePosted, "New comment", "c1", doc.Id);
+            await service.NotifyAsync(recipient.Id, NotificationType.ChatMessagePosted, "New comment", "c2", doc.Id);
+            await service.NotifyAsync(recipient.Id, NotificationType.ChatMessagePosted, "New comment", "c3", doc.Id);
             // A non-coalescable type on the same document stays its own row.
             await service.NotifyAsync(recipient.Id, NotificationType.AccessGranted, "Access granted", "g", doc.Id);
         }
@@ -214,7 +214,7 @@ public class NotificationServiceTests
         {
             var all = await read.Notifications.ToListAsync();
             Assert.Equal(2, all.Count); // one coalesced comment row + one access-granted row
-            var comment = Assert.Single(all, n => n.Type == NotificationType.CommentPosted);
+            var comment = Assert.Single(all, n => n.Type == NotificationType.ChatMessagePosted);
             Assert.Equal(3, comment.EventCount);
             Assert.Single(all, n => n.Type == NotificationType.AccessGranted);
 
@@ -226,11 +226,11 @@ public class NotificationServiceTests
         using (var act = CreateContext(connection, tenantAccessor))
         {
             var service = CreateService(act, tenantAccessor, userAccessor);
-            await service.NotifyAsync(recipient.Id, NotificationType.CommentPosted, "New comment", "c4", doc.Id);
+            await service.NotifyAsync(recipient.Id, NotificationType.ChatMessagePosted, "New comment", "c4", doc.Id);
         }
 
         using var final = CreateContext(connection, tenantAccessor);
-        var comments = await final.Notifications.Where(n => n.Type == NotificationType.CommentPosted).ToListAsync();
+        var comments = await final.Notifications.Where(n => n.Type == NotificationType.ChatMessagePosted).ToListAsync();
         Assert.Equal(2, comments.Count); // the read digest (×3) + a fresh unread one (×1)
         Assert.Single(comments, n => n.EventCount == 1 && n.ReadAt == null);
     }
@@ -249,7 +249,7 @@ public class NotificationServiceTests
         var recipient = new User { Id = Guid.NewGuid(), TenantId = tenant.Id, Email = "r@acme.test", DisplayName = "R", CreatedAt = DateTimeOffset.UtcNow };
         var doc = new SimplArchive.Domain.Documents.Document { Id = Guid.NewGuid(), TenantId = tenant.Id, Name = "Doc", CreatedByUserId = actor.Id, CreatedAt = DateTimeOffset.UtcNow };
         // An unread comment notification created 7h ago — past the 6h coalesce window.
-        var stale = new Notification { Id = Guid.NewGuid(), TenantId = tenant.Id, RecipientUserId = recipient.Id, Type = NotificationType.CommentPosted, Title = "old", Body = "old", DocumentId = doc.Id, EventCount = 1, CreatedAt = DateTimeOffset.UtcNow.AddHours(-7) };
+        var stale = new Notification { Id = Guid.NewGuid(), TenantId = tenant.Id, RecipientUserId = recipient.Id, Type = NotificationType.ChatMessagePosted, Title = "old", Body = "old", DocumentId = doc.Id, EventCount = 1, CreatedAt = DateTimeOffset.UtcNow.AddHours(-7) };
         using (var seed = CreateContext(connection, tenantAccessor)) { seed.Tenants.Add(tenant); seed.Users.AddRange(actor, recipient); seed.Documents.Add(doc); seed.Notifications.Add(stale); await seed.SaveChangesAsync(); }
 
         tenantAccessor.TenantId = tenant.Id;
@@ -258,11 +258,11 @@ public class NotificationServiceTests
         using (var act = CreateContext(connection, tenantAccessor))
         {
             var service = CreateService(act, tenantAccessor, userAccessor);
-            await service.NotifyAsync(recipient.Id, NotificationType.CommentPosted, "New comment", "new", doc.Id);
+            await service.NotifyAsync(recipient.Id, NotificationType.ChatMessagePosted, "New comment", "new", doc.Id);
         }
 
         using var read = CreateContext(connection, tenantAccessor);
-        var all = await read.Notifications.Where(n => n.Type == NotificationType.CommentPosted).ToListAsync();
+        var all = await read.Notifications.Where(n => n.Type == NotificationType.ChatMessagePosted).ToListAsync();
         Assert.Equal(2, all.Count); // the stale one wasn't touched; a fresh one was created
         Assert.Single(all, n => n.EventCount == 1 && n.Title == "New comment");
         Assert.Single(all, n => n.Id == stale.Id && n.EventCount == 1); // unchanged

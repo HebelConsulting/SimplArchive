@@ -83,7 +83,7 @@ public class RepositoryExporterTests
         context.DocumentVersions.AddRange(v1, v2, bVer);
 
         context.FieldValues.Add(new FieldValue { Id = Guid.NewGuid(), TenantId = _tenantId, DocumentId = docA.Id, FieldDefinitionId = field.Id, Value = "contract" });
-        context.DocumentComments.Add(new DocumentComment { Id = Guid.NewGuid(), TenantId = _tenantId, DocumentId = docA.Id, Body = "Looks good", CreatedByUserId = userId, CreatedAt = DateTimeOffset.UtcNow });
+        context.ChatMessages.Add(new ChatMessage { Id = Guid.NewGuid(), TenantId = _tenantId, DocumentId = docA.Id, Body = "Looks good", CreatedByUserId = userId, CreatedAt = DateTimeOffset.UtcNow });
 
         await context.SaveChangesAsync();
         return new Seed(repo.Id, folder.Id, emptyFolder.Id, docA.Id, docB.Id, v1.Id, v2.Id, v1Sha, v2Sha, bSha);
@@ -127,7 +127,7 @@ public class RepositoryExporterTests
 
         // Manifest counts.
         var manifest = JsonDocument.Parse(entries["manifest.json"]).RootElement;
-        Assert.Equal(1, manifest.GetProperty("formatVersion").GetInt32());
+        Assert.Equal(2, manifest.GetProperty("formatVersion").GetInt32()); // 2 since the chat rename (#382)
         Assert.Equal("Acme", manifest.GetProperty("source").GetProperty("tenantName").GetString());
         var counts = manifest.GetProperty("counts");
         Assert.Equal(3, counts.GetProperty("versions").GetInt32());     // v1, v2, docB

@@ -101,15 +101,15 @@ public class EmailNotificationDispatcherTests
 
         var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Acme", CreatedAt = DateTimeOffset.UtcNow };
         var user = new User { Id = Guid.NewGuid(), TenantId = tenant.Id, Email = "rcpt@acme.test", DisplayName = "Recipient", CreatedAt = DateTimeOffset.UtcNow };
-        var muted = new Notification { Id = Guid.NewGuid(), TenantId = tenant.Id, RecipientUserId = user.Id, Type = NotificationType.CommentPosted, Title = "New comment", Body = "b", CreatedAt = DateTimeOffset.UtcNow };
+        var muted = new Notification { Id = Guid.NewGuid(), TenantId = tenant.Id, RecipientUserId = user.Id, Type = NotificationType.ChatMessagePosted, Title = "New comment", Body = "b", CreatedAt = DateTimeOffset.UtcNow };
         var kept = new Notification { Id = Guid.NewGuid(), TenantId = tenant.Id, RecipientUserId = user.Id, Type = NotificationType.ReviewAssigned, Title = "Review requested", Body = "b", CreatedAt = DateTimeOffset.UtcNow };
         using (var seed = CreateContext(connection))
         {
             seed.Tenants.Add(tenant);
             seed.Users.Add(user);
             seed.Notifications.AddRange(muted, kept);
-            // The user muted the CommentPosted email channel; ReviewAssigned is left at its default (on).
-            seed.UserNotificationPreferences.Add(new UserNotificationPreference { Id = Guid.NewGuid(), TenantId = tenant.Id, UserId = user.Id, Type = NotificationType.CommentPosted, EmailEnabled = false });
+            // The user muted the ChatMessagePosted email channel; ReviewAssigned is left at its default (on).
+            seed.UserNotificationPreferences.Add(new UserNotificationPreference { Id = Guid.NewGuid(), TenantId = tenant.Id, UserId = user.Id, Type = NotificationType.ChatMessagePosted, EmailEnabled = false });
             await seed.SaveChangesAsync();
         }
 

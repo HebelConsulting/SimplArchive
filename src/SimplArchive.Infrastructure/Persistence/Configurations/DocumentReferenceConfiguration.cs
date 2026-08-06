@@ -27,7 +27,7 @@ public class DocumentReferenceConfiguration : IEntityTypeConfiguration<DocumentR
             "\"TargetDocumentId\" <> \"ParentFolderId\""));
 
         // Exactly one of CreatedByUserId/CreatedByServiceAccountId is set — same CASE WHEN "exactly one"
-        // shape as DocumentVersion/DocumentComment.
+        // shape as DocumentVersion/ChatMessage.
         builder.ToTable(t => t.HasCheckConstraint(
             "CK_DocumentReferences_ExactlyOneCreator",
             "(CASE WHEN \"CreatedByUserId\" IS NOT NULL THEN 1 ELSE 0 END + " +

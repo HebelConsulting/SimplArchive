@@ -19,7 +19,10 @@ namespace SimplArchive.Api.Documents;
 // deliberately dropped (retention rides along via the mask's RetentionYears). Read-only; no schema change.
 public sealed class RepositoryExporter
 {
-    public const int FormatVersion = 1;
+    // 2 since issue #382: the chat thread moved from "tree/comments.jsonl" to "tree/chat.jsonl" (and its
+    // "parentCommentId" field to "parentMessageId"). Bumped rather than shimmed so a v1 archive fails loudly with
+    // UnsupportedArchiveVersionException instead of importing with every thread silently missing.
+    public const int FormatVersion = 2;
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -105,7 +108,7 @@ public sealed class RepositoryExporter
             .ToListAsync(cancellationToken);
         // Ordered client-side — SQLite can't translate a DateTimeOffset ORDER BY (the export runs against both
         // providers), and the thread is small.
-        var comments = (await _dbContext.DocumentComments
+        var comments = (await _dbContext.ChatMessages
             .Where(c => included.Contains(c.DocumentId))
             .ToListAsync(cancellationToken))
             .OrderBy(c => c.CreatedAt).ThenBy(c => c.Id)
@@ -255,11 +258,12 @@ public sealed class RepositoryExporter
             value = f.Value,
         }), cancellationToken);
 
-        await WriteJsonLinesAsync(archive, "tree/comments.jsonl", comments.Select(c => (object)new
+        // The chat thread (issue #382) — "tree/comments.jsonl" with a "parentCommentId" field before FormatVersion 2.
+        await WriteJsonLinesAsync(archive, "tree/chat.jsonl", comments.Select(c => (object)new
         {
             id = c.Id,
             documentId = c.DocumentId,
-            parentCommentId = c.ParentCommentId,
+            parentMessageId = c.ParentMessageId,
             body = c.Body,
             createdByUserId = c.CreatedByUserId,
             createdByServiceAccountId = c.CreatedByServiceAccountId,

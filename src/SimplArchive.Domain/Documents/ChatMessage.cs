@@ -5,7 +5,7 @@ namespace SimplArchive.Domain.Documents;
 // A message in a Document's comment/chat thread — see ADR "Document comment thread". The
 // thread is append-only for now (no edit/delete). Author is a User or a ServiceAccount, exactly one, the
 // same pattern as Document/DocumentVersion.CreatedBy*.
-public class DocumentComment : ITenantScoped
+public class ChatMessage : ITenantScoped
 {
     public Guid Id { get; set; }
 
@@ -15,7 +15,7 @@ public class DocumentComment : ITenantScoped
 
     // null = a top-level comment; set = a reply to that comment. One level only — the target must itself be
     // a top-level comment (enforced at POST), so the thread stays two levels deep at most.
-    public Guid? ParentCommentId { get; set; }
+    public Guid? ParentMessageId { get; set; }
 
     public required string Body { get; set; }
 

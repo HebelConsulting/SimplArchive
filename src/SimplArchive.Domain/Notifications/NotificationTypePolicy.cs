@@ -20,7 +20,7 @@ public static class NotificationTypePolicy
             NotificationType.WorkflowApproved => true,
             NotificationType.WorkflowRejected => true,
             NotificationType.WorkflowReleased => true,
-            NotificationType.CommentPosted => true,
+            NotificationType.ChatMessagePosted => true,
             NotificationType.AccessGranted => true,
             NotificationType.SubscribedActivity => true,
             NotificationType.DocumentReminder => true,

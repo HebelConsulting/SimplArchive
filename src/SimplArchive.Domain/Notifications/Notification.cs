@@ -10,7 +10,7 @@ public enum NotificationType
     WorkflowApproved = 1,
     WorkflowRejected = 2,
     WorkflowReleased = 3,
-    CommentPosted = 4,
+    ChatMessagePosted = 4,
     AccessGranted = 5,
     ReviewReminder = 6,
     ReviewOverdue = 7,

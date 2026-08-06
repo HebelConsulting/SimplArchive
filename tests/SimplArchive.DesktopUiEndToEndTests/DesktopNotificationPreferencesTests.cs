@@ -28,7 +28,7 @@ public class DesktopNotificationPreferencesTests
             Assert.True(defaults.Count >= 6, $"expected at least the 6 original mutable types, got {defaults.Count}");
             Assert.All(defaults, p => Assert.True(p.EmailEnabled));
 
-            // Mute CommentPosted (type 4), keep the rest on.
+            // Mute ChatMessagePosted (type 4), keep the rest on.
             await client.SetNotificationPreferencesAsync(
                 defaults.Select(p => p with { EmailEnabled = p.Type != 4 }));
 

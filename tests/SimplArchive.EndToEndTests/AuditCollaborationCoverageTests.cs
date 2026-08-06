@@ -37,7 +37,7 @@ public class AuditCollaborationCoverageTests
         await PutJson(api, $"/api/documents/{docId}/versions/{versionId}", new { });
 
         // Comment.
-        await PostJson(api, $"/api/documents/{docId}/comments", new { body = "A comment" });
+        await PostJson(api, $"/api/documents/{docId}/chat", new { body = "A comment" });
 
         // Reference: add a shortcut to the document in the repo root, then remove it.
         var reference = await PostJson(api, $"/api/documents/{repoId}/references", new { targetId = docId });
@@ -64,7 +64,7 @@ public class AuditCollaborationCoverageTests
             .Select(e => e.GetProperty("action").GetString())
             .ToHashSet();
 
-        Assert.Contains("Comment.Posted", actions);
+        Assert.Contains("Chat.MessagePosted", actions);
         Assert.Contains("Reference.Added", actions);
         Assert.Contains("Reference.Removed", actions);
         Assert.Contains("Annotation.Added", actions);

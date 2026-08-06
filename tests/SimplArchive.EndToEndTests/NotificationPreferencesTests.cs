@@ -28,7 +28,7 @@ public class NotificationPreferencesTests
         Assert.Equal(SimplArchive.Domain.Notifications.NotificationTypePolicy.Mutable.Count, defaults.Length);
         Assert.All(defaults, p => Assert.True(p.GetProperty("emailEnabled").GetBoolean()));
 
-        // Mute CommentPosted (type 4); the rest stay on.
+        // Mute ChatMessagePosted (type 4); the rest stay on.
         var body = new
         {
             preferences = defaults.Select(p => new
@@ -39,7 +39,7 @@ public class NotificationPreferencesTests
         };
         (await user.PutAsJsonAsync("/api/notifications/preferences", body)).EnsureSuccessStatusCode();
 
-        // Read back: CommentPosted is off, everything else on.
+        // Read back: ChatMessagePosted is off, everything else on.
         var after = (await TestJson.Get(user, "/api/notifications/preferences")).GetProperty("preferences").EnumerateArray().ToArray();
         Assert.False(after.Single(p => p.GetProperty("type").GetInt32() == 4).GetProperty("emailEnabled").GetBoolean());
         Assert.All(after.Where(p => p.GetProperty("type").GetInt32() != 4), p => Assert.True(p.GetProperty("emailEnabled").GetBoolean()));

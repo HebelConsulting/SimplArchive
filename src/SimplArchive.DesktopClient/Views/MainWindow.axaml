@@ -658,13 +658,13 @@
                                         <ScrollViewer>
                                             <ItemsControl ItemsSource="{Binding Comments}" Margin="10,0">
                                                 <ItemsControl.ItemTemplate>
-                                                    <DataTemplate x:DataType="vm:CommentViewModel">
+                                                    <DataTemplate x:DataType="vm:ChatMessageViewModel">
                                                         <StackPanel Margin="0,6">
                                                             <TextBlock Text="{Binding Meta}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                             <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" />
                                                             <ItemsControl ItemsSource="{Binding Replies}" Margin="16,4,0,0">
                                                                 <ItemsControl.ItemTemplate>
-                                                                    <DataTemplate x:DataType="vm:CommentViewModel">
+                                                                    <DataTemplate x:DataType="vm:ChatMessageViewModel">
                                                                         <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0" Padding="8,2" Margin="0,3">
                                                                             <StackPanel>
                                                                                 <TextBlock Text="{Binding Meta}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
@@ -1286,13 +1286,13 @@
                                                 <ScrollViewer>
                                                     <ItemsControl ItemsSource="{Binding RecycleBin.Comments}" Margin="10,0">
                                                         <ItemsControl.ItemTemplate>
-                                                            <DataTemplate x:DataType="vm:CommentViewModel">
+                                                            <DataTemplate x:DataType="vm:ChatMessageViewModel">
                                                                 <StackPanel Margin="0,6">
                                                                     <TextBlock Text="{Binding Meta}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                                     <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" />
                                                                     <ItemsControl ItemsSource="{Binding Replies}" Margin="16,4,0,0">
                                                                         <ItemsControl.ItemTemplate>
-                                                                            <DataTemplate x:DataType="vm:CommentViewModel">
+                                                                            <DataTemplate x:DataType="vm:ChatMessageViewModel">
                                                                                 <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0" Padding="8,2" Margin="0,3">
                                                                                     <StackPanel>
                                                                                         <TextBlock Text="{Binding Meta}" Foreground="{DynamicResource WbFaint}" FontSize="11" />

@@ -31,13 +31,13 @@ public class WebNotificationPreferencesTests
         await page.GetByText("Notification preferences").First.ClickAsync();
 
         var dialog = page.Locator(".mud-dialog");
-        await Expect(dialog.GetByText("A comment is posted on my document")).ToBeVisibleAsync();
+        await Expect(dialog.GetByText("A chat message is posted on my document")).ToBeVisibleAsync();
 
-        // Toggle the CommentPosted switch off (the 5th, in the fixed policy order) and save.
+        // Toggle the ChatMessagePosted switch off (the 5th, in the fixed policy order) and save.
         await dialog.Locator(".mud-switch").Nth(4).ClickAsync();
         await dialog.GetByRole(AriaRole.Button, new() { Name = "Save" }).ClickAsync();
 
-        // Persisted: the CommentPosted (type 4) email channel is now off.
+        // Persisted: the ChatMessagePosted (type 4) email channel is now off.
         await Eventually(async () =>
         {
             var prefs = await GetAsync(http);

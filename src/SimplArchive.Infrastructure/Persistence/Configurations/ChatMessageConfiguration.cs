@@ -7,9 +7,9 @@ using SimplArchive.Domain.Users;
 
 namespace SimplArchive.Infrastructure.Persistence.Configurations;
 
-public class DocumentCommentConfiguration : IEntityTypeConfiguration<DocumentComment>
+public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
 {
-    public void Configure(EntityTypeBuilder<DocumentComment> builder)
+    public void Configure(EntityTypeBuilder<ChatMessage> builder)
     {
         builder.HasKey(c => c.Id);
         builder.Property(c => c.Body).IsRequired();
@@ -20,7 +20,7 @@ public class DocumentCommentConfiguration : IEntityTypeConfiguration<DocumentCom
         // Exactly one of CreatedByUserId/CreatedByServiceAccountId is set — same CASE WHEN "exactly one"
         // shape as DocumentVersion's creator check (ADR "Document version upload/download endpoints").
         builder.ToTable(t => t.HasCheckConstraint(
-            "CK_DocumentComments_ExactlyOneCreator",
+            "CK_ChatMessages_ExactlyOneCreator",
             "(CASE WHEN \"CreatedByUserId\" IS NOT NULL THEN 1 ELSE 0 END + " +
             "CASE WHEN \"CreatedByServiceAccountId\" IS NOT NULL THEN 1 ELSE 0 END) = 1"));
 
@@ -38,9 +38,9 @@ public class DocumentCommentConfiguration : IEntityTypeConfiguration<DocumentCom
         // Self-referencing reply link — Restrict (not Cascade): a document delete already removes the whole
         // thread via the DocumentId cascade above, so a second cascade path isn't needed, and comments are
         // append-only so a parent is never deleted on its own.
-        builder.HasOne<DocumentComment>()
+        builder.HasOne<ChatMessage>()
             .WithMany()
-            .HasForeignKey(c => c.ParentCommentId)
+            .HasForeignKey(c => c.ParentMessageId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne<User>()

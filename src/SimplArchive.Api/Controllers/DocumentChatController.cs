@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Errors;
-using SimplArchive.Api.Errors.Exceptions.Comments;
+using SimplArchive.Api.Errors.Exceptions.Chat;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Api.Pagination;
 using SimplArchive.Application.Abstractions;
@@ -16,14 +16,14 @@ namespace SimplArchive.Api.Controllers;
 /// <summary>
 /// A Document's comment/chat thread — see ADR "Document comment thread". Append-only for
 /// now (list + add, no edit/delete). Reading and posting both require CanSee (anyone who can see the
-/// document can comment). One level of threading: a reply's ParentCommentId must be a top-level comment on
+/// document can comment). One level of threading: a reply's ParentMessageId must be a top-level comment on
 /// the same document. Authorization accepts either a ServiceAccount or a logged-in User caller.
 /// </summary>
 [ApiController]
 [ApiVersion("1.0")]
-[Route("api/documents/{documentId:guid}/comments")]
+[Route("api/documents/{documentId:guid}/chat")]
 [Authorize]
-public class DocumentCommentsController : ControllerBase
+public class DocumentChatController : ControllerBase
 {
     private readonly SimplArchiveDbContext _dbContext;
     private readonly IEffectiveRightsCalculator _effectiveRightsCalculator;
@@ -31,7 +31,7 @@ public class DocumentCommentsController : ControllerBase
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly INotificationService _notifications;
 
-    public DocumentCommentsController(
+    public DocumentChatController(
         SimplArchiveDbContext dbContext,
         IEffectiveRightsCalculator effectiveRightsCalculator,
         ICurrentServiceAccountAccessor currentServiceAccountAccessor,
@@ -50,11 +50,11 @@ public class DocumentCommentsController : ControllerBase
     private readonly IAuditRecorder _audit;
 
     // Plain mutable classes, not records — XmlSerializer (ADR "JSON/XML content negotiation").
-    public class CommentResource : HypermediaResource
+    public class ChatMessageResource : HypermediaResource
     {
         public Guid Id { get; set; }
 
-        public Guid? ParentCommentId { get; set; }
+        public Guid? ParentMessageId { get; set; }
 
         public string Body { get; set; } = "";
 
@@ -63,19 +63,19 @@ public class DocumentCommentsController : ControllerBase
         public DateTimeOffset CreatedAt { get; set; }
     }
 
-    public class CommentListResource : HypermediaResource
+    public class ChatMessageListResource : HypermediaResource
     {
-        public List<CommentResource> Comments { get; set; } = [];
+        public List<ChatMessageResource> Messages { get; set; } = [];
     }
 
-    public class CreateCommentRequest
+    public class CreateChatMessageRequest
     {
         public string Body { get; set; } = "";
 
-        public Guid? ParentCommentId { get; set; }
+        public Guid? ParentMessageId { get; set; }
     }
 
-    private record CommentRow(Guid Id, Guid? ParentCommentId, string Body, DateTimeOffset CreatedAt, string? AuthorName);
+    private record ChatMessageRow(Guid Id, Guid? ParentMessageId, string Body, DateTimeOffset CreatedAt, string? AuthorName);
 
     // Cursor-based pagination (?cursor=&limit=), CreatedAt ascending / Id ascending — same shape as every
     // other list endpoint. Threaded rendering (grouping replies under parents) is the client's job; a reply
@@ -98,7 +98,7 @@ public class DocumentCommentsController : ControllerBase
 
         var pageSize = PageSize.Resolve(limit);
 
-        var query = _dbContext.DocumentComments.Where(c => c.DocumentId == documentId);
+        var query = _dbContext.ChatMessages.Where(c => c.DocumentId == documentId);
 
         if (Cursor.TryDecode(cursor, out var cursorCreatedAt, out var cursorId))
         {
@@ -108,9 +108,9 @@ public class DocumentCommentsController : ControllerBase
         var fetched = await query
             .OrderBy(c => c.CreatedAt).ThenBy(c => c.Id)
             .Take(pageSize + 1)
-            .Select(c => new CommentRow(
+            .Select(c => new ChatMessageRow(
                 c.Id,
-                c.ParentCommentId,
+                c.ParentMessageId,
                 c.Body,
                 c.CreatedAt,
                 c.CreatedByUserId != null
@@ -128,9 +128,9 @@ public class DocumentCommentsController : ControllerBase
             links.Add(new Link("next", Url.Action(nameof(List), new { documentId, cursor = nextCursor, limit = pageSize })!, "GET"));
         }
 
-        return Ok(new CommentListResource
+        return Ok(new ChatMessageListResource
         {
-            Comments = page.Select(ToResource).ToList(),
+            Messages = page.Select(ToResource).ToList(),
             Links = links,
         });
     }
@@ -153,7 +153,7 @@ public class DocumentCommentsController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Add(Guid documentId, [FromBody] CreateCommentRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Add(Guid documentId, [FromBody] CreateChatMessageRequest request, CancellationToken cancellationToken)
     {
         var document = await _dbContext.Documents
             .Where(d => d.Id == documentId)
@@ -172,36 +172,36 @@ public class DocumentCommentsController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(request.Body))
         {
-            throw new EmptyCommentException();
+            throw new EmptyChatMessageException();
         }
 
-        if (request.ParentCommentId is { } parentId)
+        if (request.ParentMessageId is { } parentId)
         {
             // One level only: the parent must be a top-level comment on this same document.
-            var parentIsTopLevel = await _dbContext.DocumentComments
-                .AnyAsync(c => c.Id == parentId && c.DocumentId == documentId && c.ParentCommentId == null, cancellationToken);
+            var parentIsTopLevel = await _dbContext.ChatMessages
+                .AnyAsync(c => c.Id == parentId && c.DocumentId == documentId && c.ParentMessageId == null, cancellationToken);
 
             if (!parentIsTopLevel)
             {
-                throw new InvalidParentCommentException();
+                throw new InvalidParentChatMessageException();
             }
         }
 
         var (createdByUserId, createdByServiceAccountId) = GetCallerIdentity();
 
-        var comment = new DocumentComment
+        var comment = new ChatMessage
         {
             Id = Guid.NewGuid(),
             TenantId = document.TenantId,
             DocumentId = documentId,
-            ParentCommentId = request.ParentCommentId,
+            ParentMessageId = request.ParentMessageId,
             Body = request.Body,
             CreatedByUserId = createdByUserId,
             CreatedByServiceAccountId = createdByServiceAccountId,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
-        _dbContext.DocumentComments.Add(comment);
+        _dbContext.ChatMessages.Add(comment);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         var authorName = createdByUserId is { } uid
@@ -210,13 +210,13 @@ public class DocumentCommentsController : ControllerBase
 
         // Notify the person the comment lands on: a reply notifies the parent comment's author; a top-level
         // comment notifies the document's creator (the NotificationService skips self-notification).
-        var recipientId = request.ParentCommentId is { } pid
-            ? await _dbContext.DocumentComments.Where(c => c.Id == pid).Select(c => c.CreatedByUserId).SingleAsync(cancellationToken)
+        var recipientId = request.ParentMessageId is { } pid
+            ? await _dbContext.ChatMessages.Where(c => c.Id == pid).Select(c => c.CreatedByUserId).SingleAsync(cancellationToken)
             : document.CreatedByUserId;
         if (recipientId is { } rid)
         {
-            var verb = request.ParentCommentId is null ? "commented on" : "replied on";
-            await _notifications.NotifyAsync(rid, NotificationType.CommentPosted, "New comment", $"{authorName} {verb} '{document.Name}'.", documentId, cancellationToken);
+            var verb = request.ParentMessageId is null ? "commented on" : "replied on";
+            await _notifications.NotifyAsync(rid, NotificationType.ChatMessagePosted, "New comment", $"{authorName} {verb} '{document.Name}'.", documentId, cancellationToken);
         }
 
         // Notify everyone following the document (ADR "Document subscriptions"), except the actor and the
@@ -225,20 +225,20 @@ public class DocumentCommentsController : ControllerBase
             "New comment", $"{authorName} commented on '{document.Name}'.",
             recipientId is { } r ? [r] : null, cancellationToken);
 
-        await _audit.RecordAsync(AuditActions.CommentPosted, "Document", documentId, document.Name,
-            request.ParentCommentId is null ? "Comment posted" : "Reply posted", cancellationToken: cancellationToken);
+        await _audit.RecordAsync(AuditActions.ChatMessagePosted, "Document", documentId, document.Name,
+            request.ParentMessageId is null ? "Comment posted" : "Reply posted", cancellationToken: cancellationToken);
 
-        var resource = ToResource(new CommentRow(comment.Id, comment.ParentCommentId, comment.Body, comment.CreatedAt, authorName));
+        var resource = ToResource(new ChatMessageRow(comment.Id, comment.ParentMessageId, comment.Body, comment.CreatedAt, authorName));
 
         return StatusCode(StatusCodes.Status201Created, resource);
     }
 
     // No self link: a comment isn't individually addressable (no single-comment GET endpoint) — it's only
     // ever part of a document's thread.
-    private static CommentResource ToResource(CommentRow row) => new()
+    private static ChatMessageResource ToResource(ChatMessageRow row) => new()
     {
         Id = row.Id,
-        ParentCommentId = row.ParentCommentId,
+        ParentMessageId = row.ParentMessageId,
         Body = row.Body,
         AuthorName = row.AuthorName ?? "Unknown",
         CreatedAt = row.CreatedAt,

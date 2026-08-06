@@ -55,7 +55,7 @@ public class RepositoryExportTests
         Assert.NotNull(manifestEntry);
         using var manifestReader = new StreamReader(manifestEntry!.Open());
         var manifest = JsonDocument.Parse(await manifestReader.ReadToEndAsync()).RootElement;
-        Assert.Equal(1, manifest.GetProperty("formatVersion").GetInt32());
+        Assert.Equal(2, manifest.GetProperty("formatVersion").GetInt32()); // 2 since the chat rename (#382)
         Assert.Equal(1, manifest.GetProperty("counts").GetProperty("versions").GetInt32());
         Assert.Equal(3, manifest.GetProperty("counts").GetProperty("documents").GetInt32()); // repo, folder, report
 

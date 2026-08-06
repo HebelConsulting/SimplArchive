@@ -85,7 +85,7 @@ public class RepositoryImportTests
             storage.Objects["a/v1.txt"] = payload;
             var versionId = Guid.NewGuid();
             db.DocumentVersions.Add(new DocumentVersion { Id = versionId, TenantId = tenantA, DocumentId = docA.Id, Status = DocumentVersionStatus.Confirmed, VersionNumber = 1, Sha256Hash = sha, ObjectKey = "a/v1.txt", DocumentDate = new DateOnly(2025, 2, 3), CreatedByUserId = userId, CreatedAt = DateTimeOffset.UtcNow });
-            db.DocumentComments.Add(new DocumentComment { Id = Guid.NewGuid(), TenantId = tenantA, DocumentId = docA.Id, Body = "Nice one", CreatedByUserId = userId, CreatedAt = DateTimeOffset.UtcNow });
+            db.ChatMessages.Add(new ChatMessage { Id = Guid.NewGuid(), TenantId = tenantA, DocumentId = docA.Id, Body = "Nice one", CreatedByUserId = userId, CreatedAt = DateTimeOffset.UtcNow });
             // A markup annotation (a highlight shape) pinned to the version (ADR "Annotations in export/import").
             db.DocumentAnnotations.Add(new DocumentAnnotation { Id = Guid.NewGuid(), TenantId = tenantA, DocumentId = docA.Id, DocumentVersionId = versionId, PageIndex = 0, Kind = AnnotationKind.Highlight, PositionX = 0.1, PositionY = 0.2, Width = 0.3, Height = 0.05, Text = "", Color = "#FFEB3B", CreatedByUserId = userId, CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
             await db.SaveChangesAsync();
@@ -144,7 +144,7 @@ public class RepositoryImportTests
 
             // Index value + comment recreated.
             Assert.Equal("contract", await db.FieldValues.Where(f => f.DocumentId == docA.Id).Select(f => f.Value).SingleAsync());
-            Assert.Equal("Nice one", await db.DocumentComments.Where(c => c.DocumentId == docA.Id).Select(c => c.Body).SingleAsync());
+            Assert.Equal("Nice one", await db.ChatMessages.Where(c => c.DocumentId == docA.Id).Select(c => c.Body).SingleAsync());
 
             // A deactivated placeholder author was created (matched by email, absent in B), and owns the doc.
             var jane = await db.Users.SingleAsync(u => u.NormalizedEmail == "JANE@A.TEST");

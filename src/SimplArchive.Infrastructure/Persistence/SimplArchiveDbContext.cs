@@ -95,7 +95,7 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<DocumentVersion> DocumentVersions => Set<DocumentVersion>();
 
-    public DbSet<DocumentComment> DocumentComments => Set<DocumentComment>();
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
 
     public DbSet<DocumentAnnotation> DocumentAnnotations => Set<DocumentAnnotation>();
 
