@@ -53,6 +53,11 @@ public class DocumentAnnotation : ITenantScoped, IConcurrencyTracked
     // A short colour token (a hex like "#FFEB3B") from a small palette validated in the controller.
     public required string Color { get; set; }
 
+    // How the text is rendered — font, size and the four styles (ADR 0542). Null for a shape, and for any
+    // text-bearing annotation that simply uses the client's defaults, which is every annotation created before
+    // this existed. Owned, so it maps to columns on this table rather than a join.
+    public AnnotationTextStyle? TextStyle { get; set; }
+
     // Exactly one of CreatedByUserId/CreatedByServiceAccountId is set.
     public Guid? CreatedByUserId { get; set; }
 

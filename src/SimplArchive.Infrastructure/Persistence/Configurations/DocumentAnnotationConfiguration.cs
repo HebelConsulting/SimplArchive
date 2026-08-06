@@ -16,6 +16,27 @@ public class DocumentAnnotationConfiguration : IEntityTypeConfiguration<Document
         builder.Property(a => a.Color).IsRequired();
         builder.Property(a => a.Points); // Freehand stroke path ("x,y x,y …"); null for every other kind (ADR 0525).
 
+        // Text styling (ADR 0542) — an OWNED type, so it groups in code but stays flat in the table: seven
+        // additive nullable "TextStyle_*" columns (EF's default owned-type naming, kept as-is). Optional as a
+        // whole: an annotation with no styling has all seven null and reads back as a null TextStyle.
+        //
+        // Bold/Italic/Underline/Strikethrough are non-nullable in the CLR on purpose. An optional owned type
+        // whose properties are ALL nullable gives EF no way to tell "no style" from "a style that is entirely
+        // defaults" (it warns: OptionalDependentWithoutIdentifyingProperty, and nested values are lost); a
+        // required property gives it that signal. The columns themselves are still nullable in the database —
+        // EF relaxes them because the dependent is optional — which is what makes the migration purely additive
+        // over existing rows (ADR 0345).
+        builder.OwnsOne(a => a.TextStyle, style =>
+        {
+            style.Property(s => s.FontFamily);
+            style.Property(s => s.FontSizePx);
+            style.Property(s => s.SizeBasis); // stored as the enum's int; 0 = CellHeight, 1 = CharacterHeight
+            style.Property(s => s.Bold);
+            style.Property(s => s.Italic);
+            style.Property(s => s.Underline);
+            style.Property(s => s.Strikethrough);
+        });
+
         // Lists a version's notes (per page); TenantId leads for tenant-scoped locality.
         builder.HasIndex(a => new { a.TenantId, a.DocumentVersionId, a.PageIndex });
 

@@ -116,6 +116,61 @@ public class DocumentAnnotationApiTests
         await AssertBadRequest(api, url, new { pageIndex = 0, kind = 7, positionX = 0.2, positionY = 0.2, points = "0.2,0.2", text = "", color = "#F44336" }, "INVALID_ANNOTATION_POINTS");
     }
 
+    // Text styling — the schema exists so annotation styling survives an external-system interop round trip,
+    // which it can only do if it also survives create → read here.
+    [Fact]
+    public async Task Text_styling_survives_create_read_and_edit()
+    {
+        var api = await AuthedClientAsync();
+        var (docId, versionId) = await SeedConfirmedDocumentAsync(api);
+        var url = $"/api/documents/{docId}/versions/{versionId}/annotations";
+
+        var style = new { fontFamily = "Comic Sans MS", fontSizePx = 22, sizeBasis = 1, bold = true, italic = false, underline = true, strikethrough = false };
+        var created = await PostJson(api, url, new { pageIndex = 0, kind = 4, positionX = 0.6, positionY = 0.1, width = 0.25, height = 0.09, text = "APPROVED", color = "#2E7D32", textStyle = style });
+        AssertStyle(created, "Comic Sans MS", 22, 1, bold: true, underline: true);
+
+        // It must come back from a fresh read, not just from the create response's own echo.
+        var listed = (await GetJson(api, url)).GetProperty("annotations")[0];
+        AssertStyle(listed, "Comic Sans MS", 22, 1, bold: true, underline: true);
+
+        // An edit replaces the style wholesale, like every other PUT field.
+        var noteUrl = $"{url}/{created.GetProperty("id").GetGuid()}";
+        var edited = await PutWithIfMatch(api, noteUrl, created.GetProperty("etag").GetString()!, new
+        {
+            pageIndex = 0,
+            positionX = 0.6,
+            positionY = 0.1,
+            width = 0.25,
+            height = 0.09,
+            text = "APPROVED",
+            color = "#2E7D32",
+            textStyle = new { fontFamily = "Arial", fontSizePx = 36, sizeBasis = 0, bold = false, italic = true, underline = false, strikethrough = false },
+        });
+        Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
+        var afterEdit = JsonSerializer.Deserialize<JsonElement>(await edited.Content.ReadAsStringAsync());
+        AssertStyle(afterEdit, "Arial", 36, 0, bold: false, underline: false);
+        Assert.True(afterEdit.GetProperty("textStyle").GetProperty("italic").GetBoolean());
+
+        // An annotation with no style stays genuinely unstyled — null, not a row of defaults.
+        var plain = await PostJson(api, url, new { pageIndex = 0, positionX = 0.2, positionY = 0.2, text = "plain", color = "#FFEB3B" });
+        Assert.Equal(JsonValueKind.Null, plain.GetProperty("textStyle").ValueKind);
+
+        // Validation: styling belongs to text-bearing kinds only, and the size must fit interop's signed byte.
+        await AssertBadRequest(api, url, new { pageIndex = 0, kind = 1, positionX = 0.2, positionY = 0.2, width = 0.2, height = 0.1, text = "", color = "#FFEB3B", textStyle = style }, "INVALID_ANNOTATION_TEXT_STYLE");
+        await AssertBadRequest(api, url, new { pageIndex = 0, positionX = 0.2, positionY = 0.2, text = "x", color = "#FFEB3B", textStyle = new { fontSizePx = 900 } }, "INVALID_ANNOTATION_TEXT_STYLE");
+        await AssertBadRequest(api, url, new { pageIndex = 0, positionX = 0.2, positionY = 0.2, text = "x", color = "#FFEB3B", textStyle = new { sizeBasis = 7 } }, "INVALID_ANNOTATION_TEXT_STYLE");
+    }
+
+    private static void AssertStyle(JsonElement annotation, string fontFamily, int fontSizePx, int sizeBasis, bool bold, bool underline)
+    {
+        var style = annotation.GetProperty("textStyle");
+        Assert.Equal(fontFamily, style.GetProperty("fontFamily").GetString());
+        Assert.Equal(fontSizePx, style.GetProperty("fontSizePx").GetInt32());
+        Assert.Equal(sizeBasis, style.GetProperty("sizeBasis").GetInt32());
+        Assert.Equal(bold, style.GetProperty("bold").GetBoolean());
+        Assert.Equal(underline, style.GetProperty("underline").GetBoolean());
+    }
+
     [Fact]
     public async Task Confirmed_version_advertises_an_annotations_link()
     {

@@ -73,6 +73,8 @@ public partial class DocumentAnnotationsController : ControllerBase
         public string? Points { get; set; }
         public string Text { get; set; } = "";
         public string Color { get; set; } = "";
+        // How the text is rendered (ADR 0542); null when the annotation is unstyled or draws no text.
+        public AnnotationTextStyleResource? TextStyle { get; set; }
         public string AuthorName { get; set; } = "";
         public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset UpdatedAt { get; set; }
@@ -82,6 +84,21 @@ public partial class DocumentAnnotationsController : ControllerBase
         // Client hints: whether this caller may edit (author) / delete (author or a CanEditContent holder).
         public bool CanEdit { get; set; }
         public bool CanDelete { get; set; }
+    }
+
+    // The text styling of a text-bearing annotation (ADR 0542). Used in BOTH directions — it is a value object
+    // with the same shape going in and coming out, so a separate request twin would only duplicate it.
+    public class AnnotationTextStyleResource
+    {
+        public string? FontFamily { get; set; }
+        // Always positive; what it measures is SizeBasis's job, not a sign convention.
+        public int? FontSizePx { get; set; }
+        // 0 = CellHeight (includes internal leading), 1 = CharacterHeight — the Api's enum-as-int convention.
+        public int? SizeBasis { get; set; }
+        public bool Bold { get; set; }
+        public bool Italic { get; set; }
+        public bool Underline { get; set; }
+        public bool Strikethrough { get; set; }
     }
 
     public class AnnotationListResource : HypermediaResource
@@ -103,6 +120,7 @@ public partial class DocumentAnnotationsController : ControllerBase
         public string? Points { get; set; } // Freehand only: "x,y x,y …"
         public string Text { get; set; } = "";
         public string Color { get; set; } = "";
+        public AnnotationTextStyleResource? TextStyle { get; set; } // text-bearing kinds only (ADR 0542)
     }
 
     public class UpdateAnnotationRequest
@@ -115,11 +133,12 @@ public partial class DocumentAnnotationsController : ControllerBase
         public string? Points { get; set; } // Freehand only: "x,y x,y …"
         public string Text { get; set; } = "";
         public string Color { get; set; } = "";
+        public AnnotationTextStyleResource? TextStyle { get; set; } // text-bearing kinds only (ADR 0542)
     }
 
     private record AnnotationRow(
         Guid Id, int PageIndex, AnnotationKind Kind, double PositionX, double PositionY, double? Width, double? Height,
-        string? Points, string Text, string Color,
+        string? Points, string Text, string Color, AnnotationTextStyle? TextStyle,
         Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt,
         Guid ConcurrencyToken, string? AuthorName);
 
@@ -139,20 +158,64 @@ public partial class DocumentAnnotationsController : ControllerBase
             return Forbid();
         }
 
+        // The owned TextStyle is projected COLUMN BY COLUMN, not as `a.TextStyle`: EF cannot materialize an owned
+        // dependent into an arbitrary (non-entity) projection, and doing so throws at query time (ADR 0542). The
+        // nullable casts make the seven columns readable as "absent", which is what an unstyled annotation stores.
         var rows = await _dbContext.DocumentAnnotations
             .Where(a => a.DocumentVersionId == versionId)
             .OrderBy(a => a.PageIndex).ThenBy(a => a.CreatedAt).ThenBy(a => a.Id)
-            .Select(a => new AnnotationRow(
-                a.Id, a.PageIndex, a.Kind, a.PositionX, a.PositionY, a.Width, a.Height, a.Points, a.Text, a.Color,
-                a.CreatedByUserId, a.CreatedByServiceAccountId, a.CreatedAt, a.UpdatedAt, a.ConcurrencyToken,
-                a.CreatedByUserId != null
+            .Select(a => new
+            {
+                a.Id,
+                a.PageIndex,
+                a.Kind,
+                a.PositionX,
+                a.PositionY,
+                a.Width,
+                a.Height,
+                a.Points,
+                a.Text,
+                a.Color,
+                FontFamily = a.TextStyle!.FontFamily,
+                FontSizePx = a.TextStyle!.FontSizePx,
+                SizeBasis = a.TextStyle!.SizeBasis,
+                Bold = (bool?)a.TextStyle!.Bold,
+                Italic = (bool?)a.TextStyle!.Italic,
+                Underline = (bool?)a.TextStyle!.Underline,
+                Strikethrough = (bool?)a.TextStyle!.Strikethrough,
+                a.CreatedByUserId,
+                a.CreatedByServiceAccountId,
+                a.CreatedAt,
+                a.UpdatedAt,
+                a.ConcurrencyToken,
+                AuthorName = a.CreatedByUserId != null
                     ? _dbContext.Users.Where(u => u.Id == a.CreatedByUserId).Select(u => u.DisplayName).FirstOrDefault()
-                    : _dbContext.ServiceAccounts.Where(s => s.Id == a.CreatedByServiceAccountId).Select(s => s.Name).FirstOrDefault()))
+                    : _dbContext.ServiceAccounts.Where(s => s.Id == a.CreatedByServiceAccountId).Select(s => s.Name).FirstOrDefault(),
+            })
             .ToListAsync(cancellationToken);
 
         return Ok(new AnnotationListResource
         {
-            Annotations = rows.Select(r => ToResource(documentId, versionId, r, rights.CanEditContent)).ToList(),
+            Annotations = rows
+                .Select(r => new AnnotationRow(
+                    r.Id, r.PageIndex, r.Kind, r.PositionX, r.PositionY, r.Width, r.Height, r.Points, r.Text, r.Color,
+                    // All seven null = no style at all, the state every annotation was in before ADR 0542.
+                    r.FontFamily is null && r.FontSizePx is null && r.SizeBasis is null && r.Bold is null
+                        ? null
+                        : new AnnotationTextStyle
+                        {
+                            FontFamily = r.FontFamily,
+                            FontSizePx = r.FontSizePx,
+                            SizeBasis = r.SizeBasis,
+                            Bold = r.Bold ?? false,
+                            Italic = r.Italic ?? false,
+                            Underline = r.Underline ?? false,
+                            Strikethrough = r.Strikethrough ?? false,
+                        },
+                    r.CreatedByUserId, r.CreatedByServiceAccountId, r.CreatedAt, r.UpdatedAt, r.ConcurrencyToken,
+                    r.AuthorName))
+                .Select(r => ToResource(documentId, versionId, r, rights.CanEditContent))
+                .ToList(),
             CanCreate = rights.CanAnnotate,
             Links = [new Link("self", $"/api/documents/{documentId}/versions/{versionId}/annotations", "GET")],
         });
@@ -211,6 +274,7 @@ public partial class DocumentAnnotationsController : ControllerBase
             Points = points,
             Text = request.Text.Trim(),
             Color = request.Color,
+            TextStyle = ToTextStyle(kind, request.TextStyle),
             CreatedByUserId = createdByUserId,
             CreatedByServiceAccountId = createdByServiceAccountId,
             CreatedAt = now,
@@ -266,6 +330,7 @@ public partial class DocumentAnnotationsController : ControllerBase
         annotation.Points = points;
         annotation.Text = request.Text.Trim();
         annotation.Color = request.Color;
+        annotation.TextStyle = ToTextStyle(annotation.Kind, request.TextStyle);
         annotation.UpdatedAt = DateTimeOffset.UtcNow;
 
         _dbContext.Entry(annotation).Property(a => a.ConcurrencyToken).OriginalValue = ifMatch;
@@ -461,6 +526,7 @@ public partial class DocumentAnnotationsController : ControllerBase
             Points = row.Points,
             Text = row.Text,
             Color = row.Color,
+            TextStyle = ToStyleResource(row.TextStyle),
             AuthorName = row.AuthorName ?? "Unknown",
             CreatedAt = row.CreatedAt,
             UpdatedAt = row.UpdatedAt,
@@ -472,8 +538,76 @@ public partial class DocumentAnnotationsController : ControllerBase
     }
 
     private static AnnotationRow ToRow(DocumentAnnotation a, string? authorName) => new(
-        a.Id, a.PageIndex, a.Kind, a.PositionX, a.PositionY, a.Width, a.Height, a.Points, a.Text, a.Color,
+        a.Id, a.PageIndex, a.Kind, a.PositionX, a.PositionY, a.Width, a.Height, a.Points, a.Text, a.Color, a.TextStyle,
         a.CreatedByUserId, a.CreatedByServiceAccountId, a.CreatedAt, a.UpdatedAt, a.ConcurrencyToken, authorName);
+
+    private static AnnotationTextStyleResource? ToStyleResource(AnnotationTextStyle? style) =>
+        style is null
+            ? null
+            : new AnnotationTextStyleResource
+            {
+                FontFamily = style.FontFamily,
+                FontSizePx = style.FontSizePx,
+                SizeBasis = (int?)style.SizeBasis,
+                Bold = style.Bold,
+                Italic = style.Italic,
+                Underline = style.Underline,
+                Strikethrough = style.Strikethrough,
+            };
+
+    // The largest font size that can be stored. External-system interop encodes the size in a SIGNED BYTE, so
+    // anything beyond this cannot survive an export; it is also far past any plausible annotation caption.
+    private const int MaxFontSizePx = 127;
+
+    // Longer than any real font family name, and a bound on what an unauthenticated-shaped payload can push into
+    // the column. Interop formats cap this far lower, but SimplArchive is not bound to any one font catalogue.
+    private const int MaxFontFamilyLength = 128;
+
+    // Request style → the domain value object. Returns null for "unstyled", which is what an omitted style and an
+    // all-default style both mean — storing the latter as a row of falses would read as a deliberate choice.
+    private static AnnotationTextStyle? ToTextStyle(AnnotationKind kind, AnnotationTextStyleResource? style)
+    {
+        if (style is null)
+        {
+            return null;
+        }
+
+        // Styling describes how TEXT is drawn, so only the text-bearing kinds carry it (ADR 0542). Rejecting rather
+        // than silently dropping: a client that sends a style on a shape has a bug worth surfacing.
+        if (kind is not (AnnotationKind.Note or AnnotationKind.Stamp or AnnotationKind.TextBox))
+        {
+            throw new InvalidAnnotationTextStyleException("only a Note, Stamp or TextBox can carry text styling.");
+        }
+
+        if (style.FontSizePx is { } size && (size <= 0 || size > MaxFontSizePx))
+        {
+            throw new InvalidAnnotationTextStyleException($"the font size must be between 1 and {MaxFontSizePx} pixels.");
+        }
+
+        if (style.SizeBasis is { } basis && !Enum.IsDefined((FontSizeBasis)basis))
+        {
+            throw new InvalidAnnotationTextStyleException("the size basis must be 0 (cell height) or 1 (character height).");
+        }
+
+        var fontFamily = style.FontFamily?.Trim();
+        if (fontFamily is { Length: > MaxFontFamilyLength })
+        {
+            throw new InvalidAnnotationTextStyleException($"the font family must be at most {MaxFontFamilyLength} characters.");
+        }
+
+        var mapped = new AnnotationTextStyle
+        {
+            FontFamily = string.IsNullOrEmpty(fontFamily) ? null : fontFamily,
+            FontSizePx = style.FontSizePx,
+            SizeBasis = (FontSizeBasis?)style.SizeBasis,
+            Bold = style.Bold,
+            Italic = style.Italic,
+            Underline = style.Underline,
+            Strikethrough = style.Strikethrough,
+        };
+
+        return mapped.IsEmpty ? null : mapped;
+    }
 
     private async Task<bool> VersionExistsAsync(Guid documentId, Guid versionId, CancellationToken cancellationToken) =>
         await _dbContext.DocumentVersions.AnyAsync(v => v.Id == versionId && v.DocumentId == documentId, cancellationToken);
