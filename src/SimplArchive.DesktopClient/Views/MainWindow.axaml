@@ -661,7 +661,7 @@
                                                     <DataTemplate x:DataType="vm:ChatMessageViewModel">
                                                         <StackPanel Margin="0,6">
                                                             <StackPanel Orientation="Horizontal" Spacing="4">
-                                                                <Button Classes="link" IsVisible="{Binding HasAuthorCard}" Padding="0" FontSize="11"
+                                                                <Button Classes="link" IsVisible="{Binding ShowAuthorLink}" Padding="0" FontSize="11"
                                                                         Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ShowAuthorCardCommand}"
                                                                         CommandParameter="{Binding}" Content="{Binding AuthorName}">
                                                                     <!-- The identity card (ADR 0544). Clicking runs the command (which follows the
@@ -695,7 +695,7 @@
                                                                         </Flyout>
                                                                     </Button.Flyout>
                                                                 </Button>
-                                                                <TextBlock IsVisible="{Binding HasNoAuthorCard}" Text="{Binding AuthorName}"
+                                                                <TextBlock IsVisible="{Binding ShowAuthorPlainName}" Text="{Binding AuthorName}"
                                                                            Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                                 <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                             </StackPanel>
@@ -708,8 +708,7 @@
                                                             <Border IsVisible="{Binding HasVersionEntry}" Margin="0,3,0,0" Padding="6,3"
                                                                     BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0">
                                                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                    <TextBlock Text="&#x1F5CE;" FontSize="12" VerticalAlignment="Top"
-                                                                               Foreground="{DynamicResource WbMuted}" />
+                                                                    
                                                                     <StackPanel Spacing="1">
                                                                         <TextBlock Text="{Binding VersionLabel}" FontSize="11" />
                                                                         <TextBlock Text="{Binding VersionCommentText}" FontSize="11" TextWrapping="Wrap"
@@ -724,7 +723,7 @@
                                                                         <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0" Padding="8,2" Margin="0,3">
                                                                             <StackPanel>
                                                                                 <StackPanel Orientation="Horizontal" Spacing="4">
-                                                                <Button Classes="link" IsVisible="{Binding HasAuthorCard}" Padding="0" FontSize="11"
+                                                                <Button Classes="link" IsVisible="{Binding ShowAuthorLink}" Padding="0" FontSize="11"
                                                                         Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ShowAuthorCardCommand}"
                                                                         CommandParameter="{Binding}" Content="{Binding AuthorName}">
                                                                     <!-- The identity card (ADR 0544). Clicking runs the command (which follows the
@@ -758,7 +757,7 @@
                                                                         </Flyout>
                                                                     </Button.Flyout>
                                                                 </Button>
-                                                                <TextBlock IsVisible="{Binding HasNoAuthorCard}" Text="{Binding AuthorName}"
+                                                                <TextBlock IsVisible="{Binding ShowAuthorPlainName}" Text="{Binding AuthorName}"
                                                                            Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                                 <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                             </StackPanel>
@@ -771,8 +770,7 @@
                                                             <Border IsVisible="{Binding HasVersionEntry}" Margin="0,3,0,0" Padding="6,3"
                                                                     BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0">
                                                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                    <TextBlock Text="&#x1F5CE;" FontSize="12" VerticalAlignment="Top"
-                                                                               Foreground="{DynamicResource WbMuted}" />
+                                                                    
                                                                     <StackPanel Spacing="1">
                                                                         <TextBlock Text="{Binding VersionLabel}" FontSize="11" />
                                                                         <TextBlock Text="{Binding VersionCommentText}" FontSize="11" TextWrapping="Wrap"
@@ -1401,7 +1399,7 @@
                                                             <DataTemplate x:DataType="vm:ChatMessageViewModel">
                                                                 <StackPanel Margin="0,6">
                                                                     <StackPanel Orientation="Horizontal" Spacing="4">
-                                                                <Button Classes="link" IsVisible="{Binding HasAuthorCard}" Padding="0" FontSize="11"
+                                                                <Button Classes="link" IsVisible="{Binding ShowAuthorLink}" Padding="0" FontSize="11"
                                                                         Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ShowAuthorCardCommand}"
                                                                         CommandParameter="{Binding}" Content="{Binding AuthorName}">
                                                                     <!-- The identity card (ADR 0544). Clicking runs the command (which follows the
@@ -1435,7 +1433,7 @@
                                                                         </Flyout>
                                                                     </Button.Flyout>
                                                                 </Button>
-                                                                <TextBlock IsVisible="{Binding HasNoAuthorCard}" Text="{Binding AuthorName}"
+                                                                <TextBlock IsVisible="{Binding ShowAuthorPlainName}" Text="{Binding AuthorName}"
                                                                            Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                                 <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                             </StackPanel>
@@ -1448,8 +1446,7 @@
                                                             <Border IsVisible="{Binding HasVersionEntry}" Margin="0,3,0,0" Padding="6,3"
                                                                     BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0">
                                                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                    <TextBlock Text="&#x1F5CE;" FontSize="12" VerticalAlignment="Top"
-                                                                               Foreground="{DynamicResource WbMuted}" />
+                                                                    
                                                                     <StackPanel Spacing="1">
                                                                         <TextBlock Text="{Binding VersionLabel}" FontSize="11" />
                                                                         <TextBlock Text="{Binding VersionCommentText}" FontSize="11" TextWrapping="Wrap"
@@ -1464,7 +1461,7 @@
                                                                                 <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0" Padding="8,2" Margin="0,3">
                                                                                     <StackPanel>
                                                                                         <StackPanel Orientation="Horizontal" Spacing="4">
-                                                                <Button Classes="link" IsVisible="{Binding HasAuthorCard}" Padding="0" FontSize="11"
+                                                                <Button Classes="link" IsVisible="{Binding ShowAuthorLink}" Padding="0" FontSize="11"
                                                                         Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ShowAuthorCardCommand}"
                                                                         CommandParameter="{Binding}" Content="{Binding AuthorName}">
                                                                     <!-- The identity card (ADR 0544). Clicking runs the command (which follows the
@@ -1498,7 +1495,7 @@
                                                                         </Flyout>
                                                                     </Button.Flyout>
                                                                 </Button>
-                                                                <TextBlock IsVisible="{Binding HasNoAuthorCard}" Text="{Binding AuthorName}"
+                                                                <TextBlock IsVisible="{Binding ShowAuthorPlainName}" Text="{Binding AuthorName}"
                                                                            Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                                 <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                             </StackPanel>
@@ -1511,8 +1508,7 @@
                                                             <Border IsVisible="{Binding HasVersionEntry}" Margin="0,3,0,0" Padding="6,3"
                                                                     BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0">
                                                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                    <TextBlock Text="&#x1F5CE;" FontSize="12" VerticalAlignment="Top"
-                                                                               Foreground="{DynamicResource WbMuted}" />
+                                                                    
                                                                     <StackPanel Spacing="1">
                                                                         <TextBlock Text="{Binding VersionLabel}" FontSize="11" />
                                                                         <TextBlock Text="{Binding VersionCommentText}" FontSize="11" TextWrapping="Wrap"

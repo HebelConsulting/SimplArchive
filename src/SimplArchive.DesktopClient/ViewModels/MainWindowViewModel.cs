@@ -5527,7 +5527,27 @@ public sealed partial class MainWindowViewModel : ObservableObject
         IndexFields.Add(new IndexFieldViewModel { FieldName = "Keywords", Values = "invoice, reviewed" });
         Preview.PreviewConverted = false;
         Preview.Reset("Preview renders here (PDF/image/text).");
-        Comments.Add(new ChatMessageViewModel { Id = Guid.Empty, AuthorName = "demo@simplarchive.local", Body = "Looks good.", CreatedAt = ScreenshotClock });
+        // The thread mixes what the product records AUTOMATICALLY (ADR 0545) with what a person typed — which is
+        // what a real feed looks like. The fixture previously held only the typed comment, so the manual showed a
+        // chat pane that the product no longer produces.
+        //
+        // Note this fixture is synthetic: it does not come from the demo seed, so it does not follow the product
+        // on its own. It has to be updated by hand whenever the thread gains something new — see the backlog entry
+        // on the desktop capture being fixture-driven.
+        Comments.Add(new ChatMessageViewModel { Id = Guid.Empty, AuthorName = "Demo Admin", Body = "", Kind = 1, CreatedAt = ScreenshotClock });
+        Comments.Add(new ChatMessageViewModel
+        {
+            Id = Guid.Empty,
+            AuthorName = "Demo Admin",
+            Body = "",
+            Kind = 2,
+            VersionNumber = 1,
+            VersionComment = "Scanned from the paper original.",
+            CreatedAt = ScreenshotClock,
+        });
+        // "Demo Admin", not the email address: the author label became DisplayName when identity cards landed
+        // (ADR 0544), and this fixture still showed the raw email the product used to render.
+        Comments.Add(new ChatMessageViewModel { Id = Guid.Empty, AuthorName = "Demo Admin", Body = "Looks good.", CreatedAt = ScreenshotClock });
         Status = "3 item(s).";
     }
 

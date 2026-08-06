@@ -61,11 +61,16 @@ public sealed class ChatMessageViewModel
     // Drives the template: a person's name is clickable, an automation's is not.
     public bool HasAuthorCard => AuthorCardHref is not null;
 
-    public bool HasNoAuthorCard => AuthorCardHref is null;
+    // The timestamp half of the old single "Meta" string. The author is its own element so it can carry the card
+    // affordance, so what remains here is the time — with the separator only when an author precedes it. A system
+    // entry names its author INSIDE the sentence ("Demo Admin filed a new document."), so repeating it in the meta
+    // row read as a stutter; the row shows just the time there, matching the web client.
+    public string Timestamp => IsUserPost ? $"· {CreatedAt.ToLocalTime():g}" : $"{CreatedAt.ToLocalTime():g}";
 
-    // The timestamp half of the old single "Meta" string. The author is now its own element so it can carry the
-    // card affordance, so what remains here is the separator + time.
-    public string Timestamp => $"· {CreatedAt.ToLocalTime():g}";
+    // The author element belongs to a typed message only, for the same reason.
+    public bool ShowAuthorLink => IsUserPost && HasAuthorCard;
+
+    public bool ShowAuthorPlainName => IsUserPost && !HasAuthorCard;
 
     public ObservableCollection<ChatMessageViewModel> Replies { get; } = [];
 }
