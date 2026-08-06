@@ -125,7 +125,8 @@ public sealed class SimplArchiveApiClient
 
     // AuthorCardHref: the "author-card" rel as the server advertised it, or null for a ServiceAccount author
     // (ADR 0543/0544).
-    public sealed record Comment(Guid Id, Guid? ParentMessageId, string Body, string AuthorName, DateTimeOffset CreatedAt, string? AuthorCardHref);
+    public sealed record Comment(Guid Id, Guid? ParentMessageId, string Body, string AuthorName, DateTimeOffset CreatedAt, string? AuthorCardHref,
+        int Kind, int? VersionNumber, string? VersionComment, int? VersionCommentKind);
 
     public sealed record UserCard(string DisplayName, string Email, bool IsActive, string? PhotoHref);
 
@@ -2500,7 +2501,11 @@ public sealed class SimplArchiveApiClient
         item.GetProperty("body").GetString() ?? "",
         item.TryGetProperty("authorName", out var a) ? a.GetString() ?? "" : "",
         item.GetProperty("createdAt").GetDateTimeOffset(),
-        RelHref(item, "author-card"));
+        RelHref(item, "author-card"),
+        item.TryGetProperty("kind", out var k) ? k.GetInt32() : 0,
+        item.TryGetProperty("versionNumber", out var vn) && vn.ValueKind != JsonValueKind.Null ? vn.GetInt32() : null,
+        item.TryGetProperty("versionComment", out var vc) && vc.ValueKind != JsonValueKind.Null ? vc.GetString() : null,
+        item.TryGetProperty("versionCommentKind", out var vck) && vck.ValueKind != JsonValueKind.Null ? vck.GetInt32() : null);
 
     // The href a resource advertises for a rel, or null when it doesn't offer one. A missing rel is meaningful —
     // it means "not available here" — so callers branch on null rather than composing a URL (ADR 0543).

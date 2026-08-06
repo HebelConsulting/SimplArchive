@@ -1731,6 +1731,21 @@
   <data name="UserCardLoadFailed" xml:space="preserve">
     <value>Could not load this person's details.</value>
   </data>
+  <data name="ChatFiledNewDocument" xml:space="preserve">
+    <value>{0} filed a new document.</value>
+  </data>
+  <data name="ChatSavedNewVersion" xml:space="preserve">
+    <value>{0} saved a new working version of this document.</value>
+  </data>
+  <data name="ChatActivatedVersion" xml:space="preserve">
+    <value>{0} made Version {1} the current version.</value>
+  </data>
+  <data name="ChatVersionLabel" xml:space="preserve">
+    <value>Version {0}</value>
+  </data>
+  <data name="VersionCommentSearchablePdf" xml:space="preserve">
+    <value>Converted to a searchable PDF.</value>
+  </data>
   <data name="NoCommentsYet" xml:space="preserve">
     <value>No comments yet. Start the conversation.</value>
   </data>

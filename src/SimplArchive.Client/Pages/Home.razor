@@ -170,6 +170,11 @@
     .wb-author-link { color: var(--mud-palette-primary); cursor: pointer; }
     .wb-author-link:hover { text-decoration: underline; }
     .wb-author-card { max-width: 22rem; }
+    /* An automatic entry (ADR 0545) reads as a recorded event, not somebody talking. */
+    .wb-system-entry { color: var(--mud-palette-text-secondary); font-style: italic; }
+    .wb-version-entry { display: flex; align-items: flex-start; gap: .4rem; margin-top: .25rem;
+                        padding: .3rem .5rem; border-left: 2px solid var(--mud-palette-divider); font-size: .8rem; }
+    .wb-version-comment { color: var(--mud-palette-text-secondary); white-space: pre-wrap; }
     .wb-comment-body { font-size: .9rem; white-space: pre-wrap; }
     .wb-reply-link { font-size: .72rem; color: var(--mud-palette-primary); cursor: pointer; user-select: none; }
     .wb-compose { flex: 0 0 auto; border-top: 1px solid var(--mud-palette-lines-default); padding: 8px 12px; }
@@ -1088,9 +1093,34 @@
                                         @foreach (var c in _comments.Where(x => x.ParentMessageId is null).OrderBy(x => x.CreatedAt))
                                         {
                                             <div class="wb-comment">
-                                                <div class="wb-comment-meta">@AuthorMarkup(c) · @c.CreatedAt.ToLocalTime().ToString("g")</div>
-                                                <div class="wb-comment-body">@c.Body</div>
-                                                <span class="wb-reply-link" @onclick="() => ToggleReply(c.Id)">@Strings.Get("ReplyBtn")</span>
+                                                @if (c.Kind == ChatUserPost)
+                                                {
+                                                    <div class="wb-comment-meta">@AuthorMarkup(c) · @c.CreatedAt.ToLocalTime().ToString("g")</div>
+                                                    <div class="wb-comment-body">@c.Body</div>
+                                                    <span class="wb-reply-link" @onclick="() => ToggleReply(c.Id)">@Strings.Get("ReplyBtn")</span>
+                                                }
+                                                else
+                                                {
+                                                    @* An automatic entry READS as a sentence with the author in
+                                                       it, so the author isn't repeated in the meta line — only
+                                                       the time is (ADR 0545). No reply affordance: there is no
+                                                       conversation to continue with an event. *@
+                                                    <div class="wb-comment-meta">@c.CreatedAt.ToLocalTime().ToString("g")</div>
+                                                    <div class="wb-comment-body wb-system-entry">@SystemSentence(c)</div>
+                                                    @if (c.VersionNumber is { } versionNumber)
+                                                    {
+                                                        <div class="wb-version-entry">
+                                                            <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" />
+                                                            <div>
+                                                                <div>@string.Format(Strings.Get("ChatVersionLabel"), versionNumber)</div>
+                                                                @if (VersionCommentText(c) is { } versionComment)
+                                                                {
+                                                                    <div class="wb-version-comment">@versionComment</div>
+                                                                }
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                }
                                             </div>
                                             @foreach (var r in _comments.Where(x => x.ParentMessageId == c.Id).OrderBy(x => x.CreatedAt))
                                             {
@@ -5978,6 +6008,78 @@
         }
     }
 
+    // ---- Automatic chat entries (ADR 0545) -----------------------------------------------------------
+
+    private const int ChatUserPost = 0, ChatDocumentFiled = 1, ChatVersionFiled = 2, ChatVersionActivated = 3;
+
+    // Renders a system entry's sentence from a LOCALIZED TEMPLATE, splicing the author in as a live element so
+    // the name stays a clickable identity card. String.Format would flatten it to text and lose the card, which
+    // is why the wording is stored nowhere and composed here instead.
+    private RenderFragment SystemSentence(ChatMessageResponse message) => builder =>
+    {
+        var template = message.Kind switch
+        {
+            ChatDocumentFiled => Strings.Get("ChatFiledNewDocument"),
+            ChatVersionFiled => Strings.Get("ChatSavedNewVersion"),
+            ChatVersionActivated => Strings.Get("ChatActivatedVersion"),
+            _ => "{0}",
+        };
+
+        // {0} is the author element; {1}, where a template has one, is the version number.
+        var sequence = 0;
+        foreach (var part in SplitTemplate(template))
+        {
+            switch (part)
+            {
+                case "{0}":
+                    builder.AddContent(sequence++, AuthorMarkup(message));
+                    break;
+                case "{1}":
+                    builder.AddContent(sequence++, message.VersionNumber?.ToString() ?? "");
+                    break;
+                default:
+                    builder.AddContent(sequence++, part);
+                    break;
+            }
+        }
+    };
+
+    // Splits "{0} made Version {1} current." into its literal and placeholder parts, preserving order.
+    private static IEnumerable<string> SplitTemplate(string template)
+    {
+        var buffer = new System.Text.StringBuilder();
+        for (var i = 0; i < template.Length; i++)
+        {
+            if (i + 2 < template.Length && template[i] == '{' && char.IsDigit(template[i + 1]) && template[i + 2] == '}')
+            {
+                if (buffer.Length > 0)
+                {
+                    yield return buffer.ToString();
+                    buffer.Clear();
+                }
+
+                yield return template.Substring(i, 3);
+                i += 2;
+                continue;
+            }
+
+            buffer.Append(template[i]);
+        }
+
+        if (buffer.Length > 0)
+        {
+            yield return buffer.ToString();
+        }
+    }
+
+    // The check-in comment shown beneath "Version N". A machine-generated one carries no stored text — its
+    // wording is a localized string for the kind (ADR 0545).
+    private string? VersionCommentText(ChatMessageResponse message) => message.VersionCommentKind switch
+    {
+        1 => Strings.Get("VersionCommentSearchablePdf"),
+        _ => string.IsNullOrWhiteSpace(message.VersionComment) ? null : message.VersionComment,
+    };
+
     // ---- Author identity card (ADR 0544) -------------------------------------------------------------
 
     // The author label. A message that advertises an "author-card" rel renders a clickable name; one that does
@@ -8591,5 +8693,5 @@
         };
     }
     private record ChatMessageListResponse { public List<ChatMessageResponse> Messages { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-    private record ChatMessageResponse { public Guid Id { get; set; } public Guid? ParentMessageId { get; set; } public string Body { get; set; } = ""; public string AuthorName { get; set; } = ""; public Guid? AuthorUserId { get; set; } public DateTimeOffset CreatedAt { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record ChatMessageResponse { public Guid Id { get; set; } public Guid? ParentMessageId { get; set; } public string Body { get; set; } = ""; public string AuthorName { get; set; } = ""; public Guid? AuthorUserId { get; set; } public DateTimeOffset CreatedAt { get; set; } public int Kind { get; set; } public int? VersionNumber { get; set; } public string? VersionComment { get; set; } public int? VersionCommentKind { get; set; } public List<LinkResponse> Links { get; set; } = []; }
 }

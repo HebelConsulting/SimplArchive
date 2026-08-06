@@ -57,6 +57,7 @@ public class DocumentVersionsController : ControllerBase
         ICurrentUserAccessor currentUserAccessor,
         IDocumentIndexQueue queue,
         DocumentFinalizer finalizer,
+        Documents.ChatSystemEntryRecorder chatEntries,
         ILegalHoldService legalHold,
         IWormLockService wormLock,
         IStorageQuotaService storageQuota,
@@ -73,6 +74,7 @@ public class DocumentVersionsController : ControllerBase
         _currentUserAccessor = currentUserAccessor;
         _queue = queue;
         _finalizer = finalizer;
+        _chatEntries = chatEntries;
         _legalHold = legalHold;
         _wormLock = wormLock;
         _storageQuota = storageQuota;
@@ -133,6 +135,7 @@ public class DocumentVersionsController : ControllerBase
         }
     }
     private readonly DocumentFinalizer _finalizer;
+    private readonly Documents.ChatSystemEntryRecorder _chatEntries;
 
     // Plain mutable classes, not records — System.Xml.Serialization.XmlSerializer (ADR "JSON/XML content
     // negotiation") needs a parameterless constructor and settable properties.
@@ -770,6 +773,14 @@ public class DocumentVersionsController : ControllerBase
             var documentName = await LoadDocumentNameAsync(documentId, cancellationToken);
             await _audit.RecordAsync(AuditActions.DocumentVersionRestored, "Document", documentId, documentName,
                 $"Made version {source.VersionNumber} current", cancellationToken: cancellationToken);
+
+            // Recorded in the chat thread too (ADR 0545) — this is the one document action that changes what
+            // everyone else sees without adding anything, so it deserves to be visible rather than silent. Inside
+            // the idempotency branch, so re-pinning the current version stays a no-op. The author is the caller,
+            // not whoever uploaded the version originally.
+            var (restoredByUserId, restoredByServiceAccountId) = GetCallerIdentity();
+            await _chatEntries.RecordVersionActivatedAsync(
+                source.TenantId, documentId, source.Id, restoredByUserId, restoredByServiceAccountId, cancellationToken);
         }
 
         var name = await LoadDocumentNameAsync(documentId, cancellationToken);

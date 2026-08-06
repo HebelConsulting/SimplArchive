@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using SimplArchive.Localization;
 using Avalonia.Media.Imaging;
 
 namespace SimplArchive.DesktopClient.ViewModels;
@@ -21,6 +22,41 @@ public sealed class ChatMessageViewModel
     // never composed here (ADR 0543). Null when a ServiceAccount posted the message: an automation has no card,
     // and that absence is what makes the name render as plain text rather than a link (ADR 0544).
     public string? AuthorCardHref { get; init; }
+
+    // What produced this entry (ADR 0545): 0 UserPost · 1 DocumentFiled · 2 VersionFiled · 3 VersionActivated.
+    public int Kind { get; init; }
+
+    public int? VersionNumber { get; init; }
+
+    public string? VersionComment { get; init; }
+
+    public int? VersionCommentKind { get; init; }
+
+    public bool IsUserPost => Kind == 0;
+
+    public bool IsSystemEntry => Kind != 0;
+
+    // The sentence for an automatic entry, from a localized template. Unlike the web client — which splices the
+    // author in as a clickable element — the desktop renders it as text with the name inline, because Avalonia's
+    // TextBlock has no equivalent of a render fragment here. The author's card stays reachable from the meta row.
+    public string SystemSentence => Kind switch
+    {
+        1 => string.Format(Strings.Get("ChatFiledNewDocument"), AuthorName),
+        2 => string.Format(Strings.Get("ChatSavedNewVersion"), AuthorName),
+        3 => string.Format(Strings.Get("ChatActivatedVersion"), AuthorName, VersionNumber),
+        _ => Body,
+    };
+
+    public bool HasVersionEntry => VersionNumber is not null;
+
+    public string VersionLabel => string.Format(Strings.Get("ChatVersionLabel"), VersionNumber);
+
+    // A machine-generated comment carries no stored text; its wording is a localized string for the kind.
+    public string? VersionCommentText => VersionCommentKind == 1
+        ? Strings.Get("VersionCommentSearchablePdf")
+        : string.IsNullOrWhiteSpace(VersionComment) ? null : VersionComment;
+
+    public bool HasVersionComment => VersionCommentText is not null;
 
     // Drives the template: a person's name is clickable, an automation's is not.
     public bool HasAuthorCard => AuthorCardHref is not null;

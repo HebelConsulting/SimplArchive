@@ -57,4 +57,19 @@ public class DocumentVersion : ITenantScoped
     // An optional per-version comment — the "why this revision" note (ADR 0528). Its author is the version's
     // own CreatedBy; shown in the versions dialog. Null when none was given.
     public string? Comment { get; set; }
+
+    // Where Comment came from. A machine-generated one carries no text at all: its wording is a localized
+    // template the clients render, so a German user doesn't read an English sentence somebody's code wrote
+    // (ADR 0545). Default UserComment, so every existing row keeps meaning exactly what it meant.
+    public VersionCommentKind CommentKind { get; set; }
+}
+
+// Who wrote a DocumentVersion.Comment (ADR 0545) — a person, or the system.
+public enum VersionCommentKind
+{
+    // Typed by whoever filed the version: free text, stored verbatim, never translated.
+    UserComment = 0,
+
+    // Written by the searchable-PDF conversion. Comment stays NULL; the clients render the localized sentence.
+    SearchablePdfGenerated = 1,
 }

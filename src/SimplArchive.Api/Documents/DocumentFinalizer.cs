@@ -23,6 +23,7 @@ public class DocumentFinalizer
     private readonly IWormLockService _wormLock;
     private readonly IStorageQuotaService _storageQuota;
     private readonly INotificationService _notifications;
+    private readonly ChatSystemEntryRecorder _chatEntries;
 
     public DocumentFinalizer(
         SimplArchiveDbContext dbContext,
@@ -32,7 +33,8 @@ public class DocumentFinalizer
         ISearchablePdfQueue searchablePdfQueue,
         IWormLockService wormLock,
         IStorageQuotaService storageQuota,
-        INotificationService notifications)
+        INotificationService notifications,
+        ChatSystemEntryRecorder chatEntries)
     {
         _dbContext = dbContext;
         _objectStorageClient = objectStorageClient;
@@ -42,6 +44,7 @@ public class DocumentFinalizer
         _wormLock = wormLock;
         _storageQuota = storageQuota;
         _notifications = notifications;
+        _chatEntries = chatEntries;
     }
 
     // Extensions that trigger a searchable-PDF successor job. A TIFF always converts; a PDF is a *candidate* —
@@ -92,6 +95,11 @@ public class DocumentFinalizer
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         await _storageQuota.AdjustUsageAsync(version.TenantId, sizeBytes, cancellationToken);
+
+        // The document's chat thread records that this was filed (ADR 0545). This method is the single point
+        // every interactive upload reaches — the versions endpoint, check-in, inbox filing and WebDAV all funnel
+        // through it — and the early return above makes it idempotent, so a re-finalize can't post twice.
+        await _chatEntries.RecordVersionFiledAsync(version, cancellationToken);
 
         // Classification: a staged inbox draft (ADR "Consume the staged mask sidecar at filing") takes over
         // when present — the user classified the item in the inbox, so its Name/Document date/mask/index-data

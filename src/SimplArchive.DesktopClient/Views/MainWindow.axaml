@@ -699,7 +699,25 @@
                                                                            Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                                 <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                             </StackPanel>
-                                                            <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" />
+                                                            <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
+                                                            <!-- An automatic entry (ADR 0545): the sentence, then the
+                                                                 version block with its icon and optional comment. -->
+                                                            <TextBlock Text="{Binding SystemSentence}" TextWrapping="Wrap" FontSize="13"
+                                                                       FontStyle="Italic" Foreground="{DynamicResource WbMuted}"
+                                                                       IsVisible="{Binding IsSystemEntry}" />
+                                                            <Border IsVisible="{Binding HasVersionEntry}" Margin="0,3,0,0" Padding="6,3"
+                                                                    BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0">
+                                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                    <TextBlock Text="&#x1F5CE;" FontSize="12" VerticalAlignment="Top"
+                                                                               Foreground="{DynamicResource WbMuted}" />
+                                                                    <StackPanel Spacing="1">
+                                                                        <TextBlock Text="{Binding VersionLabel}" FontSize="11" />
+                                                                        <TextBlock Text="{Binding VersionCommentText}" FontSize="11" TextWrapping="Wrap"
+                                                                                   Foreground="{DynamicResource WbMuted}"
+                                                                                   IsVisible="{Binding HasVersionComment}" />
+                                                                    </StackPanel>
+                                                                </StackPanel>
+                                                            </Border>
                                                             <ItemsControl ItemsSource="{Binding Replies}" Margin="16,4,0,0">
                                                                 <ItemsControl.ItemTemplate>
                                                                     <DataTemplate x:DataType="vm:ChatMessageViewModel">
@@ -744,7 +762,25 @@
                                                                            Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                                 <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                             </StackPanel>
-                                                                                <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" />
+                                                                                <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
+                                                            <!-- An automatic entry (ADR 0545): the sentence, then the
+                                                                 version block with its icon and optional comment. -->
+                                                            <TextBlock Text="{Binding SystemSentence}" TextWrapping="Wrap" FontSize="13"
+                                                                       FontStyle="Italic" Foreground="{DynamicResource WbMuted}"
+                                                                       IsVisible="{Binding IsSystemEntry}" />
+                                                            <Border IsVisible="{Binding HasVersionEntry}" Margin="0,3,0,0" Padding="6,3"
+                                                                    BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0">
+                                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                    <TextBlock Text="&#x1F5CE;" FontSize="12" VerticalAlignment="Top"
+                                                                               Foreground="{DynamicResource WbMuted}" />
+                                                                    <StackPanel Spacing="1">
+                                                                        <TextBlock Text="{Binding VersionLabel}" FontSize="11" />
+                                                                        <TextBlock Text="{Binding VersionCommentText}" FontSize="11" TextWrapping="Wrap"
+                                                                                   Foreground="{DynamicResource WbMuted}"
+                                                                                   IsVisible="{Binding HasVersionComment}" />
+                                                                    </StackPanel>
+                                                                </StackPanel>
+                                                            </Border>
                                                                             </StackPanel>
                                                                         </Border>
                                                                     </DataTemplate>
@@ -1403,7 +1439,25 @@
                                                                            Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                                 <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                             </StackPanel>
-                                                                    <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" />
+                                                                    <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
+                                                            <!-- An automatic entry (ADR 0545): the sentence, then the
+                                                                 version block with its icon and optional comment. -->
+                                                            <TextBlock Text="{Binding SystemSentence}" TextWrapping="Wrap" FontSize="13"
+                                                                       FontStyle="Italic" Foreground="{DynamicResource WbMuted}"
+                                                                       IsVisible="{Binding IsSystemEntry}" />
+                                                            <Border IsVisible="{Binding HasVersionEntry}" Margin="0,3,0,0" Padding="6,3"
+                                                                    BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0">
+                                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                    <TextBlock Text="&#x1F5CE;" FontSize="12" VerticalAlignment="Top"
+                                                                               Foreground="{DynamicResource WbMuted}" />
+                                                                    <StackPanel Spacing="1">
+                                                                        <TextBlock Text="{Binding VersionLabel}" FontSize="11" />
+                                                                        <TextBlock Text="{Binding VersionCommentText}" FontSize="11" TextWrapping="Wrap"
+                                                                                   Foreground="{DynamicResource WbMuted}"
+                                                                                   IsVisible="{Binding HasVersionComment}" />
+                                                                    </StackPanel>
+                                                                </StackPanel>
+                                                            </Border>
                                                                     <ItemsControl ItemsSource="{Binding Replies}" Margin="16,4,0,0">
                                                                         <ItemsControl.ItemTemplate>
                                                                             <DataTemplate x:DataType="vm:ChatMessageViewModel">
@@ -1448,7 +1502,25 @@
                                                                            Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                                 <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                             </StackPanel>
-                                                                                        <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" />
+                                                                                        <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
+                                                            <!-- An automatic entry (ADR 0545): the sentence, then the
+                                                                 version block with its icon and optional comment. -->
+                                                            <TextBlock Text="{Binding SystemSentence}" TextWrapping="Wrap" FontSize="13"
+                                                                       FontStyle="Italic" Foreground="{DynamicResource WbMuted}"
+                                                                       IsVisible="{Binding IsSystemEntry}" />
+                                                            <Border IsVisible="{Binding HasVersionEntry}" Margin="0,3,0,0" Padding="6,3"
+                                                                    BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0">
+                                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                    <TextBlock Text="&#x1F5CE;" FontSize="12" VerticalAlignment="Top"
+                                                                               Foreground="{DynamicResource WbMuted}" />
+                                                                    <StackPanel Spacing="1">
+                                                                        <TextBlock Text="{Binding VersionLabel}" FontSize="11" />
+                                                                        <TextBlock Text="{Binding VersionCommentText}" FontSize="11" TextWrapping="Wrap"
+                                                                                   Foreground="{DynamicResource WbMuted}"
+                                                                                   IsVisible="{Binding HasVersionComment}" />
+                                                                    </StackPanel>
+                                                                </StackPanel>
+                                                            </Border>
                                                                                     </StackPanel>
                                                                                 </Border>
                                                                             </DataTemplate>

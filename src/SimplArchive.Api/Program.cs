@@ -158,6 +158,7 @@ builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService
 // Confirms + auto-classifies an uploaded/filed DocumentVersion — shared by version finalize and inbox
 // filing (ADR "S3-backed inbox").
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentFinalizer>();
+builder.Services.AddScoped<SimplArchive.Api.Documents.ChatSystemEntryRecorder>();
 
 // Permanent purge of recycle-bin documents (blobs + rows + search index) — shared by DocumentsController
 // (per-item) and RepositoriesController (empty recycle bin). See ADR "Manual hard-delete / purge".

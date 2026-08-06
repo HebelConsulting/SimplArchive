@@ -184,6 +184,11 @@ public sealed class SearchablePdfWorker : BackgroundService
             CreatedByServiceAccountId = source.CreatedByServiceAccountId,
             CreatedAt = DateTimeOffset.UtcNow,
             SizeBytes = pdfBytes.Length, // storage-quota accounting (ADR "Per-tenant storage quota")
+            // Says why this version appeared, in the Versions dialog's Comment column (ADR 0545). Comment itself
+            // stays NULL: the wording is a localized template the clients render, so a German reader doesn't get
+            // an English sentence written by the worker. No chat entry — nobody did this, and an automated post
+            // on every scanned document would be noise in a thread people read for collaboration.
+            CommentKind = VersionCommentKind.SearchablePdfGenerated,
         });
 
         // Carry the source version's annotations onto the searchable-PDF successor (ADR 0527). The successor

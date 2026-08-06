@@ -19,10 +19,29 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
 
         // Exactly one of CreatedByUserId/CreatedByServiceAccountId is set — same CASE WHEN "exactly one"
         // shape as DocumentVersion's creator check (ADR "Document version upload/download endpoints").
-        builder.ToTable(t => t.HasCheckConstraint(
-            "CK_ChatMessages_ExactlyOneCreator",
-            "(CASE WHEN \"CreatedByUserId\" IS NOT NULL THEN 1 ELSE 0 END + " +
-            "CASE WHEN \"CreatedByServiceAccountId\" IS NOT NULL THEN 1 ELSE 0 END) = 1"));
+        builder.ToTable(t =>
+        {
+            t.HasCheckConstraint(
+                "CK_ChatMessages_ExactlyOneCreator",
+                "(CASE WHEN \"CreatedByUserId\" IS NOT NULL THEN 1 ELSE 0 END + " +
+                "CASE WHEN \"CreatedByServiceAccountId\" IS NOT NULL THEN 1 ELSE 0 END) = 1");
+
+            // Kind and DocumentVersionId are two halves of one fact (ADR 0545): a UserPost (0) or DocumentFiled
+            // (1) is about the document, so it names no version; VersionFiled (2) and VersionActivated (3) are
+            // about a specific version and cannot render their "Version N" label without one. Pairing them here
+            // means a system entry can never exist that the clients are unable to draw.
+            t.HasCheckConstraint(
+                "CK_ChatMessages_KindVersionPairing",
+                "(\"Kind\" IN (0, 1) AND \"DocumentVersionId\" IS NULL) OR " +
+                "(\"Kind\" IN (2, 3) AND \"DocumentVersionId\" IS NOT NULL)");
+        });
+
+        // Restrict, matching how annotations anchor a version: the document-delete cascade already removes the
+        // whole thread, and a version is never deleted on its own.
+        builder.HasOne<DocumentVersion>()
+            .WithMany()
+            .HasForeignKey(c => c.DocumentVersionId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne<Tenant>()
             .WithMany()

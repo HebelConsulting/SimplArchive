@@ -58,6 +58,22 @@ public class DocumentChatController : ControllerBase
 
         public string Body { get; set; } = "";
 
+        // What produced this entry (ADR 0545): 0 UserPost · 1 DocumentFiled · 2 VersionFiled · 3 VersionActivated,
+        // the Api's enum-as-int convention. A client renders a localized sentence for anything but 0, so Body is
+        // empty there and must not be displayed.
+        public int Kind { get; set; }
+
+        // For a version entry: the version's number and its check-in comment, read live from the referenced
+        // version rather than copied at post time — so editing a comment updates the feed instead of leaving a
+        // stale copy. Null on a UserPost.
+        public int? VersionNumber { get; set; }
+
+        public string? VersionComment { get; set; }
+
+        // 0 UserComment · 1 SearchablePdfGenerated. A generated comment carries no text: the client renders the
+        // localized sentence for the kind.
+        public int? VersionCommentKind { get; set; }
+
         public string AuthorName { get; set; } = "";
 
         // Null when a ServiceAccount authored the message. A client uses the "author-card" rel rather than
@@ -83,7 +99,8 @@ public class DocumentChatController : ControllerBase
     // client fetch the author's card (ADR 0544); the name alone was not enough to identify anyone.
     private record ChatMessageRow(
         Guid Id, Guid? ParentMessageId, string Body, DateTimeOffset CreatedAt, string? AuthorName,
-        Guid? AuthorUserId, Guid? AuthorServiceAccountId);
+        Guid? AuthorUserId, Guid? AuthorServiceAccountId,
+        ChatMessageKind Kind, int? VersionNumber, string? VersionComment, VersionCommentKind? VersionCommentKind);
 
     // Cursor-based pagination (?cursor=&limit=), CreatedAt ascending / Id ascending — same shape as every
     // other list endpoint. Threaded rendering (grouping replies under parents) is the client's job; a reply
@@ -127,7 +144,13 @@ public class DocumentChatController : ControllerBase
                     ? _dbContext.Users.Where(u => u.Id == c.CreatedByUserId).Select(u => u.DisplayName).FirstOrDefault()
                     : _dbContext.ServiceAccounts.Where(s => s.Id == c.CreatedByServiceAccountId).Select(s => s.Name).FirstOrDefault(),
                 c.CreatedByUserId,
-                c.CreatedByServiceAccountId))
+                c.CreatedByServiceAccountId,
+                c.Kind,
+                // Read from the referenced version, not stored on the message (ADR 0545) — a later edit to the
+                // check-in comment shows through instead of leaving a stale copy in the feed.
+                _dbContext.DocumentVersions.Where(v => v.Id == c.DocumentVersionId).Select(v => v.VersionNumber).FirstOrDefault(),
+                _dbContext.DocumentVersions.Where(v => v.Id == c.DocumentVersionId).Select(v => v.Comment).FirstOrDefault(),
+                _dbContext.DocumentVersions.Where(v => v.Id == c.DocumentVersionId).Select(v => (VersionCommentKind?)v.CommentKind).FirstOrDefault()))
             .ToListAsync(cancellationToken);
 
         var (page, hasMore) = Cursor.Split(fetched, pageSize);
@@ -242,8 +265,10 @@ public class DocumentChatController : ControllerBase
         await _audit.RecordAsync(AuditActions.ChatMessagePosted, "Document", documentId, document.Name,
             request.ParentMessageId is null ? "Comment posted" : "Reply posted", cancellationToken: cancellationToken);
 
+        // A client can only ever create a UserPost; the system kinds are written by ChatSystemEntryRecorder.
         var resource = ToResource(new ChatMessageRow(comment.Id, comment.ParentMessageId, comment.Body, comment.CreatedAt, authorName,
-            comment.CreatedByUserId, comment.CreatedByServiceAccountId));
+            comment.CreatedByUserId, comment.CreatedByServiceAccountId,
+            ChatMessageKind.UserPost, VersionNumber: null, VersionComment: null, VersionCommentKind: null));
 
         return StatusCode(StatusCodes.Status201Created, resource);
     }
@@ -258,6 +283,10 @@ public class DocumentChatController : ControllerBase
         AuthorName = row.AuthorName ?? "Unknown",
         AuthorUserId = row.AuthorUserId,
         CreatedAt = row.CreatedAt,
+        Kind = (int)row.Kind,
+        VersionNumber = row.VersionNumber,
+        VersionComment = row.VersionComment,
+        VersionCommentKind = (int?)row.VersionCommentKind,
         // The author's card, as a REL rather than a URL the client rebuilds (ADR 0543). Present only for a human
         // author: a ServiceAccount is an automation with no card to open, and its absence is how a client knows
         // to render the name as plain text (ADR 0544).
