@@ -42,6 +42,9 @@ public class RootController : ControllerBase
                 new Link("legalHolds", "/api/legal-holds", "GET"),
                 new Link("recycleBin", "/api/recycle-bin", "GET"),
                 new Link("checkouts", "/api/checkouts", "GET"),
+                // Everything the caller has shared outside the system (ADR 0546) — a top-level collection, so
+                // its href belongs here rather than being composed by each client.
+                new Link("externalLinks", "/api/external-links", "GET"),
                 new Link("tenantSettings", "/api/tenant-settings", "GET"),
                 new Link("retentionSchedule", "/api/retention/schedule", "GET"),
                 new Link("whoami", "/api/diagnostics/whoami", "GET"),

@@ -101,6 +101,9 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<DocumentReference> DocumentReferences => Set<DocumentReference>();
 
+    // Shares of a document with people who have no account (ADR 0546).
+    public DbSet<ExternalLink> ExternalLinks => Set<ExternalLink>();
+
     public DbSet<DocumentTag> DocumentTags => Set<DocumentTag>();
 
     public DbSet<TagDefinition> TagDefinitions => Set<TagDefinition>();

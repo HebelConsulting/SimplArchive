@@ -52,6 +52,12 @@ public class Group : ITenantScoped
 
     public bool CanImport { get; set; }
 
+    // May create an external link, handing read access to people outside the system (ADR 0546). A dedicated right
+    // rather than a reuse of CanReadContent: reading a document and publishing it to strangers are different acts.
+    // Not backfilled for existing admins — it should be granted deliberately.
+    public bool CanCreateExternalLink { get; set; }
+
+
     // Data-classification clearance conferred to members (ADR "Sensitivity clearance enforcement"). A member's
     // effective clearance is the max of their own and every effective group's ClearanceRank. Default 0.
     public int ClearanceRank { get; set; }

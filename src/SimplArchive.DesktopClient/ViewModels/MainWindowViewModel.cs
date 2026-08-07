@@ -64,6 +64,24 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Preview.Api = api;
         InboxPreview.Api = api;
         RecycleBin.SetApi(api);
+
+        // Read the API root's link relations once per session (ADR 0543): the root is the one URL a client may
+        // know, and everything else is discovered from it. Fire-and-forget — a workbench that cannot reach the
+        // root has larger problems, and the only consequence here is that the affordance stays hidden.
+        _ = LoadRootLinksAsync(api);
+    }
+
+    private async Task LoadRootLinksAsync(SimplArchiveApiClient api)
+    {
+        try
+        {
+            var links = await api.GetRootLinksAsync();
+            _myExternalLinksHref = links.TryGetValue("externalLinks", out var href) ? href : null;
+        }
+        catch (HttpRequestException)
+        {
+            _myExternalLinksHref = null;
+        }
     }
 
     // ---- Resizable / collapsible panes (persisted, like the web client — ADR 0224/"Desktop collapsible
@@ -5415,6 +5433,38 @@ public sealed partial class MainWindowViewModel : ObservableObject
             IsActive = result.Card.IsActive,
             Photo = result.Photo,
         };
+    }
+
+    // External links (ADR 0546). Set by MainWindow so the view-model can raise the dialog without knowing about
+    // Avalonia — the same indirection the reminder dialog uses.
+    public Func<ExternalLinksDialogViewModel, Task>? ShowExternalLinksDialog { get; set; }
+
+    // The cross-document collection's href, from the API root's "externalLinks" rel (ADR 0543). Null until the
+    // root is read, and if the server never offers it the command simply does nothing — absence of a rel is the
+    // answer, not something to work around.
+    //
+    // The PER-DOCUMENT dialog is not wired on the desktop yet: its href lives on the document resource, which
+    // this client fetches only for a name and a sensitivity label. Following that rel means refactoring those
+    // two calls into one document-resource read — worth doing, and tracked, but not smuggled in here.
+    private string? _myExternalLinksHref;
+
+    // "My external links" — everything the caller has shared, across documents. The collection is a top-level
+    // resource, so its href is stable rather than per-document.
+    [RelayCommand]
+    private async Task ShowMyExternalLinksAsync()
+    {
+        if (_api is null || ShowExternalLinksDialog is null)
+        {
+            return;
+        }
+
+        if (_myExternalLinksHref is not { } href)
+        {
+            return;
+        }
+
+        await ShowExternalLinksDialog(new ExternalLinksDialogViewModel(
+            _api, href, Strings.Get("ExtLinkMine"), crossDocument: true));
     }
 
     private async Task LoadCommentsAsync(Guid documentId)

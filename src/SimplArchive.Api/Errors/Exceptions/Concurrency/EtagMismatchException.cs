@@ -16,4 +16,7 @@ public sealed class EtagMismatchException : ConcurrencyException
 
     public static EtagMismatchException ForNote() =>
         new("The note has been modified since it was last read.");
+
+    public static EtagMismatchException ForExternalLink() =>
+        new("The external link has been modified since it was last read.");
 }

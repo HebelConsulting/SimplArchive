@@ -83,6 +83,12 @@ public class User : ITenantScoped
 
     public bool CanImport { get; set; }
 
+    // May create an external link, handing read access to people outside the system (ADR 0546). A dedicated right
+    // rather than a reuse of CanReadContent: reading a document and publishing it to strangers are different acts.
+    // Not backfilled for existing admins — it should be granted deliberately.
+    public bool CanCreateExternalLink { get; set; }
+
+
     // Data-classification clearance (ADR "Sensitivity clearance enforcement"): the highest sensitivity-label
     // Rank this user may access on their own. A user's *effective* clearance is the max of this and every group
     // they effectively belong to. Only gates access when the tenant's EnforceClearance is on; a tenant admin

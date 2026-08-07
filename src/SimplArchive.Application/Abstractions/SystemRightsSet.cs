@@ -19,9 +19,12 @@ public sealed record SystemRightsSet(
     bool CanViewAuditLog,
     bool CanExport,
     bool CanImport,
-    bool CanManageInboxes)
+    bool CanManageInboxes,
+
+    // May share a document with someone who has no account (ADR 0546).
+    bool CanCreateExternalLink)
 {
-    public static readonly SystemRightsSet None = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false);
+    public static readonly SystemRightsSet None = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
 
     // Boolean OR of every right — the union of two bundles.
     public SystemRightsSet Union(SystemRightsSet other) => new(
@@ -38,5 +41,6 @@ public sealed record SystemRightsSet(
         CanViewAuditLog || other.CanViewAuditLog,
         CanExport || other.CanExport,
         CanImport || other.CanImport,
-        CanManageInboxes || other.CanManageInboxes);
+        CanManageInboxes || other.CanManageInboxes,
+        CanCreateExternalLink || other.CanCreateExternalLink);
 }

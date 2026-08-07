@@ -44,6 +44,12 @@ public static class AuditActions
     // is done here only because no deployment carries productive audit data yet, which is the single window in
     // which this is free. Once one does, this constant's value is frozen.
     public const string ChatMessagePosted = "Chat.MessagePosted";
+    // External links (ADR 0546). Accessed is raised with an ExternalLink actor and NO principal; the others are
+    // ordinary user actions. The token never appears in an event — the link id identifies the row instead.
+    public const string ExternalLinkCreated = "ExternalLink.Created";
+    public const string ExternalLinkAccessed = "ExternalLink.Accessed";
+    public const string ExternalLinkExtended = "ExternalLink.Extended";
+    public const string ExternalLinkRevoked = "ExternalLink.Revoked";
     public const string ReferenceAdded = "Reference.Added";
     public const string ReferenceRemoved = "Reference.Removed";
     public const string AnnotationAdded = "Annotation.Added";

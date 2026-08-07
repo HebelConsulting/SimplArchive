@@ -1,0 +1,201 @@
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+@* Everything the caller has shared, across all documents (ADR 0546, issue #385) — so a person can audit their own
+   shares without hunting document by document, rather than relying on an administrator noticing later.
+
+   A tenant admin additionally gets a picker to view somebody else's links, or a whole group's. A GROUP means
+   "links created by anyone CURRENTLY in that group": membership is evaluated server-side at query time, so
+   someone who leaves drops out of this view while their links keep working. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 620px;">
+            @if (_canViewOthers)
+            {
+                <div style="display:flex; gap:8px;" class="mb-3">
+                    <MudSelect T="Guid" @bind-Value="_userFilter" Label="@Strings.Get("ExtLinkViewFor")"
+                               Variant="Variant.Outlined" Dense="true" Class="flex-grow-1">
+                        <MudSelectItem T="Guid" Value="@Guid.Empty">@Strings.Get("ExtLinkMine")</MudSelectItem>
+                        @foreach (var user in _users)
+                        {
+                            <MudSelectItem T="Guid" Value="@user.Id">@user.DisplayName</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudSelect T="Guid" @bind-Value="_groupFilter" Label="@Strings.Get("UgGroup")"
+                               Variant="Variant.Outlined" Dense="true" Class="flex-grow-1">
+                        <MudSelectItem T="Guid" Value="@Guid.Empty">—</MudSelectItem>
+                        @foreach (var group in _groups)
+                        {
+                            <MudSelectItem T="Guid" Value="@group.Id">@group.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudButton Variant="Variant.Filled" OnClick="LoadAsync">@Strings.Get("SearchBtn")</MudButton>
+                </div>
+            }
+
+            @if (_links.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("ExtLinkNone")</MudText>
+            }
+            else
+            {
+                <MudSimpleTable Dense="true" Hover="true">
+                    <thead>
+                        <tr>
+                            <th>@Strings.Get("ExtLinkDocument")</th>
+                            <th>@Strings.Get("ExtLinkExpires")</th>
+                            <th>@Strings.Get("ExtLinkAccesses")</th>
+                            <th>@Strings.Get("ExtLinkCreatedBy")</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var link in _links)
+                        {
+                            <tr>
+                                <td>@link.DocumentName</td>
+                                <td>@link.ExpiresAt.ToLocalTime().ToString("g")</td>
+                                <td>@link.AccessCount@(link.MaxAccesses is { } max ? $" / {max}" : "")</td>
+                                <td>@link.CreatedByName</td>
+                                <td style="white-space:nowrap;">
+                                    @if (link.CanExtend)
+                                    {
+                                        <MudButton Size="Size.Small" OnClick="@(() => ExtendAsync(link))">@Strings.Get("ExtLinkExtend")</MudButton>
+                                    }
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                                   aria-label="@Strings.Get("ExtLinkRevoke")" OnClick="@(() => RevokeAsync(link))" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Close())">@Strings.Get("Close")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    // The collection's href, as the server advertised it (ADR 0543).
+    [Parameter] public string LinksHref { get; set; } = "";
+
+    // Supplied by the caller, which already loads them for other admin surfaces — this dialog does not fetch the
+    // directory itself.
+    [Parameter] public List<PrincipalOption> Users { get; set; } = [];
+
+    [Parameter] public List<PrincipalOption> Groups { get; set; } = [];
+
+    public record PrincipalOption(Guid Id, string DisplayName, string Name);
+
+    private readonly List<MyLinkResponse> _links = [];
+    private List<PrincipalOption> _users = [];
+    private List<PrincipalOption> _groups = [];
+    private bool _canViewOthers;
+    private Guid _userFilter;
+    private Guid _groupFilter;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _users = Users;
+        _groups = Groups;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _links.Clear();
+
+        // A group filter wins when both are set: it is the broader question, and combining them would answer
+        // neither clearly.
+        var query = _groupFilter != Guid.Empty
+            ? $"?groupId={_groupFilter}"
+            : _userFilter != Guid.Empty ? $"?userId={_userFilter}" : "";
+
+        try
+        {
+            var page = await Http.GetFromJsonAsync<MyLinkListResponse>(LinksHref + query);
+            _links.AddRange(page?.ExternalLinks ?? []);
+            _canViewOthers = page?.CanViewOthers ?? false;
+        }
+        catch (HttpRequestException)
+        {
+            _canViewOthers = false;
+        }
+    }
+
+    private async Task RevokeAsync(MyLinkResponse link)
+    {
+        if (RelativeHref(link.Links, "revoke") is not { } href)
+        {
+            return;
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Delete, href);
+        request.Headers.TryAddWithoutValidation("If-Match", link.Etag);
+        var response = await Http.SendAsync(request);
+        if (response.IsSuccessStatusCode)
+        {
+            await LoadAsync();
+        }
+        else
+        {
+            Snackbar.Add(Strings.Get("WebDavGenError"), Severity.Error);
+        }
+    }
+
+    private async Task ExtendAsync(MyLinkResponse link)
+    {
+        if (RelativeHref(link.Links, "extend") is not { } href)
+        {
+            return;
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Put, href) { Content = JsonContent.Create(new { days = 90 }) };
+        request.Headers.TryAddWithoutValidation("If-Match", link.Etag);
+        var response = await Http.SendAsync(request);
+        if (response.IsSuccessStatusCode)
+        {
+            await LoadAsync();
+        }
+        else
+        {
+            Snackbar.Add(Strings.Get("WebDavGenError"), Severity.Error);
+        }
+    }
+
+    private static string? RelativeHref(List<LinkResponse>? links, string rel)
+    {
+        var href = links?.FirstOrDefault(l => l.Rel == rel)?.Href;
+        return href is null ? null : href.TrimStart('/');
+    }
+
+    private record LinkResponse
+    {
+        public string Rel { get; set; } = "";
+        public string? Href { get; set; }
+    }
+
+    private record MyLinkListResponse
+    {
+        public List<MyLinkResponse> ExternalLinks { get; set; } = [];
+        public bool CanViewOthers { get; set; }
+    }
+
+    private record MyLinkResponse
+    {
+        public Guid Id { get; set; }
+        public Guid DocumentId { get; set; }
+        public string DocumentName { get; set; } = "";
+        public DateTimeOffset ExpiresAt { get; set; }
+        public int? MaxAccesses { get; set; }
+        public int AccessCount { get; set; }
+        public string CreatedByName { get; set; } = "";
+        public bool CanExtend { get; set; }
+        public string Etag { get; set; } = "";
+        public List<LinkResponse> Links { get; set; } = [];
+    }
+}

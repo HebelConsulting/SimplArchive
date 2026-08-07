@@ -28,6 +28,13 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.CheckoutTtlDays).HasDefaultValue(0);
         builder.Property(t => t.CheckoutWarningDays).HasDefaultValue(1);
 
+        // External links (ADR 0546). HasDefaultValue, not just the C# initializer: the initializer only applies to
+        // objects created in code, so without these an EXISTING tenant would be migrated to 0 — which would mean
+        // "links may expire at most 0 days out" and silently make the feature unusable for every tenant that
+        // predates it. AllowExternalLinks stays false by design, so the caps only matter once someone opts in.
+        builder.Property(t => t.ExternalLinkMaxDays).HasDefaultValue(180);
+        builder.Property(t => t.ExternalLinkDefaultAccesses).HasDefaultValue(5);
+
         // WORM Object Lock retention mode (ADR "WORM / immutable document versions"). Store default Governance
         // (0) so the migration backfills existing tenants; new tenants get it from the entity default.
         builder.Property(t => t.WormLockMode).HasDefaultValue(SimplArchive.Domain.Tenants.WormLockMode.Governance);

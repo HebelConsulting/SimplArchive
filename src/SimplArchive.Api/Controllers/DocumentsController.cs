@@ -300,6 +300,9 @@ public class DocumentsController : ControllerBase
             // The document's collaboration thread (issue #382). Its absence is why renaming the route from
             // /comments to /chat broke both clients at all: with the rel, a route move is invisible to them.
             new("chat", $"/api/documents/{documentId}/chat", "GET"),
+            // The document's external links (ADR 0546). Advertised for the same reason as "chat": without it a
+            // client has to compose the URL, which is what the hypermedia ledger exists to stop.
+            new("external-links", $"/api/documents/{documentId}/external-links", "GET"),
             new("references", $"/api/documents/{documentId}/references", "GET"),
             new("referencing-folders", Url.Action(nameof(ListReferencingFolders), new { documentId })!, "GET"),
             new("move", Url.Action(nameof(Move), new { documentId })!, "PUT"),

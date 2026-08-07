@@ -724,6 +724,13 @@
                                     @* Set a reminder (Wiedervorlage) on this document (ADR "Document reminders"). *@
                                     <MudTooltip Text="@Strings.Get("RemindTooltip")">
                                         <MudIconButton Size="Size.Small" aria-label="Remind" Icon="@Icons.Material.Filled.Alarm" OnClick="OpenReminderDialogAsync" />
+                                        @if (_detailExternalLinksHref is not null)
+                                        {
+                                            <MudTooltip Text="@Strings.Get("ExtLinkManage")">
+                                                <MudIconButton Size="Size.Small" aria-label="@Strings.Get("ExtLinkManage")"
+                                                               Icon="@Icons.Material.Filled.Link" OnClick="OpenExternalLinksDialogAsync" />
+                                            </MudTooltip>
+                                        }
                                     </MudTooltip>
                                     @* Manage access (ACL) — only when the caller can manage permissions (ADR "Manage-access UI"). *@
                                     @if (_detailCanManagePermissions)
@@ -5543,6 +5550,9 @@
             _detailSensitivityWatermark = detail?.SensitivityWatermark ?? false;
             _detailCanManagePermissions = detail?.CanManagePermissions ?? false;
             _detailBreaksInheritance = detail?.BreaksInheritance ?? false;
+            // Captured from the resource's own rel (ADR 0543/0546) — the external-links dialog takes the href
+            // rather than composing one, and its absence simply means the affordance isn't offered.
+            _detailExternalLinksHref = RelativeHref(detail?.Links, "external-links");
             if (_sensitivityLabels.Count == 0)
             {
                 await LoadSensitivityLabelsAsync();
@@ -5618,6 +5628,26 @@
     }
 
     // Open the reminder (Wiedervorlage) dialog for the selected document (ADR "Document reminders").
+    private string? _detailExternalLinksHref;
+
+    // External links (ADR 0546) — sharing this document with someone who has no account. Offered only when the
+    // server advertised the rel; a document that cannot be shared simply has no link to follow.
+    private async Task OpenExternalLinksDialogAsync()
+    {
+        if (_selectedItem is not { } item || _detailExternalLinksHref is not { } href)
+        {
+            return;
+        }
+
+        var parameters = new DialogParameters
+        {
+            ["DocumentId"] = item.Id,
+            ["DocumentName"] = _sysName,
+            ["LinksHref"] = href,
+        };
+        await DialogService.ShowAsync<Dialogs.ExternalLinksDialog>(Strings.Get("ExtLinkTitle"), parameters);
+    }
+
     private async Task OpenReminderDialogAsync()
     {
         if (_selectedItem is not { } item)
@@ -5741,7 +5771,7 @@
         var svg = $"<svg xmlns='http://www.w3.org/2000/svg' width='360' height='200'><text x='10' y='150' fill='rgba(130,130,130,0.20)' font-size='20' font-family='sans-serif' transform='rotate(-28 10 150)'>{text}</text></svg>";
         return $"background-image:url(\"data:image/svg+xml,{Uri.EscapeDataString(svg)}\");";
     }
-    private record DocumentDetailResponse { public DetailRetentionDto? Retention { get; set; } public Guid? SensitivityLabelId { get; set; } public string SensitivityLabelName { get; set; } = ""; public string? SensitivityLabelColor { get; set; } public bool SensitivityWatermark { get; set; } public bool CanManagePermissions { get; set; } public bool BreaksInheritance { get; set; } }
+    private record DocumentDetailResponse { public List<LinkResponse> Links { get; set; } = []; public DetailRetentionDto? Retention { get; set; } public Guid? SensitivityLabelId { get; set; } public string SensitivityLabelName { get; set; } = ""; public string? SensitivityLabelColor { get; set; } public bool SensitivityWatermark { get; set; } public bool CanManagePermissions { get; set; } public bool BreaksInheritance { get; set; } }
     private record DetailRetentionDto { public int RetentionYears { get; set; } public string DispositionDate { get; set; } = ""; public bool SuspendedByHold { get; set; } }
 
     // Derives the always-shown system fields from the confirmed versions (ADR 0273): the current version's

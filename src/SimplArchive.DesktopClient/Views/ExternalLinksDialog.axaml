@@ -1,0 +1,75 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.ExternalLinksDialog"
+        x:DataType="vm:ExternalLinksDialogViewModel"
+        Title="{loc:Tr ExtLinkTitle}" Width="720" Height="520"
+        WindowStartupLocation="CenterOwner">
+    <!-- External links (ADR 0546). Serves both the per-document dialog and the cross-document "My external
+         links" view; ShowCreate and CanViewOthers decide which controls appear. -->
+    <DockPanel Margin="16">
+        <TextBlock DockPanel.Dock="Top" Text="{Binding DocumentName}" FontWeight="SemiBold" Margin="0,0,0,8" />
+
+        <!-- The tenant-admin picker: whose links to show. Only rendered when the server said the caller may. -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8"
+                    IsVisible="{Binding CanViewOthers}">
+            <TextBlock Text="{loc:Tr ExtLinkViewFor}" VerticalAlignment="Center" />
+            <ComboBox ItemsSource="{Binding Users}" SelectedItem="{Binding SelectedUser}" MinWidth="220"
+                      DisplayMemberBinding="{Binding DisplayName}" />
+            <Button Content="{loc:Tr SearchBtn}" Command="{Binding FilterCommand}" />
+        </StackPanel>
+
+        <!-- Shown ONCE: the list endpoints never return the token, so losing this URL means revoke-and-recreate. -->
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8"
+                    IsVisible="{Binding CreatedUrl, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <TextBlock Text="{loc:Tr ExtLinkShownOnce}" TextWrapping="Wrap" Margin="0,0,0,4" />
+            <TextBox Text="{Binding CreatedUrlWithOptions, Mode=OneWay}" IsReadOnly="True" />
+            <CheckBox Content="{loc:Tr ExtLinkDownloadOption}" IsChecked="{Binding ForceDownload}" Margin="0,4,0,0" />
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Spacing="8" Margin="0,12,0,0">
+            <TextBlock Text="{Binding Status}" VerticalAlignment="Center" />
+            <Button Content="{loc:Tr ExtLinkCreate}" Command="{Binding CreateCommand}"
+                    IsVisible="{Binding ShowCreate}" IsEnabled="{Binding CanCreate}" />
+            <Button Content="{loc:Tr Close}" Click="OnClose" />
+        </StackPanel>
+
+        <!-- Creation inputs, per-document only. -->
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0"
+                    IsVisible="{Binding ShowCreate}">
+            <TextBlock Text="{loc:Tr ExtLinkExpires}" VerticalAlignment="Center" />
+            <DatePicker SelectedDate="{Binding Expiry}" />
+            <TextBlock Text="{loc:Tr ExtLinkMaxAccesses}" VerticalAlignment="Center" />
+            <NumericUpDown Value="{Binding MaxAccesses}" Minimum="1" Width="110" />
+        </StackPanel>
+
+        <ScrollViewer>
+            <ItemsControl ItemsSource="{Binding Links}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="0,6">
+                            <Grid ColumnDefinitions="*,Auto,Auto">
+                                <StackPanel Grid.Column="0" Spacing="1">
+                                    <TextBlock Text="{Binding DocumentName}" FontWeight="SemiBold" FontSize="12" />
+                                    <TextBlock FontSize="11" Foreground="{DynamicResource WbMuted}"
+                                               Text="{Binding ExpiresAt, StringFormat='{}{0:g}'}" />
+                                    <TextBlock FontSize="11" Foreground="{DynamicResource WbMuted}"
+                                               Text="{Binding CreatedByName}" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="{loc:Tr ExtLinkExtend}" FontSize="11"
+                                        IsVisible="{Binding CanExtend}"
+                                        Command="{Binding $parent[Window].((vm:ExternalLinksDialogViewModel)DataContext).ExtendCommand}"
+                                        CommandParameter="{Binding}" />
+                                <Button Grid.Column="2" Content="{loc:Tr ExtLinkRevoke}" FontSize="11" Margin="6,0,0,0"
+                                        Command="{Binding $parent[Window].((vm:ExternalLinksDialogViewModel)DataContext).RevokeCommand}"
+                                        CommandParameter="{Binding}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

@@ -109,6 +109,20 @@ public class Tenant
     // Per-tenant storage quota (ADR "Per-tenant storage quota"). Null = unlimited (production default). When set,
     // the version-finalize path refuses an upload that would push StorageUsedBytes past this limit
     // (409 STORAGE_QUOTA_EXCEEDED). Enforced app-level (portable across S3/SeaweedFS), not a native bucket quota.
+    // External links (ADR 0546) — sharing a document with someone who has no account.
+    //
+    // Defaults to FALSE so an existing tenant is exactly as exposed after the migration as before it: an
+    // unauthenticated content-serving surface should be an administrator's decision, not a side effect of an
+    // upgrade. Checked at ACCESS time as well as at creation, which makes switching it off a genuine kill switch
+    // for links already in the wild rather than merely a block on making new ones.
+    public bool AllowExternalLinks { get; set; }
+
+    // The furthest out a link may be set to expire, and the access count a link gets when the creator doesn't
+    // choose one. Tenant-level so an administrator can tighten the rails to their own policy.
+    public int ExternalLinkMaxDays { get; set; } = 180;
+
+    public int ExternalLinkDefaultAccesses { get; set; } = 5;
+
     public long? StorageQuotaBytes { get; set; }
 
     // Maintained per-tenant used-storage counter (ADR "Per-tenant storage quota"): the sum of this tenant's

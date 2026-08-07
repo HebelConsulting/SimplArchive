@@ -200,6 +200,26 @@ builder.Services.AddHealthChecks()
 // own "unsupported API version" response) — remapping its "code" extension to our own "errorCode"
 // convention rather than leaving two different error-shape conventions in the same Api. See ADR
 // "Media-type/Accept-header API versioning (foundation slice)".
+// Rate limiting (ADR 0546) — the first in this codebase, scoped to the one anonymous endpoint. A public route
+// whose token IS its credential is exactly what token-guessing and denial of service target, and a limiter is far
+// easier to add alongside the endpoint than to retrofit once it is live.
+//
+// Keyed by client IP: there is no principal to key on, which is the whole point of the endpoint. A legitimate
+// recipient opens a link a handful of times; anyone probing for valid tokens needs orders of magnitude more.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(SimplArchive.Api.RateLimitPolicies.ExternalLinks, context =>
+        System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0, // reject immediately rather than queue — a prober should feel the wall at once
+            }));
+});
+
 builder.Services.AddProblemDetails(options =>
 {
     options.CustomizeProblemDetails = context =>
@@ -540,6 +560,9 @@ app.Use(async (context, next) =>
 
     await next();
 });
+
+// Before authentication: an anonymous endpoint's limiter must apply to callers who never authenticate at all.
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

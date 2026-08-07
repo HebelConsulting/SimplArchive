@@ -54,6 +54,12 @@ public class ServiceAccount : ITenantScoped
 
     public bool CanImport { get; set; }
 
+    // May create an external link, handing read access to people outside the system (ADR 0546). A dedicated right
+    // rather than a reuse of CanReadContent: reading a document and publishing it to strangers are different acts.
+    // Not backfilled for existing admins — it should be granted deliberately.
+    public bool CanCreateExternalLink { get; set; }
+
+
     // Data-classification clearance (ADR "Sensitivity clearance enforcement"). A ServiceAccount can't belong to
     // a group, so its effective clearance is just this value. Default 0.
     public int ClearanceRank { get; set; }

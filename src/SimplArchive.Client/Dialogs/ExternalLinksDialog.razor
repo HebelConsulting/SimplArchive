@@ -1,0 +1,235 @@
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+@* External links for one document (ADR 0546, issue #385): create a link, see the live ones, extend or revoke.
+   Interactive — does its own API calls.
+
+   The created URL is shown ONCE and never again: the token is a live credential, so the list endpoint
+   deliberately does not return it. That is why the newly-created link gets its own prominent block with a copy
+   button rather than simply appearing in the list below. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 520px;">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">@DocumentName</MudText>
+
+            @if (!_allowed)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">@Strings.Get("ExtLinkDisabled")</MudAlert>
+            }
+            else
+            {
+                @if (_createdUrl is not null)
+                {
+                    <MudAlert Severity="Severity.Success" Dense="true" Class="mb-2">
+                        @Strings.Get("ExtLinkShownOnce")
+                    </MudAlert>
+                    <div style="display:flex; align-items:center; gap:8px;" class="mb-3">
+                        <MudTextField Value="@_createdUrl" ReadOnly="true" Variant="Variant.Outlined"
+                                      Label="@Strings.Get("ExtLinkUrl")" Class="flex-grow-1" />
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CopyAsync">@Strings.Get("ExtLinkCopy")</MudButton>
+                    </div>
+                    <MudCheckBox T="bool" @bind-Value="_forceDownload" Dense="true"
+                                 Label="@Strings.Get("ExtLinkDownloadOption")" Class="mb-2" />
+                }
+
+                @if (_links.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@Strings.Get("ExtLinkNone")</MudText>
+                }
+                else
+                {
+                    <MudList T="string" Dense="true" Class="mb-1">
+                        @foreach (var link in _links)
+                        {
+                            <MudListItem T="string">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <MudIcon Icon="@Icons.Material.Filled.Link" Size="Size.Small" />
+                                    <div style="flex:1 1 auto; min-width:0;">
+                                        <div>@Strings.Get("ExtLinkExpires"): @link.ExpiresAt.ToLocalTime().ToString("g")</div>
+                                        <div class="mud-text-secondary" style="font-size:.8em;">
+                                            @Strings.Get("ExtLinkAccesses"): @link.AccessCount@(link.MaxAccesses is { } max ? $" / {max}" : "")
+                                            · @Strings.Get("ExtLinkCreatedBy"): @link.CreatedByName
+                                        </div>
+                                    </div>
+                                    @* Extend is offered only when the link is close to running out, so it stays a
+                                       renewal rather than a way to push a share indefinitely (ADR 0546). *@
+                                    @if (link.CanExtend)
+                                    {
+                                        <MudButton Size="Size.Small" OnClick="@(() => ExtendAsync(link))">@Strings.Get("ExtLinkExtend")</MudButton>
+                                    }
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                                   aria-label="@Strings.Get("ExtLinkRevoke")" OnClick="@(() => RevokeAsync(link))" />
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                    <MudDivider Class="my-2" />
+                }
+
+                @if (_canCreate)
+                {
+                    <MudDatePicker @bind-Date="_expiry" Label="@Strings.Get("ExtLinkExpires")" MinDate="DateTime.Today.AddDays(1)"
+                                   DateFormat="yyyy-MM-dd" Variant="Variant.Outlined" Class="mb-2" />
+                    <MudNumericField T="int?" @bind-Value="_maxAccesses" Label="@Strings.Get("ExtLinkMaxAccesses")"
+                                     Min="1" Variant="Variant.Outlined" />
+                }
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        @if (_allowed && _canCreate)
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="CreateAsync">@Strings.Get("ExtLinkCreate")</MudButton>
+        }
+        <MudButton OnClick="Close">@Strings.Get("Close")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public Guid DocumentId { get; set; }
+
+    [Parameter] public string DocumentName { get; set; } = "";
+
+    // The href of this document's links collection, as the SERVER advertised it via the "external-links" rel
+    // (ADR 0543). REQUIRED: the client does not compose this URL, and the hypermedia ledger enforces that — the
+    // first draft of this dialog carried a composed fallback and the guard failed the build for it.
+    [Parameter] public string LinksHref { get; set; } = "";
+
+    private readonly List<ExternalLinkResponse> _links = [];
+    private bool _canCreate;
+    private bool _allowed = true;
+    private string? _createdUrl;
+    private bool _forceDownload;
+    private DateTime? _expiry = DateTime.Today.AddDays(30);
+    private int? _maxAccesses;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private string ListUrl => LinksHref;
+
+    private async Task LoadAsync()
+    {
+        _links.Clear();
+        try
+        {
+            var page = await Http.GetFromJsonAsync<ExternalLinkListResponse>(ListUrl);
+            _links.AddRange(page?.ExternalLinks ?? []);
+            _canCreate = page?.CanCreate ?? false;
+        }
+        catch (HttpRequestException)
+        {
+            _canCreate = false;
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        var body = new
+        {
+            expiresAt = _expiry is { } d ? new DateTimeOffset(d.Date.AddHours(23).AddMinutes(59), TimeSpan.Zero) : (DateTimeOffset?)null,
+            maxAccesses = _maxAccesses,
+        };
+
+        var response = await Http.PostAsJsonAsync(ListUrl, body);
+        if (!response.IsSuccessStatusCode)
+        {
+            // A tenant with the feature switched off answers 403 EXTERNAL_LINKS_DISABLED; anything else is a
+            // genuine failure worth showing as one.
+            var problem = await response.Content.ReadAsStringAsync();
+            if (problem.Contains("EXTERNAL_LINKS_DISABLED", StringComparison.Ordinal))
+            {
+                _allowed = false;
+                return;
+            }
+
+            Snackbar.Add(Strings.Get("WebDavGenError"), Severity.Error);
+            return;
+        }
+
+        var created = await response.Content.ReadFromJsonAsync<ExternalLinkResponse>();
+        _createdUrl = created?.Url;
+        await LoadAsync();
+    }
+
+    private async Task RevokeAsync(ExternalLinkResponse link)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Delete, RelativeHref(link.Links, "revoke") ?? $"{ListUrl}/{link.Id}");
+        request.Headers.TryAddWithoutValidation("If-Match", link.Etag);
+        var response = await Http.SendAsync(request);
+        if (response.IsSuccessStatusCode)
+        {
+            await LoadAsync();
+        }
+        else
+        {
+            Snackbar.Add(Strings.Get("WebDavGenError"), Severity.Error);
+        }
+    }
+
+    // 90 days FROM TODAY, not added onto what remains (ADR 0546).
+    private async Task ExtendAsync(ExternalLinkResponse link)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Put, $"{ListUrl}/{link.Id}/expiry")
+        {
+            Content = JsonContent.Create(new { days = 90 }),
+        };
+        request.Headers.TryAddWithoutValidation("If-Match", link.Etag);
+        var response = await Http.SendAsync(request);
+        if (response.IsSuccessStatusCode)
+        {
+            await LoadAsync();
+        }
+        else
+        {
+            Snackbar.Add(Strings.Get("WebDavGenError"), Severity.Error);
+        }
+    }
+
+    private async Task CopyAsync()
+    {
+        if (_createdUrl is null)
+        {
+            return;
+        }
+
+        var url = _forceDownload ? _createdUrl + "?download=true" : _createdUrl;
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+        Snackbar.Add(Strings.Get("ExtLinkCopied"), Severity.Success);
+    }
+
+    private void Close() => MudDialog.Close();
+
+    private static string? RelativeHref(List<LinkResponse>? links, string rel)
+    {
+        var href = links?.FirstOrDefault(l => l.Rel == rel)?.Href;
+        return href is null ? null : href.TrimStart('/');
+    }
+
+    private record LinkResponse
+    {
+        public string Rel { get; set; } = "";
+        public string? Href { get; set; }
+    }
+
+    private record ExternalLinkListResponse
+    {
+        public List<ExternalLinkResponse> ExternalLinks { get; set; } = [];
+        public bool CanCreate { get; set; }
+    }
+
+    private record ExternalLinkResponse
+    {
+        public Guid Id { get; set; }
+        public string? Url { get; set; }
+        public DateTimeOffset ExpiresAt { get; set; }
+        public int? MaxAccesses { get; set; }
+        public int AccessCount { get; set; }
+        public string CreatedByName { get; set; } = "";
+        public bool CanExtend { get; set; }
+        public string Etag { get; set; } = "";
+        public List<LinkResponse> Links { get; set; } = [];
+    }
+}

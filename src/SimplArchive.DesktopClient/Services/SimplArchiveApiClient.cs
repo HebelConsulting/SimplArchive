@@ -2528,6 +2528,126 @@ public sealed class SimplArchiveApiClient
         return null;
     }
 
+    // The API root's link relations — the ONE URL a client is allowed to know (ADR 0543); everything else is
+    // discovered from here. Note "api" carries no slash, so it is not a composed resource path.
+    public async Task<IReadOnlyDictionary<string, string>> GetRootLinksAsync(CancellationToken cancellationToken = default)
+    {
+        var links = new Dictionary<string, string>(StringComparer.Ordinal);
+        using var response = await _http.GetAsync("api", cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return links;
+        }
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        if (doc.RootElement.TryGetProperty("links", out var items) && items.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var link in items.EnumerateArray())
+            {
+                if (link.TryGetProperty("rel", out var rel) && rel.GetString() is { Length: > 0 } name
+                    && link.TryGetProperty("href", out var href) && href.GetString() is { Length: > 0 } value)
+                {
+                    links[name] = value.TrimStart('/');
+                }
+            }
+        }
+
+        return links;
+    }
+
+    // ---- External links (ADR 0546) ---------------------------------------------------------------------
+
+    public sealed record ExternalLinkInfo(
+        Guid Id, Guid DocumentId, string DocumentName, string? Url, DateTimeOffset ExpiresAt,
+        int? MaxAccesses, int AccessCount, string CreatedByName, bool CanExtend, string Etag,
+        string? RevokeHref, string? ExtendHref);
+
+    public sealed record ExternalLinkListInfo(IReadOnlyList<ExternalLinkInfo> Links, bool CanCreate, bool CanViewOthers);
+
+    // Follows the href the document resource advertised via its "external-links" rel (ADR 0543) — never composed.
+    public async Task<ExternalLinkListInfo> GetExternalLinksAsync(string linksHref, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.GetAsync(linksHref, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return new ExternalLinkListInfo([], false, false);
+        }
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        return ParseLinkList(doc.RootElement);
+    }
+
+    // The caller's own links across all documents; a tenant admin may filter by user or group.
+    public async Task<ExternalLinkListInfo> GetMyExternalLinksAsync(
+        string linksHref, Guid? userId = null, Guid? groupId = null, CancellationToken cancellationToken = default)
+    {
+        var query = groupId is { } g ? $"?groupId={g}" : userId is { } u ? $"?userId={u}" : "";
+        return await GetExternalLinksAsync(linksHref + query, cancellationToken);
+    }
+
+    // Returns the created link — the ONLY time its URL is available, since the list endpoints never return the
+    // token (ADR 0546). Null when the tenant has the feature switched off or the caller lacks the right.
+    public async Task<ExternalLinkInfo?> CreateExternalLinkAsync(
+        string linksHref, DateTimeOffset? expiresAt, int? maxAccesses, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsJsonAsync(linksHref, new { expiresAt, maxAccesses }, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        return ParseLink(doc.RootElement);
+    }
+
+    public async Task<bool> RevokeExternalLinkAsync(string revokeHref, string etag, CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Delete, revokeHref);
+        request.Headers.TryAddWithoutValidation("If-Match", etag);
+        using var response = await _http.SendAsync(request, cancellationToken);
+        return response.IsSuccessStatusCode;
+    }
+
+    // Days are measured from TODAY by the server, not added onto what remains (ADR 0546).
+    public async Task<bool> ExtendExternalLinkAsync(string extendHref, int days, string etag, CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Put, extendHref)
+        {
+            Content = JsonContent.Create(new { days }),
+        };
+        request.Headers.TryAddWithoutValidation("If-Match", etag);
+        using var response = await _http.SendAsync(request, cancellationToken);
+        return response.IsSuccessStatusCode;
+    }
+
+    private static ExternalLinkListInfo ParseLinkList(JsonElement root)
+    {
+        var links = new List<ExternalLinkInfo>();
+        if (root.TryGetProperty("externalLinks", out var items) && items.ValueKind == JsonValueKind.Array)
+        {
+            links.AddRange(items.EnumerateArray().Select(ParseLink));
+        }
+
+        return new ExternalLinkListInfo(
+            links,
+            root.TryGetProperty("canCreate", out var c) && c.ValueKind == JsonValueKind.True,
+            root.TryGetProperty("canViewOthers", out var v) && v.ValueKind == JsonValueKind.True);
+    }
+
+    private static ExternalLinkInfo ParseLink(JsonElement item) => new(
+        item.GetProperty("id").GetGuid(),
+        item.TryGetProperty("documentId", out var d) ? d.GetGuid() : Guid.Empty,
+        item.TryGetProperty("documentName", out var dn) ? dn.GetString() ?? "" : "",
+        item.TryGetProperty("url", out var u) && u.ValueKind != JsonValueKind.Null ? u.GetString() : null,
+        item.GetProperty("expiresAt").GetDateTimeOffset(),
+        item.TryGetProperty("maxAccesses", out var m) && m.ValueKind != JsonValueKind.Null ? m.GetInt32() : null,
+        item.TryGetProperty("accessCount", out var a) ? a.GetInt32() : 0,
+        item.TryGetProperty("createdByName", out var cb) ? cb.GetString() ?? "" : "",
+        item.TryGetProperty("canExtend", out var ce) && ce.ValueKind == JsonValueKind.True,
+        item.TryGetProperty("etag", out var e) ? e.GetString() ?? "" : "",
+        RelHref(item, "revoke"),
+        RelHref(item, "extend"));
+
     // Fetch an author's identity card by FOLLOWING the href the message advertised (ADR 0544).
     public async Task<(UserCard Card, byte[]? Photo)?> GetUserCardAsync(string cardHref, CancellationToken cancellationToken = default)
     {

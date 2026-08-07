@@ -13,6 +13,12 @@ public enum AuditActorType
     // A background process with no interactive principal — e.g. the retention sweep auto-disposing an expired
     // document (ADR "Retention policies (auto-disposition)"). ActorId is Guid.Empty.
     System = 3,
+
+    // An anonymous access through an external link (ADR 0546). ActorId is the LINK's id — the link is the
+    // credential that acted, and recording it lets an investigator pivot from a leaked token to every access it
+    // made. Deliberately not folded into System, which would lump third-party reads in with the retention sweep,
+    // and deliberately not the link's creator, who did not perform the access.
+    ExternalLink = 4,
 }
 
 // An append-only audit record of a security-sensitive action (ADR "Audit trail (first slice)"). Never

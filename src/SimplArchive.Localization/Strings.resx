@@ -1746,6 +1746,75 @@
   <data name="VersionCommentSearchablePdf" xml:space="preserve">
     <value>Converted to a searchable PDF.</value>
   </data>
+  <data name="ExtLinkCreate" xml:space="preserve">
+    <value>Create external link…</value>
+  </data>
+  <data name="ExtLinkManage" xml:space="preserve">
+    <value>External links…</value>
+  </data>
+  <data name="ExtLinkMine" xml:space="preserve">
+    <value>My external links…</value>
+  </data>
+  <data name="ExtLinkTitle" xml:space="preserve">
+    <value>External link</value>
+  </data>
+  <data name="ExtLinkExpires" xml:space="preserve">
+    <value>Expires</value>
+  </data>
+  <data name="ExtLinkMaxAccesses" xml:space="preserve">
+    <value>Maximum accesses</value>
+  </data>
+  <data name="ExtLinkAccesses" xml:space="preserve">
+    <value>Accesses</value>
+  </data>
+  <data name="ExtLinkCreatedBy" xml:space="preserve">
+    <value>Created by</value>
+  </data>
+  <data name="ExtLinkDocument" xml:space="preserve">
+    <value>Document</value>
+  </data>
+  <data name="ExtLinkUrl" xml:space="preserve">
+    <value>Link</value>
+  </data>
+  <data name="ExtLinkCopy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="ExtLinkCopied" xml:space="preserve">
+    <value>Link copied.</value>
+  </data>
+  <data name="ExtLinkDownloadOption" xml:space="preserve">
+    <value>Force download instead of opening in the browser</value>
+  </data>
+  <data name="ExtLinkRevoke" xml:space="preserve">
+    <value>Revoke</value>
+  </data>
+  <data name="ExtLinkExtend" xml:space="preserve">
+    <value>Extend</value>
+  </data>
+  <data name="ExtLinkExtendDays" xml:space="preserve">
+    <value>Extend by (days)</value>
+  </data>
+  <data name="ExtLinkNone" xml:space="preserve">
+    <value>No external links.</value>
+  </data>
+  <data name="ExtLinkShownOnce" xml:space="preserve">
+    <value>Copy this link now — it is shown only once and cannot be retrieved later.</value>
+  </data>
+  <data name="ExtLinkDisabled" xml:space="preserve">
+    <value>External links are switched off for this tenant.</value>
+  </data>
+  <data name="ExtLinkViewFor" xml:space="preserve">
+    <value>Show links created by</value>
+  </data>
+  <data name="TenantAllowExternalLinks" xml:space="preserve">
+    <value>Allow external links</value>
+  </data>
+  <data name="TenantExtLinkMaxDays" xml:space="preserve">
+    <value>Maximum link lifetime (days)</value>
+  </data>
+  <data name="TenantExtLinkDefaultAccesses" xml:space="preserve">
+    <value>Default maximum accesses</value>
+  </data>
   <data name="NoCommentsYet" xml:space="preserve">
     <value>No comments yet. Start the conversation.</value>
   </data>
