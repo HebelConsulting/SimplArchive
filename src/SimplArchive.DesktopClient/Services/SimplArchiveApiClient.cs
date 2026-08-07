@@ -126,7 +126,14 @@ public sealed class SimplArchiveApiClient
     // AuthorCardHref: the "author-card" rel as the server advertised it, or null for a ServiceAccount author
     // (ADR 0543/0544).
     public sealed record Comment(Guid Id, Guid? ParentMessageId, string Body, string AuthorName, DateTimeOffset CreatedAt, string? AuthorCardHref,
-        int Kind, int? VersionNumber, string? VersionComment, int? VersionCommentKind);
+        int Kind, int? VersionNumber, string? VersionComment, int? VersionCommentKind,
+        // The names behind the body's "@[id]" tokens, resolved by the server (issue #383). The body stores ids,
+        // never names, so a rename cannot break a mention.
+        IReadOnlyList<Mention> Mentions);
+
+    public sealed record Mention(Guid UserId, string DisplayName);
+
+    public sealed record MentionableUser(Guid Id, string DisplayName);
 
     public sealed record UserCard(string DisplayName, string Email, bool IsActive, string? PhotoHref);
 
@@ -1396,8 +1403,45 @@ public sealed class SimplArchiveApiClient
 
     public string? GetDownloadUrl(Preview preview) => preview.DownloadUrl;
 
-    public Task<List<Comment>> GetCommentsAsync(Guid documentId, CancellationToken cancellationToken = default) =>
-        LoadPagedAsync($"api/documents/{documentId}/chat", "messages", ParseComment, cancellationToken);
+    public async Task<List<Comment>> GetCommentsAsync(Guid documentId, CancellationToken cancellationToken = default) =>
+        (await GetChatAsync(documentId, cancellationToken)).Messages;
+
+    // The thread AND the rel that reaches its mention picker, from one request. The href has to travel with the
+    // messages: it is advertised on the list resource, and re-fetching it separately would mean composing the
+    // thread's URL a second time, which is exactly what ADR 0543 forbids.
+    public async Task<ChatThread> GetChatAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        string? mentionableUsersHref = null;
+        var messages = await LoadPagedAsync($"api/documents/{documentId}/chat", "messages", ParseComment, cancellationToken,
+            // First page only: the rel describes the thread, not the page.
+            page => mentionableUsersHref ??= FindLink(page, "mentionable-users"));
+
+        return new ChatThread(messages, mentionableUsersHref);
+    }
+
+    public sealed record ChatThread(List<Comment> Messages, string? MentionableUsersHref);
+
+    // Who may be @-mentioned on this document. The server filters by who can SEE it — mentioning somebody
+    // subscribes them and sends a notification carrying the document's name, so this is not a staff directory
+    // (issue #383). The href comes from the thread's "mentionable-users" rel; the client never builds it.
+    public async Task<IReadOnlyList<MentionableUser>> GetMentionableUsersAsync(string href, string query, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.GetAsync($"{href}?q={Uri.EscapeDataString(query)}", cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return [];
+        }
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        if (!document.RootElement.TryGetProperty("users", out var users) || users.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return [.. users.EnumerateArray().Select(u => new MentionableUser(
+            u.GetProperty("id").GetGuid(),
+            u.TryGetProperty("displayName", out var n) ? n.GetString() ?? "" : ""))];
+    }
 
     public async Task PostCommentAsync(Guid documentId, string body, Guid? parentCommentId, CancellationToken cancellationToken = default)
     {
@@ -2427,7 +2471,8 @@ public sealed class SimplArchiveApiClient
         return (bytes, response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream");
     }
 
-    private async Task<List<T>> LoadPagedAsync<T>(string url, string arrayProperty, Func<JsonElement, T> parse, CancellationToken cancellationToken)
+    private async Task<List<T>> LoadPagedAsync<T>(string url, string arrayProperty, Func<JsonElement, T> parse, CancellationToken cancellationToken,
+        Action<JsonElement>? onPage = null)
     {
         var items = new List<T>();
         string? next = url;
@@ -2435,6 +2480,7 @@ public sealed class SimplArchiveApiClient
         while (next is not null)
         {
             var page = await _http.GetFromJsonAsync<JsonElement>(next, cancellationToken);
+            onPage?.Invoke(page);
             if (page.TryGetProperty(arrayProperty, out var array))
             {
                 items.AddRange(array.EnumerateArray().Select(parse));
@@ -2505,7 +2551,20 @@ public sealed class SimplArchiveApiClient
         item.TryGetProperty("kind", out var k) ? k.GetInt32() : 0,
         item.TryGetProperty("versionNumber", out var vn) && vn.ValueKind != JsonValueKind.Null ? vn.GetInt32() : null,
         item.TryGetProperty("versionComment", out var vc) && vc.ValueKind != JsonValueKind.Null ? vc.GetString() : null,
-        item.TryGetProperty("versionCommentKind", out var vck) && vck.ValueKind != JsonValueKind.Null ? vck.GetInt32() : null);
+        item.TryGetProperty("versionCommentKind", out var vck) && vck.ValueKind != JsonValueKind.Null ? vck.GetInt32() : null,
+        ParseMentions(item));
+
+    private static IReadOnlyList<Mention> ParseMentions(JsonElement item)
+    {
+        if (!item.TryGetProperty("mentions", out var mentions) || mentions.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return [.. mentions.EnumerateArray().Select(m => new Mention(
+            m.GetProperty("userId").GetGuid(),
+            m.TryGetProperty("displayName", out var n) ? n.GetString() ?? "" : ""))];
+    }
 
     // The href a resource advertises for a rel, or null when it doesn't offer one. A missing rel is meaningful —
     // it means "not available here" — so callers branch on null rather than composing a URL (ADR 0543).

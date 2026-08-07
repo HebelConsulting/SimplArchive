@@ -142,6 +142,15 @@ public sealed class RepositoryExporter
         foreach (var d in includedDocuments) Note(d.CreatedByUserId, d.CreatedByServiceAccountId);
         foreach (var v in exportedVersions) Note(v.CreatedByUserId, v.CreatedByServiceAccountId);
         foreach (var c in comments) Note(c.CreatedByUserId, c.CreatedByServiceAccountId);
+
+        // A MENTIONED user counts as referenced even if they never wrote anything here (issue #383) — without
+        // this, someone who was only ever addressed would be missing from the principals manifest, so the import
+        // could not map them and every mention of them would arrive as the unknown-user tombstone.
+        foreach (var c in comments)
+        {
+            foreach (var mentionedId in ChatMentions.Parse(c.Body)) Note(mentionedId, null);
+        }
+
         foreach (var a in annotations) Note(a.CreatedByUserId, a.CreatedByServiceAccountId);
 
         // 8b. ACL — the own AclEntry rows on the included documents (opt-in, ADR "ACL in export/import"). Their
@@ -259,12 +268,18 @@ public sealed class RepositoryExporter
         }), cancellationToken);
 
         // The chat thread (issue #382) — "tree/comments.jsonl" with a "parentCommentId" field before FormatVersion 2.
+        //
+        // "mentions" (issue #383) is additive and FormatVersion stays 2 on purpose: an archive written before
+        // mentions existed has none to lose, so bumping would only make every archive to date unimportable. The
+        // ids are the archive's own user ids, which the import remaps like every other principal reference — the
+        // body's "@[id]" tokens are remapped in step.
         await WriteJsonLinesAsync(archive, "tree/chat.jsonl", comments.Select(c => (object)new
         {
             id = c.Id,
             documentId = c.DocumentId,
             parentMessageId = c.ParentMessageId,
             body = c.Body,
+            mentions = ChatMentions.Parse(c.Body),
             createdByUserId = c.CreatedByUserId,
             createdByServiceAccountId = c.CreatedByServiceAccountId,
             createdAt = c.CreatedAt,

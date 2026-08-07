@@ -21,6 +21,10 @@ public static class NotificationTypePolicy
             NotificationType.WorkflowRejected => true,
             NotificationType.WorkflowReleased => true,
             NotificationType.ChatMessagePosted => true,
+            // Mutable like the rest of the collaboration types: being mentioned is not a deadline or a
+            // compliance escalation, so a user may switch its email off. It stays un-coalescable regardless —
+            // muting the EMAIL channel is a different thing from folding the in-app row into a digest.
+            NotificationType.ChatMentioned => true,
             NotificationType.AccessGranted => true,
             NotificationType.SubscribedActivity => true,
             NotificationType.DocumentReminder => true,

@@ -527,6 +527,82 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty] private string _newComment = "";
 
+    // ---- @-mentions (issue #383) ----------------------------------------------------------------------------
+
+    // The picker's endpoint, as the thread advertised it (ADR 0543) — the server decides who may be addressed
+    // here, because offering somebody who cannot see the document would leak the document to them.
+    private string? _mentionableUsersHref;
+
+    public ObservableCollection<SimplArchiveApiClient.MentionableUser> MentionCandidates { get; } = [];
+
+    // An explicit bool rather than binding IsVisible straight to Count: Avalonia does not convert int to bool for
+    // a visibility binding, so the picker would simply never hide.
+    [ObservableProperty] private bool _hasMentionCandidates;
+
+    // Typing drives the picker. The query is whatever follows the LAST '@' and deliberately does not stop at a
+    // space — display names contain them, so "@Demo Ad" has to keep matching — which is why it is capped instead.
+    private const int MentionQueryLimit = 30;
+
+    partial void OnNewCommentChanged(string value) => Safe.Fire(() => RefreshMentionCandidatesAsync(value));
+
+    private async Task RefreshMentionCandidatesAsync(string text)
+    {
+        if (_api is null || _mentionableUsersHref is not { } href || MentionQuery(text) is not { } query)
+        {
+            MentionCandidates.Clear();
+            HasMentionCandidates = false;
+            return;
+        }
+
+        var users = await _api.GetMentionableUsersAsync(href, query);
+
+        MentionCandidates.Clear();
+        foreach (var user in users)
+        {
+            MentionCandidates.Add(user);
+        }
+
+        HasMentionCandidates = MentionCandidates.Count > 0;
+    }
+
+    private static string? MentionQuery(string text)
+    {
+        var at = text.LastIndexOf('@');
+        if (at < 0)
+        {
+            return null;
+        }
+
+        // The '@' has to start the token — otherwise an email address in the text would open the picker.
+        if (at > 0 && !char.IsWhiteSpace(text[at - 1]))
+        {
+            return null;
+        }
+
+        var query = text[(at + 1)..];
+        return query.Length > MentionQueryLimit || query.Contains('\n') ? null : query;
+    }
+
+    // Replaces the half-typed "@Dem" with the token, so what is STORED is the id and what is SHOWN is the name.
+    [RelayCommand]
+    private void PickMention(SimplArchiveApiClient.MentionableUser? user)
+    {
+        if (user is null)
+        {
+            return;
+        }
+
+        var at = NewComment.LastIndexOf('@');
+        if (at < 0)
+        {
+            return;
+        }
+
+        NewComment = $"{NewComment[..at]}@[{user.Id}] ";
+        MentionCandidates.Clear();
+        HasMentionCandidates = false;
+    }
+
     // New-folder is available only inside a folder (not at the repository-list root).
     [ObservableProperty] private bool _canCreateFolder;
 
@@ -5469,10 +5545,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private async Task LoadCommentsAsync(Guid documentId)
     {
-        var comments = await _api!.GetCommentsAsync(documentId);
+        var thread = await _api!.GetChatAsync(documentId);
+        var comments = thread.Messages;
+        _mentionableUsersHref = thread.MentionableUsersHref;
+        MentionCandidates.Clear();
+        HasMentionCandidates = false;
         var byId = comments.ToDictionary(
             c => c.Id,
-            c => new ChatMessageViewModel { Id = c.Id, AuthorName = c.AuthorName, Body = c.Body, CreatedAt = c.CreatedAt, AuthorCardHref = c.AuthorCardHref, Kind = c.Kind, VersionNumber = c.VersionNumber, VersionComment = c.VersionComment, VersionCommentKind = c.VersionCommentKind, CanReply = c.ParentMessageId is null });
+            c => new ChatMessageViewModel { Id = c.Id, AuthorName = c.AuthorName, Body = c.Body, CreatedAt = c.CreatedAt, AuthorCardHref = c.AuthorCardHref, Kind = c.Kind, VersionNumber = c.VersionNumber, VersionComment = c.VersionComment, VersionCommentKind = c.VersionCommentKind, CanReply = c.ParentMessageId is null, Mentions = c.Mentions });
 
         Comments.Clear();
         foreach (var comment in comments.Where(c => c.ParentMessageId is null))

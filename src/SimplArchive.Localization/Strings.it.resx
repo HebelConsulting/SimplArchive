@@ -1713,6 +1713,9 @@
   <data name="CommentBtn" xml:space="preserve">
     <value>Commenta</value>
   </data>
+  <data name="ChatMentionUnknown" xml:space="preserve">
+    <value>Utente sconosciuto</value>
+  </data>
   <data name="ReplyBtn" xml:space="preserve">
     <value>Rispondi</value>
   </data>

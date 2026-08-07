@@ -97,6 +97,8 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
 
+    public DbSet<ChatMessageMention> ChatMessageMentions => Set<ChatMessageMention>();
+
     public DbSet<DocumentAnnotation> DocumentAnnotations => Set<DocumentAnnotation>();
 
     public DbSet<DocumentReference> DocumentReferences => Set<DocumentReference>();

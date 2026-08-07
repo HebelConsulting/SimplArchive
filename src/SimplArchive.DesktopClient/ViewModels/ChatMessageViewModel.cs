@@ -3,6 +3,8 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using System.Text.RegularExpressions;
+using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
 using Avalonia.Media.Imaging;
 
@@ -35,6 +37,30 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     public string? VersionComment { get; init; }
 
     public int? VersionCommentKind { get; init; }
+
+    // The names behind the body's "@[id]" tokens (issue #383).
+    public IReadOnlyList<SimplArchiveApiClient.Mention> Mentions { get; init; } = [];
+
+    // The body with its mention tokens replaced by names. Unlike the web client — which wraps each mention in its
+    // own coloured element — the desktop renders it as flat text, for the same toolkit reason SystemSentence
+    // does: an Avalonia TextBlock has no render-fragment equivalent to splice elements into a bound string.
+    public string DisplayBody => MentionToken.Replace(Body, match =>
+    {
+        var name = Guid.TryParse(match.Groups[1].Value, out var userId)
+            ? Mentions.FirstOrDefault(m => m.UserId == userId)?.DisplayName
+            : null;
+
+        // A token whose user is gone still reads as a sentence: the record that somebody was addressed outlives
+        // the account, so it becomes a tombstone rather than a raw id.
+        return $"@{name ?? Strings.Get("ChatMentionUnknown")}";
+    });
+
+    // The wire format for a mention, normatively defined by Domain ChatMentions. Parsed locally rather than by
+    // referencing that assembly: both clients deliberately depend on Localization alone, and pulling the server's
+    // whole entity model into a desktop binary (and the web client's WASM payload) to reuse one regex is a bad
+    // trade. This is the same hand-parsing the rest of this client already does for every wire shape.
+    private static readonly Regex MentionToken =
+        new(@"@\[([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]", RegexOptions.Compiled);
 
     public bool IsUserPost => Kind == 0;
 

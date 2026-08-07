@@ -34,6 +34,11 @@ public enum NotificationType
     // A user-set reminder (Wiedervorlage) on a document came due (ADR "Document reminders") — the target is
     // put back in front of the document, with the reminder's note.
     DocumentReminder = 12,
+
+    // Somebody addressed the user by name in a chat message (issue #383). Deliberately NOT coalescable, unlike
+    // ChatMessagePosted: being addressed personally is a discrete, actionable thing, and folding it into a
+    // "3 new comments" digest is exactly how a direct request gets missed.
+    ChatMentioned = 13,
 }
 
 // A per-User in-app notification (ADR "Notifications (in-app, first slice)"). Written by INotificationService

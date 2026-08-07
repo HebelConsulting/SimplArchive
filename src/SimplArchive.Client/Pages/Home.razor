@@ -178,6 +178,12 @@
                         padding: .3rem .5rem; border-left: 2px solid var(--mud-palette-divider); font-size: .8rem; }
     .wb-version-comment { color: var(--mud-palette-text-secondary); white-space: pre-wrap; }
     .wb-comment-body { font-size: .9rem; white-space: pre-wrap; }
+    /* A mention has to be visibly not-prose, so a reader can tell at a glance they were addressed (issue #383). */
+    .wb-mention { color: var(--mud-palette-primary); font-weight: 500; }
+    /* Anchored above the compose box: the picker opens while typing at the bottom of the pane, so opening
+       downwards would push it off the visible area. */
+    .wb-mention-picker { position: absolute; bottom: 100%; left: 0; right: 0; max-height: 190px; overflow-y: auto; z-index: 10; }
+    .wb-compose { position: relative; }
     .wb-reply-link { font-size: .72rem; color: var(--mud-palette-primary); cursor: pointer; user-select: none; }
     .wb-compose { flex: 0 0 auto; border-top: 1px solid var(--mud-palette-lines-default); padding: 8px 12px; }
     .wb-compose-actions { display: flex; justify-content: flex-end; margin-top: 4px; }
@@ -1105,7 +1111,7 @@
                                                 @if (c.Kind == ChatUserPost)
                                                 {
                                                     <div class="wb-comment-meta">@AuthorMarkup(c) · @c.CreatedAt.ToLocalTime().ToString("g")</div>
-                                                    <div class="wb-comment-body">@c.Body</div>
+                                                    <div class="wb-comment-body">@MentionMarkup(c)</div>
                                                     <span class="wb-reply-link" @onclick="() => ToggleReply(c.Id)">@Strings.Get("ReplyBtn")</span>
                                                 }
                                                 else
@@ -1135,13 +1141,25 @@
                                             {
                                                 <div class="wb-comment wb-comment-reply">
                                                     <div class="wb-comment-meta">@AuthorMarkup(r) · @r.CreatedAt.ToLocalTime().ToString("g")</div>
-                                                    <div class="wb-comment-body">@r.Body</div>
+                                                    <div class="wb-comment-body">@MentionMarkup(r)</div>
                                                 </div>
                                             }
                                             @if (_replyingTo == c.Id)
                                             {
                                                 <div class="wb-comment-reply">
-                                                    <MudTextField @bind-Value="_replyText" Placeholder="@Strings.Get("ReplyPlaceholder")" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+                                                    <MudTextField T="string" Value="_replyText" ValueChanged="OnReplyChangedAsync" Immediate="true"
+                                                                  Placeholder="@Strings.Get("ReplyPlaceholder")" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+                                                    @if (_mentionCandidates.Count > 0)
+                                                    {
+                                                        <MudPaper Class="wb-mention-picker" Elevation="4">
+                                                            <MudList T="string" Dense="true">
+                                                                @foreach (var candidate in _mentionCandidates)
+                                                                {
+                                                                    <MudListItem T="string" OnClick="@(() => PickMention(candidate))">@candidate.DisplayName</MudListItem>
+                                                                }
+                                                            </MudList>
+                                                        </MudPaper>
+                                                    }
                                                     <div class="wb-compose-actions">
                                                         <MudButton Size="Size.Small" OnClick="@(() => PostReplyAsync(c.Id))" Disabled="@string.IsNullOrWhiteSpace(_replyText)">@Strings.Get("ReplyBtn")</MudButton>
                                                     </div>
@@ -1150,7 +1168,23 @@
                                         }
                                     </div>
                                     <div class="wb-compose">
-                                        <MudTextField @bind-Value="_newComment" Placeholder="@Strings.Get("CommentPlaceholder")" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+                                        @* Immediate, so the @-picker can react as the name is typed (issue #383) —
+                                           the default commits on blur, which would only offer names after the box
+                                           lost focus. *@
+                                        <MudTextField T="string" Value="_newComment" ValueChanged="OnComposeChangedAsync" Immediate="true"
+                                                      Placeholder="@Strings.Get("CommentPlaceholder")" Variant="Variant.Outlined"
+                                                      Margin="Margin.Dense" Lines="2" />
+                                        @if (_mentionCandidates.Count > 0)
+                                        {
+                                            <MudPaper Class="wb-mention-picker" Elevation="4">
+                                                <MudList T="string" Dense="true">
+                                                    @foreach (var candidate in _mentionCandidates)
+                                                    {
+                                                        <MudListItem T="string" OnClick="@(() => PickMention(candidate))">@candidate.DisplayName</MudListItem>
+                                                    }
+                                                </MudList>
+                                            </MudPaper>
+                                        }
                                         <div class="wb-compose-actions">
                                             <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="PostCommentAsync" Disabled="@string.IsNullOrWhiteSpace(_newComment)">@Strings.Get("CommentBtn")</MudButton>
                                         </div>
@@ -3406,6 +3440,18 @@
     private string _newComment = "";
     private Guid? _replyingTo;
     private string _replyText = "";
+
+    // The stored form of a mention, matching Domain ChatMentions.Token. A static Regex rather than
+    // [GeneratedRegex]: a Razor @code block is not a partial class, so the source generator has nothing to
+    // extend. Strict 8-4-4-4-12 so ordinary prose containing "@[...]" cannot turn into a mention.
+    private static readonly System.Text.RegularExpressions.Regex MentionTokenPattern =
+        new(@"@\[([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    // The @-mention picker (issue #383). The href comes from the thread's "mentionable-users" rel — the server
+    // decides who may be addressed here, because offering somebody who cannot see the document would leak it.
+    private string? _mentionableUsersHref;
+    private List<MentionableUserResponse> _mentionCandidates = [];
 
     private ElementReference _dropRoot;
     private IJSObjectReference? _module;
@@ -6217,6 +6263,8 @@
     {
         _comments = [];
         _replyingTo = null;
+        _mentionCandidates = [];
+        _mentionableUsersHref = null;
         try
         {
             var url = ChatUrlFor(node);
@@ -6224,6 +6272,8 @@
             {
                 var page = await Http.GetFromJsonAsync<ChatMessageListResponse>(url);
                 _comments.AddRange(page?.Messages ?? []);
+                // Captured from the FIRST page: the rel is a property of the thread, not of a page of it.
+                _mentionableUsersHref ??= RelativeHref(page?.Links, "mentionable-users");
                 url = RelativeHref(page?.Links, "next");
             }
         }
@@ -6237,6 +6287,137 @@
     {
         _replyingTo = _replyingTo == commentId ? null : commentId;
         _replyText = "";
+        _mentionCandidates = [];
+    }
+
+    // ---- @-mentions (issue #383) ---------------------------------------------------------------------------
+
+    // A mention is stored as a token holding the USER ID, never the typed name: display names contain spaces (so
+    // "@Demo Admin" has no delimiter), are not unique, and can be renamed. The name shown here is resolved from
+    // the id at render time, so it can never go stale.
+    private async Task OnComposeChangedAsync(string value)
+    {
+        _newComment = value;
+        await RefreshMentionCandidatesAsync(value);
+    }
+
+    private async Task OnReplyChangedAsync(string value)
+    {
+        _replyText = value;
+        await RefreshMentionCandidatesAsync(value);
+    }
+
+    // The picker is driven off the text AFTER the last '@'. It deliberately does NOT stop at a space: display
+    // names contain them, so "@Demo Ad" has to keep matching. The cost is that the query only makes sense while
+    // the caret is at the end — which is where typing happens — so a stale run is capped at MentionQueryLimit
+    // characters rather than searching the rest of the message.
+    private const int MentionQueryLimit = 30;
+
+    private async Task RefreshMentionCandidatesAsync(string text)
+    {
+        if (_mentionableUsersHref is not { } href || MentionQuery(text) is not { } query)
+        {
+            _mentionCandidates = [];
+            return;
+        }
+
+        try
+        {
+            var page = await Http.GetFromJsonAsync<MentionableUserListResponse>($"{href}?q={Uri.EscapeDataString(query)}");
+            _mentionCandidates = page?.Users ?? [];
+        }
+        catch (HttpRequestException)
+        {
+            _mentionCandidates = [];
+        }
+    }
+
+    private static string? MentionQuery(string text)
+    {
+        var at = text.LastIndexOf('@');
+        if (at < 0)
+        {
+            return null;
+        }
+
+        // Not a mention if the '@' is part of a word (an email address, say) — it has to start the token.
+        if (at > 0 && !char.IsWhiteSpace(text[at - 1]))
+        {
+            return null;
+        }
+
+        var query = text[(at + 1)..];
+        return query.Length > MentionQueryLimit || query.Contains('\n') ? null : query;
+    }
+
+    // Replaces the half-typed "@Dem" with the token, so what is stored is the id and what is shown is the name.
+    private void PickMention(MentionableUserResponse user)
+    {
+        var target = _replyingTo is null ? _newComment : _replyText;
+        var at = target.LastIndexOf('@');
+        if (at < 0)
+        {
+            return;
+        }
+
+        var replaced = $"{target[..at]}@[{user.Id}] ";
+
+        if (_replyingTo is null)
+        {
+            _newComment = replaced;
+        }
+        else
+        {
+            _replyText = replaced;
+        }
+
+        _mentionCandidates = [];
+    }
+
+    // Renders a body with its "@[id]" tokens turned into the mentioned person's name. The names come from the
+    // message's own mentions list, so no extra lookup is needed; a token whose user is gone falls back to a
+    // tombstone rather than showing a raw id or silently dropping the fact that somebody was addressed.
+    private RenderFragment MentionMarkup(ChatMessageResponse message) => builder =>
+    {
+        var names = (message.Mentions ?? []).ToDictionary(m => m.UserId, m => m.DisplayName);
+        var sequence = 0;
+
+        foreach (var part in MentionParts(message.Body))
+        {
+            if (part.UserId is { } userId)
+            {
+                builder.OpenElement(sequence++, "span");
+                builder.AddAttribute(sequence++, "class", "wb-mention");
+                builder.AddContent(sequence++, $"@{names.GetValueOrDefault(userId, Strings.Get("ChatMentionUnknown"))}");
+                builder.CloseElement();
+            }
+            else
+            {
+                builder.AddContent(sequence++, part.Text);
+            }
+        }
+    };
+
+    private static IEnumerable<(string Text, Guid? UserId)> MentionParts(string body)
+    {
+        var matches = MentionTokenPattern.Matches(body);
+        var position = 0;
+
+        foreach (System.Text.RegularExpressions.Match match in matches)
+        {
+            if (match.Index > position)
+            {
+                yield return (body[position..match.Index], null);
+            }
+
+            yield return ("", Guid.Parse(match.Groups[1].Value));
+            position = match.Index + match.Length;
+        }
+
+        if (position < body.Length)
+        {
+            yield return (body[position..], null);
+        }
     }
 
     private async Task PostCommentAsync()
@@ -8756,5 +8937,13 @@
         };
     }
     private record ChatMessageListResponse { public List<ChatMessageResponse> Messages { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-    private record ChatMessageResponse { public Guid Id { get; set; } public Guid? ParentMessageId { get; set; } public string Body { get; set; } = ""; public string AuthorName { get; set; } = ""; public Guid? AuthorUserId { get; set; } public DateTimeOffset CreatedAt { get; set; } public int Kind { get; set; } public int? VersionNumber { get; set; } public string? VersionComment { get; set; } public int? VersionCommentKind { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record ChatMessageResponse { public Guid Id { get; set; } public Guid? ParentMessageId { get; set; } public string Body { get; set; } = ""; public string AuthorName { get; set; } = ""; public Guid? AuthorUserId { get; set; } public DateTimeOffset CreatedAt { get; set; } public int Kind { get; set; } public int? VersionNumber { get; set; } public string? VersionComment { get; set; } public int? VersionCommentKind { get; set; } public List<ChatMentionResponse>? Mentions { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+
+    // The names behind a body's "@[id]" tokens, resolved by the server so the thread renders without a lookup
+    // per token (issue #383).
+    private record ChatMentionResponse { public Guid UserId { get; set; } public string DisplayName { get; set; } = ""; }
+
+    private record MentionableUserResponse { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; }
+
+    private record MentionableUserListResponse { public List<MentionableUserResponse> Users { get; set; } = []; }
 }

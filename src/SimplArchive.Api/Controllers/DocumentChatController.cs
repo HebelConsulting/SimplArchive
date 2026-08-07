@@ -81,11 +81,37 @@ public class DocumentChatController : ControllerBase
         public Guid? AuthorUserId { get; set; }
 
         public DateTimeOffset CreatedAt { get; set; }
+
+        // Who this message addresses (issue #383), resolved for rendering. The BODY carries only ids, as
+        // "@[{userId}]" tokens — a display name is neither unique nor stable, so storing one would break on a
+        // rename. The client substitutes each token with the name from here, which is why the name is sent
+        // alongside rather than being looked up per token.
+        public List<ChatMentionResource> Mentions { get; set; } = [];
+    }
+
+    public class ChatMentionResource
+    {
+        public Guid UserId { get; set; }
+
+        public string DisplayName { get; set; } = "";
     }
 
     public class ChatMessageListResource : HypermediaResource
     {
         public List<ChatMessageResource> Messages { get; set; } = [];
+    }
+
+    // A user who may be @-mentioned on this document.
+    public class MentionableUserResource
+    {
+        public Guid Id { get; set; }
+
+        public string DisplayName { get; set; } = "";
+    }
+
+    public class MentionableUserListResource : HypermediaResource
+    {
+        public List<MentionableUserResource> Users { get; set; } = [];
     }
 
     public class CreateChatMessageRequest
@@ -155,6 +181,27 @@ public class DocumentChatController : ControllerBase
 
         var (page, hasMore) = Cursor.Split(fetched, pageSize);
 
+        // Mentions for the whole page in one round trip, then joined in memory — a per-message subquery would
+        // multiply the thread's query count by its length for a feature most messages don't use.
+        var messageIds = page.Select(p => p.Id).ToList();
+        var mentions = (await _dbContext.ChatMessageMentions
+                .Where(m => messageIds.Contains(m.ChatMessageId))
+                .Select(m => new
+                {
+                    m.ChatMessageId,
+                    m.UserId,
+                    DisplayName = _dbContext.Users.Where(u => u.Id == m.UserId).Select(u => u.DisplayName).FirstOrDefault(),
+                })
+                .ToListAsync(cancellationToken))
+            .GroupBy(m => m.ChatMessageId)
+            .ToDictionary(g => g.Key, g => g.Select(m => new ChatMentionResource
+            {
+                UserId = m.UserId,
+                // A mention whose user no longer resolves still renders as a readable sentence rather than a raw
+                // id — the record that somebody was addressed outlives the account.
+                DisplayName = m.DisplayName ?? UnknownMentionName,
+            }).ToList());
+
         var links = new List<Link> { new("self", Url.Action(nameof(List), new { documentId, cursor, limit = pageSize })!, "GET") };
 
         if (hasMore)
@@ -163,11 +210,96 @@ public class DocumentChatController : ControllerBase
             links.Add(new Link("next", Url.Action(nameof(List), new { documentId, cursor = nextCursor, limit = pageSize })!, "GET"));
         }
 
+        // The picker's endpoint is advertised here rather than composed by the client (ADR 0543). It is on the
+        // thread because that is where mentioning happens.
+        links.Add(new Link("mentionable-users", Url.Action(nameof(MentionableUsers), new { documentId })!, "GET"));
+
         return Ok(new ChatMessageListResource
         {
-            Messages = page.Select(ToResource).ToList(),
+            Messages = page.Select(row => ToResource(row, mentions.GetValueOrDefault(row.Id) ?? [])).ToList(),
             Links = links,
         });
+    }
+
+    // The users this caller may address on this document. ACL-filtered, NOT a tenant-wide directory: mentioning
+    // somebody auto-subscribes them and sends a notification carrying the document's NAME, so offering a user who
+    // cannot see the document would leak it. (The pre-existing grantable-principals endpoint looks similar but is
+    // neither — it lists every active user and is gated on CanManagePermissions, which an ordinary commenter has
+    // no reason to hold.)
+    [HttpGet("mentionable-users")]
+    public async Task<IActionResult> MentionableUsers(Guid documentId, [FromQuery] string? q, CancellationToken cancellationToken)
+    {
+        if (!await _dbContext.Documents.AnyAsync(d => d.Id == documentId, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        if (!await CanSeeAsync(documentId, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var users = await MentionCandidatesAsync(q, cancellationToken);
+
+        var visible = new List<MentionableUserResource>();
+        foreach (var user in users)
+        {
+            // One rights walk per candidate. Bounded by narrowing on the name FIRST — the picker filters as the
+            // caller types, so in practice this runs over a handful of names, not the tenant.
+            if ((await _effectiveRightsCalculator.GetEffectiveRightsAsync(user.Id, documentId, cancellationToken)).CanSee)
+            {
+                visible.Add(new MentionableUserResource { Id = user.Id, DisplayName = user.DisplayName });
+            }
+
+            if (visible.Count == MentionPickerSize)
+            {
+                break;
+            }
+        }
+
+        return Ok(new MentionableUserListResource
+        {
+            Users = visible,
+            Links = [new Link("self", Url.Action(nameof(MentionableUsers), new { documentId, q })!, "GET")],
+        });
+    }
+
+    [HttpHead("mentionable-users")]
+    public async Task<IActionResult> HeadMentionableUsers(Guid documentId, CancellationToken cancellationToken)
+    {
+        if (!await _dbContext.Documents.AnyAsync(d => d.Id == documentId, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        return await CanSeeAsync(documentId, cancellationToken) ? NoContent() : Forbid();
+    }
+
+    // How many names the picker shows, and how many candidates are rights-checked to fill it. The candidate cap
+    // is the higher of the two because the name filter runs before the rights filter: without headroom, a caller
+    // whose first matches are all invisible to them would see an empty picker rather than the reachable ones.
+    private const int MentionPickerSize = 20;
+    private const int MentionCandidateCap = 100;
+
+    private const string UnknownMentionName = "Unknown user";
+
+    private async Task<List<(Guid Id, string DisplayName)>> MentionCandidatesAsync(string? q, CancellationToken cancellationToken)
+    {
+        var query = _dbContext.Users.Where(u => u.IsActive);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim();
+            query = query.Where(u => EF.Functions.Like(u.DisplayName.ToUpper(), $"%{term.ToUpper()}%"));
+        }
+
+        return (await query
+                .OrderBy(u => u.DisplayName).ThenBy(u => u.Id)
+                .Take(MentionCandidateCap)
+                .Select(u => new { u.Id, u.DisplayName })
+                .ToListAsync(cancellationToken))
+            .Select(u => (u.Id, u.DisplayName))
+            .ToList();
     }
 
     // Standing convention: every GET action gets a companion HEAD action.
@@ -222,6 +354,21 @@ public class DocumentChatController : ControllerBase
             }
         }
 
+        // Mentions are validated BEFORE the message is written: a token naming somebody who cannot see this
+        // document would subscribe them to it and send them a notification carrying its NAME. Rejecting keeps
+        // that impossible rather than merely unlikely — the picker only ever offers visible users, so a caller
+        // reaches this only by hand-crafting a request, or by losing a race with an ACL change.
+        var mentionedUserIds = ChatMentions.Parse(request.Body);
+        foreach (var mentionedId in mentionedUserIds)
+        {
+            var mentionedIsActive = await _dbContext.Users.AnyAsync(u => u.Id == mentionedId && u.IsActive, cancellationToken);
+            if (!mentionedIsActive
+                || !(await _effectiveRightsCalculator.GetEffectiveRightsAsync(mentionedId, documentId, cancellationToken)).CanSee)
+            {
+                throw new InvalidChatMentionException(mentionedId);
+            }
+        }
+
         var (createdByUserId, createdByServiceAccountId) = GetCallerIdentity();
 
         var comment = new ChatMessage
@@ -237,6 +384,40 @@ public class DocumentChatController : ControllerBase
         };
 
         _dbContext.ChatMessages.Add(comment);
+
+        foreach (var mentionedId in mentionedUserIds)
+        {
+            _dbContext.ChatMessageMentions.Add(new ChatMessageMention
+            {
+                Id = Guid.NewGuid(),
+                TenantId = document.TenantId,
+                ChatMessageId = comment.Id,
+                UserId = mentionedId,
+                CreatedAt = comment.CreatedAt,
+            });
+        }
+
+        // Being addressed subscribes you to the document, so the answers to what you were asked reach you too.
+        // Deliberately re-subscribes somebody who unsubscribed earlier (interviewed): a mention is treated as a
+        // fresh request for attention rather than something a past opt-out silences. Unsubscribing again is one
+        // click on the document, which is what keeps that bearable.
+        var alreadySubscribed = await _dbContext.DocumentSubscriptions
+            .Where(s => s.DocumentId == documentId && mentionedUserIds.Contains(s.UserId))
+            .Select(s => s.UserId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var mentionedId in mentionedUserIds.Where(id => !alreadySubscribed.Contains(id)))
+        {
+            _dbContext.DocumentSubscriptions.Add(new DocumentSubscription
+            {
+                Id = Guid.NewGuid(),
+                TenantId = document.TenantId,
+                UserId = mentionedId,
+                DocumentId = documentId,
+                CreatedAt = comment.CreatedAt,
+            });
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         // DisplayName, matching the list projection — the thread shows a person's NAME, and their email now lives
@@ -250,33 +431,54 @@ public class DocumentChatController : ControllerBase
         var recipientId = request.ParentMessageId is { } pid
             ? await _dbContext.ChatMessages.Where(c => c.Id == pid).Select(c => c.CreatedByUserId).SingleAsync(cancellationToken)
             : document.CreatedByUserId;
-        if (recipientId is { } rid)
+
+        // Being named personally comes first, and is its own notification type so it does NOT fold into the
+        // "3 new comments" digest that ChatMessagePosted coalesces into (ADR 0434) — a digest is how a direct
+        // request gets missed.
+        foreach (var mentionedId in mentionedUserIds)
+        {
+            await _notifications.NotifyAsync(mentionedId, NotificationType.ChatMentioned, "You were mentioned",
+                $"{authorName} mentioned you on '{document.Name}'.", documentId, cancellationToken);
+        }
+
+        // Everyone below has either been told already or is being told something weaker about the same message.
+        var alreadyTold = mentionedUserIds.ToList();
+
+        if (recipientId is { } rid && !alreadyTold.Contains(rid))
         {
             var verb = request.ParentMessageId is null ? "commented on" : "replied on";
             await _notifications.NotifyAsync(rid, NotificationType.ChatMessagePosted, "New comment", $"{authorName} {verb} '{document.Name}'.", documentId, cancellationToken);
+            alreadyTold.Add(rid);
         }
 
-        // Notify everyone following the document (ADR "Document subscriptions"), except the actor and the
-        // recipient just notified above (so a follower isn't double-notified for one comment).
+        // Notify everyone following the document (ADR "Document subscriptions"), except the actor and anyone
+        // notified above — including the users just auto-subscribed BY this message, who would otherwise be told
+        // twice about the message that subscribed them.
         await _notifications.NotifyDocumentSubscribersAsync(documentId, NotificationType.SubscribedActivity,
             "New comment", $"{authorName} commented on '{document.Name}'.",
-            recipientId is { } r ? [r] : null, cancellationToken);
+            alreadyTold.Count > 0 ? alreadyTold : null, cancellationToken);
 
         await _audit.RecordAsync(AuditActions.ChatMessagePosted, "Document", documentId, document.Name,
             request.ParentMessageId is null ? "Comment posted" : "Reply posted", cancellationToken: cancellationToken);
 
         // A client can only ever create a UserPost; the system kinds are written by ChatSystemEntryRecorder.
+        var mentionResources = await _dbContext.Users
+            .Where(u => mentionedUserIds.Contains(u.Id))
+            .Select(u => new ChatMentionResource { UserId = u.Id, DisplayName = u.DisplayName })
+            .ToListAsync(cancellationToken);
+
         var resource = ToResource(new ChatMessageRow(comment.Id, comment.ParentMessageId, comment.Body, comment.CreatedAt, authorName,
             comment.CreatedByUserId, comment.CreatedByServiceAccountId,
-            ChatMessageKind.UserPost, VersionNumber: null, VersionComment: null, VersionCommentKind: null));
+            ChatMessageKind.UserPost, VersionNumber: null, VersionComment: null, VersionCommentKind: null), mentionResources);
 
         return StatusCode(StatusCodes.Status201Created, resource);
     }
 
     // No self link: a comment isn't individually addressable (no single-comment GET endpoint) — it's only
     // ever part of a document's thread.
-    private static ChatMessageResource ToResource(ChatMessageRow row) => new()
+    private static ChatMessageResource ToResource(ChatMessageRow row, List<ChatMentionResource> mentions) => new()
     {
+        Mentions = mentions,
         Id = row.Id,
         ParentMessageId = row.ParentMessageId,
         Body = row.Body,

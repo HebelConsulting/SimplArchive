@@ -617,17 +617,45 @@ public sealed class RepositoryImporter
         var (userId, svcId) = ResolveCreator(message.CreatedByUserId, message.CreatedByServiceAccountId, userMap);
         var newId = Guid.NewGuid();
         messageMap[message.Id] = newId;
+
+        // @-mention tokens carry USER IDS, and this import gives every principal a fresh id in the destination
+        // tenant — so the body has to be rewritten alongside the mention rows, or a mention would point at an id
+        // that means nothing here (issue #383). An unmapped user's token is left in place and renders as the
+        // unknown-user tombstone.
+        var body = ChatMentions.Remap(message.Body,
+            archiveUserId => userMap.TryGetValue(archiveUserId, out var mapped) ? mapped.UserId : null);
+
         _dbContext.ChatMessages.Add(new ChatMessage
         {
             Id = newId,
             TenantId = tenantId,
             DocumentId = docMap[message.DocumentId],
             ParentMessageId = parentMessageId,
-            Body = message.Body,
+            Body = body,
             CreatedByUserId = userId,
             CreatedByServiceAccountId = svcId,
             CreatedAt = message.CreatedAt,
         });
+
+        // The rows the notification/subscription paths read. Only for tokens that actually MAPPED: an unmapped
+        // one still holds a source-tenant id, and a row for it would fail the UserId foreign key. The token stays
+        // in the body regardless and renders as the tombstone, so the message still shows somebody was addressed.
+        var mappedMentions = ChatMentions.Parse(message.Body)
+            .Select(archiveUserId => userMap.TryGetValue(archiveUserId, out var mapped) ? mapped.UserId : null)
+            .OfType<Guid>()
+            .Distinct();
+
+        foreach (var mentionedId in mappedMentions)
+        {
+            _dbContext.ChatMessageMentions.Add(new ChatMessageMention
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ChatMessageId = newId,
+                UserId = mentionedId,
+                CreatedAt = message.CreatedAt,
+            });
+        }
     }
 
     // Matches each archived user by email (else a deactivated placeholder) and each service account by name (else

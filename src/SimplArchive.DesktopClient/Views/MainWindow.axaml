@@ -646,6 +646,20 @@
                                         <TextBlock DockPanel.Dock="Top" Text="{loc:Tr CommentsHeader}" FontWeight="SemiBold" Margin="10,8" />
                                         <Border DockPanel.Dock="Bottom" Padding="8" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,1,0,0">
                                             <StackPanel Spacing="4">
+                                                <!-- The @-mention picker (issue #383), ABOVE the box: it opens while typing at the
+                                                     bottom of the pane, so opening downwards would push it out of view. -->
+                                                <ItemsControl ItemsSource="{Binding MentionCandidates}"
+                                                              IsVisible="{Binding HasMentionCandidates}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="svc:SimplArchiveApiClient+MentionableUser">
+                                                            <Button Classes="mention" HorizontalAlignment="Stretch" Padding="6,3" FontSize="12"
+                                                                    Background="Transparent" BorderThickness="0"
+                                                                    HorizontalContentAlignment="Left" Content="{Binding DisplayName}"
+                                                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).PickMentionCommand}"
+                                                                    CommandParameter="{Binding}" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
                                                 <TextBox Text="{Binding NewComment}" Watermark="{loc:Tr CommentPlaceholder}" AcceptsReturn="True" MinHeight="46" />
                                                 <Button Command="{Binding PostCommentCommand}" HorizontalAlignment="Right" ToolTip.Tip="{loc:Tr MwPostComment}">
                                                     <StackPanel Orientation="Horizontal" Spacing="6">
@@ -699,7 +713,7 @@
                                                                            Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                                 <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                             </StackPanel>
-                                                            <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
+                                                            <TextBlock Text="{Binding DisplayBody}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
                                                             <!-- Reply affordance: a top-level typed message only (ADR 0511 parity with the web
                                                                  thread). It binds to the window view-model, since the command has to close
                                                                  whichever other reply box is open.
@@ -773,7 +787,7 @@
                                                                            Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                                 <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                             </StackPanel>
-                                                                                <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
+                                                                                <TextBlock Text="{Binding DisplayBody}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
                                                             <!-- An automatic entry (ADR 0545): the sentence, then the
                                                                  version block with its icon and optional comment. -->
                                                             <TextBlock Text="{Binding SystemSentence}" TextWrapping="Wrap" FontSize="13"
@@ -1458,7 +1472,7 @@
                                                                            Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                                 <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                             </StackPanel>
-                                                                    <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
+                                                                    <TextBlock Text="{Binding DisplayBody}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
                                                             <!-- An automatic entry (ADR 0545): the sentence, then the
                                                                  version block with its icon and optional comment. -->
                                                             <TextBlock Text="{Binding SystemSentence}" TextWrapping="Wrap" FontSize="13"
@@ -1520,7 +1534,7 @@
                                                                            Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                                 <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                             </StackPanel>
-                                                                                        <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
+                                                                                        <TextBlock Text="{Binding DisplayBody}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
                                                             <!-- An automatic entry (ADR 0545): the sentence, then the
                                                                  version block with its icon and optional comment. -->
                                                             <TextBlock Text="{Binding SystemSentence}" TextWrapping="Wrap" FontSize="13"
