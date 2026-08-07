@@ -56,8 +56,10 @@
        One mid-tone pastel serves both themes — pale enough to read as "nothing here" on light, bright enough to
        stay visible on dark — so it needs no per-theme override. The four-class chain out-specifies MudBlazor's
        own .mud-icon-default colour; the svg has no fill, so it inherits currentColor. */
+    /* An empty folder's glyph: pale yellow, well lighter than the gold of a folder with contents (issue #376 —
+       it was a pastel blue). Same hue family now, so the lightness gap is what makes it readable at a glance. */
     .wb-tree-empty > .mud-treeview-item > .mud-treeview-item-content > .mud-treeview-item-icon > .mud-icon-root {
-        color: #8fb4d9;
+        color: #f2dd8c;
     }
     .wb-list { flex: 0 0 300px; container-type: inline-size; }
     .wb-detail { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }

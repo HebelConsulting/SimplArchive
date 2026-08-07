@@ -129,7 +129,10 @@ public class DocumentReferencesController : ControllerBase
                 r.CreatedAt,
                 r.TargetDocumentId,
                 _dbContext.Documents.Where(d => d.Id == r.TargetDocumentId).Select(d => d.Name).FirstOrDefault()!,
-                _dbContext.Documents.Any(c => c.ParentId == r.TargetDocumentId),
+                // Anything filed here at all: a child document/subfolder, or a REFERENCE filed into it (issue
+                // #376). A folder holding only shortcuts still has contents the list shows.
+                _dbContext.Documents.Any(c => c.ParentId == r.TargetDocumentId)
+                    || _dbContext.DocumentReferences.Any(x => x.ParentFolderId == r.TargetDocumentId),
                 _dbContext.DocumentVersions.Any(v => v.DocumentId == r.TargetDocumentId),
                 _dbContext.Documents.Any(c => c.ParentId == r.TargetDocumentId && !_dbContext.DocumentVersions.Any(v => v.DocumentId == c.Id)),
                 _dbContext.DocumentReferences.Any(other => other.TargetDocumentId == r.TargetDocumentId),

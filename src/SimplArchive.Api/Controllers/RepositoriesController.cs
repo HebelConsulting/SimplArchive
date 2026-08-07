@@ -129,7 +129,9 @@ public class RepositoriesController : ControllerBase
                 d.Id,
                 d.Name,
                 d.CreatedAt,
-                _dbContext.Documents.Any(c => c.ParentId == d.Id),
+                // Child document/subfolder OR a reference filed into it (issue #376).
+                _dbContext.Documents.Any(c => c.ParentId == d.Id)
+                    || _dbContext.DocumentReferences.Any(x => x.ParentFolderId == d.Id),
                 _dbContext.DocumentVersions.Any(v => v.DocumentId == d.Id),
                 _dbContext.Documents.Any(c => c.ParentId == d.Id && !_dbContext.DocumentVersions.Any(v => v.DocumentId == c.Id))))
             .ToListAsync(cancellationToken);
@@ -316,7 +318,9 @@ public class RepositoriesController : ControllerBase
             {
                 d.Id,
                 d.Name,
-                HasChildren = _dbContext.Documents.Any(c => c.ParentId == d.Id),
+                // Child document/subfolder OR a reference filed into it (issue #376).
+                HasChildren = _dbContext.Documents.Any(c => c.ParentId == d.Id)
+                    || _dbContext.DocumentReferences.Any(x => x.ParentFolderId == d.Id),
                 HasVersions = _dbContext.DocumentVersions.Any(v => v.DocumentId == d.Id),
                 HasSubfolders = _dbContext.Documents.Any(c => c.ParentId == d.Id && !_dbContext.DocumentVersions.Any(v => v.DocumentId == c.Id)),
             })
@@ -424,7 +428,9 @@ public class RepositoriesController : ControllerBase
                 d.Id,
                 d.Name,
                 d.CreatedAt,
-                _dbContext.Documents.Any(c => c.ParentId == d.Id),
+                // Child document/subfolder OR a reference filed into it (issue #376).
+                _dbContext.Documents.Any(c => c.ParentId == d.Id)
+                    || _dbContext.DocumentReferences.Any(x => x.ParentFolderId == d.Id),
                 _dbContext.DocumentVersions.Any(v => v.DocumentId == d.Id),
                 _dbContext.DocumentReferences.Any(r => r.TargetDocumentId == d.Id),
                 _dbContext.LegalHoldItems.Any(i => i.DocumentId == d.Id && _dbContext.LegalHolds.Any(h => h.Id == i.LegalHoldId && h.ReleasedAt == null))))

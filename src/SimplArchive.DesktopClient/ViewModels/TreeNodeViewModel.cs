@@ -63,8 +63,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     // The bottom-tab index the launcher activates: Inbox = 1, Check-out = 2 (ADR "Document check-out / check-in").
     public int LauncherTab => PersonalKind switch { "inbox" => 1, "checkout" => 2, _ => 0 };
 
-    // Whether this folder holds ANYTHING — subfolders or documents. Defaults to true so the pseudo-nodes
-    // (Administration, the Inbox / Check-out launchers, the demo/screenshot stubs) never render as "empty".
+    // Whether this folder holds ANYTHING — a document, a subfolder, or a reference filed into it (issue #376).
+    // Defaults to true so the pseudo-nodes (Administration, the Inbox / Check-out launchers, the demo/screenshot
+    // stubs) never render as "empty".
     public bool HasChildren { get; }
 
     // An EMPTY folder — nothing at all inside (ADR "Empty-folder tree icon", issue #352). Note this is NOT the
@@ -83,12 +84,14 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         _ => SyntheticIcon ?? (IsPersonal ? "mdi-account" : IsReference ? "mdi-folder-arrow-right" : "mdi-folder"),
     };
 
-    // The tree's folder glyphs are gold; an empty one is tinted a pastel blue instead so it's spottable without
-    // expanding. One mid-tone pastel serves light and dark alike, matching the web client's `.wb-tree-empty`.
+    // The tree's folder glyphs are gold; an empty one is tinted a PALE YELLOW instead so it's spottable without
+    // expanding (issue #376 — it was a pastel blue). Deliberately much lighter and less saturated than the gold,
+    // since the two now share a hue and the whole point is telling them apart at a glance. One mid-tone serves
+    // light and dark alike, matching the web client's `.wb-tree-empty`.
     public IBrush IconBrush => IsEmptyFolder ? EmptyFolderBrush : FolderBrush;
 
     private static readonly IBrush FolderBrush = new SolidColorBrush(Color.FromRgb(0xd9, 0xa4, 0x00));
-    private static readonly IBrush EmptyFolderBrush = new SolidColorBrush(Color.FromRgb(0x8f, 0xb4, 0xd9));
+    private static readonly IBrush EmptyFolderBrush = new SolidColorBrush(Color.FromRgb(0xf2, 0xdd, 0x8c));
 
     // Set when this node is loaded as a child (used to build the breadcrumb path from a tree selection).
     public TreeNodeViewModel? Parent { get; private set; }

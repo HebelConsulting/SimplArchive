@@ -1384,8 +1384,10 @@ public class DocumentsController : ControllerBase
 
         // Presentation metadata (ADR "Blazor repository/document browsing", "Workbench pane content fixes"):
         // HasVersions picks the icon (folder when false, downloadable document when true — a folder is a
-        // Document with zero versions); HasChildren = any child; HasSubfolders = a child that is itself a
-        // folder, which is what governs the folder tree's expand caret (the tree shows only folders).
+        // Document with zero versions); HasChildren = anything filed here at all — a child document, a subfolder,
+        // OR a reference filed into it (issue #376; it counted only child Documents before, so a folder holding
+        // only shortcuts reported false); HasSubfolders = a child that is itself a folder, which is what governs
+        // the folder tree's expand caret (the tree shows only folders).
         // Computed, never stored.
         public bool HasChildren { get; set; }
 
@@ -1502,7 +1504,10 @@ public class DocumentsController : ControllerBase
                 d.Id,
                 d.Name,
                 d.CreatedAt,
-                _dbContext.Documents.Any(c => c.ParentId == d.Id),
+                // Child document/subfolder OR a reference filed into it (issue #376) — "is anything filed
+                // here", which is what the empty-folder tree glyph and the open/navigate tests want.
+                _dbContext.Documents.Any(c => c.ParentId == d.Id)
+                    || _dbContext.DocumentReferences.Any(x => x.ParentFolderId == d.Id),
                 _dbContext.DocumentVersions.Any(v => v.DocumentId == d.Id),
                 _dbContext.Documents.Any(c => c.ParentId == d.Id && !_dbContext.DocumentVersions.Any(v => v.DocumentId == c.Id)),
                 _dbContext.DocumentReferences.Any(r => r.TargetDocumentId == d.Id),

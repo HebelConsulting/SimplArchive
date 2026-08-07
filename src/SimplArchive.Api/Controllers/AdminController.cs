@@ -78,7 +78,9 @@ public class AdminController : ControllerBase
                 Email = u.Email,
                 UserIsActive = u.IsActive,
                 RepositoryId = d.Id,
-                HasChildren = _dbContext.Documents.Any(c => c.ParentId == d.Id),
+                // Child document/subfolder OR a reference filed into it (issue #376).
+                HasChildren = _dbContext.Documents.Any(c => c.ParentId == d.Id)
+                    || _dbContext.DocumentReferences.Any(x => x.ParentFolderId == d.Id),
                 HasSubfolders = _dbContext.Documents.Any(c => c.ParentId == d.Id && !_dbContext.DocumentVersions.Any(v => v.DocumentId == c.Id)),
             })
             .OrderBy(x => x.DisplayName)

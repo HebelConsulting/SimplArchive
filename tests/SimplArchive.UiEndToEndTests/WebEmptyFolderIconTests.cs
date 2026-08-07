@@ -6,14 +6,17 @@ using static Microsoft.Playwright.Assertions;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// The web half of the empty-folder tree icon (ADR "Empty-folder tree icon", issue #352): a folder with nothing
-// inside gets a pastel glyph so it's spottable without expanding. The distinction that matters is HasChildren
-// (any child) vs HasSubfolders (the expander caret) — a folder holding only DOCUMENTS is a leaf in the
-// folders-only tree but is NOT empty, so it must keep the normal glyph.
+// The web half of the empty-folder tree icon (ADR "Empty-folder tree icon", issue #352; recoloured and the
+// criterion corrected in issue #376): a folder with nothing inside gets a pale-yellow glyph so it's spottable
+// without expanding. The distinction that matters is HasChildren ("is ANYTHING filed here") vs HasSubfolders
+// (the expander caret) — a folder holding only DOCUMENTS is a leaf in the folders-only tree but is NOT empty,
+// and neither is one holding only REFERENCES, which is what #376 fixed.
 [Collection(UiCollection.Name)]
 public class WebEmptyFolderIconTests
 {
-    private const string Pastel = "rgb(143, 180, 217)"; // .wb-tree-empty — #8fb4d9
+    // .wb-tree-empty — #f2dd8c. Pale yellow since #376; it was a pastel blue. Deliberately much lighter than
+    // the gold of a non-empty folder, since the two now share a hue.
+    private const string EmptyTint = "rgb(242, 221, 140)";
 
     private readonly SelfHostedAppFixture _app;
 
@@ -37,6 +40,14 @@ public class WebEmptyFolderIconTests
         // One real DOCUMENT inside — no subfolder, so it stays a tree LEAF, but it is not empty.
         await AddDocumentAsync(http, docsOnlyId, $"doc-{suffix}");
 
+        // A folder holding only a REFERENCE (issue #376). It has no child Document at all, which is exactly why
+        // it used to be drawn as empty — the shortcut inside it went uncounted.
+        var refsOnlyName = $"refs-{suffix}";
+        var refsOnlyId = await CreateFolderAsync(http, repoId, refsOnlyName);
+        var refTargetId = await CreateFolderAsync(http, repoId, $"target-{suffix}");
+        (await http.PostAsJsonAsync($"/api/documents/{refsOnlyId}/references", new { targetId = refTargetId }))
+            .EnsureSuccessStatusCode();
+
         var page = await Ui.LoginAsync(_app);
         var tree = page.Locator("[data-pane='tree']");
         var root = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Demo Repository" }).First;
@@ -47,11 +58,12 @@ public class WebEmptyFolderIconTests
         var docsOnlyIcon = IconOf(tree, docsOnlyName);
         await Expect(emptyIcon).ToBeVisibleAsync(new() { Timeout = 15000 });
 
-        Assert.Equal(Pastel, await ColorOfAsync(emptyIcon));
-        Assert.NotEqual(Pastel, await ColorOfAsync(docsOnlyIcon));
+        Assert.Equal(EmptyTint, await ColorOfAsync(emptyIcon));
+        Assert.NotEqual(EmptyTint, await ColorOfAsync(docsOnlyIcon));
+        Assert.NotEqual(EmptyTint, await ColorOfAsync(IconOf(tree, refsOnlyName)));
 
         // Nothing leaks to the ancestor: the repository root holds these folders, so it is not empty.
-        Assert.NotEqual(Pastel, await ColorOfAsync(root.Locator(".mud-treeview-item-icon > .mud-icon-root")));
+        Assert.NotEqual(EmptyTint, await ColorOfAsync(root.Locator(".mud-treeview-item-icon > .mud-icon-root")));
 
         // Filing a document into the empty folder makes it non-empty on the next tree load.
         await AddDocumentAsync(http, emptyId, $"now-{suffix}");
@@ -60,7 +72,7 @@ public class WebEmptyFolderIconTests
         await tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Demo Repository" }).First
             .Locator(".mud-treeview-item-arrow").ClickAsync();
         await Expect(IconOf(tree, emptyName)).ToBeVisibleAsync(new() { Timeout = 15000 });
-        Assert.NotEqual(Pastel, await ColorOfAsync(IconOf(tree, emptyName)));
+        Assert.NotEqual(EmptyTint, await ColorOfAsync(IconOf(tree, emptyName)));
     }
 
     // The node's OWN icon — a MudTreeViewItem renders its children inside itself, so scope to the content row.
