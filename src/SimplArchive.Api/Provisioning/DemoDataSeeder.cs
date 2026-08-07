@@ -123,10 +123,10 @@ public static class DemoDataSeeder
 
         var offer = await AddDocumentAsync(dbContext, objectStorage, assembly, tenantId, acmeCorp.Id,
             "Offer 2026-014", adminId, now, basicEntryVersion.Id, "DemoOfferV1.pdf", ".pdf", "application/pdf",
-            new DateOnly(2026, 1, 14), finalizer);
+            new DateOnly(2026, 1, 14), finalizer, "Initial draft sent to the customer.");
         offer.CurrentVersionId = (await AddVersionAsync(dbContext, objectStorage, assembly, offer, adminId, now,
             offer.StorageFolderId, "DemoOfferV2.pdf", ".pdf", "application/pdf",
-            new DateOnly(2026, 1, 14), finalizer)).Id;
+            new DateOnly(2026, 1, 14), finalizer, "Price corrected after the framework-agreement review.")).Id;
         await dbContext.SaveChangesAsync();
 
         // A small colour-coded tag catalog + a couple of tags on the invoice (ADR "Tag controlled vocabulary" 0422).
@@ -143,7 +143,46 @@ public static class DemoDataSeeder
         await dbContext.SaveChangesAsync();
 
         // ── Two extra users + a shared "Scan Team" group inbox (the group-inbox showcase, ADR 0532). ─────────────
-        await SeedTeamAsync(dbContext, objectStorage, assembly, tenantId, repositoryId, adminId, now, demoPassword);
+        var (annaId, _) = await SeedTeamAsync(dbContext, objectStorage, assembly, tenantId, repositoryId, adminId, now, demoPassword);
+
+        // A real conversation on the offer (issue #380). The thread already carries the automatic entries — filed,
+        // each version saved (ADR 0545) — so this puts what PEOPLE said alongside them, which is what the pane
+        // actually looks like in use.
+        //
+        // Two authors and a REPLY are both deliberate: the reply exercises threading (the external-system feed
+        // export attaches a reply to its parent post, and a live run could not prove that path with an empty
+        // thread), and a second author means the identity card is demonstrably per-person rather than always the
+        // logged-in user.
+        var offerThread = new ChatMessage
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DocumentId = offer.Id,
+            Body = "Customer came back on the price — version 2 has the corrected figure.",
+            CreatedByUserId = adminId,
+            CreatedAt = now,
+        };
+        dbContext.ChatMessages.Add(offerThread);
+        dbContext.ChatMessages.Add(new ChatMessage
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DocumentId = offer.Id,
+            ParentMessageId = offerThread.Id,
+            Body = "Checked it against the framework agreement — the new figure is right.",
+            CreatedByUserId = annaId,
+            CreatedAt = now,
+        });
+        dbContext.ChatMessages.Add(new ChatMessage
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DocumentId = invoice.Id,
+            Body = "Approved for payment — see the stamp on page 1.",
+            CreatedByUserId = adminId,
+            CreatedAt = now,
+        });
+        await dbContext.SaveChangesAsync();
     }
 
     // The business-filing tree from issue #354. Returns the "Contracts / Acme Corp" customer folder + the
@@ -176,7 +215,8 @@ public static class DemoDataSeeder
         // March holds the chocolate-gift invoice as a PDF with TWO versions + a highlight and a sticky note — a
         // second Compare-versions + annotations sample living inside the Business Years tree (for the manual).
         var chocolate = await DocAsync(monthFolders[3].Id, "Invoice for customer's chocolate gift", "DemoChocInvoiceV1.pdf", ".pdf", "application/pdf", new DateOnly(2026, 3, 16));
-        var chocV2 = await AddVersionAsync(dbContext, storage, assembly, chocolate, adminId, now, chocolate.StorageFolderId, "DemoChocInvoiceV2.pdf", ".pdf", "application/pdf", new DateOnly(2026, 3, 16), finalizer);
+        var chocV2 = await AddVersionAsync(dbContext, storage, assembly, chocolate, adminId, now, chocolate.StorageFolderId, "DemoChocInvoiceV2.pdf", ".pdf", "application/pdf", new DateOnly(2026, 3, 16), finalizer,
+            "Re-scanned — the first scan cut off the footer.");
         chocolate.CurrentVersionId = chocV2.Id;
         await dbContext.SaveChangesAsync();
         AddAnnotation(dbContext, tenantId, chocolate.Id, chocV2.Id, adminId, now, AnnotationKind.Highlight, 0.560, 0.470, 0.360, 0.030, string.Empty, "#ffd54a");
@@ -224,7 +264,7 @@ public static class DemoDataSeeder
     // Two extra users (an editor + a clerk) and a shared "Scan Team" group with a seeded group-inbox item — so the
     // group-inbox feature (ADR 0532) is live on the demo login: the admin (CanManageInboxes) can open the users'
     // inboxes and the Scan Team group inbox shows an unfiled scan waiting to be picked up.
-    private static async Task SeedTeamAsync(
+    private static async Task<(Guid AnnaId, Guid TomId)> SeedTeamAsync(
         SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
         Guid tenantId, Guid repositoryId, Guid adminId, DateTimeOffset now, string demoPassword)
     {
@@ -273,6 +313,8 @@ public static class DemoDataSeeder
         var scanBytes = await ReadResourceAsync(assembly, "DemoTelekomInvoiceMar.pdf");
         using var content = new MemoryStream(scanBytes);
         await storage.PutObjectAsync($"tenants/{tenantId}/groups/{scanTeam.Id}/inbox/scan-2026-03-inbox.pdf", content, "application/pdf");
+
+        return (anna.Id, tom.Id);
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -299,7 +341,7 @@ public static class DemoDataSeeder
         SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
         Guid tenantId, Guid parentId, string name, Guid adminId, DateTimeOffset at, Guid maskVersionId,
         string resourceName, string ext, string contentType, DateOnly documentDate,
-        Documents.DocumentFinalizer finalizer)
+        Documents.DocumentFinalizer finalizer, string? comment = null)
     {
         var storageFolderId = Guid.NewGuid();
         var document = new Document
@@ -316,7 +358,7 @@ public static class DemoDataSeeder
         dbContext.Documents.Add(document);
         await dbContext.SaveChangesAsync();
 
-        await AddVersionAsync(dbContext, storage, assembly, document, adminId, at, storageFolderId, resourceName, ext, contentType, documentDate, finalizer);
+        await AddVersionAsync(dbContext, storage, assembly, document, adminId, at, storageFolderId, resourceName, ext, contentType, documentDate, finalizer, comment);
         return document;
     }
 
@@ -324,7 +366,7 @@ public static class DemoDataSeeder
         SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
         Document document, Guid adminId, DateTimeOffset at, Guid storageFolderId,
         string resourceName, string ext, string contentType, DateOnly documentDate,
-        Documents.DocumentFinalizer finalizer)
+        Documents.DocumentFinalizer finalizer, string? comment = null)
     {
         var bytes = await ReadResourceAsync(assembly, resourceName);
         var versionId = Guid.NewGuid();
@@ -353,6 +395,10 @@ public static class DemoDataSeeder
             CreatedByUserId = adminId,
             DocumentDate = documentDate,
             CreatedAt = at,
+            // The check-in comment — why this version exists. Deliberately not set on every version: the feed
+            // renders "Version N" with the comment beneath it when there is one and just "Version N" when there
+            // isn't, and the demo should show both (issue #380).
+            Comment = comment,
         };
         dbContext.DocumentVersions.Add(version);
         await dbContext.SaveChangesAsync();
