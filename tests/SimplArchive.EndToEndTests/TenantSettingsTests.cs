@@ -39,6 +39,13 @@ public class TenantSettingsTests
         Assert.Equal(0, settings.GetProperty("checkoutTtlDays").GetInt32()); // disabled by default
         Assert.Equal(0, settings.GetProperty("wormLockMode").GetInt32()); // Governance by default
         Assert.False(settings.GetProperty("requireMfa").GetBoolean()); // opt-in, off by default
+
+        // External links (ADR 0546): OFF by default, with the caps present so the tenant UI has something to
+        // render the moment it is switched on. The default matters — an existing tenant must not gain an
+        // unauthenticated way for documents to leave it as a side effect of a migration.
+        Assert.False(settings.GetProperty("allowExternalLinks").GetBoolean());
+        Assert.Equal(180, settings.GetProperty("externalLinkMaxDays").GetInt32());
+        Assert.Equal(5, settings.GetProperty("externalLinkDefaultAccesses").GetInt32());
         Assert.False(string.IsNullOrEmpty(settings.GetProperty("defaultOcrLanguages").GetString()));
 
         // Update name + OCR languages + retention + check-out TTL + WORM mode (1 = Compliance) + require-MFA.
@@ -46,6 +53,26 @@ public class TenantSettingsTests
         var updated = await TestJson.Put(admin, "/api/tenant-settings", new { name = newName, defaultOcrLanguages = "eng+spa", auditRetentionDays = 90, checkoutTtlDays = 14, wormLockMode = 1, requireMfa = true });
         Assert.Equal(newName, updated.GetProperty("name").GetString());
         Assert.Equal("eng+spa", updated.GetProperty("defaultOcrLanguages").GetString());
+
+        // The external-link switch and its caps round-trip through the same PUT, so an administrator can actually
+        // turn the feature on — without this the flags default to false and nothing in the product can set them.
+        var shared = await TestJson.Put(admin, "/api/tenant-settings", new
+        {
+            name = newName,
+            defaultOcrLanguages = "eng+spa",
+            auditRetentionDays = 90,
+            checkoutTtlDays = 14,
+            // Carried through deliberately: PUT is a FULL replacement (ADR 0003 prefers it over PATCH), so
+            // omitting these would reset them and break the assertions that follow.
+            wormLockMode = 1,
+            requireMfa = true,
+            allowExternalLinks = true,
+            externalLinkMaxDays = 30,
+            externalLinkDefaultAccesses = 2,
+        });
+        Assert.True(shared.GetProperty("allowExternalLinks").GetBoolean());
+        Assert.Equal(30, shared.GetProperty("externalLinkMaxDays").GetInt32());
+        Assert.Equal(2, shared.GetProperty("externalLinkDefaultAccesses").GetInt32());
         Assert.Equal(90, updated.GetProperty("auditRetentionDays").GetInt32());
         Assert.Equal(14, updated.GetProperty("checkoutTtlDays").GetInt32());
         Assert.Equal(1, updated.GetProperty("wormLockMode").GetInt32());

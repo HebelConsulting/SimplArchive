@@ -29,10 +29,12 @@ public class WebTenantSettingsTests
         // Each explainable setting carries an info button (hover tooltip). Name, OCR, audit retention,
         // check-out auto-release, check-out expiry warning, WORM lock mode, storage quota, the storage Recompute
         // action, incomplete-upload cleanup, require-MFA, allow-passkey-login, require-disposition-review,
-        // restrict-tags-to-catalog, enforce-clearance, and the audit webhook URL → fifteen (the webhook secret +
-        // delivery-health buttons render only in edit mode / when a webhook is configured, so aren't counted
-        // here). ADR "Sensitivity clearance enforcement" added the enforce-clearance one.
-        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Explanation" })).ToHaveCountAsync(15);
+        // restrict-tags-to-catalog, enforce-clearance, allow-external-links, and the audit webhook URL → sixteen
+        // (the webhook secret + delivery-health buttons render only in edit mode / when a webhook is configured,
+        // so aren't counted here). ADR "Sensitivity clearance enforcement" added the enforce-clearance one;
+        // ADR "External links" the allow-external-links one — its two numeric caps carry no info button of their
+        // own and are nested behind the switch, so the count does not depend on whether the feature is on.
+        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Explanation" })).ToHaveCountAsync(16);
 
         // The storage-usage line (ADR "Per-tenant storage quota") shows how much is used vs the limit.
         await Expect(view.GetByText("Used:")).ToBeVisibleAsync();

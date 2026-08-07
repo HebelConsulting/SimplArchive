@@ -1815,6 +1815,9 @@
   <data name="TenantExtLinkDefaultAccesses" xml:space="preserve">
     <value>Default maximum accesses</value>
   </data>
+  <data name="TenantAllowExternalLinksInfo" xml:space="preserve">
+    <value>Lets people share a document with someone who has no account, via a link that expires. Checked every time a link is used, so switching this off immediately stops links that are already out there.</value>
+  </data>
   <data name="NoCommentsYet" xml:space="preserve">
     <value>No comments yet. Start the conversation.</value>
   </data>

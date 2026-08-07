@@ -1705,6 +1705,28 @@
                             @InfoButton(Strings.Get("TenantEnforceClearanceInfo"))
                         </div>
 
+                        @* External links (ADR 0546). Off by default: this is the switch that opens an
+                           unauthenticated way for documents to leave the tenant, so it is opted into rather than
+                           inherited. The caps only matter once it is on, hence the nesting. *@
+                        <div class="wb-setting-row mb-2">
+                            <MudSwitch T="bool" @bind-Value="_tenantEdit.AllowExternalLinks" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
+                                       Label="@Strings.Get("TenantAllowExternalLinks")" />
+                            @InfoButton(Strings.Get("TenantAllowExternalLinksInfo"))
+                        </div>
+                        @if (_tenantEdit.AllowExternalLinks)
+                        {
+                            <div class="wb-setting-row mb-2">
+                                <MudNumericField T="int" @bind-Value="_tenantEdit.ExternalLinkMaxDays" Min="1" Max="3650"
+                                                 Label="@Strings.Get("TenantExtLinkMaxDays")" Disabled="@(!_tenantEditing)"
+                                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
+                            </div>
+                            <div class="wb-setting-row mb-4">
+                                <MudNumericField T="int" @bind-Value="_tenantEdit.ExternalLinkDefaultAccesses" Min="1" Max="1000"
+                                                 Label="@Strings.Get("TenantExtLinkDefaultAccesses")" Disabled="@(!_tenantEditing)"
+                                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
+                            </div>
+                        }
+
                         <div class="wb-setting-row mb-2">
                             <MudTextField T="string" Label="@Strings.Get("TenantWebhookUrlLabel")" @bind-Value="_tenantEdit.AuditWebhookUrl"
                                           Disabled="@(!_tenantEditing)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1"
@@ -4914,7 +4936,7 @@
     private void SyncTenantEditFromTenant()
     {
         if (_tenant is null) return;
-        _tenantEdit = new TenantSettingsEdit { Name = _tenant.Name, AuditRetentionDays = _tenant.AuditRetentionDays, CheckoutTtlDays = _tenant.CheckoutTtlDays, CheckoutWarningDays = _tenant.CheckoutWarningDays, WormLockMode = _tenant.WormLockMode, RequireMfa = _tenant.RequireMfa, AllowPasskeyLogin = _tenant.AllowPasskeyLogin, RequireDispositionReview = _tenant.RequireDispositionReview, RestrictTagsToCatalog = _tenant.RestrictTagsToCatalog, EnforceClearance = _tenant.EnforceClearance, StorageQuotaMb = _tenant.StorageQuotaBytes is { } b ? (int)(b / (1024 * 1024)) : null, IncompleteUploadCleanupDays = _tenant.IncompleteUploadCleanupDays, AuditWebhookUrl = _tenant.AuditWebhookUrl, AuditWebhookSecret = null };
+        _tenantEdit = new TenantSettingsEdit { Name = _tenant.Name, AuditRetentionDays = _tenant.AuditRetentionDays, CheckoutTtlDays = _tenant.CheckoutTtlDays, CheckoutWarningDays = _tenant.CheckoutWarningDays, WormLockMode = _tenant.WormLockMode, RequireMfa = _tenant.RequireMfa, AllowPasskeyLogin = _tenant.AllowPasskeyLogin, RequireDispositionReview = _tenant.RequireDispositionReview, RestrictTagsToCatalog = _tenant.RestrictTagsToCatalog, EnforceClearance = _tenant.EnforceClearance, AllowExternalLinks = _tenant.AllowExternalLinks, ExternalLinkMaxDays = _tenant.ExternalLinkMaxDays, ExternalLinkDefaultAccesses = _tenant.ExternalLinkDefaultAccesses, StorageQuotaMb = _tenant.StorageQuotaBytes is { } b ? (int)(b / (1024 * 1024)) : null, IncompleteUploadCleanupDays = _tenant.IncompleteUploadCleanupDays, AuditWebhookUrl = _tenant.AuditWebhookUrl, AuditWebhookSecret = null };
         _tenantEditOcr = new HashSet<string>(_tenant.DefaultOcrLanguages.Split('+', StringSplitOptions.RemoveEmptyEntries));
     }
 
@@ -4938,7 +4960,7 @@
         var webhookUrl = string.IsNullOrWhiteSpace(_tenantEdit.AuditWebhookUrl) ? null : _tenantEdit.AuditWebhookUrl.Trim();
         var webhookSecret = string.IsNullOrWhiteSpace(_tenantEdit.AuditWebhookSecret) ? null : _tenantEdit.AuditWebhookSecret;
         long? storageQuotaBytes = _tenantEdit.StorageQuotaMb is { } mb ? (long)mb * 1024 * 1024 : null;
-        var body = new { name = _tenantEdit.Name, defaultOcrLanguages = ocr, auditRetentionDays = _tenantEdit.AuditRetentionDays, checkoutTtlDays = _tenantEdit.CheckoutTtlDays, checkoutWarningDays = _tenantEdit.CheckoutWarningDays, wormLockMode = _tenantEdit.WormLockMode, requireMfa = _tenantEdit.RequireMfa, allowPasskeyLogin = _tenantEdit.AllowPasskeyLogin, requireDispositionReview = _tenantEdit.RequireDispositionReview, restrictTagsToCatalog = _tenantEdit.RestrictTagsToCatalog, enforceClearance = _tenantEdit.EnforceClearance, storageQuotaBytes, incompleteUploadCleanupDays = _tenantEdit.IncompleteUploadCleanupDays, auditWebhookUrl = webhookUrl, auditWebhookSecret = webhookSecret };
+        var body = new { name = _tenantEdit.Name, defaultOcrLanguages = ocr, auditRetentionDays = _tenantEdit.AuditRetentionDays, checkoutTtlDays = _tenantEdit.CheckoutTtlDays, checkoutWarningDays = _tenantEdit.CheckoutWarningDays, wormLockMode = _tenantEdit.WormLockMode, requireMfa = _tenantEdit.RequireMfa, allowPasskeyLogin = _tenantEdit.AllowPasskeyLogin, requireDispositionReview = _tenantEdit.RequireDispositionReview, restrictTagsToCatalog = _tenantEdit.RestrictTagsToCatalog, enforceClearance = _tenantEdit.EnforceClearance, allowExternalLinks = _tenantEdit.AllowExternalLinks, externalLinkMaxDays = _tenantEdit.ExternalLinkMaxDays, externalLinkDefaultAccesses = _tenantEdit.ExternalLinkDefaultAccesses, storageQuotaBytes, incompleteUploadCleanupDays = _tenantEdit.IncompleteUploadCleanupDays, auditWebhookUrl = webhookUrl, auditWebhookSecret = webhookSecret };
         var resp = await Http.PutAsJsonAsync("api/tenant-settings", body);
         if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add("Another active tenant already uses this name.", Severity.Warning); return; }
         if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add("Check the name, OCR languages, retention/expiry values and the webhook URL/secret.", Severity.Warning); return; }
@@ -4993,6 +5015,11 @@
 
     private record TenantSettingsDto
     {
+        // External links (ADR 0546) — the tenant master switch plus its two caps.
+        public bool AllowExternalLinks { get; set; }
+        public int ExternalLinkMaxDays { get; set; } = 180;
+        public int ExternalLinkDefaultAccesses { get; set; } = 5;
+
         public Guid Id { get; set; }
         public string Name { get; set; } = "";
         public string Status { get; set; } = "";
@@ -5024,6 +5051,10 @@
     private class TenantSettingsEdit
     {
         public string Name { get; set; } = "";
+        // External links (ADR 0546).
+        public bool AllowExternalLinks { get; set; }
+        public int ExternalLinkMaxDays { get; set; } = 180;
+        public int ExternalLinkDefaultAccesses { get; set; } = 5;
         public int AuditRetentionDays { get; set; }
         public int CheckoutTtlDays { get; set; }
         public int CheckoutWarningDays { get; set; } = 1;

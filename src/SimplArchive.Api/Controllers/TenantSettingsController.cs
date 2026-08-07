@@ -69,6 +69,12 @@ public class TenantSettingsController : ControllerBase
         public bool RequireMfa { get; set; }
         public bool AllowPasskeyLogin { get; set; }
         public bool RequireDispositionReview { get; set; }
+        // External links (ADR 0546). AllowExternalLinks is the tenant's master switch for sharing a document with
+        // people who have no account — read at ACCESS time, so turning it off stops links already in the wild.
+        public bool AllowExternalLinks { get; set; }
+        public int ExternalLinkMaxDays { get; set; }
+        public int ExternalLinkDefaultAccesses { get; set; }
+
         // Tag-catalog enforcement (ADR "Tag controlled vocabulary").
         public bool RestrictTagsToCatalog { get; set; }
         // Data-classification clearance enforcement (ADR "Sensitivity clearance enforcement").
@@ -104,6 +110,12 @@ public class TenantSettingsController : ControllerBase
         public bool RequireMfa { get; set; }
         public bool AllowPasskeyLogin { get; set; }
         public bool RequireDispositionReview { get; set; }
+        // External links (ADR 0546). AllowExternalLinks is the tenant's master switch for sharing a document with
+        // people who have no account — read at ACCESS time, so turning it off stops links already in the wild.
+        public bool AllowExternalLinks { get; set; }
+        public int ExternalLinkMaxDays { get; set; }
+        public int ExternalLinkDefaultAccesses { get; set; }
+
         public bool RestrictTagsToCatalog { get; set; }
         // Data-classification clearance enforcement (ADR "Sensitivity clearance enforcement").
         public bool EnforceClearance { get; set; }
@@ -240,6 +252,9 @@ public class TenantSettingsController : ControllerBase
         tenant.RestrictTagsToCatalog = request.RestrictTagsToCatalog;
         tenant.RequireDispositionReview = request.RequireDispositionReview;
         tenant.EnforceClearance = request.EnforceClearance;
+        tenant.AllowExternalLinks = request.AllowExternalLinks;
+        tenant.ExternalLinkMaxDays = request.ExternalLinkMaxDays;
+        tenant.ExternalLinkDefaultAccesses = request.ExternalLinkDefaultAccesses;
         tenant.StorageQuotaBytes = request.StorageQuotaBytes; // null = unlimited
         var lifecycleChanged = tenant.IncompleteUploadCleanupDays != request.IncompleteUploadCleanupDays;
         tenant.IncompleteUploadCleanupDays = request.IncompleteUploadCleanupDays;
@@ -460,6 +475,9 @@ public class TenantSettingsController : ControllerBase
         AllowPasskeyLogin = tenant.AllowPasskeyLogin,
         RestrictTagsToCatalog = tenant.RestrictTagsToCatalog,
         RequireDispositionReview = tenant.RequireDispositionReview,
+        AllowExternalLinks = tenant.AllowExternalLinks,
+        ExternalLinkMaxDays = tenant.ExternalLinkMaxDays,
+        ExternalLinkDefaultAccesses = tenant.ExternalLinkDefaultAccesses,
         EnforceClearance = tenant.EnforceClearance,
         StorageQuotaBytes = tenant.StorageQuotaBytes,
         StorageUsedBytes = tenant.StorageUsedBytes,

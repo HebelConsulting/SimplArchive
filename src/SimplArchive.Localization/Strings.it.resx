@@ -1815,6 +1815,9 @@
   <data name="TenantExtLinkDefaultAccesses" xml:space="preserve">
     <value>Accessi massimi predefiniti</value>
   </data>
+  <data name="TenantAllowExternalLinksInfo" xml:space="preserve">
+    <value>Consente di condividere un documento con chi non ha un account, tramite un link con scadenza. Viene verificato a ogni utilizzo: disattivandolo si bloccano subito anche i link già distribuiti.</value>
+  </data>
   <data name="NoCommentsYet" xml:space="preserve">
     <value>Ancora nessun commento. Avvia la conversazione.</value>
   </data>

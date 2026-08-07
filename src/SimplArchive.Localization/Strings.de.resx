@@ -1815,6 +1815,9 @@
   <data name="TenantExtLinkDefaultAccesses" xml:space="preserve">
     <value>Standardmässige maximale Zugriffe</value>
   </data>
+  <data name="TenantAllowExternalLinksInfo" xml:space="preserve">
+    <value>Erlaubt das Teilen eines Dokuments mit Personen ohne Konto über einen ablaufenden Link. Wird bei jeder Nutzung geprüft — das Deaktivieren stoppt daher sofort auch bereits verteilte Links.</value>
+  </data>
   <data name="NoCommentsYet" xml:space="preserve">
     <value>Noch keine Kommentare. Starten Sie die Unterhaltung.</value>
   </data>
