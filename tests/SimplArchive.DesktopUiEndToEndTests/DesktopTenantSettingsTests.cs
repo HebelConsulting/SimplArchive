@@ -24,7 +24,16 @@ public class DesktopTenantSettingsTests
 
         // Update the editable settings (keep the same name to avoid a cross-test name collision). WORM mode 1 = Compliance.
         // Also configure the audit webhook (URL + write-only secret) and confirm it reports back as configured.
-        var updated = await api.SetTenantSettingsAsync(before.Name, "deu+eng", 500, 21, 3, 1, true, true, true, false, false, 500L * 1024 * 1024, 14, "https://siem.example.com/ingest", "s3cr3t-signing-key");
+        var updated = await api.SetTenantSettingsAsync(before.Name, "deu+eng", 500, 21, 3, 1, true, true, true, false, false,
+            allowExternalLinks: true, externalLinkMaxDays: 30, externalLinkDefaultAccesses: 2,
+            500L * 1024 * 1024, 14, "https://siem.example.com/ingest", "s3cr3t-signing-key");
+        // External links (issue #385). These are asserted here because the desktop PUT used to omit them entirely,
+        // and the endpoint is a FULL replacement — so saving any unrelated setting from the desktop silently
+        // switched external links off and set both caps to 0.
+        Assert.True(updated.AllowExternalLinks);
+        Assert.Equal(30, updated.ExternalLinkMaxDays);
+        Assert.Equal(2, updated.ExternalLinkDefaultAccesses);
+
         Assert.Equal("deu+eng", updated.DefaultOcrLanguages);
         Assert.Equal(500, updated.AuditRetentionDays);
         Assert.Equal(21, updated.CheckoutTtlDays);
@@ -50,7 +59,7 @@ public class DesktopTenantSettingsTests
 
         // Restore the original values so a re-run / other tests see a clean tenant (require-MFA OFF for the shared demo admin,
         // passkey login back to the tenant's original state, webhook cleared).
-        await api.SetTenantSettingsAsync(before.Name, before.DefaultOcrLanguages, before.AuditRetentionDays, before.CheckoutTtlDays, before.CheckoutWarningDays, before.WormLockMode, before.RequireMfa, before.AllowPasskeyLogin, before.RequireDispositionReview, before.RestrictTagsToCatalog, before.EnforceClearance, before.StorageQuotaBytes, before.IncompleteUploadCleanupDays, null, null);
+        await api.SetTenantSettingsAsync(before.Name, before.DefaultOcrLanguages, before.AuditRetentionDays, before.CheckoutTtlDays, before.CheckoutWarningDays, before.WormLockMode, before.RequireMfa, before.AllowPasskeyLogin, before.RequireDispositionReview, before.RestrictTagsToCatalog, before.EnforceClearance, before.AllowExternalLinks, before.ExternalLinkMaxDays, before.ExternalLinkDefaultAccesses, before.StorageQuotaBytes, before.IncompleteUploadCleanupDays, null, null);
         var restored = await api.GetTenantSettingsAsync();
         Assert.Equal(before.AllowPasskeyLogin, restored.AllowPasskeyLogin); // round-trips to the original (passkey login defaults ON, ADR "Passwordless passkey login on by default")
         Assert.False(restored.RequireDispositionReview);

@@ -56,8 +56,10 @@ public class DocumentsController : ControllerBase
         Documents.RepositoryImporter importer,
         IObjectStorageClient objectStorage,
         Documents.IClearanceScopeResolver clearanceScope,
-        IWormLockService wormLock)
+        IWormLockService wormLock,
+        ICurrentTenantAccessor currentTenantAccessor)
     {
+        _currentTenantAccessor = currentTenantAccessor;
         _dbContext = dbContext;
         _clearanceScope = clearanceScope;
         _effectiveRightsCalculator = effectiveRightsCalculator;
@@ -265,6 +267,8 @@ public class DocumentsController : ControllerBase
         public bool ByMe { get; set; }
     }
 
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
+
     private record DocumentRow(string Name, Guid ConcurrencyToken, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, bool SensitivityWatermark, bool BreaksInheritance);
 
     [HttpGet]
@@ -290,6 +294,19 @@ public class DocumentsController : ControllerBase
 
         var checkedOut = await BuildCheckoutInfoAsync(documentId, cancellationToken);
 
+        // The document's external links (ADR 0546, issue #385). CONDITIONAL, unlike the rels around it: a missing
+        // rel means "not available to you, here, now" (ADR 0543), so a client hides the affordance instead of
+        // offering one that leads to a refusal. Two things have to hold — the tenant's master switch, and the
+        // caller's right to read this document's content, which is what the linked GET itself requires. Whether
+        // the caller may also CREATE a link is a separate question answered by "canCreate" on that resource, so a
+        // reviewer who cannot share still reaches the list.
+        //
+        // Scoped by THIS document's TenantId, deliberately: Tenant is not ITenantScoped, so it carries no
+        // automatic tenant query filter — an unqualified "any tenant allows external links" would answer for the
+        // whole database and light the affordance up for every tenant as soon as one enabled it.
+        var externalLinksAllowed = rights.CanReadContent
+            && await _dbContext.Tenants.AnyAsync(t => t.Id == _currentTenantAccessor.TenantId && t.AllowExternalLinks, cancellationToken);
+
         var links = new List<Link>
         {
             new("self", Url.Action(nameof(Get), new { documentId })!, "GET"),
@@ -300,15 +317,17 @@ public class DocumentsController : ControllerBase
             // The document's collaboration thread (issue #382). Its absence is why renaming the route from
             // /comments to /chat broke both clients at all: with the rel, a route move is invisible to them.
             new("chat", $"/api/documents/{documentId}/chat", "GET"),
-            // The document's external links (ADR 0546). Advertised for the same reason as "chat": without it a
-            // client has to compose the URL, which is what the hypermedia ledger exists to stop.
-            new("external-links", $"/api/documents/{documentId}/external-links", "GET"),
             new("references", $"/api/documents/{documentId}/references", "GET"),
             new("referencing-folders", Url.Action(nameof(ListReferencingFolders), new { documentId })!, "GET"),
             new("move", Url.Action(nameof(Move), new { documentId })!, "PUT"),
             new("set-primary-location", Url.Action(nameof(SetPrimaryLocation), new { documentId })!, "PUT"),
             new("assignable-reviewers", Url.Action(nameof(AssignableReviewers), new { documentId })!, "GET"),
         };
+
+        if (externalLinksAllowed)
+        {
+            links.Add(new Link("external-links", $"/api/documents/{documentId}/external-links", "GET"));
+        }
 
         // Check-out affordances (ADR "Document check-out / check-in"): offer check-out when it's free and the
         // caller can edit content; offer check-in when the caller holds the lock or can override someone else's.

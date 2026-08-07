@@ -185,6 +185,11 @@
                             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
                                 <Button Command="{Binding RefreshCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
                                 <Button Command="{Binding ResetLayoutCommand}" ToolTip.Tip="{loc:Tr RibbonResetLayout}"><i:Icon Value="mdi-view-grid-outline" FontSize="18" /></Button>
+                                <!-- "My external links" — everything the caller has shared, across documents (ADR 0546).
+                                     A cross-document review surface, so it belongs to the general group rather than to the
+                                     selected document. Hidden until the API root advertises the rel. -->
+                                <Button Command="{Binding ShowMyExternalLinksCommand}" IsVisible="{Binding HasMyExternalLinks}"
+                                        ToolTip.Tip="{loc:Tr ExtLinkMyLinks}"><i:Icon Value="mdi-link-box-variant-outline" FontSize="18" /></Button>
                             </StackPanel>
 
                             <ItemsControl ItemsSource="{Binding Breadcrumbs}" VerticalAlignment="Center" Margin="0,0,0,4">
@@ -449,6 +454,14 @@
                                                 IsVisible="{Binding DetailTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
                                                 Height="26" Padding="6,0" Background="Transparent" BorderThickness="0">
                                             <i:Icon Value="{Binding SubscriptionIcon}" FontSize="16" />
+                                        </Button>
+                                        <!-- Share this document by external link (ADR 0546, issue #385). Shown only when the
+                                             server advertised the rel — with the tenant switch off, or without the right, there
+                                             is no link to offer and the button is simply absent. -->
+                                        <Button DockPanel.Dock="Right" Command="{Binding ShowDocumentExternalLinksCommand}"
+                                                ToolTip.Tip="{loc:Tr ExtLinkShare}" IsVisible="{Binding CanShareDocument}"
+                                                Height="26" Padding="6,0" Background="Transparent" BorderThickness="0">
+                                            <i:Icon Value="mdi-link-variant" FontSize="16" />
                                         </Button>
                                         <TextBlock Text="{Binding DetailTitle}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
                                     </DockPanel>
@@ -2055,6 +2068,28 @@
                                 <CheckBox IsChecked="{Binding TenantEnforceClearance}" IsEnabled="{Binding TenantEditing}" Content="{loc:Tr TenantEnforceClearance}" />
                                 <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
                                         ToolTip.Tip="{loc:Tr MwEnforceClearanceTip}" />
+                            </StackPanel>
+
+                            <!-- External links (ADR 0546, issue #385), matching the web Tenant tab. The info text says
+                                 the thing that surprises people: the switch is read every time a link is USED, so
+                                 turning it off immediately stops links already out there. -->
+                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,10,0,0">
+                                <CheckBox IsChecked="{Binding TenantAllowExternalLinks}" IsEnabled="{Binding TenantEditing}" Content="{loc:Tr TenantAllowExternalLinks}" />
+                                <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                        ToolTip.Tip="{loc:Tr TenantAllowExternalLinksInfo}" />
+                            </StackPanel>
+                            <!-- The caps are meaningless while the feature is off, so they appear with it. -->
+                            <StackPanel Margin="24,6,0,0" Spacing="6" IsVisible="{Binding TenantAllowExternalLinks}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="{loc:Tr TenantExtLinkMaxDays}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Width="220" />
+                                    <NumericUpDown Value="{Binding TenantExternalLinkMaxDays}" IsEnabled="{Binding TenantEditing}"
+                                                   Minimum="1" Maximum="3650" Increment="1" FormatString="0" Width="120" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="{loc:Tr TenantExtLinkDefaultAccesses}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Width="220" />
+                                    <NumericUpDown Value="{Binding TenantExternalLinkDefaultAccesses}" IsEnabled="{Binding TenantEditing}"
+                                                   Minimum="1" Maximum="1000" Increment="1" FormatString="0" Width="120" />
+                                </StackPanel>
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,10,0,0">

@@ -1755,6 +1755,12 @@
   <data name="ExtLinkManage" xml:space="preserve">
     <value>Externe Links…</value>
   </data>
+  <data name="ExtLinkShare" xml:space="preserve">
+    <value>Per Link teilen</value>
+  </data>
+  <data name="ExtLinkMyLinks" xml:space="preserve">
+    <value>Meine externen Links</value>
+  </data>
   <data name="ExtLinkMine" xml:space="preserve">
     <value>Meine externen Links…</value>
   </data>

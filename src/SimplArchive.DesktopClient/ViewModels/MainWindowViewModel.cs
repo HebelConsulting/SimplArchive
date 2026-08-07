@@ -77,10 +77,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             var links = await api.GetRootLinksAsync();
             _myExternalLinksHref = links.TryGetValue("externalLinks", out var href) ? href : null;
+            HasMyExternalLinks = _myExternalLinksHref is not null;
         }
         catch (HttpRequestException)
         {
             _myExternalLinksHref = null;
+            HasMyExternalLinks = false;
         }
     }
 
@@ -4093,6 +4095,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty] private bool _tenantRestrictTagsToCatalog;
     // Data-classification clearance enforcement (ADR "Sensitivity clearance enforcement").
     [ObservableProperty] private bool _tenantEnforceClearance;
+
+    // External links (ADR 0546, issue #385). The two caps only mean anything while the switch is on, so the UI
+    // reveals them with it — one yes/no decision, then its bounds.
+    [ObservableProperty] private bool _tenantAllowExternalLinks;
+    [ObservableProperty] private int _tenantExternalLinkMaxDays = 180;
+    [ObservableProperty] private int _tenantExternalLinkDefaultAccesses = 5;
     // Per-tenant storage quota (ADR "Per-tenant storage quota"): the editable limit in MB (null = unlimited) and a
     // read-only "used of limit" display line.
     [ObservableProperty] private int? _tenantStorageQuotaMb;
@@ -4172,6 +4180,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         TenantRequireDispositionReview = s.RequireDispositionReview;
         TenantRestrictTagsToCatalog = s.RestrictTagsToCatalog;
         TenantEnforceClearance = s.EnforceClearance;
+        TenantAllowExternalLinks = s.AllowExternalLinks;
+        TenantExternalLinkMaxDays = s.ExternalLinkMaxDays;
+        TenantExternalLinkDefaultAccesses = s.ExternalLinkDefaultAccesses;
         TenantStorageQuotaMb = s.StorageQuotaBytes is { } b ? (int)(b / (1024 * 1024)) : null;
         if (s.StorageQuotaBytes is { } quota && quota > 0)
         {
@@ -4297,7 +4308,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             var webhookUrl = string.IsNullOrWhiteSpace(TenantAuditWebhookUrl) ? null : TenantAuditWebhookUrl.Trim();
             var webhookSecret = string.IsNullOrWhiteSpace(TenantAuditWebhookSecret) ? null : TenantAuditWebhookSecret;
             long? storageQuotaBytes = TenantStorageQuotaMb is { } mb ? (long)mb * 1024 * 1024 : null;
-            var s = await _api.SetTenantSettingsAsync(TenantName.Trim(), ocr, TenantAuditRetentionDays, TenantCheckoutTtlDays, TenantCheckoutWarningDays, TenantWormLockModeIndex, TenantRequireMfa, TenantAllowPasskeyLogin, TenantRequireDispositionReview, TenantRestrictTagsToCatalog, TenantEnforceClearance, storageQuotaBytes, TenantIncompleteUploadCleanupDays, webhookUrl, webhookSecret);
+            var s = await _api.SetTenantSettingsAsync(TenantName.Trim(), ocr, TenantAuditRetentionDays, TenantCheckoutTtlDays, TenantCheckoutWarningDays, TenantWormLockModeIndex, TenantRequireMfa, TenantAllowPasskeyLogin, TenantRequireDispositionReview, TenantRestrictTagsToCatalog, TenantEnforceClearance, TenantAllowExternalLinks, TenantExternalLinkMaxDays, TenantExternalLinkDefaultAccesses, storageQuotaBytes, TenantIncompleteUploadCleanupDays, webhookUrl, webhookSecret);
             ApplyTenantSettings(s);
             TenantEditing = false;
             Status = Strings.Get("StTenantSaved");
@@ -5127,13 +5138,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // load it before the version-less early-return so a folder can show/edit it too.
         try
         {
-            var s = await _api.GetDocumentSensitivityAsync(documentId);
+            // One read of the document resource serves the label AND the external-links rel (issue #385).
+            var detail = await _api.GetDocumentDetailAsync(documentId);
+            var s = detail.Sensitivity;
             _detailSensitivityName = s.Name;
             _detailSensitivityColor = s.Color;
             _detailSensitivityWatermark = s.Watermark;
             DetailSensitivityId = s.LabelId;
+            _detailExternalLinksHref = detail.ExternalLinksHref;
+            _detailDocumentName = detail.Name;
+            CanShareDocument = detail.ExternalLinksHref is not null;
         }
-        catch (Exception) { _detailSensitivityName = ""; _detailSensitivityColor = null; _detailSensitivityWatermark = false; DetailSensitivityId = null; }
+        catch (Exception) { _detailSensitivityName = ""; _detailSensitivityColor = null; _detailSensitivityWatermark = false; DetailSensitivityId = null; _detailExternalLinksHref = null; CanShareDocument = false; }
         // Sensitivity watermark on the preview (ADR "Document watermarking") — when the label's watermark flag is set.
         Preview.WatermarkText = _detailSensitivityWatermark ? $"{_detailSensitivityName} · {UserDisplayName}" : "";
         // Whether the current user follows this document (ADR "Document subscriptions").
@@ -5518,11 +5534,33 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // The cross-document collection's href, from the API root's "externalLinks" rel (ADR 0543). Null until the
     // root is read, and if the server never offers it the command simply does nothing — absence of a rel is the
     // answer, not something to work around.
-    //
-    // The PER-DOCUMENT dialog is not wired on the desktop yet: its href lives on the document resource, which
-    // this client fetches only for a name and a sensitivity label. Following that rel means refactoring those
-    // two calls into one document-resource read — worth doing, and tracked, but not smuggled in here.
     private string? _myExternalLinksHref;
+
+    // Drives the ribbon button. Without this the command existed but nothing invoked it — the dialog was
+    // unreachable on the desktop, which is how a shipped feature stays invisible.
+    [ObservableProperty] private bool _hasMyExternalLinks;
+
+    // The selected document's own links collection, from the "external-links" rel on the DOCUMENT resource
+    // (issue #385). Null when the tenant has the feature off or the caller may not share this document, which is
+    // exactly what hides the affordance — a missing rel means "not available to you, here, now".
+    private string? _detailExternalLinksHref;
+
+    private string _detailDocumentName = "";
+
+    [ObservableProperty] private bool _canShareDocument;
+
+    // "Share this document" — the per-document dialog: create a link for THIS document, list the live ones,
+    // extend or revoke. Same view-model as the cross-document view, which only differs by offering creation.
+    [RelayCommand]
+    private async Task ShowDocumentExternalLinksAsync()
+    {
+        if (_api is null || ShowExternalLinksDialog is null || _detailExternalLinksHref is not { } href)
+        {
+            return;
+        }
+
+        await ShowExternalLinksDialog(new ExternalLinksDialogViewModel(_api, href, _detailDocumentName));
+    }
 
     // "My external links" — everything the caller has shared, across documents. The collection is a top-level
     // resource, so its href is stable rather than per-document.

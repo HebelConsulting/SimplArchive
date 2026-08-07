@@ -52,7 +52,10 @@ public class ClientHypermediaTests
         ["src/SimplArchive.Client/Dialogs/WorkflowDialog.razor"] = 2,
         ["src/SimplArchive.Client/Layout/MainLayout.razor"] = 7,
         ["src/SimplArchive.Client/Pages/Home.razor"] = 141,
-        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 184,
+        // 184 → 183 (issue #385): the desktop read the document resource TWICE — once for its name, once for its
+        // sensitivity label — so the per-document external-links rel had nowhere to be picked up from. One read
+        // now serves both and carries the rel, which is what let the dialog follow it instead of composing a URL.
+        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 183,
     };
 
     [Fact]

@@ -693,11 +693,8 @@ public sealed class SimplArchiveApiClient
     public Task DeleteInboxItemAsync(string name, string sourceQuery = "", CancellationToken cancellationToken = default) =>
         _http.DeleteAsync($"api/inbox/{Uri.EscapeDataString(name)}{sourceQuery}", cancellationToken);
 
-    public async Task<string> GetDocumentNameAsync(Guid documentId, CancellationToken cancellationToken = default)
-    {
-        var document = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}", cancellationToken);
-        return document.TryGetProperty("name", out var name) ? name.GetString() ?? "" : "";
-    }
+    public async Task<string> GetDocumentNameAsync(Guid documentId, CancellationToken cancellationToken = default) =>
+        (await GetDocumentDetailAsync(documentId, cancellationToken)).Name;
 
     public async Task<MaskInfo> GetMaskAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
@@ -925,14 +922,31 @@ public sealed class SimplArchiveApiClient
     public sealed record SensitivityLabelInfo(Guid Id, string Name, int Rank, string? Color, bool Watermark, bool Retired);
     public sealed record SensitivityLabelCatalog(IReadOnlyList<SensitivityLabelInfo> Items, bool CanManage);
 
-    public async Task<DocumentSensitivityInfo> GetDocumentSensitivityAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<DocumentSensitivityInfo> GetDocumentSensitivityAsync(Guid documentId, CancellationToken cancellationToken = default) =>
+        (await GetDocumentDetailAsync(documentId, cancellationToken)).Sensitivity;
+
+    // Everything the detail pane needs from the document resource, from ONE read of it (issue #385).
+    //
+    // The name and the sensitivity label used to be two separate GETs of the same URL, which is why the
+    // per-document external-links dialog had nowhere to get its href from without composing one: the rel is
+    // advertised on this resource, and ADR 0543 forbids rebuilding the URL instead of following it. Parsing the
+    // resource once, here, is what makes the rel reachable.
+    public sealed record DocumentDetailInfo(string Name, DocumentSensitivityInfo Sensitivity, string? ExternalLinksHref);
+
+    public async Task<DocumentDetailInfo> GetDocumentDetailAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
         var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}", cancellationToken);
-        return new DocumentSensitivityInfo(
-            json.TryGetProperty("sensitivityLabelId", out var id) && id.ValueKind == JsonValueKind.String ? id.GetGuid() : null,
-            json.TryGetProperty("sensitivityLabelName", out var n) ? n.GetString() ?? "" : "",
-            json.TryGetProperty("sensitivityLabelColor", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null,
-            json.TryGetProperty("sensitivityWatermark", out var w) && w.ValueKind == JsonValueKind.True);
+
+        return new DocumentDetailInfo(
+            json.TryGetProperty("name", out var name) ? name.GetString() ?? "" : "",
+            new DocumentSensitivityInfo(
+                json.TryGetProperty("sensitivityLabelId", out var id) && id.ValueKind == JsonValueKind.String ? id.GetGuid() : null,
+                json.TryGetProperty("sensitivityLabelName", out var n) ? n.GetString() ?? "" : "",
+                json.TryGetProperty("sensitivityLabelColor", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null,
+                json.TryGetProperty("sensitivityWatermark", out var w) && w.ValueKind == JsonValueKind.True),
+            // Absent when the tenant has the feature off or the caller may not share this document — a missing
+            // rel means "not available to you, here, now", so the affordance is simply not offered (ADR 0543).
+            RelHref(json, "external-links"));
     }
 
     public async Task SetSensitivityAsync(Guid documentId, Guid? labelId, CancellationToken cancellationToken = default)
@@ -1471,7 +1485,7 @@ public sealed class SimplArchiveApiClient
 
     // ---- Tenant-admin settings (ADR "Tenant-admin settings tab") -----------------------------------
 
-    public sealed record TenantSettingsInfo(Guid Id, string Name, string Status, DateTimeOffset CreatedAt, string DefaultOcrLanguages, int AuditRetentionDays, int CheckoutTtlDays, int CheckoutWarningDays, int WormLockMode, bool RequireMfa, bool AllowPasskeyLogin, bool RequireDispositionReview, bool RestrictTagsToCatalog, bool EnforceClearance, long? StorageQuotaBytes, long StorageUsedBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool AuditWebhookConfigured, int AuditWebhookConsecutiveFailures, DateTimeOffset? AuditWebhookLastSuccessAt, DateTimeOffset? AuditWebhookLastFailureAt, DateTimeOffset? AuditWebhookNextAttemptAt, string? AuditWebhookLastError);
+    public sealed record TenantSettingsInfo(Guid Id, string Name, string Status, DateTimeOffset CreatedAt, string DefaultOcrLanguages, int AuditRetentionDays, int CheckoutTtlDays, int CheckoutWarningDays, int WormLockMode, bool RequireMfa, bool AllowPasskeyLogin, bool RequireDispositionReview, bool RestrictTagsToCatalog, bool EnforceClearance, bool AllowExternalLinks, int ExternalLinkMaxDays, int ExternalLinkDefaultAccesses, long? StorageQuotaBytes, long StorageUsedBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool AuditWebhookConfigured, int AuditWebhookConsecutiveFailures, DateTimeOffset? AuditWebhookLastSuccessAt, DateTimeOffset? AuditWebhookLastFailureAt, DateTimeOffset? AuditWebhookNextAttemptAt, string? AuditWebhookLastError);
 
     private static DateTimeOffset? OptDate(JsonElement j, string name) =>
         j.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetDateTimeOffset() : null;
@@ -1491,6 +1505,9 @@ public sealed class SimplArchiveApiClient
         j.TryGetProperty("requireDispositionReview", out var dr) && dr.ValueKind == JsonValueKind.True,
         j.TryGetProperty("restrictTagsToCatalog", out var rt) && rt.ValueKind == JsonValueKind.True,
         j.TryGetProperty("enforceClearance", out var ec) && ec.ValueKind == JsonValueKind.True,
+        j.TryGetProperty("allowExternalLinks", out var xl) && xl.ValueKind == JsonValueKind.True,
+        j.TryGetProperty("externalLinkMaxDays", out var xd) ? xd.GetInt32() : 180,
+        j.TryGetProperty("externalLinkDefaultAccesses", out var xa) ? xa.GetInt32() : 5,
         j.TryGetProperty("storageQuotaBytes", out var sq) && sq.ValueKind == JsonValueKind.Number ? sq.GetInt64() : null,
         j.TryGetProperty("storageUsedBytes", out var su) && su.ValueKind == JsonValueKind.Number ? su.GetInt64() : 0,
         j.TryGetProperty("incompleteUploadCleanupDays", out var iu) ? iu.GetInt32() : 0,
@@ -1543,9 +1560,13 @@ public sealed class SimplArchiveApiClient
         return ParseTenantSettings(j);
     }
 
-    public async Task<TenantSettingsInfo> SetTenantSettingsAsync(string name, string defaultOcrLanguages, int auditRetentionDays, int checkoutTtlDays, int checkoutWarningDays, int wormLockMode, bool requireMfa, bool allowPasskeyLogin, bool requireDispositionReview, bool restrictTagsToCatalog, bool enforceClearance, long? storageQuotaBytes, int incompleteUploadCleanupDays, string? auditWebhookUrl, string? auditWebhookSecret, CancellationToken cancellationToken = default)
+    // NOTE: this PUT is a FULL REPLACEMENT — a field left out of the payload is set to its DTO default, not left
+    // alone. The external-link settings are therefore REQUIRED parameters rather than optional ones: when they
+    // were simply missing here, a desktop admin saving any unrelated tenant setting silently switched external
+    // links off AND set both caps to 0. An optional default would recreate exactly that bug at the next caller.
+    public async Task<TenantSettingsInfo> SetTenantSettingsAsync(string name, string defaultOcrLanguages, int auditRetentionDays, int checkoutTtlDays, int checkoutWarningDays, int wormLockMode, bool requireMfa, bool allowPasskeyLogin, bool requireDispositionReview, bool restrictTagsToCatalog, bool enforceClearance, bool allowExternalLinks, int externalLinkMaxDays, int externalLinkDefaultAccesses, long? storageQuotaBytes, int incompleteUploadCleanupDays, string? auditWebhookUrl, string? auditWebhookSecret, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PutAsJsonAsync("api/tenant-settings", new { name, defaultOcrLanguages, auditRetentionDays, checkoutTtlDays, checkoutWarningDays, wormLockMode, requireMfa, allowPasskeyLogin, requireDispositionReview, restrictTagsToCatalog, enforceClearance, storageQuotaBytes, incompleteUploadCleanupDays, auditWebhookUrl, auditWebhookSecret }, cancellationToken);
+        using var response = await _http.PutAsJsonAsync("api/tenant-settings", new { name, defaultOcrLanguages, auditRetentionDays, checkoutTtlDays, checkoutWarningDays, wormLockMode, requireMfa, allowPasskeyLogin, requireDispositionReview, restrictTagsToCatalog, enforceClearance, allowExternalLinks, externalLinkMaxDays, externalLinkDefaultAccesses, storageQuotaBytes, incompleteUploadCleanupDays, auditWebhookUrl, auditWebhookSecret }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException("Another active tenant already uses this name.");
