@@ -5472,7 +5472,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var comments = await _api!.GetCommentsAsync(documentId);
         var byId = comments.ToDictionary(
             c => c.Id,
-            c => new ChatMessageViewModel { Id = c.Id, AuthorName = c.AuthorName, Body = c.Body, CreatedAt = c.CreatedAt, AuthorCardHref = c.AuthorCardHref, Kind = c.Kind, VersionNumber = c.VersionNumber, VersionComment = c.VersionComment, VersionCommentKind = c.VersionCommentKind });
+            c => new ChatMessageViewModel { Id = c.Id, AuthorName = c.AuthorName, Body = c.Body, CreatedAt = c.CreatedAt, AuthorCardHref = c.AuthorCardHref, Kind = c.Kind, VersionNumber = c.VersionNumber, VersionComment = c.VersionComment, VersionCommentKind = c.VersionCommentKind, CanReply = c.ParentMessageId is null });
 
         Comments.Clear();
         foreach (var comment in comments.Where(c => c.ParentMessageId is null))
@@ -5484,6 +5484,51 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
 
             Comments.Add(vm);
+        }
+    }
+
+    // Opens the inline reply box under one message, closing whichever was open — one conversation at a time, the
+    // same rule the web client follows. Re-clicking the same message closes it, and either way the half-typed
+    // text is dropped: a reply is addressed to a specific message, so carrying it to another one would misfile it.
+    [RelayCommand]
+    private void ToggleReply(ChatMessageViewModel? message)
+    {
+        if (message is null)
+        {
+            return;
+        }
+
+        var opening = !message.IsReplying;
+
+        foreach (var other in Comments)
+        {
+            other.IsReplying = false;
+            other.ReplyText = "";
+        }
+
+        message.IsReplying = opening;
+    }
+
+    [RelayCommand]
+    private async Task PostReplyAsync(ChatMessageViewModel? message)
+    {
+        if (_api is null || _selectedDocumentId is not { } documentId
+            || message is null || string.IsNullOrWhiteSpace(message.ReplyText))
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.PostCommentAsync(documentId, message.ReplyText, parentCommentId: message.Id);
+
+            // Reloading rebuilds the collection, so the open reply box disappears with it — no need to reset the
+            // flag on an instance that is about to be replaced.
+            await LoadCommentsAsync(documentId);
+        }
+        catch (Exception e)
+        {
+            Status = string.Format(Strings.Get("StErrPostComment"), e.Message);
         }
     }
 
@@ -5597,7 +5642,26 @@ public sealed partial class MainWindowViewModel : ObservableObject
         });
         // "Demo Admin", not the email address: the author label became DisplayName when identity cards landed
         // (ADR 0544), and this fixture still showed the raw email the product used to render.
-        Comments.Add(new ChatMessageViewModel { Id = Guid.Empty, AuthorName = "Demo Admin", Body = "Looks good.", CreatedAt = ScreenshotClock });
+        //
+        // CanReply + a reply of its own, so the capture shows the thread the product can actually produce
+        // (issue #383) rather than a flat list — the affordance is on the message in the manual because it is on
+        // the message in the app.
+        var typed = new ChatMessageViewModel
+        {
+            Id = Guid.Empty,
+            AuthorName = "Demo Admin",
+            Body = "Looks good.",
+            CreatedAt = ScreenshotClock,
+            CanReply = true,
+        };
+        typed.Replies.Add(new ChatMessageViewModel
+        {
+            Id = Guid.Empty,
+            AuthorName = "Demo Admin",
+            Body = "Filed under Invoices.",
+            CreatedAt = ScreenshotClock,
+        });
+        Comments.Add(typed);
         Status = "3 item(s).";
     }
 

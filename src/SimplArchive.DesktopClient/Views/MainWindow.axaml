@@ -700,6 +700,18 @@
                                                                 <TextBlock Text="{Binding Timestamp}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                                                             </StackPanel>
                                                             <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="13" IsVisible="{Binding IsUserPost}" />
+                                                            <!-- Reply affordance: a top-level typed message only (ADR 0511 parity with the web
+                                                                 thread). It binds to the window view-model, since the command has to close
+                                                                 whichever other reply box is open.
+                                                                 Deliberately NOT Classes="link" — no such style is defined in this app, so that
+                                                                 class is a no-op and the button would render with full default chrome next to
+                                                                 the message text. The flat look is set here instead, matching the web's link. -->
+                                                            <Button IsVisible="{Binding ShowReplyLink}" Padding="0" FontSize="11"
+                                                                    HorizontalAlignment="Left" Content="{loc:Tr ReplyBtn}"
+                                                                    Background="Transparent" BorderThickness="0"
+                                                                    Foreground="{DynamicResource WbMuted}"
+                                                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ToggleReplyCommand}"
+                                                                    CommandParameter="{Binding}" />
                                                             <!-- An automatic entry (ADR 0545): the sentence, then the
                                                                  version block with its icon and optional comment. -->
                                                             <TextBlock Text="{Binding SystemSentence}" TextWrapping="Wrap" FontSize="13"
@@ -708,7 +720,7 @@
                                                             <Border IsVisible="{Binding HasVersionEntry}" Margin="0,3,0,0" Padding="6,3"
                                                                     BorderBrush="{DynamicResource WbBorder}" BorderThickness="2,0,0,0">
                                                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                    
+
                                                                     <StackPanel Spacing="1">
                                                                         <TextBlock Text="{Binding VersionLabel}" FontSize="11" />
                                                                         <TextBlock Text="{Binding VersionCommentText}" FontSize="11" TextWrapping="Wrap"
@@ -784,6 +796,15 @@
                                                                     </DataTemplate>
                                                                 </ItemsControl.ItemTemplate>
                                                             </ItemsControl>
+                                                            <!-- The reply box sits BELOW the existing replies, where the new one will
+                                                                 appear — so the thread reads in the order it was written. -->
+                                                            <StackPanel IsVisible="{Binding IsReplying}" Margin="16,4,0,0" Spacing="4">
+                                                                <TextBox Text="{Binding ReplyText}" Watermark="{loc:Tr ReplyPlaceholder}"
+                                                                         AcceptsReturn="True" MinHeight="40" FontSize="13" />
+                                                                <Button HorizontalAlignment="Right" FontSize="11" Content="{loc:Tr ReplyBtn}"
+                                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).PostReplyCommand}"
+                                                                        CommandParameter="{Binding}" />
+                                                            </StackPanel>
                                                         </StackPanel>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>

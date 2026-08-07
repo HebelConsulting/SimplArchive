@@ -2,13 +2,17 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using CommunityToolkit.Mvvm.ComponentModel;
 using SimplArchive.Localization;
 using Avalonia.Media.Imaging;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
 // A message in the chat pane. Top-level messages carry their replies (one level, like the web thread).
-public sealed class ChatMessageViewModel
+//
+// Observable because the reply box opens INSIDE the item's template: whether this particular message is being
+// replied to is per-item state, so it lives here rather than as one id on the window view-model.
+public sealed partial class ChatMessageViewModel : ObservableObject
 {
     public required Guid Id { get; init; }
 
@@ -71,6 +75,18 @@ public sealed class ChatMessageViewModel
     public bool ShowAuthorLink => IsUserPost && HasAuthorCard;
 
     public bool ShowAuthorPlainName => IsUserPost && !HasAuthorCard;
+
+    // Whether this message may be replied to. Set only for TOP-LEVEL messages in the live chat pane: the thread
+    // is one level deep (a reply's parent must itself be top-level, enforced at POST), and the recycle bin's
+    // read-only preview of a deleted document leaves this false — there is nothing to continue there.
+    public bool CanReply { get; init; }
+
+    // Matching the web client, an automatic entry gets no reply affordance: an event is not a conversation.
+    public bool ShowReplyLink => CanReply && IsUserPost;
+
+    [ObservableProperty] private bool _isReplying;
+
+    [ObservableProperty] private string _replyText = "";
 
     public ObservableCollection<ChatMessageViewModel> Replies { get; } = [];
 }
