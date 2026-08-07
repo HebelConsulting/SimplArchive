@@ -1489,10 +1489,10 @@
     <value>⧉ Vista previa generada</value>
   </data>
   <data name="RbCommentsHeader" xml:space="preserve">
-    <value>Comentarios (solo lectura)</value>
+    <value>Chat (solo lectura)</value>
   </data>
   <data name="RbNoComments" xml:space="preserve">
-    <value>No hay comentarios.</value>
+    <value>No hay mensajes.</value>
   </data>
   <data name="TenantHeader" xml:space="preserve">
     <value>Configuración del inquilino</value>
@@ -1711,7 +1711,7 @@
     <value>Borrar selección</value>
   </data>
   <data name="CommentBtn" xml:space="preserve">
-    <value>Comentar</value>
+    <value>Enviar</value>
   </data>
   <data name="ChatMentionUnknown" xml:space="preserve">
     <value>Usuario desconocido</value>
@@ -1720,7 +1720,7 @@
     <value>Responder</value>
   </data>
   <data name="CommentsHeader" xml:space="preserve">
-    <value>Comentarios</value>
+    <value>Chat</value>
   </data>
   <data name="NoActions" xml:space="preserve">
     <value>No hay acciones disponibles.</value>
@@ -1812,6 +1812,63 @@
   <data name="ExtLinkDisabled" xml:space="preserve">
     <value>Los enlaces externos están desactivados para este inquilino.</value>
   </data>
+  <data name="ExtLinkPageTitle" xml:space="preserve">
+    <value>Documento compartido</value>
+  </data>
+  <data name="ExtLinkPageAvailableUntil" xml:space="preserve">
+    <value>Disponible hasta el {0}</value>
+  </data>
+  <data name="ExtLinkPageOpen" xml:space="preserve">
+    <value>Abrir documento</value>
+  </data>
+  <data name="ExtLinkPageDownload" xml:space="preserve">
+    <value>Descargar</value>
+  </data>
+  <data name="ExtLinkPageGoneTitle" xml:space="preserve">
+    <value>Este enlace ya no está disponible</value>
+  </data>
+  <data name="ExtLinkPageGoneBody" xml:space="preserve">
+    <value>Puede haber caducado, haber alcanzado su límite de accesos o haber sido revocado. Pide un enlace nuevo a quien lo compartió.</value>
+  </data>
+  <data name="ExtLinkPageFooter" xml:space="preserve">
+    <value>Compartido mediante SimplArchive</value>
+  </data>
+  <data name="ExtLinkGoTo" xml:space="preserve">
+    <value>Ir a</value>
+  </data>
+  <data name="ExtLinkGoToTooltip" xml:space="preserve">
+    <value>Mostrar este documento en el archivo</value>
+  </data>
+  <data name="ExtLinkShow" xml:space="preserve">
+    <value>Mostrar</value>
+  </data>
+  <data name="ExtLinkShowTooltip" xml:space="preserve">
+    <value>Mostrar los detalles de este enlace</value>
+  </data>
+  <data name="ExtLinkDetailTitle" xml:space="preserve">
+    <value>Detalles del enlace externo</value>
+  </data>
+  <data name="ExtLinkCreatedAt" xml:space="preserve">
+    <value>Creado</value>
+  </data>
+  <data name="ExtLinkUnlimited" xml:space="preserve">
+    <value>Ilimitado</value>
+  </data>
+  <data name="ExtLinkUrlNotShown" xml:space="preserve">
+    <value>No se muestra: la URL de un enlace se entrega una sola vez, al crearlo.</value>
+  </data>
+  <data name="ExtLinkRenew" xml:space="preserve">
+    <value>Renovar disponibilidad</value>
+  </data>
+  <data name="ExtLinkRenewHint" xml:space="preserve">
+    <value>Fija la caducidad desde hoy y sustituye el límite de accesos. Déjalo vacío para ilimitado.</value>
+  </data>
+  <data name="ExtLinkApply" xml:space="preserve">
+    <value>Aplicar</value>
+  </data>
+  <data name="ExtLinkActionFailed" xml:space="preserve">
+    <value>No se pudo actualizar el enlace.</value>
+  </data>
   <data name="ExtLinkViewFor" xml:space="preserve">
     <value>Mostrar enlaces creados por</value>
   </data>
@@ -1828,7 +1885,7 @@
     <value>Permite compartir un documento con alguien sin cuenta mediante un enlace con caducidad. Se comprueba en cada uso, por lo que desactivarlo detiene de inmediato los enlaces ya distribuidos.</value>
   </data>
   <data name="NoCommentsYet" xml:space="preserve">
-    <value>Aún no hay comentarios. Inicia la conversación.</value>
+    <value>Aún no hay mensajes. Inicia la conversación.</value>
   </data>
   <data name="SelectDocDetail" xml:space="preserve">
     <value>Selecciona un documento para ver sus datos de índice y vista previa.</value>
@@ -1843,7 +1900,7 @@
     <value>Este archivo está vacío.</value>
   </data>
   <data name="SelectForComments" xml:space="preserve">
-    <value>Selecciona una carpeta o documento para ver sus comentarios.</value>
+    <value>Selecciona una carpeta o documento para ver su chat.</value>
   </data>
   <data name="CoLockedOther" xml:space="preserve">
     <value>Desprotegido por otro usuario</value>
@@ -1855,7 +1912,7 @@
     <value>Bajo retención legal</value>
   </data>
   <data name="CommentPlaceholder" xml:space="preserve">
-    <value>Añadir un comentario…</value>
+    <value>Escribe un mensaje…</value>
   </data>
   <data name="ReplyPlaceholder" xml:space="preserve">
     <value>Escribe una respuesta…</value>
@@ -2389,7 +2446,7 @@
     <value>Abrir en el gestor de archivos</value>
   </data>
   <data name="MwPostComment" xml:space="preserve">
-    <value>Publicar comentario</value>
+    <value>Enviar mensaje</value>
   </data>
   <data name="MwPreview" xml:space="preserve">
     <value>Vista previa</value>
@@ -2662,7 +2719,7 @@
     <value>No se pudo colocar la referencia: {0}</value>
   </data>
   <data name="StErrPostComment" xml:space="preserve">
-    <value>No se pudo publicar el comentario: {0}</value>
+    <value>No se pudo enviar el mensaje: {0}</value>
   </data>
   <data name="StErrRename" xml:space="preserve">
     <value>No se pudo renombrar: {0}</value>
@@ -2989,7 +3046,7 @@
     <value>Detalles</value>
   </data>
   <data name="PhoneTabComments" xml:space="preserve">
-    <value>Comentarios</value>
+    <value>Chat</value>
   </data>
   <data name="FolderSortLabel" xml:space="preserve">
     <value>Orden del contenido</value>

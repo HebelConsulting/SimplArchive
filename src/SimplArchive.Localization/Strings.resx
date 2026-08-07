@@ -1489,10 +1489,10 @@
     <value>⧉ Converted preview</value>
   </data>
   <data name="RbCommentsHeader" xml:space="preserve">
-    <value>Comments (read-only)</value>
+    <value>Chat (read-only)</value>
   </data>
   <data name="RbNoComments" xml:space="preserve">
-    <value>No comments.</value>
+    <value>No messages.</value>
   </data>
   <data name="TenantHeader" xml:space="preserve">
     <value>Tenant settings</value>
@@ -1711,7 +1711,7 @@
     <value>Clear selection</value>
   </data>
   <data name="CommentBtn" xml:space="preserve">
-    <value>Comment</value>
+    <value>Send</value>
   </data>
   <data name="ChatMentionUnknown" xml:space="preserve">
     <value>Unknown user</value>
@@ -1720,7 +1720,7 @@
     <value>Reply</value>
   </data>
   <data name="CommentsHeader" xml:space="preserve">
-    <value>Comments</value>
+    <value>Chat</value>
   </data>
   <data name="NoActions" xml:space="preserve">
     <value>No actions available.</value>
@@ -1812,6 +1812,63 @@
   <data name="ExtLinkDisabled" xml:space="preserve">
     <value>External links are switched off for this tenant.</value>
   </data>
+  <data name="ExtLinkPageTitle" xml:space="preserve">
+    <value>Shared document</value>
+  </data>
+  <data name="ExtLinkPageAvailableUntil" xml:space="preserve">
+    <value>Available until {0}</value>
+  </data>
+  <data name="ExtLinkPageOpen" xml:space="preserve">
+    <value>Open document</value>
+  </data>
+  <data name="ExtLinkPageDownload" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="ExtLinkPageGoneTitle" xml:space="preserve">
+    <value>This link is no longer available</value>
+  </data>
+  <data name="ExtLinkPageGoneBody" xml:space="preserve">
+    <value>It may have expired, reached its access limit, or been withdrawn. Ask the person who shared it for a new link.</value>
+  </data>
+  <data name="ExtLinkPageFooter" xml:space="preserve">
+    <value>Shared via SimplArchive</value>
+  </data>
+  <data name="ExtLinkGoTo" xml:space="preserve">
+    <value>Go to</value>
+  </data>
+  <data name="ExtLinkGoToTooltip" xml:space="preserve">
+    <value>Show this document in the repository</value>
+  </data>
+  <data name="ExtLinkShow" xml:space="preserve">
+    <value>Show</value>
+  </data>
+  <data name="ExtLinkShowTooltip" xml:space="preserve">
+    <value>Show this link's details</value>
+  </data>
+  <data name="ExtLinkDetailTitle" xml:space="preserve">
+    <value>External link details</value>
+  </data>
+  <data name="ExtLinkCreatedAt" xml:space="preserve">
+    <value>Created</value>
+  </data>
+  <data name="ExtLinkUnlimited" xml:space="preserve">
+    <value>Unlimited</value>
+  </data>
+  <data name="ExtLinkUrlNotShown" xml:space="preserve">
+    <value>Not shown — a link's URL is given out once, when it is created.</value>
+  </data>
+  <data name="ExtLinkRenew" xml:space="preserve">
+    <value>Renew availability</value>
+  </data>
+  <data name="ExtLinkRenewHint" xml:space="preserve">
+    <value>Sets the expiry from today, and replaces the access limit. Leave the limit empty for unlimited.</value>
+  </data>
+  <data name="ExtLinkApply" xml:space="preserve">
+    <value>Apply</value>
+  </data>
+  <data name="ExtLinkActionFailed" xml:space="preserve">
+    <value>The link could not be updated.</value>
+  </data>
   <data name="ExtLinkViewFor" xml:space="preserve">
     <value>Show links created by</value>
   </data>
@@ -1828,7 +1885,7 @@
     <value>Lets people share a document with someone who has no account, via a link that expires. Checked every time a link is used, so switching this off immediately stops links that are already out there.</value>
   </data>
   <data name="NoCommentsYet" xml:space="preserve">
-    <value>No comments yet. Start the conversation.</value>
+    <value>No messages yet. Start the conversation.</value>
   </data>
   <data name="SelectDocDetail" xml:space="preserve">
     <value>Select a document to see its index data and preview.</value>
@@ -1843,7 +1900,7 @@
     <value>This archive is empty.</value>
   </data>
   <data name="SelectForComments" xml:space="preserve">
-    <value>Select a folder or document to view its comments.</value>
+    <value>Select a folder or document to view its chat.</value>
   </data>
   <data name="CoLockedOther" xml:space="preserve">
     <value>Checked out by another user</value>
@@ -1855,7 +1912,7 @@
     <value>Under legal hold</value>
   </data>
   <data name="CommentPlaceholder" xml:space="preserve">
-    <value>Add a comment…</value>
+    <value>Write a message…</value>
   </data>
   <data name="ReplyPlaceholder" xml:space="preserve">
     <value>Write a reply…</value>
@@ -2389,7 +2446,7 @@
     <value>Open in file manager</value>
   </data>
   <data name="MwPostComment" xml:space="preserve">
-    <value>Post comment</value>
+    <value>Send message</value>
   </data>
   <data name="MwPreview" xml:space="preserve">
     <value>Preview</value>
@@ -2662,7 +2719,7 @@
     <value>Could not place reference: {0}</value>
   </data>
   <data name="StErrPostComment" xml:space="preserve">
-    <value>Could not post comment: {0}</value>
+    <value>Could not send message: {0}</value>
   </data>
   <data name="StErrRename" xml:space="preserve">
     <value>Could not rename: {0}</value>
@@ -2989,7 +3046,7 @@
     <value>Details</value>
   </data>
   <data name="PhoneTabComments" xml:space="preserve">
-    <value>Comments</value>
+    <value>Chat</value>
   </data>
   <data name="FolderSortLabel" xml:space="preserve">
     <value>Contents sort order</value>

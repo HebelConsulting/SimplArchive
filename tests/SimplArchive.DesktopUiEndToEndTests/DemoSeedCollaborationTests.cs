@@ -1,5 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace SimplArchive.UiEndToEndTests;
@@ -62,6 +64,45 @@ public class DemoSeedCollaborationTests
             string.IsNullOrWhiteSpace(v.GetProperty("comment").GetString()),
             "every version of the offer should carry a check-in comment"));
     }
+
+    // The seeded external link (issue #405). Same guard reasoning as above, with one addition: this link's URL is
+    // meant to survive the kiosk's nightly re-seed, so anything that quietly made the token random again would
+    // break URLs already shared — while every test that merely creates a link of its own would keep passing.
+    [Fact]
+    public async Task The_demo_seed_has_a_live_external_link_with_a_stable_url()
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(_app.BaseUrl) };
+        http.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", await Ui.GetUserTokenAsync(_app.BaseUrl));
+
+        var agreementId = await FindDocumentAsync(http, "MyCountry Telekom — service agreement");
+        Assert.NotEqual(Guid.Empty, agreementId);
+
+        var link = Assert.Single(
+            (await http.GetFromJsonAsync<JsonElement>($"/api/documents/{agreementId}/external-links"))
+                .GetProperty("externalLinks").EnumerateArray());
+
+        // Unlimited, not the tenant's default of 5 — five curious visitors must not exhaust the demo.
+        Assert.Equal(JsonValueKind.Null, link.GetProperty("maxAccesses").ValueKind);
+
+        // ~90 days out, so a nightly reset always refreshes it long before it lapses.
+        var expires = link.GetProperty("expiresAt").GetDateTimeOffset();
+        Assert.InRange(expires, DateTimeOffset.UtcNow.AddDays(88), DateTimeOffset.UtcNow.AddDays(91));
+
+        // The URL works ANONYMOUSLY and is the stable one: derived from a fixed seed string, so it is identical
+        // after every re-seed. Recomputed here rather than pasted, so the test says WHY the value is what it is.
+        var token = Base64Url(SHA256.HashData(
+            Encoding.UTF8.GetBytes("simplarchive-demo-telekom-service-agreement-v1")));
+
+        using var anonymous = new HttpClient { BaseAddress = new Uri(_app.BaseUrl) };
+        var redeemed = await anonymous.GetAsync($"/api/external-links/{token}");
+        Assert.True(redeemed.IsSuccessStatusCode,
+            $"the seeded link must resolve anonymously; got {redeemed.StatusCode}. A 410 here usually means the "
+            + "demo tenant's AllowExternalLinks switch was left off — it is checked at access time.");
+    }
+
+    private static string Base64Url(byte[] bytes) =>
+        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     private static async Task<Guid> FindDocumentAsync(HttpClient http, string name)
     {

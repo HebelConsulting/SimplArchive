@@ -3,8 +3,8 @@ using static Microsoft.Playwright.Assertions;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// A UI flow (ADR 0222): the chat pane posts a comment on the selected node and a threaded reply — both appear
-// with the author. Commenting on the repository folder keeps it independent of the document-focused tests.
+// A UI flow (ADR 0222): the chat pane sends a message on the selected node and a threaded reply — both appear
+// with the author. Chatting on the repository folder keeps it independent of the document-focused tests.
 [Collection(UiCollection.Name)]
 public class WebCommentsTests
 {
@@ -19,13 +19,13 @@ public class WebCommentsTests
         var body = "e2e-comment-" + Guid.NewGuid().ToString("N")[..8];
         var reply = "e2e-reply-" + Guid.NewGuid().ToString("N")[..8];
 
-        // Selecting a node (the repository folder) drives the comment pane.
+        // Selecting a node (the repository folder) drives the chat pane.
         await page.GetByText("Demo Repository").First.ClickAsync();
         var chat = page.Locator(".wb-chat");
 
-        // Post a top-level comment.
-        await FillMudAsync(chat.Locator("textarea[placeholder*='Add a comment']"), body);
-        await chat.GetByRole(AriaRole.Button, new() { Name = "Comment" }).ClickAsync();
+        // Send a top-level message.
+        await FillMudAsync(chat.Locator("textarea[placeholder*='Write a message']"), body);
+        await chat.GetByRole(AriaRole.Button, new() { Name = "Send" }).ClickAsync();
         await Expect(chat.Locator(".wb-comment-body").Filter(new() { HasText = body })).ToBeVisibleAsync();
 
         // Reply to it.
@@ -36,7 +36,7 @@ public class WebCommentsTests
     }
 
     // MudTextField (no Immediate) commits its bound value on the change event, i.e. on blur — fill then blur so
-    // the value reaches the model and the Post button enables.
+    // the value reaches the model and the Send button enables.
     private static async Task FillMudAsync(ILocator field, string value)
     {
         await field.FillAsync(value);

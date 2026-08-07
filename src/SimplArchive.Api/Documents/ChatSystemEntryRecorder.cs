@@ -3,8 +3,8 @@ using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Documents;
 
-// Writes the automatic entries in a document's chat thread (ADR 0545): a document was filed, a version was saved,
-// an older version was made current again.
+// Writes the automatic entries in a document's chat thread (ADR 0545): a version was confirmed (which for a
+// first version IS the document being filed), or an older version was made current again.
 //
 // These carry NO text. Their wording is a localized template each client renders, with the author as a slot so
 // the name stays a clickable identity card (ADR 0544) — storing an English sentence would freeze it for every
@@ -21,19 +21,13 @@ public sealed class ChatSystemEntryRecorder
 
     public ChatSystemEntryRecorder(SimplArchiveDbContext dbContext) => _dbContext = dbContext;
 
-    // Called once a version is confirmed. A document's FIRST version produces two entries — "filed a new
-    // document" plus its "Version 1" entry — so that every version, including the first, has the same per-version
-    // entry in the feed, and the arrival of the document itself is still announced separately.
+    // Called once a version is confirmed — ONE entry per version, first or not. Filing used to add a second,
+    // separate "filed a new document" entry beside it, which said the same thing twice and left the per-version
+    // one reading "saved a new working version" of a document that had no earlier version. The version number
+    // the entry already points at is enough for a client to choose the right sentence, so the split earned
+    // nothing. Which version this is stays the clients' question to answer, not a fact duplicated here.
     public async Task RecordVersionFiledAsync(DocumentVersion version, CancellationToken cancellationToken)
     {
-        var isFirstVersion = version.VersionNumber is null or <= 1;
-
-        if (isFirstVersion)
-        {
-            Add(version.TenantId, version.DocumentId, ChatMessageKind.DocumentFiled, documentVersionId: null,
-                version.CreatedByUserId, version.CreatedByServiceAccountId);
-        }
-
         Add(version.TenantId, version.DocumentId, ChatMessageKind.VersionFiled, version.Id,
             version.CreatedByUserId, version.CreatedByServiceAccountId);
 

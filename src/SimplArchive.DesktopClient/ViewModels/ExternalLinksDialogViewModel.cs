@@ -44,7 +44,11 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
 
     [ObservableProperty] private SimplArchiveApiClient.UserOptionInfo? _selectedUser;
 
-    [ObservableProperty] private DateTimeOffset? _expiry = DateTimeOffset.Now.AddDays(30);
+    // UtcNow, not Now: a DateTimeOffset carrying a local offset is a valid instant but Postgres stores instants
+    // with offset 0 only, so sending one used to 500 the create endpoint for anybody not sitting in UTC. The
+    // server now normalises inbound timestamps, but sending what we mean is still the honest thing — the user
+    // picks a DATE, and its zone is not part of what they chose.
+    [ObservableProperty] private DateTimeOffset? _expiry = DateTimeOffset.UtcNow.AddDays(30);
 
     [ObservableProperty] private int? _maxAccesses;
 
@@ -52,18 +56,29 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
 
     [ObservableProperty] private bool _canViewOthers;
 
-    [ObservableProperty] private bool _forceDownload;
-
     // Shown once, prominently: the token is a live credential and the list endpoints never return it, so if the
     // sharer loses this URL the only remedy is to revoke and create another (ADR 0546).
     [ObservableProperty] private string? _createdUrl;
 
     [ObservableProperty] private string _status = "";
 
-    public string CreatedUrlWithOptions =>
-        CreatedUrl is null ? "" : ForceDownload ? CreatedUrl + "?download=true" : CreatedUrl;
+    // Set by the host window: opening a child dialog and moving the workbench are both things a dialog cannot do
+    // for itself, so they arrive as callbacks rather than as a dependency on the main view-model.
+    public Func<ExternalLinkDetailDialogViewModel, Task>? ShowDetailDialog { get; set; }
 
-    partial void OnForceDownloadChanged(bool value) => OnPropertyChanged(nameof(CreatedUrlWithOptions));
+    public Action<Guid, Guid?>? GoToDocument { get; set; }
+
+    // Set by the host window, so "Go to" can dismiss this dialog before the workbench moves behind it.
+    public Action? RequestClose { get; set; }
+
+    // "Go to" only appears in the cross-document list; in the per-document one it would select the document the
+    // reader is already looking at.
+    public bool ShowGoTo => !ShowCreate;
+
+    // One URL, no variants: opening it lands on a page offering both Open and Download, so the RECIPIENT decides
+    // how to take the document. The sharer used to make that choice for them at creation time, from a dialog that
+    // could not know what the other person wanted (ADR 0546).
+    public string CreatedUrlWithOptions => CreatedUrl ?? "";
 
     partial void OnCreatedUrlChanged(string? value) => OnPropertyChanged(nameof(CreatedUrlWithOptions));
 
@@ -97,7 +112,19 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
     [RelayCommand]
     private async Task CreateAsync()
     {
-        var created = await _api.CreateExternalLinkAsync(_linksHref, Expiry, MaxAccesses);
+        SimplArchiveApiClient.ExternalLinkInfo? created;
+        try
+        {
+            created = await _api.CreateExternalLinkAsync(_linksHref, Expiry, MaxAccesses);
+        }
+        catch (ApiActionException e)
+        {
+            // A genuine failure, reported as one. This used to fall into the branch below and claim the tenant
+            // switch was off — which had the reader checking a setting that was already correct.
+            Status = e.Message;
+            return;
+        }
+
         if (created is null)
         {
             // The tenant switch being off and the right being absent both land here. The dialog says the feature
@@ -125,19 +152,37 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
         }
     }
 
+    // The link's own details, read-only, with renewal as the one thing still open to change. Renewal lives THERE
+    // rather than on the row because it is now two decisions — how long, and how many more times — and a
+    // row-sized button cannot ask for either without guessing on the reader's behalf.
     [RelayCommand]
-    private async Task ExtendAsync(SimplArchiveApiClient.ExternalLinkInfo? link)
+    private async Task ShowAsync(SimplArchiveApiClient.ExternalLinkInfo? link)
     {
-        // 90 days from today — the server measures it, so the client does not have to know the rule twice.
-        if (link?.ExtendHref is not { } href)
+        if (link is null || ShowDetailDialog is null)
         {
             return;
         }
 
-        if (await _api.ExtendExternalLinkAsync(href, 90, link.Etag))
+        var detail = new ExternalLinkDetailDialogViewModel(_api, link);
+        await ShowDetailDialog(detail);
+
+        if (detail.Renewed)
         {
             await LoadAsync();
         }
+    }
+
+    // Hands the document back to the workbench, which owns the tree and list panes; this dialog cannot see them.
+    // Only meaningful in the cross-document list — the per-document one is already sitting on the document.
+    [RelayCommand]
+    private void GoTo(SimplArchiveApiClient.ExternalLinkInfo? link)
+    {
+        if (link is null)
+        {
+            return;
+        }
+
+        GoToDocument?.Invoke(link.DocumentId, link.ParentId);
     }
 
     [RelayCommand]

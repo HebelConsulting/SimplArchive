@@ -276,11 +276,28 @@
                                 <Style Selector="TreeViewItem">
                                     <Setter Property="IsExpanded" Value="{ReflectionBinding IsExpanded, Mode=TwoWay}" />
                                 </Style>
+                                <!-- The glyph's colour comes from the ACTIVE theme dictionary (ADR "Folder icon
+                                     scheme"), so it must be a DynamicResource resolved in the view — a brush the
+                                     view model resolved once would keep the startup theme after the OS switched.
+                                     Avalonia can't bind a resource key, hence one class per brush; the view
+                                     model's three flags are mutually exclusive. -->
+                                <Style Selector="i|Icon.wbFolder">
+                                    <Setter Property="Foreground" Value="{DynamicResource WbFolder}" />
+                                </Style>
+                                <Style Selector="i|Icon.wbFolderEmpty">
+                                    <Setter Property="Foreground" Value="{DynamicResource WbFolderEmpty}" />
+                                </Style>
+                                <Style Selector="i|Icon.wbMutedGlyph">
+                                    <Setter Property="Foreground" Value="{DynamicResource WbMuted}" />
+                                </Style>
                             </TreeView.Styles>
                             <TreeView.DataTemplates>
                                 <TreeDataTemplate DataType="vm:TreeNodeViewModel" ItemsSource="{Binding Children}">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <i:Icon Value="{Binding IconValue}" Foreground="{Binding IconBrush}" />
+                                        <i:Icon Value="{Binding IconValue}"
+                                                Classes.wbFolder="{Binding UsesFolderBrush}"
+                                                Classes.wbFolderEmpty="{Binding UsesEmptyFolderBrush}"
+                                                Classes.wbMutedGlyph="{Binding UsesMutedBrush}" />
                                         <TextBlock Text="{Binding Name}" />
                                     </StackPanel>
                                 </TreeDataTemplate>
@@ -450,6 +467,21 @@
                                 <StackPanel Margin="12,10" Spacing="4">
                                     <DockPanel>
                                         <!-- Follow / unfollow this document (ADR "Document subscriptions"). -->
+                                        <!-- Edit the index data (issue #407): beside the thing it edits, in the row of
+                                             per-document actions, rather than at the far end of the pane where it began.
+                                             Icon-only like its neighbours, and always visible — touch has no hover
+                                             (ADR 0511). Save and Cancel stay down with the FIELDS: they act on the form,
+                                             not on the document.
+
+                                             Declared FIRST among the Dock=Right buttons on purpose: docking stacks
+                                             right-to-left in declaration order, so first means rightmost — which is
+                                             where the web client's row ends too (ADR 0511 asks for one order, not
+                                             merely one set). -->
+                                        <Button DockPanel.Dock="Right" Command="{Binding BeginEditCommand}"
+                                                ToolTip.Tip="{loc:Tr Edit}" IsVisible="{Binding CanBeginEdit}"
+                                                Height="26" Padding="6,0" Background="Transparent" BorderThickness="0">
+                                            <i:Icon Value="mdi-pencil-outline" FontSize="16" />
+                                        </Button>
                                         <Button DockPanel.Dock="Right" Command="{Binding ToggleSubscriptionCommand}" ToolTip.Tip="{Binding SubscriptionTip}"
                                                 IsVisible="{Binding DetailTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
                                                 Height="26" Padding="6,0" Background="Transparent" BorderThickness="0">
@@ -466,26 +498,6 @@
                                         <TextBlock Text="{Binding DetailTitle}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
                                     </DockPanel>
 
-                                    <!-- Folder detail: the open folder's persisted contents sort order (ADR "Per-folder contents
-                                         sort order"), editable under an Edit toggle. Shown when a folder is open and no document
-                                         is selected. -->
-                                    <StackPanel IsVisible="{Binding ShowFolderDetail}" Spacing="6">
-                                        <TextBlock Text="{Binding CurrentFolderName}" FontSize="15" FontWeight="SemiBold" />
-                                        <Grid ColumnDefinitions="130,*" Margin="0,6,0,0">
-                                            <TextBlock Grid.Column="0" Text="{loc:Tr FolderSortLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="1" Text="{Binding FolderSortText}" VerticalAlignment="Center" IsVisible="{Binding !FolderSortEditing}" />
-                                            <ComboBox Grid.Column="1" SelectedIndex="{Binding FolderSortEditIndex}" IsVisible="{Binding FolderSortEditing}" HorizontalAlignment="Left" MinWidth="180">
-                                                <ComboBoxItem Content="{loc:Tr FolderSortName}" />
-                                                <ComboBoxItem Content="{loc:Tr FolderSortDocDate}" />
-                                                <ComboBoxItem Content="{loc:Tr FolderSortCreated}" />
-                                            </ComboBox>
-                                        </Grid>
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <Button Content="{loc:Tr Edit}" Command="{Binding BeginFolderSortEditCommand}" IsVisible="{Binding !FolderSortEditing}" />
-                                            <Button Content="{loc:Tr Save}" Command="{Binding SaveFolderSortCommand}" IsVisible="{Binding FolderSortEditing}" />
-                                            <Button Content="{loc:Tr Cancel}" Command="{Binding CancelFolderSortEditCommand}" IsVisible="{Binding FolderSortEditing}" />
-                                        </StackPanel>
-                                    </StackPanel>
 
                                     <!-- System fields: always shown, separate from the mask (ADR "System fields + OCR-language mask
                                          field"). Read-only until the pane enters edit mode (ADR "Single pane-level edit toggle on
@@ -518,6 +530,19 @@
                                              (ADR "Mask-pane current-version line"). -->
                                         <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:Tr SysCurrentVersion}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                                         <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SysCurrentVersion}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Margin="0,2" />
+                                    </Grid>
+
+                                    <!-- Folder-only: the order this folder lists its contents in (ADR "Per-folder contents
+                                         sort order"). A row in the ONE detail pane since issue #408, committed by the same
+                                         Save as the mask beside it rather than by an Edit toggle of its own. -->
+                                    <Grid ColumnDefinitions="130,*" Margin="0,6,0,0" IsVisible="{Binding DetailIsFolder}">
+                                        <TextBlock Grid.Column="0" Text="{loc:Tr FolderSortLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding DetailSortText}" VerticalAlignment="Center" IsVisible="{Binding !IsEditing}" />
+                                        <ComboBox Grid.Column="1" SelectedIndex="{Binding EditSortOrder}" IsVisible="{Binding IsEditing}" HorizontalAlignment="Left" MinWidth="180">
+                                            <ComboBoxItem Content="{loc:Tr FolderSortName}" />
+                                            <ComboBoxItem Content="{loc:Tr FolderSortDocDate}" />
+                                            <ComboBoxItem Content="{loc:Tr FolderSortCreated}" />
+                                        </ComboBox>
                                     </Grid>
 
                                     <!-- Mask (additional metadata) — read-only when the pane isn't editing. -->
@@ -617,11 +642,12 @@
                                         </Grid>
                                     </StackPanel>
 
-                                    <!-- One pane-level action row: Edit (read-only) or Save + Cancel (editing). -->
-                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,10,0,0">
-                                        <Button Content="{loc:Tr Edit}" Command="{Binding BeginEditCommand}" IsVisible="{Binding CanBeginEdit}" />
-                                        <Button Content="{loc:Tr Cancel}" Command="{Binding CancelEditCommand}" IsVisible="{Binding IsEditing}" />
-                                        <Button Content="{loc:Tr Save}" Command="{Binding SaveDetailCommand}" IsVisible="{Binding IsEditing}" />
+                                    <!-- Commit controls only: Edit STARTS from the header pencil (issue #407), but Save and
+                                         Cancel act on the form, so they sit under the fields they commit. -->
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,10,0,0"
+                                                IsVisible="{Binding IsEditing}">
+                                        <Button Content="{loc:Tr Cancel}" Command="{Binding CancelEditCommand}" />
+                                        <Button Content="{loc:Tr Save}" Command="{Binding SaveDetailCommand}" />
                                     </StackPanel>
                                 </StackPanel>
                             </ScrollViewer>

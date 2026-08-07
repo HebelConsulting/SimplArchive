@@ -106,10 +106,15 @@ public sealed class RepositoryExporter
         var fieldValues = await _dbContext.FieldValues
             .Where(f => exportedVersionDocIds.Contains(f.DocumentId))
             .ToListAsync(cancellationToken);
+        // Only what a PERSON typed. An automatic entry (ADR 0545) stores no text — its wording is a localized
+        // template rendered from Kind + DocumentVersionId, neither of which crosses the archive — so exporting one
+        // would write an empty row that imports as a blank message nobody wrote. The importing side records its
+        // own entries for the versions it creates anyway, which is where those events belong.
+        //
         // Ordered client-side — SQLite can't translate a DateTimeOffset ORDER BY (the export runs against both
         // providers), and the thread is small.
         var comments = (await _dbContext.ChatMessages
-            .Where(c => included.Contains(c.DocumentId))
+            .Where(c => included.Contains(c.DocumentId) && c.Kind == ChatMessageKind.UserPost)
             .ToListAsync(cancellationToken))
             .OrderBy(c => c.CreatedAt).ThenBy(c => c.Id)
             .ToList();

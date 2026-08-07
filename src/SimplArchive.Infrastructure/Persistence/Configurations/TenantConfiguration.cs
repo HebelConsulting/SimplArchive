@@ -31,7 +31,8 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         // External links (ADR 0546). HasDefaultValue, not just the C# initializer: the initializer only applies to
         // objects created in code, so without these an EXISTING tenant would be migrated to 0 — which would mean
         // "links may expire at most 0 days out" and silently make the feature unusable for every tenant that
-        // predates it. AllowExternalLinks stays false by design, so the caps only matter once someone opts in.
+        // predates it. AllowExternalLinks stays false by design, so the caps only matter once someone opts in —
+        // the DEMO tenant is the one exception, switched on by DemoDataSeeder so the kiosk can show the feature.
         builder.Property(t => t.ExternalLinkMaxDays).HasDefaultValue(180);
         builder.Property(t => t.ExternalLinkDefaultAccesses).HasDefaultValue(5);
 

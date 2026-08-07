@@ -1,0 +1,110 @@
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+@* One external link, read-only, with the one thing you can still change about it: how long it stays usable and
+   how often it may still be redeemed (ADR 0546).
+
+   There is no "edit" here beyond that, and deliberately so. A link's document, creator and token are settled the
+   moment it is created — the token most of all, which the server hands out exactly once and this dialog therefore
+   cannot show, however much a reader might want it. Renewing is the only live decision left, so it is the only
+   control. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 480px;">
+            <MudSimpleTable Dense="true" Elevation="0">
+                <tbody>
+                    <tr>
+                        <td class="mud-text-secondary">@Strings.Get("ExtLinkDocument")</td>
+                        <td>@Link.DocumentName</td>
+                    </tr>
+                    <tr>
+                        <td class="mud-text-secondary">@Strings.Get("ExtLinkCreatedBy")</td>
+                        <td>@Link.CreatedByName</td>
+                    </tr>
+                    <tr>
+                        <td class="mud-text-secondary">@Strings.Get("ExtLinkExpires")</td>
+                        <td>@Link.ExpiresAt.ToLocalTime().ToString("g")</td>
+                    </tr>
+                    <tr>
+                        <td class="mud-text-secondary">@Strings.Get("ExtLinkAccesses")</td>
+                        <td>@Link.AccessCount / @(Link.MaxAccesses?.ToString() ?? Strings.Get("ExtLinkUnlimited"))</td>
+                    </tr>
+                    <tr>
+                        <td class="mud-text-secondary">@Strings.Get("ExtLinkUrl")</td>
+                        <td class="mud-text-secondary"><em>@Strings.Get("ExtLinkUrlNotShown")</em></td>
+                    </tr>
+                </tbody>
+            </MudSimpleTable>
+
+            @* Renewal moves BOTH halves of "still usable" at once — a link out of time and out of accesses is
+               only half-renewed by moving either alone, and the server takes them in one call so the two can
+               never land apart. *@
+            @if (RenewHref is not null)
+            {
+                <div class="mt-4">
+                    <MudText Typo="Typo.subtitle2">@Strings.Get("ExtLinkRenew")</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">@Strings.Get("ExtLinkRenewHint")</MudText>
+                    <div style="display:flex; gap:12px;">
+                        <MudNumericField T="int" @bind-Value="_days" Label="@Strings.Get("ExtLinkExtendDays")"
+                                         Variant="Variant.Outlined" Min="1" Max="90" Margin="Margin.Dense" />
+                        <MudNumericField T="int?" @bind-Value="_maxAccesses" Label="@Strings.Get("ExtLinkMaxAccesses")"
+                                         Variant="Variant.Outlined" Min="1" Margin="Margin.Dense" Clearable="true" />
+                    </div>
+                </div>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        @if (RenewHref is not null)
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="RenewAsync">@Strings.Get("ExtLinkApply")</MudButton>
+        }
+        <MudButton OnClick="@(() => MudDialog.Close())">@Strings.Get("Close")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public LinkView Link { get; set; } = default!;
+
+    // The "availability" rel as the server advertised it (ADR 0543). Null when the server did not offer it, in
+    // which case the renewal controls are simply absent — a missing rel means "not available to you, here, now",
+    // so the affordance goes rather than leading somebody to a refusal.
+    [Parameter] public string? RenewHref { get; set; }
+
+    private int _days = 90;
+    private int? _maxAccesses;
+
+    protected override void OnInitialized() => _maxAccesses = Link.MaxAccesses;
+
+    private async Task RenewAsync()
+    {
+        if (RenewHref is null)
+        {
+            return;
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Put, RenewHref)
+        {
+            Content = JsonContent.Create(new { days = _days, maxAccesses = _maxAccesses }),
+        };
+        request.Headers.TryAddWithoutValidation("If-Match", Link.Etag);
+
+        var response = await Http.SendAsync(request);
+        if (response.IsSuccessStatusCode)
+        {
+            // Closing with a result tells the list to reload: the row's expiry, cap and ETag all just changed, and
+            // a stale ETag behind this dialog would make the caller's next action fail a precondition.
+            MudDialog.Close(DialogResult.Ok(true));
+            return;
+        }
+
+        Snackbar.Add(Strings.Get("ExtLinkActionFailed"), Severity.Error);
+    }
+
+    // The subset of a link this dialog renders — passed in rather than re-fetched, since the list has just read it.
+    public record LinkView(
+        string DocumentName, string CreatedByName, DateTimeOffset ExpiresAt,
+        int? MaxAccesses, int AccessCount, string Etag);
+}

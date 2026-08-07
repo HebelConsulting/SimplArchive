@@ -25,7 +25,6 @@
                     IsVisible="{Binding CreatedUrl, Converter={x:Static ObjectConverters.IsNotNull}}">
             <TextBlock Text="{loc:Tr ExtLinkShownOnce}" TextWrapping="Wrap" Margin="0,0,0,4" />
             <TextBox Text="{Binding CreatedUrlWithOptions, Mode=OneWay}" IsReadOnly="True" />
-            <CheckBox Content="{loc:Tr ExtLinkDownloadOption}" IsChecked="{Binding ForceDownload}" Margin="0,4,0,0" />
         </StackPanel>
 
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right"
@@ -58,10 +57,20 @@
                                     <TextBlock FontSize="11" Foreground="{DynamicResource WbMuted}"
                                                Text="{Binding CreatedByName}" />
                                 </StackPanel>
-                                <Button Grid.Column="1" Content="{loc:Tr ExtLinkExtend}" FontSize="11"
-                                        IsVisible="{Binding CanExtend}"
-                                        Command="{Binding $parent[Window].((vm:ExternalLinksDialogViewModel)DataContext).ExtendCommand}"
-                                        CommandParameter="{Binding}" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                    <!-- This list spans documents, so a row is often the reader's only handle on
+                                         where the thing actually lives; "Go to" turns it back into one. Absent in
+                                         the per-document dialog, which is already there. -->
+                                    <Button Content="{loc:Tr ExtLinkGoTo}" FontSize="11"
+                                            ToolTip.Tip="{loc:Tr ExtLinkGoToTooltip}"
+                                            IsVisible="{Binding $parent[Window].((vm:ExternalLinksDialogViewModel)DataContext).ShowGoTo}"
+                                            Command="{Binding $parent[Window].((vm:ExternalLinksDialogViewModel)DataContext).GoToCommand}"
+                                            CommandParameter="{Binding}" />
+                                    <Button Content="{loc:Tr ExtLinkShow}" FontSize="11"
+                                            ToolTip.Tip="{loc:Tr ExtLinkShowTooltip}"
+                                            Command="{Binding $parent[Window].((vm:ExternalLinksDialogViewModel)DataContext).ShowCommand}"
+                                            CommandParameter="{Binding}" />
+                                </StackPanel>
                                 <Button Grid.Column="2" Content="{loc:Tr ExtLinkRevoke}" FontSize="11" Margin="6,0,0,0"
                                         Command="{Binding $parent[Window].((vm:ExternalLinksDialogViewModel)DataContext).RevokeCommand}"
                                         CommandParameter="{Binding}" />

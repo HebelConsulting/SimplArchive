@@ -29,7 +29,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     // and that absence is what makes the name render as plain text rather than a link (ADR 0544).
     public string? AuthorCardHref { get; init; }
 
-    // What produced this entry (ADR 0545): 0 UserPost · 1 DocumentFiled · 2 VersionFiled · 3 VersionActivated.
+    // What produced this entry (ADR 0545): 0 UserPost · 1 VersionFiled · 2 VersionActivated.
     public int Kind { get; init; }
 
     public int? VersionNumber { get; init; }
@@ -69,11 +69,14 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     // The sentence for an automatic entry, from a localized template. Unlike the web client — which splices the
     // author in as a clickable element — the desktop renders it as text with the name inline, because Avalonia's
     // TextBlock has no equivalent of a render fragment here. The author's card stays reachable from the meta row.
+    //
+    // VersionFiled covers every version and carries BOTH filing sentences: version 1 is the document arriving,
+    // later ones are new working versions of something already filed.
     public string SystemSentence => Kind switch
     {
-        1 => string.Format(Strings.Get("ChatFiledNewDocument"), AuthorName),
-        2 => string.Format(Strings.Get("ChatSavedNewVersion"), AuthorName),
-        3 => string.Format(Strings.Get("ChatActivatedVersion"), AuthorName, VersionNumber),
+        1 => string.Format(
+            Strings.Get(VersionNumber is null or <= 1 ? "ChatFiledNewDocument" : "ChatSavedNewVersion"), AuthorName),
+        2 => string.Format(Strings.Get("ChatActivatedVersion"), AuthorName, VersionNumber),
         _ => Body,
     };
 

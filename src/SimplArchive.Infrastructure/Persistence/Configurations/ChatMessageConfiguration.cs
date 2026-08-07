@@ -26,14 +26,15 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
                 "(CASE WHEN \"CreatedByUserId\" IS NOT NULL THEN 1 ELSE 0 END + " +
                 "CASE WHEN \"CreatedByServiceAccountId\" IS NOT NULL THEN 1 ELSE 0 END) = 1");
 
-            // Kind and DocumentVersionId are two halves of one fact (ADR 0545): a UserPost (0) or DocumentFiled
-            // (1) is about the document, so it names no version; VersionFiled (2) and VersionActivated (3) are
-            // about a specific version and cannot render their "Version N" label without one. Pairing them here
-            // means a system entry can never exist that the clients are unable to draw.
+            // Kind and DocumentVersionId are two halves of one fact (ADR 0545): a UserPost (0) is about the
+            // document, so it names no version; VersionFiled (1) and VersionActivated (2) are about a specific
+            // version and cannot render their "Version N" label — or, for VersionFiled, even pick their
+            // sentence — without one. Pairing them here means a system entry can never exist that the clients
+            // are unable to draw, and rules out the renumbered-away fourth kind by leaving no value for it.
             t.HasCheckConstraint(
                 "CK_ChatMessages_KindVersionPairing",
-                "(\"Kind\" IN (0, 1) AND \"DocumentVersionId\" IS NULL) OR " +
-                "(\"Kind\" IN (2, 3) AND \"DocumentVersionId\" IS NOT NULL)");
+                "(\"Kind\" = 0 AND \"DocumentVersionId\" IS NULL) OR " +
+                "(\"Kind\" IN (1, 2) AND \"DocumentVersionId\" IS NOT NULL)");
         });
 
         // Restrict, matching how annotations anchor a version: the document-delete cascade already removes the

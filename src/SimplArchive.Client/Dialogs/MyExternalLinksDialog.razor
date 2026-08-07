@@ -1,5 +1,6 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 @* Everything the caller has shared, across all documents (ADR 0546, issue #385) — so a person can audit their own
    shares without hunting document by document, rather than relying on an administrator noticing later.
@@ -58,10 +59,16 @@
                                 <td>@link.AccessCount@(link.MaxAccesses is { } max ? $" / {max}" : "")</td>
                                 <td>@link.CreatedByName</td>
                                 <td style="white-space:nowrap;">
-                                    @if (link.CanExtend)
-                                    {
-                                        <MudButton Size="Size.Small" OnClick="@(() => ExtendAsync(link))">@Strings.Get("ExtLinkExtend")</MudButton>
-                                    }
+                                    @* This list spans documents, so the row is often the reader's only handle on
+                                       where the thing actually lives — "Go to" is what turns it back into one. *@
+                                    <MudTooltip Text="@Strings.Get("ExtLinkGoToTooltip")">
+                                        <MudIconButton Icon="@Icons.Material.Filled.ArrowForward" Size="Size.Small"
+                                                       aria-label="@Strings.Get("ExtLinkGoTo")" OnClick="@(() => GoTo(link))" />
+                                    </MudTooltip>
+                                    <MudTooltip Text="@Strings.Get("ExtLinkShowTooltip")">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
+                                                       aria-label="@Strings.Get("ExtLinkShow")" OnClick="@(() => ShowAsync(link))" />
+                                    </MudTooltip>
                                     <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
                                                    aria-label="@Strings.Get("ExtLinkRevoke")" OnClick="@(() => RevokeAsync(link))" />
                                 </td>
@@ -143,29 +150,41 @@
         }
         else
         {
-            Snackbar.Add(Strings.Get("WebDavGenError"), Severity.Error);
+            Snackbar.Add(Strings.Get("ExtLinkActionFailed"), Severity.Error);
         }
     }
 
-    private async Task ExtendAsync(MyLinkResponse link)
+    // The link's own details, read-only, with renewal as the one thing still open to change. Renewing lives HERE
+    // rather than on the row because it is now two decisions (how long, how many) and a row-sized button cannot
+    // ask for either without guessing.
+    private async Task ShowAsync(MyLinkResponse link)
     {
-        if (RelativeHref(link.Links, "extend") is not { } href)
+        var parameters = new DialogParameters
         {
-            return;
-        }
+            {
+                nameof(ExternalLinkDetailDialog.Link),
+                new ExternalLinkDetailDialog.LinkView(
+                    link.DocumentName, link.CreatedByName, link.ExpiresAt, link.MaxAccesses, link.AccessCount, link.Etag)
+            },
+            // Only offered while the link is near enough to its end to be worth renewing — the same "nearly up"
+            // hint the row used to gate its Extend button on.
+            { nameof(ExternalLinkDetailDialog.RenewHref), link.CanExtend ? RelativeHref(link.Links, "availability") : null },
+        };
 
-        var request = new HttpRequestMessage(HttpMethod.Put, href) { Content = JsonContent.Create(new { days = 90 }) };
-        request.Headers.TryAddWithoutValidation("If-Match", link.Etag);
-        var response = await Http.SendAsync(request);
-        if (response.IsSuccessStatusCode)
+        var dialog = await DialogService.ShowAsync<ExternalLinkDetailDialog>(Strings.Get("ExtLinkDetailTitle"), parameters);
+        if ((await dialog.Result)?.Data is true)
         {
+            // Renewed: this list is now stale in three columns at once, including the ETag every action needs.
             await LoadAsync();
         }
-        else
-        {
-            Snackbar.Add(Strings.Get("WebDavGenError"), Severity.Error);
-        }
     }
+
+    // Closes the dialog and hands the document back to the caller, which owns the tree and list panes. Navigating
+    // is the workbench's job, not this dialog's — it has no idea what is selected behind it.
+    private void GoTo(MyLinkResponse link) =>
+        MudDialog.Close(DialogResult.Ok(new GoToDocument(link.DocumentId, link.ParentId)));
+
+    public record GoToDocument(Guid DocumentId, Guid? ParentId);
 
     private static string? RelativeHref(List<LinkResponse>? links, string rel)
     {
@@ -194,6 +213,8 @@
         public int? MaxAccesses { get; set; }
         public int AccessCount { get; set; }
         public string CreatedByName { get; set; } = "";
+        // The document's folder, so "Go to" can open it and select the row inside — data, not a URL to follow.
+        public Guid? ParentId { get; set; }
         public bool CanExtend { get; set; }
         public string Etag { get; set; } = "";
         public List<LinkResponse> Links { get; set; } = [];

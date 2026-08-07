@@ -6,17 +6,19 @@ using static Microsoft.Playwright.Assertions;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// The web half of the empty-folder tree icon (ADR "Empty-folder tree icon", issue #352; recoloured and the
-// criterion corrected in issue #376): a folder with nothing inside gets a pale-yellow glyph so it's spottable
-// without expanding. The distinction that matters is HasChildren ("is ANYTHING filed here") vs HasSubfolders
-// (the expander caret) — a folder holding only DOCUMENTS is a leaf in the folders-only tree but is NOT empty,
-// and neither is one holding only REFERENCES, which is what #376 fixed.
+// The web half of the empty-folder tree icon (ADR "Empty-folder tree icon", issue #352; criterion corrected in
+// issue #376, recoloured by ADR "Folder icon scheme"): a folder with nothing inside is drawn faded and in the
+// outline glyph, so it's spottable without expanding. The distinction that matters is HasChildren ("is ANYTHING
+// filed here") vs HasSubfolders (the expander caret) — a folder holding only DOCUMENTS is a leaf in the
+// folders-only tree but is NOT empty, and neither is one holding only REFERENCES, which is what #376 fixed.
 [Collection(UiCollection.Name)]
 public class WebEmptyFolderIconTests
 {
-    // .wb-tree-empty — #f2dd8c. Pale yellow since #376; it was a pastel blue. Deliberately much lighter than
-    // the gold of a non-empty folder, since the two now share a hue.
-    private const string EmptyTint = "rgb(242, 221, 140)";
+    // .wb-tree-folder — the gold a folder with contents gets. Asserted exactly because it is a value the app
+    // declares; the EMPTY tint deliberately is not, since it is a color-mix against the current theme surface
+    // and pinning its computed result here would encode the light palette into the test. What matters about it
+    // is that it DIFFERS from the gold, in whichever theme the test happens to run.
+    private const string Gold = "rgb(217, 164, 0)";
 
     private readonly SelfHostedAppFixture _app;
 
@@ -58,21 +60,47 @@ public class WebEmptyFolderIconTests
         var docsOnlyIcon = IconOf(tree, docsOnlyName);
         await Expect(emptyIcon).ToBeVisibleAsync(new() { Timeout = 15000 });
 
-        Assert.Equal(EmptyTint, await ColorOfAsync(emptyIcon));
-        Assert.NotEqual(EmptyTint, await ColorOfAsync(docsOnlyIcon));
-        Assert.NotEqual(EmptyTint, await ColorOfAsync(IconOf(tree, refsOnlyName)));
+        // A folder with contents is the plain gold; an empty one is that gold faded toward the pane behind it.
+        Assert.Equal(Gold, await ColorOfAsync(docsOnlyIcon));
+        Assert.NotEqual(Gold, await ColorOfAsync(emptyIcon));
+        Assert.Equal(Gold, await ColorOfAsync(IconOf(tree, refsOnlyName)));
+
+        // The GLYPH differs too — the outline variant. This is the half that survives without colour vision, so
+        // it is asserted separately rather than trusted to follow the colour.
+        Assert.NotEqual(await GlyphOfAsync(docsOnlyIcon), await GlyphOfAsync(emptyIcon));
 
         // Nothing leaks to the ancestor: the repository root holds these folders, so it is not empty.
-        Assert.NotEqual(EmptyTint, await ColorOfAsync(root.Locator(".mud-treeview-item-icon > .mud-icon-root")));
+        Assert.Equal(Gold, await ColorOfAsync(root.Locator(".mud-treeview-item-icon > .mud-icon-root")));
 
-        // Filing a document into the empty folder makes it non-empty on the next tree load.
+        // Filing a document into the empty folder makes it non-empty on the next tree load — both cues revert.
         await AddDocumentAsync(http, emptyId, $"now-{suffix}");
         await page.ReloadAsync();
         await Expect(root).ToBeVisibleAsync(new() { Timeout = 15000 });
         await tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Demo Repository" }).First
             .Locator(".mud-treeview-item-arrow").ClickAsync();
         await Expect(IconOf(tree, emptyName)).ToBeVisibleAsync(new() { Timeout = 15000 });
-        Assert.NotEqual(EmptyTint, await ColorOfAsync(IconOf(tree, emptyName)));
+        Assert.Equal(Gold, await ColorOfAsync(IconOf(tree, emptyName)));
+        Assert.Equal(await GlyphOfAsync(IconOf(tree, docsOnlyName)), await GlyphOfAsync(IconOf(tree, emptyName)));
+    }
+
+    // Gold marks a place documents live, so the Personal space's Inbox / Check-out launchers — real nodes, but
+    // not containers — must NOT take it (ADR "Folder icon scheme"). Their being muted is what keeps the colour
+    // meaningful rather than decorative.
+    [Fact]
+    public async Task The_personal_launchers_are_not_gold()
+    {
+        var page = await Ui.LoginAsync(_app);
+        var tree = page.Locator("[data-pane='tree']");
+        var personal = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Personal" }).First;
+        await Expect(personal).ToBeVisibleAsync(new() { Timeout = 15000 });
+        await personal.Locator(".mud-treeview-item-arrow").ClickAsync();
+
+        var inbox = IconOf(tree, "Inbox");
+        await Expect(inbox).ToBeVisibleAsync(new() { Timeout = 15000 });
+
+        Assert.NotEqual(Gold, await ColorOfAsync(inbox));
+        // The Personal root itself IS a container, so it keeps the gold.
+        Assert.Equal(Gold, await ColorOfAsync(personal.Locator(".mud-treeview-item-icon > .mud-icon-root")));
     }
 
     // The node's OWN icon — a MudTreeViewItem renders its children inside itself, so scope to the content row.
@@ -82,6 +110,11 @@ public class WebEmptyFolderIconTests
 
     private static Task<string> ColorOfAsync(ILocator icon) =>
         icon.EvaluateAsync<string>("el => getComputedStyle(el).color");
+
+    // The rendered SVG path — the filled and outline folder glyphs draw different geometry, so this distinguishes
+    // them without depending on how MudBlazor names its icons.
+    private static Task<string> GlyphOfAsync(ILocator icon) =>
+        icon.EvaluateAsync<string>("el => el.innerHTML");
 
     private static async Task<Guid> CreateFolderAsync(HttpClient http, Guid parentId, string name)
     {

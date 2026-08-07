@@ -248,6 +248,13 @@ public class DocumentsController : ControllerBase
         // True when this item ignores its ancestors' ACL and uses only its own grants (ADR "Document ACL
         // inheritance resolution") — the read-only inheritance indicator in the Manage-access dialog.
         public bool BreaksInheritance { get; set; }
+
+        // The order this FOLDER lists its contents in (ADR "Per-folder contents sort order"). Carried on the
+        // document resource so a client showing a folder's details has it without listing the folder first: the
+        // clients now show one detail pane for folders and documents alike, and a child folder's pane is opened
+        // from its parent's listing, where the child's own setting has never been fetched. Meaningless for a
+        // document, which lists nothing.
+        public FolderContentsSortOrder ContentsSortOrder { get; set; }
     }
 
     public class RetentionInfo
@@ -269,7 +276,7 @@ public class DocumentsController : ControllerBase
 
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
-    private record DocumentRow(string Name, Guid ConcurrencyToken, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, bool SensitivityWatermark, bool BreaksInheritance);
+    private record DocumentRow(string Name, Guid ConcurrencyToken, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, bool SensitivityWatermark, bool BreaksInheritance, FolderContentsSortOrder ContentsSortOrder);
 
     [HttpGet]
     public async Task<IActionResult> Get(Guid documentId, CancellationToken cancellationToken)
@@ -304,7 +311,16 @@ public class DocumentsController : ControllerBase
         // Scoped by THIS document's TenantId, deliberately: Tenant is not ITenantScoped, so it carries no
         // automatic tenant query filter — an unqualified "any tenant allows external links" would answer for the
         // whole database and light the affordance up for every tenant as soon as one enabled it.
-        var externalLinksAllowed = rights.CanReadContent
+        //
+        // A FOLDER is never shareable — POST answers CANNOT_SHARE_FOLDER — so the rel must not appear on one
+        // either. Advertising it and refusing the click is precisely the shape ADR 0543 rules out: the client
+        // would draw an affordance whose only outcome is a 400. "Has a confirmed version" is what separates a
+        // document from a folder here, the same test the list uses to pick its icon.
+        var isFolder = !await _dbContext.DocumentVersions
+            .AnyAsync(v => v.DocumentId == documentId && v.Status == DocumentVersionStatus.Confirmed, cancellationToken);
+
+        var externalLinksAllowed = !isFolder
+            && rights.CanReadContent
             && await _dbContext.Tenants.AnyAsync(t => t.Id == _currentTenantAccessor.TenantId && t.AllowExternalLinks, cancellationToken);
 
         var links = new List<Link>
@@ -355,6 +371,7 @@ public class DocumentsController : ControllerBase
             Retention = await BuildRetentionInfoAsync(documentId, cancellationToken),
             CanManagePermissions = rights.CanManagePermissions,
             BreaksInheritance = document.BreaksInheritance,
+            ContentsSortOrder = document.ContentsSortOrder,
             Links = links,
         });
     }
@@ -2384,7 +2401,8 @@ public class DocumentsController : ControllerBase
                 d.SensitivityLabelId == null ? null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => l.Name).FirstOrDefault(),
                 d.SensitivityLabelId == null ? null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => l.Color).FirstOrDefault(),
                 d.SensitivityLabelId != null && _dbContext.SensitivityLabelDefinitions.Any(l => l.Id == d.SensitivityLabelId && l.Watermark),
-                d.BreaksInheritance))
+                d.BreaksInheritance,
+                d.ContentsSortOrder))
             .SingleOrDefaultAsync(cancellationToken);
     }
 

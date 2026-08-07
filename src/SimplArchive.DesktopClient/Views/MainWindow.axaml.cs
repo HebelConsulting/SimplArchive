@@ -83,7 +83,15 @@ public partial class MainWindow : Window
                 vm.SaveSearchNamePrompt = () => new NewFolderDialog("Save search", "Name this saved search").ShowDialog<string?>(this);
                 vm.DuplicateUploadDialog = req => new DuplicateUploadDialog(req).ShowDialog<MainWindowViewModel.DuplicatePromptResult?>(this);
                 vm.ShowReminderDialog = rvm => new ReminderDialog(rvm).ShowDialog(this);
-                vm.ShowExternalLinksDialog = evm => new ExternalLinksDialog(evm).ShowDialog(this);
+                vm.ShowExternalLinksDialog = evm =>
+                {
+                    var window = new ExternalLinksDialog(evm);
+                    // The view-model closes its own window for "Go to": the navigation it triggers happens in the
+                    // workbench behind, which a dialog left open would be covering.
+                    evm.RequestClose = window.Close;
+                    return window.ShowDialog(this);
+                };
+                vm.ShowExternalLinkDetailDialog = dvm => new ExternalLinkDetailDialog(dvm).ShowDialog(this);
                 vm.ShowShareSavedSearchDialog = svm => new ShareSavedSearchDialog(svm).ShowDialog<bool>(this);
             }
         };

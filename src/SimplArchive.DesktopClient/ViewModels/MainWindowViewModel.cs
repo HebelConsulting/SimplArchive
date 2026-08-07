@@ -753,8 +753,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanManageAccess));
         OnPropertyChanged(nameof(CanCheckOut));
         OnPropertyChanged(nameof(CanOverrideSelected));
-        OnPropertyChanged(nameof(ShowFolderDetail)); // folder detail pane shows only when no document is selected
-        FolderSortEditing = false;
+        OnPropertyChanged(nameof(DetailIsFolder)); // the pane's subject changed, and with it the folder-only row
         if (value is { IsFolder: false, IsArchiveEntry: false })
         {
             await LoadDetailAsync(value);
@@ -1037,9 +1036,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
             // fresh folder resets any ephemeral column-header sort back to that default.
             _folderSortOrder = await _api.GetContentsSortOrderAsync(folderId);
             _headerSortActive = false;
-            FolderSortEditing = false;
-            OnPropertyChanged(nameof(FolderSortText));
-            OnPropertyChanged(nameof(ShowFolderDetail));
+            OnPropertyChanged(nameof(DetailSortText));
+            OnPropertyChanged(nameof(DetailIsFolder));
             Items.Clear();
             foreach (var child in children)
             {
@@ -1181,43 +1179,30 @@ public sealed partial class MainWindowViewModel : ObservableObject
     };
 
     // A folder is open and no document is selected → show the folder detail pane instead of the placeholder.
-    public bool ShowFolderDetail => _currentFolderId is not null && SelectedItem is null;
+    // The pane describes a SUBJECT — a selected row, else the open folder — so a folder gets the document's pane
+    // wherever you reached it from (issue #408). ShowFolderDetail, which used to gate a pane of its own, is gone.
+    public bool DetailIsFolder => _detailIsFolder;
 
-    [ObservableProperty] private bool _folderSortEditing;
-    [ObservableProperty] private int _folderSortEditIndex;
+    private bool _detailIsFolder;
 
-    [RelayCommand]
-    private void BeginFolderSortEdit()
+
+    private int _detailSortOrder;
+
+    // Staged like every other edited field, so Cancel discards it and Save commits it with the rest.
+    [ObservableProperty] private int _editSortOrder;
+
+    public string DetailSortText => _detailSortOrder switch
     {
-        FolderSortEditIndex = _folderSortOrder;
-        FolderSortEditing = true;
-    }
+        1 => Strings.Get("FolderSortDocDate"),
+        2 => Strings.Get("FolderSortCreated"),
+        _ => Strings.Get("FolderSortName"),
+    };
 
+    // The tree context menu's "Contents sort order" entry: the order is a field in the ONE detail pane now
+    // (issue #408), so this opens that edit rather than a mode of its own — one edit, one Save, wherever you
+    // started from. The old toggle (its own Edit/Save/Cancel and its own save path) is gone with it.
     [RelayCommand]
-    private void CancelFolderSortEdit() => FolderSortEditing = false;
-
-    [RelayCommand]
-    private async Task SaveFolderSortAsync()
-    {
-        if (_api is null || _currentFolderId is not { } folderId)
-        {
-            return;
-        }
-
-        try
-        {
-            await _api.SetContentsSortOrderAsync(folderId, FolderSortEditIndex);
-            _folderSortOrder = FolderSortEditIndex;
-            _headerSortActive = false; // re-apply the persisted default to the current listing
-            FolderSortEditing = false;
-            OnPropertyChanged(nameof(FolderSortText));
-            ApplyContentSort();
-        }
-        catch (Services.ApiActionException e)
-        {
-            Status = e.Message;
-        }
-    }
+    private void BeginFolderSortEdit() => BeginEditCommand.Execute(null);
 
     // The folder currently shown in the contents pane — the drop target for a drag onto empty space.
     public Guid? CurrentFolderId => _currentFolderId;
@@ -3552,7 +3537,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // preview + system fields reflect the new current version).
     public async Task ReloadSelectedDetailAsync()
     {
-        if (SelectedItem is { IsFolder: false, IsArchiveEntry: false, IsArchiveBack: false } document)
+        // Folders included since issue #408: a folder is a Document with a mask, and it now gets the same pane
+        // rather than a thinner one of its own. Archive entries stay out — they are zip contents, not documents.
+        if (SelectedItem is { IsArchiveEntry: false, IsArchiveBack: false } document)
         {
             await LoadDetailAsync(document);
         }
@@ -3566,6 +3553,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         _selectedDocumentId = document.Id;
+        _detailIsFolder = document.IsFolder;
+        OnPropertyChanged(nameof(DetailIsFolder));
         DetailTitle = document.Name;
         IndexFields.Clear();
         Comments.Clear();
@@ -3647,7 +3636,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         "Tenant administrator", "Impersonate", "Override checkout", "Legal hold",
         "Manage classification", "Reset MFA", "Manage repositories", "Manage masks",
         "Manage service accounts", "Manage users & groups", "View audit log", "Export", "Import",
-        "Manage inboxes",
+        "Manage inboxes", "Create external links",
     ];
 
     async partial void OnSelectedPrincipalChanged(PrincipalRowViewModel? value)
@@ -4540,7 +4529,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         10 => r.CanViewAuditLog,
         11 => r.CanExport,
         12 => r.CanImport,
-        _ => r.CanManageInboxes,
+        13 => r.CanManageInboxes,
+        _ => r.CanCreateExternalLink,
     };
 
     private SimplArchiveApiClient.SystemRightsData CurrentMatrixRights() => new(
@@ -4548,7 +4538,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         PrincipalRights[3].IsChecked, PrincipalRights[4].IsChecked, PrincipalRights[5].IsChecked,
         PrincipalRights[6].IsChecked, PrincipalRights[7].IsChecked, PrincipalRights[8].IsChecked,
         PrincipalRights[9].IsChecked, PrincipalRights[10].IsChecked, PrincipalRights[11].IsChecked,
-        PrincipalRights[12].IsChecked, PrincipalRights[13].IsChecked, SelectedPrincipalClearance);
+        PrincipalRights[12].IsChecked, PrincipalRights[13].IsChecked, PrincipalRights[14].IsChecked,
+        SelectedPrincipalClearance);
 
     public async Task LoadPrincipalsAsync()
     {
@@ -5148,6 +5139,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             _detailExternalLinksHref = detail.ExternalLinksHref;
             _detailDocumentName = detail.Name;
             CanShareDocument = detail.ExternalLinksHref is not null;
+            // Folder-only, and read from the resource because a child folder's order is never fetched by the
+            // parent's listing that opened this pane (issue #408).
+            _detailSortOrder = detail.ContentsSortOrder;
+            OnPropertyChanged(nameof(DetailSortText));
         }
         catch (Exception) { _detailSensitivityName = ""; _detailSensitivityColor = null; _detailSensitivityWatermark = false; DetailSensitivityId = null; _detailExternalLinksHref = null; CanShareDocument = false; }
         // Sensitivity watermark on the preview (ADR "Document watermarking") — when the label's watermark flag is set.
@@ -5230,6 +5225,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // Edit affordances: begin only when a detail is loaded and not already editing; the OCR picker only for a
     // TIFF-sourced document and only while editing.
     public bool CanBeginEdit => CanEditDetail && !IsEditing;
+
+    // Seeds the staged contents order from the subject, so opening the edit does not silently change it.
+    private void StageSortOrder() => EditSortOrder = _detailSortOrder;
     public bool CanEditOcr => IsEditing && SysHasTiff;
 
     public ObservableCollection<MaskChoiceViewModel> AvailableMasks { get; } = [];
@@ -5251,6 +5249,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         try
         {
             _loadingMaskEdit = true;
+            StageSortOrder();
 
             // Snapshot the read-write system fields so Save can persist only what actually changed and Cancel
             // can restore them.
@@ -5433,6 +5432,26 @@ public sealed partial class MainWindowViewModel : ObservableObject
         catch (ApiActionException e) { failures.Add(e.Message); } // required field missing / invalid value
         catch (Exception e) { failures.Add($"mask ({e.Message})"); }
 
+        // A folder's contents order commits with everything else, from the same Save (issue #408). Skipped for a
+        // document, which lists nothing, and when unchanged — so an ordinary edit sends no extra request.
+        if (_detailIsFolder && EditSortOrder != _detailSortOrder)
+        {
+            try
+            {
+                await _api.SetContentsSortOrderAsync(documentId, EditSortOrder);
+                _detailSortOrder = EditSortOrder;
+                OnPropertyChanged(nameof(DetailSortText));
+
+                // The OPEN folder's listing re-sorts only when it is the folder that changed.
+                if (_currentFolderId == documentId)
+                {
+                    _folderSortOrder = EditSortOrder;
+                    _headerSortActive = false;
+                }
+            }
+            catch (Exception e) { failures.Add($"contents sort order ({e.Message})"); }
+        }
+
         if (failures.Count > 0)
         {
             Status = string.Format(Strings.Get("StErrSaveJoin"), string.Join("; ", failures));
@@ -5531,6 +5550,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // Avalonia — the same indirection the reminder dialog uses.
     public Func<ExternalLinksDialogViewModel, Task>? ShowExternalLinksDialog { get; set; }
 
+    // The per-link detail window the links dialog opens for its "Show" action (ADR 0546). Hosted here for the
+    // same reason as the dialog above: a view-model does not open windows.
+    public Func<ExternalLinkDetailDialogViewModel, Task>? ShowExternalLinkDetailDialog { get; set; }
+
     // The cross-document collection's href, from the API root's "externalLinks" rel (ADR 0543). Null until the
     // root is read, and if the server never offers it the command simply does nothing — absence of a rel is the
     // answer, not something to work around.
@@ -5559,7 +5582,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        await ShowExternalLinksDialog(new ExternalLinksDialogViewModel(_api, href, _detailDocumentName));
+        var perDocument = new ExternalLinksDialogViewModel(_api, href, _detailDocumentName);
+        perDocument.ShowDetailDialog = ShowExternalLinkDetailDialog;
+        await ShowExternalLinksDialog(perDocument);
     }
 
     // "My external links" — everything the caller has shared, across documents. The collection is a top-level
@@ -5577,8 +5602,27 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        await ShowExternalLinksDialog(new ExternalLinksDialogViewModel(
-            _api, href, Strings.Get("ExtLinkMine"), crossDocument: true));
+        var dialog = new ExternalLinksDialogViewModel(_api, href, Strings.Get("ExtLinkMine"), crossDocument: true);
+        dialog.ShowDetailDialog = ShowExternalLinkDetailDialog;
+
+        // "Go to" leaves the dialog and moves the workbench to the shared document — the same end state as
+        // browsing to it by hand, which is what the reader of a cross-document list is usually after.
+        Guid? goToDocument = null;
+        Guid? goToParent = null;
+        dialog.GoToDocument = (documentId, parentId) =>
+        {
+            goToDocument = documentId;
+            goToParent = parentId;
+            dialog.RequestClose?.Invoke();
+        };
+
+        await ShowExternalLinksDialog(dialog);
+
+        if (goToDocument is { } target)
+        {
+            // The parent is where the document lives; without one it IS a repository root, so open it directly.
+            await (goToParent is { } parent ? OpenFolderAsync(parent, target) : OpenFolderAsync(target));
+        }
     }
 
     private async Task LoadCommentsAsync(Guid documentId)
@@ -5747,13 +5791,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // Note this fixture is synthetic: it does not come from the demo seed, so it does not follow the product
         // on its own. It has to be updated by hand whenever the thread gains something new — see the backlog entry
         // on the desktop capture being fixture-driven.
-        Comments.Add(new ChatMessageViewModel { Id = Guid.Empty, AuthorName = "Demo Admin", Body = "", Kind = 1, CreatedAt = ScreenshotClock });
+        // ONE entry for the filing, not two: a first version IS the document arriving, and it carries the version
+        // chip and check-in comment (ADR 0545). The fixture used to hold the separate "filed a new document"
+        // entry beside this one, which is exactly the duplication the product stopped producing.
         Comments.Add(new ChatMessageViewModel
         {
             Id = Guid.Empty,
             AuthorName = "Demo Admin",
             Body = "",
-            Kind = 2,
+            Kind = 1,
             VersionNumber = 1,
             VersionComment = "Scanned from the paper original.",
             CreatedAt = ScreenshotClock,
@@ -6276,10 +6322,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
         await OpenFolderAsync(folderId);
         var defaultIsDocDate = _folderSortOrder == 1 && FolderSortText == Strings.Get("FolderSortDocDate");
 
-        FolderSortEditIndex = 2; // Created
-        await SaveFolderSortCommand.ExecuteAsync(null);
+        // Through the ONE detail edit now (issue #408): the order is a field in the pane, committed by the same
+        // Save as the mask, rather than by a toggle of its own.
+        await LoadDetailAsync(new NodeViewModel { Id = folderId, Name = name, HasChildren = false, HasVersions = false });
+        await BeginEditCommand.ExecuteAsync(null);
+        EditSortOrder = 2; // Created
+        await SaveDetailCommand.ExecuteAsync(null);
         var persisted = await _api.GetContentsSortOrderAsync(folderId) == 2;
-        var reflected = _folderSortOrder == 2 && !FolderSortEditing && FolderSortText == Strings.Get("FolderSortCreated");
+        var reflected = _detailSortOrder == 2 && !IsEditing && DetailSortText == Strings.Get("FolderSortCreated");
 
         await DeleteFolderByIdAsync(folderId);
         return defaultIsDocDate && persisted && reflected;

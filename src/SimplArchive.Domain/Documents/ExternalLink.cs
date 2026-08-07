@@ -40,11 +40,11 @@ public class ExternalLink : ITenantScoped, IConcurrencyTracked
 
     public int AccessCount { get; set; }
 
-    // Exactly one of CreatedByUserId/CreatedByServiceAccountId is set — the same pattern as every other
-    // creator pair, enforced by a check constraint.
-    public Guid? CreatedByUserId { get; set; }
-
-    public Guid? CreatedByServiceAccountId { get; set; }
+    // A PERSON shares a document; a service account never does (ADR 0546). This deliberately breaks the
+    // creator-pair pattern every other entity follows: handing a document to someone outside the tenant is an
+    // act of judgement about a recipient, and an automation has no one to answer for that judgement. Required,
+    // so "a person did this" is a property of the schema rather than a convention the code upholds.
+    public Guid CreatedByUserId { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 

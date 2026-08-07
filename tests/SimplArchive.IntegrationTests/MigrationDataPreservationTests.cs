@@ -11,8 +11,17 @@ namespace SimplArchive.IntegrationTests;
 // scan). Two migrations predate the policy (pre-real-data, ADR 0200 era) and are grandfathered; any NEW
 // destructive migration must be added here deliberately, with a documented reason — which is the reviewed act
 // this test forces.
+//
+// Raw SQL counts too. A DropColumn/DropTable is what EF models as an operation, but `migrationBuilder.Sql` can
+// delete just as much data while presenting as an opaque SqlOperation — which is how a full "DELETE FROM
+// AuditEvents" passed this guard unremarked. Destructive verbs in raw SQL are therefore matched textually and
+// need the same allowlist entry, so the gate can't be walked around by writing the destruction out by hand.
 public class MigrationDataPreservationTests
 {
+    // Matched against the SQL of any SqlOperation in an Up(). Word-bounded so an INSERT of a row whose text
+    // happens to contain "delete" doesn't trip it.
+    private static readonly string[] DestructiveSqlVerbs = ["DELETE FROM", "TRUNCATE", "DROP TABLE", "DROP COLUMN"];
+
     private static readonly HashSet<string> DestructiveAllowlist = new()
     {
         // Reshaped the mask model before any real data existed.
@@ -26,6 +35,18 @@ public class MigrationDataPreservationTests
         // with a nullable FK to the new per-tenant SensitivityLabelDefinition — data-preserving (seeds the four
         // defaults + backfills by rank before the drop).
         "20260723202530_AddConfigurableSensitivityLabels",
+        // Hash-chained audit log (ADR 0318): wipes AuditEvents, because pre-chain rows have no hash and could
+        // never be verified — leaving them would make the chain unverifiable from its first link. Predates the
+        // raw-SQL half of this guard and is recorded here now that the guard can see it.
+        "20260717182120_AddAuditChain",
+        // Renumbered chat kinds (ADR 0545): deletes the retired DocumentFiled rows, each of which duplicated the
+        // VersionFiled row beside it — same document, same author, same moment. No thread loses information; it
+        // stops each filing being announced twice.
+        "20260807155503_RenumberChatMessageKinds",
+        // External links are person-only (ADR 0546): drops ServiceAccount.CanCreateExternalLink and the link's
+        // service-account creator column, and deletes any link a service account created — such a link cannot be
+        // re-attributed to a person, and a live share whose creator cannot be named is the thing being prevented.
+        "20260807164245_ExternalLinksArePersonOnly",
     };
 
     private static SimplArchiveDbContext MetadataContext() =>
@@ -50,7 +71,7 @@ public class MigrationDataPreservationTests
 
             var migration = assembly.CreateMigration(typeInfo, provider);
             var drops = migration.UpOperations
-                .Where(op => op is DropColumnOperation or DropTableOperation)
+                .Where(IsDestructive)
                 .Select(Describe)
                 .ToList();
             if (drops.Count > 0)
@@ -76,10 +97,26 @@ public class MigrationDataPreservationTests
         Assert.All(DestructiveAllowlist, id => Assert.Contains(id, ids));
     }
 
+    private static bool IsDestructive(MigrationOperation op) => op switch
+    {
+        DropColumnOperation or DropTableOperation => true,
+        SqlOperation sql => DestructiveSqlVerbs.Any(
+            verb => sql.Sql.Contains(verb, StringComparison.OrdinalIgnoreCase)),
+        _ => false,
+    };
+
     private static string Describe(MigrationOperation op) => op switch
     {
         DropColumnOperation c => $"DropColumn {c.Table}.{c.Name}",
         DropTableOperation t => $"DropTable {t.Name}",
+        SqlOperation sql => $"Sql {Condense(sql.Sql)}",
         _ => op.GetType().Name,
     };
+
+    // Migration SQL is written as a formatted block; a violation message is more useful on one line.
+    private static string Condense(string sql)
+    {
+        var oneLine = string.Join(' ', sql.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return oneLine.Length <= 120 ? oneLine : $"{oneLine[..120]}…";
+    }
 }

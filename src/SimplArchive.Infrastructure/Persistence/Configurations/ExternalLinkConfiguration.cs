@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using SimplArchive.Domain.Documents;
-using SimplArchive.Domain.ServiceAccounts;
 using SimplArchive.Domain.Tenants;
 using SimplArchive.Domain.Users;
 
@@ -28,11 +27,8 @@ public class ExternalLinkConfiguration : IEntityTypeConfiguration<ExternalLink>
         // user's links (ADR 0546).
         builder.HasIndex(l => new { l.TenantId, l.CreatedByUserId, l.ExpiresAt });
 
-        builder.ToTable(t => t.HasCheckConstraint(
-            "CK_ExternalLinks_ExactlyOneCreator",
-            "(CASE WHEN \"CreatedByUserId\" IS NOT NULL THEN 1 ELSE 0 END + " +
-            "CASE WHEN \"CreatedByServiceAccountId\" IS NOT NULL THEN 1 ELSE 0 END) = 1"));
-
+        // No "exactly one creator" constraint here, unlike every other creator pair: only a User can create a
+        // link (ADR 0546), so a required CreatedByUserId says the same thing with a NOT NULL instead of a CHECK.
         builder.HasOne<Tenant>()
             .WithMany()
             .HasForeignKey(l => l.TenantId)
@@ -47,11 +43,6 @@ public class ExternalLinkConfiguration : IEntityTypeConfiguration<ExternalLink>
         builder.HasOne<User>()
             .WithMany()
             .HasForeignKey(l => l.CreatedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasOne<ServiceAccount>()
-            .WithMany()
-            .HasForeignKey(l => l.CreatedByServiceAccountId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

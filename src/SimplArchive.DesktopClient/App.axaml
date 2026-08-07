@@ -6,7 +6,18 @@
         <!-- Theme-adaptive workbench colours (light/dark), shared by MainWindow and the dialogs, replacing
              the old hardcoded light greys that clashed in dark mode. WbChrome: status-bar surface; WbBorder:
              1px pane/section separators; WbMuted/WbFaint: secondary/hint text. See ADR "Desktop dark-mode
-             colour pass". -->
+             colour pass".
+
+             WbFolder/WbFolderEmpty are the tree's folder glyphs (ADR "Folder icon scheme"). Gold means "a place
+             documents live" — folders, the personal root, a referenced folder — so the launchers and the
+             synthetic admin nodes deliberately take WbMuted instead: colouring everything gold made it
+             decorative. An EMPTY folder is the SAME gold at reduced alpha, not a second colour: the earlier pale
+             yellow was a fixed mid-tone, which recedes on light but on dark is LIGHTER than the gold, making
+             empty folders the most eye-catching thing in the tree — the opposite of what "nothing here" should
+             do. Alpha composites toward whatever is behind it, so one value (0x8c ≈ 55%) recedes in BOTH themes
+             and needs no per-theme tuning; the web client states the same rule as a color-mix toward its surface
+             variable. The glyph also changes to the outline variant, so the distinction survives without colour
+             vision. -->
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
@@ -14,12 +25,16 @@
                     <SolidColorBrush x:Key="WbBorder" Color="#dddde3" />
                     <SolidColorBrush x:Key="WbMuted" Color="#555555" />
                     <SolidColorBrush x:Key="WbFaint" Color="#888888" />
+                    <SolidColorBrush x:Key="WbFolder" Color="#d9a400" />
+                    <SolidColorBrush x:Key="WbFolderEmpty" Color="#8cd9a400" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="WbChrome" Color="#2b2b30" />
                     <SolidColorBrush x:Key="WbBorder" Color="#3b3b42" />
                     <SolidColorBrush x:Key="WbMuted" Color="#c2c2ca" />
                     <SolidColorBrush x:Key="WbFaint" Color="#8f8f98" />
+                    <SolidColorBrush x:Key="WbFolder" Color="#d9a400" />
+                    <SolidColorBrush x:Key="WbFolderEmpty" Color="#8cd9a400" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>

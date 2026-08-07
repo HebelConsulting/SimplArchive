@@ -485,6 +485,7 @@ public class GroupsController : ControllerBase
         CanExport = g.CanExport,
         CanImport = g.CanImport,
         CanManageInboxes = g.CanManageInboxes,
+        CanCreateExternalLink = g.CanCreateExternalLink,
         ClearanceRank = g.ClearanceRank,
     };
 
@@ -504,6 +505,7 @@ public class GroupsController : ControllerBase
         g.CanExport = r.CanExport;
         g.CanImport = r.CanImport;
         g.CanManageInboxes = r.CanManageInboxes;
+        g.CanCreateExternalLink = r.CanCreateExternalLink;
         g.ClearanceRank = r.ClearanceRank;
     }
 
@@ -553,6 +555,7 @@ public class GroupsController : ControllerBase
                 CanExport = r.CanExport,
                 CanImport = r.CanImport,
                 CanManageInboxes = r.CanManageInboxes,
+                CanCreateExternalLink = r.CanCreateExternalLink,
                 ClearanceRank = (await _clearanceResolver.GetForUserAsync(userId, cancellationToken)).Rank,
             };
         }

@@ -130,6 +130,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             CanExport = true,
             CanImport = true,
             CanManageInboxes = true,
+            CanCreateExternalLink = true,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

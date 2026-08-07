@@ -47,9 +47,8 @@ public class DesktopChatReplyTests
     [Theory]
     [InlineData(true, 0, true)]    // a top-level typed message — the only case that shows it
     [InlineData(false, 0, false)]  // a reply, or the recycle bin's read-only preview
-    [InlineData(true, 1, false)]   // DocumentFiled
-    [InlineData(true, 2, false)]   // VersionFiled
-    [InlineData(true, 3, false)]   // VersionActivated
+    [InlineData(true, 1, false)]   // VersionFiled
+    [InlineData(true, 2, false)]   // VersionActivated
     public void Only_a_top_level_typed_message_can_be_replied_to(bool canReply, int kind, bool expected)
     {
         var message = new ChatMessageViewModel

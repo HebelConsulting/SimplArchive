@@ -74,4 +74,47 @@ public class RepositoryExportTests
 
         Assert.Equal(payload, blobStream.ToArray());
     }
+
+    // Only what a PERSON typed crosses the archive. An automatic entry (ADR 0545) stores no text — its wording is
+    // a localized template rendered from Kind and DocumentVersionId, neither of which the archive carries — so
+    // exporting one wrote an empty row that imported as a blank message attributed to whoever filed the document.
+    // Filing produces such an entry for every document, so before this every archive carried one per document.
+    [Fact]
+    public async Task Only_typed_messages_are_exported_not_the_automatic_entries()
+    {
+        var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+
+        var email = $"admin-{Guid.NewGuid():N}@e2e.local";
+        const string password = "export-1234";
+        await _factory.SeedUserAsync(tenantId, email, password, "Admin");
+        await _factory.GrantTenantAdminAsync(email);
+        using var admin = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, password));
+
+        var repoId = (await TestJson.Post(owner, "/api/repositories", new { name = $"Chat export {Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+        var docId = (await TestJson.Post(owner, $"/api/documents/{repoId}/children", new { name = "Chatty" })).GetProperty("id").GetGuid();
+
+        // Filing the version is what produces the automatic entry — the one that must NOT be exported.
+        var created = await TestJson.Post(owner, $"/api/documents/{docId}/versions", new { fileExtension = ".txt" });
+        using (var storage = new HttpClient())
+        {
+            (await storage.PutAsync(created.GetProperty("uploadUrl").GetString()!,
+                new ByteArrayContent(Encoding.UTF8.GetBytes("chat-export")))).EnsureSuccessStatusCode();
+        }
+        await TestJson.Put(owner, $"/api/documents/{docId}/versions/{created.GetProperty("id").GetGuid()}", new { });
+
+        const string typed = "a person wrote this one";
+        await TestJson.Post(owner, $"/api/documents/{docId}/chat", new { body = typed });
+
+        var response = await admin.GetAsync($"/api/documents/{repoId}/export?versions=all");
+        response.EnsureSuccessStatusCode();
+        using var archive = new ZipArchive(new MemoryStream(await response.Content.ReadAsByteArrayAsync()), ZipArchiveMode.Read);
+
+        using var chatReader = new StreamReader(archive.GetEntry("tree/chat.jsonl")!.Open());
+        var lines = (await chatReader.ReadToEndAsync())
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var only = Assert.Single(lines);
+        Assert.Equal(typed, JsonDocument.Parse(only).RootElement.GetProperty("body").GetString());
+    }
 }

@@ -37,6 +37,11 @@ public class SystemRights
     // Manage other users' inboxes (ADR 0532): see + move any user's inbox items tenant-wide.
     public bool CanManageInboxes { get; set; }
 
+    // Share a document outside the tenant via an expiring link (ADR 0546). Its own right rather than part of
+    // reading: handing a document to someone with no account is a different act from opening it, and the people
+    // trusted to do the second are not automatically trusted to do the first.
+    public bool CanCreateExternalLink { get; set; }
+
     // Data-classification clearance (ADR "Sensitivity clearance enforcement") — not a boolean right but carried
     // in the same bundle so the Users & groups tab sets it alongside the rights. 0 = lowest (unlabelled only).
     public int ClearanceRank { get; set; }
@@ -82,7 +87,8 @@ public static class SystemRightsPolicy
             && IsGrantAllowed(caller.CanViewAuditLog, current.CanViewAuditLog, proposed.CanViewAuditLog)
             && IsGrantAllowed(caller.CanExport, current.CanExport, proposed.CanExport)
             && IsGrantAllowed(caller.CanImport, current.CanImport, proposed.CanImport)
-            && IsGrantAllowed(caller.CanManageInboxes, current.CanManageInboxes, proposed.CanManageInboxes);
+            && IsGrantAllowed(caller.CanManageInboxes, current.CanManageInboxes, proposed.CanManageInboxes)
+            && IsGrantAllowed(caller.CanCreateExternalLink, current.CanCreateExternalLink, proposed.CanCreateExternalLink);
     }
 
     private static bool IsGrantAllowed(bool callerHolds, bool current, bool proposed)

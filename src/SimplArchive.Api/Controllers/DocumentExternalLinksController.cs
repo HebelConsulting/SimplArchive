@@ -99,9 +99,25 @@ public class DocumentExternalLinksController : ControllerBase
         public int? MaxAccesses { get; set; }
     }
 
-    public class ExtendExternalLinkRequest
+    /// <summary>
+    /// Renews a link's availability — how long it lives and how often it may still be redeemed — in one call.
+    /// </summary>
+    /// <remarks>
+    /// The two travel together because they are one decision ("keep this share usable"), and a link that has run
+    /// out of BOTH time and accesses is only half-renewed by moving either alone. One request also means one ETag
+    /// and one audit entry, so there is no state where the expiry moved and the cap did not.
+    /// </remarks>
+    public class UpdateExternalLinkAvailabilityRequest
     {
+        /// <summary>Days from TODAY the link should live, 1..90.</summary>
         public int Days { get; set; }
+
+        /// <summary>
+        /// The new access cap: a positive number, or null for unlimited. May be raised, lowered or cleared —
+        /// lowering is a tightening, in the same direction as revoking, so it needs no rule of its own. Setting it
+        /// below the accesses already used exhausts the link immediately, which is a legitimate way to stop it.
+        /// </summary>
+        public int? MaxAccesses { get; set; }
     }
 
     [HttpGet]
@@ -132,9 +148,7 @@ public class DocumentExternalLinksController : ControllerBase
                 l.AccessCount,
                 l.CreatedAt,
                 l.ConcurrencyToken,
-                CreatedByName = l.CreatedByUserId != null
-                    ? _dbContext.Users.Where(u => u.Id == l.CreatedByUserId).Select(u => u.DisplayName).FirstOrDefault()
-                    : _dbContext.ServiceAccounts.Where(s => s.Id == l.CreatedByServiceAccountId).Select(s => s.Name).FirstOrDefault(),
+                CreatedByName = _dbContext.Users.Where(u => u.Id == l.CreatedByUserId).Select(u => u.DisplayName).FirstOrDefault(),
             })
             .ToListAsync(cancellationToken);
 
@@ -151,7 +165,13 @@ public class DocumentExternalLinksController : ControllerBase
                 CreatedAt = l.CreatedAt,
                 CanExtend = l.ExpiresAt <= now.AddDays(ExtendableWithinDays),
                 Etag = l.ConcurrencyToken.ToString(),
-                Links = [new Link("revoke", $"/api/documents/{documentId}/external-links/{l.Id}", "DELETE")],
+                Links =
+                [
+                    new Link("revoke", $"/api/documents/{documentId}/external-links/{l.Id}", "DELETE"),
+                    // Renewal, advertised here as it already is on the cross-document list — the client followed a
+                    // COMPOSED ".../expiry" before, which is how it kept calling that route after it moved.
+                    new Link("availability", $"/api/documents/{documentId}/external-links/{l.Id}/availability", "PUT"),
+                ],
             }).ToList(),
             CanCreate = await CanCreateAsync(documentId, cancellationToken),
             Links = [new Link("self", $"/api/documents/{documentId}/external-links", "GET")],
@@ -203,7 +223,6 @@ public class DocumentExternalLinksController : ControllerBase
             throw new InvalidExternalLinkExpiryException(tenant.ExternalLinkMaxDays);
         }
 
-        var (userId, serviceAccountId) = GetCallerIdentity();
         var link = new ExternalLink
         {
             Id = Guid.NewGuid(),
@@ -212,8 +231,8 @@ public class DocumentExternalLinksController : ControllerBase
             Token = ExternalLinkToken.Create(),
             ExpiresAt = expiresAt,
             MaxAccesses = request.MaxAccesses ?? tenant.ExternalLinkDefaultAccesses,
-            CreatedByUserId = userId,
-            CreatedByServiceAccountId = serviceAccountId,
+            // Non-null by the CanCreateAsync gate above, which admits no service account (ADR 0546).
+            CreatedByUserId = _currentUser.UserId!.Value,
             CreatedAt = now,
         };
 
@@ -244,8 +263,16 @@ public class DocumentExternalLinksController : ControllerBase
 
     // Extend measured FROM TODAY, not from the current expiry: a link with 29 days left extended by 90 lands 90
     // days out, not 119. Predictable, and it cannot be chained past what the creation cap implies (ADR 0546).
-    [HttpPut("{linkId:guid}/expiry")]
-    public async Task<IActionResult> Extend(Guid documentId, Guid linkId, [FromBody] ExtendExternalLinkRequest request, CancellationToken cancellationToken)
+    //
+    // "availability" rather than "expiry" because it now sets BOTH halves of what keeps a link usable — the time
+    // left and the accesses left. The route moved; the rel is what clients navigate by (ADR 0543), so it moved
+    // with it and no conforming client noticed.
+    //
+    // The 30-day "nearly up" window stays a CLIENT hint (CanExtend) and is deliberately not enforced here: it
+    // nudges people to renew when a share is running out, it is not a security boundary — the caller already
+    // needs the sharing right plus read access on the document to reach this at all.
+    [HttpPut("{linkId:guid}/availability")]
+    public async Task<IActionResult> UpdateAvailability(Guid documentId, Guid linkId, [FromBody] UpdateExternalLinkAvailabilityRequest request, CancellationToken cancellationToken)
     {
         var link = await _dbContext.ExternalLinks
             .SingleOrDefaultAsync(l => l.Id == linkId && l.DocumentId == documentId, cancellationToken);
@@ -271,13 +298,24 @@ public class DocumentExternalLinksController : ControllerBase
             throw new InvalidExternalLinkExpiryException(tenant.ExternalLinkMaxDays);
         }
 
+        // Zero or negative would mean "a link nobody may open", which is what revoking is for — and it would read
+        // as a typo for unlimited, which is null. Any positive value is allowed in either direction.
+        if (request.MaxAccesses is < 1)
+        {
+            throw new InvalidExternalLinkMaxAccessesException();
+        }
+
         var ifMatch = RequireIfMatch();
         link.ExpiresAt = now.AddDays(request.Days);
+        link.MaxAccesses = request.MaxAccesses;
         _dbContext.Entry(link).Property(l => l.ConcurrencyToken).OriginalValue = ifMatch;
         await SaveWithConcurrencyAsync(cancellationToken);
 
+        // The cap is recorded alongside the new expiry: "who re-opened this share, and how far" is one question,
+        // and an audit reader should not have to join two entries to answer it.
+        var cap = request.MaxAccesses is { } max ? $"{max} accesses" : "unlimited accesses";
         await _audit.RecordAsync(AuditActions.ExternalLinkExtended, "Document", documentId, await DocumentNameAsync(documentId, cancellationToken),
-            $"External link {link.Id} extended to {link.ExpiresAt:u}", cancellationToken: cancellationToken);
+            $"External link {link.Id} extended to {link.ExpiresAt:u}, {cap}", cancellationToken: cancellationToken);
 
         SetETag(link.ConcurrencyToken);
         return NoContent();
@@ -315,19 +353,16 @@ public class DocumentExternalLinksController : ControllerBase
 
     // Creating a link needs BOTH the system right and CanReadContent on the document itself: the right says you
     // may share, the ACL says you may read this particular thing. Neither alone is enough.
+    //
+    // A SERVICE ACCOUNT never passes this gate (ADR 0546) — the right does not exist for one, so there is nothing
+    // to check. Handing a document to someone outside the tenant is a judgement about a recipient, and an
+    // automation has nobody to answer for it. That is also why ExternalLink.CreatedByUserId is required: a link
+    // with no person behind it cannot be stored, not merely refused here.
     private async Task<bool> CanCreateAsync(Guid documentId, CancellationToken cancellationToken)
     {
         if (!(await GetRightsAsync(documentId, cancellationToken)).CanReadContent)
         {
             return false;
-        }
-
-        if (_currentServiceAccount.ServiceAccountId is { } serviceAccountId)
-        {
-            return await _dbContext.ServiceAccounts
-                .Where(s => s.Id == serviceAccountId)
-                .Select(s => s.CanCreateExternalLink)
-                .SingleOrDefaultAsync(cancellationToken);
         }
 
         return _currentUser.UserId is { } userId
@@ -349,9 +384,6 @@ public class DocumentExternalLinksController : ControllerBase
     // An unauthenticated caller can't reach these actions ([Authorize]), so this is a defensive floor rather
     // than a real branch.
     private static readonly EffectiveRights NoRights = new(false, false, false, false, false, false, false, false, false);
-
-    private (Guid? UserId, Guid? ServiceAccountId) GetCallerIdentity() =>
-        _currentServiceAccount.ServiceAccountId is { } sid ? (null, sid) : (_currentUser.UserId, null);
 
     private async Task<Domain.Tenants.Tenant> CurrentTenantAsync(CancellationToken cancellationToken) =>
         await _dbContext.Tenants.SingleAsync(t => t.Id == _tenant.TenantId!.Value, cancellationToken);

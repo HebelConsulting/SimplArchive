@@ -874,6 +874,7 @@ public class UsersController : ControllerBase
         CanExport = u.CanExport,
         CanImport = u.CanImport,
         CanManageInboxes = u.CanManageInboxes,
+        CanCreateExternalLink = u.CanCreateExternalLink,
         ClearanceRank = u.ClearanceRank,
     };
 
@@ -893,6 +894,7 @@ public class UsersController : ControllerBase
         u.CanExport = r.CanExport;
         u.CanImport = r.CanImport;
         u.CanManageInboxes = r.CanManageInboxes;
+        u.CanCreateExternalLink = r.CanCreateExternalLink;
         u.ClearanceRank = r.ClearanceRank;
     }
 
@@ -958,6 +960,7 @@ public class UsersController : ControllerBase
         CanExport = r.CanExport,
         CanImport = r.CanImport,
         CanManageInboxes = r.CanManageInboxes,
+        CanCreateExternalLink = r.CanCreateExternalLink,
     };
 
     // Checks ServiceAccount.CanManageUsers first, then User.CanManageUsers — see ADR "User support for

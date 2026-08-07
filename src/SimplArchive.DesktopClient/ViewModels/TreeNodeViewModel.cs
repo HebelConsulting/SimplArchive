@@ -77,21 +77,41 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
     // Material Design Icons glyph — a launcher's own glyph, a synthetic admin node's own icon, a person icon for
     // the personal repository, a shortcut variant for a referenced folder, else a plain folder.
-    public string IconValue => PersonalKind switch
+    //
+    // An empty one takes the OUTLINE variant of whatever it is, so "nothing here" is carried by the glyph's shape
+    // and not by colour alone — it stays readable to someone who can't distinguish the two golds, and at any
+    // contrast setting. Appending the suffix rather than listing the outline names keeps the two halves from
+    // drifting apart; every glyph reachable here has one, and the pseudo-nodes never qualify as empty.
+    public string IconValue => IsEmptyFolder ? $"{BaseIconValue}-outline" : BaseIconValue;
+
+    private string BaseIconValue => PersonalKind switch
     {
         "inbox" => "mdi-inbox-arrow-down",
         "checkout" => "mdi-lock-open-variant-outline",
         _ => SyntheticIcon ?? (IsPersonal ? "mdi-account" : IsReference ? "mdi-folder-arrow-right" : "mdi-folder"),
     };
 
-    // The tree's folder glyphs are gold; an empty one is tinted a PALE YELLOW instead so it's spottable without
-    // expanding (issue #376 — it was a pastel blue). Deliberately much lighter and less saturated than the gold,
-    // since the two now share a hue and the whole point is telling them apart at a glance. One mid-tone serves
-    // light and dark alike, matching the web client's `.wb-tree-empty`.
-    public IBrush IconBrush => IsEmptyFolder ? EmptyFolderBrush : FolderBrush;
+    // Which of App.axaml's theme brushes paints this glyph (ADR "Folder icon scheme"). Gold marks a place
+    // documents live — a folder, the personal root, a referenced folder. The Inbox / Check-out launchers and the
+    // synthetic admin nodes are not containers and take the muted text colour, so the gold means something
+    // rather than merely decorating every row.
+    //
+    // An empty folder is the SAME gold at reduced alpha, which is what lets it recede in BOTH themes; the old
+    // fixed pale yellow could only do that on light, and on dark actually out-shouted the gold.
+    //
+    // Named rather than resolved to an IBrush here: the brush has to come from the ACTIVE theme dictionary, and
+    // a value the view model resolves once would keep the startup theme after the OS switched. The view binds
+    // this to style classes, so the DynamicResource lookup happens where it can follow the theme.
+    public string IconBrushKey => IsEmptyFolder ? "WbFolderEmpty"
+        : IsLauncher || IsSynthetic ? "WbMuted"
+        : "WbFolder";
 
-    private static readonly IBrush FolderBrush = new SolidColorBrush(Color.FromRgb(0xd9, 0xa4, 0x00));
-    private static readonly IBrush EmptyFolderBrush = new SolidColorBrush(Color.FromRgb(0xf2, 0xdd, 0x8c));
+    // The three are mutually exclusive — one style class each, since Avalonia can't bind a resource KEY.
+    public bool UsesFolderBrush => IconBrushKey == "WbFolder";
+
+    public bool UsesEmptyFolderBrush => IconBrushKey == "WbFolderEmpty";
+
+    public bool UsesMutedBrush => IconBrushKey == "WbMuted";
 
     // Set when this node is loaded as a child (used to build the breadcrumb path from a tree selection).
     public TreeNodeViewModel? Parent { get; private set; }

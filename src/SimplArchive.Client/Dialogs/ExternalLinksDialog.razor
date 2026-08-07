@@ -29,8 +29,6 @@
                                       Label="@Strings.Get("ExtLinkUrl")" Class="flex-grow-1" />
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CopyAsync">@Strings.Get("ExtLinkCopy")</MudButton>
                     </div>
-                    <MudCheckBox T="bool" @bind-Value="_forceDownload" Dense="true"
-                                 Label="@Strings.Get("ExtLinkDownloadOption")" Class="mb-2" />
                 }
 
                 @if (_links.Count == 0)
@@ -102,7 +100,6 @@
     private bool _canCreate;
     private bool _allowed = true;
     private string? _createdUrl;
-    private bool _forceDownload;
     private DateTime? _expiry = DateTime.Today.AddDays(30);
     private int? _maxAccesses;
 
@@ -172,9 +169,19 @@
     // 90 days FROM TODAY, not added onto what remains (ADR 0546).
     private async Task ExtendAsync(ExternalLinkResponse link)
     {
-        var request = new HttpRequestMessage(HttpMethod.Put, $"{ListUrl}/{link.Id}/expiry")
+        // FOLLOWED, not composed (ADR 0543). This dialog used to build ".../expiry" itself, so when that route
+        // became ".../availability" it went on calling a route that no longer existed — the exact failure a rel
+        // exists to prevent.
+        if (RelativeHref(link.Links, "availability") is not { } href)
         {
-            Content = JsonContent.Create(new { days = 90 }),
+            return;
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Put, href)
+        {
+            // The cap travels WITH the expiry, so it has to be re-sent as it stands: availability replaces both,
+            // and omitting it would quietly turn a capped link into an unlimited one.
+            Content = JsonContent.Create(new { days = 90, maxAccesses = link.MaxAccesses }),
         };
         request.Headers.TryAddWithoutValidation("If-Match", link.Etag);
         var response = await Http.SendAsync(request);
@@ -184,9 +191,10 @@
         }
         else
         {
-            Snackbar.Add(Strings.Get("WebDavGenError"), Severity.Error);
+            Snackbar.Add(Strings.Get("ExtLinkActionFailed"), Severity.Error);
         }
     }
+
 
     private async Task CopyAsync()
     {
@@ -195,8 +203,10 @@
             return;
         }
 
-        var url = _forceDownload ? _createdUrl + "?download=true" : _createdUrl;
-        await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+        // One URL, no variants: opening it lands on a page offering both Open and Download, so the RECIPIENT
+        // decides how to take the document. The sharer used to make that choice for them at creation time, which
+        // they were never in a position to make (ADR 0546).
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", _createdUrl);
         Snackbar.Add(Strings.Get("ExtLinkCopied"), Severity.Success);
     }
 

@@ -1,3 +1,4 @@
+using System.Text;
 using SimplArchive.DesktopClient;
 using SimplArchive.DesktopClient.Services;
 
@@ -39,6 +40,11 @@ public class DesktopExternalLinksTests
     // The affordance is driven ENTIRELY by whether the server advertised the rel — never by the client assuming a
     // URL. Toggling the tenant switch is the honest way to prove that: off → no rel → no share button; on → the
     // rel appears and is the href the dialog follows.
+    //
+    // A DOCUMENT, deliberately. This test used to toggle the switch on a folder, which stopped proving anything
+    // the day folders became unshareable: a folder has no rel with the switch either way, so "off → null" passed
+    // for the wrong reason and "on → not null" simply failed. The folder case is now asserted separately, below,
+    // where it says what it means.
     [Fact]
     public async Task The_share_affordance_appears_only_when_the_server_advertises_the_rel()
     {
@@ -46,25 +52,51 @@ public class DesktopExternalLinksTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
-        var name = $"rel-{Guid.NewGuid():N}";
+        var name = $"rel-{Guid.NewGuid():N}.txt";
+        await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("shareable"));
+        var document = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+
+        var before = await api.GetTenantSettingsAsync();
+        try
+        {
+            await SetExternalLinksAsync(api, before, allow: false);
+            Assert.Null((await api.GetDocumentDetailAsync(document.Id)).ExternalLinksHref);
+
+            await SetExternalLinksAsync(api, before, allow: true);
+            var href = (await api.GetDocumentDetailAsync(document.Id)).ExternalLinksHref;
+            Assert.NotNull(href);
+            Assert.Contains(document.Id.ToString(), href, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            // The tenant is shared with every other test in this collection, so put the switch back however it
+            // started rather than assuming it was off.
+            await SetExternalLinksAsync(api, before, before.AllowExternalLinks);
+        }
+    }
+
+    // A folder is not shareable — POST answers CANNOT_SHARE_FOLDER — so it must not advertise the rel either,
+    // even with the tenant switch ON. Otherwise the client draws a share button whose only outcome is a refusal,
+    // which is the shape ADR 0543 rules out. Asserted with the switch on, since off would pass either way.
+    [Fact]
+    public async Task A_folder_never_advertises_the_share_rel()
+    {
+        DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
+        var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
+
+        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var name = $"nofolder-{Guid.NewGuid():N}";
         await api.CreateFolderAsync(repo.Id, name);
         var folder = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == name);
 
         var before = await api.GetTenantSettingsAsync();
         try
         {
-            await SetExternalLinksAsync(api, before, allow: false);
-            Assert.Null((await api.GetDocumentDetailAsync(folder.Id)).ExternalLinksHref);
-
             await SetExternalLinksAsync(api, before, allow: true);
-            var href = (await api.GetDocumentDetailAsync(folder.Id)).ExternalLinksHref;
-            Assert.NotNull(href);
-            Assert.Contains(folder.Id.ToString(), href, StringComparison.OrdinalIgnoreCase);
+            Assert.Null((await api.GetDocumentDetailAsync(folder.Id)).ExternalLinksHref);
         }
         finally
         {
-            // The tenant is shared with every other test in this collection, so put the switch back however it
-            // started rather than assuming it was off.
             await SetExternalLinksAsync(api, before, before.AllowExternalLinks);
         }
     }

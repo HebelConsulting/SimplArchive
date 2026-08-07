@@ -154,6 +154,8 @@ public sealed class SimplArchiveApiClient
         bool CanManageServiceAccounts, bool CanManageUsers, bool CanViewAuditLog, bool CanExport, bool CanImport,
         // Tenant-wide inbox triage (ADR 0532). Defaulted so existing 13-bool construction sites keep compiling.
         bool CanManageInboxes = false,
+        // Share a document with someone who has no account (ADR 0546). Defaulted for the same reason.
+        bool CanCreateExternalLink = false,
         // Data-classification clearance (ADR "Sensitivity clearance enforcement"). Defaulted so existing
         // construction sites (e.g. a copied-rights bundle) keep compiling.
         int ClearanceRank = 0);
@@ -931,7 +933,9 @@ public sealed class SimplArchiveApiClient
     // per-document external-links dialog had nowhere to get its href from without composing one: the rel is
     // advertised on this resource, and ADR 0543 forbids rebuilding the URL instead of following it. Parsing the
     // resource once, here, is what makes the rel reachable.
-    public sealed record DocumentDetailInfo(string Name, DocumentSensitivityInfo Sensitivity, string? ExternalLinksHref);
+    // ContentsSortOrder is meaningful for a FOLDER only. It rides along here because the detail pane for a child
+    // folder is opened from its parent's listing, where the child's own setting has never been fetched (#408).
+    public sealed record DocumentDetailInfo(string Name, DocumentSensitivityInfo Sensitivity, string? ExternalLinksHref, int ContentsSortOrder);
 
     public async Task<DocumentDetailInfo> GetDocumentDetailAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
@@ -946,7 +950,9 @@ public sealed class SimplArchiveApiClient
                 json.TryGetProperty("sensitivityWatermark", out var w) && w.ValueKind == JsonValueKind.True),
             // Absent when the tenant has the feature off or the caller may not share this document — a missing
             // rel means "not available to you, here, now", so the affordance is simply not offered (ADR 0543).
-            RelHref(json, "external-links"));
+            // A FOLDER never carries it: sharing one is refused, so the icon must not appear either.
+            RelHref(json, "external-links"),
+            json.TryGetProperty("contentsSortOrder", out var so) && so.ValueKind == JsonValueKind.Number ? so.GetInt32() : 0);
     }
 
     public async Task SetSensitivityAsync(Guid documentId, Guid? labelId, CancellationToken cancellationToken = default)
@@ -2640,7 +2646,7 @@ public sealed class SimplArchiveApiClient
     public sealed record ExternalLinkInfo(
         Guid Id, Guid DocumentId, string DocumentName, string? Url, DateTimeOffset ExpiresAt,
         int? MaxAccesses, int AccessCount, string CreatedByName, bool CanExtend, string Etag,
-        string? RevokeHref, string? ExtendHref);
+        string? RevokeHref, string? AvailabilityHref, Guid? ParentId);
 
     public sealed record ExternalLinkListInfo(IReadOnlyList<ExternalLinkInfo> Links, bool CanCreate, bool CanViewOthers);
 
@@ -2667,13 +2673,22 @@ public sealed class SimplArchiveApiClient
 
     // Returns the created link — the ONLY time its URL is available, since the list endpoints never return the
     // token (ADR 0546). Null when the tenant has the feature switched off or the caller lacks the right.
+    // Returns null ONLY when the share was refused — the tenant switch is off, or the caller lacks the right.
+    // Anything else throws, so the dialog reports a real failure as one. Collapsing every non-success into null
+    // is what made a 500 (a non-UTC expiry Postgres refused to store) display as "external links are switched off
+    // for this tenant": a message that sent the reader to a setting that was already correct.
     public async Task<ExternalLinkInfo?> CreateExternalLinkAsync(
         string linksHref, DateTimeOffset? expiresAt, int? maxAccesses, CancellationToken cancellationToken = default)
     {
         using var response = await _http.PostAsJsonAsync(linksHref, new { expiresAt, maxAccesses }, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            return null;
+            if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+
+            throw new ApiActionException($"The link could not be created ({(int)response.StatusCode}).");
         }
 
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
@@ -2688,12 +2703,15 @@ public sealed class SimplArchiveApiClient
         return response.IsSuccessStatusCode;
     }
 
-    // Days are measured from TODAY by the server, not added onto what remains (ADR 0546).
-    public async Task<bool> ExtendExternalLinkAsync(string extendHref, int days, string etag, CancellationToken cancellationToken = default)
+    // Days are measured from TODAY by the server, not added onto what remains, and the access cap travels in the
+    // same call — a link out of both time and accesses is only half-renewed by moving either alone (ADR 0546).
+    // maxAccesses null means unlimited; the server takes both in one request so they cannot land apart.
+    public async Task<bool> RenewExternalLinkAsync(
+        string availabilityHref, int days, int? maxAccesses, string etag, CancellationToken cancellationToken = default)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Put, extendHref)
+        using var request = new HttpRequestMessage(HttpMethod.Put, availabilityHref)
         {
-            Content = JsonContent.Create(new { days }),
+            Content = JsonContent.Create(new { days, maxAccesses }),
         };
         request.Headers.TryAddWithoutValidation("If-Match", etag);
         using var response = await _http.SendAsync(request, cancellationToken);
@@ -2726,7 +2744,10 @@ public sealed class SimplArchiveApiClient
         item.TryGetProperty("canExtend", out var ce) && ce.ValueKind == JsonValueKind.True,
         item.TryGetProperty("etag", out var e) ? e.GetString() ?? "" : "",
         RelHref(item, "revoke"),
-        RelHref(item, "extend"));
+        RelHref(item, "availability"),
+        // Null in the per-document list, which is already sitting on the document — "Go to" only means something
+        // in the cross-document one, where a row is the reader's only handle on where the thing lives.
+        item.TryGetProperty("parentId", out var pid) && pid.ValueKind != JsonValueKind.Null ? pid.GetGuid() : null);
 
     // Fetch an author's identity card by FOLLOWING the href the message advertised (ADR 0544).
     public async Task<(UserCard Card, byte[]? Photo)?> GetUserCardAsync(string cardHref, CancellationToken cancellationToken = default)
@@ -3648,7 +3669,7 @@ public sealed class SimplArchiveApiClient
             B("isTenantAdmin"), B("canImpersonate"), B("canOverrideCheckout"), B("canLegalHold"),
             B("canManageClassification"), B("canResetMfa"), B("canManageRepositories"), B("canManageMasks"),
             B("canManageServiceAccounts"), B("canManageUsers"), B("canViewAuditLog"), B("canExport"), B("canImport"),
-            B("canManageInboxes"),
+            B("canManageInboxes"), B("canCreateExternalLink"),
             r.TryGetProperty("clearanceRank", out var cr) && cr.ValueKind == JsonValueKind.Number ? cr.GetInt32() : 0);
     }
 

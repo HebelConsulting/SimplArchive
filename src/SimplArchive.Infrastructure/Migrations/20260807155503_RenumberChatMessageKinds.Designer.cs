@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SimplArchive.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using SimplArchive.Infrastructure.Persistence;
 namespace SimplArchive.Infrastructure.Migrations
 {
     [DbContext(typeof(SimplArchiveDbContext))]
-    partial class SimplArchiveDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260807155503_RenumberChatMessageKinds")]
+    partial class RenumberChatMessageKinds
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -915,7 +918,10 @@ namespace SimplArchive.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("CreatedByUserId")
+                    b.Property<Guid?>("CreatedByServiceAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CreatedByUserId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("DocumentId")
@@ -939,6 +945,8 @@ namespace SimplArchive.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CreatedByServiceAccountId");
+
                     b.HasIndex("CreatedByUserId");
 
                     b.HasIndex("DocumentId");
@@ -950,7 +958,10 @@ namespace SimplArchive.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "DocumentId", "ExpiresAt");
 
-                    b.ToTable("ExternalLinks");
+                    b.ToTable("ExternalLinks", t =>
+                        {
+                            t.HasCheckConstraint("CK_ExternalLinks_ExactlyOneCreator", "(CASE WHEN \"CreatedByUserId\" IS NOT NULL THEN 1 ELSE 0 END + CASE WHEN \"CreatedByServiceAccountId\" IS NOT NULL THEN 1 ELSE 0 END) = 1");
+                        });
                 });
 
             modelBuilder.Entity("SimplArchive.Domain.Documents.SensitivityLabelDefinition", b =>
@@ -1533,6 +1544,9 @@ namespace SimplArchive.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("CanCreateExternalLink")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("CanExport")
                         .HasColumnType("boolean");
@@ -2446,11 +2460,15 @@ namespace SimplArchive.Infrastructure.Migrations
 
             modelBuilder.Entity("SimplArchive.Domain.Documents.ExternalLink", b =>
                 {
+                    b.HasOne("SimplArchive.Domain.ServiceAccounts.ServiceAccount", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByServiceAccountId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("SimplArchive.Domain.Users.User", null)
                         .WithMany()
                         .HasForeignKey("CreatedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("SimplArchive.Domain.Documents.Document", null)
                         .WithMany()

@@ -17,7 +17,9 @@ public class ChatSystemEntriesTests
 
     public ChatSystemEntriesTests(E2EApiFactory factory) => _factory = factory;
 
-    private const int UserPost = 0, DocumentFiled = 1, VersionFiled = 2, VersionActivated = 3;
+    // Renumbered when the fourth kind went away: a first version used to emit a second "filed a new document"
+    // entry beside its own, so filing said the same thing twice — the second time falsely.
+    private const int UserPost = 0, VersionFiled = 1, VersionActivated = 2;
 
     [Fact]
     public async Task Filing_a_document_and_its_versions_records_entries_in_the_thread()
@@ -28,45 +30,41 @@ public class ChatSystemEntriesTests
         var repoId = (await PostJson(api, "/api/repositories", new { name = $"Entries {Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
         var docId = (await PostJson(api, $"/api/documents/{repoId}/children", new { name = "filed-doc" })).GetProperty("id").GetGuid();
 
-        // First version: the document itself arrives, AND it gets the same per-version entry every version gets.
+        // Filing a document produces exactly ONE entry — the arrival of the document and the arrival of its first
+        // version are the same event, and saying it twice is what this replaced.
         var v1 = await ConfirmVersionAsync(api, docId, "first draft");
 
         var afterFirst = await MessagesAsync(api, docId);
-        Assert.Equal(2, afterFirst.Count);
-        Assert.Equal(DocumentFiled, afterFirst[0].GetProperty("kind").GetInt32());
-        Assert.Equal(VersionFiled, afterFirst[1].GetProperty("kind").GetInt32());
+        var filed = Assert.Single(afterFirst);
+        Assert.Equal(VersionFiled, filed.GetProperty("kind").GetInt32());
 
-        // A system entry stores NO text — its wording is a localized template, not English in the database.
-        Assert.Equal("", afterFirst[0].GetProperty("body").GetString());
-        Assert.Equal("", afterFirst[1].GetProperty("body").GetString());
+        // A system entry stores NO text — its wording is a localized template, not English in the database. Which
+        // of the two filing sentences a client renders follows from versionNumber, so the entry must carry it.
+        Assert.Equal("", filed.GetProperty("body").GetString());
+        Assert.Equal(1, filed.GetProperty("versionNumber").GetInt32());
+        Assert.Equal("first draft", filed.GetProperty("versionComment").GetString());
 
-        // The version entry carries the number and comment, read from the version itself.
-        Assert.Equal(1, afterFirst[1].GetProperty("versionNumber").GetInt32());
-        Assert.Equal("first draft", afterFirst[1].GetProperty("versionComment").GetString());
-
-        // A "document filed" entry is about the document, so it names no version.
-        Assert.Equal(JsonValueKind.Null, afterFirst[0].GetProperty("versionNumber").ValueKind);
-
-        // A second version adds ONE entry — the document was already filed.
+        // A second version adds one more, distinguishable from the first only by its number — which is exactly
+        // what makes it read as "saved a new working version" rather than "filed a new document".
         await ConfirmVersionAsync(api, docId, "second pass");
         var afterSecond = await MessagesAsync(api, docId);
-        Assert.Equal(3, afterSecond.Count);
-        Assert.Equal(VersionFiled, afterSecond[2].GetProperty("kind").GetInt32());
-        Assert.Equal(2, afterSecond[2].GetProperty("versionNumber").GetInt32());
-        Assert.Equal("second pass", afterSecond[2].GetProperty("versionComment").GetString());
+        Assert.Equal(2, afterSecond.Count);
+        Assert.Equal(VersionFiled, afterSecond[1].GetProperty("kind").GetInt32());
+        Assert.Equal(2, afterSecond[1].GetProperty("versionNumber").GetInt32());
+        Assert.Equal("second pass", afterSecond[1].GetProperty("versionComment").GetString());
 
         // Making the older version current again is recorded: it changes what everyone sees without adding
         // anything, which is exactly why it should not be silent.
         (await api.PostAsync($"/api/documents/{docId}/versions/{v1}/restore", null)).EnsureSuccessStatusCode();
 
         var afterRestore = await MessagesAsync(api, docId);
-        Assert.Equal(4, afterRestore.Count);
-        Assert.Equal(VersionActivated, afterRestore[3].GetProperty("kind").GetInt32());
-        Assert.Equal(1, afterRestore[3].GetProperty("versionNumber").GetInt32());
+        Assert.Equal(3, afterRestore.Count);
+        Assert.Equal(VersionActivated, afterRestore[2].GetProperty("kind").GetInt32());
+        Assert.Equal(1, afterRestore[2].GetProperty("versionNumber").GetInt32());
 
         // Re-pinning the version that is already current is a no-op, so it must not post again.
         (await api.PostAsync($"/api/documents/{docId}/versions/{v1}/restore", null)).EnsureSuccessStatusCode();
-        Assert.Equal(4, (await MessagesAsync(api, docId)).Count);
+        Assert.Equal(3, (await MessagesAsync(api, docId)).Count);
     }
 
     // The version entry's comment is READ FROM THE VERSION, not copied onto the message. There is no endpoint

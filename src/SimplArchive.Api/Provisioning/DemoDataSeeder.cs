@@ -84,6 +84,12 @@ public static class DemoDataSeeder
         // provisioned with no quota (unlimited). Showcases the quota UI + enforcement from the single login.
         var demoTenant = await dbContext.Tenants.SingleAsync(t => t.Id == tenantId);
         demoTenant.StorageQuotaBytes = 250L * 1024 * 1024;
+
+        // External links ON for the DEMO tenant only (ADR 0546, issue #405). The product default stays false, so a
+        // real tenant still opts in deliberately — but the switch is checked at ACCESS time, so leaving it off here
+        // would make the seeded link below answer 410 to every visitor. A showcase that ships the feature switched
+        // off is not showing it.
+        demoTenant.AllowExternalLinks = true;
         await dbContext.SaveChangesAsync();
 
         var folderMaskVersionId = await FolderMask.CurrentVersionIdAsync(dbContext, CancellationToken.None);
@@ -100,7 +106,7 @@ public static class DemoDataSeeder
 
         // ── The realistic filing tree (issue #354): Business Years / Contracts / General. Built first so the
         // "Contracts / Acme Corp" customer folder + the month folders exist for the showcase documents below. ────
-        var (acmeCorp, march2026) = await SeedRichTreeAsync(dbContext, objectStorage, assembly, tenantId, repositoryId, adminId, now, basicEntryVersion.Id, folderMaskVersionId, finalizer);
+        var (acmeCorp, march2026, telekomAgreement) = await SeedRichTreeAsync(dbContext, objectStorage, assembly, tenantId, repositoryId, adminId, now, basicEntryVersion.Id, folderMaskVersionId, finalizer);
 
         // ── Showcase customer "Contracts / Acme Corp": an invoice ("Invoice 2026-003", document-dated March 2026)
         // with a highlight + sticky note + stamp and in the approval workflow — so the demo login lands on live
@@ -183,12 +189,45 @@ public static class DemoDataSeeder
             CreatedAt = now,
         });
         await dbContext.SaveChangesAsync();
+
+        await SeedExternalLinkAsync(dbContext, tenantId, telekomAgreement.Id, adminId, now);
+    }
+
+    // A live external link on the Telekom service agreement (ADR 0546, issue #405), so the feature is something a
+    // visitor can click rather than read about. Three of its properties are deliberate:
+    //
+    // STATIC TOKEN. The kiosk re-seeds nightly from empty volumes, so a fresh random token would mint a new URL
+    // every night and break every link already shared, bookmarked or written into a demo script. Derived from a
+    // fixed string instead — see ExternalLinkToken.DeriveForDemoSeed for why that is safe here and nowhere else.
+    //
+    // 90 DAYS. Long enough that the nightly reset always refreshes it well before it lapses, so the demo is never
+    // dead the morning after. (Comfortably inside the tenant's own 180-day cap.)
+    //
+    // UNLIMITED ACCESSES. The tenant default is 5, which five curious visitors would exhaust — the same
+    // dead-demo problem in a different disguise, and one the reset would only fix the next day.
+    private static async Task SeedExternalLinkAsync(
+        SimplArchiveDbContext dbContext, Guid tenantId, Guid documentId, Guid adminId, DateTimeOffset now)
+    {
+        dbContext.ExternalLinks.Add(new ExternalLink
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DocumentId = documentId,
+            Token = ExternalLinkToken.DeriveForDemoSeed("simplarchive-demo-telekom-service-agreement-v1"),
+            ExpiresAt = now.AddDays(90),
+            // null = unlimited, NOT the tenant's ExternalLinkDefaultAccesses.
+            MaxAccesses = null,
+            CreatedByUserId = adminId,
+            CreatedAt = now,
+        });
+
+        await dbContext.SaveChangesAsync();
     }
 
     // The business-filing tree from issue #354. Returns the "Contracts / Acme Corp" customer folder + the
     // "Business Years / 2026 / 03 March" month folder — the showcase invoice + offer are filed into Acme Corp and
     // the invoice is also referenced (multi-filed) into March by the caller.
-    private static async Task<(Document AcmeCorp, Document March)> SeedRichTreeAsync(
+    private static async Task<(Document AcmeCorp, Document March, Document TelekomAgreement)> SeedRichTreeAsync(
         SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
         Guid tenantId, Guid repositoryId, Guid adminId, DateTimeOffset now, Guid basicEntryVersionId, Guid? folderMaskVersionId,
         Documents.DocumentFinalizer finalizer)
@@ -232,7 +271,8 @@ public static class DemoDataSeeder
         await DocAsync(contoso.Id, "Contoso Cloud — 2026 cost forecast", "DemoContosoForecast.xlsx", ".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", new DateOnly(2026, 1, 15));
 
         var telekom = await FolderAsync(contracts.Id, "MyCountry Telekom");
-        await DocAsync(telekom.Id, "MyCountry Telekom — service agreement", "DemoTelekomContract.pdf", ".pdf", "application/pdf", new DateOnly(2026, 1, 1));
+        // Returned to the caller: this is the document the seeded external link shares (issue #405).
+        var telekomAgreement = await DocAsync(telekom.Id, "MyCountry Telekom — service agreement", "DemoTelekomContract.pdf", ".pdf", "application/pdf", new DateOnly(2026, 1, 1));
 
         // The three monthly Telekom invoices live under Contracts/MyCountry Telekom/Invoices AND are *referenced*
         // (a shortcut, ADR "…move and reference") into the matching Business Years month — the multi-filing showcase.
@@ -258,7 +298,7 @@ public static class DemoDataSeeder
         await DocAsync(templates.Id, "Letterhead template", "DemoLetterheadTemplate.odt", ".odt", "application/vnd.oasis.opendocument.text", new DateOnly(2026, 1, 1));
         await DocAsync(templates.Id, "Invoice template", "DemoInvoiceTemplate.ods", ".ods", "application/vnd.oasis.opendocument.spreadsheet", new DateOnly(2026, 1, 1));
 
-        return (acmeCorp, monthFolders[3]);
+        return (acmeCorp, monthFolders[3], telekomAgreement);
     }
 
     // Two extra users (an editor + a clerk) and a shared "Scan Team" group with a seeded group-inbox item — so the

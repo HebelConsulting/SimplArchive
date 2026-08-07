@@ -58,9 +58,9 @@ public class DocumentChatController : ControllerBase
 
         public string Body { get; set; } = "";
 
-        // What produced this entry (ADR 0545): 0 UserPost · 1 DocumentFiled · 2 VersionFiled · 3 VersionActivated,
-        // the Api's enum-as-int convention. A client renders a localized sentence for anything but 0, so Body is
-        // empty there and must not be displayed.
+        // What produced this entry (ADR 0545): 0 UserPost · 1 VersionFiled · 2 VersionActivated, the Api's
+        // enum-as-int convention. A client renders a localized sentence for anything but 0, so Body is empty
+        // there and must not be displayed — and for VersionFiled it picks the sentence by VersionNumber.
         public int Kind { get; set; }
 
         // For a version entry: the version's number and its check-in comment, read live from the referenced

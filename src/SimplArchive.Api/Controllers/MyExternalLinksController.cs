@@ -26,20 +26,17 @@ public class MyExternalLinksController : ControllerBase
     private readonly SimplArchiveDbContext _dbContext;
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly ICurrentUserAccessor _currentUser;
-    private readonly ICurrentServiceAccountAccessor _currentServiceAccount;
     private readonly TimeProvider _clock;
 
     public MyExternalLinksController(
         SimplArchiveDbContext dbContext,
         IUserSystemRightsResolver userSystemRights,
         ICurrentUserAccessor currentUser,
-        ICurrentServiceAccountAccessor currentServiceAccount,
         TimeProvider clock)
     {
         _dbContext = dbContext;
         _userSystemRights = userSystemRights;
         _currentUser = currentUser;
-        _currentServiceAccount = currentServiceAccount;
         _clock = clock;
     }
 
@@ -53,6 +50,10 @@ public class MyExternalLinksController : ControllerBase
 
         // Which document this shares — the whole point of a cross-document view is knowing WHAT was shared.
         public string DocumentName { get; set; } = "";
+
+        // The document's folder, so the client's "Go to" can open that folder and select the row inside it. Null
+        // only for a repository root, which cannot be shared anyway (a folder is not shareable).
+        public Guid? ParentId { get; set; }
 
         public DateTimeOffset ExpiresAt { get; set; }
 
@@ -82,21 +83,12 @@ public class MyExternalLinksController : ControllerBase
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> List(
-        [FromQuery] Guid? userId, [FromQuery] Guid? groupId, [FromQuery] Guid? serviceAccountId,
-        CancellationToken cancellationToken)
+        [FromQuery] Guid? userId, [FromQuery] Guid? groupId, CancellationToken cancellationToken)
     {
         var now = _clock.GetUtcNow();
 
-        // A ServiceAccount can hold CanCreateExternalLink, so it can create links — and must therefore be able to
-        // see its own. Without this branch automation could share documents that never appeared in any
-        // cross-document view, which is precisely the blind spot this view exists to remove.
-        if (_currentServiceAccount.ServiceAccountId is { } callerServiceAccountId)
-        {
-            var own = _dbContext.ExternalLinks.Where(l =>
-                l.RevokedAt == null && l.ExpiresAt > now && l.CreatedByServiceAccountId == callerServiceAccountId);
-            return Ok(await BuildAsync(own, now, canViewOthers: false, cancellationToken));
-        }
-
+        // Only a person shares a document (ADR 0546), so only a person has links to list. A service account
+        // reaching this endpoint has nothing to show rather than an empty list to puzzle over.
         if (_currentUser.UserId is not { } callerId)
         {
             return Forbid();
@@ -106,7 +98,7 @@ public class MyExternalLinksController : ControllerBase
 
         // Looking at anyone but yourself is an administrative act. Without this, the filters would let any user
         // enumerate what colleagues have shared.
-        if ((userId is not null && userId != callerId) || groupId is not null || serviceAccountId is not null)
+        if ((userId is not null && userId != callerId) || groupId is not null)
         {
             if (!isAdmin)
             {
@@ -116,13 +108,7 @@ public class MyExternalLinksController : ControllerBase
 
         var query = _dbContext.ExternalLinks.Where(l => l.RevokedAt == null && l.ExpiresAt > now);
 
-        if (serviceAccountId is { } account)
-        {
-            // Links created by automation. Invisible to the user/group filters by construction, so an admin
-            // auditing "everything shared out of this tenant" needs this third lens.
-            query = query.Where(l => l.CreatedByServiceAccountId == account);
-        }
-        else if (groupId is { } group)
+        if (groupId is { } group)
         {
             // "Links created by anyone CURRENTLY in this group" — membership is evaluated here, at query time,
             // rather than stored on the link (ADR 0546). Someone who leaves the group drops out of this view while
@@ -132,7 +118,7 @@ public class MyExternalLinksController : ControllerBase
                 .Select(m => m.UserId)
                 .ToListAsync(cancellationToken);
 
-            query = query.Where(l => l.CreatedByUserId != null && memberIds.Contains(l.CreatedByUserId.Value));
+            query = query.Where(l => memberIds.Contains(l.CreatedByUserId));
         }
         else
         {
@@ -158,9 +144,8 @@ public class MyExternalLinksController : ControllerBase
                 l.CreatedAt,
                 l.ConcurrencyToken,
                 DocumentName = _dbContext.Documents.Where(d => d.Id == l.DocumentId).Select(d => d.Name).FirstOrDefault(),
-                CreatedByName = l.CreatedByUserId != null
-                    ? _dbContext.Users.Where(u => u.Id == l.CreatedByUserId).Select(u => u.DisplayName).FirstOrDefault()
-                    : _dbContext.ServiceAccounts.Where(a => a.Id == l.CreatedByServiceAccountId).Select(a => a.Name).FirstOrDefault(),
+                ParentId = _dbContext.Documents.Where(d => d.Id == l.DocumentId).Select(d => d.ParentId).FirstOrDefault(),
+                CreatedByName = _dbContext.Users.Where(u => u.Id == l.CreatedByUserId).Select(u => u.DisplayName).FirstOrDefault(),
             })
             .ToListAsync(cancellationToken);
 
@@ -171,6 +156,7 @@ public class MyExternalLinksController : ControllerBase
                 Id = l.Id,
                 DocumentId = l.DocumentId,
                 DocumentName = l.DocumentName ?? "",
+                ParentId = l.ParentId,
                 ExpiresAt = l.ExpiresAt,
                 MaxAccesses = l.MaxAccesses,
                 AccessCount = l.AccessCount,
@@ -178,12 +164,14 @@ public class MyExternalLinksController : ControllerBase
                 CreatedAt = l.CreatedAt,
                 CanExtend = l.ExpiresAt <= now.AddDays(ExtendableWithinDays),
                 Etag = l.ConcurrencyToken.ToString(),
-                // Revoke and extend live under the document, so the client follows these rather than composing
-                // them (ADR 0543).
+                // Revoke and availability live under the document, so the client follows these rather than
+                // composing them (ADR 0543). No "document" rel: the "Go to" action does not CALL anything — it
+                // moves the workbench's own tree and list panes — so what it needs is the document's parent id,
+                // carried as data below, not a URL to follow.
                 Links =
                 [
                     new Link("revoke", $"/api/documents/{l.DocumentId}/external-links/{l.Id}", "DELETE"),
-                    new Link("extend", $"/api/documents/{l.DocumentId}/external-links/{l.Id}/expiry", "PUT"),
+                    new Link("availability", $"/api/documents/{l.DocumentId}/external-links/{l.Id}/availability", "PUT"),
                 ],
             }).ToList(),
             CanViewOthers = canViewOthers,

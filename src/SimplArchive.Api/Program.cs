@@ -15,6 +15,7 @@ using SimplArchive.Api.Errors;
 using SimplArchive.Api.HealthChecks;
 using SimplArchive.Api.Logging;
 using SimplArchive.Api.Provisioning;
+using SimplArchive.Api.Serialization;
 using SimplArchive.Api.Versioning;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Auth;
@@ -68,6 +69,10 @@ ProductionReadinessValidator.ThrowIfNotProductionReady(builder.Configuration, bu
 // version would add its own entries here.
 builder.Services.AddControllers()
     .AddXmlSerializerFormatters()
+    // Every inbound timestamp is normalised to UTC before it reaches a handler: Postgres stores an instant and
+    // Npgsql rejects a DateTimeOffset carrying any other offset, so without this a caller in a non-UTC timezone
+    // turns a valid request into a 500 deep inside SaveChanges. See UtcDateTimeOffsetConverter.
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new UtcDateTimeOffsetConverter()))
     .AddMvcOptions(options =>
     {
         foreach (var formatter in options.OutputFormatters)

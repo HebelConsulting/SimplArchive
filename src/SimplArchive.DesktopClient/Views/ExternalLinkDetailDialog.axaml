@@ -1,0 +1,52 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.ExternalLinkDetailDialog"
+        x:DataType="vm:ExternalLinkDetailDialogViewModel"
+        Title="{loc:Tr ExtLinkDetailTitle}" Width="480" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner">
+    <!-- One link, read-only, with renewal as the only live control (ADR 0546). The web client's
+         ExternalLinkDetailDialog is the same surface in the other toolkit (ADR 0511). -->
+    <StackPanel Margin="16" Spacing="10">
+        <Grid ColumnDefinitions="130,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" >
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr ExtLinkDocument}" Foreground="{DynamicResource WbMuted}" />
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DocumentName}" TextWrapping="Wrap" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr ExtLinkCreatedBy}" Foreground="{DynamicResource WbMuted}" Margin="0,6,0,0" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CreatedByName}" Margin="0,6,0,0" />
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr ExtLinkExpires}" Foreground="{DynamicResource WbMuted}" Margin="0,6,0,0" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Expires}" Margin="0,6,0,0" />
+
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr ExtLinkAccesses}" Foreground="{DynamicResource WbMuted}" Margin="0,6,0,0" />
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Accesses}" Margin="0,6,0,0" />
+
+            <!-- The token is shown once, when the link is created, and the list endpoints never return it — so
+                 this row explains an absence rather than leaving a reader hunting for the URL. -->
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Tr ExtLinkUrl}" Foreground="{DynamicResource WbMuted}" Margin="0,6,0,0" />
+            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding UrlNote}" Foreground="{DynamicResource WbMuted}"
+                       FontStyle="Italic" TextWrapping="Wrap" Margin="0,6,0,0" />
+        </Grid>
+
+        <!-- Renewal moves BOTH halves of "still usable" at once: the server takes them in one call, so they can
+             never land apart. Absent when the link is not near enough to its end to need it. -->
+        <StackPanel Spacing="6" IsVisible="{Binding CanRenew}">
+            <Separator />
+            <TextBlock Text="{loc:Tr ExtLinkRenew}" FontWeight="SemiBold" />
+            <TextBlock Text="{loc:Tr ExtLinkRenewHint}" Foreground="{DynamicResource WbMuted}" FontSize="11" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{loc:Tr ExtLinkExtendDays}" VerticalAlignment="Center" />
+                <NumericUpDown Value="{Binding Days}" Minimum="1" Maximum="90" Width="110" />
+                <TextBlock Text="{loc:Tr ExtLinkMaxAccesses}" VerticalAlignment="Center" />
+                <NumericUpDown Value="{Binding MaxAccesses}" Minimum="1" Width="110" />
+            </StackPanel>
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <TextBlock Text="{Binding Status}" VerticalAlignment="Center" />
+            <Button Content="{loc:Tr ExtLinkApply}" Command="{Binding ApplyCommand}" IsVisible="{Binding CanRenew}" />
+            <Button Content="{loc:Tr Close}" Click="OnClose" />
+        </StackPanel>
+    </StackPanel>
+</Window>

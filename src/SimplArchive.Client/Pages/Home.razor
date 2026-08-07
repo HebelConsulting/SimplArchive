@@ -50,16 +50,29 @@
     .wb-tree .mud-treeview-item-content:hover .wb-tree-menu-btn,
     .wb-tree .mud-treeview-item-content:focus-within .wb-tree-menu-btn { visibility: visible; }
     @@media (pointer: coarse) { .wb-tree .wb-tree-menu-btn { visibility: visible; } }
-    /* An EMPTY folder's glyph gets a pastel tint so you can spot it without expanding (ADR "Empty-folder tree
-       icon", issue #352). The direct-child chain is deliberate: a MudTreeViewItem renders its children inside
-       itself (nested under .mud-collapse-container), so a descendant selector would tint every subfolder too.
-       One mid-tone pastel serves both themes — pale enough to read as "nothing here" on light, bright enough to
-       stay visible on dark — so it needs no per-theme override. The four-class chain out-specifies MudBlazor's
-       own .mud-icon-default colour; the svg has no fill, so it inherits currentColor. */
-    /* An empty folder's glyph: pale yellow, well lighter than the gold of a folder with contents (issue #376 —
-       it was a pastel blue). Same hue family now, so the lightness gap is what makes it readable at a glance. */
+    /* The tree's glyph colours (ADR "Folder icon scheme"), matching the desktop client. The direct-child chain is
+       deliberate: a MudTreeViewItem renders its children inside itself (nested under .mud-collapse-container), so
+       a descendant selector would colour every subfolder too. The four-class chain also out-specifies MudBlazor's
+       own .mud-icon-default colour; the svg has no fill, so it inherits currentColor.
+
+       GOLD marks a place documents live — a folder, the personal root, a referenced folder. The Inbox /
+       Check-out launchers and the Administration branch are real nodes but not containers, so they take the
+       theme's secondary text colour: gold that lands on every row says nothing.
+
+       An EMPTY folder is the SAME gold, mixed toward the pane's own surface colour — not a second hue. The
+       previous fixed pale yellow could only recede on light; on dark it was LIGHTER than the gold, which made
+       empty folders the loudest thing in the tree. Mixing toward --mud-palette-surface follows the in-app dark
+       toggle for free (a media query would not: the toggle is ours, not the OS's). Browsers without color-mix
+       fall back to the flat gold and lean on the outline glyph, which carries the distinction anyway. */
+    .wb-tree-folder > .mud-treeview-item > .mud-treeview-item-content > .mud-treeview-item-icon > .mud-icon-root {
+        color: #d9a400;
+    }
     .wb-tree-empty > .mud-treeview-item > .mud-treeview-item-content > .mud-treeview-item-icon > .mud-icon-root {
-        color: #f2dd8c;
+        color: #d9a400;
+        color: color-mix(in srgb, #d9a400 55%, var(--mud-palette-surface));
+    }
+    .wb-tree-muted > .mud-treeview-item > .mud-treeview-item-content > .mud-treeview-item-icon > .mud-icon-root {
+        color: var(--mud-palette-text-secondary);
     }
     .wb-list { flex: 0 0 300px; container-type: inline-size; }
     .wb-detail { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
@@ -381,6 +394,16 @@
                     <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="RefreshAsync" title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
                         <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
                     </MudButton>
+                    @* "My external links" — everything the caller has shared, across documents (ADR 0546). A
+                       cross-document review surface, so it belongs to the general group rather than to the selected
+                       document, matching where the desktop puts it (ADR 0511). Hidden until the API root
+                       advertises the rel: its absence means the feature is not available here. *@
+                    @if (_myExternalLinksHref is not null)
+                    {
+                        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="OpenMyExternalLinksAsync" title="@Strings.Get("ExtLinkMyLinks")" aria-label="@Strings.Get("ExtLinkMyLinks")">
+                            <MudIcon Icon="@Icons.Material.Filled.Link" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("ExtLinkMyLinks")</span>
+                        </MudButton>
+                    }
                     @if (_isTenantAdmin)
                     {
                         <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="RunTiffBackfillAsync" title="@Strings.Get("RibbonConvertScans")" aria-label="@Strings.Get("RibbonConvertScans")">
@@ -450,7 +473,7 @@
                                        "Tree-pane context menu"): a MudTreeViewItem renders its children INSIDE
                                        itself, so stopPropagation is what makes a right-click on a subfolder open
                                        that subfolder's menu instead of also firing its ancestors' handlers. *@
-                                    <div class="wb-tree-node @(item.Value?.IsEmptyFolder == true ? "wb-tree-empty" : "")"
+                                    <div class="wb-tree-node @(item.Value?.TreeGlyphClass)"
                                          @oncontextmenu="@(e => OnTreeContextMenuAsync(item.Value, e))"
                                          @oncontextmenu:preventDefault="true" @oncontextmenu:stopPropagation="true">
                                         <MudTreeViewItem Value="@item.Value" Text="@item.Text" Icon="@item.Icon"
@@ -494,7 +517,9 @@
                                         <MudDivider />
                                         <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => RenameAsync(tn)">@Strings.Get("CtxRename")</MudMenuItem>
                                         <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => MoveAsync(tn)">@Strings.Get("CtxMoveTo")</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Sort" OnClick="BeginFolderEdit">@Strings.Get("FolderSortLabel")</MudMenuItem>
+                                        @* Opens the ONE detail edit on this folder (issue #408) — the contents order is a
+                                           field in that pane now, not a mode of its own. *@
+                                        <MudMenuItem Icon="@Icons.Material.Filled.Sort" OnClick="@(() => BeginFolderSortEditAsync(tn))">@Strings.Get("FolderSortLabel")</MudMenuItem>
                                         <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteAsync(tn)">@Strings.Get("UgDelete")</MudMenuItem>
                                         <MudDivider />
                                         <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessAsync(tn.Id, tn.Name)">@Strings.Get("MaManageAccess")</MudMenuItem>
@@ -676,43 +701,7 @@
                             </div>
                         }
                         <div class="wb-pane wb-index" data-pane="index">
-                            @if (_selectedItem is null && _selectedFolder is { } detailFolder)
-                            {
-                                @* Folder detail pane (ADR "Per-folder contents sort order") — the open folder's
-                                   persisted default contents sort order, editable under an Edit toggle. *@
-                                <MudText Typo="Typo.subtitle1" Style="min-width:0; overflow:hidden; text-overflow:ellipsis;">@detailFolder.Name</MudText>
-                                <table class="wb-sysfields">
-                                    <tr>
-                                        <td>@Strings.Get("FolderSortLabel")</td>
-                                        <td>
-                                            @if (_folderEditing)
-                                            {
-                                                <MudSelect T="FolderContentsSortOrder" @bind-Value="_folderSortEdit" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
-                                                    <MudSelectItem Value="FolderContentsSortOrder.Name">@Strings.Get("FolderSortName")</MudSelectItem>
-                                                    <MudSelectItem Value="FolderContentsSortOrder.DocumentDate">@Strings.Get("FolderSortDocDate")</MudSelectItem>
-                                                    <MudSelectItem Value="FolderContentsSortOrder.Created">@Strings.Get("FolderSortCreated")</MudSelectItem>
-                                                </MudSelect>
-                                            }
-                                            else
-                                            {
-                                                @FolderSortText(_folderSortOrder)
-                                            }
-                                        </td>
-                                    </tr>
-                                </table>
-                                @if (_folderEditing)
-                                {
-                                    <div style="display:flex; gap:6px; margin-top:8px;">
-                                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveFolderSortAsync" Disabled="_folderBusy">@Strings.Get("Save")</MudButton>
-                                        <MudButton Size="Size.Small" OnClick="() => _folderEditing = false" Disabled="_folderBusy">@Strings.Get("Cancel")</MudButton>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Edit" OnClick="BeginFolderEdit">@Strings.Get("Edit")</MudButton>
-                                }
-                            }
-                            else if (_selectedItem is null)
+                            @if (_detailNode is null)
                             {
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("SelectDocDetail")</MudText>
                             }
@@ -745,12 +734,24 @@
                                             <MudIconButton Size="Size.Small" aria-label="Manage access" Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessAsync(_selectedItem!.Id, _sysName)" />
                                         </MudTooltip>
                                     }
+                                    @* Edit the index data (issue #407). It belongs beside the thing it edits, in the row of
+                                       per-document actions, rather than at the far end of the pane where it began — and
+                                       icon-only like its neighbours, so the row stays one vocabulary. Always visible rather
+                                       than on hover: touch has no hover (ADR 0511). Save and Cancel stay down with the
+                                       FIELDS, because they act on the form rather than on the document. *@
+                                    @if (CanEditDetail)
+                                    {
+                                        <MudTooltip Text="@Strings.Get("Edit")">
+                                            <MudIconButton Size="Size.Small" aria-label="@Strings.Get("Edit")" Icon="@Icons.Material.Filled.Edit"
+                                                           OnClick="BeginEditAsync" Disabled="_detailBusy" />
+                                        </MudTooltip>
+                                    }
                                 </div>
 
-                                @* System fields — always shown for a document with a confirmed version (ADR 0273). *@
-                                @if (_sysHasVersion)
-                                {
-                                    <table class="wb-sysfields">
+                                @* System fields (ADR 0273). Rendered for a FOLDER as well since issue #408 — the rows
+                                   that come from a VERSION stay conditional, because a folder has none, but Name and the
+                                   mask below are as real for a folder as for a document. *@
+                                <table class="wb-sysfields">
                                         <tr>
                                             <td>@Strings.Get("Name")</td>
                                             <td>
@@ -764,6 +765,8 @@
                                                 }
                                             </td>
                                         </tr>
+                                        @if (_sysHasVersion)
+                                        {
                                         <tr><td>@Strings.Get("SysFileExtension")</td><td class="wb-sys-muted">@_sysFileExtension</td></tr>
                                         <tr>
                                             <td>@Strings.Get("VerColDocDate")</td>
@@ -804,6 +807,7 @@
                                         }
                                         <tr><td>@Strings.Get("SysCreated")</td><td class="wb-sys-muted">@_sysCreated</td></tr>
                                         <tr><td>@Strings.Get("SysCreatedBy")</td><td class="wb-sys-muted">@_sysCreatedBy</td></tr>
+                                        }
                                         @* The document's current (latest confirmed) version number, directly below Created by
                                            (ADR "Mask-pane current-version line"). *@
                                         @if (_sysCurrentVersion is { } curVer)
@@ -819,8 +823,30 @@
                                                 </td>
                                             </tr>
                                         }
+                                        @* Folder-only: the order this folder lists its contents in (ADR "Per-folder
+                                           contents sort order"). It rides in the same pane and the same edit as the
+                                           mask now, rather than in a pane of its own with its own Edit button. *@
+                                        @if (_detailNode?.IsFolder == true)
+                                        {
+                                            <tr>
+                                                <td>@Strings.Get("FolderSortLabel")</td>
+                                                <td>
+                                                    @if (_isEditing)
+                                                    {
+                                                        <MudSelect T="FolderContentsSortOrder" @bind-Value="_editSortOrder" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
+                                                            <MudSelectItem Value="FolderContentsSortOrder.Name">@Strings.Get("FolderSortName")</MudSelectItem>
+                                                            <MudSelectItem Value="FolderContentsSortOrder.DocumentDate">@Strings.Get("FolderSortDocDate")</MudSelectItem>
+                                                            <MudSelectItem Value="FolderContentsSortOrder.Created">@Strings.Get("FolderSortCreated")</MudSelectItem>
+                                                        </MudSelect>
+                                                    }
+                                                    else
+                                                    {
+                                                        @FolderSortText(_detailSortOrder)
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
                                     </table>
-                                }
 
                                 @if (_isEditing)
                                 {
@@ -930,13 +956,11 @@
                                         <MudButton Size="Size.Small" OnClick="CancelEdit" Disabled="_detailBusy">@Strings.Get("Cancel")</MudButton>
                                         <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveDetailAsync" Disabled="_detailBusy">@Strings.Get("Save")</MudButton>
                                     }
-                                    else
+                                    else if (_detailVersionCount >= 2)
                                     {
-                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit" OnClick="BeginEditAsync" Disabled="_detailBusy">@Strings.Get("Edit")</MudButton>
-                                        @if (_detailVersionCount >= 2)
-                                        {
-                                            <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Difference" OnClick="OpenCompareVersionsAsync">@Strings.Get("CompareVersionsBtn")</MudButton>
-                                        }
+                                        @* Edit moved to the header (issue #407); Compare versions stays, being about the
+                                           document's history rather than about editing it. *@
+                                        <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Difference" OnClick="OpenCompareVersionsAsync">@Strings.Get("CompareVersionsBtn")</MudButton>
                                     }
                                 </div>
                             }
@@ -2579,6 +2603,14 @@
         // holds those launchers.
         public bool IsEmptyFolder => IsFolder && !HasChildren && AdminKind == "" && PersonalKind == "";
 
+        // Which glyph colour this node takes in the tree (ADR "Folder icon scheme"), as the CSS class that
+        // carries it. Gold is for containers only, so the Inbox / Check-out launchers and the Administration
+        // branch go muted — the Personal ROOT is a container and stays gold.
+        public string TreeGlyphClass =>
+            IsEmptyFolder ? "wb-tree-empty"
+            : AdminKind != "" || PersonalKind is "inbox" or "checkout" ? "wb-tree-muted"
+            : "wb-tree-folder";
+
         // A checked-out document is shown as "[holder] name" (ADR "Check-out working-copy stash").
         public string DisplayName => CheckedOut && !string.IsNullOrEmpty(CheckedOutByName) ? $"[{CheckedOutByName}] {Name}" : Name;
 
@@ -2600,6 +2632,15 @@
     // ListChildren envelope). Clicking a column header is an EPHEMERAL override (_headerSortActive) that resets
     // when another folder is opened. Client-side over the fully-loaded rows (the listing loads all pages).
     private FolderContentsSortOrder _folderSortOrder = FolderContentsSortOrder.DocumentDate;
+
+    // What the detail pane is describing (issue #408). A selected row wins; with none, it is the open folder —
+    // so the pane always describes SOMETHING you can see, and a folder gets the same pane as a document rather
+    // than a thinner one of its own. Distinct from _selectedItem, which still means "a highlighted LIST row" and
+    // governs the ribbon's per-item actions.
+    private BrowseNode? _detailNode;
+
+    // The subject's own contents-sort order (folders only), read from its detail resource.
+    private FolderContentsSortOrder _detailSortOrder = FolderContentsSortOrder.Name;
     private bool _headerSortActive;
 
     private enum ContentSort { Name, Type, Date, Size, Tags }
@@ -2656,16 +2697,6 @@
     }
 
     // Folder detail-pane editing of the persisted contents sort order (ADR "Per-folder contents sort order").
-    private bool _folderEditing;
-    private bool _folderBusy;
-    private FolderContentsSortOrder _folderSortEdit;
-
-    private void BeginFolderEdit()
-    {
-        _folderSortEdit = _folderSortOrder;
-        _folderEditing = true;
-    }
-
     private string FolderSortText(FolderContentsSortOrder order) => order switch
     {
         FolderContentsSortOrder.DocumentDate => Strings.Get("FolderSortDocDate"),
@@ -2673,36 +2704,18 @@
         _ => Strings.Get("FolderSortName"),
     };
 
-    private async Task SaveFolderSortAsync()
+    // Selecting a folder and starting the pane's edit, for the tree context menu's "Contents sort order" entry.
+    // The order lives in the detail pane now (issue #408), so this navigates to it rather than opening an editor
+    // of its own — one edit, one Save, wherever you started from.
+    private async Task BeginFolderSortEditAsync(BrowseNode? folder)
     {
-        if (_selectedFolder is not { } folder)
+        if (folder is null)
         {
             return;
         }
 
-        _folderBusy = true;
-        try
-        {
-            var resp = await Http.PutAsJsonAsync($"api/documents/{folder.Id}/contents-sort-order", new { sortOrder = (int)_folderSortEdit });
-            if (resp.IsSuccessStatusCode)
-            {
-                _folderSortOrder = _folderSortEdit;
-                _headerSortActive = false; // re-apply the persisted default order to the current listing
-                _folderEditing = false;
-            }
-            else if (resp.StatusCode == System.Net.HttpStatusCode.Forbidden)
-            {
-                Snackbar.Add(Strings.Get("FolderSortNoPermission"), Severity.Warning);
-            }
-            else
-            {
-                Snackbar.Add(Strings.Get("FolderSortSaveFailed"), Severity.Error);
-            }
-        }
-        finally
-        {
-            _folderBusy = false;
-        }
+        await SelectFolderAsync(folder);
+        await BeginEditAsync();
     }
 
     private static string FormatSize(long? bytes) => bytes switch
@@ -3548,6 +3561,7 @@
         await ReloadRootsAsync();
         _loadingRoots = false;
 
+        await LoadMyExternalLinksHrefAsync(); // gates the ribbon's "my external links" button (ADR 0546)
         await LoadTasksAsync(); // for the Tasks tab badge count
 
         AppNav.OpenDocumentRequested += OpenDocumentFromNotificationAsync; // ADR "Notification viewer + click-through"
@@ -5323,7 +5337,7 @@
         // only documents is a leaf in the tree. See ADR "Workbench pane content fixes".
         Expandable = node.HasSubfolders,
         Text = node.Name,
-        Icon = NodeIcon(node),
+        Icon = TreeIcon(node),
     };
 
     // Material icon per node — a shortcut variant for references, matching the desktop client's icons.
@@ -5333,6 +5347,18 @@
         (true, false) => Icons.Material.Filled.Link,
         (false, true) => Icons.Material.Filled.Folder,
         (false, false) => Icons.Material.Filled.Description,
+    };
+
+    // The TREE's variant: an empty folder takes the OUTLINE glyph, so "nothing here" is carried by the shape and
+    // not by colour alone — readable to someone who can't tell the two golds apart, and at any contrast setting
+    // (ADR "Folder icon scheme"). A referenced folder keeps its shortcut glyph in outline form rather than
+    // flattening to a plain folder: being empty must not cost the node what it IS. The contents list keeps the
+    // filled glyph throughout — emptiness is a property of a folder you might drill INTO, which is the tree's job.
+    private static string TreeIcon(BrowseNode n) => (n.IsEmptyFolder, n.IsReference) switch
+    {
+        (false, _) => NodeIcon(n),
+        (true, true) => Icons.Material.Outlined.FolderSpecial,
+        (true, false) => Icons.Material.Outlined.Folder,
     };
 
     // A folder row is a drop target that files into itself; a document row is a drop target that opens the
@@ -5434,10 +5460,12 @@
         ClearDetail();
         _folderContents = folder is null ? [] : await LoadContentsAsync(folder.Id, folder.RepositoryId);
 
-        // A folder has its own comment thread too, even though it has no index-data/preview.
+        // A folder has its own comment thread, and — since issue #408 — its own detail pane: the same one a
+        // document gets, because a folder is a Document with a mask and index data of its own.
         if (folder is not null)
         {
             _commentTarget = folder;
+            await LoadDetailForAsync(folder);
             await LoadFolderSubscriptionAsync(folder);
             await LoadCommentsAsync(folder);
         }
@@ -5593,6 +5621,9 @@
     {
         ClearDetail();
         _commentTarget = folder;
+        // The selected folder WINS over the open one: the pane follows the selection exactly as it does for a
+        // document row, so a child folder's metadata is editable without navigating into it (issue #408).
+        await LoadDetailForAsync(folder);
         await LoadFolderSubscriptionAsync(folder);
         await LoadCommentsAsync(folder);
     }
@@ -5602,6 +5633,18 @@
         ClearDetail();
         _selectedItem = item;
         _commentTarget = item;
+        await LoadDetailForAsync(item);
+    }
+
+    // Fills the detail pane for whatever it is describing — a document row, a folder row, or the open folder.
+    // ONE loader for all three, because they now render one pane (issue #408): a folder IS a Document with a mask,
+    // so every endpoint below applies to it unchanged. It was the pane, not the data, that used to differ.
+    private async Task LoadDetailForAsync(BrowseNode item)
+    {
+        _detailNode = item;
+        // Set unconditionally, unlike the version-derived fields: a folder has a name to show but no version to
+        // derive one from, which is exactly why it used to fall out of this pane entirely.
+        _sysName = _origName = item.Name;
 
         try
         {
@@ -5627,6 +5670,9 @@
             _detailSensitivityWatermark = detail?.SensitivityWatermark ?? false;
             _detailCanManagePermissions = detail?.CanManagePermissions ?? false;
             _detailBreaksInheritance = detail?.BreaksInheritance ?? false;
+            // A FOLDER's own contents order, which now travels with its details — the pane for a child folder is
+            // opened from its parent's listing, where the child's setting was never fetched (issue #408).
+            _detailSortOrder = detail?.ContentsSortOrder ?? FolderContentsSortOrder.Name;
             // Captured from the resource's own rel (ADR 0543/0546) — the external-links dialog takes the href
             // rather than composing one, and its absence simply means the affordance isn't offered.
             _detailExternalLinksHref = RelativeHref(detail?.Links, "external-links");
@@ -5673,6 +5719,7 @@
     private void ClearDetail()
     {
         _selectedItem = null;
+        _detailNode = null;
         _detailMaskName = null;
         _detailVersionNumber = null;
         _detailIndexData = null;
@@ -5723,6 +5770,59 @@
             ["LinksHref"] = href,
         };
         await DialogService.ShowAsync<Dialogs.ExternalLinksDialog>(Strings.Get("ExtLinkTitle"), parameters);
+    }
+
+    // The cross-document list, reached from the ribbon. Its href comes from the API ROOT rather than a document —
+    // "everything I have shared" is not a property of whatever happens to be selected (ADR 0543/0546). The rel's
+    // ABSENCE is meaningful: it means the feature is not available here, so the ribbon button is not drawn.
+    private async Task LoadMyExternalLinksHrefAsync()
+    {
+        try
+        {
+            var root = await Http.GetFromJsonAsync<RootResponse>("api");
+            _myExternalLinksHref = RelativeHref(root?.Links, "externalLinks");
+        }
+        catch (Exception)
+        {
+            _myExternalLinksHref = null;
+        }
+    }
+
+    private sealed record RootResponse { public List<LinkResponse> Links { get; set; } = []; }
+    // The cross-document list, reached from the ribbon. Its href comes from the API ROOT rather than a document —
+    // "everything I have shared" is not a property of whatever happens to be selected (ADR 0543/0546).
+    private string? _myExternalLinksHref;
+
+    private async Task OpenMyExternalLinksAsync()
+    {
+        if (_myExternalLinksHref is not { } href)
+        {
+            return;
+        }
+
+        // The directory the dialog's admin filters need. Taken from the Users & groups tab's own list when it has
+        // been loaded, rather than fetched again — and empty is fine: a non-admin gets no filters anyway, and the
+        // server refuses the cross-user query regardless of what this list happens to contain.
+        var users = _principals.Where(p => !p.IsGroup)
+            .Select(p => new Dialogs.MyExternalLinksDialog.PrincipalOption(p.Id, p.Name, p.Name)).ToList();
+        var groups = _principals.Where(p => p.IsGroup)
+            .Select(p => new Dialogs.MyExternalLinksDialog.PrincipalOption(p.Id, p.Name, p.Name)).ToList();
+
+        var parameters = new DialogParameters
+        {
+            ["LinksHref"] = href,
+            ["Users"] = users,
+            ["Groups"] = groups,
+        };
+
+        var dialog = await DialogService.ShowAsync<Dialogs.MyExternalLinksDialog>(Strings.Get("ExtLinkMyLinks"), parameters);
+
+        // "Go to" closes the dialog and hands back a document: navigating belongs to the workbench, which owns the
+        // tree and list panes, not to a dialog that cannot see them.
+        if ((await dialog.Result)?.Data is Dialogs.MyExternalLinksDialog.GoToDocument target)
+        {
+            await NavigateToDocumentAsync(target.DocumentId, target.ParentId);
+        }
     }
 
     private async Task OpenReminderDialogAsync()
@@ -5848,7 +5948,7 @@
         var svg = $"<svg xmlns='http://www.w3.org/2000/svg' width='360' height='200'><text x='10' y='150' fill='rgba(130,130,130,0.20)' font-size='20' font-family='sans-serif' transform='rotate(-28 10 150)'>{text}</text></svg>";
         return $"background-image:url(\"data:image/svg+xml,{Uri.EscapeDataString(svg)}\");";
     }
-    private record DocumentDetailResponse { public List<LinkResponse> Links { get; set; } = []; public DetailRetentionDto? Retention { get; set; } public Guid? SensitivityLabelId { get; set; } public string SensitivityLabelName { get; set; } = ""; public string? SensitivityLabelColor { get; set; } public bool SensitivityWatermark { get; set; } public bool CanManagePermissions { get; set; } public bool BreaksInheritance { get; set; } }
+    private record DocumentDetailResponse { public List<LinkResponse> Links { get; set; } = []; public DetailRetentionDto? Retention { get; set; } public Guid? SensitivityLabelId { get; set; } public string SensitivityLabelName { get; set; } = ""; public string? SensitivityLabelColor { get; set; } public bool SensitivityWatermark { get; set; } public bool CanManagePermissions { get; set; } public bool BreaksInheritance { get; set; } public FolderContentsSortOrder ContentsSortOrder { get; set; } }
     private record DetailRetentionDto { public int RetentionYears { get; set; } public string DispositionDate { get; set; } = ""; public bool SuspendedByHold { get; set; } }
 
     // Derives the always-shown system fields from the confirmed versions (ADR 0273): the current version's
@@ -5879,14 +5979,23 @@
 
     // ---- Single pane-level edit (ADR 0278): Name/date/OCR/mask/index-data all editable at once -----------
 
-    private bool CanEditDetail => _selectedItem is not null && !_isEditing;
+    // The SUBJECT is what gets edited — a selected row or the open folder — so a folder's metadata is editable
+    // from wherever you reached it (issue #408).
+    private bool CanEditDetail => _detailNode is not null && !_isEditing;
+
+    // The edited contents order, staged like every other field so Cancel discards it.
+    private FolderContentsSortOrder _editSortOrder = FolderContentsSortOrder.Name;
 
     private async Task BeginEditAsync()
     {
-        if (_selectedItem is null)
+        if (_detailNode is null)
         {
             return;
         }
+
+        // One pencil commits everything the pane shows, so a folder's contents order is staged alongside its mask
+        // and index fields rather than hiding behind an Edit button of its own.
+        _editSortOrder = _detailSortOrder;
 
         _detailBusy = true;
         try
@@ -5995,7 +6104,7 @@
     // Persists only the fields that changed; a failure keeps the pane in edit mode and reports it (ADR 0278).
     private async Task SaveDetailAsync()
     {
-        if (_selectedItem is not { } item)
+        if (_detailNode is not { } item)
         {
             return;
         }
@@ -6085,6 +6194,29 @@
                 failures.Add("mask / index data (check required and formatted fields)");
             }
 
+            // A folder's contents order commits with everything else, from the same pencil (issue #408). Skipped
+            // for a document, which lists nothing, and when unchanged — so an ordinary edit sends no extra request.
+            if (item.IsFolder && _editSortOrder != _detailSortOrder)
+            {
+                var resp = await Http.PutAsJsonAsync($"api/documents/{item.Id}/contents-sort-order", new { sortOrder = (int)_editSortOrder });
+                if (resp.IsSuccessStatusCode)
+                {
+                    _detailSortOrder = _editSortOrder;
+                    // The OPEN folder's own listing re-sorts only when it is the folder that changed.
+                    if (_selectedFolder?.Id == item.Id)
+                    {
+                        _folderSortOrder = _editSortOrder;
+                        _headerSortActive = false; // re-apply the persisted default order to the current listing
+                    }
+                }
+                else
+                {
+                    failures.Add(resp.StatusCode == System.Net.HttpStatusCode.Forbidden
+                        ? Strings.Get("FolderSortNoPermission")
+                        : "contents sort order");
+                }
+            }
+
             if (failures.Count > 0)
             {
                 Snackbar.Add($"Could not save: {string.Join("; ", failures)}", Severity.Warning);
@@ -6119,7 +6251,7 @@
 
     // ---- Automatic chat entries (ADR 0545) -----------------------------------------------------------
 
-    private const int ChatUserPost = 0, ChatDocumentFiled = 1, ChatVersionFiled = 2, ChatVersionActivated = 3;
+    private const int ChatUserPost = 0, ChatVersionFiled = 1, ChatVersionActivated = 2;
 
     // Renders a system entry's sentence from a LOCALIZED TEMPLATE, splicing the author in as a live element so
     // the name stays a clickable identity card. String.Format would flatten it to text and lose the card, which
@@ -6128,8 +6260,10 @@
     {
         var template = message.Kind switch
         {
-            ChatDocumentFiled => Strings.Get("ChatFiledNewDocument"),
-            ChatVersionFiled => Strings.Get("ChatSavedNewVersion"),
+            // One entry per version, two sentences: a first version IS the document arriving; every later one is
+            // a new working version of something already here. The version number the entry points at decides.
+            ChatVersionFiled => Strings.Get(
+                message.VersionNumber is null or <= 1 ? "ChatFiledNewDocument" : "ChatSavedNewVersion"),
             ChatVersionActivated => Strings.Get("ChatActivatedVersion"),
             _ => "{0}",
         };
@@ -6860,6 +6994,7 @@
         new("Export", r => r.CanExport, (r, v) => r.CanExport = v),
         new("Import", r => r.CanImport, (r, v) => r.CanImport = v),
         new("Manage inboxes", r => r.CanManageInboxes, (r, v) => r.CanManageInboxes = v),
+        new("Create external links", r => r.CanCreateExternalLink, (r, v) => r.CanCreateExternalLink = v),
     ];
 
     private async Task LoadPrincipalsAsync()
@@ -7388,6 +7523,7 @@
         public bool CanExport { get; set; }
         public bool CanImport { get; set; }
         public bool CanManageInboxes { get; set; }
+        public bool CanCreateExternalLink { get; set; }
         public int ClearanceRank { get; set; }
     }
 
