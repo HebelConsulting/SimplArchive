@@ -61,6 +61,10 @@ public class RootController : ControllerBase
                 new Link("serviceAccounts", "/api/service-accounts", "GET"),
                 new Link("tags", "/api/tags", "GET"),
                 new Link("users", "/api/users", "GET"),
+                // The caller's own account — everything that belongs to THEM rather than the tenant hangs
+                // off this rather than off the root, which is what keeps the root a set of collections
+                // instead of a URL registry (issue #416).
+                new Link("me", "/api/me", "GET"),
                 new Link("whoami", "/api/diagnostics/whoami", "GET"),
                 new Link("admin", "/api/admin", "GET"),
                 new Link("openIdConfiguration", "/.well-known/openid-configuration", "GET"),

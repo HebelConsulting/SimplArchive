@@ -1,6 +1,7 @@
 @inject HttpClient Http
 @inject IJSRuntime JS
 @inject ISnackbar Snackbar
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
 
 @* Manage the app-specific WebDAV password (ADR "WebDAV gateway") — generate/regenerate (shown once) or
    revoke, and show the mount URL for the OS WebDAV client. *@
@@ -57,7 +58,7 @@
     {
         try
         {
-            var status = await Http.GetFromJsonAsync<StatusDto>("api/me/webdav-password");
+            var status = await Http.GetFromJsonAsync<StatusDto>(await ApiRoot.RequireMeAsync("webdavPassword"));
             _enabled = status?.Enabled ?? false;
             _username = status?.Username ?? "";
             _url = status?.Url ?? "";
@@ -70,7 +71,7 @@
         _busy = true;
         try
         {
-            var response = await Http.PostAsync("api/me/webdav-password", null);
+            var response = await Http.PostAsync(await ApiRoot.RequireMeAsync("webdavPassword"), null);
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<StatusDto>();
             _generatedPassword = result?.Password;
@@ -90,7 +91,7 @@
         _busy = true;
         try
         {
-            (await Http.DeleteAsync("api/me/webdav-password")).EnsureSuccessStatusCode();
+            (await Http.DeleteAsync(await ApiRoot.RequireMeAsync("webdavPassword"))).EnsureSuccessStatusCode();
             _enabled = false;
             _generatedPassword = null;
             Snackbar.Add(Strings.Get("WebDavRevoked"), Severity.Success);

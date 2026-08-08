@@ -1,5 +1,6 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
 
 @* Per-type email-notification preferences (ADR "Notification preferences"). In-app notifications always show;
    these toggles only control which types are also emailed. The deadline/compliance escalations aren't listed
@@ -44,7 +45,7 @@
     {
         try
         {
-            _prefs = (await Http.GetFromJsonAsync<PrefsResponse>("api/notifications/preferences"))?.Preferences ?? [];
+            _prefs = (await Http.GetFromJsonAsync<PrefsResponse>(await ApiRoot.RequireMeAsync("notificationPreferences")))?.Preferences ?? [];
         }
         catch (Exception)
         {
@@ -62,7 +63,7 @@
         try
         {
             var body = new { preferences = _prefs.Select(p => new { type = p.Type, emailEnabled = p.EmailEnabled }) };
-            using var resp = await Http.PutAsJsonAsync("api/notifications/preferences", body);
+            using var resp = await Http.PutAsJsonAsync(await ApiRoot.RequireMeAsync("notificationPreferences"), body);
             if (resp.IsSuccessStatusCode)
             {
                 Snackbar.Add(Strings.Get("NotifPrefsSaved"), Severity.Success);

@@ -1,6 +1,7 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
 @using System.Text.Json
 
 @* WebAuthn passkey management (ADR "WebAuthn passkeys as a second factor"): list, register (browser
@@ -57,7 +58,7 @@
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync() =>
-        _passkeys = (await Http.GetFromJsonAsync<PasskeyListResponse>("api/users/me/passkeys"))?.Passkeys ?? [];
+        _passkeys = (await Http.GetFromJsonAsync<PasskeyListResponse>(await ApiRoot.RequireMeAsync("passkeys")))?.Passkeys ?? [];
 
     private async Task AddAsync()
     {
@@ -71,14 +72,14 @@
         _busy = true;
         try
         {
-            var options = await Http.PostAsync("api/users/me/passkeys/register/options", null);
+            var options = await Http.PostAsync(await ApiRoot.RequireMeAsync("passkeyRegisterOptions"), null);
             options.EnsureSuccessStatusCode();
             var optionsBody = await options.Content.ReadFromJsonAsync<RegisterOptionsResponse>();
 
             var attestationJson = await JS.InvokeAsync<string>("simplArchiveWebAuthn.register", optionsBody!.Options);
             var attestation = JsonSerializer.Deserialize<JsonElement>(attestationJson);
 
-            var resp = await Http.PostAsJsonAsync("api/users/me/passkeys/register", new { attestationResponse = attestation, token = optionsBody.Token, name = _newName.Trim() });
+            var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireMeAsync("passkeyRegister"), new { attestationResponse = attestation, token = optionsBody.Token, name = _newName.Trim() });
             if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("PasskeyRegisterError"), Severity.Error); return; }
 
             Snackbar.Add($"Passkey '{_newName.Trim()}' added.", Severity.Success);

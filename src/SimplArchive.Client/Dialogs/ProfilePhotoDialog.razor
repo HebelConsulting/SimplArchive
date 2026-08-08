@@ -2,6 +2,7 @@
 @inject HttpClient Http
 @inject IJSRuntime JS
 @inject ISnackbar Snackbar
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
 @implements IAsyncDisposable
 
 @* Profile-photo picker with a draggable/resizable square crop (ADR "User profile photo"). Pick an image,
@@ -37,7 +38,11 @@
     private bool _hasImage;
     private bool _busy;
 
-    private string PutUrl => UserId is { } id ? $"api/users/{id}/photo" : "api/users/me/photo";
+    // A method, not a property: following the "photo" rel is a lookup that may have to fetch the me
+    // resource first, and a property cannot await. Editing someone ELSE's photo is an admin action on
+    // that user, so it keeps the per-user path until a rel exists for it.
+    private async Task<string> PutUrlAsync() =>
+        UserId is { } id ? $"api/users/{id}/photo" : await ApiRoot.RequireMeAsync("photo");
 
     private async Task OnFileAsync(InputFileChangeEventArgs e)
     {
@@ -78,7 +83,7 @@
 
             var content = new ByteArrayContent(Convert.FromBase64String(base64));
             content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
-            using var response = await Http.PutAsync(PutUrl, content);
+            using var response = await Http.PutAsync(await PutUrlAsync(), content);
             if (response.IsSuccessStatusCode)
             {
                 Snackbar.Add(Strings.Get("PhotoUpdated"), Severity.Success);

@@ -93,7 +93,15 @@ if [ "$build" -eq 1 ]; then
 fi
 
 logdir="$(mktemp -d)"
-trap 'rm -rf "$logdir"' EXIT
+
+# NO `trap ... EXIT` here, deliberately. Bash runs an inherited EXIT trap in BACKGROUND SUBSHELLS TOO, so the
+# first leg to finish would delete the shared log directory while the others are still writing into it — the
+# summary then reads nothing and the run ends with no table at all.
+#
+# The usual guard (`[ "$$" = "$MAIN_PID" ]`) does NOT work: `$$` is the same inside a subshell. `$BASHPID` would
+# distinguish them, but macOS ships bash 3.2 and BASHPID arrived in 4.0 — so on the shell this actually runs on,
+# there is no PID to test. Cleaning up on the normal path instead is the honest fix; an aborted run leaves a
+# directory under the system temp area, which the OS reclaims.
 
 run_leg() {
     local i="$1" filter="$2"
@@ -144,7 +152,9 @@ Before assuming a regression: this suite still has residual flakiness (#420). Re
 test on its own — if it passes in isolation it is noise, and the useful comparison is a baseline
 run with your change stashed, not another run with it.
 EOF
+    rm -rf "$logdir"
     exit 1
 fi
 
+rm -rf "$logdir"
 printf 'All legs green.\n'

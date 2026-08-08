@@ -31,26 +31,22 @@ public partial class ClientHypermediaTests
     // Seeded from the counts at adoption. LOWER an entry when converting a call site; never raise one.
     private static readonly Dictionary<string, int> Budget = new()
     {
-        ["src/SimplArchive.Client/Dialogs/ChangePasswordDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/CompareCheckoutDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/CompareVersionsDialog.razor"] = 2,
         ["src/SimplArchive.Client/Dialogs/FilingDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/FolderPickerDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/InboxSendDialog.razor"] = 2,
         ["src/SimplArchive.Client/Dialogs/ManageAccessDialog.razor"] = 7,
-        ["src/SimplArchive.Client/Dialogs/MfaSetupDialog.razor"] = 2,
-        ["src/SimplArchive.Client/Dialogs/NotificationPreferencesDialog.razor"] = 2,
-        ["src/SimplArchive.Client/Dialogs/PasskeysDialog.razor"] = 4,
-        ["src/SimplArchive.Client/Dialogs/ProfilePhotoDialog.razor"] = 2,
+        ["src/SimplArchive.Client/Dialogs/PasskeysDialog.razor"] = 1,
+        ["src/SimplArchive.Client/Dialogs/ProfilePhotoDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/ReferencesDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/ReminderDialog.razor"] = 4,
         ["src/SimplArchive.Client/Dialogs/SensitivityLabelsDialog.razor"] = 3,
         ["src/SimplArchive.Client/Dialogs/ServiceAccountsDialog.razor"] = 3,
         ["src/SimplArchive.Client/Dialogs/VersionsDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/WebDavDialog.razor"] = 3,
         ["src/SimplArchive.Client/Dialogs/WorkflowDialog.razor"] = 2,
-        ["src/SimplArchive.Client/Layout/MainLayout.razor"] = 7,
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 110,
+        ["src/SimplArchive.Client/Layout/MainLayout.razor"] = 6,
+        ["src/SimplArchive.Client/Pages/Home.razor"] = 108,
         // 184 → 183 (issue #385): the desktop read the document resource TWICE — once for its name, once for its
         // sensitivity label — so the per-document external-links rel had nowhere to be picked up from. One read
         // now serves both and carries the rel, which is what let the dialog follow it instead of composing a URL.

@@ -5372,7 +5372,7 @@
     {
         try
         {
-            var response = await Http.PostAsync("api/me/personal-repository", null);
+            var response = await Http.PostAsync(await ApiRoot.RequireMeAsync("personalRepository"), null);
             if (!response.IsSuccessStatusCode) return null;
             return await response.Content.ReadFromJsonAsync<PersonalRepositoryResponse>();
         }
@@ -8535,7 +8535,7 @@
     {
         try
         {
-            var status = await Http.GetFromJsonAsync<WebDavStatusDto>("api/me/webdav-password");
+            var status = await Http.GetFromJsonAsync<WebDavStatusDto>(await ApiRoot.RequireMeAsync("webdavPassword"));
             if (status is not { Enabled: true } || string.IsNullOrEmpty(status.Url))
             {
                 Snackbar.Add("Set up WebDAV access first (account menu → WebDAV access…).", Severity.Info);

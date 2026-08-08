@@ -49,6 +49,48 @@ public sealed class ApiRoot
         await HrefAsync(rel, cancellationToken)
         ?? throw new InvalidOperationException($"The API root does not advertise the '{rel}' rel.");
 
+    /// <summary>
+    /// The href for a rel on the caller's own "me" resource (issue #416) — their password, photo, MFA, passkeys,
+    /// WebDAV password and personal repository all hang off it rather than off the root.
+    /// </summary>
+    /// <remarks>
+    /// Cached like the root: it is a constant for the session, and refetching per call would make following a rel
+    /// cost two round trips — the usual reason a codebase gives up on hypermedia and goes back to string paths.
+    /// Null when the rel is absent, which is what a service-account principal sees (it has no personal account),
+    /// so a caller disables the affordance rather than failing.
+    /// </remarks>
+    public async Task<string?> MeHrefAsync(string rel, CancellationToken cancellationToken = default)
+    {
+        if (_meRels is null)
+        {
+            await _gate.WaitAsync(cancellationToken);
+            try
+            {
+                if (_meRels is null)
+                {
+                    var meHref = await HrefAsync("me", cancellationToken);
+                    var me = meHref is null ? null : await _http.GetFromJsonAsync<RootResponse>(meHref, cancellationToken);
+                    _meRels = me?.Links
+                        .Where(l => !string.IsNullOrEmpty(l.Rel) && !string.IsNullOrEmpty(l.Href))
+                        .ToDictionary(l => l.Rel, l => Relative(l.Href)) ?? [];
+                }
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+
+        return _meRels.TryGetValue(rel, out var href) ? href : null;
+    }
+
+    /// <summary>As <see cref="MeHrefAsync"/>, for a rel the caller cannot work without.</summary>
+    public async Task<string> RequireMeAsync(string rel, CancellationToken cancellationToken = default) =>
+        await MeHrefAsync(rel, cancellationToken)
+        ?? throw new InvalidOperationException($"The 'me' resource does not advertise the '{rel}' rel.");
+
+    private Dictionary<string, string>? _meRels;
+
     private async Task<Dictionary<string, string>> LoadAsync(CancellationToken cancellationToken)
     {
         if (_rels is { } cached)

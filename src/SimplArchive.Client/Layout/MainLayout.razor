@@ -13,6 +13,7 @@
 @inject SimplArchive.Client.Services.ImpersonationState Impersonation
 @inject SimplArchive.Client.Services.ImpersonationService ImpersonationSvc
 @inject SimplArchive.Client.Services.AppNavigationState AppNav
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
 
 <MudThemeProvider @ref="_themeProvider" Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -458,7 +459,7 @@
             return;
         }
 
-        var response = await Http.DeleteAsync("api/users/me/mfa");
+        var response = await Http.DeleteAsync(await ApiRoot.RequireMeAsync("mfa"));
         if (response.IsSuccessStatusCode)
         {
             _mfaEnabled = false;

@@ -1,5 +1,6 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
 
 @* Two-factor (TOTP) enrollment (ADR "MFA (interactive login, TOTP)"): enroll on open (GET a secret + QR),
    scan/enter the code, POST enable → show the one-time recovery codes. Both clients share this shape. *@
@@ -65,7 +66,7 @@
     {
         try
         {
-            _enroll = await (await Http.PostAsync("api/users/me/mfa/enroll", null)).Content.ReadFromJsonAsync<EnrollResponse>();
+            _enroll = await (await Http.PostAsync(await ApiRoot.RequireMeAsync("mfaEnroll"), null)).Content.ReadFromJsonAsync<EnrollResponse>();
         }
         catch (Exception)
         {
@@ -79,7 +80,7 @@
         _busy = true;
         try
         {
-            using var response = await Http.PostAsJsonAsync("api/users/me/mfa/enable", new { code = _code });
+            using var response = await Http.PostAsJsonAsync(await ApiRoot.RequireMeAsync("mfaEnable"), new { code = _code });
             if (response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadFromJsonAsync<RecoveryCodesResponse>();
