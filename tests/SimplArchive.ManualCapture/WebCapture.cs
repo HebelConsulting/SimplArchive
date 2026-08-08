@@ -71,6 +71,7 @@ public static partial class WebCapture
         }
 
         await CaptureVersionCompareAsync(page, outDir);
+        await CaptureExternalLinksAsync(context, page, outDir);
     }
 
     // Opens the "Compare versions" dialog on the two-revision demo document ("Offer 2026-014", ADR 0502) and shots
@@ -101,6 +102,185 @@ public static partial class WebCapture
         catch (Exception ex)
         {
             Console.WriteLine($"[web] version-compare skipped: {ex.Message}");
+        }
+        finally
+        {
+            // Leave no modal behind. A dialog left open has a scrim that intercepts every subsequent click, so it
+            // breaks whatever capture runs next — and because each step is individually guarded, the damage shows
+            // up as the NEXT step mysteriously "skipped" rather than as a failure here. In the `finally` so it
+            // still runs when the shot above threw half-way.
+            //
+            // Swallowed HERE specifically, even though DismissAnyDialogAsync throws by design: a throw out of a
+            // `finally` would discard whatever exception was already on its way up from the try block, hiding the
+            // real failure behind a cleanup one. The next step calls it again outside a finally, so a genuinely
+            // stuck dialog still surfaces — just attributed to the step it actually breaks.
+            try
+            {
+                await DismissAnyDialogAsync(page);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[web] warning — could not close the version-compare dialog: {ex.Message}");
+            }
+        }
+    }
+
+    // Closes any open MudBlazor dialog and waits for its scrim to go, because a scrim left behind intercepts
+    // every subsequent click.
+    //
+    // Escape is tried first but is NOT enough: the version-compare dialog ignores it (it opts out of
+    // close-on-escape and offers only its CLOSE button), so the scrim stayed and the next capture's very first
+    // click timed out. Hence the fallback to the dialog's own close control, and hence this throws rather than
+    // logging on failure — a capture that continues past an undismissed modal cannot do anything but fail
+    // sixty seconds later, somewhere that looks unrelated.
+    private static async Task DismissAnyDialogAsync(IPage page)
+    {
+        var scrim = page.Locator(".mud-overlay-scrim");
+        if (await scrim.CountAsync() == 0)
+        {
+            return;
+        }
+
+        await page.Keyboard.PressAsync("Escape");
+        if (await WaitForScrimGoneAsync(scrim, 2000))
+        {
+            return;
+        }
+
+        // Any button whose label reads as a dismissal — Close on most dialogs, Cancel on the editing ones.
+        var close = page.Locator(".mud-dialog button").Filter(new() { HasTextRegex = CloseButtonRegex() });
+        if (await close.CountAsync() > 0)
+        {
+            await close.Last.ClickAsync();
+            if (await WaitForScrimGoneAsync(scrim, 5000))
+            {
+                return;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "a dialog is still open and its scrim will block every later click — neither Escape nor a Close/Cancel button dismissed it");
+    }
+
+    private static async Task<bool> WaitForScrimGoneAsync(ILocator scrim, float timeout)
+    {
+        try
+        {
+            await scrim.First.WaitForAsync(new() { State = WaitForSelectorState.Detached, Timeout = timeout });
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+        catch (PlaywrightException)
+        {
+            return true; // the element went away between the count and the wait — which is the outcome we wanted
+        }
+    }
+
+    [GeneratedRegex("^(close|cancel)$", RegexOptions.IgnoreCase)]
+    private static partial Regex CloseButtonRegex();
+
+    // The external-links figures for the manual's "Sharing outside SimplArchive" chapter (issue #406, ADR 0546):
+    // the per-document dialog at the moment the URL is shown, the cross-document list, and the anonymous landing
+    // page a recipient sees.
+    //
+    // The link is CREATED here rather than reusing the seeded demo one, for two reasons. The create dialog reveals
+    // the URL exactly once, at creation — that is the feature's central safety property and the thing the figure
+    // has to show, and no listing can be made to display it. And the seeded token is derived from a fixed string
+    // in DemoDataSeeder; re-deriving it here would duplicate the crypto in a project that deliberately does not
+    // link the API assembly (ReferenceOutputAssembly=false), so the two copies could silently drift apart.
+    private static async Task CaptureExternalLinksAsync(IBrowserContext context, IPage page, string outDir)
+    {
+        // Named steps, so a failure says WHERE. Without this the guard below reports only "Timeout 60000ms
+        // exceeded" plus a scrolling log, which cannot distinguish "the button is missing" from "the document was
+        // never selected" — three ten-minute capture runs went into that ambiguity.
+        var step = "start";
+        try
+        {
+            // Belt and braces: the previous step now tidies up after itself, but this must not silently break
+            // again if some future capture is inserted before it and forgets.
+            await DismissAnyDialogAsync(page);
+
+            step = "open the Repositories tab";
+            await page.Locator(".wb-tab[aria-label='Repositories']").First.ClickAsync();
+            step = "select the Demo Repository root";
+            await page.GetByText("Demo Repository").First.ClickAsync();
+            // Contracts → MyCountry Telekom → the service agreement (the same document the demo seed shares).
+            foreach (var folder in new[] { "Contracts", "MyCountry Telekom" })
+            {
+                step = $"drill into '{folder}'";
+                var row = page.Locator(".wb-list-row").Filter(new() { HasText = folder });
+                await row.First.WaitForAsync(new() { Timeout = 15000 });
+                await row.First.DblClickAsync();
+            }
+
+            step = "select the service-agreement document";
+            var doc = page.Locator(".wb-list-row").Filter(new() { HasText = "service agreement" });
+            await doc.First.WaitForAsync(new() { Timeout = 15000 });
+            await doc.First.ClickAsync();
+
+            // The link icon sits in the detail header, and only when the API advertises the rel — so its absence
+            // here would mean the right or the tenant switch is off, not that the selector is wrong.
+            step = "open the External links dialog";
+            await page.GetByRole(AriaRole.Button, new() { Name = "External links…" }).First.ClickAsync();
+            var dialog = page.Locator(".mud-dialog").First;
+            await dialog.WaitForAsync(new() { Timeout = 10000 });
+
+            step = "click Create external link";
+            await dialog.GetByRole(AriaRole.Button, new() { Name = "Create external link…" }).ClickAsync();
+
+            // Wait for the one-shot reveal itself rather than a fixed pause: shooting before it renders would
+            // produce a figure of the empty form, with nothing in the filename to say so.
+            //
+            // NOT `input[readonly].First` — the date picker renders a read-only input too, so that would have
+            // quietly screenshotted the right thing while reading the wrong value into `url`, and the landing-page
+            // shot would then have navigated to a date.
+            step = "wait for the one-shot URL reveal";
+            await dialog.GetByText("shown only once").WaitForAsync(new() { Timeout = 15000 });
+            var url = await dialog.Locator("input").EvaluateAllAsync<string>(
+                "els => { const f = els.find(e => (e.value || '').startsWith('http')); return f ? f.value : ''; }");
+            await page.WaitForTimeoutAsync(600);
+            await ShotAsync(page, outDir, "external-link-create");
+
+            await DismissAnyDialogAsync(page);
+
+            // The cross-document list: every live link this user has shared, with Go to / Show / Revoke per row.
+            step = "open My external links";
+            await page.GetByRole(AriaRole.Button, new() { Name = "My external links" }).First.ClickAsync();
+            await page.Locator(".mud-dialog tbody tr").First.WaitForAsync(new() { Timeout = 15000 });
+            await page.WaitForTimeoutAsync(600);
+            await ShotAsync(page, outDir, "external-links-list");
+            await DismissAnyDialogAsync(page);
+
+            // The recipient's view, in a SEPARATE context with no session — the whole point of the page is that it
+            // works for someone with no account, and shooting it from the logged-in page would not prove that.
+            if (!string.IsNullOrWhiteSpace(url))
+            {
+                var anon = await context.Browser!.NewContextAsync(new BrowserNewContextOptions
+                {
+                    ViewportSize = new ViewportSize { Width = ViewportWidth, Height = ViewportHeight },
+                    ColorScheme = ColorScheme.Light,
+                });
+                var anonPage = await anon.NewPageAsync();
+                await anonPage.GotoAsync(url, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+                await anonPage.WaitForTimeoutAsync(1200);
+                await ShotAsync(anonPage, outDir, "external-link-landing");
+                await anon.CloseAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            // First line only: Playwright appends a long call log that buries the step name.
+            Console.WriteLine($"[web] external-links FAILED at step '{step}': {ex.Message.Split('\n')[0]}");
+            try
+            {
+                var dump = Path.Combine(Path.GetTempPath(), "manual-capture-external-links-failure.png");
+                await page.ScreenshotAsync(new PageScreenshotOptions { Path = dump });
+                Console.WriteLine($"[web] state at failure → {dump}");
+            }
+            catch { /* diagnostics are best-effort */ }
         }
     }
 

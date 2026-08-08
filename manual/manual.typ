@@ -156,6 +156,64 @@ see it is locked — then *check in* your changes as a new version.
   [Left: the *My work* dashboard. Right: the *Check-out* tab listing documents locked for exclusive editing —
    here one edited (_Modified_) and one untouched (_Unchanged_).])
 
+= Sharing outside SimplArchive
+
+Everything above assumes the other person has an account. An *external link* is for when they do not: a plain URL
+that opens one document, for anyone who has it, with no sign-in. Use it for the customer who needs the signed
+contract or the auditor who needs one invoice — not as a general-purpose way to move documents around.
+
+*Creating one.* Select the document and open *External links…* from the detail pane. Choose when it should expire
+and how many times it may be opened, then create it.
+
+#note[
+  *The URL is shown once, at creation, and never again.* Copy it before you close the dialog. It appears in no
+  list afterwards — deliberately, because a list is read far more widely, and far more casually, than the moment
+  you deliberately created something.
+]
+
+#shot("screenshots/web-external-link-create.png",
+  [Creating an external link. The URL is revealed once, here, and cannot be retrieved later.])
+
+*Managing what you have shared.* *My external links* on the ribbon lists your live links: which document, when it
+expires, how many times it has been opened. From a row you can jump to the document, review a link's details, or
+*revoke* it. An administrator sees everyone's, filtered by user or group.
+
+A link near its expiry can be *extended* — but only within 30 days of lapsing, by at most 90 days, and measured
+from today rather than added to whatever time remains. So extending is a deliberate renewal, not a way to
+accumulate an indefinite link.
+
+#note[
+  *Revoking does not delete the row.* It stamps it revoked and leaves the record standing — who shared what, with
+  effect from when. After a link has leaked, that record is exactly what the investigation needs, and it would be
+  gone if revoking tidied it away.
+]
+
+#shot("screenshots/web-external-links-list.png",
+  [*My external links* — every live link you have shared, with go-to, details and revoke on each row.])
+
+*What the recipient sees.* A single page with the document's name, a preview, and buttons to open or download it.
+Nothing else: no tree, no navigation, no route to any other document.
+
+An unknown, expired, exhausted or revoked link all produce the *same* response. That is deliberate — telling a
+stranger which of those they hit would confirm a real link exists and hint at how to reach a usable one.
+
+#shot("screenshots/web-external-link-landing.png",
+  [The recipient's view. No account, one document, nothing else reachable from it.])
+
+== The controls an administrator holds
+
+Sharing outward is the one action that leaves the system, so it is gated twice and can be stopped in one move.
+
+- *Two gates on creating a link.* The tenant-wide *Allow external links* switch must be on, and the individual
+  needs the *Create external link* right, granted per user or group from *Users & groups*. Either alone is
+  enough to prevent sharing; both must be present to allow it. A service account can never create one — only a
+  person shares, so there is always someone accountable for a link's existence.
+- *The kill switch.* Turning *Allow external links* off is checked when a link is *opened*, not only when one is
+  created — so it stops every link already out in the world, not merely future ones. This is the control to reach
+  for when something has leaked, and it is worth knowing about before you need it.
+- *The caps you set.* *Maximum link lifetime* (default 180 days) and *default access count* (default 5) are the
+  rails everyone else shares within. Tighten them to your own policy rather than relying on people choosing well.
+
 = Workflow & records
 
 *Approval workflow.* Submit a document for review and it moves through a fixed state machine —

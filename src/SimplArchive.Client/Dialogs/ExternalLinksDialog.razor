@@ -126,7 +126,15 @@
     {
         var body = new
         {
-            expiresAt = _expiry is { } d ? new DateTimeOffset(d.Date.AddHours(23).AddMinutes(59), TimeSpan.Zero) : (DateTimeOffset?)null,
+            // SpecifyKind(Unspecified) is load-bearing, not tidying. MudDatePicker hands back a DateTime with
+            // Kind=Local, and `new DateTimeOffset(local, TimeSpan.Zero)` THROWS unless the machine's own offset is
+            // zero — so creating a link failed for every user outside UTC, silently (the exception is unhandled,
+            // so no snackbar appeared and the dialog simply did nothing). Every test missed it because CI runs in
+            // UTC. The picked value is a calendar date, which carries no zone of its own; Unspecified says exactly
+            // that, and the offset below then reads it as end-of-day UTC.
+            expiresAt = _expiry is { } d
+                ? new DateTimeOffset(DateTime.SpecifyKind(d.Date.AddHours(23).AddMinutes(59), DateTimeKind.Unspecified), TimeSpan.Zero)
+                : (DateTimeOffset?)null,
             maxAccesses = _maxAccesses,
         };
 
