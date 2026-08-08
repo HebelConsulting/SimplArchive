@@ -3162,4 +3162,67 @@
   <data name="TenantShowExternalLinkUrlInfo" xml:space="preserve">
     <value>Normalerweise wird die URL eines Links nur einmal ausgegeben, bei der Erstellung, und kann danach nie wieder gelesen werden. Wenn Sie dies einschalten, kann sie in den Details eines Links angezeigt werden — nützlich für einen Demo-Mandanten, schwächt aber einen bewussten Schutz: Wer ein Dokument teilen darf, kann dann auch die URLs abrufen, die es teilen.</value>
   </data>
+  <data name="CoErrAlreadyOut" xml:space="preserve">
+    <value>Bereits von einer anderen Person ausgecheckt.</value>
+  </data>
+  <data name="CoErrNoPermission" xml:space="preserve">
+    <value>Sie haben keine Berechtigung, dies auszuchecken.</value>
+  </data>
+  <data name="CoErrCheckOut" xml:space="preserve">
+    <value>Das Dokument konnte nicht ausgecheckt werden.</value>
+  </data>
+  <data name="CoOkCheckedOut" xml:space="preserve">
+    <value>„{0}“ ausgecheckt. Über den Reiter Check-out können Sie die Datei herunterladen, bearbeiten und wieder einchecken.</value>
+  </data>
+  <data name="CoConfirmOverride" xml:space="preserve">
+    <value>Das Check-out von „{0}“ von {1} zwangsweise aufheben?</value>
+  </data>
+  <data name="CoOverride" xml:space="preserve">
+    <value>Aufheben</value>
+  </data>
+  <data name="CoErrOverride" xml:space="preserve">
+    <value>Das Check-out konnte nicht aufgehoben werden.</value>
+  </data>
+  <data name="CoErrNothingToDownload" xml:space="preserve">
+    <value>Nichts zum Herunterladen.</value>
+  </data>
+  <data name="CoErrDownload" xml:space="preserve">
+    <value>Die Arbeitskopie konnte nicht heruntergeladen werden.</value>
+  </data>
+  <data name="CoOkUploaded" xml:space="preserve">
+    <value>„{0}“ in der Cloud gespeichert.</value>
+  </data>
+  <data name="CoErrUpload" xml:space="preserve">
+    <value>Die Arbeitskopie konnte nicht hochgeladen werden.</value>
+  </data>
+  <data name="CoErrUploadFirst" xml:space="preserve">
+    <value>Laden Sie die bearbeitete Datei zuerst in die Cloud hoch.</value>
+  </data>
+  <data name="CoOkCheckedIn" xml:space="preserve">
+    <value>„{0}“ eingecheckt.</value>
+  </data>
+  <data name="CoErrCheckIn" xml:space="preserve">
+    <value>Das Einchecken ist fehlgeschlagen.</value>
+  </data>
+  <data name="CoCompareTitle" xml:space="preserve">
+    <value>Arbeitskopie vergleichen</value>
+  </data>
+  <data name="CoOkExtended" xml:space="preserve">
+    <value>Das Check-out von „{0}“ wurde verlängert.</value>
+  </data>
+  <data name="CoErrExtend" xml:space="preserve">
+    <value>Das Check-out konnte nicht verlängert werden.</value>
+  </data>
+  <data name="CoConfirmCancel" xml:space="preserve">
+    <value>Das Check-out von „{0}“ abbrechen? Eine eventuelle Arbeitskopie in der Cloud wird verworfen.</value>
+  </data>
+  <data name="CoCancelTitle" xml:space="preserve">
+    <value>Check-out abbrechen</value>
+  </data>
+  <data name="CoOkReleased" xml:space="preserve">
+    <value>„{0}“ freigegeben.</value>
+  </data>
+  <data name="CoErrCancel" xml:space="preserve">
+    <value>Das Check-out konnte nicht abgebrochen werden.</value>
+  </data>
 </root>

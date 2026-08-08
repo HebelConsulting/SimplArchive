@@ -3162,4 +3162,67 @@
   <data name="TenantShowExternalLinkUrlInfo" xml:space="preserve">
     <value>Di norma l'URL di un link viene fornito una sola volta, alla creazione, e non può più essere letto. Attivando questa opzione può essere mostrato nei dettagli del link — utile per un tenant dimostrativo, ma indebolisce una protezione voluta: chi può condividere un documento può poi recuperare gli URL che lo condividono.</value>
   </data>
+  <data name="CoErrAlreadyOut" xml:space="preserve">
+    <value>Già estratto da un altro utente.</value>
+  </data>
+  <data name="CoErrNoPermission" xml:space="preserve">
+    <value>Non hai i permessi per estrarre questo documento.</value>
+  </data>
+  <data name="CoErrCheckOut" xml:space="preserve">
+    <value>Impossibile estrarre il documento.</value>
+  </data>
+  <data name="CoOkCheckedOut" xml:space="preserve">
+    <value>“{0}” estratto. Usa la scheda Check-out per scaricarlo, modificarlo e reintegrarlo.</value>
+  </data>
+  <data name="CoConfirmOverride" xml:space="preserve">
+    <value>Forzare il rilascio del check-out di “{0}” detenuto da {1}?</value>
+  </data>
+  <data name="CoOverride" xml:space="preserve">
+    <value>Forza</value>
+  </data>
+  <data name="CoErrOverride" xml:space="preserve">
+    <value>Impossibile forzare il rilascio del check-out.</value>
+  </data>
+  <data name="CoErrNothingToDownload" xml:space="preserve">
+    <value>Niente da scaricare.</value>
+  </data>
+  <data name="CoErrDownload" xml:space="preserve">
+    <value>Impossibile scaricare la copia di lavoro.</value>
+  </data>
+  <data name="CoOkUploaded" xml:space="preserve">
+    <value>“{0}” salvato nel cloud.</value>
+  </data>
+  <data name="CoErrUpload" xml:space="preserve">
+    <value>Impossibile caricare la copia di lavoro.</value>
+  </data>
+  <data name="CoErrUploadFirst" xml:space="preserve">
+    <value>Carica prima nel cloud il file modificato.</value>
+  </data>
+  <data name="CoOkCheckedIn" xml:space="preserve">
+    <value>“{0}” reintegrato.</value>
+  </data>
+  <data name="CoErrCheckIn" xml:space="preserve">
+    <value>Impossibile reintegrare il documento.</value>
+  </data>
+  <data name="CoCompareTitle" xml:space="preserve">
+    <value>Confronta la copia di lavoro</value>
+  </data>
+  <data name="CoOkExtended" xml:space="preserve">
+    <value>Check-out di “{0}” prolungato.</value>
+  </data>
+  <data name="CoErrExtend" xml:space="preserve">
+    <value>Impossibile prolungare il check-out.</value>
+  </data>
+  <data name="CoConfirmCancel" xml:space="preserve">
+    <value>Annullare il check-out di “{0}”? L'eventuale copia di lavoro nel cloud verrà eliminata.</value>
+  </data>
+  <data name="CoCancelTitle" xml:space="preserve">
+    <value>Annulla il check-out</value>
+  </data>
+  <data name="CoOkReleased" xml:space="preserve">
+    <value>“{0}” rilasciato.</value>
+  </data>
+  <data name="CoErrCancel" xml:space="preserve">
+    <value>Impossibile annullare il check-out.</value>
+  </data>
 </root>

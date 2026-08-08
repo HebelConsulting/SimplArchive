@@ -3162,4 +3162,67 @@
   <data name="TenantShowExternalLinkUrlInfo" xml:space="preserve">
     <value>Normalmente la URL de un enlace se facilita una sola vez, al crearlo, y ya no puede volver a leerse. Si activa esta opción, podrá mostrarse en los detalles del enlace — útil para un inquilino de demostración, pero debilita una protección deliberada: quien pueda compartir un documento podrá recuperar las URL que lo comparten.</value>
   </data>
+  <data name="CoErrAlreadyOut" xml:space="preserve">
+    <value>Ya está desprotegido por otra persona.</value>
+  </data>
+  <data name="CoErrNoPermission" xml:space="preserve">
+    <value>No tiene permiso para desproteger esto.</value>
+  </data>
+  <data name="CoErrCheckOut" xml:space="preserve">
+    <value>No se pudo desproteger el documento.</value>
+  </data>
+  <data name="CoOkCheckedOut" xml:space="preserve">
+    <value>“{0}” desprotegido. Use la pestaña Check-out para descargarlo, editarlo y volver a protegerlo.</value>
+  </data>
+  <data name="CoConfirmOverride" xml:space="preserve">
+    <value>¿Liberar por la fuerza el check-out de “{0}” en poder de {1}?</value>
+  </data>
+  <data name="CoOverride" xml:space="preserve">
+    <value>Forzar</value>
+  </data>
+  <data name="CoErrOverride" xml:space="preserve">
+    <value>No se pudo forzar la liberación del check-out.</value>
+  </data>
+  <data name="CoErrNothingToDownload" xml:space="preserve">
+    <value>No hay nada que descargar.</value>
+  </data>
+  <data name="CoErrDownload" xml:space="preserve">
+    <value>No se pudo descargar la copia de trabajo.</value>
+  </data>
+  <data name="CoOkUploaded" xml:space="preserve">
+    <value>“{0}” guardado en la nube.</value>
+  </data>
+  <data name="CoErrUpload" xml:space="preserve">
+    <value>No se pudo subir la copia de trabajo.</value>
+  </data>
+  <data name="CoErrUploadFirst" xml:space="preserve">
+    <value>Suba primero el archivo editado a la nube.</value>
+  </data>
+  <data name="CoOkCheckedIn" xml:space="preserve">
+    <value>“{0}” protegido de nuevo.</value>
+  </data>
+  <data name="CoErrCheckIn" xml:space="preserve">
+    <value>No se pudo proteger el documento.</value>
+  </data>
+  <data name="CoCompareTitle" xml:space="preserve">
+    <value>Comparar la copia de trabajo</value>
+  </data>
+  <data name="CoOkExtended" xml:space="preserve">
+    <value>Se ha prolongado el check-out de “{0}”.</value>
+  </data>
+  <data name="CoErrExtend" xml:space="preserve">
+    <value>No se pudo prolongar el check-out.</value>
+  </data>
+  <data name="CoConfirmCancel" xml:space="preserve">
+    <value>¿Cancelar el check-out de “{0}”? Se descartará cualquier copia de trabajo en la nube.</value>
+  </data>
+  <data name="CoCancelTitle" xml:space="preserve">
+    <value>Cancelar el check-out</value>
+  </data>
+  <data name="CoOkReleased" xml:space="preserve">
+    <value>“{0}” liberado.</value>
+  </data>
+  <data name="CoErrCancel" xml:space="preserve">
+    <value>No se pudo cancelar el check-out.</value>
+  </data>
 </root>

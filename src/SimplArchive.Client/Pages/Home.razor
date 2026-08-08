@@ -4889,41 +4889,41 @@
         try
         {
             var resp = await Http.PutAsync($"api/documents/{node.Id}/checkout", null);
-            if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add("Already checked out by another user.", Severity.Warning); return; }
-            if (resp.StatusCode == System.Net.HttpStatusCode.Forbidden) { Snackbar.Add("You don't have permission to check this out.", Severity.Error); return; }
+            if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add(Strings.Get("CoErrAlreadyOut"), Severity.Warning); return; }
+            if (resp.StatusCode == System.Net.HttpStatusCode.Forbidden) { Snackbar.Add(Strings.Get("CoErrNoPermission"), Severity.Error); return; }
             resp.EnsureSuccessStatusCode();
-            Snackbar.Add($"Checked out '{node.Name}'. Use the Check-out tab to download, edit and check it back in.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("CoOkCheckedOut"), node.Name), Severity.Success);
             await ReloadCurrentFolderAsync();
             await LoadCheckoutsAsync();
         }
-        catch (Exception) { Snackbar.Add("Could not check out the document.", Severity.Error); }
+        catch (Exception) { Snackbar.Add(Strings.Get("CoErrCheckOut"), Severity.Error); }
     }
 
     // Force-release another user's lock (a CanOverrideCheckout holder).
     private async Task OverrideCheckoutAsync(BrowseNode node)
     {
-        if (!await Confirm($"Force-release the check-out of '{node.Name}' held by {node.CheckedOutByName}?", "Override")) return;
+        if (!await Confirm(string.Format(Strings.Get("CoConfirmOverride"), node.Name, node.CheckedOutByName), Strings.Get("CoOverride"))) return;
         try
         {
             (await Http.DeleteAsync($"api/documents/{node.Id}/checkout")).EnsureSuccessStatusCode();
             Snackbar.Add($"Released the check-out of '{node.Name}'.", Severity.Success);
             await ReloadCurrentFolderAsync();
         }
-        catch (Exception) { Snackbar.Add("Could not override the check-out.", Severity.Error); }
+        catch (Exception) { Snackbar.Add(Strings.Get("CoErrOverride"), Severity.Error); }
     }
 
     // Download from stash: fetch the cloud working copy (or the current version if no stash yet) as a file.
     private async Task DownloadFromStashAsync(CheckoutDto c)
     {
         var url = c.StashDownloadUrl ?? c.DownloadUrl;
-        if (url is null) { Snackbar.Add("Nothing to download.", Severity.Warning); return; }
+        if (url is null) { Snackbar.Add(Strings.Get("CoErrNothingToDownload"), Severity.Warning); return; }
         try
         {
             var stream = await AnonymousHttp.GetStreamAsync(url);
             using var streamRef = new DotNetStreamReference(stream);
             await JS.InvokeVoidAsync("downloadFileFromStream", c.Name + c.FileExtension, streamRef);
         }
-        catch (Exception) { Snackbar.Add("Could not download the working copy.", Severity.Error); }
+        catch (Exception) { Snackbar.Add(Strings.Get("CoErrDownload"), Severity.Error); }
     }
 
     // Upload to stash: put the edited file back into the cloud working copy (a presigned PUT).
@@ -4937,10 +4937,10 @@
             await file.OpenReadStream(maxAllowedSize: 500L * 1024 * 1024).CopyToAsync(buffer);
             using var content = new ByteArrayContent(buffer.ToArray());
             (await AnonymousHttp.PutAsync(target!.UploadUrl, content)).EnsureSuccessStatusCode();
-            Snackbar.Add($"Saved '{c.Name}' to the cloud.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("CoOkUploaded"), c.Name), Severity.Success);
             await LoadCheckoutsAsync();
         }
-        catch (Exception) { Snackbar.Add("Could not upload the working copy.", Severity.Error); }
+        catch (Exception) { Snackbar.Add(Strings.Get("CoErrUpload"), Severity.Error); }
     }
 
     // Check in: promote the cloud stash to a new version + release (server-side).
@@ -4949,20 +4949,20 @@
         try
         {
             var resp = await Http.PostAsync($"api/checkouts/{c.Id}/checkin", null);
-            if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add("Upload the edited file to the cloud first.", Severity.Warning); return; }
+            if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add(Strings.Get("CoErrUploadFirst"), Severity.Warning); return; }
             resp.EnsureSuccessStatusCode();
-            Snackbar.Add($"Checked in '{c.Name}'.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("CoOkCheckedIn"), c.Name), Severity.Success);
             await LoadCheckoutsAsync();
             await ReloadCurrentFolderAsync();
         }
-        catch (Exception) { Snackbar.Add("Could not check in.", Severity.Error); }
+        catch (Exception) { Snackbar.Add(Strings.Get("CoErrCheckIn"), Severity.Error); }
     }
 
     // Compare the working copy against the current version as an inline unified diff (ADR 0517). Modified rows only.
     private async Task OpenCompareCheckoutAsync(CheckoutDto c)
     {
         var parameters = new DialogParameters { ["DocumentId"] = c.Id, ["DocumentName"] = c.Name };
-        await DialogService.ShowAsync<Dialogs.CompareCheckoutDialog>("Compare working copy", parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+        await DialogService.ShowAsync<Dialogs.CompareCheckoutDialog>(Strings.Get("CoCompareTitle"), parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
     }
 
     // Extend my check-out: reset the auto-release idle timer (ADR "Self-service check-out extension").
@@ -4971,24 +4971,24 @@
         try
         {
             (await Http.PostAsync($"api/checkouts/{c.Id}/extend", null)).EnsureSuccessStatusCode();
-            Snackbar.Add($"Extended the check-out of '{c.Name}'.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("CoOkExtended"), c.Name), Severity.Success);
             await LoadCheckoutsAsync();
         }
-        catch (Exception) { Snackbar.Add("Could not extend the check-out.", Severity.Error); }
+        catch (Exception) { Snackbar.Add(Strings.Get("CoErrExtend"), Severity.Error); }
     }
 
     // Cancel check-out: release the lock without committing (discards any stash server-side).
     private async Task CancelCheckoutAsync(CheckoutDto c)
     {
-        if (!await Confirm($"Cancel the check-out of '{c.Name}'? Any cloud working copy is discarded.", "Cancel check-out")) return;
+        if (!await Confirm(string.Format(Strings.Get("CoConfirmCancel"), c.Name), Strings.Get("CoCancelTitle"))) return;
         try
         {
             (await Http.DeleteAsync($"api/documents/{c.Id}/checkout")).EnsureSuccessStatusCode();
-            Snackbar.Add($"Released '{c.Name}'.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("CoOkReleased"), c.Name), Severity.Success);
             await LoadCheckoutsAsync();
             await ReloadCurrentFolderAsync();
         }
-        catch (Exception) { Snackbar.Add("Could not cancel the check-out.", Severity.Error); }
+        catch (Exception) { Snackbar.Add(Strings.Get("CoErrCancel"), Severity.Error); }
     }
 
     private async Task ReloadCurrentFolderAsync()

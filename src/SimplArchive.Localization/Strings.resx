@@ -3162,4 +3162,67 @@
   <data name="TenantShowExternalLinkUrlInfo" xml:space="preserve">
     <value>Normally a link's URL is given out once, when it is created, and can never be read again. Switch this on and it can be revealed from a link's details — useful for a demonstration tenant, but it weakens a deliberate protection: anyone who may share a document can then retrieve the URLs that share it.</value>
   </data>
+  <data name="CoErrAlreadyOut" xml:space="preserve">
+    <value>Already checked out by another user.</value>
+  </data>
+  <data name="CoErrNoPermission" xml:space="preserve">
+    <value>You don't have permission to check this out.</value>
+  </data>
+  <data name="CoErrCheckOut" xml:space="preserve">
+    <value>Could not check out the document.</value>
+  </data>
+  <data name="CoOkCheckedOut" xml:space="preserve">
+    <value>Checked out “{0}”. Use the Check-out tab to download, edit and check it back in.</value>
+  </data>
+  <data name="CoConfirmOverride" xml:space="preserve">
+    <value>Force-release the check-out of “{0}” held by {1}?</value>
+  </data>
+  <data name="CoOverride" xml:space="preserve">
+    <value>Override</value>
+  </data>
+  <data name="CoErrOverride" xml:space="preserve">
+    <value>Could not override the check-out.</value>
+  </data>
+  <data name="CoErrNothingToDownload" xml:space="preserve">
+    <value>Nothing to download.</value>
+  </data>
+  <data name="CoErrDownload" xml:space="preserve">
+    <value>Could not download the working copy.</value>
+  </data>
+  <data name="CoOkUploaded" xml:space="preserve">
+    <value>Saved “{0}” to the cloud.</value>
+  </data>
+  <data name="CoErrUpload" xml:space="preserve">
+    <value>Could not upload the working copy.</value>
+  </data>
+  <data name="CoErrUploadFirst" xml:space="preserve">
+    <value>Upload the edited file to the cloud first.</value>
+  </data>
+  <data name="CoOkCheckedIn" xml:space="preserve">
+    <value>Checked in “{0}”.</value>
+  </data>
+  <data name="CoErrCheckIn" xml:space="preserve">
+    <value>Could not check in.</value>
+  </data>
+  <data name="CoCompareTitle" xml:space="preserve">
+    <value>Compare working copy</value>
+  </data>
+  <data name="CoOkExtended" xml:space="preserve">
+    <value>Extended the check-out of “{0}”.</value>
+  </data>
+  <data name="CoErrExtend" xml:space="preserve">
+    <value>Could not extend the check-out.</value>
+  </data>
+  <data name="CoConfirmCancel" xml:space="preserve">
+    <value>Cancel the check-out of “{0}”? Any cloud working copy is discarded.</value>
+  </data>
+  <data name="CoCancelTitle" xml:space="preserve">
+    <value>Cancel check-out</value>
+  </data>
+  <data name="CoOkReleased" xml:space="preserve">
+    <value>Released “{0}”.</value>
+  </data>
+  <data name="CoErrCancel" xml:space="preserve">
+    <value>Could not cancel the check-out.</value>
+  </data>
 </root>
