@@ -90,6 +90,12 @@ public static class DemoDataSeeder
         // would make the seeded link below answer 410 to every visitor. A showcase that ships the feature switched
         // off is not showing it.
         demoTenant.AllowExternalLinks = true;
+        // The demo is a SHOWCASE, so it opts into revealing an existing link's URL (issue #412): the URL is the
+        // one artefact that makes "share a document with someone who has no account" concrete, and a visitor
+        // could not otherwise see one without creating it. Safe precisely here — the credentials are published,
+        // so a token exposed to a visitor gives away nothing they cannot already reach. Off for every real
+        // tenant by default.
+        demoTenant.ShowExternalLinkUrl = true;
         await dbContext.SaveChangesAsync();
 
         var folderMaskVersionId = await FolderMask.CurrentVersionIdAsync(dbContext, CancellationToken.None);

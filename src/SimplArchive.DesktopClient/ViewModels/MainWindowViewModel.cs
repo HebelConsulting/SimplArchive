@@ -4118,6 +4118,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // External links (ADR 0546, issue #385). The two caps only mean anything while the switch is on, so the UI
     // reveals them with it — one yes/no decision, then its bounds.
     [ObservableProperty] private bool _tenantAllowExternalLinks;
+
+    // Whether an existing link's URL may be revealed again (issue #412). Threaded through EVERY site below:
+    // the tenant-settings PUT is a FULL replacement, so a field missing from the call would silently reset it
+    // — which is exactly the bug #404 fixed.
+    [ObservableProperty] private bool _tenantShowExternalLinkUrl;
     [ObservableProperty] private int _tenantExternalLinkMaxDays = 180;
     [ObservableProperty] private int _tenantExternalLinkDefaultAccesses = 5;
     // Per-tenant storage quota (ADR "Per-tenant storage quota"): the editable limit in MB (null = unlimited) and a
@@ -4200,6 +4205,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         TenantRestrictTagsToCatalog = s.RestrictTagsToCatalog;
         TenantEnforceClearance = s.EnforceClearance;
         TenantAllowExternalLinks = s.AllowExternalLinks;
+        TenantShowExternalLinkUrl = s.ShowExternalLinkUrl;
         TenantExternalLinkMaxDays = s.ExternalLinkMaxDays;
         TenantExternalLinkDefaultAccesses = s.ExternalLinkDefaultAccesses;
         TenantStorageQuotaMb = s.StorageQuotaBytes is { } b ? (int)(b / (1024 * 1024)) : null;
@@ -4327,7 +4333,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             var webhookUrl = string.IsNullOrWhiteSpace(TenantAuditWebhookUrl) ? null : TenantAuditWebhookUrl.Trim();
             var webhookSecret = string.IsNullOrWhiteSpace(TenantAuditWebhookSecret) ? null : TenantAuditWebhookSecret;
             long? storageQuotaBytes = TenantStorageQuotaMb is { } mb ? (long)mb * 1024 * 1024 : null;
-            var s = await _api.SetTenantSettingsAsync(TenantName.Trim(), ocr, TenantAuditRetentionDays, TenantCheckoutTtlDays, TenantCheckoutWarningDays, TenantWormLockModeIndex, TenantRequireMfa, TenantAllowPasskeyLogin, TenantRequireDispositionReview, TenantRestrictTagsToCatalog, TenantEnforceClearance, TenantAllowExternalLinks, TenantExternalLinkMaxDays, TenantExternalLinkDefaultAccesses, storageQuotaBytes, TenantIncompleteUploadCleanupDays, webhookUrl, webhookSecret);
+            var s = await _api.SetTenantSettingsAsync(TenantName.Trim(), ocr, TenantAuditRetentionDays, TenantCheckoutTtlDays, TenantCheckoutWarningDays, TenantWormLockModeIndex, TenantRequireMfa, TenantAllowPasskeyLogin, TenantRequireDispositionReview, TenantRestrictTagsToCatalog, TenantEnforceClearance, TenantAllowExternalLinks, TenantExternalLinkMaxDays, TenantExternalLinkDefaultAccesses, TenantShowExternalLinkUrl, storageQuotaBytes, TenantIncompleteUploadCleanupDays, webhookUrl, webhookSecret);
             ApplyTenantSettings(s);
             TenantEditing = false;
             Status = Strings.Get("StTenantSaved");

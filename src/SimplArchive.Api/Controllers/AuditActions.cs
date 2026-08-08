@@ -50,6 +50,12 @@ public static class AuditActions
     public const string ExternalLinkAccessed = "ExternalLink.Accessed";
     public const string ExternalLinkExtended = "ExternalLink.Extended";
     public const string ExternalLinkRevoked = "ExternalLink.Revoked";
+
+    // Raised when an existing link's URL is read back, which is possible only where the tenant opted in
+    // (Tenant.ShowExternalLinkUrl, issue #412). Worth recording precisely because the token normally never
+    // leaves the create response: once it can be retrieved, "who else obtained this URL" becomes a real
+    // question, and it is the one asked after a link turns up somewhere it should not have.
+    public const string ExternalLinkUrlViewed = "ExternalLink.UrlViewed";
     public const string ReferenceAdded = "Reference.Added";
     public const string ReferenceRemoved = "Reference.Removed";
     public const string AnnotationAdded = "Annotation.Added";

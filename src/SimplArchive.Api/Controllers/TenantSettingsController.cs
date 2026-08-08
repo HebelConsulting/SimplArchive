@@ -75,6 +75,9 @@ public class TenantSettingsController : ControllerBase
         public int ExternalLinkMaxDays { get; set; }
         public int ExternalLinkDefaultAccesses { get; set; }
 
+        /// <summary>Whether an existing link's URL may be revealed again after creation (issue #412).</summary>
+        public bool ShowExternalLinkUrl { get; set; }
+
         // Tag-catalog enforcement (ADR "Tag controlled vocabulary").
         public bool RestrictTagsToCatalog { get; set; }
         // Data-classification clearance enforcement (ADR "Sensitivity clearance enforcement").
@@ -115,6 +118,9 @@ public class TenantSettingsController : ControllerBase
         public bool AllowExternalLinks { get; set; }
         public int ExternalLinkMaxDays { get; set; }
         public int ExternalLinkDefaultAccesses { get; set; }
+
+        /// <summary>Whether an existing link's URL may be revealed again after creation (issue #412).</summary>
+        public bool ShowExternalLinkUrl { get; set; }
 
         public bool RestrictTagsToCatalog { get; set; }
         // Data-classification clearance enforcement (ADR "Sensitivity clearance enforcement").
@@ -255,6 +261,7 @@ public class TenantSettingsController : ControllerBase
         tenant.AllowExternalLinks = request.AllowExternalLinks;
         tenant.ExternalLinkMaxDays = request.ExternalLinkMaxDays;
         tenant.ExternalLinkDefaultAccesses = request.ExternalLinkDefaultAccesses;
+        tenant.ShowExternalLinkUrl = request.ShowExternalLinkUrl;
         tenant.StorageQuotaBytes = request.StorageQuotaBytes; // null = unlimited
         var lifecycleChanged = tenant.IncompleteUploadCleanupDays != request.IncompleteUploadCleanupDays;
         tenant.IncompleteUploadCleanupDays = request.IncompleteUploadCleanupDays;
@@ -478,6 +485,7 @@ public class TenantSettingsController : ControllerBase
         AllowExternalLinks = tenant.AllowExternalLinks,
         ExternalLinkMaxDays = tenant.ExternalLinkMaxDays,
         ExternalLinkDefaultAccesses = tenant.ExternalLinkDefaultAccesses,
+        ShowExternalLinkUrl = tenant.ShowExternalLinkUrl,
         EnforceClearance = tenant.EnforceClearance,
         StorageQuotaBytes = tenant.StorageQuotaBytes,
         StorageUsedBytes = tenant.StorageUsedBytes,

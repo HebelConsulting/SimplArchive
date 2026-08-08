@@ -1491,7 +1491,7 @@ public sealed class SimplArchiveApiClient
 
     // ---- Tenant-admin settings (ADR "Tenant-admin settings tab") -----------------------------------
 
-    public sealed record TenantSettingsInfo(Guid Id, string Name, string Status, DateTimeOffset CreatedAt, string DefaultOcrLanguages, int AuditRetentionDays, int CheckoutTtlDays, int CheckoutWarningDays, int WormLockMode, bool RequireMfa, bool AllowPasskeyLogin, bool RequireDispositionReview, bool RestrictTagsToCatalog, bool EnforceClearance, bool AllowExternalLinks, int ExternalLinkMaxDays, int ExternalLinkDefaultAccesses, long? StorageQuotaBytes, long StorageUsedBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool AuditWebhookConfigured, int AuditWebhookConsecutiveFailures, DateTimeOffset? AuditWebhookLastSuccessAt, DateTimeOffset? AuditWebhookLastFailureAt, DateTimeOffset? AuditWebhookNextAttemptAt, string? AuditWebhookLastError);
+    public sealed record TenantSettingsInfo(Guid Id, string Name, string Status, DateTimeOffset CreatedAt, string DefaultOcrLanguages, int AuditRetentionDays, int CheckoutTtlDays, int CheckoutWarningDays, int WormLockMode, bool RequireMfa, bool AllowPasskeyLogin, bool RequireDispositionReview, bool RestrictTagsToCatalog, bool EnforceClearance, bool AllowExternalLinks, int ExternalLinkMaxDays, int ExternalLinkDefaultAccesses, bool ShowExternalLinkUrl, long? StorageQuotaBytes, long StorageUsedBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool AuditWebhookConfigured, int AuditWebhookConsecutiveFailures, DateTimeOffset? AuditWebhookLastSuccessAt, DateTimeOffset? AuditWebhookLastFailureAt, DateTimeOffset? AuditWebhookNextAttemptAt, string? AuditWebhookLastError);
 
     private static DateTimeOffset? OptDate(JsonElement j, string name) =>
         j.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetDateTimeOffset() : null;
@@ -1514,6 +1514,7 @@ public sealed class SimplArchiveApiClient
         j.TryGetProperty("allowExternalLinks", out var xl) && xl.ValueKind == JsonValueKind.True,
         j.TryGetProperty("externalLinkMaxDays", out var xd) ? xd.GetInt32() : 180,
         j.TryGetProperty("externalLinkDefaultAccesses", out var xa) ? xa.GetInt32() : 5,
+        j.TryGetProperty("showExternalLinkUrl", out var xu) && xu.GetBoolean(),
         j.TryGetProperty("storageQuotaBytes", out var sq) && sq.ValueKind == JsonValueKind.Number ? sq.GetInt64() : null,
         j.TryGetProperty("storageUsedBytes", out var su) && su.ValueKind == JsonValueKind.Number ? su.GetInt64() : 0,
         j.TryGetProperty("incompleteUploadCleanupDays", out var iu) ? iu.GetInt32() : 0,
@@ -1570,9 +1571,9 @@ public sealed class SimplArchiveApiClient
     // alone. The external-link settings are therefore REQUIRED parameters rather than optional ones: when they
     // were simply missing here, a desktop admin saving any unrelated tenant setting silently switched external
     // links off AND set both caps to 0. An optional default would recreate exactly that bug at the next caller.
-    public async Task<TenantSettingsInfo> SetTenantSettingsAsync(string name, string defaultOcrLanguages, int auditRetentionDays, int checkoutTtlDays, int checkoutWarningDays, int wormLockMode, bool requireMfa, bool allowPasskeyLogin, bool requireDispositionReview, bool restrictTagsToCatalog, bool enforceClearance, bool allowExternalLinks, int externalLinkMaxDays, int externalLinkDefaultAccesses, long? storageQuotaBytes, int incompleteUploadCleanupDays, string? auditWebhookUrl, string? auditWebhookSecret, CancellationToken cancellationToken = default)
+    public async Task<TenantSettingsInfo> SetTenantSettingsAsync(string name, string defaultOcrLanguages, int auditRetentionDays, int checkoutTtlDays, int checkoutWarningDays, int wormLockMode, bool requireMfa, bool allowPasskeyLogin, bool requireDispositionReview, bool restrictTagsToCatalog, bool enforceClearance, bool allowExternalLinks, int externalLinkMaxDays, int externalLinkDefaultAccesses, bool showExternalLinkUrl, long? storageQuotaBytes, int incompleteUploadCleanupDays, string? auditWebhookUrl, string? auditWebhookSecret, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PutAsJsonAsync("api/tenant-settings", new { name, defaultOcrLanguages, auditRetentionDays, checkoutTtlDays, checkoutWarningDays, wormLockMode, requireMfa, allowPasskeyLogin, requireDispositionReview, restrictTagsToCatalog, enforceClearance, allowExternalLinks, externalLinkMaxDays, externalLinkDefaultAccesses, storageQuotaBytes, incompleteUploadCleanupDays, auditWebhookUrl, auditWebhookSecret }, cancellationToken);
+        using var response = await _http.PutAsJsonAsync("api/tenant-settings", new { name, defaultOcrLanguages, auditRetentionDays, checkoutTtlDays, checkoutWarningDays, wormLockMode, requireMfa, allowPasskeyLogin, requireDispositionReview, restrictTagsToCatalog, enforceClearance, allowExternalLinks, externalLinkMaxDays, externalLinkDefaultAccesses, showExternalLinkUrl, storageQuotaBytes, incompleteUploadCleanupDays, auditWebhookUrl, auditWebhookSecret }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException("Another active tenant already uses this name.");

@@ -3150,4 +3150,16 @@
   <data name="SmErrDuplicateName" xml:space="preserve">
     <value>Ya existe un servidor con ese nombre.</value>
   </data>
+  <data name="ExtLinkShowUrl" xml:space="preserve">
+    <value>Mostrar el enlace</value>
+  </data>
+  <data name="ExtLinkCopyToClipboard" xml:space="preserve">
+    <value>Copiar al portapapeles</value>
+  </data>
+  <data name="TenantShowExternalLinkUrl" xml:space="preserve">
+    <value>Mostrar la URL de un enlace existente</value>
+  </data>
+  <data name="TenantShowExternalLinkUrlInfo" xml:space="preserve">
+    <value>Normalmente la URL de un enlace se facilita una sola vez, al crearlo, y ya no puede volver a leerse. Si activa esta opción, podrá mostrarse en los detalles del enlace — útil para un inquilino de demostración, pero debilita una protección deliberada: quien pueda compartir un documento podrá recuperar las URL que lo comparten.</value>
+  </data>
 </root>

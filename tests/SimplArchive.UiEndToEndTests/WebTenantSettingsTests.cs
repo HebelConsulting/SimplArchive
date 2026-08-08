@@ -29,12 +29,18 @@ public class WebTenantSettingsTests
         // Each explainable setting carries an info button (hover tooltip). Name, OCR, audit retention,
         // check-out auto-release, check-out expiry warning, WORM lock mode, storage quota, the storage Recompute
         // action, incomplete-upload cleanup, require-MFA, allow-passkey-login, require-disposition-review,
-        // restrict-tags-to-catalog, enforce-clearance, allow-external-links, and the audit webhook URL → sixteen
-        // (the webhook secret + delivery-health buttons render only in edit mode / when a webhook is configured,
-        // so aren't counted here). ADR "Sensitivity clearance enforcement" added the enforce-clearance one;
-        // ADR "External links" the allow-external-links one — its two numeric caps carry no info button of their
-        // own and are nested behind the switch, so the count does not depend on whether the feature is on.
-        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Explanation" })).ToHaveCountAsync(16);
+        // restrict-tags-to-catalog, enforce-clearance, allow-external-links, show-external-link-url, and the audit
+        // webhook URL → seventeen (the webhook secret + delivery-health buttons render only in edit mode / when a
+        // webhook is configured, so aren't counted here). ADR "Sensitivity clearance enforcement" added the
+        // enforce-clearance one; ADR 0546 the allow-external-links one; ADR 0553 the show-external-link-url one.
+        //
+        // NOTE — this count now DEPENDS on external links being switched on for the tenant. The two numeric caps
+        // carry no info button, so that used to be irrelevant; show-external-link-url has one AND is nested behind
+        // the allow-external-links switch, so a tenant with the feature off would show sixteen. It holds here
+        // because the demo seed enables external links (ADR 0214) and nothing in this suite turns them off — if
+        // a future test toggles that switch, this assertion becomes order-dependent and should move to asserting
+        // the individual buttons rather than a total.
+        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Explanation" })).ToHaveCountAsync(17);
 
         // The storage-usage line (ADR "Per-tenant storage quota") shows how much is used vs the limit.
         await Expect(view.GetByText("Used:")).ToBeVisibleAsync();

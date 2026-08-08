@@ -85,6 +85,16 @@ public class DocumentExternalLinksController : ControllerBase
         public string Etag { get; set; } = "";
     }
 
+    // The response of the reveal endpoint. Its own resource rather than a reused row: a row means "here is a
+    // link", this means "here is a credential you asked for", and keeping the shapes apart stops the token
+    // drifting into the listing by someone reusing the type.
+    public class ExternalLinkUrlResource : HypermediaResource
+    {
+        public Guid Id { get; set; }
+
+        public string Url { get; set; } = "";
+    }
+
     public class ExternalLinkListResource : HypermediaResource
     {
         public List<ExternalLinkResource> ExternalLinks { get; set; } = [];
@@ -135,6 +145,11 @@ public class DocumentExternalLinksController : ControllerBase
 
         var now = _clock.GetUtcNow();
 
+        // Whether to advertise the reveal rel at all. A MISSING rel is meaningful (ADR 0543): it means "not
+        // available to you, here, now", so the client hides the affordance rather than offering a button that
+        // would 403.
+        var showsUrl = (await CurrentTenantAsync(cancellationToken)).ShowExternalLinkUrl;
+
         // Live links only — expired and revoked rows are retained as evidence but are not the working list.
         var links = await _dbContext.ExternalLinks
             .Where(l => l.DocumentId == documentId && l.RevokedAt == null && l.ExpiresAt > now)
@@ -171,6 +186,9 @@ public class DocumentExternalLinksController : ControllerBase
                     // Renewal, advertised here as it already is on the cross-document list — the client followed a
                     // COMPOSED ".../expiry" before, which is how it kept calling that route after it moved.
                     new Link("availability", $"/api/documents/{documentId}/external-links/{l.Id}/availability", "PUT"),
+                    .. showsUrl
+                        ? new[] { new Link("reveal-url", $"/api/documents/{documentId}/external-links/{l.Id}/url", "GET") }
+                        : [],
                 ],
             }).ToList(),
             CanCreate = await CanCreateAsync(documentId, cancellationToken),
@@ -349,6 +367,68 @@ public class DocumentExternalLinksController : ControllerBase
             $"External link {link.Id} revoked", cancellationToken: cancellationToken);
 
         return NoContent();
+    }
+
+    // Reveals an existing link's URL — only where the tenant has opted in (Tenant.ShowExternalLinkUrl, issue
+    // #412). A DEDICATED endpoint rather than a field on the list rows, and that distinction is the whole point:
+    // putting the token in every list response would keep it out of the UI while leaving it one network-tab
+    // glance away, so the protection would be cosmetic. Here a token is transmitted only when someone asks for
+    // that one link, which is also what makes the access recordable.
+    //
+    // Gated by the same rights as creating a link: if you may not share this document, you may not read back the
+    // URL that shares it.
+    [HttpGet("{linkId:guid}/url")]
+    // Named RevealUrl, not Url: ControllerBase already has a Url property, and hiding it would break every
+    // other action in this controller that uses it.
+    public async Task<IActionResult> RevealUrl(Guid documentId, Guid linkId, CancellationToken cancellationToken)
+    {
+        var link = await _dbContext.ExternalLinks
+            .SingleOrDefaultAsync(l => l.Id == linkId && l.DocumentId == documentId, cancellationToken);
+        if (link is null)
+        {
+            return NotFound();
+        }
+
+        if (!await CanCreateAsync(documentId, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (!(await CurrentTenantAsync(cancellationToken)).ShowExternalLinkUrl)
+        {
+            throw new ExternalLinkUrlNotShownException();
+        }
+
+        await _audit.RecordAsync(AuditActions.ExternalLinkUrlViewed, "Document", documentId,
+            await DocumentNameAsync(documentId, cancellationToken),
+            $"External link {link.Id} URL revealed", cancellationToken: cancellationToken);
+
+        // Revoked and expired links are deliberately still revealable: the URL is what identifies a link in a
+        // report of a leak, and refusing it exactly when someone is investigating would be backwards.
+        return Ok(new ExternalLinkUrlResource
+        {
+            Id = link.Id,
+            Url = $"{Request.Scheme}://{Request.Host}/api/external-links/{link.Token}",
+            Links = [new Link("self", $"/api/documents/{documentId}/external-links/{linkId}/url", "GET")],
+        });
+    }
+
+    // Standing convention: every GET action gets a companion HEAD.
+    [HttpHead("{linkId:guid}/url")]
+    public async Task<IActionResult> RevealUrlHead(Guid documentId, Guid linkId, CancellationToken cancellationToken)
+    {
+        var exists = await _dbContext.ExternalLinks.AnyAsync(l => l.Id == linkId && l.DocumentId == documentId, cancellationToken);
+        if (!exists)
+        {
+            return NotFound();
+        }
+
+        if (!await CanCreateAsync(documentId, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        return (await CurrentTenantAsync(cancellationToken)).ShowExternalLinkUrl ? NoContent() : throw new ExternalLinkUrlNotShownException();
     }
 
     // Creating a link needs BOTH the system right and CanReadContent on the document itself: the right says you

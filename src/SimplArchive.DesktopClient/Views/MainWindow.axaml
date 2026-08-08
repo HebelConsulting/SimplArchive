@@ -2129,6 +2129,12 @@
                                     <NumericUpDown Value="{Binding TenantExternalLinkDefaultAccesses}" IsEnabled="{Binding TenantEditing}"
                                                    Minimum="1" Maximum="1000" Increment="1" FormatString="0" Width="120" />
                                 </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <CheckBox IsChecked="{Binding TenantShowExternalLinkUrl}" IsEnabled="{Binding TenantEditing}"
+                                              Content="{loc:Tr TenantShowExternalLinkUrl}" />
+                                    <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                            ToolTip.Tip="{loc:Tr TenantShowExternalLinkUrlInfo}" />
+                                </StackPanel>
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,10,0,0">

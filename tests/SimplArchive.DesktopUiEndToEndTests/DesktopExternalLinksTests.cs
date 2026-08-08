@@ -107,6 +107,6 @@ public class DesktopExternalLinksTests
         api.SetTenantSettingsAsync(before.Name, before.DefaultOcrLanguages, before.AuditRetentionDays, before.CheckoutTtlDays,
             before.CheckoutWarningDays, before.WormLockMode, before.RequireMfa, before.AllowPasskeyLogin,
             before.RequireDispositionReview, before.RestrictTagsToCatalog, before.EnforceClearance,
-            allow, before.ExternalLinkMaxDays, before.ExternalLinkDefaultAccesses,
+            allow, before.ExternalLinkMaxDays, before.ExternalLinkDefaultAccesses, before.ShowExternalLinkUrl,
             before.StorageQuotaBytes, before.IncompleteUploadCleanupDays, null, null);
 }

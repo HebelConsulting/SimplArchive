@@ -26,17 +26,20 @@ public class MyExternalLinksController : ControllerBase
     private readonly SimplArchiveDbContext _dbContext;
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly ICurrentUserAccessor _currentUser;
+    private readonly ICurrentTenantAccessor _tenant;
     private readonly TimeProvider _clock;
 
     public MyExternalLinksController(
         SimplArchiveDbContext dbContext,
         IUserSystemRightsResolver userSystemRights,
         ICurrentUserAccessor currentUser,
+        ICurrentTenantAccessor tenant,
         TimeProvider clock)
     {
         _dbContext = dbContext;
         _userSystemRights = userSystemRights;
         _currentUser = currentUser;
+        _tenant = tenant;
         _clock = clock;
     }
 
@@ -132,6 +135,13 @@ public class MyExternalLinksController : ControllerBase
     private async Task<MyExternalLinkListResource> BuildAsync(
         IQueryable<Domain.Documents.ExternalLink> query, DateTimeOffset now, bool canViewOthers, CancellationToken cancellationToken)
     {
+        // As on the per-document list: the reveal rel appears only where the tenant opted in (issue #412), and
+        // its ABSENCE is how the client knows not to offer the affordance rather than offering one that 403s.
+        var showsUrl = await _dbContext.Tenants
+            .Where(t => t.Id == _tenant.TenantId!.Value)
+            .Select(t => t.ShowExternalLinkUrl)
+            .SingleAsync(cancellationToken);
+
         var rows = await query
             .OrderBy(l => l.ExpiresAt).ThenBy(l => l.Id)
             .Select(l => new
@@ -172,6 +182,9 @@ public class MyExternalLinksController : ControllerBase
                 [
                     new Link("revoke", $"/api/documents/{l.DocumentId}/external-links/{l.Id}", "DELETE"),
                     new Link("availability", $"/api/documents/{l.DocumentId}/external-links/{l.Id}/availability", "PUT"),
+                    .. showsUrl
+                        ? new[] { new Link("reveal-url", $"/api/documents/{l.DocumentId}/external-links/{l.Id}/url", "GET") }
+                        : [],
                 ],
             }).ToList(),
             CanViewOthers = canViewOthers,

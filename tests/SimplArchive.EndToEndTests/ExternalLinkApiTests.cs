@@ -392,6 +392,91 @@ public class ExternalLinkApiTests
         return (api, tenantId, docId);
     }
 
+    // Revealing an existing link's URL (issue #412) — off by default, and the DEFAULT is the assertion that
+    // matters most here.
+    //
+    // Every one of these checks the PAYLOAD, not the UI. The whole justification for a dedicated reveal endpoint
+    // rather than a field on the list rows is that a token in the list response would be one network-tab glance
+    // from anyone who can list — so a test that only proved the client hides it would be testing the wrong layer
+    // and would pass against exactly the design this replaced.
+    [Fact]
+    public async Task A_listing_never_carries_the_token__nor_offers_to_reveal_it__unless_the_tenant_opted_in()
+    {
+        var (api, _, docId) = await SeedShareableDocumentAsync();
+        await PostJson(api, $"/api/documents/{docId}/external-links", new { });
+
+        var row = (await GetJson(api, $"/api/documents/{docId}/external-links"))
+            .GetProperty("externalLinks").EnumerateArray().Single();
+
+        // The token is absent from the row, as it always has been.
+        Assert.True(row.GetProperty("url").ValueKind is JsonValueKind.Null);
+
+        // And no rel invites the client to ask for it. A MISSING rel is how the client knows not to offer the
+        // affordance (ADR 0543), so its absence here is what hides the button rather than any client-side flag.
+        Assert.DoesNotContain("reveal-url", RelsOf(row));
+    }
+
+    [Fact]
+    public async Task Revealing_the_url_is_refused_until_the_tenant_opts_in__then_returns_the_working_link()
+    {
+        var (api, tenantId, docId) = await SeedShareableDocumentAsync();
+        var created = await PostJson(api, $"/api/documents/{docId}/external-links", new { });
+        var linkId = created.GetProperty("id").GetGuid();
+        var createdUrl = created.GetProperty("url").GetString()!;
+
+        // Off: refused, and with its OWN code — not "external links are disabled", which would send an
+        // administrator to the wrong switch, and not 404, which would deny the link exists.
+        var refused = await api.GetAsync($"/api/documents/{docId}/external-links/{linkId}/url");
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Contains("EXTERNAL_LINK_URL_NOT_SHOWN", await refused.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        await SetShowExternalLinkUrlAsync(tenantId, true);
+
+        // On: the rel appears, and following it yields the same URL the create response gave once.
+        var row = (await GetJson(api, $"/api/documents/{docId}/external-links"))
+            .GetProperty("externalLinks").EnumerateArray().Single();
+        Assert.Contains("reveal-url", RelsOf(row));
+
+        var revealed = (await GetJson(api, $"/api/documents/{docId}/external-links/{linkId}/url"))
+            .GetProperty("url").GetString();
+        Assert.Equal(createdUrl, revealed);
+
+        // And it is a working credential, not merely a matching string.
+        using var anonymous = _factory.CreateClient();
+        var redeemed = await GetJson(anonymous, RelativePath(revealed!));
+        Assert.False(string.IsNullOrWhiteSpace(redeemed.GetProperty("fileName").GetString()));
+    }
+
+    // Even opted in, the URL is a credential: someone who may not share this document may not read back the URL
+    // that shares it. Otherwise the setting would quietly widen who can hand the document out, which is a
+    // different decision from making it visible to those who could already share it.
+    [Fact]
+    public async Task Revealing_the_url_still_requires_the_right_to_share()
+    {
+        var (api, tenantId, docId) = await SeedShareableDocumentAsync();
+        var created = await PostJson(api, $"/api/documents/{docId}/external-links", new { });
+        var linkId = created.GetProperty("id").GetGuid();
+        await SetShowExternalLinkUrlAsync(tenantId, true);
+
+        // A client with no bearer token stands in for "not entitled": the endpoint is [Authorize], so this proves
+        // the reveal route is not reachable outside the authenticated, rights-checked path.
+        using var anonymous = _factory.CreateClient();
+        var response = await anonymous.GetAsync($"/api/documents/{docId}/external-links/{linkId}/url");
+        Assert.True(response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden);
+    }
+
+    private static IEnumerable<string> RelsOf(JsonElement resource) =>
+        resource.GetProperty("links").EnumerateArray().Select(l => l.GetProperty("rel").GetString() ?? "");
+
+    private async Task SetShowExternalLinkUrlAsync(Guid tenantId, bool show)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+        var tenant = await db.Tenants.IgnoreQueryFilters(["TenantFilter"]).SingleAsync(t => t.Id == tenantId);
+        tenant.ShowExternalLinkUrl = show;
+        await db.SaveChangesAsync();
+    }
+
     private async Task SetAllowExternalLinksAsync(Guid tenantId, bool allow)
     {
         using var scope = _factory.Services.CreateScope();

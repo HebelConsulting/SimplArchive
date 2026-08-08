@@ -1830,10 +1830,15 @@
                                                  Label="@Strings.Get("TenantExtLinkMaxDays")" Disabled="@(!_tenantEditing)"
                                                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
                             </div>
-                            <div class="wb-setting-row mb-4">
+                            <div class="wb-setting-row mb-2">
                                 <MudNumericField T="int" @bind-Value="_tenantEdit.ExternalLinkDefaultAccesses" Min="1" Max="1000"
                                                  Label="@Strings.Get("TenantExtLinkDefaultAccesses")" Disabled="@(!_tenantEditing)"
                                                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
+                            </div>
+                            <div class="wb-setting-row mb-4">
+                                <MudSwitch T="bool" @bind-Value="_tenantEdit.ShowExternalLinkUrl" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
+                                           Label="@Strings.Get("TenantShowExternalLinkUrl")" />
+                                @InfoButton(Strings.Get("TenantShowExternalLinkUrlInfo"))
                             </div>
                         }
 
@@ -5048,7 +5053,7 @@
     private void SyncTenantEditFromTenant()
     {
         if (_tenant is null) return;
-        _tenantEdit = new TenantSettingsEdit { Name = _tenant.Name, AuditRetentionDays = _tenant.AuditRetentionDays, CheckoutTtlDays = _tenant.CheckoutTtlDays, CheckoutWarningDays = _tenant.CheckoutWarningDays, WormLockMode = _tenant.WormLockMode, RequireMfa = _tenant.RequireMfa, AllowPasskeyLogin = _tenant.AllowPasskeyLogin, RequireDispositionReview = _tenant.RequireDispositionReview, RestrictTagsToCatalog = _tenant.RestrictTagsToCatalog, EnforceClearance = _tenant.EnforceClearance, AllowExternalLinks = _tenant.AllowExternalLinks, ExternalLinkMaxDays = _tenant.ExternalLinkMaxDays, ExternalLinkDefaultAccesses = _tenant.ExternalLinkDefaultAccesses, StorageQuotaMb = _tenant.StorageQuotaBytes is { } b ? (int)(b / (1024 * 1024)) : null, IncompleteUploadCleanupDays = _tenant.IncompleteUploadCleanupDays, AuditWebhookUrl = _tenant.AuditWebhookUrl, AuditWebhookSecret = null };
+        _tenantEdit = new TenantSettingsEdit { Name = _tenant.Name, AuditRetentionDays = _tenant.AuditRetentionDays, CheckoutTtlDays = _tenant.CheckoutTtlDays, CheckoutWarningDays = _tenant.CheckoutWarningDays, WormLockMode = _tenant.WormLockMode, RequireMfa = _tenant.RequireMfa, AllowPasskeyLogin = _tenant.AllowPasskeyLogin, RequireDispositionReview = _tenant.RequireDispositionReview, RestrictTagsToCatalog = _tenant.RestrictTagsToCatalog, EnforceClearance = _tenant.EnforceClearance, AllowExternalLinks = _tenant.AllowExternalLinks, ShowExternalLinkUrl = _tenant.ShowExternalLinkUrl, ExternalLinkMaxDays = _tenant.ExternalLinkMaxDays, ExternalLinkDefaultAccesses = _tenant.ExternalLinkDefaultAccesses, StorageQuotaMb = _tenant.StorageQuotaBytes is { } b ? (int)(b / (1024 * 1024)) : null, IncompleteUploadCleanupDays = _tenant.IncompleteUploadCleanupDays, AuditWebhookUrl = _tenant.AuditWebhookUrl, AuditWebhookSecret = null };
         _tenantEditOcr = new HashSet<string>(_tenant.DefaultOcrLanguages.Split('+', StringSplitOptions.RemoveEmptyEntries));
     }
 
@@ -5072,7 +5077,7 @@
         var webhookUrl = string.IsNullOrWhiteSpace(_tenantEdit.AuditWebhookUrl) ? null : _tenantEdit.AuditWebhookUrl.Trim();
         var webhookSecret = string.IsNullOrWhiteSpace(_tenantEdit.AuditWebhookSecret) ? null : _tenantEdit.AuditWebhookSecret;
         long? storageQuotaBytes = _tenantEdit.StorageQuotaMb is { } mb ? (long)mb * 1024 * 1024 : null;
-        var body = new { name = _tenantEdit.Name, defaultOcrLanguages = ocr, auditRetentionDays = _tenantEdit.AuditRetentionDays, checkoutTtlDays = _tenantEdit.CheckoutTtlDays, checkoutWarningDays = _tenantEdit.CheckoutWarningDays, wormLockMode = _tenantEdit.WormLockMode, requireMfa = _tenantEdit.RequireMfa, allowPasskeyLogin = _tenantEdit.AllowPasskeyLogin, requireDispositionReview = _tenantEdit.RequireDispositionReview, restrictTagsToCatalog = _tenantEdit.RestrictTagsToCatalog, enforceClearance = _tenantEdit.EnforceClearance, allowExternalLinks = _tenantEdit.AllowExternalLinks, externalLinkMaxDays = _tenantEdit.ExternalLinkMaxDays, externalLinkDefaultAccesses = _tenantEdit.ExternalLinkDefaultAccesses, storageQuotaBytes, incompleteUploadCleanupDays = _tenantEdit.IncompleteUploadCleanupDays, auditWebhookUrl = webhookUrl, auditWebhookSecret = webhookSecret };
+        var body = new { name = _tenantEdit.Name, defaultOcrLanguages = ocr, auditRetentionDays = _tenantEdit.AuditRetentionDays, checkoutTtlDays = _tenantEdit.CheckoutTtlDays, checkoutWarningDays = _tenantEdit.CheckoutWarningDays, wormLockMode = _tenantEdit.WormLockMode, requireMfa = _tenantEdit.RequireMfa, allowPasskeyLogin = _tenantEdit.AllowPasskeyLogin, requireDispositionReview = _tenantEdit.RequireDispositionReview, restrictTagsToCatalog = _tenantEdit.RestrictTagsToCatalog, enforceClearance = _tenantEdit.EnforceClearance, allowExternalLinks = _tenantEdit.AllowExternalLinks, showExternalLinkUrl = _tenantEdit.ShowExternalLinkUrl, externalLinkMaxDays = _tenantEdit.ExternalLinkMaxDays, externalLinkDefaultAccesses = _tenantEdit.ExternalLinkDefaultAccesses, storageQuotaBytes, incompleteUploadCleanupDays = _tenantEdit.IncompleteUploadCleanupDays, auditWebhookUrl = webhookUrl, auditWebhookSecret = webhookSecret };
         var resp = await Http.PutAsJsonAsync("api/tenant-settings", body);
         if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add("Another active tenant already uses this name.", Severity.Warning); return; }
         if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add("Check the name, OCR languages, retention/expiry values and the webhook URL/secret.", Severity.Warning); return; }
@@ -5129,6 +5134,8 @@
     {
         // External links (ADR 0546) — the tenant master switch plus its two caps.
         public bool AllowExternalLinks { get; set; }
+
+        public bool ShowExternalLinkUrl { get; set; }
         public int ExternalLinkMaxDays { get; set; } = 180;
         public int ExternalLinkDefaultAccesses { get; set; } = 5;
 
@@ -5165,6 +5172,8 @@
         public string Name { get; set; } = "";
         // External links (ADR 0546).
         public bool AllowExternalLinks { get; set; }
+
+        public bool ShowExternalLinkUrl { get; set; }
         public int ExternalLinkMaxDays { get; set; } = 180;
         public int ExternalLinkDefaultAccesses { get; set; } = 5;
         public int AuditRetentionDays { get; set; }

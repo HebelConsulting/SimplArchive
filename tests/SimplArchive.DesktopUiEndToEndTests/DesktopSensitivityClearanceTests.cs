@@ -31,10 +31,10 @@ public class DesktopSensitivityClearanceTests
         // The tenant EnforceClearance switch round-trips through the Tenant tab api (leave it OFF so the shared
         // demo tenant is unaffected for other tests).
         var before = await client.GetTenantSettingsAsync();
-        var on = await client.SetTenantSettingsAsync(before.Name, before.DefaultOcrLanguages, before.AuditRetentionDays, before.CheckoutTtlDays, before.CheckoutWarningDays, before.WormLockMode, before.RequireMfa, before.AllowPasskeyLogin, before.RequireDispositionReview, before.RestrictTagsToCatalog, enforceClearance: true, before.AllowExternalLinks, before.ExternalLinkMaxDays, before.ExternalLinkDefaultAccesses, before.StorageQuotaBytes, before.IncompleteUploadCleanupDays, null, null);
+        var on = await client.SetTenantSettingsAsync(before.Name, before.DefaultOcrLanguages, before.AuditRetentionDays, before.CheckoutTtlDays, before.CheckoutWarningDays, before.WormLockMode, before.RequireMfa, before.AllowPasskeyLogin, before.RequireDispositionReview, before.RestrictTagsToCatalog, enforceClearance: true, before.AllowExternalLinks, before.ExternalLinkMaxDays, before.ExternalLinkDefaultAccesses, before.ShowExternalLinkUrl, before.StorageQuotaBytes, before.IncompleteUploadCleanupDays, null, null);
         Assert.True(on.EnforceClearance);
 
-        var off = await client.SetTenantSettingsAsync(before.Name, before.DefaultOcrLanguages, before.AuditRetentionDays, before.CheckoutTtlDays, before.CheckoutWarningDays, before.WormLockMode, before.RequireMfa, before.AllowPasskeyLogin, before.RequireDispositionReview, before.RestrictTagsToCatalog, enforceClearance: false, before.AllowExternalLinks, before.ExternalLinkMaxDays, before.ExternalLinkDefaultAccesses, before.StorageQuotaBytes, before.IncompleteUploadCleanupDays, null, null);
+        var off = await client.SetTenantSettingsAsync(before.Name, before.DefaultOcrLanguages, before.AuditRetentionDays, before.CheckoutTtlDays, before.CheckoutWarningDays, before.WormLockMode, before.RequireMfa, before.AllowPasskeyLogin, before.RequireDispositionReview, before.RestrictTagsToCatalog, enforceClearance: false, before.AllowExternalLinks, before.ExternalLinkMaxDays, before.ExternalLinkDefaultAccesses, before.ShowExternalLinkUrl, before.StorageQuotaBytes, before.IncompleteUploadCleanupDays, null, null);
         Assert.False(off.EnforceClearance);
     }
 }

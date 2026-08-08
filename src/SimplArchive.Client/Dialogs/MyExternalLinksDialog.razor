@@ -180,6 +180,9 @@
             // Only offered while the link is near enough to its end to be worth renewing — the same "nearly up"
             // hint the row used to gate its Extend button on.
             { nameof(ExternalLinkDetailDialog.RenewHref), link.CanExtend ? RelativeHref(link.Links, "availability") : null },
+            // Followed, never composed (ADR 0543). Absent on any tenant that has not opted into revealing a
+            // link's URL, which is precisely how the dialog knows to keep saying it is not shown (issue #412).
+            { nameof(ExternalLinkDetailDialog.RevealHref), RelativeHref(link.Links, "reveal-url") },
         };
 
         var dialog = await DialogService.ShowAsync<ExternalLinkDetailDialog>(Strings.Get("ExtLinkDetailTitle"), parameters);

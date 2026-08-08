@@ -1,13 +1,16 @@
 @inject HttpClient Http
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 @* One external link, read-only, with the one thing you can still change about it: how long it stays usable and
    how often it may still be redeemed (ADR 0546).
 
    There is no "edit" here beyond that, and deliberately so. A link's document, creator and token are settled the
-   moment it is created — the token most of all, which the server hands out exactly once and this dialog therefore
-   cannot show, however much a reader might want it. Renewing is the only live decision left, so it is the only
-   control. *@
+   moment it is created. Renewing is the only live decision left, so it is the only control.
+
+   The token is normally not shown at all — it is handed out once, at creation. A tenant may opt into revealing it
+   again (issue #412), and this dialog is the ONLY place that does: it asks the server for one link's URL when the
+   reader presses the button, so a token is never carried by the listing every row here came from. *@
 <MudDialog>
     <DialogContent>
         <div style="min-width: 480px;">
@@ -29,9 +32,31 @@
                         <td class="mud-text-secondary">@Strings.Get("ExtLinkAccesses")</td>
                         <td>@Link.AccessCount / @(Link.MaxAccesses?.ToString() ?? Strings.Get("ExtLinkUnlimited"))</td>
                     </tr>
+                    @* The URL is retrievable only where the tenant opted in (issue #412), which the server says
+                       by advertising the "reveal-url" rel. The explanatory line below must therefore switch with
+                       it: left as-is it would claim the URL is unavailable while sitting next to the URL. *@
                     <tr>
                         <td class="mud-text-secondary">@Strings.Get("ExtLinkUrl")</td>
-                        <td class="mud-text-secondary"><em>@Strings.Get("ExtLinkUrlNotShown")</em></td>
+                        <td>
+                            @if (RevealHref is null)
+                            {
+                                <span class="mud-text-secondary"><em>@Strings.Get("ExtLinkUrlNotShown")</em></span>
+                            }
+                            else if (_revealedUrl is null)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Visibility"
+                                           OnClick="RevealAsync" Disabled="_revealing">@Strings.Get("ExtLinkShowUrl")</MudButton>
+                            }
+                            else
+                            {
+                                <div class="d-flex align-center gap-2" style="flex-wrap: wrap;">
+                                    <span style="word-break: break-all;">@_revealedUrl</span>
+                                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.ContentCopy"
+                                               OnClick="CopyAsync">@Strings.Get("ExtLinkCopyToClipboard")</MudButton>
+                                </div>
+                            }
+                        </td>
                     </tr>
                 </tbody>
             </MudSimpleTable>
@@ -73,10 +98,62 @@
     // so the affordance goes rather than leading somebody to a refusal.
     [Parameter] public string? RenewHref { get; set; }
 
+    // The "reveal-url" rel, likewise as advertised. Null on any tenant that has not opted in — so the button is
+    // absent rather than present-and-failing, and the "not shown" wording above stays truthful.
+    [Parameter] public string? RevealHref { get; set; }
+
+    // Fetched on demand rather than with the row: the token is only transmitted when somebody asks for this one
+    // link, which is what keeps it out of the listing that every row came from.
+    private string? _revealedUrl;
+    private bool _revealing;
+
     private int _days = 90;
     private int? _maxAccesses;
 
     protected override void OnInitialized() => _maxAccesses = Link.MaxAccesses;
+
+    private async Task RevealAsync()
+    {
+        if (RevealHref is null || _revealing)
+        {
+            return;
+        }
+
+        _revealing = true;
+        try
+        {
+            var response = await Http.GetAsync(RevealHref);
+            if (!response.IsSuccessStatusCode)
+            {
+                // The tenant switch can be turned off between listing and asking, so a refusal here is a real
+                // possibility rather than a defensive branch.
+                Snackbar.Add(Strings.Get("ExtLinkActionFailed"), Severity.Error);
+                return;
+            }
+
+            _revealedUrl = (await response.Content.ReadFromJsonAsync<RevealedUrl>())?.Url;
+        }
+        finally
+        {
+            _revealing = false;
+        }
+    }
+
+    private async Task CopyAsync()
+    {
+        if (_revealedUrl is null)
+        {
+            return;
+        }
+
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", _revealedUrl);
+        Snackbar.Add(Strings.Get("ExtLinkCopied"), Severity.Success);
+    }
+
+    private sealed class RevealedUrl
+    {
+        public string Url { get; set; } = "";
+    }
 
     private async Task RenewAsync()
     {

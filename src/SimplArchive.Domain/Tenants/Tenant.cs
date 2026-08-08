@@ -123,6 +123,17 @@ public class Tenant
 
     public int ExternalLinkDefaultAccesses { get; set; } = 5;
 
+    // Whether an existing link's URL may be revealed again after creation. FALSE everywhere by default, which
+    // keeps the rule the feature shipped with: the token is returned once, from the create response, and the
+    // listings never carry it — because a list is read far more widely, and far more casually, than the moment
+    // someone deliberately created a link.
+    //
+    // It exists for the SHOWCASE. On the public demo the URL is the one artefact that makes "share a document
+    // with someone who has no account" concrete, and a visitor could not see one without creating it. A tenant
+    // whose credentials are published loses nothing by exposing its tokens; a real tenant would, which is why
+    // this is opt-in per tenant and off unless someone says otherwise (issue #412).
+    public bool ShowExternalLinkUrl { get; set; }
+
     public long? StorageQuotaBytes { get; set; }
 
     // Maintained per-tenant used-storage counter (ADR "Per-tenant storage quota"): the sum of this tenant's
