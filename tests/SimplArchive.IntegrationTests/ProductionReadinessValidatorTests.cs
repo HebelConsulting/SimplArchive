@@ -45,11 +45,30 @@ public class ProductionReadinessValidatorTests
         Assert.Empty(ProductionReadinessValidator.Validate(config, new StubEnvironment { EnvironmentName = "Development" }));
     }
 
+    // A real release build stamps its version; the test assembly never does, so it must be supplied here or
+    // every "clean production" case would fail on the unstamped check rather than on what it is testing.
+    private const string StampedVersion = "0.1.6";
+
+    // A deployment that cannot say which build it is has no business in production: it makes the desktop's
+    // "are you behind this deployment?" check meaningless (ADR 0512) and leaves a post-mortem unable to answer
+    // the first question it will ask (issue #425).
+    [Fact]
+    public void Production_refuses_an_unstamped_build()
+    {
+        var violations = ProductionReadinessValidator.Validate(
+            Config(CleanProduction), new StubEnvironment(), SimplArchive.Api.ServerBuildInfo.UnstampedVersion);
+
+        Assert.Contains(violations, v => v.Contains("unstamped", StringComparison.OrdinalIgnoreCase));
+
+        // …and it is the ONLY complaint, so this really is about the stamp rather than the rest of the config.
+        Assert.Single(violations);
+    }
+
     [Fact]
     public void Production_with_a_clean_config_passes()
     {
-        Assert.Empty(ProductionReadinessValidator.Validate(Config(CleanProduction), new StubEnvironment()));
-        ProductionReadinessValidator.ThrowIfNotProductionReady(Config(CleanProduction), new StubEnvironment()); // no throw
+        Assert.Empty(ProductionReadinessValidator.Validate(Config(CleanProduction), new StubEnvironment(), StampedVersion));
+        ProductionReadinessValidator.ThrowIfNotProductionReady(Config(CleanProduction), new StubEnvironment(), StampedVersion); // no throw
     }
 
     [Fact]
@@ -67,7 +86,7 @@ public class ProductionReadinessValidatorTests
             // OpenBao:Address unset → the dev Postgres password check applies.
         });
 
-        var violations = ProductionReadinessValidator.Validate(config, new StubEnvironment());
+        var violations = ProductionReadinessValidator.Validate(config, new StubEnvironment(), StampedVersion);
 
         Assert.Contains(violations, v => v.Contains("OpenIddict"));
         Assert.Contains(violations, v => v.Contains("ApplyMigrationsAtStartup"));
@@ -90,6 +109,6 @@ public class ProductionReadinessValidatorTests
             ["ConnectionStrings:Default"] = "Host=db;Port=5432;Database=simplarchive;Username=postgres;Password=postgres",
         });
 
-        Assert.DoesNotContain(ProductionReadinessValidator.Validate(config, new StubEnvironment()), v => v.Contains("Postgres password"));
+        Assert.DoesNotContain(ProductionReadinessValidator.Validate(config, new StubEnvironment(), StampedVersion), v => v.Contains("Postgres password"));
     }
 }

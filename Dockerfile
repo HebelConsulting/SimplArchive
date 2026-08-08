@@ -3,10 +3,15 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
 
-# Version stamped into the desktop-client download artifacts + their file names (ADR 0490). CI passes the release
-# tag (docker/metadata-action's {{version}}, e.g. 0.1.0); defaults to 0.1.0 for a plain local build. The Dockerfile
-# can't derive it from git — .git is excluded from the build context (.dockerignore).
-ARG VERSION=0.1.0
+# Version stamped into the desktop-client download artifacts + their file names (ADR 0490) and into the API
+# assembly, which surfaces it as GET /api's serverVersion (ADR 0512). CI passes the release tag
+# (docker/metadata-action's {{version}}). The Dockerfile can't derive it from git — .git is excluded from the
+# build context (.dockerignore).
+#
+# The default is the non-release sentinel, matching the Api project's own default. It used to be 0.1.0 — a REAL
+# past release — so an image built without --build-arg was indistinguishable from a genuine v0.1.0 deployment,
+# which is a plausible-looking lie rather than an admission of not knowing (issue #425).
+ARG VERSION=0.0.0-dev
 
 # Copy all project files first (preserving relative paths, needed since Api's project references must resolve
 # during restore) so the restore layer is cached independently of source-code changes.

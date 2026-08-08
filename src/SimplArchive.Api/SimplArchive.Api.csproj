@@ -1,5 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <PropertyGroup>
+    <!-- The version reported by GET /api (ADR 0512) when nothing stamps one. A release build overrides it with
+         -p:Version=<tag> (the Dockerfile does this from the release tag).
+
+         0.0.0-dev, NOT the SDK's implicit 1.0.0: serverVersion tells the desktop whether it is behind THIS
+         deployment, so an unstamped build reporting 1.0.0 claimed to be ahead of every release that exists —
+         harmless only because looking up a non-existent v1.0.0 release 404s, and not harmless the day a real
+         1.0.0 is tagged. A sentinel that sorts below every release cannot make that mistake, and reads as
+         "unstamped" rather than as a version (issue #425). -->
+    <Version>0.0.0-dev</Version>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- Demo document PDFs the Demo:* seed uploads (ADR 0214 / 0502). Embedded so they ship inside the API
          assembly and work in the container. Regenerate from the .typ sources with Typst. The invoice is

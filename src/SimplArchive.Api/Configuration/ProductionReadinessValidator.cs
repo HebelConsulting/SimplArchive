@@ -9,7 +9,12 @@ public static class ProductionReadinessValidator
     private const string DevBootstrapSecret = "dev-bootstrap-secret";
     private const string DevMinioCredential = "minioadmin";
 
-    public static IReadOnlyList<string> Validate(IConfiguration configuration, IHostEnvironment environment)
+    /// <param name="serverVersion">
+    /// The running build's version; defaults to this assembly's. A PARAMETER rather than a direct read of
+    /// <see cref="ServerBuildInfo.Version"/> so the check is testable: a test assembly is never stamped, so a
+    /// static read would make every "clean production config" case fail for a reason the test is not about.
+    /// </param>
+    public static IReadOnlyList<string> Validate(IConfiguration configuration, IHostEnvironment environment, string? serverVersion = null)
     {
         var violations = new List<string>();
         if (environment.IsDevelopment())
@@ -23,6 +28,15 @@ public static class ProductionReadinessValidator
             || string.IsNullOrWhiteSpace(configuration["OpenIddict:EncryptionCertificatePem"]))
         {
             violations.Add("OpenIddict signing/encryption certificates are not configured — the app would fall back to development certificates. Source them from OpenBao (ADR 0339) or provide the PEMs.");
+        }
+
+        // An unstamped build cannot say which code is running. That makes the desktop's "are you behind this
+        // deployment?" check meaningless (ADR 0512) and makes an incident report ambiguous about what was
+        // deployed — the one question every post-mortem starts with. Same family as the dev-cert refusal below:
+        // the deployment is missing something a production one must have (issue #425).
+        if (string.Equals(serverVersion ?? ServerBuildInfo.Version, ServerBuildInfo.UnstampedVersion, StringComparison.Ordinal))
+        {
+            violations.Add($"This build is unstamped (serverVersion = {ServerBuildInfo.UnstampedVersion}) — build with -p:Version=<tag>, or pass --build-arg VERSION=<tag> to the Dockerfile, so the deployment can say which build it is.");
         }
 
         // Startup migration races across replicas; run migrations as a one-off step (the Helm chart defaults false).
@@ -61,9 +75,9 @@ public static class ProductionReadinessValidator
         return violations;
     }
 
-    public static void ThrowIfNotProductionReady(IConfiguration configuration, IHostEnvironment environment)
+    public static void ThrowIfNotProductionReady(IConfiguration configuration, IHostEnvironment environment, string? serverVersion = null)
     {
-        var violations = Validate(configuration, environment);
+        var violations = Validate(configuration, environment, serverVersion);
         if (violations.Count == 0)
         {
             return;
