@@ -101,10 +101,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty] private bool _indexCollapsed;
     [ObservableProperty] private bool _chatCollapsed;
 
-    private GridLength _treeSaved, _listSaved, _indexSaved, _chatSaved;
+    private GridLength _treeSaved, _listSaved, _chatSaved;
 
     // Default pane proportions (star units) — the reset target and the load-time fallback.
-    private const double DefaultTree = 1.4, DefaultList = 2, DefaultIndex = 1.5, DefaultChat = 2;
+    private const double DefaultTree = 1.4, DefaultList = 2, DefaultChat = 2;
 
     // Repositories contents-list column widths in pixels (ADR "Desktop list-pane resizable columns"): the
     // header and every row bind their cell widths to these, a horizontal scrollbar appears once the total
@@ -166,8 +166,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void ToggleIndex()
     {
-        if (IndexCollapsed) { IndexHeight = _indexSaved; IndexCollapsed = false; }
-        else { _indexSaved = IndexHeight; IndexHeight = new GridLength(0); IndexCollapsed = true; }
+        // Expands to Auto, never to a remembered height — unlike every other pane here. A drag of this pane is a
+        // PEEK (ADR 0550), so there is nothing to remember: restoring a saved height would let one drag survive a
+        // collapse/expand cycle, and (via SaveLayout) the whole session after it. That is the same leak the web
+        // client had through localStorage (issue #413), just by a different route.
+        if (IndexCollapsed) { IndexHeight = GridLength.Auto; IndexCollapsed = false; }
+        else { IndexHeight = new GridLength(0); IndexCollapsed = true; }
         SaveLayout();
     }
 
@@ -186,14 +190,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         _treeSaved = new GridLength(DefaultTree, GridUnitType.Star);
         _listSaved = new GridLength(DefaultList, GridUnitType.Star);
-        _indexSaved = new GridLength(DefaultIndex, GridUnitType.Star);
         _chatSaved = new GridLength(DefaultChat, GridUnitType.Star);
 
         TreeCollapsed = ListCollapsed = IndexCollapsed = ChatCollapsed = false;
 
         TreeWidth = _treeSaved;
         ListWidth = _listSaved;
-        IndexHeight = _indexSaved;
+        IndexHeight = GridLength.Auto; // fits its content — there is no default proportion to restore
         ChatWidth = _chatSaved;
 
         _inboxServerSaved = new GridLength(DefaultInboxServer, GridUnitType.Star);
@@ -221,7 +224,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var settings = LayoutSettingsStore.Load();
         _treeSaved = ParseOrStar(settings.TreeWidth, DefaultTree);
         _listSaved = ParseOrStar(settings.ListWidth, DefaultList);
-        _indexSaved = ParseOrStar(settings.IndexHeight, DefaultIndex);
         _chatSaved = ParseOrStar(settings.ChatWidth, DefaultChat);
 
         TreeCollapsed = settings.TreeCollapsed;
@@ -231,9 +233,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         TreeWidth = TreeCollapsed ? new GridLength(0) : _treeSaved;
         ListWidth = ListCollapsed ? new GridLength(0) : _listSaved;
-        // Auto, not the persisted value: this pane fits its content (ADR 0550), and a stored height would be the
-        // height of whatever happened to be selected when it was last dragged. _indexSaved still serves the
-        // collapse toggle, which needs something to restore TO.
+        // Auto, not a persisted value: this pane fits its content (ADR 0550), and a stored height would be the
+        // height of whatever happened to be selected when it was last dragged. Nothing reads a saved height for
+        // this pane any more — the collapse toggle expands to Auto too.
         IndexHeight = IndexCollapsed ? new GridLength(0) : GridLength.Auto;
         ChatWidth = ChatCollapsed ? new GridLength(0) : _chatSaved;
 
@@ -267,7 +269,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             TreeWidth = (TreeCollapsed ? _treeSaved : TreeWidth).ToString(),
             ListWidth = (ListCollapsed ? _listSaved : ListWidth).ToString(),
-            IndexHeight = (IndexCollapsed ? _indexSaved : IndexHeight).ToString(),
+            // Always "Auto": a peek must not reach the settings file (issue #413). The field stays in the
+            // settings shape so an older file still loads; its value is simply never meaningful now.
+            IndexHeight = GridLength.Auto.ToString(),
             ChatWidth = (ChatCollapsed ? _chatSaved : ChatWidth).ToString(),
             TreeCollapsed = TreeCollapsed,
             ListCollapsed = ListCollapsed,

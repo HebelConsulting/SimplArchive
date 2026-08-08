@@ -12,7 +12,14 @@ const KEY = 'simplarchive.wb-layout';
 // Default pane extents (px along the resize axis) and, per gutter, which pane it resizes and how the
 // pointer maps to a size: 'left' = pointer.x - pane.left, 'right' = pane.right - pointer.x (pane is
 // right-anchored), 'top' = pointer.y - pane.top.
-const DEFAULTS = { tree: 240, list: 300, index: 210, chat: 340 };
+const DEFAULTS = { tree: 240, list: 300, chat: 340 };
+
+// The detail (index) pane deliberately has NO persisted size — it fits its content (ADR 0550). This is only the
+// CAP: how much vertical space it may ever take from the preview, which is the thing the user came to look at.
+// A constant, not state: a drag is a peek and must not be able to raise it (see beginDrag / resetIndexSizing),
+// so there is nothing that could ever change it. A stale `sizes.index` left in storage by an older build is
+// simply never read.
+const INDEX_CAP = 210;
 const MIN = 90;
 const GUTTERS = {
     tree: { pane: 'tree', mode: 'left' },
@@ -79,26 +86,25 @@ function caretGlyph(mode, collapsed) {
 
 // Returns true once wired (or already wired), false if `root` isn't a real element yet — the workbench DOM
 // lives inside <Authorized>, so on a page reload auth may still be resolving when this is first called.
-// Ends a temporary drag of the detail pane, restoring fit-to-content (ADR 0550). Called when the SELECTION
-// changes: that is when the fitted height would move anyway, so it is the moment the override stops meaning
-// anything. A drag therefore survives while you work with the same document — scrolling its fields, editing
-// them — which is when you wanted it.
-// KNOWN BROKEN (verified in a browser): after a real drag and a genuine selection change the pane stays at the
-// dragged height. Fit-content itself works; only this reset does not. The likely cause is that the exported
-// function and the state the gutter mutates are not the same instance in practice — Blazor imports the module
-// per call site, so `liveState` may belong to a different module instance than `attach` populated. Do not trust
-// this until it is fixed and re-verified in a browser; the fit-content default below is unaffected.
-export function resetIndexSizing() {
-    // The LIVE state, not loadState(): the dragged flag is deliberately never written to storage, so a reader
-    // that reloads would always see it unset and this would silently never reset anything.
-    if (!liveState || !liveState.sizes.indexDragged) return;
-    delete liveState.sizes.indexDragged;
-    const el = document.querySelector('[data-pane="index"]');
-    if (el) { el.style.flex = '0 1 auto'; el.style.maxHeight = `${liveState.sizes.index}px`; }
-}
+// A drag of the detail pane is a PEEK (ADR 0550): a transient height that ends at the next SELECTION change —
+// which is when the fitted height would move anyway, so it is the moment the override stops meaning anything.
+// The peek therefore survives while you work with the same document (scrolling its fields, editing them), which
+// is when you wanted it, and leaves NO trace afterwards: it is never written to storage and — the part that was
+// wrong before — it never raises INDEX_CAP either. A drag that permanently changed the pane's ceiling would be
+// a lasting preference the user never asked to set (issue #413).
+let indexPeek = null;
 
-// Set by attach so the exported reset can reach the same state object the gutters mutate.
-let liveState = null;
+// Set by attach so the exported reset can reach the live workbench's applyPane. (An earlier version kept a
+// `liveState` reference here and was suspected of module-instance splitting; that was never the problem —
+// Blazor imports `./wbLayout.js` once and shares it — but routing through applyPane keeps the sizing rules in
+// exactly one place regardless.)
+let activeApplyPane = null;
+
+export function resetIndexSizing() {
+    if (indexPeek === null) return;
+    indexPeek = null;
+    if (activeApplyPane) activeApplyPane('index');
+}
 
 export function attach(root) {
     if (!root || typeof root.querySelector !== 'function') return false;
@@ -108,7 +114,6 @@ export function attach(root) {
     root.__wbLayout = true;
 
     const state = loadState();
-    liveState = state;
     const pane = name => root.querySelector(`[data-pane="${name}"]`);
 
     function applyPane(name) {
@@ -134,12 +139,23 @@ export function attach(root) {
         // one document is wrong for the next one clicked, and persisting it stores noise. The other panes are not
         // like that: a tree or list WIDTH does not depend on the selection, so those stay persisted.
         //
-        // A drag still overrides it (see beginDrag), but only until the selection changes — that is exactly when
-        // the fitted height would move anyway. Capped, because pure fit-content lets a long mask push the preview
-        // down, which is the thing this rule exists to prevent.
-        if (name === 'index' && !state.sizes.indexDragged) {
-            el.style.flex = '0 1 auto';
-            el.style.maxHeight = `${state.sizes.index}px`;
+        // A drag still overrides it (see the peek above), but only until the selection changes — that is exactly
+        // when the fitted height would move anyway. Capped, because pure fit-content lets a long mask push the
+        // preview down, which is the thing this rule exists to prevent.
+        if (name === 'index') {
+            if (indexPeek !== null) {
+                el.style.maxHeight = ''; // a peek is allowed past the cap — that is the point of asking for it
+                el.style.flex = `0 0 ${indexPeek}px`;
+                return;
+            }
+
+            // `0 0 auto`, NOT `0 1 auto`: flex-shrink let the preview squeeze this pane below its own content,
+            // producing a scrollbar while the cap still had room (measured: 253px of content shown in 225px,
+            // cap 380px). A scrollbar here means the user must scroll to discover there was nothing more to
+            // see, which is precisely what ADR 0550 forbids. Growth is bounded by max-height, so refusing to
+            // shrink cannot cost the preview more than the cap.
+            el.style.flex = '0 0 auto';
+            el.style.maxHeight = `${INDEX_CAP}px`;
             return;
         }
 
@@ -170,13 +186,16 @@ export function attach(root) {
             const limit = vertical ? window.innerHeight * 0.7 : window.innerWidth * 0.7;
 
             const onMove = ev => {
-                let size = cfg.mode === 'left' ? ev.clientX - rect.left
+                const raw = cfg.mode === 'left' ? ev.clientX - rect.left
                     : cfg.mode === 'right' ? rect.right - ev.clientX
                         : ev.clientY - rect.top;
-                state.sizes[cfg.pane] = Math.round(Math.max(MIN, Math.min(size, limit)));
-                // Dragging the detail pane overrides its fit-to-content height — but TEMPORARILY, and this flag
-                // is deliberately not saved: see applyPane and resetIndexSizing (ADR 0550).
-                if (cfg.pane === 'index') state.sizes.indexDragged = true;
+                const size = Math.round(Math.max(MIN, Math.min(raw, limit)));
+                if (cfg.pane === 'index') {
+                    // A peek, held apart from `state` so it can reach neither storage nor the cap (ADR 0550).
+                    indexPeek = size;
+                } else {
+                    state.sizes[cfg.pane] = size;
+                }
                 applyPane(cfg.pane);
             };
             const onUp = () => {
@@ -184,9 +203,9 @@ export function attach(root) {
                 document.removeEventListener('mouseup', onUp);
                 document.body.style.userSelect = '';
                 document.body.style.cursor = '';
-                // The dragged flag never reaches storage: a fresh load starts fitted again, which is the point.
-                const { indexDragged, ...persisted } = state.sizes;
-                saveState({ ...state, sizes: persisted });
+                // Safe to save wholesale: an index drag never touches `state`, so a peek cannot be persisted
+                // here — which is what makes a fresh load, and the next selection, start fitted again.
+                saveState(state);
             };
             document.body.style.userSelect = 'none';
             document.body.style.cursor = vertical ? 'row-resize' : 'col-resize';
@@ -206,6 +225,9 @@ export function attach(root) {
     }
 
     // Restore persisted sizes/collapsed state on attach, and register this workbench as the resize target.
+    // A fresh workbench (a tab switch recreates the DOM) starts with no peek outstanding.
+    indexPeek = null;
+    activeApplyPane = applyPane;
     activeReapply = () => {
         for (const name of Object.keys(GUTTERS)) {
             applyPane(name);

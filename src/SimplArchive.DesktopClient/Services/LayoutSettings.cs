@@ -46,12 +46,18 @@ public static class LayoutSettingsStore
         "SimplArchive",
         "desktop-layout.json");
 
+    // Overridable so a test can point at a throwaway file instead of the real app-data path (mirrors
+    // ServerProfileStore). Without it a layout test writes over the developer's own saved layout.
+    public static string? PathOverride { get; set; }
+
+    private static string Path_ => PathOverride ?? FilePath;
+
     public static LayoutSettings Load()
     {
         try
         {
-            return File.Exists(FilePath)
-                ? JsonSerializer.Deserialize<LayoutSettings>(File.ReadAllText(FilePath)) ?? new LayoutSettings()
+            return File.Exists(Path_)
+                ? JsonSerializer.Deserialize<LayoutSettings>(File.ReadAllText(Path_)) ?? new LayoutSettings()
                 : new LayoutSettings();
         }
         catch
@@ -64,8 +70,8 @@ public static class LayoutSettingsStore
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }));
+            Directory.CreateDirectory(Path.GetDirectoryName(Path_)!);
+            File.WriteAllText(Path_, JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }));
         }
         catch
         {
