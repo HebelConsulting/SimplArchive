@@ -102,7 +102,13 @@ public sealed class NodeViewModel
     public bool IsFolder => !HasVersions;
 
     // Material Design Icons glyph name for the row. References get a shortcut variant; archive rows their own.
-    public string IconValue => (IsArchiveBack, IsArchiveEntry) switch
+    //
+    // An EMPTY folder takes the outline variant, exactly as in the tree (ADR 0547): the same object must not look
+    // like two different things depending on which pane you are seeing it in. The tree used to own this rule
+    // alone, which is how a folder came to read as empty on the left and full in the middle.
+    public string IconValue => IsEmptyFolder ? $"{BaseIconValue}-outline" : BaseIconValue;
+
+    private string BaseIconValue => (IsArchiveBack, IsArchiveEntry) switch
     {
         (true, _) => "mdi-arrow-up-left",
         (_, true) => "mdi-file-outline",
@@ -114,4 +120,14 @@ public sealed class NodeViewModel
             (false, false) => "mdi-file-document-outline",
         },
     };
+
+    // A real folder with nothing inside. Archive rows are excluded — they are zip contents, not folders whose
+    // emptiness anybody can act on.
+    public bool IsEmptyFolder => IsFolder && !HasChildren && !IsArchiveBack && !IsArchiveEntry;
+
+    // Which of App.axaml's glyph brushes paints this row, keyed the same way the tree keys it. A DOCUMENT keeps
+    // the list's own accent — gold means "a place documents live", and a document is not one.
+    public bool UsesFolderBrush => IsFolder && !IsEmptyFolder && !IsArchiveBack && !IsArchiveEntry;
+
+    public bool UsesEmptyFolderBrush => IsEmptyFolder;
 }

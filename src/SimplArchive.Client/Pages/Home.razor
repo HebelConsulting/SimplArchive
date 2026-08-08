@@ -67,6 +67,15 @@
     .wb-tree-folder > .mud-treeview-item > .mud-treeview-item-content > .mud-treeview-item-icon > .mud-icon-root {
         color: #d9a400;
     }
+    /* The detail pane and the contents list draw the SAME object, so they use the same glyph colours as the tree
+       (ADR 0547): a folder looks like a folder, and an empty one like an empty one, in every pane. The earlier
+       decision — colour only in the tree, filled glyphs everywhere else — made one object look like three. */
+    .wb-detail-head.wb-tree-folder > .wb-detail-glyph, .wb-list-row .wb-glyph-folder { color: #d9a400; }
+    .wb-detail-head.wb-tree-empty > .wb-detail-glyph, .wb-list-row .wb-glyph-empty {
+        color: #d9a400;
+        color: color-mix(in srgb, #d9a400 55%, var(--mud-palette-surface));
+    }
+    .wb-detail-head.wb-tree-muted > .wb-detail-glyph { color: var(--mud-palette-text-secondary); }
     .wb-tree-empty > .mud-treeview-item > .mud-treeview-item-content > .mud-treeview-item-icon > .mud-icon-root {
         color: #d9a400;
         color: color-mix(in srgb, #d9a400 55%, var(--mud-palette-surface));
@@ -76,7 +85,16 @@
     }
     .wb-list { flex: 0 0 300px; container-type: inline-size; }
     .wb-detail { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+    /* NOTE (ADR 0550): this pane should size to its CONTENT for short detail sets — the preview is what the user
+       came to look at, and a scrollbar on a four-row pane means the pane is claiming space it is not using. It
+       does NOT yet: wbLayout.js applies an inline flex basis in pixels here (persisted, user-resizable), and an
+       inline style beats this rule. Fixing it belongs in wbLayout.js — default to fit-content and let a manual
+       drag take over — not in a stylesheet the script overrides. */
     .wb-index { flex: 0 0 280px; overflow: auto; padding: 10px 14px; }
+    /* The pane's own header stays put while the fields scroll, so the commit controls a transition put there
+       cannot scroll out of reach (ADR 0550). */
+    .wb-detail-head { position: sticky; top: -10px; z-index: 2; background: var(--mud-palette-surface);
+        padding: 4px 0 6px; margin-top: -4px; }
     /* System-fields grid + editable-mask form (ADRs 0273/0278). */
     .wb-sysfields { width: 100%; border-collapse: collapse; margin-top: 6px; }
     .wb-sysfields td { padding: 2px 6px 2px 0; vertical-align: middle; font-size: 0.82rem; }
@@ -612,7 +630,8 @@
                                 <div class="wb-list-row wb-cols @(_bulkIds.Contains(node.Id) || ReferenceEquals(node, _commentTarget) ? "wb-list-row-selected" : "")"
                                      @onclick="(e) => OnRowClickAsync(node, e)" @ondblclick="() => OnRowDoubleClickAsync(node)" @attributes="attrs">
                                     <span class="wb-ccell wb-cname" title="@node.DisplayName">
-                                        <MudIcon Icon="@NodeIcon(node)" Size="Size.Small" />
+                                        <MudIcon Icon="@TreeIcon(node)" Size="Size.Small"
+                                                 Class="@(node.IsFolder ? (node.IsEmptyFolder ? "wb-glyph-empty" : "wb-glyph-folder") : "")" />
                                         <span style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@node.DisplayName</span>
                                         @if (node.OnLegalHold)
                                         {
@@ -700,15 +719,49 @@
                                 <button type="button" class="wb-ptab-btn @(_phoneDetailTab == "comments" ? "wb-ptab-on" : "")" @onclick='() => SetPhoneTab("comments")'>@Strings.Get("PhoneTabComments")</button>
                             </div>
                         }
-                        <div class="wb-pane wb-index" data-pane="index">
+                        @* Esc cancels the edit (ADR 0550). tabindex makes the pane focusable so it can receive the
+                           key at all.
+
+                           NO preventDefault, and therefore NO Ctrl/Cmd+S on the web. The attribute is evaluated per
+                           RENDER for every key, not per keystroke — so binding it to _isEditing prevented the
+                           default on EVERY key while editing, and typing into any field in this pane produced
+                           nothing at all. It broke tag entry outright, which the UI suite caught.
+                           Suppressing the browser's own Save dialog needs a document-level JS handler (the pattern
+                           wbLayout.js uses); until that exists the web keeps Esc, which needs no preventDefault,
+                           and ⌘S stays a desktop affordance where it works properly. *@
+                        <div class="wb-pane wb-index" data-pane="index" tabindex="-1"
+                             @onkeydown="OnDetailKeyDown">
                             @if (_detailNode is null)
                             {
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("SelectDocDetail")</MudText>
                             }
                             else
                             {
-                                <div style="display:flex; align-items:center; gap:4px;">
+                                <div class="wb-detail-head @(_detailNode?.TreeGlyphClass) @(_isEditing ? "wb-editing" : "")" style="display:flex; align-items:center; gap:4px;">
+                                    @* The SAME glyph the tree draws for this object (ADR 0547): a folder looks like a
+                                       folder — and an empty one like an empty one — wherever it appears, rather than
+                                       changing style depending on which pane you are looking at. *@
+                                    @if (_detailNode is { } glyphNode)
+                                    {
+                                        <MudIcon Icon="@TreeIcon(glyphNode)" Size="Size.Small" Class="wb-detail-glyph" />
+                                    }
                                     <MudText Typo="Typo.subtitle1" Style="flex:1 1 auto; min-width:0;">@_sysName</MudText>
+                                    @* While EDITING, the actions that can do nothing disappear and the commit controls
+                                       take their slots (ADR 0550) — the row does not reflow under the cursor that just
+                                       clicked the pencil, and Save/Cancel are where that pencil was. *@
+                                    @if (_isEditing)
+                                    {
+                                        <MudTooltip Text="@Strings.Get("Save")">
+                                            <MudIconButton Size="Size.Small" aria-label="@Strings.Get("Save")" Color="Color.Primary"
+                                                           Icon="@Icons.Material.Filled.Save" OnClick="SaveDetailAsync" Disabled="_detailBusy" />
+                                        </MudTooltip>
+                                        <MudTooltip Text="@Strings.Get("Cancel")">
+                                            <MudIconButton Size="Size.Small" aria-label="@Strings.Get("Cancel")"
+                                                           Icon="@Icons.Material.Filled.Close" OnClick="CancelEdit" Disabled="_detailBusy" />
+                                        </MudTooltip>
+                                    }
+                                    else
+                                    {
                                     @* Follow / unfollow this document (ADR "Document subscriptions"). *@
                                     <MudTooltip Text="@(_detailSubscribed ? Strings.Get("UnfollowDoc") : Strings.Get("FollowDoc"))">
                                         <MudIconButton Size="Size.Small" aria-label="Follow"
@@ -745,6 +798,7 @@
                                             <MudIconButton Size="Size.Small" aria-label="@Strings.Get("Edit")" Icon="@Icons.Material.Filled.Edit"
                                                            OnClick="BeginEditAsync" Disabled="_detailBusy" />
                                         </MudTooltip>
+                                    }
                                     }
                                 </div>
 
@@ -950,13 +1004,11 @@
                                     }
                                 }
 
+                                @* Save/Cancel are NOT here any more — they live in the header row, where the pencil
+                                   that started the edit is (ADR 0550). Compare versions stays: it is about the
+                                   document's history, not about editing it. *@
                                 <div class="wb-detail-actions">
-                                    @if (_isEditing)
-                                    {
-                                        <MudButton Size="Size.Small" OnClick="CancelEdit" Disabled="_detailBusy">@Strings.Get("Cancel")</MudButton>
-                                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveDetailAsync" Disabled="_detailBusy">@Strings.Get("Save")</MudButton>
-                                    }
-                                    else if (_detailVersionCount >= 2)
+                                    @if (!_isEditing && _detailVersionCount >= 2)
                                     {
                                         @* Edit moved to the header (issue #407); Compare versions stays, being about the
                                            document's history rather than about editing it. *@
@@ -5642,6 +5694,17 @@
     private async Task LoadDetailForAsync(BrowseNode item)
     {
         _detailNode = item;
+
+        // A drag of the detail pane lasts only until the SELECTION changes (ADR 0550) — which is now, and is
+        // exactly when the fitted height would move anyway. Wrapped like every other interop here: a stale
+        // cached module must degrade quietly rather than take the pane down with it (ADR 0500).
+        if (_layoutModule is not null)
+        {
+            try { await _layoutModule.InvokeVoidAsync("resetIndexSizing"); }
+            catch (JSException) { }
+            catch (JSDisconnectedException) { }
+        }
+
         // Set unconditionally, unlike the version-derived fields: a folder has a name to show but no version to
         // derive one from, which is exactly why it used to fall out of this pane entirely.
         _sysName = _origName = item.Name;
@@ -5815,7 +5878,10 @@
             ["Groups"] = groups,
         };
 
-        var dialog = await DialogService.ShowAsync<Dialogs.MyExternalLinksDialog>(Strings.Get("ExtLinkMyLinks"), parameters);
+        // Wide enough for four data columns plus three row actions (issue #410). Without this the DIALOG is the
+        // clipping box — the content can be as wide as it likes and Revoke still falls off its right edge.
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<Dialogs.MyExternalLinksDialog>(Strings.Get("ExtLinkMyLinks"), parameters, options);
 
         // "Go to" closes the dialog and hands back a document: navigating belongs to the workbench, which owns the
         // tree and list panes, not to a dialog that cannot see them.
@@ -6100,6 +6166,17 @@
     }
 
     private void CancelEdit() => _isEditing = false;
+
+    // Esc while editing (ADR 0550); ignored otherwise, so the pane keeps its ordinary behaviour. Synchronous and
+    // WITHOUT preventDefault: Escape has no default worth suppressing, and suppressing keys wholesale is what
+    // broke text entry in this pane.
+    private void OnDetailKeyDown(KeyboardEventArgs e)
+    {
+        if (_isEditing && e.Key == "Escape")
+        {
+            CancelEdit();
+        }
+    }
 
     // Persists only the fields that changed; a failure keeps the pane in edit mode and reports it (ADR 0278).
     private async Task SaveDetailAsync()

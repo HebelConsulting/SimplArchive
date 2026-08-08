@@ -69,6 +69,14 @@ public static class ExternalLinkPage
 
     // $$""" so the CSS keeps its own braces: with two $ the interpolation delimiter becomes {{ }}, which leaves
     // every { in the stylesheet as itself instead of a doubled escape nobody can read.
+    // "Shared via {0}" with the product name as the link. The TEMPLATE is encoded and the anchor spliced in
+    // afterwards, so a translator's text can never inject markup while the one bit of HTML here stays ours —
+    // and {0} keeps the word order each language actually wants.
+    private static string FooterLine() =>
+        string.Format(
+            HtmlEncoder.Default.Encode(Strings.Get("ExtLinkPageFooter")),
+            "<a href=\"https://www.simplarchive.dev\">SimplArchive</a>");
+
     private static string Document(string title, string body) =>
         $$"""
         <!DOCTYPE html>
@@ -94,6 +102,10 @@ public static class ExternalLinkPage
                    border: 1px solid #d3d3dc; color: #1c1c21; font-size: .95rem; }
             .btn.primary { background: #5b4ee5; border-color: #5b4ee5; color: #fff; }
             footer { margin-top: 2rem; font-size: .8rem; color: #8a8a96; }
+            footer a { color: inherit; }
+            /* Smaller and quieter than the line above it: the address must not compete with the document name
+               and the two buttons, which are what the recipient came for (issue #411). */
+            address { margin-top: .75rem; font-style: normal; font-size: .72rem; line-height: 1.5; color: #9a9aa4; }
             @media (prefers-color-scheme: dark) {
               body { background: #16161a; color: #ececf1; }
               main { background: #1f1f25; box-shadow: none; }
@@ -106,7 +118,22 @@ public static class ExternalLinkPage
         <body>
           <main>
         {{body}}
-            <footer>{{HtmlEncoder.Default.Encode(Strings.Get("ExtLinkPageFooter"))}}</footer>
+            <footer>
+              <!-- The product name links out (issue #411): this page is the one surface in the system seen by
+                   people with NO account, and a recipient who has never heard of SimplArchive otherwise has no
+                   way to find out what it is. Safe to link because the page sets referrer: no-referrer, so the
+                   token-bearing URL is not handed to the site it points at. -->
+              {{FooterLine()}}
+              <!-- Deliberately NOT localised: a postal address does not translate. -->
+              <address>
+                &copy; 2026<br>
+                Hebel Consulting GmbH<br>
+                Schweighofplatz 7<br>
+                6010 Kriens<br>
+                Switzerland<br>
+                <a href="mailto:support@simplarchive.dev">support@simplarchive.dev</a>
+              </address>
+            </footer>
           </main>
         </body>
         </html>

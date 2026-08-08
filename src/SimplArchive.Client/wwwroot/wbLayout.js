@@ -79,6 +79,27 @@ function caretGlyph(mode, collapsed) {
 
 // Returns true once wired (or already wired), false if `root` isn't a real element yet — the workbench DOM
 // lives inside <Authorized>, so on a page reload auth may still be resolving when this is first called.
+// Ends a temporary drag of the detail pane, restoring fit-to-content (ADR 0550). Called when the SELECTION
+// changes: that is when the fitted height would move anyway, so it is the moment the override stops meaning
+// anything. A drag therefore survives while you work with the same document — scrolling its fields, editing
+// them — which is when you wanted it.
+// KNOWN BROKEN (verified in a browser): after a real drag and a genuine selection change the pane stays at the
+// dragged height. Fit-content itself works; only this reset does not. The likely cause is that the exported
+// function and the state the gutter mutates are not the same instance in practice — Blazor imports the module
+// per call site, so `liveState` may belong to a different module instance than `attach` populated. Do not trust
+// this until it is fixed and re-verified in a browser; the fit-content default below is unaffected.
+export function resetIndexSizing() {
+    // The LIVE state, not loadState(): the dragged flag is deliberately never written to storage, so a reader
+    // that reloads would always see it unset and this would silently never reset anything.
+    if (!liveState || !liveState.sizes.indexDragged) return;
+    delete liveState.sizes.indexDragged;
+    const el = document.querySelector('[data-pane="index"]');
+    if (el) { el.style.flex = '0 1 auto'; el.style.maxHeight = `${liveState.sizes.index}px`; }
+}
+
+// Set by attach so the exported reset can reach the same state object the gutters mutate.
+let liveState = null;
+
 export function attach(root) {
     if (!root || typeof root.querySelector !== 'function') return false;
     // Idempotent per element instance: Blazor recreates the container when leaving/returning to the tab,
@@ -87,6 +108,7 @@ export function attach(root) {
     root.__wbLayout = true;
 
     const state = loadState();
+    liveState = state;
     const pane = name => root.querySelector(`[data-pane="${name}"]`);
 
     function applyPane(name) {
@@ -100,8 +122,29 @@ export function attach(root) {
             return;
         }
         const collapsed = state.collapsed[name];
-        el.style.flex = collapsed ? '0 0 0px' : `0 0 ${state.sizes[name]}px`;
-        if (collapsed) el.dataset.collapsed = '1'; else delete el.dataset.collapsed;
+        if (collapsed) {
+            el.style.flex = '0 0 0px';
+            el.dataset.collapsed = '1';
+            return;
+        }
+        delete el.dataset.collapsed;
+
+        // The index (detail) pane FITS ITS CONTENT rather than a remembered height (ADR 0550). Its correct height
+        // is decided by what is selected — four rows for a folder, many for a long mask — so a height dragged for
+        // one document is wrong for the next one clicked, and persisting it stores noise. The other panes are not
+        // like that: a tree or list WIDTH does not depend on the selection, so those stay persisted.
+        //
+        // A drag still overrides it (see beginDrag), but only until the selection changes — that is exactly when
+        // the fitted height would move anyway. Capped, because pure fit-content lets a long mask push the preview
+        // down, which is the thing this rule exists to prevent.
+        if (name === 'index' && !state.sizes.indexDragged) {
+            el.style.flex = '0 1 auto';
+            el.style.maxHeight = `${state.sizes.index}px`;
+            return;
+        }
+
+        el.style.maxHeight = '';
+        el.style.flex = `0 0 ${state.sizes[name]}px`;
     }
 
     function updateCaret(name) {
@@ -131,6 +174,9 @@ export function attach(root) {
                     : cfg.mode === 'right' ? rect.right - ev.clientX
                         : ev.clientY - rect.top;
                 state.sizes[cfg.pane] = Math.round(Math.max(MIN, Math.min(size, limit)));
+                // Dragging the detail pane overrides its fit-to-content height — but TEMPORARILY, and this flag
+                // is deliberately not saved: see applyPane and resetIndexSizing (ADR 0550).
+                if (cfg.pane === 'index') state.sizes.indexDragged = true;
                 applyPane(cfg.pane);
             };
             const onUp = () => {
@@ -138,7 +184,9 @@ export function attach(root) {
                 document.removeEventListener('mouseup', onUp);
                 document.body.style.userSelect = '';
                 document.body.style.cursor = '';
-                saveState(state);
+                // The dragged flag never reaches storage: a fresh load starts fitted again, which is the point.
+                const { indexDragged, ...persisted } = state.sizes;
+                saveState({ ...state, sizes: persisted });
             };
             document.body.style.userSelect = 'none';
             document.body.style.cursor = vertical ? 'row-resize' : 'col-resize';

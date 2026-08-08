@@ -1,5 +1,6 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
              x:Class="SimplArchive.DesktopClient.App"
              RequestedThemeVariant="Default">
     <Application.Resources>
@@ -41,5 +42,22 @@
     </Application.Resources>
     <Application.Styles>
         <FluentTheme />
+        <!-- The folder-glyph colours, application-wide so every pane that draws a folder uses the SAME rules
+             (ADR 0547): the tree, the contents list and the detail-pane header. Defined once here rather than
+             inside one view's styles, because "a folder looks like a folder wherever it appears" is precisely
+             what a per-view definition cannot guarantee.
+
+             DynamicResource, not a brush a view model resolved: the colour has to come from the ACTIVE theme
+             dictionary, or it keeps the startup theme after the OS switches. Avalonia cannot bind a resource
+             KEY, hence one class per brush. -->
+        <Style Selector="i|Icon.wbFolder">
+            <Setter Property="Foreground" Value="{DynamicResource WbFolder}" />
+        </Style>
+        <Style Selector="i|Icon.wbFolderEmpty">
+            <Setter Property="Foreground" Value="{DynamicResource WbFolderEmpty}" />
+        </Style>
+        <Style Selector="i|Icon.wbMutedGlyph">
+            <Setter Property="Foreground" Value="{DynamicResource WbMuted}" />
+        </Style>
     </Application.Styles>
 </Application>

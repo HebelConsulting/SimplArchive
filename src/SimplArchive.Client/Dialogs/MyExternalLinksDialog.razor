@@ -10,7 +10,13 @@
    someone who leaves drops out of this view while their links keep working. *@
 <MudDialog>
     <DialogContent>
-        <div style="min-width: 620px;">
+        @* Wide enough for four data columns plus THREE row actions (issue #410): the row gained Go to and Show
+           without the dialog growing, and Revoke — the one action somebody reaches for under time pressure, after
+           a link has leaked — was the one pushed off the edge. The document name truncates instead, being the
+           most compressible column: the row is identified by it, but rarely needs all of it. *@
+        @* Fills the dialog rather than demanding a width from it (issue #410): the dialog is the clipping box, so
+           content that insists on being wider simply overflows and the last column — Revoke — is what is lost. *@
+        <div style="width:100%;">
             @if (_canViewOthers)
             {
                 <div style="display:flex; gap:8px;" class="mb-3">
@@ -40,7 +46,7 @@
             }
             else
             {
-                <MudSimpleTable Dense="true" Hover="true">
+                <MudSimpleTable Dense="true" Hover="true" Style="width:100%; table-layout:fixed;">
                     <thead>
                         <tr>
                             <th>@Strings.Get("ExtLinkDocument")</th>
@@ -54,11 +60,12 @@
                         @foreach (var link in _links)
                         {
                             <tr>
-                                <td>@link.DocumentName</td>
+                                <td style="max-width:20rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                                    title="@link.DocumentName">@link.DocumentName</td>
                                 <td>@link.ExpiresAt.ToLocalTime().ToString("g")</td>
                                 <td>@link.AccessCount@(link.MaxAccesses is { } max ? $" / {max}" : "")</td>
                                 <td>@link.CreatedByName</td>
-                                <td style="white-space:nowrap;">
+                                <td style="white-space:nowrap; width:1%;">
                                     @* This list spans documents, so the row is often the reader's only handle on
                                        where the thing actually lives — "Go to" is what turns it back into one. *@
                                     <MudTooltip Text="@Strings.Get("ExtLinkGoToTooltip")">
@@ -69,8 +76,12 @@
                                         <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
                                                        aria-label="@Strings.Get("ExtLinkShow")" OnClick="@(() => ShowAsync(link))" />
                                     </MudTooltip>
-                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
-                                                   aria-label="@Strings.Get("ExtLinkRevoke")" OnClick="@(() => RevokeAsync(link))" />
+                                    @* Colour-coded because it is the only destructive one of the three, and the
+                                       one that matters most when it matters at all (issue #410). *@
+                                    <MudTooltip Text="@Strings.Get("ExtLinkRevoke")">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                       aria-label="@Strings.Get("ExtLinkRevoke")" OnClick="@(() => RevokeAsync(link))" />
+                                    </MudTooltip>
                                 </td>
                             </tr>
                         }

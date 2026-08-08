@@ -2,12 +2,16 @@ name: CI
 
 # ADR 0378 "Continuous integration (GitHub Actions)". Two tiers, both on GitHub-hosted Ubuntu runners:
 #  - fast: build + unit + integration (SQLite in-memory, no Docker) — gates every PR.
-#  - heavy: container E2E (Testcontainers) + browser/desktop UI E2E (Playwright). The GitHub-hosted Ubuntu image
+#  - heavy: container E2E (Testcontainers) + browser/desktop UI E2E (Playwright). GATED on ordinary PRs — see the
+#    `if:` on the job. It runs on every push to `main` and on any PR labelled `e2e`. The GitHub-hosted Ubuntu image
 #    ships Docker and Google Chrome pre-installed, which the Testcontainers fleet + Playwright ("chrome" channel)
 #    need. Runs natively on the host (no Docker-Desktop VM slicing RAM), so the ~7 GB fits the memory-optimized
 #    fleet (Tika/OpenSearch heap-capped; SeaweedFS -volume.max raised).
 on:
+  # `labeled` is NOT among pull_request's default types (opened/synchronize/reopened), so without it the `e2e`
+  # label that un-gates the heavy tier would never trigger anything — the escape hatch would silently not exist.
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
 
@@ -121,6 +125,17 @@ jobs:
   heavy:
     name: E2E (${{ matrix.name }})
     needs: fast # don't spend heavy-tier minutes if the build/unit/integration tier is already red
+    # GATED while the project has no paying customer: six Docker+Chrome jobs on every push is insurance worth
+    # less than it costs when a defect costs embarrassment rather than money. It still runs unconditionally where
+    # it earns its keep — every push to `main`, and any PR labelled `e2e` (add the label to demand a full run
+    # before a release or on anything that touches the clients broadly).
+    #
+    # The trade only holds if the FULL local suite is run before pushing. A filtered local run is what let
+    # DesktopExternalLinksTests reach CI red in the first place, and that is precisely the class of failure this
+    # tier exists to catch.
+    if: >-
+      github.event_name == 'push'
+      || contains(github.event.pull_request.labels.*.name, 'e2e')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

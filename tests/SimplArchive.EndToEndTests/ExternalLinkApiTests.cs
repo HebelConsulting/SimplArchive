@@ -253,6 +253,11 @@ public class ExternalLinkApiTests
         Assert.DoesNotContain("X-Amz-", html, StringComparison.Ordinal);
         Assert.Contains("/content", html, StringComparison.Ordinal);
 
+        // The recipient has no account and may never have heard of SimplArchive, so the footer names it, links
+        // it, and says who is behind it (issue #411).
+        Assert.Contains("https://www.simplarchive.dev", html, StringComparison.Ordinal);
+        Assert.Contains("Hebel Consulting GmbH", html, StringComparison.Ordinal);
+
         // Asking for JSON explicitly still gets the resource, so an integration is not forced to scrape markup.
         var json = await GetJson(anonymous, path);
         Assert.False(string.IsNullOrWhiteSpace(json.GetProperty("downloadUrl").GetString()));

@@ -231,7 +231,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         TreeWidth = TreeCollapsed ? new GridLength(0) : _treeSaved;
         ListWidth = ListCollapsed ? new GridLength(0) : _listSaved;
-        IndexHeight = IndexCollapsed ? new GridLength(0) : _indexSaved;
+        // Auto, not the persisted value: this pane fits its content (ADR 0550), and a stored height would be the
+        // height of whatever happened to be selected when it was last dragged. _indexSaved still serves the
+        // collapse toggle, which needs something to restore TO.
+        IndexHeight = IndexCollapsed ? new GridLength(0) : GridLength.Auto;
         ChatWidth = ChatCollapsed ? new GridLength(0) : _chatSaved;
 
         _inboxServerSaved = ParseOrStar(settings.InboxServerHeight, DefaultInboxServer);
@@ -1182,6 +1185,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // The pane describes a SUBJECT — a selected row, else the open folder — so a folder gets the document's pane
     // wherever you reached it from (issue #408). ShowFolderDetail, which used to gate a pane of its own, is gone.
     public bool DetailIsFolder => _detailIsFolder;
+
+    // The glyph and colour the TREE would give this same object (ADR 0547), so a folder looks like a folder — and
+    // an empty one like an empty one — in the detail pane too, rather than changing style per pane. Reuses
+    // TreeNodeViewModel's rules rather than restating them, so the two cannot drift.
+    public string DetailGlyph => _detailGlyphNode?.IconValue ?? "mdi-file-document-outline";
+
+    public string DetailGlyphBrushKey => _detailGlyphNode?.IconBrushKey ?? "WbMuted";
+
+    private TreeNodeViewModel? _detailGlyphNode;
 
     private bool _detailIsFolder;
 
@@ -3552,9 +3564,23 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
+        // The detail pane fits its CONTENT (ADR 0550): its right height is decided by what is selected — a few
+        // rows for a folder, many for a long mask — so a height dragged for one document is wrong for the next.
+        // A drag overrides it only until the selection changes, which is now; it is never persisted.
+        if (!IndexCollapsed)
+        {
+            IndexHeight = GridLength.Auto;
+        }
+
         _selectedDocumentId = document.Id;
         _detailIsFolder = document.IsFolder;
+        // A stand-in node purely to borrow the tree's glyph rules — hasChildren drives the empty-folder variant.
+        _detailGlyphNode = document.IsFolder
+            ? new TreeNodeViewModel(document.Id, document.Name, false, null, hasChildren: document.HasChildren)
+            : null;
         OnPropertyChanged(nameof(DetailIsFolder));
+        OnPropertyChanged(nameof(DetailGlyph));
+        OnPropertyChanged(nameof(DetailGlyphBrushKey));
         DetailTitle = document.Name;
         IndexFields.Clear();
         Comments.Clear();
@@ -5329,7 +5355,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private async Task SaveDetailAsync()
     {
-        if (_api is null || _selectedDocumentId is not { } documentId)
+        // IsEditing guards the KEYBOARD path (ADR 0550): Ctrl/Cmd+S is bound window-wide, so without this a
+        // save would fire while the pane is merely displaying a document.
+        if (_api is null || !IsEditing || _selectedDocumentId is not { } documentId)
         {
             return;
         }
@@ -5471,6 +5499,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private async Task CancelEditAsync()
     {
+        // Esc is bound window-wide and also exits the preview full-screen (ADR 0550), so this must do nothing
+        // unless the pane is actually editing — the two states never coexist, and each command ignores the one
+        // it does not own.
+        if (!IsEditing)
+        {
+            return;
+        }
+
         IsEditing = false;
 
         // Restore the staged system fields to their loaded values.

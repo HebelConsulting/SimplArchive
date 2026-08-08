@@ -1831,7 +1831,7 @@
     <value>Potrebbe essere scaduto, aver raggiunto il limite di accessi o essere stato revocato. Chiedi un nuovo link a chi lo ha condiviso.</value>
   </data>
   <data name="ExtLinkPageFooter" xml:space="preserve">
-    <value>Condiviso tramite SimplArchive</value>
+    <value>Condiviso tramite {0}</value>
   </data>
   <data name="ExtLinkGoTo" xml:space="preserve">
     <value>Vai a</value>

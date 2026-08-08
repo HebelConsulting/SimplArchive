@@ -15,6 +15,13 @@
     <Window.KeyBindings>
         <!-- Esc exits the preview full-screen (no-op otherwise). See ADR "Desktop preview full-screen toggle". -->
         <KeyBinding Gesture="Escape" Command="{Binding ExitPreviewFullscreenCommand}" />
+        <!-- Esc cancels an edit, Ctrl/Cmd+S saves it (ADR 0550) — no visual cost, and they serve the person deep
+             in a long field list. Both commands no-op unless the pane is editing, so they do not shadow anything.
+             Esc is bound twice on purpose: the two commands are mutually exclusive in practice (you cannot be in
+             a full-screen preview and editing the pane), and each ignores the state it does not own. -->
+        <KeyBinding Gesture="Escape" Command="{Binding CancelEditCommand}" />
+        <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveDetailCommand}" />
+        <KeyBinding Gesture="Cmd+S" Command="{Binding SaveDetailCommand}" />
     </Window.KeyBindings>
 
     <DockPanel LastChildFill="True">
@@ -276,20 +283,9 @@
                                 <Style Selector="TreeViewItem">
                                     <Setter Property="IsExpanded" Value="{ReflectionBinding IsExpanded, Mode=TwoWay}" />
                                 </Style>
-                                <!-- The glyph's colour comes from the ACTIVE theme dictionary (ADR "Folder icon
-                                     scheme"), so it must be a DynamicResource resolved in the view — a brush the
-                                     view model resolved once would keep the startup theme after the OS switched.
-                                     Avalonia can't bind a resource key, hence one class per brush; the view
-                                     model's three flags are mutually exclusive. -->
-                                <Style Selector="i|Icon.wbFolder">
-                                    <Setter Property="Foreground" Value="{DynamicResource WbFolder}" />
-                                </Style>
-                                <Style Selector="i|Icon.wbFolderEmpty">
-                                    <Setter Property="Foreground" Value="{DynamicResource WbFolderEmpty}" />
-                                </Style>
-                                <Style Selector="i|Icon.wbMutedGlyph">
-                                    <Setter Property="Foreground" Value="{DynamicResource WbMuted}" />
-                                </Style>
+                                <!-- The folder-glyph classes are APPLICATION-wide (App.axaml), not defined here:
+                                     the tree, the contents list and the detail pane draw the same object and must
+                                     use the same rules (ADR 0547). -->
                             </TreeView.Styles>
                             <TreeView.DataTemplates>
                                 <TreeDataTemplate DataType="vm:TreeNodeViewModel" ItemsSource="{Binding Children}">
@@ -424,7 +420,12 @@
                                 <DataTemplate x:DataType="vm:NodeViewModel">
                                     <StackPanel Orientation="Horizontal">
                                         <Grid Width="{Binding $parent[ListBox].DataContext.ColNameWidth}" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
-                                            <i:Icon Grid.Column="0" Value="{Binding IconValue}" Foreground="#5b4ee5" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                            <!-- Folders follow the tree's glyph rules (ADR 0547) so the same object looks
+                                                 the same in both panes; documents keep the list's accent. -->
+                                            <i:Icon Grid.Column="0" Value="{Binding IconValue}" Foreground="#5b4ee5"
+                                                    Classes.wbFolder="{Binding UsesFolderBrush}"
+                                                    Classes.wbFolderEmpty="{Binding UsesEmptyFolderBrush}"
+                                                    VerticalAlignment="Center" Margin="0,0,6,0" />
                                             <TextBlock Grid.Column="1" Text="{Binding DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                             <i:Icon Grid.Column="2" Value="mdi-lock" Foreground="#d9a400" VerticalAlignment="Center" Margin="6,0,0,0" IsVisible="{Binding OnLegalHold}" ToolTip.Tip="{loc:Tr LhUnderHold}" />
                                             <!-- Check-out lock (ADR "Document check-out / check-in"): green when mine, red when someone else's. -->
@@ -457,7 +458,11 @@
                         <!-- Detail: index-data over (preview | chat) -->
                         <Grid Grid.Column="4">
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="{Binding IndexHeight, Mode=TwoWay}" />
+                                <!-- Auto by default so the pane fits its content and the preview keeps the rest
+                                     (ADR 0550); a GridSplitter drag writes a pixel height into the same property,
+                                     which the next selection resets back to Auto. MaxHeight caps a long mask so
+                                     it cannot push the preview off the bottom. -->
+                                <RowDefinition Height="{Binding IndexHeight, Mode=TwoWay}" MaxHeight="280" />
                                 <RowDefinition Height="10" />
                                 <RowDefinition Height="3*" />
                             </Grid.RowDefinitions>
@@ -465,36 +470,49 @@
                             <!-- Index-data -->
                             <ScrollViewer Grid.Row="0" IsVisible="{Binding !IndexCollapsed}">
                                 <StackPanel Margin="12,10" Spacing="4">
+                                    <!-- The row that owns this object's actions. While EDITING it swaps to Save + Cancel
+                                         in the SAME slots (ADR 0550): the pencil taught the user where this pane's
+                                         controls are, so the commit belongs there and not at the far end of the pane;
+                                         and the actions that can do nothing mid-edit (share, follow) go away rather than
+                                         sit inert. Declaration order matters — Dock=Right stacks right-to-left, so first
+                                         means rightmost, matching where the web row ends (ADR 0511). -->
                                     <DockPanel>
-                                        <!-- Follow / unfollow this document (ADR "Document subscriptions"). -->
-                                        <!-- Edit the index data (issue #407): beside the thing it edits, in the row of
-                                             per-document actions, rather than at the far end of the pane where it began.
-                                             Icon-only like its neighbours, and always visible — touch has no hover
-                                             (ADR 0511). Save and Cancel stay down with the FIELDS: they act on the form,
-                                             not on the document.
-
-                                             Declared FIRST among the Dock=Right buttons on purpose: docking stacks
-                                             right-to-left in declaration order, so first means rightmost — which is
-                                             where the web client's row ends too (ADR 0511 asks for one order, not
-                                             merely one set). -->
+                                        <Button DockPanel.Dock="Right" Command="{Binding SaveDetailCommand}"
+                                                ToolTip.Tip="{loc:Tr Save}" IsVisible="{Binding IsEditing}"
+                                                Height="26" Padding="6,0" Background="Transparent" BorderThickness="0">
+                                            <i:Icon Value="mdi-content-save-outline" FontSize="16" />
+                                        </Button>
+                                        <Button DockPanel.Dock="Right" Command="{Binding CancelEditCommand}"
+                                                ToolTip.Tip="{loc:Tr Cancel}" IsVisible="{Binding IsEditing}"
+                                                Height="26" Padding="6,0" Background="Transparent" BorderThickness="0">
+                                            <i:Icon Value="mdi-close" FontSize="16" />
+                                        </Button>
                                         <Button DockPanel.Dock="Right" Command="{Binding BeginEditCommand}"
                                                 ToolTip.Tip="{loc:Tr Edit}" IsVisible="{Binding CanBeginEdit}"
                                                 Height="26" Padding="6,0" Background="Transparent" BorderThickness="0">
                                             <i:Icon Value="mdi-pencil-outline" FontSize="16" />
                                         </Button>
+                                        <!-- Follow / unfollow this document (ADR "Document subscriptions"). -->
                                         <Button DockPanel.Dock="Right" Command="{Binding ToggleSubscriptionCommand}" ToolTip.Tip="{Binding SubscriptionTip}"
-                                                IsVisible="{Binding DetailTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
+                                                IsVisible="{Binding !IsEditing}"
                                                 Height="26" Padding="6,0" Background="Transparent" BorderThickness="0">
                                             <i:Icon Value="{Binding SubscriptionIcon}" FontSize="16" />
                                         </Button>
                                         <!-- Share this document by external link (ADR 0546, issue #385). Shown only when the
-                                             server advertised the rel — with the tenant switch off, or without the right, there
-                                             is no link to offer and the button is simply absent. -->
+                                             server advertised the rel — with the tenant switch off, without the right, or on a
+                                             FOLDER, there is no link to offer and the button is simply absent. -->
                                         <Button DockPanel.Dock="Right" Command="{Binding ShowDocumentExternalLinksCommand}"
                                                 ToolTip.Tip="{loc:Tr ExtLinkShare}" IsVisible="{Binding CanShareDocument}"
                                                 Height="26" Padding="6,0" Background="Transparent" BorderThickness="0">
                                             <i:Icon Value="mdi-link-variant" FontSize="16" />
                                         </Button>
+                                        <!-- The SAME glyph the tree draws for this object (ADR 0547): a folder looks like a
+                                             folder — and an empty one like an empty one — in every pane. -->
+                                        <i:Icon DockPanel.Dock="Left" Value="{Binding DetailGlyph}" FontSize="16"
+                                                Classes.wbFolder="{Binding DetailGlyphBrushKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=WbFolder}"
+                                                Classes.wbFolderEmpty="{Binding DetailGlyphBrushKey, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=WbFolderEmpty}"
+                                                VerticalAlignment="Center" Margin="0,0,6,0"
+                                                IsVisible="{Binding DetailTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                                         <TextBlock Text="{Binding DetailTitle}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
                                     </DockPanel>
 
@@ -642,13 +660,8 @@
                                         </Grid>
                                     </StackPanel>
 
-                                    <!-- Commit controls only: Edit STARTS from the header pencil (issue #407), but Save and
-                                         Cancel act on the form, so they sit under the fields they commit. -->
-                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,10,0,0"
-                                                IsVisible="{Binding IsEditing}">
-                                        <Button Content="{loc:Tr Cancel}" Command="{Binding CancelEditCommand}" />
-                                        <Button Content="{loc:Tr Save}" Command="{Binding SaveDetailCommand}" />
-                                    </StackPanel>
+                                    <!-- No commit row here: Save and Cancel live in the header, where the pencil that
+                                         started the edit is (ADR 0550). -->
                                 </StackPanel>
                             </ScrollViewer>
 
