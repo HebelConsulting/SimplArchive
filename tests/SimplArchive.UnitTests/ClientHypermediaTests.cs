@@ -31,7 +31,7 @@ public partial class ClientHypermediaTests
     // Seeded from the counts at adoption. LOWER an entry when converting a call site; never raise one.
     private static readonly Dictionary<string, int> Budget = new()
     {
-                ["src/SimplArchive.Client/Dialogs/ChangePasswordDialog.razor"] = 1,
+        ["src/SimplArchive.Client/Dialogs/ChangePasswordDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/CompareCheckoutDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/CompareVersionsDialog.razor"] = 2,
         ["src/SimplArchive.Client/Dialogs/FilingDialog.razor"] = 1,
