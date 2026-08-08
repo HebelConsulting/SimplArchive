@@ -7,7 +7,7 @@ using SimplArchive.Localization;
 namespace SimplArchive.UiEndToEndTests;
 
 // The startup logon window VM (ADR "Desktop logon window", login redesign slice B) — pure logic, no server or
-// browser (the reachability + OAuth steps are injectable seams): auto-seed a default tenant, show the "no
+// browser (the reachability + OAuth steps are injectable seams): auto-seed a default server, show the "no
 // connection" message when the server is unreachable, and fire LoginSucceeded + remember the choices on success.
 [Collection("DesktopConfig")]
 public class DesktopLogonTests
@@ -16,19 +16,19 @@ public class DesktopLogonTests
     public async Task Auto_seeds_shows_no_connection_and_logs_in()
     {
         var tmp = Path.Combine(Path.GetTempPath(), $"logon-{Guid.NewGuid():N}.json");
-        TenantProfileStore.PathOverride = tmp;
+        ServerProfileStore.PathOverride = tmp;
         DesktopClientOptions.ApiBaseUrl = "http://localhost:8080";
         try
         {
             var vm = new LogonViewModel();
 
             // Auto-seeded the public Demo deployment (the default) plus a Local one; English selected (issue #269).
-            Assert.Equal(2, vm.Tenants.Count);
-            Assert.Equal("demo.simplarchive.dev", vm.Tenants[0].Name);
-            Assert.Equal("https://demo.simplarchive.dev", vm.Tenants[0].ApiRootUrl);
-            Assert.Equal("Local", vm.Tenants[1].Name);
-            Assert.NotNull(vm.SelectedTenant);
-            Assert.Equal("demo.simplarchive.dev", vm.SelectedTenant!.Name); // Demo is the first-run default
+            Assert.Equal(2, vm.Servers.Count);
+            Assert.Equal("demo.simplarchive.dev", vm.Servers[0].Name);
+            Assert.Equal("https://demo.simplarchive.dev", vm.Servers[0].ApiRootUrl);
+            Assert.Equal("Local", vm.Servers[1].Name);
+            Assert.NotNull(vm.SelectedServer);
+            Assert.Equal("demo.simplarchive.dev", vm.SelectedServer!.Name); // Demo is the first-run default
             Assert.Equal("en", vm.SelectedLanguage!.Code);
 
             // Server unreachable → the "No connection" message, and no login.
@@ -41,7 +41,7 @@ public class DesktopLogonTests
             Assert.False(vm.Busy);
 
             // Reachable + a token → LoginSucceeded fires with the api client + email; the choices persist.
-            vm.SelectedTenant = vm.Tenants.First(t => t.Name == "Local");
+            vm.SelectedServer = vm.Servers.First(t => t.Name == "Local");
             vm.Username = "user@example.com";
             vm.SelectedLanguage = vm.Languages.First(l => l.Code == "de");
             vm.ReachabilityCheck = (_, _) => Task.FromResult(true);
@@ -61,8 +61,8 @@ public class DesktopLogonTests
             Assert.Equal("user@example.com", gotEmail);
             Assert.Equal("user@example.com", passedHint); // the username flows through as the login_hint
 
-            var cfg = TenantProfileStore.Load();
-            Assert.Equal("Local", cfg.LastTenant);
+            var cfg = ServerProfileStore.Load();
+            Assert.Equal("Local", cfg.LastServer);
             Assert.Equal("user@example.com", cfg.LastUsername);
             Assert.Equal("de", cfg.LastLanguage);
 
@@ -73,7 +73,7 @@ public class DesktopLogonTests
         }
         finally
         {
-            TenantProfileStore.PathOverride = null;
+            ServerProfileStore.PathOverride = null;
             if (File.Exists(tmp))
             {
                 File.Delete(tmp);
@@ -87,7 +87,7 @@ public class DesktopLogonTests
     public async Task Update_check_surfaces_a_newer_client()
     {
         var tmp = Path.Combine(Path.GetTempPath(), $"logon-{Guid.NewGuid():N}.json");
-        TenantProfileStore.PathOverride = tmp;
+        ServerProfileStore.PathOverride = tmp;
         DesktopClientOptions.ApiBaseUrl = "http://localhost:8080";
         try
         {
@@ -116,7 +116,7 @@ public class DesktopLogonTests
         }
         finally
         {
-            TenantProfileStore.PathOverride = null;
+            ServerProfileStore.PathOverride = null;
             if (File.Exists(tmp))
             {
                 File.Delete(tmp);
@@ -131,7 +131,7 @@ public class DesktopLogonTests
     public async Task A_stalled_sign_in_re_enables_the_button_and_a_retry_supersedes_it()
     {
         var tmp = Path.Combine(Path.GetTempPath(), $"logon-{Guid.NewGuid():N}.json");
-        TenantProfileStore.PathOverride = tmp;
+        ServerProfileStore.PathOverride = tmp;
         DesktopClientOptions.ApiBaseUrl = "http://localhost:8080";
         try
         {
@@ -171,7 +171,7 @@ public class DesktopLogonTests
         }
         finally
         {
-            TenantProfileStore.PathOverride = null;
+            ServerProfileStore.PathOverride = null;
             if (File.Exists(tmp))
             {
                 File.Delete(tmp);

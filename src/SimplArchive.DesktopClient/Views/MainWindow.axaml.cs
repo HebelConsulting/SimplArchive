@@ -49,7 +49,7 @@ public partial class MainWindow : Window
         ContentsList.AddHandler(PointerMovedEvent, OnListPointerMoved, RoutingStrategies.Tunnel);
         ContentsList.AddHandler(PointerReleasedEvent, OnListPointerReleased, RoutingStrategies.Tunnel);
 
-        // Ctrl/Cmd+P opens the tenant manager (ADR "Desktop tenant configuration") — a window-level tunnel
+        // Ctrl/Cmd+P opens the server manager (ADR "Desktop server configuration") — a window-level tunnel
         // handler so it fires regardless of focus.
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
 
@@ -1179,13 +1179,13 @@ public partial class MainWindow : Window
         }
     }
 
-    // Ctrl/Cmd+P → the tenant manager (ADR "Desktop tenant configuration").
+    // Ctrl/Cmd+P → the server manager (ADR "Desktop server configuration").
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.P && (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta)))
         {
             e.Handled = true;
-            _ = new TenantManagerWindow().ShowDialog(this);
+            _ = new ServerManagerWindow().ShowDialog(this);
         }
     }
 

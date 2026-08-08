@@ -14,7 +14,7 @@ public enum DesktopWindow
 {
     Main,      // --screenshot <out> --demo <flags>
     Logon,     // --logon-screenshot <out>
-    Tenants,   // --tenants-screenshot <out>
+    Servers,   // --servers-screenshot <out>
 }
 
 // A web screen: after login, click the bottom tab whose label matches `Tab` (null = the default workbench, or the
@@ -37,7 +37,7 @@ public static class Screens
         new("recycle-bin", ["--recyclebin"]),
         new("tenant", ["--tenant"]),
         new("checkout", ["--checkout"]),
-        new("tenant-manager", [], DesktopWindow.Tenants),
+        new("server-manager", [], DesktopWindow.Servers),
     ];
 
     // Web — the Blazor workbench. Tab labels match the bottom tab bar (.wb-tab). The demo admin holds every right,

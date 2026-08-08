@@ -7,7 +7,7 @@ using Avalonia.Media;
 namespace SimplArchive.DesktopClient.ViewModels;
 
 // Tints a control light green when the bound bool is true, else leaves the themed default (issue #270: a
-// positive "reachable + this is our server" cue on the tenant-manager URL field). ConverterParameter picks which
+// positive "reachable + this is our server" cue on the server-manager URL field). ConverterParameter picks which
 // brush — "bg" a light-green fill, "fg" a dark-green text colour that stays readable on that fill (so it works in
 // both light and dark themes). False → UnsetValue, so the control keeps its theme brush.
 public sealed class GreenTintConverter : IValueConverter

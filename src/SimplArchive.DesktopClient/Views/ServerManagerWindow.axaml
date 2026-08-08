@@ -4,21 +4,21 @@
         xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
         xmlns:svc="using:SimplArchive.DesktopClient.Services"
         xmlns:i="using:Projektanker.Icons.Avalonia"
-        x:Class="SimplArchive.DesktopClient.Views.TenantManagerWindow"
-        x:DataType="vm:TenantManagerViewModel"
-        Title="{loc:Tr TmTitle}" Width="640" Height="400"
+        x:Class="SimplArchive.DesktopClient.Views.ServerManagerWindow"
+        x:DataType="vm:ServerManagerViewModel"
+        Title="{loc:Tr SmTitle}" Width="640" Height="400"
         WindowStartupLocation="CenterOwner">
     <Grid Margin="12" ColumnDefinitions="220,12,*" RowDefinitions="*,Auto">
-        <!-- Tenants pane (left) -->
+        <!-- Server list (left) -->
         <DockPanel Grid.Row="0" Grid.Column="0">
             <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="4" Margin="0,6,0,0">
-                <Button Command="{Binding AddCommand}" ToolTip.Tip="Add a tenant" Padding="6,2"><i:Icon Value="mdi-plus" /></Button>
-                <Button Command="{Binding RemoveCommand}" ToolTip.Tip="Remove the selected tenant (the last one can't be removed)" Padding="6,2"><i:Icon Value="mdi-minus" /></Button>
+                <Button Command="{Binding AddCommand}" ToolTip.Tip="{loc:Tr SmAdd}" Padding="6,2"><i:Icon Value="mdi-plus" /></Button>
+                <Button Command="{Binding RemoveCommand}" ToolTip.Tip="{loc:Tr SmRemove}" Padding="6,2"><i:Icon Value="mdi-minus" /></Button>
             </StackPanel>
             <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="4">
-                <ListBox ItemsSource="{Binding Tenants}" SelectedItem="{Binding Selected}">
+                <ListBox ItemsSource="{Binding Servers}" SelectedItem="{Binding Selected}">
                     <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="svc:TenantProfile">
+                        <DataTemplate x:DataType="svc:ServerProfile">
                             <TextBlock Text="{Binding Name}" />
                         </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -33,11 +33,11 @@
                 <StackPanel Spacing="10" IsVisible="{Binding !IsEditing}">
                     <StackPanel IsVisible="{Binding HasSelection}" Spacing="10">
                         <StackPanel>
-                            <TextBlock Text="Tenant Name" FontSize="11" Foreground="{DynamicResource WbMuted}" />
+                            <TextBlock Text="{loc:Tr SmNameLabel}" FontSize="11" Foreground="{DynamicResource WbMuted}" />
                             <TextBlock Text="{Binding Selected.Name}" FontSize="14" />
                         </StackPanel>
                         <StackPanel>
-                            <TextBlock Text="URL" FontSize="11" Foreground="{DynamicResource WbMuted}" />
+                            <TextBlock Text="{loc:Tr SmUrlLabel}" FontSize="11" Foreground="{DynamicResource WbMuted}" />
                             <!-- Tints light green when a live probe confirms the selected profile is our server (issue #270). -->
                             <Border Background="{Binding SelectedIsOurServer, Converter={x:Static vm:GreenTintConverter.Instance}, ConverterParameter=bg}"
                                     CornerRadius="3" Padding="4,2" HorizontalAlignment="Left">
@@ -49,17 +49,17 @@
                             <StackPanel Orientation="Horizontal" Spacing="5"><i:Icon Value="mdi-pencil" /><TextBlock Text="{loc:Tr Edit}" /></StackPanel>
                         </Button>
                     </StackPanel>
-                    <TextBlock IsVisible="{Binding !HasSelection}" Text="Select a tenant, or add one with +." Foreground="{DynamicResource WbFaint}" />
+                    <TextBlock IsVisible="{Binding !HasSelection}" Text="{loc:Tr SmEmpty}" Foreground="{DynamicResource WbFaint}" />
                 </StackPanel>
 
                 <!-- Editable view -->
                 <StackPanel Spacing="10" IsVisible="{Binding IsEditing}">
                     <StackPanel>
-                        <TextBlock Text="Tenant Name" FontSize="11" Foreground="{DynamicResource WbMuted}" />
-                        <TextBox Text="{Binding EditName}" Watermark="e.g. Production" />
+                        <TextBlock Text="{loc:Tr SmNameLabel}" FontSize="11" Foreground="{DynamicResource WbMuted}" />
+                        <TextBox Text="{Binding EditName}" Watermark="{loc:Tr SmNameWatermark}" />
                     </StackPanel>
                     <StackPanel>
-                        <TextBlock Text="URL (API root)" FontSize="11" Foreground="{DynamicResource WbMuted}" />
+                        <TextBlock Text="{loc:Tr SmUrlEditLabel}" FontSize="11" Foreground="{DynamicResource WbMuted}" />
                         <!-- Tints light green once a live probe confirms this URL is a SimplArchive server (issue #270).
                              The Fluent TextBox paints its own background per visual state (incl. focused, i.e. while
                              editing), so the local Background is overridden — style the template's border part across
@@ -82,8 +82,8 @@
                     </StackPanel>
                     <TextBlock Text="{Binding Error}" Foreground="#c0392b" FontSize="12" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
-                        <Button Command="{Binding SaveCommand}" Classes="accent"><StackPanel Orientation="Horizontal" Spacing="5"><i:Icon Value="mdi-content-save-outline" /><TextBlock Text="Save" /></StackPanel></Button>
-                        <Button Command="{Binding CancelCommand}">Cancel</Button>
+                        <Button Command="{Binding SaveCommand}" Classes="accent"><StackPanel Orientation="Horizontal" Spacing="5"><i:Icon Value="mdi-content-save-outline" /><TextBlock Text="{loc:Tr Save}" /></StackPanel></Button>
+                        <Button Command="{Binding CancelCommand}" Content="{loc:Tr Cancel}" />
                     </StackPanel>
                 </StackPanel>
             </StackPanel>

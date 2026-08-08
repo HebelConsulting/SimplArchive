@@ -16,18 +16,18 @@ namespace SimplArchive.DesktopClient.ViewModels;
 public sealed record LanguageOption(string Name, string Code);
 
 // Backs the startup logon window (ADR "Desktop logon window", login redesign slice B): a username (email), a
-// tenant (deployment) dropdown, a language dropdown, and Login. Login points the client at the chosen tenant's
+// server dropdown, a language dropdown, and Login. Login points the client at the chosen server's
 // API-root URL, checks the server is reachable within ~10 s (else "No connection to the server. Retry later."),
 // then runs the browser OAuth flow and raises LoginSucceeded with an authenticated api client.
 public sealed partial class LogonViewModel : ObservableObject
 {
-    public ObservableCollection<TenantProfile> Tenants { get; } = [];
+    public ObservableCollection<ServerProfile> Servers { get; } = [];
     public IReadOnlyList<LanguageOption> Languages { get; } =
         [new("English", "en"), new("Deutsch", "de"), new("Italiano", "it"), new("Español", "es")];
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(LoginCommand))]
-    private TenantProfile? _selectedTenant;
+    private ServerProfile? _selectedServer;
 
     [ObservableProperty] private LanguageOption? _selectedLanguage;
     [ObservableProperty] private string _username = "";
@@ -77,48 +77,48 @@ public sealed partial class LogonViewModel : ObservableObject
     // main window.
     public event Action<SimplArchiveApiClient, string>? LoginSucceeded;
 
-    // The pre-seeded public demo deployment (issue #269) — offered as the first-run default so a fresh client
+    // The pre-seeded public demo server (issue #269) — offered as the first-run default so a fresh client
     // points at the live demo out of the box. Only ever seeded on an empty config; never overrides an existing
     // saved preference.
-    public const string DemoTenantName = "demo.simplarchive.dev";
-    public const string DemoTenantUrl = "https://demo.simplarchive.dev";
+    public const string DemoServerName = "demo.simplarchive.dev";
+    public const string DemoServerUrl = "https://demo.simplarchive.dev";
 
     public LogonViewModel()
     {
-        var cfg = TenantProfileStore.Load();
-        if (cfg.Tenants.Count == 0)
+        var cfg = ServerProfileStore.Load();
+        if (cfg.Servers.Count == 0)
         {
-            // First run: seed the public Demo deployment (the default) plus a Local one for dev, so the app is
+            // First run: seed the public Demo server (the default) plus a Local one for dev, so the app is
             // usable out of the box (ADR "Desktop logon window", issue #269). Demo is first, so it's the default
-            // selection when no LastTenant is remembered yet.
-            cfg.Tenants.Add(new TenantProfile { Name = DemoTenantName, ApiRootUrl = DemoTenantUrl });
-            cfg.Tenants.Add(new TenantProfile { Name = "Local", ApiRootUrl = DesktopClientOptions.ApiBaseUrl });
-            TenantProfileStore.Save(cfg);
+            // selection when no LastServer is remembered yet.
+            cfg.Servers.Add(new ServerProfile { Name = DemoServerName, ApiRootUrl = DemoServerUrl });
+            cfg.Servers.Add(new ServerProfile { Name = "Local", ApiRootUrl = DesktopClientOptions.ApiBaseUrl });
+            ServerProfileStore.Save(cfg);
         }
 
-        foreach (var t in cfg.Tenants)
+        foreach (var t in cfg.Servers)
         {
-            Tenants.Add(t);
+            Servers.Add(t);
         }
 
-        SelectedTenant = Tenants.FirstOrDefault(t => string.Equals(t.Name, cfg.LastTenant, StringComparison.OrdinalIgnoreCase)) ?? Tenants.FirstOrDefault();
+        SelectedServer = Servers.FirstOrDefault(t => string.Equals(t.Name, cfg.LastServer, StringComparison.OrdinalIgnoreCase)) ?? Servers.FirstOrDefault();
         Username = cfg.LastUsername ?? "";
         SelectedLanguage = Languages.FirstOrDefault(l => l.Code == cfg.LastLanguage) ?? Languages[0];
     }
 
-    // Reloads the tenant dropdown from the config after the manager was opened (Ctrl/Cmd+P), keeping the selected
+    // Reloads the server dropdown from the config after the manager was opened (Ctrl/Cmd+P), keeping the selected
     // one where possible — without replacing the VM (which would drop the LoginSucceeded subscription).
-    public void RefreshTenants()
+    public void RefreshServers()
     {
-        var previous = SelectedTenant?.Name;
-        var cfg = TenantProfileStore.Load();
-        Tenants.Clear();
-        foreach (var t in cfg.Tenants)
+        var previous = SelectedServer?.Name;
+        var cfg = ServerProfileStore.Load();
+        Servers.Clear();
+        foreach (var t in cfg.Servers)
         {
-            Tenants.Add(t);
+            Servers.Add(t);
         }
 
-        SelectedTenant = Tenants.FirstOrDefault(t => string.Equals(t.Name, previous, StringComparison.OrdinalIgnoreCase)) ?? Tenants.FirstOrDefault();
+        SelectedServer = Servers.FirstOrDefault(t => string.Equals(t.Name, previous, StringComparison.OrdinalIgnoreCase)) ?? Servers.FirstOrDefault();
     }
 
     // Called by the window once it's shown: enables the network-backed update check and runs an initial one for
@@ -129,7 +129,7 @@ public sealed partial class LogonViewModel : ObservableObject
         _ = CheckForUpdatesAsync();
     }
 
-    partial void OnSelectedTenantChanged(TenantProfile? value)
+    partial void OnSelectedServerChanged(ServerProfile? value)
     {
         if (_activated)
         {
@@ -148,7 +148,7 @@ public sealed partial class LogonViewModel : ObservableObject
         UpdateStatus = "";
         UpdateDownloadUrl = null;
 
-        var profile = SelectedTenant;
+        var profile = SelectedServer;
         if (profile is null || string.IsNullOrWhiteSpace(profile.ApiRootUrl))
         {
             return;
@@ -196,7 +196,7 @@ public sealed partial class LogonViewModel : ObservableObject
         }
     }
 
-    private bool CanLogin => SelectedTenant is not null && !Busy;
+    private bool CanLogin => SelectedServer is not null && !Busy;
 
     // AllowConcurrentExecutions so the re-enabled button can start a fresh attempt while a stuck one is still
     // (logically) in flight — otherwise the command disables itself for the whole run and Busy=false wouldn't
@@ -204,7 +204,7 @@ public sealed partial class LogonViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanLogin), AllowConcurrentExecutions = true)]
     private async Task Login()
     {
-        if (SelectedTenant is null)
+        if (SelectedServer is null)
         {
             return;
         }
@@ -217,7 +217,7 @@ public sealed partial class LogonViewModel : ObservableObject
 
         Busy = true;
         Status = Strings.Get("StConnecting");
-        DesktopClientOptions.ApiBaseUrl = SelectedTenant.ApiRootUrl.TrimEnd('/');
+        DesktopClientOptions.ApiBaseUrl = SelectedServer.ApiRootUrl.TrimEnd('/');
         Persist();
 
         try
@@ -300,11 +300,11 @@ public sealed partial class LogonViewModel : ObservableObject
 
     private void Persist()
     {
-        var cfg = TenantProfileStore.Load();
-        cfg.LastTenant = SelectedTenant?.Name;
+        var cfg = ServerProfileStore.Load();
+        cfg.LastServer = SelectedServer?.Name;
         cfg.LastUsername = Username;
         cfg.LastLanguage = SelectedLanguage?.Code;
-        TenantProfileStore.Save(cfg);
+        ServerProfileStore.Save(cfg);
     }
 
     // A quick reachability probe: the server's OIDC discovery document, bounded by the caller's timeout token.

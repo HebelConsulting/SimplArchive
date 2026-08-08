@@ -18,17 +18,11 @@
   <data name="LogonUsername" xml:space="preserve">
     <value>Username (email)</value>
   </data>
-  <data name="LogonTenant" xml:space="preserve">
-    <value>Tenant</value>
-  </data>
   <data name="LogonLanguage" xml:space="preserve">
     <value>Language</value>
   </data>
   <data name="LogonLogin" xml:space="preserve">
     <value>Log in</value>
-  </data>
-  <data name="LogonManageTenants" xml:space="preserve">
-    <value>Manage tenants with Ctrl/Cmd + P</value>
   </data>
   <data name="LogonUpdateAvailable" xml:space="preserve">
     <value>A newer client ({0}) is available.</value>
@@ -2346,9 +2340,6 @@
   <data name="MfaRecoveryHint" xml:space="preserve">
     <value>Save these recovery codes somewhere safe. Each can be used once to sign in if you lose your authenticator. They won't be shown again.</value>
   </data>
-  <data name="TmTitle" xml:space="preserve">
-    <value>Tenants</value>
-  </data>
   <data name="WfTitle" xml:space="preserve">
     <value>Workflow</value>
   </data>
@@ -3119,5 +3110,44 @@
   </data>
   <data name="SaClientSecret" xml:space="preserve">
     <value>Client secret</value>
+  </data>
+  <data name="LogonServer" xml:space="preserve">
+    <value>Server</value>
+  </data>
+  <data name="LogonManageServers" xml:space="preserve">
+    <value>Manage servers with Ctrl/Cmd + P</value>
+  </data>
+  <data name="SmTitle" xml:space="preserve">
+    <value>Servers</value>
+  </data>
+  <data name="SmNameLabel" xml:space="preserve">
+    <value>Server name</value>
+  </data>
+  <data name="SmUrlLabel" xml:space="preserve">
+    <value>URL</value>
+  </data>
+  <data name="SmUrlEditLabel" xml:space="preserve">
+    <value>URL (API root)</value>
+  </data>
+  <data name="SmAdd" xml:space="preserve">
+    <value>Add a server</value>
+  </data>
+  <data name="SmRemove" xml:space="preserve">
+    <value>Remove the selected server (the last one can't be removed)</value>
+  </data>
+  <data name="SmEmpty" xml:space="preserve">
+    <value>Select a server, or add one with +.</value>
+  </data>
+  <data name="SmNameWatermark" xml:space="preserve">
+    <value>e.g. Production</value>
+  </data>
+  <data name="SmErrNameRequired" xml:space="preserve">
+    <value>A name is required.</value>
+  </data>
+  <data name="SmErrUrlInvalid" xml:space="preserve">
+    <value>The URL must be an absolute http(s) address.</value>
+  </data>
+  <data name="SmErrDuplicateName" xml:space="preserve">
+    <value>A server with that name already exists.</value>
   </data>
 </root>

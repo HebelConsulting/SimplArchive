@@ -188,11 +188,12 @@ password, multi-factor authentication (authenticator app or passkeys), and profi
 #pair("screenshots/web-tenant.png", "screenshots/desktop-tenant.png",
   [Tenant settings in the web (left) and desktop (right) clients.])
 
-The desktop client can connect to *several deployments*; its tenant manager stores a profile (name + address) for
-each.
+The desktop client can connect to *several servers*; its server manager stores a profile (name + address) for
+each. A server is not a tenant: one SimplArchive installation hosts many tenants, and which tenant you belong to
+follows from the account you sign in with.
 
-#shot("screenshots/desktop-tenant-manager.png",
-  [The desktop tenant manager: connection profiles for multiple SimplArchive deployments.])
+#shot("screenshots/desktop-server-manager.png",
+  [The desktop server manager: connection profiles for several SimplArchive servers.])
 
 // ─────────────────────────────────────────────────────────────────────────────
 #pagebreak()

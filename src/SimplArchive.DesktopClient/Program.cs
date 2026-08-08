@@ -262,28 +262,37 @@ internal static class Program
             return;
         }
 
-        // Headless render of the tenant manager (ADR "Desktop tenant configuration") — catches XAML/binding load
-        // crashes: `--tenants-screenshot <out.png>`.
-        var tenantsShotIndex = Array.IndexOf(args, "--tenants-screenshot");
-        if (tenantsShotIndex >= 0 && tenantsShotIndex + 1 < args.Length)
+        // Headless render of the server manager (ADR "Desktop server configuration") — catches XAML/binding load
+        // crashes: `--servers-screenshot <out.png>`.
+        var serversShotIndex = Array.IndexOf(args, "--servers-screenshot");
+        if (serversShotIndex >= 0 && serversShotIndex + 1 < args.Length)
         {
+            // As for `--logon-screenshot`: an optional `--lang <code>` renders this window in that language. It is
+            // shown before the main window builds, so its strings are only ever seen in the language chosen at the
+            // logon window — which makes a headless per-language render the only cheap way to check them (#417).
+            var serversLangIndex = Array.IndexOf(args, "--lang");
+            if (serversLangIndex >= 0 && serversLangIndex + 1 < args.Length)
+            {
+                SimplArchive.Localization.Culture.Apply(args[serversLangIndex + 1]);
+            }
+
             AppBuilder.Configure<App>()
                 .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                 .UseSkia()
                 .WithInterFont()
                 .SetupWithoutStarting();
-            var win = new Views.TenantManagerWindow();
+            var win = new Views.ServerManagerWindow();
             var green = args.Contains("--green");
             var editShot = args.Contains("--edit");
-            ViewModels.TenantManagerViewModel? gvm = null;
+            ViewModels.ServerManagerViewModel? gvm = null;
             // `--green` shows the light-green "confirmed our server" tint (issue #270): on the read-only pane of a
             // merely-selected profile, or — with `--edit` — on the focused edit field. The real tint needs a
             // reachable server to probe.
             if (green)
             {
-                gvm = new ViewModels.TenantManagerViewModel();
-                gvm.Tenants.Add(new Services.TenantProfile { Name = "Demo", ApiRootUrl = "https://demo.simplarchive.dev" });
-                gvm.Selected = gvm.Tenants[^1];
+                gvm = new ViewModels.ServerManagerViewModel();
+                gvm.Servers.Add(new Services.ServerProfile { Name = "Demo", ApiRootUrl = "https://demo.simplarchive.dev" });
+                gvm.Selected = gvm.Servers[^1];
                 win.DataContext = gvm;
                 if (editShot)
                 {
@@ -317,7 +326,7 @@ internal static class Program
                 Dispatcher.UIThread.RunJobs();
             }
 
-            win.CaptureRenderedFrame()?.Save(args[tenantsShotIndex + 1]);
+            win.CaptureRenderedFrame()?.Save(args[serversShotIndex + 1]);
             return;
         }
 

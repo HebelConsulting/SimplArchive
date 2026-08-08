@@ -25,7 +25,7 @@ public static class DesktopCapture
             var appArgs = screen.Window switch
             {
                 DesktopWindow.Logon => new[] { "--logon-screenshot", outPath },
-                DesktopWindow.Tenants => ["--tenants-screenshot", outPath],
+                DesktopWindow.Servers => ["--servers-screenshot", outPath],
                 _ => ["--screenshot", outPath, "--demo", .. screen.Flags, .. pdfArg],
             };
 

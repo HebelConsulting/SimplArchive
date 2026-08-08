@@ -6,21 +6,22 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
+using SimplArchive.Localization;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
-// Backs the Ctrl/Cmd+P tenant manager (ADR "Desktop tenant configuration"): a list of configured deployments on
-// the left + a read-only data pane (Name / URL) on the right that Edit makes editable (Save/Cancel), plus a +
-// to add a new one and a Remove. Changes persist to the tenant config file.
-public sealed partial class TenantManagerViewModel : ObservableObject
+// Backs the Ctrl/Cmd+P server manager (ADR "Desktop server configuration"): a list of configured servers on the
+// left + a read-only data pane (Name / URL) on the right that Edit makes editable (Save/Cancel), plus a + to add
+// a new one and a Remove. Changes persist to the server config file.
+public sealed partial class ServerManagerViewModel : ObservableObject
 {
-    public ObservableCollection<TenantProfile> Tenants { get; } = [];
+    public ObservableCollection<ServerProfile> Servers { get; } = [];
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelection))]
     [NotifyCanExecuteChangedFor(nameof(EditCommand))]
     [NotifyCanExecuteChangedFor(nameof(RemoveCommand))]
-    private TenantProfile? _selected;
+    private ServerProfile? _selected;
 
     // Edit/add state — while editing, the data pane shows the editable fields bound to EditName/EditUrl.
     [ObservableProperty]
@@ -67,7 +68,7 @@ public sealed partial class TenantManagerViewModel : ObservableObject
         _ = ProbeSelectedAsync();
     }
 
-    partial void OnSelectedChanged(TenantProfile? value)
+    partial void OnSelectedChanged(ServerProfile? value)
     {
         // A different profile invalidates the previous read-only tint until a fresh probe confirms it.
         SelectedIsOurServer = false;
@@ -160,14 +161,14 @@ public sealed partial class TenantManagerViewModel : ObservableObject
         }
     }
 
-    public TenantManagerViewModel()
+    public ServerManagerViewModel()
     {
-        foreach (var t in TenantProfileStore.Load().Tenants)
+        foreach (var t in ServerProfileStore.Load().Servers)
         {
-            Tenants.Add(new TenantProfile { Name = t.Name, ApiRootUrl = t.ApiRootUrl });
+            Servers.Add(new ServerProfile { Name = t.Name, ApiRootUrl = t.ApiRootUrl });
         }
 
-        Selected = Tenants.FirstOrDefault();
+        Selected = Servers.FirstOrDefault();
     }
 
     private bool CanEdit => Selected is not null && !IsEditing;
@@ -199,19 +200,19 @@ public sealed partial class TenantManagerViewModel : ObservableObject
         IsEditing = true;
     }
 
-    // The last entry can't be removed — there must always be a tenant to log into (ADR "Desktop logon window").
-    private bool CanRemove => Selected is not null && !IsEditing && Tenants.Count > 1;
+    // The last entry can't be removed — there must always be a server to log into (ADR "Desktop logon window").
+    private bool CanRemove => Selected is not null && !IsEditing && Servers.Count > 1;
 
     [RelayCommand(CanExecute = nameof(CanRemove))]
     private void Remove()
     {
-        if (Selected is null || Tenants.Count <= 1)
+        if (Selected is null || Servers.Count <= 1)
         {
             return;
         }
 
-        Tenants.Remove(Selected);
-        Selected = Tenants.FirstOrDefault();
+        Servers.Remove(Selected);
+        Selected = Servers.FirstOrDefault();
         RemoveCommand.NotifyCanExecuteChanged();
         Persist();
     }
@@ -223,28 +224,28 @@ public sealed partial class TenantManagerViewModel : ObservableObject
         var url = EditUrl.Trim();
         if (name.Length == 0)
         {
-            Error = "A name is required.";
+            Error = Strings.Get("SmErrNameRequired");
             return;
         }
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
-            Error = "The URL must be an absolute http(s) address.";
+            Error = Strings.Get("SmErrUrlInvalid");
             return;
         }
 
         // A duplicate name (other than the one being edited) is rejected — the name is the profile's identity.
-        var clashesWith = Tenants.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
+        var clashesWith = Servers.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
         if (clashesWith is not null && !(IsAdding == false && ReferenceEquals(clashesWith, Selected)))
         {
-            Error = "A tenant with that name already exists.";
+            Error = Strings.Get("SmErrDuplicateName");
             return;
         }
 
         if (IsAdding)
         {
-            var profile = new TenantProfile { Name = name, ApiRootUrl = url };
-            Tenants.Add(profile);
+            var profile = new ServerProfile { Name = name, ApiRootUrl = url };
+            Servers.Add(profile);
             Selected = profile;
             RemoveCommand.NotifyCanExecuteChanged();
         }
@@ -253,7 +254,7 @@ public sealed partial class TenantManagerViewModel : ObservableObject
             Selected.Name = name;
             Selected.ApiRootUrl = url;
             // Re-select to refresh the read-only pane bindings.
-            var idx = Tenants.IndexOf(Selected);
+            var idx = Servers.IndexOf(Selected);
             var current = Selected;
             Selected = null;
             Selected = current;
@@ -275,14 +276,14 @@ public sealed partial class TenantManagerViewModel : ObservableObject
 
     private void Persist()
     {
-        var config = TenantProfileStore.Load();
-        config.Tenants = Tenants.Select(t => new TenantProfile { Name = t.Name, ApiRootUrl = t.ApiRootUrl }).ToList();
-        // Keep the remembered last-chosen tenant only if it still exists.
-        if (config.LastTenant is not null && Tenants.All(t => !string.Equals(t.Name, config.LastTenant, StringComparison.OrdinalIgnoreCase)))
+        var config = ServerProfileStore.Load();
+        config.Servers = Servers.Select(t => new ServerProfile { Name = t.Name, ApiRootUrl = t.ApiRootUrl }).ToList();
+        // Keep the remembered last-chosen server only if it still exists.
+        if (config.LastServer is not null && Servers.All(t => !string.Equals(t.Name, config.LastServer, StringComparison.OrdinalIgnoreCase)))
         {
-            config.LastTenant = null;
+            config.LastServer = null;
         }
 
-        TenantProfileStore.Save(config);
+        ServerProfileStore.Save(config);
     }
 }

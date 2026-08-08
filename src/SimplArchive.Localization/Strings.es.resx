@@ -18,17 +18,11 @@
   <data name="LogonUsername" xml:space="preserve">
     <value>Nombre de usuario (correo electrónico)</value>
   </data>
-  <data name="LogonTenant" xml:space="preserve">
-    <value>Tenant</value>
-  </data>
   <data name="LogonLanguage" xml:space="preserve">
     <value>Idioma</value>
   </data>
   <data name="LogonLogin" xml:space="preserve">
     <value>Iniciar sesión</value>
-  </data>
-  <data name="LogonManageTenants" xml:space="preserve">
-    <value>Gestionar tenants con Ctrl/Cmd + P</value>
   </data>
   <data name="LogonUpdateAvailable" xml:space="preserve">
     <value>Hay un cliente más reciente ({0}) disponible.</value>
@@ -2346,9 +2340,6 @@
   <data name="MfaRecoveryHint" xml:space="preserve">
     <value>Guarda estos códigos de recuperación en un lugar seguro. Cada uno se puede usar una vez para iniciar sesión si pierdes tu autenticador. No se volverán a mostrar.</value>
   </data>
-  <data name="TmTitle" xml:space="preserve">
-    <value>Inquilinos</value>
-  </data>
   <data name="WfTitle" xml:space="preserve">
     <value>Flujo de trabajo</value>
   </data>
@@ -3119,5 +3110,44 @@
   </data>
   <data name="SaClientSecret" xml:space="preserve">
     <value>Secreto de cliente</value>
+  </data>
+  <data name="LogonServer" xml:space="preserve">
+    <value>Servidor</value>
+  </data>
+  <data name="LogonManageServers" xml:space="preserve">
+    <value>Gestionar servidores con Ctrl/Cmd + P</value>
+  </data>
+  <data name="SmTitle" xml:space="preserve">
+    <value>Servidores</value>
+  </data>
+  <data name="SmNameLabel" xml:space="preserve">
+    <value>Nombre del servidor</value>
+  </data>
+  <data name="SmUrlLabel" xml:space="preserve">
+    <value>URL</value>
+  </data>
+  <data name="SmUrlEditLabel" xml:space="preserve">
+    <value>URL (raíz de la API)</value>
+  </data>
+  <data name="SmAdd" xml:space="preserve">
+    <value>Añadir un servidor</value>
+  </data>
+  <data name="SmRemove" xml:space="preserve">
+    <value>Eliminar el servidor seleccionado (el último no se puede eliminar)</value>
+  </data>
+  <data name="SmEmpty" xml:space="preserve">
+    <value>Seleccione un servidor o añada uno con +.</value>
+  </data>
+  <data name="SmNameWatermark" xml:space="preserve">
+    <value>p. ej. Producción</value>
+  </data>
+  <data name="SmErrNameRequired" xml:space="preserve">
+    <value>Se requiere un nombre.</value>
+  </data>
+  <data name="SmErrUrlInvalid" xml:space="preserve">
+    <value>La URL debe ser una dirección http(s) absoluta.</value>
+  </data>
+  <data name="SmErrDuplicateName" xml:space="preserve">
+    <value>Ya existe un servidor con ese nombre.</value>
   </data>
 </root>

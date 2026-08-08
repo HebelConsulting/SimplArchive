@@ -6,10 +6,10 @@ using System.Threading.Tasks;
 
 namespace SimplArchive.DesktopClient.Services;
 
-// "Is this our server?" — an unauthenticated probe of a URL's API root (ADR "Desktop tenant configuration",
+// "Is this our server?" — an unauthenticated probe of a URL's API root (ADR "Desktop server configuration",
 // issue #270). GETs `<url>/api` and confirms the response is SimplArchive's own HATEOAS discovery document
 // (ADR "API discoverability / root endpoint design") rather than merely reachable. Any failure / non-SimplArchive
-// response is a plain false. Used by the tenant manager's live URL validation to tint a correct URL light green.
+// response is a plain false. Used by the server manager's live URL validation to tint a correct URL light green.
 public static class ServerIdentity
 {
     public static async Task<bool> IsSimplArchiveAsync(string baseUrl, CancellationToken cancellationToken = default)
