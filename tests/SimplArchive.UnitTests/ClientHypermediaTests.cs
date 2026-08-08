@@ -20,7 +20,7 @@ namespace SimplArchive.UnitTests;
 //
 // Deleting the last composed URL in a file means deleting its entry. When every entry is gone, delete the budget
 // and flip the assertion to "no client composes an api/ URL" — that is the finish line.
-public class ClientHypermediaTests
+public partial class ClientHypermediaTests
 {
     // Matches a string literal that starts an API path: "api/…" or $"api/…". Deliberately narrow — it catches the
     // way both clients actually build these, without flagging prose in a comment.
@@ -31,12 +31,11 @@ public class ClientHypermediaTests
     // Seeded from the counts at adoption. LOWER an entry when converting a call site; never raise one.
     private static readonly Dictionary<string, int> Budget = new()
     {
-        ["src/SimplArchive.Client/Dialogs/BulkTagsDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/ChangePasswordDialog.razor"] = 1,
+                ["src/SimplArchive.Client/Dialogs/ChangePasswordDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/CompareCheckoutDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/CompareVersionsDialog.razor"] = 2,
-        ["src/SimplArchive.Client/Dialogs/FilingDialog.razor"] = 2,
-        ["src/SimplArchive.Client/Dialogs/FolderPickerDialog.razor"] = 2,
+        ["src/SimplArchive.Client/Dialogs/FilingDialog.razor"] = 1,
+        ["src/SimplArchive.Client/Dialogs/FolderPickerDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/InboxSendDialog.razor"] = 2,
         ["src/SimplArchive.Client/Dialogs/ManageAccessDialog.razor"] = 7,
         ["src/SimplArchive.Client/Dialogs/MfaSetupDialog.razor"] = 2,
@@ -45,17 +44,22 @@ public class ClientHypermediaTests
         ["src/SimplArchive.Client/Dialogs/ProfilePhotoDialog.razor"] = 2,
         ["src/SimplArchive.Client/Dialogs/ReferencesDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/ReminderDialog.razor"] = 4,
-        ["src/SimplArchive.Client/Dialogs/SensitivityLabelsDialog.razor"] = 5,
-        ["src/SimplArchive.Client/Dialogs/ServiceAccountsDialog.razor"] = 5,
+        ["src/SimplArchive.Client/Dialogs/SensitivityLabelsDialog.razor"] = 3,
+        ["src/SimplArchive.Client/Dialogs/ServiceAccountsDialog.razor"] = 3,
         ["src/SimplArchive.Client/Dialogs/VersionsDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/WebDavDialog.razor"] = 3,
         ["src/SimplArchive.Client/Dialogs/WorkflowDialog.razor"] = 2,
         ["src/SimplArchive.Client/Layout/MainLayout.razor"] = 7,
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 141,
+        ["src/SimplArchive.Client/Pages/Home.razor"] = 110,
         // 184 → 183 (issue #385): the desktop read the document resource TWICE — once for its name, once for its
         // sensitivity label — so the per-document external-links rel had nowhere to be picked up from. One read
         // now serves both and carries the rel, which is what let the dialog follow it instead of composing a URL.
-        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 183,
+        //
+        // 183 → 153 (issue #416, tranche A): the 19 top-level COLLECTION roots now come from the API root's own
+        // rels via the cached RootHrefAsync. What remains here is overwhelmingly the interpolated kind
+        // ($"api/documents/{id}/…"), which needs a resource in hand rather than a path — the structural half of
+        // the burn-down, and a separate piece of work.
+        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 153,
     };
 
     [Fact]
@@ -101,11 +105,50 @@ public class ClientHypermediaTests
             $"Clients compose {total} api/ URLs in total, above the recorded ledger of {Budget.Values.Sum()} (ADR 0543).");
     }
 
-    private static Dictionary<string, int> CountByFile()
+    // Every root rel a client demands must actually be advertised by RootController.
+    //
+    // Converting a composed URL to a rel that does not exist swaps a working call for an exception, and the
+    // exception happens at RUNTIME, in whichever screen happens to use it — so it shows up as one unrelated test
+    // failing, or not at all if nothing exercises that path. That is exactly what happened while converting
+    // tranche A of issue #416: nine of the ten needed rels were added, `tags` was missed, and the only signal was
+    // two desktop tag tests failing several minutes later. This turns that into a build error naming the rel.
+    [Fact]
+    public void Every_root_rel_the_clients_follow_is_advertised_by_the_api()
     {
         var root = RepoRoot();
-        var counts = new Dictionary<string, int>();
+        var demanded = new SortedSet<string>(StringComparer.Ordinal);
 
+        foreach (var file in ClientFiles(root))
+        {
+            foreach (Match m in RootRelUse().Matches(File.ReadAllText(file)))
+            {
+                demanded.Add(m.Groups["rel"].Value);
+            }
+        }
+
+        var controller = File.ReadAllText(Path.Combine(root, "src", "SimplArchive.Api", "Controllers", "RootController.cs"));
+        var advertised = AdvertisedRel().Matches(controller).Select(m => m.Groups["rel"].Value).ToHashSet(StringComparer.Ordinal);
+
+        var missing = demanded.Where(r => !advertised.Contains(r)).ToList();
+
+        Assert.True(missing.Count == 0,
+            "These root rels are followed by a client but not advertised by RootController — following one throws "
+            + "at runtime (ADR 0543):\n  " + string.Join("\n  ", missing));
+
+        // Anti-vacuous: if the regexes stop matching, the assertion above passes while checking nothing.
+        Assert.True(demanded.Count > 10, $"expected the clients to follow many root rels, found {demanded.Count} — the scan is probably broken");
+    }
+
+    [GeneratedRegex(@"(?:RequireAsync|HrefAsync|RootHrefAsync)\(""(?<rel>[A-Za-z]+)""")]
+    private static partial Regex RootRelUse();
+
+    [GeneratedRegex(@"new Link\(""(?<rel>[A-Za-z]+)""")]
+    private static partial Regex AdvertisedRel();
+
+    // One definition of "a client source file", shared by both tests — so the rel guard and the ledger can never
+    // disagree about what they are scanning.
+    private static IEnumerable<string> ClientFiles(string root)
+    {
         foreach (var project in new[] { "src/SimplArchive.Client", "src/SimplArchive.DesktopClient" })
         {
             var dir = Path.Combine(root, project.Replace('/', Path.DirectorySeparatorChar));
@@ -128,11 +171,22 @@ public class ClientHypermediaTests
                     continue;
                 }
 
-                var matches = ComposedApiUrl.Matches(File.ReadAllText(file)).Count;
-                if (matches > 0)
-                {
-                    counts[Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/')] = matches;
-                }
+                yield return file;
+            }
+        }
+    }
+
+    private static Dictionary<string, int> CountByFile()
+    {
+        var root = RepoRoot();
+        var counts = new Dictionary<string, int>();
+
+        foreach (var file in ClientFiles(root))
+        {
+            var matches = ComposedApiUrl.Matches(File.ReadAllText(file)).Count;
+            if (matches > 0)
+            {
+                counts[Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/')] = matches;
             }
         }
 

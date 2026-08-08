@@ -1,3 +1,4 @@
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
 @* Manage the tenant's configurable sensitivity labels (ADR "Configurable sensitivity labels + upload defaults").
    Create / rename / recolour / toggle-watermark / retire — gated on CanManageClassification (the API enforces).
    Calls the API directly; closes with no result (the caller reloads its label list on close). *@
@@ -72,7 +73,7 @@
 
     private async Task LoadAsync()
     {
-        try { _labels = (await Http.GetFromJsonAsync<LabelsResponse>("api/sensitivity-labels"))?.Labels ?? []; }
+        try { _labels = (await Http.GetFromJsonAsync<LabelsResponse>(await ApiRoot.RequireAsync("sensitivityLabels")))?.Labels ?? []; }
         catch (Exception) { _labels = []; }
     }
 
@@ -81,7 +82,7 @@
     private async Task CreateAsync()
     {
         if (string.IsNullOrWhiteSpace(_newName)) return;
-        var resp = await Http.PostAsJsonAsync("api/sensitivity-labels", new { name = _newName.Trim(), rank = _newRank, color = string.IsNullOrWhiteSpace(_newColor) ? null : _newColor.Trim(), watermark = _newWatermark });
+        var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("sensitivityLabels"), new { name = _newName.Trim(), rank = _newRank, color = string.IsNullOrWhiteSpace(_newColor) ? null : _newColor.Trim(), watermark = _newWatermark });
         if (resp.IsSuccessStatusCode) { _newName = ""; _newColor = ""; _newWatermark = false; await LoadAsync(); }
         else { Snackbar.Add(resp.StatusCode == System.Net.HttpStatusCode.Conflict ? "A label with that name exists." : "Could not add the label.", Severity.Warning); }
     }

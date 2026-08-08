@@ -47,6 +47,20 @@ public class RootController : ControllerBase
                 new Link("externalLinks", "/api/external-links", "GET"),
                 new Link("tenantSettings", "/api/tenant-settings", "GET"),
                 new Link("retentionSchedule", "/api/retention/schedule", "GET"),
+                // The remaining top-level collections (issue #416). Only COLLECTION ROOTS belong here: an action
+                // ON a collection — purging the recycle bin, exporting the audit log — is a rel on that
+                // collection's own resource, which the client has already fetched. Listing every route here would
+                // make the root a flat URL registry, which is the opposite of what ADR 0543 asks for.
+                new Link("auditEvents", "/api/audit-events", "GET"),
+                new Link("groups", "/api/groups", "GET"),
+                new Link("inbox", "/api/inbox", "GET"),
+                new Link("masks", "/api/masks", "GET"),
+                new Link("ocrLanguages", "/api/ocr-languages", "GET"),
+                new Link("savedSearches", "/api/saved-searches", "GET"),
+                new Link("sensitivityLabels", "/api/sensitivity-labels", "GET"),
+                new Link("serviceAccounts", "/api/service-accounts", "GET"),
+                new Link("tags", "/api/tags", "GET"),
+                new Link("users", "/api/users", "GET"),
                 new Link("whoami", "/api/diagnostics/whoami", "GET"),
                 new Link("admin", "/api/admin", "GET"),
                 new Link("openIdConfiguration", "/.well-known/openid-configuration", "GET"),

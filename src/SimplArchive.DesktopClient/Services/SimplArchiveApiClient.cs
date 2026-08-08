@@ -238,7 +238,7 @@ public sealed class SimplArchiveApiClient
         if (to is { } t) query.Add($"to={Uri.EscapeDataString(t.UtcDateTime.ToString("o"))}");
         if (cursor is not null) query.Add($"cursor={Uri.EscapeDataString(cursor)}");
 
-        var url = "api/audit-events" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
+        var url = await RootHrefAsync("auditEvents", cancellationToken) + (query.Count > 0 ? "?" + string.Join("&", query) : "");
         var page = await _http.GetFromJsonAsync<JsonElement>(url, cancellationToken);
         var events = page.TryGetProperty("events", out var array)
             ? array.EnumerateArray().Select(ParseAuditEvent).ToList()
@@ -378,8 +378,8 @@ public sealed class SimplArchiveApiClient
         return Uri.UnescapeDataString(amp >= 0 ? value[..amp] : value);
     }
 
-    public Task<List<Node>> GetRepositoriesAsync(CancellationToken cancellationToken = default) =>
-        LoadPagedAsync("api/repositories", "repositories", ParseNode, cancellationToken);
+    public async Task<List<Node>> GetRepositoriesAsync(CancellationToken cancellationToken = default) =>
+        await LoadPagedAsync(await RootHrefAsync("repositories", cancellationToken), "repositories", ParseNode, cancellationToken);
 
     public sealed record AdminPersonalRepoInfo(Guid UserId, string DisplayName, string Email, bool UserIsActive, Guid RepositoryId, bool HasChildren, bool HasSubfolders);
 
@@ -535,7 +535,7 @@ public sealed class SimplArchiveApiClient
     // caller's group inboxes, and user opens a specific user's inbox for a CanManageInboxes holder (ADR 0532).
     public async Task<IReadOnlyList<InboxItemInfo>> GetInboxAsync(bool includeGroups = false, Guid? user = null, CancellationToken cancellationToken = default)
     {
-        var url = user is { } viewUser ? $"api/inbox?user={viewUser}" : includeGroups ? "api/inbox?includeGroups=true" : "api/inbox";
+        var url = user is { } viewUser ? $"api/inbox?user={viewUser}" : includeGroups ? "api/inbox?includeGroups=true" : await RootHrefAsync("inbox", cancellationToken);
         var json = await _http.GetFromJsonAsync<JsonElement>(url, cancellationToken);
         var items = new List<InboxItemInfo>();
         if (json.TryGetProperty("items", out var array))
@@ -663,7 +663,7 @@ public sealed class SimplArchiveApiClient
     // Uploads a local file into the server inbox: POST for a presigned URL, then PUT the bytes to it.
     public async Task UploadToInboxAsync(string fileName, byte[] bytes, CancellationToken cancellationToken = default)
     {
-        var response = await (await _http.PostAsJsonAsync("api/inbox", new { fileName }, cancellationToken)).Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        var response = await (await _http.PostAsJsonAsync(await RootHrefAsync("inbox", cancellationToken), new { fileName }, cancellationToken)).Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         var uploadUrl = response.GetProperty("uploadUrl").GetString()!;
         using var content = new ByteArrayContent(bytes);
         (await Anonymous.PutAsync(uploadUrl, content, cancellationToken)).EnsureSuccessStatusCode();
@@ -710,7 +710,7 @@ public sealed class SimplArchiveApiClient
     // The tenant's masks (id + name) for the mask-change dropdown (ADR "Editable mask on the detail pane").
     public async Task<IReadOnlyList<MaskOptionInfo>> GetMasksAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/masks", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("masks", cancellationToken), cancellationToken);
         var list = new List<MaskOptionInfo>();
         if (json.TryGetProperty("masks", out var masks))
         {
@@ -894,7 +894,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<IReadOnlyList<OcrLanguageOption>> GetOcrLanguageCatalogAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/ocr-languages", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("ocrLanguages", cancellationToken), cancellationToken);
         var list = new List<OcrLanguageOption>();
         if (json.TryGetProperty("languages", out var langs))
         {
@@ -967,7 +967,7 @@ public sealed class SimplArchiveApiClient
     // The tenant's configurable label catalog (for the picker + admin).
     public async Task<SensitivityLabelCatalog> GetSensitivityLabelsAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/sensitivity-labels", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("sensitivityLabels", cancellationToken), cancellationToken);
         var items = new List<SensitivityLabelInfo>();
         if (json.TryGetProperty("labels", out var arr) && arr.ValueKind == JsonValueKind.Array)
         {
@@ -988,7 +988,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task CreateSensitivityLabelAsync(string name, int rank, string? color, bool watermark, CancellationToken cancellationToken = default)
     {
-        var resp = await _http.PostAsJsonAsync("api/sensitivity-labels", new { name, rank, color, watermark }, cancellationToken);
+        var resp = await _http.PostAsJsonAsync(await RootHrefAsync("sensitivityLabels", cancellationToken), new { name, rank, color, watermark }, cancellationToken);
         if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ErrorMessageAsync(resp, "Could not add the label."));
     }
 
@@ -1025,7 +1025,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<IReadOnlyList<string>> GetTagCatalogAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/tags", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("tags", cancellationToken), cancellationToken);
         return ReadTags(json);
     }
 
@@ -1040,7 +1040,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<TagCatalog> GetTagCatalogWithColorsAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/tags", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("tags", cancellationToken), cancellationToken);
         var items = new List<TagCatalogItem>();
         if (json.TryGetProperty("catalog", out var arr) && arr.ValueKind == JsonValueKind.Array)
         {
@@ -1058,7 +1058,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task CreateTagAsync(string name, string? color, CancellationToken cancellationToken = default)
     {
-        var resp = await _http.PostAsJsonAsync("api/tags", new { name, color }, cancellationToken);
+        var resp = await _http.PostAsJsonAsync(await RootHrefAsync("tags", cancellationToken), new { name, color }, cancellationToken);
         if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ErrorMessageAsync(resp, "Could not add the tag."));
     }
 
@@ -1153,7 +1153,7 @@ public sealed class SimplArchiveApiClient
     // The caller's overdue + due-soon reminders across all documents (the dashboard's Reminders section).
     public async Task<IReadOnlyList<DashReminderInfo>> GetDashboardRemindersAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/reminders", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("reminders", cancellationToken), cancellationToken);
         var list = new List<DashReminderInfo>();
         if (json.TryGetProperty("reminders", out var arr))
         {
@@ -1177,7 +1177,7 @@ public sealed class SimplArchiveApiClient
     // The documents the caller follows (the dashboard's Following section).
     public async Task<IReadOnlyList<DashFollowedInfo>> GetDashboardFollowingAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/subscriptions", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("subscriptions", cancellationToken), cancellationToken);
         var list = new List<DashFollowedInfo>();
         if (json.TryGetProperty("followed", out var arr))
         {
@@ -1528,7 +1528,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<TenantSettingsInfo> GetTenantSettingsAsync(CancellationToken cancellationToken = default)
     {
-        var j = await _http.GetFromJsonAsync<JsonElement>("api/tenant-settings", cancellationToken);
+        var j = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("tenantSettings", cancellationToken), cancellationToken);
         return ParseTenantSettings(j);
     }
 
@@ -1573,7 +1573,7 @@ public sealed class SimplArchiveApiClient
     // links off AND set both caps to 0. An optional default would recreate exactly that bug at the next caller.
     public async Task<TenantSettingsInfo> SetTenantSettingsAsync(string name, string defaultOcrLanguages, int auditRetentionDays, int checkoutTtlDays, int checkoutWarningDays, int wormLockMode, bool requireMfa, bool allowPasskeyLogin, bool requireDispositionReview, bool restrictTagsToCatalog, bool enforceClearance, bool allowExternalLinks, int externalLinkMaxDays, int externalLinkDefaultAccesses, bool showExternalLinkUrl, long? storageQuotaBytes, int incompleteUploadCleanupDays, string? auditWebhookUrl, string? auditWebhookSecret, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PutAsJsonAsync("api/tenant-settings", new { name, defaultOcrLanguages, auditRetentionDays, checkoutTtlDays, checkoutWarningDays, wormLockMode, requireMfa, allowPasskeyLogin, requireDispositionReview, restrictTagsToCatalog, enforceClearance, allowExternalLinks, externalLinkMaxDays, externalLinkDefaultAccesses, showExternalLinkUrl, storageQuotaBytes, incompleteUploadCleanupDays, auditWebhookUrl, auditWebhookSecret }, cancellationToken);
+        using var response = await _http.PutAsJsonAsync(await RootHrefAsync("tenantSettings", cancellationToken), new { name, defaultOcrLanguages, auditRetentionDays, checkoutTtlDays, checkoutWarningDays, wormLockMode, requireMfa, allowPasskeyLogin, requireDispositionReview, restrictTagsToCatalog, enforceClearance, allowExternalLinks, externalLinkMaxDays, externalLinkDefaultAccesses, showExternalLinkUrl, storageQuotaBytes, incompleteUploadCleanupDays, auditWebhookUrl, auditWebhookSecret }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException("Another active tenant already uses this name.");
@@ -1596,7 +1596,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task CreateRepositoryAsync(string name, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync("api/repositories", new { name }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(await RootHrefAsync("repositories", cancellationToken), new { name }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException($"A repository named '{name}' already exists.");
@@ -1723,7 +1723,7 @@ public sealed class SimplArchiveApiClient
     // Api (Truncated flag ignored here; the tab tells the user if more exist via the status line).
     public async Task<List<RecycleBinEntry>> GetRecycleBinItemsAsync(CancellationToken cancellationToken = default)
     {
-        var response = await _http.GetFromJsonAsync<JsonElement>("api/recycle-bin", cancellationToken);
+        var response = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("recycleBin", cancellationToken), cancellationToken);
         var items = new List<RecycleBinEntry>();
         if (response.TryGetProperty("items", out var array))
         {
@@ -1950,7 +1950,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<List<SavedSearchInfo>> GetSavedSearchesAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/saved-searches", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("savedSearches", cancellationToken), cancellationToken);
         var list = new List<SavedSearchInfo>();
         if (json.TryGetProperty("savedSearches", out var arr))
         {
@@ -2011,7 +2011,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task SaveSearchAsync(string name, string queryString, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync("api/saved-searches", new { name, queryString }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(await RootHrefAsync("savedSearches", cancellationToken), new { name, queryString }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException("You already have a saved search with that name.");
@@ -2280,7 +2280,7 @@ public sealed class SimplArchiveApiClient
     // The caller's currently checked-out documents (tenant-wide), each with the current version's SHA-256.
     public async Task<List<CheckoutItem>> GetCheckoutsAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/checkouts", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("checkouts", cancellationToken), cancellationToken);
         var items = new List<CheckoutItem>();
         if (json.TryGetProperty("items", out var arr))
         {
@@ -2615,6 +2615,36 @@ public sealed class SimplArchiveApiClient
         return null;
     }
 
+    // The root document, fetched once per client instance. Cached because the root is a constant for a session:
+    // re-reading it before every call would turn one request into two, which is the usual reason a codebase
+    // abandons hypermedia and goes back to composing paths (issue #416).
+    private IReadOnlyDictionary<string, string>? _rootLinks;
+    private readonly SemaphoreSlim _rootGate = new(1, 1);
+
+    /// <summary>
+    /// The href for a root-level rel. Throws when the server does not advertise it — for the collections a screen
+    /// is built around, a null would surface as an empty list ("you have no tags") rather than as a fault.
+    /// </summary>
+    public async Task<string> RootHrefAsync(string rel, CancellationToken cancellationToken = default)
+    {
+        if (_rootLinks is null)
+        {
+            await _rootGate.WaitAsync(cancellationToken);
+            try
+            {
+                _rootLinks ??= await GetRootLinksAsync(cancellationToken);
+            }
+            finally
+            {
+                _rootGate.Release();
+            }
+        }
+
+        return _rootLinks.TryGetValue(rel, out var href)
+            ? href
+            : throw new InvalidOperationException($"The API root does not advertise the '{rel}' rel.");
+    }
+
     // The API root's link relations — the ONE URL a client is allowed to know (ADR 0543); everything else is
     // discovered from here. Note "api" carries no slash, so it is not a composed resource path.
     public async Task<IReadOnlyDictionary<string, string>> GetRootLinksAsync(CancellationToken cancellationToken = default)
@@ -2789,7 +2819,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<IReadOnlyList<TaskInfo>> GetTasksAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/tasks", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("tasks", cancellationToken), cancellationToken);
         var list = new List<TaskInfo>();
         if (json.TryGetProperty("tasks", out var tasks))
         {
@@ -2918,15 +2948,15 @@ public sealed class SimplArchiveApiClient
 
     // ---- Users & groups administration (ADR "Users & groups administration tab") --------------------
 
-    public Task<List<PrincipalInfo>> GetUsersAsync(CancellationToken cancellationToken = default) =>
-        LoadPagedAsync("api/users", "users", ParseUser, cancellationToken);
+    public async Task<List<PrincipalInfo>> GetUsersAsync(CancellationToken cancellationToken = default) =>
+        await LoadPagedAsync(await RootHrefAsync("users", cancellationToken), "users", ParseUser, cancellationToken);
 
-    public Task<List<PrincipalInfo>> GetGroupsAsync(CancellationToken cancellationToken = default) =>
-        LoadPagedAsync("api/groups", "groups", ParseGroup, cancellationToken);
+    public async Task<List<PrincipalInfo>> GetGroupsAsync(CancellationToken cancellationToken = default) =>
+        await LoadPagedAsync(await RootHrefAsync("groups", cancellationToken), "groups", ParseGroup, cancellationToken);
 
     public async Task<Guid> CreateUserAsync(string email, string displayName, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync("api/users", new { email, displayName }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(await RootHrefAsync("users", cancellationToken), new { email, displayName }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException("A user with this email already exists.");
@@ -2944,7 +2974,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<Guid> CreateGroupAsync(string name, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync("api/groups", new { name }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(await RootHrefAsync("groups", cancellationToken), new { name }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException($"A group named '{name}' already exists.");
@@ -3030,13 +3060,13 @@ public sealed class SimplArchiveApiClient
 
     // ---- Service accounts (ADR 0203/0534) -----------------------------------------------------------
 
-    public Task<List<ServiceAccountInfo>> GetServiceAccountsAsync(CancellationToken cancellationToken = default) =>
-        LoadPagedAsync("api/service-accounts", "serviceAccounts", ParseServiceAccount, cancellationToken);
+    public async Task<List<ServiceAccountInfo>> GetServiceAccountsAsync(CancellationToken cancellationToken = default) =>
+        await LoadPagedAsync(await RootHrefAsync("serviceAccounts", cancellationToken), "serviceAccounts", ParseServiceAccount, cancellationToken);
 
     // Create a service account with its rights; returns the one-time client_id + client_secret (shown once).
     public async Task<ServiceAccountSecret> CreateServiceAccountAsync(string name, SystemRightsData rights, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync("api/service-accounts", ToServiceAccountBody(name, rights), cancellationToken);
+        using var response = await _http.PostAsJsonAsync(await RootHrefAsync("serviceAccounts", cancellationToken), ToServiceAccountBody(name, rights), cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException($"A service account named '{name}' already exists.");
@@ -3277,7 +3307,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<NotificationList> GetNotificationsAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/notifications", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("notifications", cancellationToken), cancellationToken);
         var items = new List<NotificationInfo>();
         if (json.TryGetProperty("notifications", out var arr))
         {
@@ -3318,7 +3348,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<List<LegalHoldInfo>> GetLegalHoldsAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/legal-holds", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("legalHolds", cancellationToken), cancellationToken);
         var list = new List<LegalHoldInfo>();
         if (json.TryGetProperty("holds", out var holds))
         {
@@ -3336,7 +3366,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<LegalHoldInfo> CreateLegalHoldAsync(string name, string? reason, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync("api/legal-holds", new { name, reason }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(await RootHrefAsync("legalHolds", cancellationToken), new { name, reason }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to place legal holds.");

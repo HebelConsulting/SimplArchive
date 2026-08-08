@@ -1,3 +1,4 @@
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
 @inject HttpClient Http
 
 @* Context-aware inbox filing dialog (ADRs 0286/0287/0288) — file as a new version of the selected document,
@@ -87,7 +88,7 @@
     protected override async Task OnInitializedAsync()
     {
         var nodes = new List<TreeItemData<PickNode>>();
-        var url = "api/repositories";
+        var url = await ApiRoot.RequireAsync("repositories");
         while (url is not null)
         {
             var page = await Http.GetFromJsonAsync<ListResponse>(url);

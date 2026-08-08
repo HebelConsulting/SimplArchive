@@ -1,3 +1,4 @@
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
 @inject HttpClient Http
 
 @* Folder picker for Move / Place-reference targets (real folders only, no references) — see ADR
@@ -47,7 +48,7 @@
     protected override async Task OnInitializedAsync()
     {
         var nodes = new List<TreeItemData<PickNode>>();
-        var url = "api/repositories";
+        var url = await ApiRoot.RequireAsync("repositories");
         while (url is not null)
         {
             var page = await Http.GetFromJsonAsync<ListResponse>(url);

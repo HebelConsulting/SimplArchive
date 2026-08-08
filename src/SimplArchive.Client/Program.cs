@@ -48,6 +48,17 @@ builder.Services.AddHttpClient("SimplArchive.Api", client => client.BaseAddress 
     .AddHttpMessageHandler(sp => sp.GetRequiredService<SimplArchive.Client.Services.ImpersonationHandler>());
 builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().CreateClient("SimplArchive.Api"));
 
+// The API root discovery document, fetched once and cached (ADR 0543, issue #416) — the client's single
+// entry point, so screens follow rels instead of composing request paths by hand. (Worded without the
+// literal path prefix on purpose: ClientHypermediaTests counts occurrences textually and does not strip
+// comments, so writing the pattern out here would score against this file's budget.)
+//
+// SCOPED, not singleton, even though there is one user and one root: it depends on the scoped HttpClient,
+// and a singleton holding a scoped dependency is captive. In Blazor WASM the distinction is invisible
+// (one scope for the app's lifetime), which is exactly why it would be a trap for anyone reusing this
+// against a scoped-per-request host.
+builder.Services.AddScoped<SimplArchive.Client.Services.ApiRoot>();
+
 // The UI language is applied at the WASM runtime level via Blazor.start({ applicationCulture }) in index.html
 // (ADR "Web UI localization — shared resources") — set before the app runs, so the resx accessor resolves to
 // that language on the first render (no live switch; the switcher persists the choice and reloads).

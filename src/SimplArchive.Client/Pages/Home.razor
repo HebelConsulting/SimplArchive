@@ -12,6 +12,7 @@
 @inject IDialogService DialogService
 @inject SimplArchive.Client.Services.ImpersonationService ImpersonationSvc
 @inject SimplArchive.Client.Services.AppNavigationState AppNav
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
 
 <PageTitle>SimplArchive</PageTitle>
 
@@ -3924,7 +3925,7 @@
     {
         try
         {
-            var response = await Http.GetFromJsonAsync<RecycleBinResponse>("api/recycle-bin");
+            var response = await Http.GetFromJsonAsync<RecycleBinResponse>(await ApiRoot.RequireAsync("recycleBin"));
             _recycleBinItems.Clear();
             if (response?.Items is { } items)
             {
@@ -4247,7 +4248,7 @@
     {
         try
         {
-            var response = await Http.GetFromJsonAsync<LegalHoldsListDto>("api/legal-holds");
+            var response = await Http.GetFromJsonAsync<LegalHoldsListDto>(await ApiRoot.RequireAsync("legalHolds"));
             _legalHolds.Clear();
             if (response?.Holds is { } holds)
             {
@@ -4286,7 +4287,7 @@
 
         try
         {
-            using var response = await Http.PostAsJsonAsync("api/legal-holds", new { name = result.Name, reason = result.Reason });
+            using var response = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("legalHolds"), new { name = result.Name, reason = result.Reason });
             response.EnsureSuccessStatusCode();
             Snackbar.Add($"Legal hold '{result.Name}' created.", Severity.Success);
             await LoadLegalHoldsAsync();
@@ -4307,7 +4308,7 @@
 
         try
         {
-            using var created = await Http.PostAsJsonAsync("api/legal-holds", new { name = result.Name, reason = result.Reason });
+            using var created = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("legalHolds"), new { name = result.Name, reason = result.Reason });
             created.EnsureSuccessStatusCode();
             var hold = await created.Content.ReadFromJsonAsync<LegalHoldDto>();
             using var added = await Http.PostAsJsonAsync($"api/legal-holds/{hold!.Id}/items", new { documentId = node.Id });
@@ -4708,7 +4709,7 @@
                 query.Add($"cursor={Uri.EscapeDataString(_auditNextCursor)}");
             }
 
-            var url = "api/audit-events" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
+            var url = await ApiRoot.RequireAsync("auditEvents") + (query.Count > 0 ? "?" + string.Join("&", query) : "");
             var page = await Http.GetFromJsonAsync<AuditResponse>(url);
             foreach (var e in page?.Events ?? [])
             {
@@ -4798,7 +4799,7 @@
     {
         try
         {
-            _tasks = (await Http.GetFromJsonAsync<TaskListResponse>("api/tasks"))?.Tasks ?? [];
+            _tasks = (await Http.GetFromJsonAsync<TaskListResponse>(await ApiRoot.RequireAsync("tasks")))?.Tasks ?? [];
             _taskCount = _tasks.Count;
         }
         catch (Exception)
@@ -4829,8 +4830,8 @@
     {
         try
         {
-            _dashReminders = (await Http.GetFromJsonAsync<DashReminderResponse>("api/reminders"))?.Reminders ?? [];
-            _dashFollowing = (await Http.GetFromJsonAsync<DashFollowedResponse>("api/subscriptions"))?.Followed ?? [];
+            _dashReminders = (await Http.GetFromJsonAsync<DashReminderResponse>(await ApiRoot.RequireAsync("reminders")))?.Reminders ?? [];
+            _dashFollowing = (await Http.GetFromJsonAsync<DashFollowedResponse>(await ApiRoot.RequireAsync("subscriptions")))?.Followed ?? [];
             await LoadTasksAsync();
         }
         catch (Exception)
@@ -4874,7 +4875,7 @@
     {
         try
         {
-            _checkouts = (await Http.GetFromJsonAsync<CheckoutListResponse>("api/checkouts"))?.Items ?? [];
+            _checkouts = (await Http.GetFromJsonAsync<CheckoutListResponse>(await ApiRoot.RequireAsync("checkouts")))?.Items ?? [];
         }
         catch (Exception)
         {
@@ -5035,10 +5036,10 @@
         _tenantEditing = false;
         try
         {
-            _tenant = await Http.GetFromJsonAsync<TenantSettingsDto>("api/tenant-settings");
+            _tenant = await Http.GetFromJsonAsync<TenantSettingsDto>(await ApiRoot.RequireAsync("tenantSettings"));
             if (_ocrCatalog.Count == 0)
             {
-                _ocrCatalog = (await Http.GetFromJsonAsync<OcrCatalogResponse>("api/ocr-languages"))?.Languages ?? [];
+                _ocrCatalog = (await Http.GetFromJsonAsync<OcrCatalogResponse>(await ApiRoot.RequireAsync("ocrLanguages")))?.Languages ?? [];
             }
             SyncTenantEditFromTenant(); // the read-only fields bind to _tenantEdit too, so keep it in sync
         }
@@ -5078,7 +5079,7 @@
         var webhookSecret = string.IsNullOrWhiteSpace(_tenantEdit.AuditWebhookSecret) ? null : _tenantEdit.AuditWebhookSecret;
         long? storageQuotaBytes = _tenantEdit.StorageQuotaMb is { } mb ? (long)mb * 1024 * 1024 : null;
         var body = new { name = _tenantEdit.Name, defaultOcrLanguages = ocr, auditRetentionDays = _tenantEdit.AuditRetentionDays, checkoutTtlDays = _tenantEdit.CheckoutTtlDays, checkoutWarningDays = _tenantEdit.CheckoutWarningDays, wormLockMode = _tenantEdit.WormLockMode, requireMfa = _tenantEdit.RequireMfa, allowPasskeyLogin = _tenantEdit.AllowPasskeyLogin, requireDispositionReview = _tenantEdit.RequireDispositionReview, restrictTagsToCatalog = _tenantEdit.RestrictTagsToCatalog, enforceClearance = _tenantEdit.EnforceClearance, allowExternalLinks = _tenantEdit.AllowExternalLinks, showExternalLinkUrl = _tenantEdit.ShowExternalLinkUrl, externalLinkMaxDays = _tenantEdit.ExternalLinkMaxDays, externalLinkDefaultAccesses = _tenantEdit.ExternalLinkDefaultAccesses, storageQuotaBytes, incompleteUploadCleanupDays = _tenantEdit.IncompleteUploadCleanupDays, auditWebhookUrl = webhookUrl, auditWebhookSecret = webhookSecret };
-        var resp = await Http.PutAsJsonAsync("api/tenant-settings", body);
+        var resp = await Http.PutAsJsonAsync(await ApiRoot.RequireAsync("tenantSettings"), body);
         if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add("Another active tenant already uses this name.", Severity.Warning); return; }
         if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add("Check the name, OCR languages, retention/expiry values and the webhook URL/secret.", Severity.Warning); return; }
         if (!resp.IsSuccessStatusCode) { Snackbar.Add("Could not save the settings.", Severity.Error); return; }
@@ -5122,7 +5123,7 @@
     {
         var input = await JS.InvokeAsync<string?>("prompt", "New repository name:");
         if (string.IsNullOrWhiteSpace(input)) return;
-        var resp = await Http.PostAsJsonAsync("api/repositories", new { name = input.Trim() });
+        var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("repositories"), new { name = input.Trim() });
         if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add("A repository with that name already exists.", Severity.Warning); return; }
         if (resp.StatusCode == System.Net.HttpStatusCode.Forbidden) { Snackbar.Add("You don't have permission to create repositories.", Severity.Error); return; }
         if (!resp.IsSuccessStatusCode) { Snackbar.Add("Could not create the repository.", Severity.Error); return; }
@@ -5220,7 +5221,7 @@
             }
 
             var shared = new List<TreeItemData<BrowseNode>>();
-            var url = "api/repositories";
+            var url = await ApiRoot.RequireAsync("repositories");
             while (url is not null)
             {
                 var page = await Http.GetFromJsonAsync<RepositoryListResponse>(url);
@@ -6007,7 +6008,7 @@
     {
         try
         {
-            var resp = await Http.GetFromJsonAsync<SensitivityLabelsResponse>("api/sensitivity-labels");
+            var resp = await Http.GetFromJsonAsync<SensitivityLabelsResponse>(await ApiRoot.RequireAsync("sensitivityLabels"));
             _sensitivityLabels = resp?.Labels ?? [];
             _canManageSensitivity = resp?.CanManage ?? false;
         }
@@ -6090,10 +6091,10 @@
                 await LoadTagCatalogAsync(); // names for autocomplete + colours for the chips
             }
 
-            _availableMasks = (await Http.GetFromJsonAsync<MaskListResponse>("api/masks"))?.Masks ?? [];
+            _availableMasks = (await Http.GetFromJsonAsync<MaskListResponse>(await ApiRoot.RequireAsync("masks")))?.Masks ?? [];
             if (_sysHasTiff && _ocrCatalog.Count == 0)
             {
-                _ocrCatalog = (await Http.GetFromJsonAsync<OcrCatalogResponse>("api/ocr-languages"))?.Languages ?? [];
+                _ocrCatalog = (await Http.GetFromJsonAsync<OcrCatalogResponse>(await ApiRoot.RequireAsync("ocrLanguages")))?.Languages ?? [];
             }
 
             await LoadEditFieldsAsync(_editMaskId, useCurrentValues: true);
@@ -7091,7 +7092,7 @@
 
         try
         {
-            var gurl = "api/groups";
+            var gurl = await ApiRoot.RequireAsync("groups");
             while (gurl is not null)
             {
                 var page = await Http.GetFromJsonAsync<GroupsAdminResponse>(gurl);
@@ -7102,7 +7103,7 @@
                 gurl = RelativeHref(page?.Links, "next");
             }
 
-            var uurl = "api/users";
+            var uurl = await ApiRoot.RequireAsync("users");
             while (uurl is not null)
             {
                 var page = await Http.GetFromJsonAsync<UsersAdminResponse>(uurl);
@@ -7415,8 +7416,8 @@
         {
             Guid newId;
             using (var resp = isGroup
-                ? await Http.PostAsJsonAsync("api/groups", new { name })
-                : await Http.PostAsJsonAsync("api/users", new { email, displayName = name }))
+                ? await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("groups"), new { name })
+                : await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("users"), new { email, displayName = name }))
             {
                 if (!resp.IsSuccessStatusCode)
                 {
@@ -7770,7 +7771,7 @@
     // ---- Saved searches (ADR "Saved searches") ------------------------------------------------------
     private async Task LoadSavedSearchesAsync()
     {
-        try { _savedSearches = (await Http.GetFromJsonAsync<SavedSearchesResponse>("api/saved-searches"))?.SavedSearches ?? []; }
+        try { _savedSearches = (await Http.GetFromJsonAsync<SavedSearchesResponse>(await ApiRoot.RequireAsync("savedSearches")))?.SavedSearches ?? []; }
         catch (Exception) { _savedSearches = []; }
     }
 
@@ -7787,7 +7788,7 @@
             return;
         }
 
-        using var resp = await Http.PostAsJsonAsync("api/saved-searches", new { name = name.Trim(), queryString = _lastSearchQueryString });
+        using var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("savedSearches"), new { name = name.Trim(), queryString = _lastSearchQueryString });
         if (resp.IsSuccessStatusCode)
         {
             Snackbar.Add("Search saved.", Severity.Success);
@@ -8026,7 +8027,7 @@
             _availableFields = (fields?.Fields ?? []).Select(f => new SearchFieldOption(f.Name, f.DataType)).ToList();
 
             var repos = new List<SearchRepoOption>();
-            var url = "api/repositories";
+            var url = await ApiRoot.RequireAsync("repositories");
             while (url is not null)
             {
                 var page = await Http.GetFromJsonAsync<RepositoryListResponse>(url);
@@ -8505,7 +8506,7 @@
 
             var url = _inboxViewUserId is { } viewUser
                 ? $"api/inbox?user={viewUser}"
-                : _inboxIncludeGroups ? "api/inbox?includeGroups=true" : "api/inbox";
+                : _inboxIncludeGroups ? "api/inbox?includeGroups=true" : await ApiRoot.RequireAsync("inbox");
             var response = await Http.GetFromJsonAsync<InboxResponse>(url);
             _inboxItems = (response?.Items ?? []).Select(i => new InboxItem(
                 i.Name, i.Size, i.HasMask,
@@ -8575,7 +8576,7 @@
         {
             foreach (var file in files)
             {
-                var target = await (await Http.PostAsJsonAsync("api/inbox", new { fileName = file.Name })).Content.ReadFromJsonAsync<UploadInboxResponse>();
+                var target = await (await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("inbox"), new { fileName = file.Name })).Content.ReadFromJsonAsync<UploadInboxResponse>();
                 if (target is null)
                 {
                     continue;
@@ -8622,7 +8623,7 @@
     {
         try
         {
-            var target = await (await Http.PostAsJsonAsync("api/inbox", new { fileName })).Content.ReadFromJsonAsync<UploadInboxResponse>();
+            var target = await (await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("inbox"), new { fileName })).Content.ReadFromJsonAsync<UploadInboxResponse>();
             return target?.UploadUrl;
         }
         catch (Exception)
@@ -8693,7 +8694,7 @@
 
         try
         {
-            _inboxStgMasks = (await Http.GetFromJsonAsync<MaskListResponse>("api/masks"))?.Masks ?? [];
+            _inboxStgMasks = (await Http.GetFromJsonAsync<MaskListResponse>(await ApiRoot.RequireAsync("masks")))?.Masks ?? [];
             var draft = await Http.GetFromJsonAsync<InboxMaskDraft>($"api/inbox/{Uri.EscapeDataString(item.Name)}/mask{item.SourceQuery}");
             _inboxStgName = string.IsNullOrEmpty(draft?.Name) ? System.IO.Path.GetFileNameWithoutExtension(item.Name) : draft.Name;
             _inboxStgDate = DateTime.TryParse(draft?.DocumentDate, out var d) ? d.Date : null;
@@ -8705,7 +8706,7 @@
             _inboxStgOcrCodes = draft?.OcrLanguages ?? [];
             if (_inboxStgScannable && _ocrCatalog.Count == 0)
             {
-                _ocrCatalog = (await Http.GetFromJsonAsync<OcrCatalogResponse>("api/ocr-languages"))?.Languages ?? [];
+                _ocrCatalog = (await Http.GetFromJsonAsync<OcrCatalogResponse>(await ApiRoot.RequireAsync("ocrLanguages")))?.Languages ?? [];
             }
 
             // Preselect the staged mask, or default to "Basic Entry" for an un-classified item (ADR 0284).
@@ -9042,7 +9043,7 @@
     {
         try
         {
-            var resp = await Http.GetFromJsonAsync<TagsResponse>("api/tags");
+            var resp = await Http.GetFromJsonAsync<TagsResponse>(await ApiRoot.RequireAsync("tags"));
             _catalogTags = resp?.Catalog ?? [];
             _tagCatalog = _catalogTags.Select(t => t.Name).ToList();
             _tagColors = _catalogTags.ToDictionary(t => t.Name, t => t.Color);
@@ -9055,7 +9056,7 @@
         var name = (_newTagName ?? "").Trim();
         if (name.Length == 0) return;
         var color = string.IsNullOrWhiteSpace(_newTagColor) ? null : _newTagColor.Trim();
-        var resp = await Http.PostAsJsonAsync("api/tags", new { name, color });
+        var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("tags"), new { name, color });
         if (resp.IsSuccessStatusCode) { _newTagName = ""; _newTagColor = ""; await LoadTagCatalogAsync(); }
         else Snackbar.Add(resp.StatusCode == HttpStatusCode.Conflict ? "That tag already exists." : "Could not add the tag (check the colour is #RRGGBB).", Severity.Warning);
     }

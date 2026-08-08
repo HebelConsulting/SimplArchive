@@ -1,3 +1,4 @@
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
 @* Bulk add-tags dialog (ADR "Bulk actions on selected documents") — a chip editor + a catalog-autocomplete
    add box; returns the normalized tag list to union onto every selected document. *@
 @using System.Net.Http.Json
@@ -37,7 +38,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        try { _catalog = (await Http.GetFromJsonAsync<TagsResponse>("api/tags"))?.Tags ?? []; }
+        try { _catalog = (await Http.GetFromJsonAsync<TagsResponse>(await ApiRoot.RequireAsync("tags")))?.Tags ?? []; }
         catch { _catalog = []; }
     }
 
