@@ -3225,4 +3225,34 @@
   <data name="CoErrCancel" xml:space="preserve">
     <value>Impossibile annullare il check-out.</value>
   </data>
+  <data name="ApiErrGeneric" xml:space="preserve">
+    <value>L'azione è stata rifiutata dal server.</value>
+  </data>
+  <data name="ApiErrExternalLinksDisabled" xml:space="preserve">
+    <value>I link esterni sono disattivati per questo tenant.</value>
+  </data>
+  <data name="ApiErrExternalLinkUrlNotShown" xml:space="preserve">
+    <value>L'URL di un link viene fornito una sola volta, alla creazione, e questo tenant non lo rende recuperabile in seguito.</value>
+  </data>
+  <data name="ApiErrInsufficientRightsToGrant" xml:space="preserve">
+    <value>Non puoi concedere più diritti di quanti ne possiedi.</value>
+  </data>
+  <data name="ApiErrDocumentUnderLegalHold" xml:space="preserve">
+    <value>Questo documento è soggetto a un blocco legale e non può essere modificato.</value>
+  </data>
+  <data name="ApiErrDocumentCheckedOut" xml:space="preserve">
+    <value>Questo documento è estratto.</value>
+  </data>
+  <data name="ApiErrEtagMismatch" xml:space="preserve">
+    <value>Nel frattempo qualcun altro ha modificato questo elemento: ricarica e riprova.</value>
+  </data>
+  <data name="ApiErrIfMatchRequired" xml:space="preserve">
+    <value>Questa modifica richiede una copia aggiornata: ricarica e riprova.</value>
+  </data>
+  <data name="ApiErrStorageQuotaExceeded" xml:space="preserve">
+    <value>La quota di archiviazione di questo tenant è esaurita.</value>
+  </data>
+  <data name="ApiErrWorkflowTransitionNotAllowed" xml:space="preserve">
+    <value>Questo passaggio del workflow non è consentito dallo stato attuale.</value>
+  </data>
 </root>

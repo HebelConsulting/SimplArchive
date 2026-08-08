@@ -3225,4 +3225,34 @@
   <data name="CoErrCancel" xml:space="preserve">
     <value>Could not cancel the check-out.</value>
   </data>
+  <data name="ApiErrGeneric" xml:space="preserve">
+    <value>The action was rejected by the server.</value>
+  </data>
+  <data name="ApiErrExternalLinksDisabled" xml:space="preserve">
+    <value>External links are switched off for this tenant.</value>
+  </data>
+  <data name="ApiErrExternalLinkUrlNotShown" xml:space="preserve">
+    <value>A link's URL is given out once, when it is created, and this tenant does not make it retrievable afterwards.</value>
+  </data>
+  <data name="ApiErrInsufficientRightsToGrant" xml:space="preserve">
+    <value>You cannot grant more rights than you hold yourself.</value>
+  </data>
+  <data name="ApiErrDocumentUnderLegalHold" xml:space="preserve">
+    <value>This document is under a legal hold and cannot be changed.</value>
+  </data>
+  <data name="ApiErrDocumentCheckedOut" xml:space="preserve">
+    <value>This document is checked out.</value>
+  </data>
+  <data name="ApiErrEtagMismatch" xml:space="preserve">
+    <value>Someone else changed this in the meantime — reload and try again.</value>
+  </data>
+  <data name="ApiErrIfMatchRequired" xml:space="preserve">
+    <value>This change needs a fresh copy — reload and try again.</value>
+  </data>
+  <data name="ApiErrStorageQuotaExceeded" xml:space="preserve">
+    <value>The storage quota for this tenant is exhausted.</value>
+  </data>
+  <data name="ApiErrWorkflowTransitionNotAllowed" xml:space="preserve">
+    <value>That workflow step is not allowed from the current status.</value>
+  </data>
 </root>

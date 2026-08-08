@@ -443,7 +443,7 @@
             if (!response.IsSuccessStatusCode)
             {
                 var problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
-                Snackbar.Add(problem?.Detail ?? Strings.Get("MaLoadFailed"), Severity.Warning);
+                Snackbar.Add(ApiErrorText.For(problem?.ErrorCode), Severity.Warning);
                 return;
             }
             _editing = null;
@@ -548,7 +548,8 @@
 
     private sealed class DocDto { public bool BreaksInheritance { get; set; } }
 
-    private sealed class ProblemDto { public string? Detail { get; set; } }
+    // `errorCode`, not `detail` — see ApiErrorText (issue #424).
+    private sealed class ProblemDto { public string? ErrorCode { get; set; } }
 
     private sealed class EffectiveDto
     {

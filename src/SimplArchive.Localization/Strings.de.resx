@@ -3225,4 +3225,34 @@
   <data name="CoErrCancel" xml:space="preserve">
     <value>Das Check-out konnte nicht abgebrochen werden.</value>
   </data>
+  <data name="ApiErrGeneric" xml:space="preserve">
+    <value>Die Aktion wurde vom Server abgelehnt.</value>
+  </data>
+  <data name="ApiErrExternalLinksDisabled" xml:space="preserve">
+    <value>Externe Links sind für diesen Mandanten deaktiviert.</value>
+  </data>
+  <data name="ApiErrExternalLinkUrlNotShown" xml:space="preserve">
+    <value>Die URL eines Links wird nur einmal bei der Erstellung ausgegeben; dieser Mandant macht sie danach nicht abrufbar.</value>
+  </data>
+  <data name="ApiErrInsufficientRightsToGrant" xml:space="preserve">
+    <value>Sie können nicht mehr Rechte vergeben, als Sie selbst besitzen.</value>
+  </data>
+  <data name="ApiErrDocumentUnderLegalHold" xml:space="preserve">
+    <value>Dieses Dokument unterliegt einem Legal Hold und kann nicht geändert werden.</value>
+  </data>
+  <data name="ApiErrDocumentCheckedOut" xml:space="preserve">
+    <value>Dieses Dokument ist ausgecheckt.</value>
+  </data>
+  <data name="ApiErrEtagMismatch" xml:space="preserve">
+    <value>Jemand anderes hat dies zwischenzeitlich geändert — bitte neu laden und erneut versuchen.</value>
+  </data>
+  <data name="ApiErrIfMatchRequired" xml:space="preserve">
+    <value>Für diese Änderung wird eine aktuelle Fassung benötigt — bitte neu laden und erneut versuchen.</value>
+  </data>
+  <data name="ApiErrStorageQuotaExceeded" xml:space="preserve">
+    <value>Das Speicherkontingent dieses Mandanten ist erschöpft.</value>
+  </data>
+  <data name="ApiErrWorkflowTransitionNotAllowed" xml:space="preserve">
+    <value>Dieser Workflow-Schritt ist aus dem aktuellen Status nicht zulässig.</value>
+  </data>
 </root>

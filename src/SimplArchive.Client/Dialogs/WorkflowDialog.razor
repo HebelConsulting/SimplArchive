@@ -183,7 +183,8 @@
             else
             {
                 var problem = await response.Content.ReadFromJsonAsync<ProblemResponse>();
-                Snackbar.Add(problem?.Detail ?? "The workflow action was rejected.", Severity.Warning);
+                // The server's `detail` is English (issue #424) — map its machine code to our own localised text.
+                Snackbar.Add(ApiErrorText.For(problem?.ErrorCode), Severity.Warning);
             }
         }
         catch (Exception)
@@ -235,5 +236,7 @@
     private record VersionSummary { public string Status { get; set; } = ""; public int? VersionNumber { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record AssignableReviewersResponse { public List<UserOption> Reviewers { get; set; } = []; }
     private record UserOption { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; }
-    private record ProblemResponse { public string? Detail { get; set; } }
+    // `errorCode`, not `detail`: the code is the stable, language-neutral contract (ADR 0543); the detail
+    // is English prose for developers.
+    private record ProblemResponse { public string? ErrorCode { get; set; } }
 }

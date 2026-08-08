@@ -764,7 +764,13 @@ public sealed class SimplArchiveApiClient
         await ThrowIfProblemAsync(response, "Could not save the index data", cancellationToken);
     }
 
-    // Surfaces a Problem Details `detail` (or a generic message) as an ApiActionException on a failed response.
+    // Turns a failed response into an ApiActionException carrying text the USER can read, in their language.
+    //
+    // Reads `errorCode`, not `detail`. The detail is English — the API's 153 exception classes carry their
+    // message as a constructor literal, so no Accept-Language handling reaches them — and this method is on the
+    // path of every failed call in the desktop, which made it the single biggest source of English in an
+    // otherwise German UI (issue #424). The code is the stable, language-neutral contract (ADR 0543), so it
+    // crosses the wire and ApiErrorText supplies the words.
     private static async Task ThrowIfProblemAsync(HttpResponseMessage response, string fallback, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)
@@ -772,21 +778,23 @@ public sealed class SimplArchiveApiClient
             return;
         }
 
-        var detail = fallback;
+        string? errorCode = null;
         try
         {
             var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-            if (json.TryGetProperty("detail", out var d) && d.GetString() is { Length: > 0 } message)
+            if (json.TryGetProperty("errorCode", out var c) && c.GetString() is { Length: > 0 } code)
             {
-                detail = message;
+                errorCode = code;
             }
         }
         catch
         {
-            // no problem body — use the fallback
+            // No problem body at all (a proxy error page, a connection reset) — fall back to the caller's message,
+            // which is already localised at its call site.
+            throw new ApiActionException(fallback);
         }
 
-        throw new ApiActionException(detail);
+        throw new ApiActionException(errorCode is null ? fallback : ApiErrorText.For(errorCode));
     }
 
     public async Task<List<IndexField>> GetIndexDataAsync(Guid documentId, CancellationToken cancellationToken = default)
@@ -1077,12 +1085,13 @@ public sealed class SimplArchiveApiClient
         if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ErrorMessageAsync(resp, "Could not merge the tags."));
     }
 
+    // As ThrowIfProblemAsync: the machine code, never the server's English `detail` (issue #424).
     private static async Task<string> ErrorMessageAsync(HttpResponseMessage resp, string fallback)
     {
         try
         {
             var json = await resp.Content.ReadFromJsonAsync<JsonElement>();
-            if (json.TryGetProperty("detail", out var d) && d.GetString() is { Length: > 0 } detail) return detail;
+            if (json.TryGetProperty("errorCode", out var c) && c.GetString() is { Length: > 0 } code) return ApiErrorText.For(code);
         }
         catch { /* not a problem+json body */ }
 
@@ -2906,16 +2915,16 @@ public sealed class SimplArchiveApiClient
 
         if (!response.IsSuccessStatusCode)
         {
-            var detail = "The workflow action was rejected.";
+            var detail = ApiErrorText.For(null);
             try
             {
                 var problem = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-                if (problem.TryGetProperty("detail", out var d) && d.GetString() is { } s)
+                if (problem.TryGetProperty("errorCode", out var c) && c.GetString() is { Length: > 0 } code)
                 {
-                    detail = s;
+                    detail = ApiErrorText.For(code);
                 }
             }
-            catch (Exception) { /* keep the default */ }
+            catch (Exception) { /* keep the generic localised message */ }
 
             throw new ApiActionException(detail);
         }

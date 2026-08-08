@@ -3225,4 +3225,34 @@
   <data name="CoErrCancel" xml:space="preserve">
     <value>No se pudo cancelar el check-out.</value>
   </data>
+  <data name="ApiErrGeneric" xml:space="preserve">
+    <value>El servidor rechazó la acción.</value>
+  </data>
+  <data name="ApiErrExternalLinksDisabled" xml:space="preserve">
+    <value>Los enlaces externos están desactivados para este inquilino.</value>
+  </data>
+  <data name="ApiErrExternalLinkUrlNotShown" xml:space="preserve">
+    <value>La URL de un enlace se facilita una sola vez, al crearlo, y este inquilino no permite recuperarla después.</value>
+  </data>
+  <data name="ApiErrInsufficientRightsToGrant" xml:space="preserve">
+    <value>No puede conceder más derechos de los que usted posee.</value>
+  </data>
+  <data name="ApiErrDocumentUnderLegalHold" xml:space="preserve">
+    <value>Este documento está sujeto a una retención legal y no puede modificarse.</value>
+  </data>
+  <data name="ApiErrDocumentCheckedOut" xml:space="preserve">
+    <value>Este documento está desprotegido.</value>
+  </data>
+  <data name="ApiErrEtagMismatch" xml:space="preserve">
+    <value>Otra persona lo ha modificado mientras tanto: recargue e inténtelo de nuevo.</value>
+  </data>
+  <data name="ApiErrIfMatchRequired" xml:space="preserve">
+    <value>Este cambio necesita una copia actualizada: recargue e inténtelo de nuevo.</value>
+  </data>
+  <data name="ApiErrStorageQuotaExceeded" xml:space="preserve">
+    <value>Se ha agotado la cuota de almacenamiento de este inquilino.</value>
+  </data>
+  <data name="ApiErrWorkflowTransitionNotAllowed" xml:space="preserve">
+    <value>Ese paso del flujo de trabajo no se permite desde el estado actual.</value>
+  </data>
 </root>
