@@ -133,6 +133,11 @@ jobs:
     # The trade only holds if the FULL local suite is run before pushing. A filtered local run is what let
     # DesktopExternalLinksTests reach CI red in the first place, and that is precisely the class of failure this
     # tier exists to catch.
+    #
+    # !! When this `if` is false these jobs report `skipping`, which is INDISTINGUISHABLE FROM PASSING to
+    # `gh pr checks` and to GitHub's required-status-check machinery. Judge merge-readiness with
+    # `scripts/merge-ready.sh`, which asserts the legs actually ran; the `verdict` job below says so out loud.
+    # See issue #418 and docs/deploy/ci.md "Merge readiness".
     if: >-
       github.event_name == 'push'
       || contains(github.event.pull_request.labels.*.name, 'e2e')
@@ -167,3 +172,53 @@ jobs:
       # CPU; WebSearchFilterTests polls until the row clears). A red suite is a real regression or a new flake.
       - name: Test ${{ matrix.project }} ${{ matrix.filter }}
         run: dotnet test tests/SimplArchive.${{ matrix.project }} --no-build -c Debug ${{ matrix.filter }}
+
+  # Says out loud whether the heavy tier actually RAN. Gating the tier separated two statements that used to be
+  # identical — "nothing failed" and "everything ran" — and nothing was updated to notice: a job skipped by its
+  # `if` reports the check as `skipping`, which `gh pr checks` counts as not-a-failure and which GitHub treats as
+  # SATISFYING a required status check. So an unverified branch presents as a wall of green, and it fails in the
+  # safe-looking direction. That near-miss is issue #418 (PR #415: all six E2E legs skipped, "0 failing").
+  #
+  # This job PASSES either way, deliberately. Failing on every label-less PR would make red mean two different
+  # things ("broken" and "not checked") on the majority of runs, and a check that is always red is a check nobody
+  # reads. It carries the warning in the job summary instead, and `scripts/merge-ready.sh` is the actual gate —
+  # it asserts the expected number of E2E legs are in `pass`, not merely that none failed.
+  verdict:
+    name: E2E verdict
+    needs: [fast, heavy]
+    if: always() && needs.fast.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report whether the E2E tier ran
+        env:
+          HEAVY: ${{ needs.heavy.result }}
+        run: |
+          if [ "$HEAVY" = "success" ]; then
+            echo "### ✅ E2E tier ran and passed" >> "$GITHUB_STEP_SUMMARY"
+            echo "All six legs executed. This branch is verified." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$HEAVY" = "failure" ]; then
+            echo "### ❌ E2E tier ran and FAILED" >> "$GITHUB_STEP_SUMMARY"
+            echo "See the red legs above — this is a real regression or a new flake." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # skipped / cancelled — the case this job exists for.
+          {
+            echo "### ⚠️ E2E DID NOT RUN — this branch is UNVERIFIED"
+            echo
+            echo "The heavy tier reported \`$HEAVY\`. **A check that did not run is not a passing check**, but"
+            echo "\`gh pr checks\` and GitHub's required-status-check machinery both treat it as one."
+            echo "Do not read the green wall on this PR as \"tested\"."
+            echo
+            echo "To verify it, both of these must happen — in this order:"
+            echo
+            echo "1. Add the \`e2e\` label to the PR."
+            echo "2. **Push a commit.** \`labeled\` only affects runs triggered *after* it fires;"
+            echo "   labelling a run that has already finished changes nothing about that run."
+            echo
+            echo "Then check readiness with \`scripts/merge-ready.sh <pr>\`, which asserts the legs"
+            echo "actually ran rather than merely not failing."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning title=E2E did not run::This branch is unverified — the heavy tier reported '$HEAVY'. See the job summary."
+          exit 0
