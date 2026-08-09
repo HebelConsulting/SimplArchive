@@ -316,8 +316,18 @@ public class DocumentsController : ControllerBase
         // either. Advertising it and refusing the click is precisely the shape ADR 0543 rules out: the client
         // would draw an affordance whose only outcome is a 400. "Has a confirmed version" is what separates a
         // document from a folder here, the same test the list uses to pick its icon.
-        var isFolder = !await _dbContext.DocumentVersions
-            .AnyAsync(v => v.DocumentId == documentId && v.Status == DocumentVersionStatus.Confirmed, cancellationToken);
+        // The latest confirmed version's object key answers BOTH questions in one query: whether this is a
+        // folder (no confirmed version) and whether it is a zip (issue #416). Both clients decided the latter by
+        // string-comparing a file extension they carried around — an inference a rel should make for them.
+        var latestKey = await _dbContext.DocumentVersions
+            .Where(v => v.DocumentId == documentId && v.Status == DocumentVersionStatus.Confirmed)
+            .OrderByDescending(v => v.CreatedAt).ThenByDescending(v => v.Id)
+            .Select(v => v.ObjectKey)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var isFolder = latestKey is null;
+        var isArchive = latestKey is not null
+            && Path.GetExtension(latestKey).Equals(".zip", StringComparison.OrdinalIgnoreCase);
 
         var externalLinksAllowed = !isFolder
             && rights.CanReadContent
@@ -371,6 +381,14 @@ public class DocumentsController : ControllerBase
         // cannot disagree. The folder/document split is applicability, not permission: a folder has no
         // sensitivity label or OCR language, and a document has no contents order, so advertising either on the
         // wrong kind would offer an affordance that can only fail.
+        // Only a ZIP has entries to list, so the rel is the server's answer to "can I browse inside this?" —
+        // a question both clients previously answered themselves by comparing ".zip" against an extension they
+        // had to carry. Needs read access, which is what the linked GET itself requires.
+        if (isArchive && rights.CanReadContent)
+        {
+            links.Add(new Link("archive-entries", $"/api/documents/{documentId}/archive-entries", "GET"));
+        }
+
         if (rights.CanEditIndexData)
         {
             if (isFolder)

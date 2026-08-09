@@ -516,7 +516,9 @@ public sealed class SimplArchiveApiClient
     // Lists a .zip document's entries on demand (ADR "Zip file browsing") — nothing is unpacked.
     public async Task<IReadOnlyList<ArchiveEntryInfo>> GetArchiveEntriesAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/archive-entries", cancellationToken);
+        // Follows the resource's own archive-entries rel — advertised only for a zip, so its PRESENCE is the
+        // server answering "can I browse inside this?" instead of the client comparing ".zip" (#416).
+        var json = await _http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "archive-entries", cancellationToken), cancellationToken);
         var entries = new List<ArchiveEntryInfo>();
         if (json.TryGetProperty("entries", out var array))
         {

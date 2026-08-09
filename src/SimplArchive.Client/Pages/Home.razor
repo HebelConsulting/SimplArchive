@@ -5651,7 +5651,8 @@
     {
         try
         {
-            var response = await Http.GetFromJsonAsync<ArchiveEntriesResponse>($"api/documents/{zip.Id}/archive-entries");
+            // The resource advertises archive-entries only for a zip (#416) — follow it rather than compose.
+            var response = await Http.GetFromJsonAsync<ArchiveEntriesResponse>(await FetchDocumentRelAsync(zip.Id, "archive-entries"));
             _archiveEntries = (response?.Entries ?? [])
                 .Select(e => new ArchiveEntryRow(e.Name, e.Path, e.Size,
                     e.Links?.FirstOrDefault(l => l.Rel == "download")?.Href?.TrimStart('/') ?? ""))
