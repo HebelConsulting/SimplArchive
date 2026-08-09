@@ -1,0 +1,26 @@
+# SimplArchive
+
+> An open-source document management system — repositories, index data, full-text search, workflow, retention
+> and an append-only audit trail — with a Blazor web client and an Avalonia desktop client. This instance is a
+> live demo that resets nightly.
+
+An agent landing here can drive the app itself. The guided tour below is a script, not a recording: it names the
+elements to act on, what should be true at each point, and what is worth saying — so you can produce a
+walkthrough in your user's language, at their depth, rather than us shipping one video for everybody.
+
+## Guided tour
+
+- [Guided tour (score for an agent)](/tour/tour.md): step-by-step anchors, assertions and narration beats. Read
+  the "For the agent reading this" section first — anchors are `data-tour` attributes, and assertions are
+  language-independent because the UI is translated.
+
+## API
+
+- [OpenAPI document](/openapi/v1.json): the full HTTP API. It is hypermedia — responses advertise the actions
+  available on a resource as named link rels, so follow rels rather than composing URLs from templates. A
+  missing rel means "not available to you, here, now".
+
+## Docs
+
+- [User manual (PDF)](/download/manual/SimplArchive-Manual.pdf): generated from the running app.
+- [Desktop clients](/download/clients/): Windows, macOS and Linux builds.

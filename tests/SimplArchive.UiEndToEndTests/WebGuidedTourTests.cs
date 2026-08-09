@@ -1,0 +1,104 @@
+using System.Text.RegularExpressions;
+using Microsoft.Playwright;
+
+namespace SimplArchive.UiEndToEndTests;
+
+// The guided tour (issue #414) is published for a visitor's own agent to perform against the live demo. That
+// makes it the one artefact whose failures happen somewhere we will never see: on a stranger's machine, in a
+// video nobody sends us. So the anchors it names are checked here against the real app.
+//
+// The tour is a CONTRACT, in the same sense as a rel name (ADR 0543): the DOM around an anchor may be
+// reorganised freely, the anchor may not be renamed. This test is what makes that promise real rather than
+// stated — rename `data-tour="pane-list"` and it fails here, not in a stranger's recording.
+//
+// It parses the anchors out of the published tour rather than restating them, so the two cannot drift: a step
+// added to the document is automatically covered, and one whose anchor is misspelled fails immediately.
+//
+// Deliberately NOT asserted: the narration, and anything about visible text. The UI is translated into four
+// languages, so a text assertion would be valid in exactly one of them — which is the audience the tour is least
+// aimed at. Anchors and `data-tour-*` values are language-independent, which is why the tour was written to
+// assert only those.
+[Collection(UiCollection.Name)]
+public partial class WebGuidedTourTests
+{
+    private readonly SelfHostedAppFixture _app;
+
+    public WebGuidedTourTests(SelfHostedAppFixture app) => _app = app;
+
+    [GeneratedRegex(@"data-tour=""(?<anchor>[a-z0-9-]+)""")]
+    private static partial Regex TourAnchor();
+
+    [Fact]
+    public async Task Every_anchor_the_tour_names_exists_in_the_app()
+    {
+        var tourPath = Path.Combine(RepoRoot(), "src", "SimplArchive.Client", "wwwroot", "tour", "tour.md");
+        Assert.True(File.Exists(tourPath), $"The published tour is missing: {tourPath}");
+
+        var anchors = TourAnchor().Matches(File.ReadAllText(tourPath))
+            .Select(m => m.Groups["anchor"].Value)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(a => a, StringComparer.Ordinal)
+            .ToList();
+
+        // Anti-vacuous, sample-independent: if the parse breaks, the loop below would assert nothing at all.
+        Assert.True(anchors.Count >= 6, $"parsed only {anchors.Count} anchors from the tour — the scan is broken");
+
+        var page = await Ui.LoginAsync(_app);
+
+        // Step 3 of the tour selects a folder before the list has rows; do the same, so the anchors that only
+        // exist once something is selected are genuinely present when checked.
+        await page.GetByText("Demo Repository").First.ClickAsync();
+        await page.Locator("[data-tour='pane-list'] .wb-list-row").First.WaitForAsync(new() { Timeout = 30000 });
+        await page.Locator("[data-tour='pane-list'] .wb-list-row").First.ClickAsync();
+
+        var missing = new List<string>();
+        foreach (var anchor in anchors)
+        {
+            if (await page.Locator($"[data-tour='{anchor}']").CountAsync() == 0)
+            {
+                missing.Add(anchor);
+            }
+        }
+
+        Assert.True(missing.Count == 0,
+            "The published guided tour names anchors that no longer exist in the app, so a visitor's agent would "
+            + "follow it into nothing (issue #414):\n  " + string.Join("\n  ", missing)
+            + "\n\nEither restore the anchor or update wwwroot/tour/tour.md — the anchor names are the contract, "
+            + "not the surrounding markup.");
+    }
+
+    // The tour's assertions are machine-readable so they hold in any language; this checks the values it reads
+    // are actually emitted, since an absent attribute reads the same as a wrong one to an agent.
+    [Fact]
+    public async Task The_values_the_tour_asserts_on_are_emitted()
+    {
+        var page = await Ui.LoginAsync(_app);
+        await page.GetByText("Demo Repository").First.ClickAsync();
+        await page.Locator("[data-tour='pane-list'] .wb-list-row").First.WaitForAsync(new() { Timeout = 30000 });
+
+        var roots = await page.Locator("[data-tour='pane-tree']").GetAttributeAsync("data-tour-roots");
+        Assert.True(int.TryParse(roots, out var rootCount) && rootCount >= 1,
+            $"pane-tree must publish a numeric data-tour-roots; got '{roots}'");
+
+        var rows = await page.Locator("[data-tour='pane-list']").GetAttributeAsync("data-tour-rows");
+        Assert.True(int.TryParse(rows, out var rowCount) && rowCount >= 1,
+            $"pane-list must publish a numeric data-tour-rows; got '{rows}'");
+
+        // A tab publishes whether it is the open one, so "the audit tab is now open" is assertable without
+        // reading a translated label.
+        await page.Locator("[data-tour='tab-audit']").ClickAsync();
+        Assert.Equal("true", await page.Locator("[data-tour='tab-audit']").GetAttributeAsync("data-tour-active"));
+        Assert.Equal("false", await page.Locator("[data-tour='tab-repositories']").GetAttributeAsync("data-tour-active"));
+    }
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "SimplArchive.slnx")))
+        {
+            dir = dir.Parent;
+        }
+
+        return dir?.FullName ?? throw new InvalidOperationException("repo root not found");
+    }
+}
