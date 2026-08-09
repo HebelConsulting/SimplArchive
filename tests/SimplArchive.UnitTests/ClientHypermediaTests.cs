@@ -46,7 +46,7 @@ public partial class ClientHypermediaTests
         ["src/SimplArchive.Client/Dialogs/VersionsDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/WorkflowDialog.razor"] = 2,
         ["src/SimplArchive.Client/Layout/MainLayout.razor"] = 6,
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 101,   // 108 → 101 (#416): the detail pane follows rels — the row's for mask/index-data, the resource's for tags/subscription
+        ["src/SimplArchive.Client/Pages/Home.razor"] = 99,    // 101 → 99 (#416): folder-follow fetches the resource and follows its subscription rel   // 108 → 101 (#416): the detail pane follows rels — the row's for mask/index-data, the resource's for tags/subscription
         // 184 → 183 (issue #385): the desktop read the document resource TWICE — once for its name, once for its
         // sensitivity label — so the per-document external-links rel had nowhere to be picked up from. One read
         // now serves both and carries the rel, which is what let the dialog follow it instead of composing a URL.

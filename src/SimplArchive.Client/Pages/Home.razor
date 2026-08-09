@@ -5982,7 +5982,7 @@
     {
         try
         {
-            var sub = await Http.GetFromJsonAsync<SubscriptionResponse>($"api/documents/{folder.Id}/subscription");
+            var sub = await Http.GetFromJsonAsync<SubscriptionResponse>(await FetchDocumentRelAsync(folder.Id, "subscription"));
             _folderSubscribed = sub?.Subscribed ?? false;
         }
         catch (Exception)
@@ -6001,9 +6001,10 @@
         try
         {
             var target = _folderSubscribed;
+            var href = await FetchDocumentRelAsync(folder.Id, "subscription");
             using var response = target
-                ? await Http.DeleteAsync($"api/documents/{folder.Id}/subscription")
-                : await Http.PutAsync($"api/documents/{folder.Id}/subscription", null);
+                ? await Http.DeleteAsync(href)
+                : await Http.PutAsync(href, null);
             response.EnsureSuccessStatusCode();
             _folderSubscribed = !target;
             Snackbar.Add(_folderSubscribed ? "Following this folder and everything in it." : "Unfollowed folder.", Severity.Success);
@@ -9043,6 +9044,19 @@
     private IReadOnlyDictionary<string, string>? _detailLinks;
 
     private string DetailHref(string rel) => HrefOrThrow(_detailLinks, rel);
+
+    // For an action on a node whose resource is not open — "Follow folder" from the tree context menu — FETCH
+    // the document and follow the rel. One request, at the moment the user acts.
+    //
+    // Deliberately not solved by advertising `subscription` on the listings: a listing advertises what BROWSING
+    // needs, and this is an action taken on ONE row, occasionally. Carrying it on every row of every page to
+    // serve that would invert the cost (#416).
+    private async Task<string> FetchDocumentRelAsync(Guid documentId, string rel)
+    {
+        var doc = await Http.GetFromJsonAsync<DocumentLinksResponse>($"api/documents/{documentId}");
+        return RelativeHref(doc?.Links, rel)
+            ?? throw new InvalidOperationException($"Document {documentId} advertised no '{rel}' rel (ADR 0543).");
+    }
 
     // The row's own advertised rel when it has one — no extra call — else the OPEN RESOURCE's, which this pane
     // has already fetched. Not every BrowseNode comes from a listing: a reference row, or a node built from an
