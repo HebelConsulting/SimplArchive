@@ -156,7 +156,13 @@
     .wb-pv-swatch-on { border-color: var(--mud-palette-primary); }
     .wb-pv-shape-preview { opacity: .6; pointer-events: none; }
     .wb-pv-drawing .wb-pv-overlay { cursor: crosshair; }
-    .wb-pv-findbar { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--mud-palette-lines-default); }
+    /* flex-wrap + min-width:0, so a narrowed pane wraps the toolbar onto another line instead of letting its
+       controls escape the pane and draw over the chat pane (#419). This mirrors the desktop, whose toolbar is a
+       WrapPanel (PreviewPane.axaml) and never had the defect — ADR 0511, the desktop is the reference. */
+    .wb-pv-findbar { flex: 0 0 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--mud-palette-lines-default); }
+    /* The find controls wrap as ONE unit, like the desktop's StackPanel — a text field split from its match
+       counter and arrows reads as broken rather than as a second row. */
+    .wb-pv-findbar .wb-pv-findgrp { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
     /* Right-aligned control group (zoom + fullscreen) at the end of the preview toolbar (#357). */
     .wb-pv-findbar .wb-pv-rightgrp { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; }
     /* In-app full-screen: the preview pane becomes a fixed overlay over the workbench, stopping just above the
@@ -1029,12 +1035,14 @@
                                     <div class="wb-pv-findbar" style="@((_pv.HasPages || _pv.Kind == "text") ? "" : "display:none;")">
                                         @if (_pv.HasPages)
                                         {
-                                            <MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Small" />
-                                            <MudTextField T="string" Value="_pv.FindQuery" ValueChanged="ApplyFindAsync" Immediate="true" Placeholder="@Strings.Get("FindInDocument")"
-                                                          Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:220px;" />
-                                            <span class="mud-text-secondary" style="font-size:.8em; min-width:46px;">@_pv.Index / @_pv.Count</span>
-                                            <MudIconButton Class="wb-pv-find-prev" Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Disabled="@(_pv.Count == 0)" OnClick="FindPrevAsync" />
-                                            <MudIconButton Class="wb-pv-find-next" Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Disabled="@(_pv.Count == 0)" OnClick="FindNextAsync" />
+                                            <span class="wb-pv-findgrp">
+                                                <MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Small" />
+                                                <MudTextField T="string" Value="_pv.FindQuery" ValueChanged="ApplyFindAsync" Immediate="true" Placeholder="@Strings.Get("FindInDocument")"
+                                                              Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:220px;" />
+                                                <span class="mud-text-secondary" style="font-size:.8em; min-width:46px;">@_pv.Index / @_pv.Count</span>
+                                                <MudIconButton Class="wb-pv-find-prev" Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Disabled="@(_pv.Count == 0)" OnClick="FindPrevAsync" />
+                                                <MudIconButton Class="wb-pv-find-next" Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Disabled="@(_pv.Count == 0)" OnClick="FindNextAsync" />
+                                            </span>
                                         }
                                         @if (_pvAnnotatable)
                                         {
