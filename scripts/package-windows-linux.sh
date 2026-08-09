@@ -29,7 +29,7 @@ OUT_DIR="dist"
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
 
-for tool in dotnet zip tar; do
+for tool in dotnet zip tar magick; do
   command -v "$tool" >/dev/null 2>&1 || { echo "error: '$tool' is required but not found on PATH." >&2; exit 1; }
 done
 
@@ -63,9 +63,82 @@ Windows:  run  ${EXE_NAME}.exe
 Linux:    run  ./${EXE_NAME}
           (if it is not executable after download:  chmod +x ${EXE_NAME})
 
+          For a menu entry and dock icon, run  ./install.sh
+          (installs a .desktop entry + icons under ~/.local/share; ./uninstall.sh removes them.
+           The binary stays where you unpacked it, so do not move it afterwards.)
+
 The client connects to a SimplArchive API; pick/enter the server on the logon window.
 Not for production — a showcase build.
 README
+
+  # Linux desktop integration (issue #429): a binary in a tarball has no menu entry, no dock icon and nothing
+  # to pin — the window icon Avalonia sets is not a LAUNCHER icon. Ship a .desktop entry plus hicolor PNGs and a
+  # tiny installer, because asking someone to place four files by hand is most of the reason nobody would.
+  if [[ "$kind" == "tar" ]]; then
+    echo "==> [$rid] Adding desktop entry + icons…"
+    local icon_src="$repo_root/src/SimplArchive.DesktopClient/Assets/cabinet-1024.png"
+    for size in 48 64 128 256; do
+      mkdir -p "$stage/share/icons/hicolor/${size}x${size}/apps"
+      magick "$icon_src" -resize "${size}x${size}" "$stage/share/icons/hicolor/${size}x${size}/apps/simplarchive.png"
+    done
+
+    mkdir -p "$stage/share/applications"
+    # Exec is a placeholder: the tarball can be unpacked anywhere, so install.sh rewrites it to the absolute
+    # path of the binary it just installed. A .desktop with a relative Exec silently does nothing when launched
+    # from a menu, which is the failure this avoids.
+    cat > "$stage/share/applications/simplarchive.desktop" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=SimplArchive
+GenericName=Document Management
+Comment=Browse, file and search documents in a SimplArchive archive
+Exec=__EXEC__
+Icon=simplarchive
+Terminal=false
+Categories=Office;
+StartupWMClass=$EXE_NAME
+DESKTOP
+
+    cat > "$stage/install.sh" <<'INSTALL'
+#!/usr/bin/env sh
+# Installs the menu entry + icons for the current user (no root, no package manager).
+# Undo with uninstall.sh. The binary itself stays where you unpacked it.
+set -eu
+here=$(cd "$(dirname "$0")" && pwd)
+apps="$HOME/.local/share/applications"
+icons="$HOME/.local/share/icons/hicolor"
+
+mkdir -p "$apps"
+sed "s|__EXEC__|$here/SimplArchive.DesktopClient|" "$here/share/applications/simplarchive.desktop" \
+    > "$apps/simplarchive.desktop"
+chmod +x "$here/SimplArchive.DesktopClient" 2>/dev/null || true
+
+for size in 48 64 128 256; do
+    mkdir -p "$icons/${size}x${size}/apps"
+    cp "$here/share/icons/hicolor/${size}x${size}/apps/simplarchive.png" "$icons/${size}x${size}/apps/"
+done
+
+# Best effort: desktops that cache the menu need a nudge; those that do not have these commands are fine.
+update-desktop-database "$apps" 2>/dev/null || true
+gtk-update-icon-cache -f -t "$icons" 2>/dev/null || true
+
+echo "Installed. SimplArchive should appear in your applications menu."
+echo "If it does not, log out and back in — some desktops only rescan then."
+INSTALL
+
+    cat > "$stage/uninstall.sh" <<'UNINSTALL'
+#!/usr/bin/env sh
+set -eu
+rm -f "$HOME/.local/share/applications/simplarchive.desktop"
+for size in 48 64 128 256; do
+    rm -f "$HOME/.local/share/icons/hicolor/${size}x${size}/apps/simplarchive.png"
+done
+update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+echo "Removed the menu entry and icons. The unpacked files are untouched."
+UNINSTALL
+
+    chmod +x "$stage/install.sh" "$stage/uninstall.sh"
+  fi
 
   if [[ "$kind" == "zip" ]]; then
     local out="$OUT_DIR/${stage_name}.zip"
