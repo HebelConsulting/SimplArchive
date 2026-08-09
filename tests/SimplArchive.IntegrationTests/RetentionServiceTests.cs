@@ -148,6 +148,81 @@ public class RetentionServiceTests
         Assert.Equal(new[] { seeds[1].Expired.Id }, deleted); // seeds[1] = autoTenant
     }
 
+    // An expired document is disposed even when it sorts BEHIND a full page of unexpired candidates.
+    //
+    // The sweep used to read candidates with a bare `.Take(500)` — placed before the expiry test, which runs
+    // client-side — so the constant named MaxDisposalsPerTenantPerSweep actually capped candidates EXAMINED. A
+    // tenant with more than 500 retention-managed documents got an arbitrary 500 of them; when none of those had
+    // expired it disposed nothing, which left the candidate set unchanged, so the next sweep asked the same
+    // question and got the same rows. Anything outside that window was never disposed — not "later", never.
+    //
+    // 500 unexpired documents followed by 3 expired ones is the smallest shape that reproduces it: the expired
+    // ones are the 501st onward in Id order, so a one-page sweep cannot see them.
+    [Fact]
+    public async Task Disposes_an_expired_document_that_sorts_past_the_first_candidate_page()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var tenantAccessor = new CurrentTenantAccessor();
+        using (var setup = CreateContext(connection, tenantAccessor)) await setup.Database.EnsureCreatedAsync();
+
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = "Acme", CreatedAt = DateTimeOffset.UtcNow };
+        var user = new User { Id = Guid.NewGuid(), TenantId = tenant.Id, Email = "u@acme.test", DisplayName = "U", CreatedAt = DateTimeOffset.UtcNow };
+        var mask = new Mask { Id = Guid.NewGuid(), TenantId = tenant.Id, CreatedAt = DateTimeOffset.UtcNow };
+        var maskVersion = new MaskVersion { Id = Guid.NewGuid(), TenantId = tenant.Id, MaskId = mask.Id, Name = "Retained", RetentionYears = 5, CreatedAt = DateTimeOffset.UtcNow };
+
+        const int UnexpiredCount = 500; // == the sweep's candidate page size
+        const int ExpiredCount = 3;
+        var old = DateTimeOffset.UtcNow.AddYears(-10);
+        var now = DateTimeOffset.UtcNow;
+
+        var documents = new List<Document>();
+        for (var i = 1; i <= UnexpiredCount + ExpiredCount; i++)
+        {
+            var expired = i > UnexpiredCount;
+            var doc = Doc(tenant.Id, user.Id, maskVersion.Id, $"doc-{i:D4}", expired ? old : now);
+            doc.Id = OrderedGuid(i); // ascending, so the expired ones are last
+            documents.Add(doc);
+        }
+
+        using (var seed = CreateContext(connection, tenantAccessor))
+        {
+            seed.Tenants.Add(tenant);
+            seed.Users.Add(user);
+            seed.Masks.Add(mask);
+            seed.MaskVersions.Add(maskVersion);
+            seed.Documents.AddRange(documents);
+            await seed.SaveChangesAsync();
+        }
+
+        var audit = new RecordingAuditRecorder();
+        int disposed;
+        using (var act = CreateContext(connection, tenantAccessor))
+        {
+            var service = new RetentionService(act, tenantAccessor, new LegalHoldService(act), new NoOpIndexQueue(), audit);
+            disposed = await service.SweepAsync();
+        }
+
+        var expectedIds = documents.TakeLast(ExpiredCount).Select(d => d.Id).ToList();
+        Assert.Equal(ExpiredCount, disposed);
+
+        using var read = CreateContext(connection, tenantAccessor);
+        var deleted = await read.Documents.IgnoreQueryFilters().Where(d => d.DeletedAt != null).Select(d => d.Id).ToListAsync();
+        Assert.Equal(expectedIds.Order().ToList(), deleted.Order().ToList());
+    }
+
+    // A Guid that sorts by `index` under BOTH of the shapes a provider might store one in. Only the final bytes
+    // vary, which are the last compared in a byte-wise (BLOB) comparison and the last printed in the textual form
+    // — so ascending `index` gives ascending order either way, and the test doesn't rest on how SQLite happens to
+    // persist a Guid today.
+    private static Guid OrderedGuid(int index)
+    {
+        var bytes = new byte[16];
+        bytes[14] = (byte)(index >> 8);
+        bytes[15] = (byte)index;
+        return new Guid(bytes);
+    }
+
     private static Document Doc(Guid tenantId, Guid userId, Guid? maskVersionId, string name, DateTimeOffset createdAt, Guid? parentId = null) => new()
     {
         Id = Guid.NewGuid(),

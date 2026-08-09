@@ -20,10 +20,17 @@ public class DocumentConfiguration : IEntityTypeConfiguration<Document>
         // never queried by it (read off the already-loaded document at key-generation time).
         builder.Property(d => d.StorageFolderId).IsRequired();
 
-        // Per-folder default contents sort order (ADR "Per-folder contents sort order"). Store default
-        // DocumentDate so the migration backfills existing folders to it; new documents get it from the entity
-        // default. Only meaningful for a folder.
-        builder.Property(d => d.ContentsSortOrder).HasDefaultValue(FolderContentsSortOrder.DocumentDate);
+        // Per-folder default contents sort order (ADR "Per-folder contents sort order"). Only meaningful for a
+        // folder. No store default: the entity initializer (= DocumentDate) supplies it, so every insert sends an
+        // explicit value.
+        //
+        // It DID carry HasDefaultValue(DocumentDate), which made Name unstorable. EF treats a property equal to
+        // its sentinel — the CLR default, and Name is 0 — as "not set", omits it from the INSERT and lets the
+        // store default win, so a folder explicitly created with Name silently became DocumentDate. EF warns
+        // about exactly this ("configured with a database-generated default, but has no configured sentinel").
+        // The store default's only job was backfilling existing folders, which its own migration did; keeping it
+        // afterwards bought nothing and cost a value.
+        builder.Property(d => d.ContentsSortOrder);
 
         // Exactly one of CreatedByUserId/CreatedByServiceAccountId is set — see ADR "Repositories
         // controller and Document creation". Same CASE WHEN "exactly one" shape already used for

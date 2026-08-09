@@ -29,13 +29,20 @@ public sealed class EmailNotificationDispatcher : IEmailNotificationDispatcher
 
     public async Task<int> DispatchPendingAsync(CancellationToken cancellationToken = default)
     {
-        // Un-emailed notifications joined to their recipient (a Restrict FK, so the user always exists). No
-        // ORDER BY — SQLite (the test provider) can't order by the DateTimeOffset columns, and all pending rows
-        // get sent eventually regardless of order. The tenant filter is ignored (this sweep spans all tenants).
+        // Un-emailed notifications joined to their recipient (a Restrict FK, so the user always exists). The
+        // tenant filter is ignored (this sweep spans all tenants).
+        //
+        // Ordered by Id: arbitrary, but STABLE, which is what a batched read needs. Not chronological — SQLite
+        // (the test provider) refuses DateTimeOffset in ORDER BY outright (NotSupportedException), so CreatedAt
+        // is not an option here. Order does not affect which notifications get sent: a sent one has EmailedAt
+        // stamped and leaves this set, so successive sweeps drain it. The exception is an address that fails
+        // PERMANENTLY — it stays pending forever, and BatchSize of those would stall everything behind them.
+        // That needs an attempt counter or a dead-letter row, not an ORDER BY; it is not introduced here.
         var pending = await (
             from n in _dbContext.Notifications.IgnoreQueryFilters(TenantFilterOnly)
             where n.EmailedAt == null
             join u in _dbContext.Users.IgnoreQueryFilters(TenantFilterOnly) on n.RecipientUserId equals u.Id
+            orderby n.Id
             select new { Notification = n, u.Email, u.DisplayName })
             .Take(BatchSize)
             .ToListAsync(cancellationToken);
