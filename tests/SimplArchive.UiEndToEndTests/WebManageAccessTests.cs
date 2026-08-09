@@ -137,4 +137,54 @@ public class WebManageAccessTests
         await dialog.GetByText("Effective access").ClickAsync();
         await Expect(dialog.GetByText("Tenant admin").First).ToBeVisibleAsync();
     }
+
+    // #426: a repository ROOT has no parent to inherit from, so the server does not advertise the
+    // acl-inheritance rel and the toggle must not be drawn. It used to be — and clicking it produced a certain
+    // 400, which is the shape ADR 0543 exists to rule out: an affordance whose only outcome is a refusal.
+    //
+    // The indicator line stays on a root ("this item uses its own permissions" is true and useful there); it is
+    // only the toggle that is meaningless. Asserting BOTH — absent on the root, present on a child — is what
+    // stops a fix that simply hides the row everywhere.
+    [Fact]
+    public async Task Break_inheritance_is_offered_on_a_folder_but_not_on_a_repository_root()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var folderName = $"root-inh-{suffix}";
+
+        using var http = new HttpClient { BaseAddress = new Uri(_app.BaseUrl) };
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await Ui.GetUserTokenAsync(_app.BaseUrl));
+        var repos = (await http.GetFromJsonAsync<JsonElement>("/api/repositories")).GetProperty("repositories");
+        var repoId = repos.EnumerateArray().First(r => r.GetProperty("name").GetString() == "Demo Repository").GetProperty("id").GetGuid();
+        (await http.PostAsJsonAsync($"/api/documents/{repoId}/children", new { name = folderName })).EnsureSuccessStatusCode();
+
+        var page = await Ui.LoginAsync(_app);
+        var tree = page.Locator("[data-pane='tree']");
+
+        // On the repository ROOT: the indicator shows, the toggle does not.
+        var root = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Demo Repository" }).First;
+        await root.ClickAsync(new() { Button = MouseButton.Right });
+        await page.Locator(".mud-menu-item").Filter(new() { HasText = "Manage access" }).First.ClickAsync();
+
+        var dialog = page.Locator(".mud-dialog");
+        await Expect(dialog.GetByText("permissions").First).ToBeVisibleAsync();
+        await Expect(dialog.GetByRole(AriaRole.Button, new() { Name = "Break inheritance" })).ToHaveCountAsync(0);
+        await Expect(dialog.GetByRole(AriaRole.Button, new() { Name = "Restore inheritance" })).ToHaveCountAsync(0);
+        // Backdrop click, not Escape: a MudDialog here does not close on Escape (measured while diagnosing
+        // #427), and a dialog left open puts its overlay over everything clicked next.
+        await page.Locator(".mud-overlay").First.ClickAsync(new() { Position = new Position { X = 5, Y = 5 } });
+        await Expect(page.Locator(".mud-dialog")).ToHaveCountAsync(0);
+
+        // On a CHILD folder of that root the toggle IS offered, because there is a parent to inherit from.
+        // Reached the same way as the root — expand the tree, right-click the node — so the two halves differ
+        // only in which node they act on, which is the thing under test.
+        await root.Locator(".mud-treeview-item-arrow").ClickAsync();
+        var subfolder = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = folderName }).First;
+        await Expect(subfolder).ToBeVisibleAsync(new() { Timeout = 15000 });
+        await subfolder.ClickAsync(new() { Button = MouseButton.Right });
+        await page.Locator(".mud-menu-item").Filter(new() { HasText = "Manage access" }).First.ClickAsync();
+
+        var childDialog = page.Locator(".mud-dialog").First;
+        await Expect(childDialog.GetByText("permissions").First).ToBeVisibleAsync();
+        await Expect(childDialog.GetByRole(AriaRole.Button, new() { Name = "Break inheritance" })).ToBeVisibleAsync();
+    }
 }

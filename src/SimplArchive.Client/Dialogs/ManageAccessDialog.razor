@@ -25,13 +25,20 @@
             }
             else
             {
-                @* Inheritance indicator + break/restore toggle. *@
+                @* Inheritance indicator, and the break/restore toggle ONLY when the server advertised the
+                   acl-inheritance rel (#426). The indicator still shows on a repository root — "this item uses
+                   its own permissions" is true and useful there — but the toggle is meaningless, because a root
+                   has no parent to inherit from and the server always refuses. A missing rel means "not
+                   available here" (ADR 0543), so the affordance simply is not drawn. *@
                 <div style="display:flex; align-items:center; gap:6px;" class="mb-3">
                     <MudIcon Icon="@(_breaksInheritance ? Icons.Material.Filled.LinkOff : Icons.Material.Filled.Link)" Size="Size.Small" Color="Color.Default" />
                     <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="flex:1 1 auto;">@(_breaksInheritance ? Strings.Get("MaAccessOwn") : Strings.Get("MaAccessInherited"))</MudText>
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="ToggleInheritanceAsync" Disabled="_busy">
-                        @(_breaksInheritance ? Strings.Get("MaRestoreInheritance") : Strings.Get("MaBreakInheritance"))
-                    </MudButton>
+                    @if (_inheritanceHref is not null)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="ToggleInheritanceAsync" Disabled="_busy">
+                            @(_breaksInheritance ? Strings.Get("MaRestoreInheritance") : Strings.Get("MaBreakInheritance"))
+                        </MudButton>
+                    }
                 </div>
 
                 <MudText Typo="Typo.subtitle2" Class="mb-1">@Strings.Get("MaCurrentAccess")</MudText>
@@ -171,6 +178,9 @@
     private bool _busy;
     private bool _breaksInheritance;
 
+    // Null when the server did not advertise acl-inheritance — a repository root, or no CanManagePermissions.
+    private string? _inheritanceHref;
+
     private List<AclEntryDto> _entries = [];
     private List<PrincipalDto> _principals = [];
     private EditState? _editing;
@@ -202,6 +212,7 @@
             _principals = (await Http.GetFromJsonAsync<PrincipalsDto>($"api/documents/{DocumentId}/acl-entries/grantable-principals"))?.Principals ?? [];
             var doc = await Http.GetFromJsonAsync<DocDto>($"api/documents/{DocumentId}");
             _breaksInheritance = doc?.BreaksInheritance ?? false;
+            _inheritanceHref = doc?.Links?.FirstOrDefault(l => l.Rel == "acl-inheritance")?.Href;
         }
         catch (Exception)
         {
@@ -439,7 +450,8 @@
         _busy = true;
         try
         {
-            var response = await Http.PutAsJsonAsync($"api/documents/{DocumentId}/acl-entries/inheritance", new { breaksInheritance = breaking });
+            // The advertised href, not a composed path (ADR 0543) — the toggle is only rendered when it exists.
+            var response = await Http.PutAsJsonAsync(_inheritanceHref!, new { breaksInheritance = breaking });
             if (!response.IsSuccessStatusCode)
             {
                 var problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
@@ -546,7 +558,19 @@
         public string Name { get; set; } = "";
     }
 
-    private sealed class DocDto { public bool BreaksInheritance { get; set; } }
+    private sealed class DocDto
+    {
+        public bool BreaksInheritance { get; set; }
+
+        public List<LinkDto>? Links { get; set; }
+    }
+
+    private sealed class LinkDto
+    {
+        public string Rel { get; set; } = "";
+
+        public string Href { get; set; } = "";
+    }
 
     // `errorCode`, not `detail` — see ApiErrorText (issue #424).
     private sealed class ProblemDto { public string? ErrorCode { get; set; } }

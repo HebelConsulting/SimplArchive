@@ -3485,14 +3485,17 @@ public sealed class SimplArchiveApiClient
 
     // Everything the Manage-access dialog needs in one load. Forbidden = the caller lacks CanManagePermissions
     // (the list/picker endpoints 403), so the dialog shows a read-only message instead of a broken editor.
-    public sealed record AclInfo(bool Forbidden, bool BreaksInheritance, List<AclEntryInfo> Entries, List<GrantablePrincipalInfo> Principals);
+    // InheritanceHref is null when the server did not advertise acl-inheritance — a repository root (no parent to
+    // inherit from) or no CanManagePermissions. The toggle is hidden then rather than offering a certain refusal
+    // (#426, ADR 0543).
+    public sealed record AclInfo(bool Forbidden, bool BreaksInheritance, List<AclEntryInfo> Entries, List<GrantablePrincipalInfo> Principals, string? InheritanceHref);
 
     public async Task<AclInfo> GetAclAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
         using var listResponse = await _http.GetAsync($"api/documents/{documentId}/acl-entries", cancellationToken);
         if (listResponse.StatusCode == HttpStatusCode.Forbidden)
         {
-            return new AclInfo(true, false, [], []);
+            return new AclInfo(true, false, [], [], null);
         }
 
         listResponse.EnsureSuccessStatusCode();
@@ -3524,17 +3527,30 @@ public sealed class SimplArchiveApiClient
         }
 
         var breaksInheritance = false;
+        string? inheritanceHref = null;
         try
         {
             var doc = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}", cancellationToken);
             breaksInheritance = doc.TryGetProperty("breaksInheritance", out var bi) && bi.ValueKind == JsonValueKind.True;
+            if (doc.TryGetProperty("links", out var links) && links.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var l in links.EnumerateArray())
+                {
+                    if (l.TryGetProperty("rel", out var rel) && rel.GetString() == "acl-inheritance")
+                    {
+                        inheritanceHref = l.TryGetProperty("href", out var h) ? h.GetString() : null;
+                        break;
+                    }
+                }
+            }
         }
         catch
         {
-            // Best-effort — the inheritance line just reads "inherits" if the document GET fails.
+            // Best-effort — the inheritance line just reads "inherits" if the document GET fails, and the toggle
+            // stays hidden, which is the safe direction: it cannot offer an action we could not confirm.
         }
 
-        return new AclInfo(false, breaksInheritance, entries, principals);
+        return new AclInfo(false, breaksInheritance, entries, principals, inheritanceHref);
     }
 
     public async Task SetAclEntryAsync(Guid documentId, string principalType, Guid principalId, AclRights rights, CancellationToken cancellationToken = default)
@@ -3584,9 +3600,11 @@ public sealed class SimplArchiveApiClient
     }
 
     // Break (copy inherited grants down) / restore (discard own grants) ACL inheritance (ADR 0486 follow-up).
-    public async Task SetInheritanceAsync(Guid documentId, bool breaksInheritance, CancellationToken cancellationToken = default)
+    // Takes the advertised href rather than composing one (ADR 0543); the caller only has it when the server
+    // offered the action.
+    public async Task SetInheritanceAsync(string href, bool breaksInheritance, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/acl-entries/inheritance", new { breaksInheritance }, cancellationToken);
+        using var response = await _http.PutAsJsonAsync(href, new { breaksInheritance }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException(Strings.Get("MaInsufficientRights"));

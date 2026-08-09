@@ -74,20 +74,25 @@ public class DesktopManageAccessTests
         Assert.False(before.BreaksInheritance);
         Assert.Empty(before.Entries);
 
-        // Break → the governing (root) grants are copied down, so the folder now has its own grants.
-        await api.SetInheritanceAsync(folder.Id, true);
+        // Break → the governing (root) grants are copied down, so the folder now has its own grants. The href
+        // comes from the resource, as the view model does it (#426) — a child folder advertises the rel.
+        Assert.NotNull(before.InheritanceHref);
+        await api.SetInheritanceAsync(before.InheritanceHref!, true);
         var broken = await api.GetAclAsync(folder.Id);
         Assert.True(broken.BreaksInheritance);
         Assert.NotEmpty(broken.Entries);
 
         // Restore → own grants discarded, inherits again.
-        await api.SetInheritanceAsync(folder.Id, false);
+        await api.SetInheritanceAsync(broken.InheritanceHref!, false);
         var restored = await api.GetAclAsync(folder.Id);
         Assert.False(restored.BreaksInheritance);
         Assert.Empty(restored.Entries);
 
-        // A repository root has no parent to inherit from — the toggle is refused.
-        await Assert.ThrowsAnyAsync<Exception>(() => api.SetInheritanceAsync(repo.Id, true));
+        // A repository root has no parent to inherit from, so the server does not advertise the rel at all and
+        // neither client draws the toggle (#426). The refusal behind it still stands, but a conforming client
+        // never reaches it — which is the point: the affordance is absent rather than certain to fail.
+        var rootAcl = await api.GetAclAsync(repo.Id);
+        Assert.Null(rootAcl.InheritanceHref);
 
         await api.DeleteAsync(folder.Id); // clean up
     }
@@ -106,7 +111,7 @@ public class DesktopManageAccessTests
 
         // Break inheritance so the folder's own grants actually govern it — a grant on a still-inheriting item is
         // a no-op (only the governing scope's grants apply, ADR 0183).
-        await api.SetInheritanceAsync(folder.Id, true);
+        await api.SetInheritanceAsync((await api.GetAclAsync(folder.Id)).InheritanceHref!, true);
 
         // A group with a member.
         var groupName = $"grp-{suffix}";

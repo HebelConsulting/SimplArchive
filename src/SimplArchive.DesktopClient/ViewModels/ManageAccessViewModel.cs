@@ -25,6 +25,13 @@ public sealed partial class ManageAccessViewModel : ObservableObject
     [ObservableProperty] private bool _forbidden;
     [ObservableProperty] private bool _loadFailed;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(InheritanceText))][NotifyPropertyChangedFor(nameof(InheritanceToggleLabel))] private bool _breaksInheritance;
+
+    // The advertised acl-inheritance href, or null when the server did not offer it — a repository ROOT has no
+    // parent to inherit from, so the toggle can only fail there and is hidden instead (#426, ADR 0543). The
+    // indicator line still shows: "this item uses its own permissions" is true and useful on a root.
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(CanToggleInheritance))] private string? _inheritanceHref;
+
+    public bool CanToggleInheritance => InheritanceHref is not null;
     [ObservableProperty][NotifyPropertyChangedFor(nameof(HasStatus))] private string _status = "";
     public bool HasStatus => !string.IsNullOrEmpty(Status);
 
@@ -163,6 +170,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
             }
 
             BreaksInheritance = info.BreaksInheritance;
+            InheritanceHref = info.InheritanceHref;
             _principals = info.Principals;
             Entries.Clear();
             foreach (var e in info.Entries)
@@ -233,7 +241,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
     [RelayCommand]
     private async Task ToggleInheritance()
     {
-        if (_api is null)
+        if (_api is null || InheritanceHref is null)
         {
             return;
         }
@@ -249,7 +257,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
 
         try
         {
-            await _api.SetInheritanceAsync(_documentId, breaking);
+            await _api.SetInheritanceAsync(InheritanceHref!, breaking);
             Editing = false;
             await ReloadAsync();
         }

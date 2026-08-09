@@ -36,7 +36,7 @@ public partial class ClientHypermediaTests
         ["src/SimplArchive.Client/Dialogs/FilingDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/FolderPickerDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/InboxSendDialog.razor"] = 2,
-        ["src/SimplArchive.Client/Dialogs/ManageAccessDialog.razor"] = 7,
+        ["src/SimplArchive.Client/Dialogs/ManageAccessDialog.razor"] = 6,   // 7 → 6 (#426): the inheritance PUT follows the acl-inheritance rel
         ["src/SimplArchive.Client/Dialogs/PasskeysDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/ProfilePhotoDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/ReferencesDialog.razor"] = 1,
@@ -51,11 +51,15 @@ public partial class ClientHypermediaTests
         // sensitivity label — so the per-document external-links rel had nowhere to be picked up from. One read
         // now serves both and carries the rel, which is what let the dialog follow it instead of composing a URL.
         //
+        // 153 → 152 (issue #426): SetInheritanceAsync takes the advertised href instead of composing the path.
+        // The rel is CONDITIONAL, so following it also removes an affordance that could only ever fail — the
+        // clients no longer offer to break inheritance on a repository root.
+        //
         // 183 → 153 (issue #416, tranche A): the 19 top-level COLLECTION roots now come from the API root's own
         // rels via the cached RootHrefAsync. What remains here is overwhelmingly the interpolated kind
         // ($"api/documents/{id}/…"), which needs a resource in hand rather than a path — the structural half of
         // the burn-down, and a separate piece of work.
-        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 153,
+        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 152,
     };
 
     [Fact]

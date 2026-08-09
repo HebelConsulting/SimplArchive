@@ -24,6 +24,7 @@
                 <TextBlock Grid.Column="1" Text="{Binding InheritanceText}" TextWrapping="Wrap" VerticalAlignment="Center"
                            Foreground="{DynamicResource WbMuted}" />
                 <Button Grid.Column="2" Content="{Binding InheritanceToggleLabel}" Command="{Binding ToggleInheritanceCommand}"
+                        IsVisible="{Binding CanToggleInheritance}"
                         VerticalAlignment="Center" Margin="8,0,0,0" />
             </Grid>
 

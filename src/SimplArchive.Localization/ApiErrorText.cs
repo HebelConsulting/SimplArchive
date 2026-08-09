@@ -20,6 +20,12 @@ namespace SimplArchive.Localization;
 /// out keeps the four languages guarded. An unmapped code falls back to a generic localised sentence — never to
 /// the English <c>detail</c>, because a fallback that leaks English is the bug this exists to remove.
 ///
+/// The keys on the left are the codes the API ACTUALLY emits, which is not always what the exception class is
+/// called: <c>DocumentUnderLegalHoldException</c> emits <c>LEGAL_HOLD</c>, and the invalid-transition one emits
+/// <c>INVALID_WORKFLOW_TRANSITION</c>. Two mappings here were originally written from the class names and so
+/// could never fire — silently, because an unmapped code still produces a sensible generic sentence.
+/// <c>ApiErrorCodesExistTests</c> now fails the build on a code the API never emits.
+///
 /// Guarded on three sides: <c>NoServerDetailInClientsTests</c> fails the build if a client reads <c>detail</c>
 /// again, and <c>WebApiErrorLocalizationTests</c> / <c>DesktopApiErrorLocalizationTests</c> drive each client in
 /// German against a real server refusal and assert the German sentence reaches the user.
@@ -31,12 +37,12 @@ public static class ApiErrorText
         "EXTERNAL_LINKS_DISABLED" => Strings.Get("ApiErrExternalLinksDisabled"),
         "EXTERNAL_LINK_URL_NOT_SHOWN" => Strings.Get("ApiErrExternalLinkUrlNotShown"),
         "INSUFFICIENT_RIGHTS_TO_GRANT" => Strings.Get("ApiErrInsufficientRightsToGrant"),
-        "DOCUMENT_UNDER_LEGAL_HOLD" => Strings.Get("ApiErrDocumentUnderLegalHold"),
+        "LEGAL_HOLD" => Strings.Get("ApiErrDocumentUnderLegalHold"),
         "DOCUMENT_CHECKED_OUT" => Strings.Get("ApiErrDocumentCheckedOut"),
         "ETAG_MISMATCH" => Strings.Get("ApiErrEtagMismatch"),
         "IF_MATCH_REQUIRED" => Strings.Get("ApiErrIfMatchRequired"),
         "STORAGE_QUOTA_EXCEEDED" => Strings.Get("ApiErrStorageQuotaExceeded"),
-        "WORKFLOW_TRANSITION_NOT_ALLOWED" => Strings.Get("ApiErrWorkflowTransitionNotAllowed"),
+        "INVALID_WORKFLOW_TRANSITION" => Strings.Get("ApiErrWorkflowTransitionNotAllowed"),
         "CANNOT_CHANGE_ROOT_INHERITANCE" => Strings.Get("ApiErrCannotChangeRootInheritance"),
         _ => Strings.Get("ApiErrGeneric"),
     };

@@ -276,7 +276,7 @@ public class DocumentsController : ControllerBase
 
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
-    private record DocumentRow(string Name, Guid ConcurrencyToken, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, bool SensitivityWatermark, bool BreaksInheritance, FolderContentsSortOrder ContentsSortOrder);
+    private record DocumentRow(string Name, Guid ConcurrencyToken, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, bool SensitivityWatermark, bool BreaksInheritance, FolderContentsSortOrder ContentsSortOrder, Guid? ParentId);
 
     [HttpGet]
     public async Task<IActionResult> Get(Guid documentId, CancellationToken cancellationToken)
@@ -343,6 +343,20 @@ public class DocumentsController : ControllerBase
         if (externalLinksAllowed)
         {
             links.Add(new Link("external-links", $"/api/documents/{documentId}/external-links", "GET"));
+        }
+
+        // Break/restore ACL inheritance (issue #426). CONDITIONAL for the same reason as external-links above: a
+        // repository ROOT has no parent to inherit from, so the server always refuses there — and an affordance
+        // whose only outcome is a refusal is exactly what ADR 0543 rules out. Both clients used to draw the
+        // toggle on a root and hand the user the resulting 400.
+        //
+        // Gated on the caller's own CanManagePermissions too, matching what the PUT itself enforces, so the rel
+        // is absent rather than leading to a 403. Neither client can work this out for itself: the resource
+        // deliberately exposes no ParentId, because "is this a root" is the API's question to answer, not a fact
+        // for two clients to reason about separately and drift on.
+        if (document.ParentId is not null && rights.CanManagePermissions)
+        {
+            links.Add(new Link("acl-inheritance", $"/api/documents/{documentId}/acl-entries/inheritance", "PUT"));
         }
 
         // Check-out affordances (ADR "Document check-out / check-in"): offer check-out when it's free and the
@@ -2402,7 +2416,8 @@ public class DocumentsController : ControllerBase
                 d.SensitivityLabelId == null ? null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => l.Color).FirstOrDefault(),
                 d.SensitivityLabelId != null && _dbContext.SensitivityLabelDefinitions.Any(l => l.Id == d.SensitivityLabelId && l.Watermark),
                 d.BreaksInheritance,
-                d.ContentsSortOrder))
+                d.ContentsSortOrder,
+                d.ParentId))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
