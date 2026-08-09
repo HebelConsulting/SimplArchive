@@ -32,7 +32,7 @@ public class DesktopListPaneDropFilingTests
         Assert.Equal(2, fields!.CurrentVersionNumber);
 
         // The filing comment is the version's note (ADR 0528), not a chat comment.
-        var versions = await api.GetVersionsAsync(doc.Id);
+        var versions = await api.GetVersionsAsync(doc.Href("versions"));
         Assert.Equal("dropped as a new version", versions.Single(v => v.VersionNumber == 2).Comment);
     }
 
@@ -50,9 +50,11 @@ public class DesktopListPaneDropFilingTests
         var docName = $"dropped-{Guid.NewGuid():N}.txt";
         var newId = await api.UploadFileAsync(folder.Id, docName, Encoding.UTF8.GetBytes("body"), "filed via drop");
 
-        Assert.Contains(await api.GetChildrenAsync(folder.Id), n => n.Id == newId);
+        // Find the created row and follow ITS advertised versions rel — upload returns an id, and an id is not
+        // an address (ADR 0543).
+        var created = (await api.GetChildrenAsync(folder.Id)).Single(n => n.Id == newId);
         // The filing comment lands on the created document's first version (ADR 0528), not a chat comment.
-        var versions = await api.GetVersionsAsync(newId);
+        var versions = await api.GetVersionsAsync(created.Href("versions"));
         Assert.Equal("filed via drop", versions.Single(v => v.VersionNumber == 1).Comment);
     }
 }

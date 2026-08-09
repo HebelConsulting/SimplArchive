@@ -51,6 +51,11 @@ public partial class ClientHypermediaTests
         // sensitivity label — so the per-document external-links rel had nowhere to be picked up from. One read
         // now serves both and carries the rel, which is what let the dialog follow it instead of composing a URL.
         //
+        // 152 → 151 (issue #416, tranche B): GetVersionsAsync takes the advertised href. The enabling change is
+        // on the SERVER — a listed item now advertises its own unconditional sub-resources, so a client holding a
+        // row has addresses rather than just an id. Without that, following a rel would have cost a `self` fetch
+        // per row, and paying two calls to follow one rel is how a codebase talks itself back into string paths.
+        //
         // 153 → 152 (issue #426): SetInheritanceAsync takes the advertised href instead of composing the path.
         // The rel is CONDITIONAL, so following it also removes an affordance that could only ever fail — the
         // clients no longer offer to break inheritance on a repository root.
@@ -59,7 +64,7 @@ public partial class ClientHypermediaTests
         // rels via the cached RootHrefAsync. What remains here is overwhelmingly the interpolated kind
         // ($"api/documents/{id}/…"), which needs a resource in hand rather than a path — the structural half of
         // the burn-down, and a separate piece of work.
-        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 152,
+        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 151,
     };
 
     [Fact]

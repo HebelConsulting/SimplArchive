@@ -519,7 +519,7 @@ public partial class MainWindow : Window
         }
 
         var vvm = new VersionsViewModel();
-        await vvm.SetupAsync(api, node.Id, node.Name);
+        await vvm.SetupAsync(api, node.Id, node.Name, node.Href("versions"));
         var dialog = new VersionsDialog(vvm);
         vvm.RequestClose = dialog.Close;
         await dialog.ShowDialog(this);
@@ -537,7 +537,7 @@ public partial class MainWindow : Window
         }
 
         var cvm = new CompareVersionsViewModel();
-        await cvm.SetupAsync(api, node.Id, node.Name);
+        await cvm.SetupAsync(api, node.Id, node.Name, node.Href("versions"));
         var dialog = new CompareVersionsDialog(cvm);
         await dialog.ShowDialog(this); // compare is read-only now — "Make current" lives on the Versions dialog (#265)
     });

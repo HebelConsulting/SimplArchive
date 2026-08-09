@@ -29,14 +29,14 @@ public class DesktopVersionRestoreTests
         // A second version of the same document, with different content.
         await api.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes($"B-{Guid.NewGuid():N}"), ".txt");
 
-        var versions = await api.GetVersionsAsync(doc.Id);
+        var versions = await api.GetVersionsAsync(doc.Href("versions"));
         Assert.Equal(2, versions.Count);
         Assert.True(versions.Single(v => v.VersionNumber == 2).IsCurrent); // v2 is current before the roll-back
         var v1 = versions.Single(v => v.VersionNumber == 1);
 
         // Make v1 current → still exactly two versions, and v1 is now flagged current (no copy).
         await api.RestoreVersionAsync(doc.Id, v1.Id);
-        var after = await api.GetVersionsAsync(doc.Id);
+        var after = await api.GetVersionsAsync(doc.Href("versions"));
         Assert.Equal(2, after.Count);
         var current = after.Single(v => v.IsCurrent);
         Assert.Equal(v1.Id, current.Id);
@@ -47,7 +47,7 @@ public class DesktopVersionRestoreTests
 
         // Uploading a new version takes over as current.
         await api.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes($"C-{Guid.NewGuid():N}"), ".txt");
-        var final = await api.GetVersionsAsync(doc.Id);
+        var final = await api.GetVersionsAsync(doc.Href("versions"));
         Assert.Equal(3, final.Count);
         Assert.Equal(3, final.Single(v => v.IsCurrent).VersionNumber);
     }

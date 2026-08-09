@@ -29,7 +29,7 @@ public class DesktopVersionsDialogTests
         await api.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes("two\n"), ".txt");
 
         var vm = new VersionsViewModel();
-        await vm.SetupAsync(api, doc.Id, doc.Name);
+        await vm.SetupAsync(api, doc.Id, doc.Name, doc.Href("versions"));
 
         // Two versions, newest first, the latest labelled current.
         Assert.Equal(2, vm.Versions.Count);

@@ -1050,6 +1050,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             {
                 Items.Add(new NodeViewModel
                 {
+                    Links = child.Links,
                     Id = child.Id,
                     Name = child.Name,
                     HasChildren = child.HasChildren,

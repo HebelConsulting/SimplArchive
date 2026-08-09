@@ -26,7 +26,7 @@ public class DesktopVersionComparisonTests
         var doc = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
         await api.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes("one\nTWO edited\nthree\nfour\n"), ".txt");
 
-        var versions = await api.GetVersionsAsync(doc.Id);
+        var versions = await api.GetVersionsAsync(doc.Href("versions"));
         Assert.Equal(2, versions.Count); // both confirmed, newest first
         Assert.Equal(2, versions[0].VersionNumber);
 
@@ -44,7 +44,7 @@ public class DesktopVersionComparisonTests
         // The dialog VM defaults the pickers to latest-vs-penultimate but does NOT run the diff (ADR "Explicit
         // compare", issue #371): the result area shows the hint and Compare is enabled, waiting for a click.
         var cvm = new CompareVersionsViewModel();
-        await cvm.SetupAsync(api, doc.Id, "cmp");
+        await cvm.SetupAsync(api, doc.Id, "cmp", doc.Href("versions"));
         Assert.Equal(versions[0].Id, cvm.ToVersion!.Id);   // newest
         Assert.Equal(versions[1].Id, cvm.FromVersion!.Id); // penultimate
         Assert.Empty(cvm.Lines);                           // nothing compared yet

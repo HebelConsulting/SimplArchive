@@ -74,7 +74,27 @@ public sealed class SimplArchiveApiClient
         string DocumentType = "", DateOnly? DocumentDate = null, long? SizeBytes = null, IReadOnlyList<string>? Tags = null, string SensitivityLabelName = "", string? SensitivityLabelColor = null, int VersionCount = 0,
         // The latest confirmed version's CreatedAt (filing timestamp) — the "Created" folder contents-sort key
         // (ADR "Per-folder contents sort order"). Null for a folder / version-less doc.
-        DateTimeOffset? VersionCreatedAt = null);
+        DateTimeOffset? VersionCreatedAt = null,
+        // The item's own sub-resource addresses, as the listing advertised them (ADR 0543, issue #416): a client
+        // holding a row follows these instead of composing a path from the document id from a template. Empty only if
+        // the row came from somewhere that does not advertise them, in which case a caller must fetch the
+        // resource — never rebuild the path.
+        IReadOnlyDictionary<string, string>? Links = null)
+    {
+        /// <summary>The advertised href for <paramref name="rel"/>.</summary>
+        /// <remarks>
+        /// Throws rather than falling back to a composed path. A rel the server did not advertise means the
+        /// action is not available here (ADR 0543) or the row came from a listing that does not advertise it —
+        /// either way, rebuilding the URL would paper over the very thing this is replacing, and would do it
+        /// silently.
+        /// </remarks>
+        public string Href(string rel) =>
+            Links is not null && Links.TryGetValue(rel, out var href)
+                ? href
+                : throw new InvalidOperationException(
+                    $"The '{rel}' rel was not advertised for '{Name}'. Follow a rel the resource offers, or fetch "
+                    + "the resource — do not compose the URL (ADR 0543).");
+    }
 
     // A folder that references a given item, with its full display path — see ADR "References-of-an-item list".
     public sealed record ReferencingFolder(Guid Id, string Name, string Path);
@@ -2372,9 +2392,10 @@ public sealed class SimplArchiveApiClient
     }
 
     // The confirmed versions of a document (newest first), each with its presigned download URL.
-    public async Task<List<VersionInfo>> GetVersionsAsync(Guid documentId, CancellationToken cancellationToken = default)
+    // Takes the advertised href (node.Href("versions")), not a document id (ADR 0543, issue #416).
+    public async Task<List<VersionInfo>> GetVersionsAsync(string versionsHref, CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/versions", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(versionsHref, cancellationToken);
         var list = new List<VersionInfo>();
         if (json.TryGetProperty("versions", out var arr))
         {
@@ -2549,6 +2570,27 @@ public sealed class SimplArchiveApiClient
         item.TryGetProperty("sensitivityLabelColor", out var slc) && slc.ValueKind == JsonValueKind.String ? slc.GetString() : null,
         item.TryGetProperty("versionCount", out var vc) && vc.ValueKind == JsonValueKind.Number ? vc.GetInt32() : 0,
         item.TryGetProperty("versionCreatedAt", out var vca) && vca.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(vca.GetString(), out var vcaDt) ? vcaDt : null);
+
+    // rel -> href for one resource's advertised links, relative (the HttpClient has the base address).
+    private static IReadOnlyDictionary<string, string>? ParseLinks(JsonElement item)
+    {
+        if (!item.TryGetProperty("links", out var links) || links.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var l in links.EnumerateArray())
+        {
+            if (l.TryGetProperty("rel", out var rel) && rel.GetString() is { Length: > 0 } r
+                && l.TryGetProperty("href", out var href) && href.GetString() is { Length: > 0 } h)
+            {
+                map[r] = h.TrimStart('/');
+            }
+        }
+
+        return map.Count == 0 ? null : map;
+    }
 
     private static SearchResult ParseSearchResult(JsonElement item) => new(
         item.GetProperty("id").GetGuid(),

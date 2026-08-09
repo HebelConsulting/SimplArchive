@@ -1633,7 +1633,29 @@ public class DocumentsController : ControllerBase
                 SensitivityLabelColor = d.SensitivityLabelColor,
                 VersionCount = d.VersionCount,
                 VersionCreatedAt = d.VersionCreatedAt,
-                Links = new List<Link> { new("self", $"/api/documents/{d.Id}", "GET"), new("chat", $"/api/documents/{d.Id}/chat", "GET") },
+                // A listed item advertises its own UNCONDITIONAL sub-resources, not just self+chat (issue #416).
+                //
+                // Without these a client holding a listing has an id and no addresses, so every sub-resource call
+                // it makes has to be composed from a template — which is most of what the ADR 0543 ledger is still
+                // counting. Fetching `self` first instead would cost a round trip per row, and paying two calls to
+                // follow one rel is the usual reason a codebase abandons hypermedia and goes back to string paths.
+                //
+                // CONDITIONAL rels are deliberately absent — checkout/checkin, external-links, acl-inheritance.
+                // Each depends on the caller's rights or the item's state, which the full document resource
+                // computes once and a listing would have to compute per row. A listing is the wrong place to
+                // answer "may I?", so those affordances still require the resource itself, and their absence here
+                // must NOT be read as "not available" (ADR 0543's rule applies to a resource, not to a summary).
+                Links = new List<Link>
+                {
+                    new("self", $"/api/documents/{d.Id}", "GET"),
+                    new("chat", $"/api/documents/{d.Id}/chat", "GET"),
+                    new("versions", $"/api/documents/{d.Id}/versions", "GET"),
+                    new("children", $"/api/documents/{d.Id}/children", "GET"),
+                    new("mask", $"/api/documents/{d.Id}/mask", "GET"),
+                    new("index-data", $"/api/documents/{d.Id}/index-data", "GET"),
+                    new("references", $"/api/documents/{d.Id}/references", "GET"),
+                    new("referencing-folders", $"/api/documents/{d.Id}/referencing-folders", "GET"),
+                },
             }).ToList(),
             ContentsSortOrder = folderSortOrder.Value,
             Links = links,

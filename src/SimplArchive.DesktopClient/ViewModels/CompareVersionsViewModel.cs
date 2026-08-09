@@ -42,14 +42,14 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
 
     // Restore ("Make current") was moved out of the compare dialog (issue #265) — it lives on the Versions dialog.
 
-    public async Task SetupAsync(SimplArchiveApiClient api, Guid documentId, string documentName)
+    public async Task SetupAsync(SimplArchiveApiClient api, Guid documentId, string documentName, string versionsHref)
     {
         _api = api;
         _documentId = documentId;
         DocumentName = documentName;
 
         Versions.Clear();
-        foreach (var v in await api.GetVersionsAsync(documentId))
+        foreach (var v in await api.GetVersionsAsync(versionsHref))
         {
             Versions.Add(new VersionOption(v.Id, v.VersionNumber ?? 0, v.FileExtension, v.DownloadUrl));
         }

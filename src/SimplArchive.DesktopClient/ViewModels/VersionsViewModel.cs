@@ -17,6 +17,12 @@ public sealed partial class VersionsViewModel : ObservableObject
     private SimplArchiveApiClient? _api;
     private Guid _documentId;
 
+    // The advertised href, threaded from the row the dialog was opened on (ADR 0543, issue #416).
+    private string _versionsHref = "";
+
+    // Exposed so the Compare dialog opened from here follows the same advertised href.
+    public string VersionsHref => _versionsHref;
+
     [ObservableProperty] private string _documentName = "";
     [ObservableProperty] private string _status = "";
     [ObservableProperty][NotifyPropertyChangedFor(nameof(HasMultiple))] private bool _loaded;
@@ -39,10 +45,11 @@ public sealed partial class VersionsViewModel : ObservableObject
     // Called by the dialog when a restore happens via the Compare launcher, so the caller refreshes the detail.
     public void MarkChanged() => Changed = true;
 
-    public async Task SetupAsync(SimplArchiveApiClient api, Guid documentId, string documentName)
+    public async Task SetupAsync(SimplArchiveApiClient api, Guid documentId, string documentName, string versionsHref)
     {
         _api = api;
         _documentId = documentId;
+        _versionsHref = versionsHref;
         DocumentName = documentName;
         await ReloadAsync();
     }
@@ -55,7 +62,7 @@ public sealed partial class VersionsViewModel : ObservableObject
         }
 
         Versions.Clear();
-        var list = await _api.GetVersionsAsync(_documentId); // confirmed, newest first; IsCurrent = the server pointer
+        var list = await _api.GetVersionsAsync(_versionsHref); // confirmed, newest first; IsCurrent = the server pointer
         foreach (var v in list)
         {
             Versions.Add(new VersionRowViewModel(v.Id, v.VersionNumber ?? 0, v.DocumentDate,

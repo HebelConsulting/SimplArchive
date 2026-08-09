@@ -4,6 +4,21 @@ namespace SimplArchive.DesktopClient.ViewModels;
 public sealed class NodeViewModel
 {
     // For a reference this is the TARGET's id, so Open/Save-as/detail all act on the referenced item.
+    // The row's advertised sub-resource addresses, carried through from the listing (ADR 0543, issue #416) so
+    // an action opened from this row follows a rel instead of composing a path from the document id.
+    //
+    // Null for the SYNTHETIC rows — the Administration branch, the personal-space groupings — which stand for no
+    // server resource at all. Href() therefore throws for them, which is right: there is nothing to follow.
+    public IReadOnlyDictionary<string, string>? Links { get; init; }
+
+    /// <summary>The advertised href for <paramref name="rel"/>; throws rather than composing one.</summary>
+    public string Href(string rel) =>
+        Links is not null && Links.TryGetValue(rel, out var href)
+            ? href
+            : throw new InvalidOperationException(
+                $"The '{rel}' rel was not advertised for '{Name}'. Follow a rel the resource offers, or fetch the "
+                + "resource — do not compose the URL (ADR 0543).");
+
     public required Guid Id { get; init; }
 
     public required string Name { get; init; }

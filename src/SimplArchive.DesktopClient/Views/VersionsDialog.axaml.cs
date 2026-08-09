@@ -91,7 +91,7 @@ public partial class VersionsDialog : Window
         }
 
         var cvm = new CompareVersionsViewModel();
-        await cvm.SetupAsync(api, vm.DocumentId, vm.DocumentName);
+        await cvm.SetupAsync(api, vm.DocumentId, vm.DocumentName, vm.VersionsHref);
         var dialog = new CompareVersionsDialog(cvm);
         await dialog.ShowDialog(this); // compare is read-only now — "Make current" lives on this Versions dialog (#265)
     });
