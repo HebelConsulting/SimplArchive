@@ -415,7 +415,7 @@ services:
       Demo__Tenant__Name: "Demo"
       Demo__Administrator__Email: "demo@simplarchive.local"
       Demo__Administrator__DisplayName: "Demo Admin"
-      Demo__Administrator__Password: "demo1234"
+      Demo__Administrator__Password: "SimplDemo2026!"
       Demo__RepositoryName: "Demo Repository"
 
   # Reverse proxy for LAN testing (ADR "Reverse proxy for LAN testing" + "Proxy S3 object storage for LAN

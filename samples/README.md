@@ -13,7 +13,7 @@ A synthetic "scanned" Swiss invoice (image only — **no text layer**), for test
    docker compose pull tika          # apache/tika:latest-full (bundles Tesseract)
    docker compose up -d --build api tika
    ```
-2. Open http://localhost:8080, log in as the demo admin (`demo@simplarchive.local` / `demo1234`).
+2. Open http://localhost:8080, log in as the demo admin (`demo@simplarchive.local` / `SimplDemo2026!`).
 3. On the **Repositories** tab, drag `scanned-invoice-sample.png` onto a folder (or use the ribbon **Upload**).
 4. Wait ~5–15 s (OCR runs on the async indexer).
 5. On the **Search** tab, search for a word that appears **only inside the image**, e.g.:

@@ -39,7 +39,7 @@ public class ProductionReadinessValidatorTests
             ["App:ApplyMigrationsAtStartup"] = "true",
             ["ObjectStorage:AccessKey"] = "minioadmin",
             ["Bootstrap:PlatformAdministrator:ClientSecret"] = "dev-bootstrap-secret",
-            ["Demo:Administrator:Password"] = "demo1234",
+            ["Demo:Administrator:Password"] = "SimplDemo2026!",
         });
 
         Assert.Empty(ProductionReadinessValidator.Validate(config, new StubEnvironment { EnvironmentName = "Development" }));
@@ -78,7 +78,7 @@ public class ProductionReadinessValidatorTests
         {
             // No OpenIddict cert PEMs → dev-cert fallback.
             ["App:ApplyMigrationsAtStartup"] = "true",
-            ["Demo:Administrator:Password"] = "demo1234",
+            ["Demo:Administrator:Password"] = "SimplDemo2026!",
             ["Bootstrap:PlatformAdministrator:ClientSecret"] = "dev-bootstrap-secret",
             ["ObjectStorage:AccessKey"] = "minioadmin",
             ["ObjectStorage:SecretKey"] = "minioadmin",

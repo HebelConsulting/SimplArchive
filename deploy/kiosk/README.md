@@ -34,7 +34,7 @@ docker compose logs -f caddy   # watch the cert being obtained
 ```
 
 First boot takes a few minutes (image pulls + OpenBao provisioning + the initial search reindex). Then browse
-to https://demo.simplarchive.dev and log in as **demo@simplarchive.dev / demo1234**.
+to https://demo.simplarchive.dev and log in as **demo@simplarchive.dev / SimplDemo2026!**.
 
 ## Daily reset
 

@@ -27,7 +27,7 @@ public sealed class SelfHostedApp : IAsyncDisposable
     public const string StoragePassword = "storageadmin";
 
     public const string AdminEmail = "demo@simplarchive.local";
-    public const string AdminPassword = "demo1234";
+    public const string AdminPassword = "SimplDemo2026!";
     public const string AdminDisplayName = "Demo Admin";
 
     // The SeaweedFS S3 identity config (mirrors scripts/seaweedfs-s3.json), ADR 0360.

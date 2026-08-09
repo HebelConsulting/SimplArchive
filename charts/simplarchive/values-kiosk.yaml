@@ -86,4 +86,4 @@ extraEnv:
   - name: Demo__Administrator__Email
     value: "demo@simplarchive.local"
   - name: Demo__Administrator__Password
-    value: "demo1234"
+    value: "SimplDemo2026!"

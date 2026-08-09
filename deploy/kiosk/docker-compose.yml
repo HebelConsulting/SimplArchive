@@ -234,7 +234,7 @@ services:
       Demo__Tenant__Name: "Demo"
       Demo__Administrator__Email: "demo@simplarchive.dev"
       Demo__Administrator__DisplayName: "Demo Admin"
-      Demo__Administrator__Password: "demo1234"
+      Demo__Administrator__Password: "SimplDemo2026!"
       Demo__RepositoryName: "Demo Repository"
 
   # Public TLS reverse proxy (automatic Let's Encrypt). Its cert/ACME state lives in HOST bind-mounts (not named
