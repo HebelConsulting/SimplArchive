@@ -19,6 +19,10 @@ namespace SimplArchive.Localization;
 /// computed key is invisible to <c>LocalizationKeyTests</c>, which scans for literal key names. Spelling every key
 /// out keeps the four languages guarded. An unmapped code falls back to a generic localised sentence — never to
 /// the English <c>detail</c>, because a fallback that leaks English is the bug this exists to remove.
+///
+/// Guarded on three sides: <c>NoServerDetailInClientsTests</c> fails the build if a client reads <c>detail</c>
+/// again, and <c>WebApiErrorLocalizationTests</c> / <c>DesktopApiErrorLocalizationTests</c> drive each client in
+/// German against a real server refusal and assert the German sentence reaches the user.
 /// </remarks>
 public static class ApiErrorText
 {
@@ -33,6 +37,7 @@ public static class ApiErrorText
         "IF_MATCH_REQUIRED" => Strings.Get("ApiErrIfMatchRequired"),
         "STORAGE_QUOTA_EXCEEDED" => Strings.Get("ApiErrStorageQuotaExceeded"),
         "WORKFLOW_TRANSITION_NOT_ALLOWED" => Strings.Get("ApiErrWorkflowTransitionNotAllowed"),
+        "CANNOT_CHANGE_ROOT_INHERITANCE" => Strings.Get("ApiErrCannotChangeRootInheritance"),
         _ => Strings.Get("ApiErrGeneric"),
     };
 }

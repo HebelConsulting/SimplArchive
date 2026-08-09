@@ -1098,7 +1098,7 @@
   <data name="CoCompare" xml:space="preserve">
     <value>Vergleichen</value>
   </data>
-  <data name="CoCompareTitle" xml:space="preserve">
+  <data name="CoCompareTitleFor" xml:space="preserve">
     <value>Arbeitskopie vergleichen — {0}</value>
   </data>
   <data name="CoCompareCurrent" xml:space="preserve">
@@ -3254,5 +3254,8 @@
   </data>
   <data name="ApiErrWorkflowTransitionNotAllowed" xml:space="preserve">
     <value>Dieser Workflow-Schritt ist aus dem aktuellen Status nicht zulässig.</value>
+  </data>
+  <data name="ApiErrCannotChangeRootInheritance" xml:space="preserve">
+    <value>Die Vererbung kann an einem Archiv nicht geändert werden — es gibt keinen übergeordneten Ordner, von dem geerbt werden könnte.</value>
   </data>
 </root>

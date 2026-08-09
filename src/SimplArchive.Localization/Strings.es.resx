@@ -1098,7 +1098,7 @@
   <data name="CoCompare" xml:space="preserve">
     <value>Comparar</value>
   </data>
-  <data name="CoCompareTitle" xml:space="preserve">
+  <data name="CoCompareTitleFor" xml:space="preserve">
     <value>Comparar copia de trabajo — {0}</value>
   </data>
   <data name="CoCompareCurrent" xml:space="preserve">
@@ -3254,5 +3254,8 @@
   </data>
   <data name="ApiErrWorkflowTransitionNotAllowed" xml:space="preserve">
     <value>Ese paso del flujo de trabajo no se permite desde el estado actual.</value>
+  </data>
+  <data name="ApiErrCannotChangeRootInheritance" xml:space="preserve">
+    <value>La herencia no se puede cambiar en la raíz de un repositorio: no hay ninguna carpeta principal de la que heredar.</value>
   </data>
 </root>
