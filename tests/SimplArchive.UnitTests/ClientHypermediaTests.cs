@@ -105,44 +105,104 @@ public partial class ClientHypermediaTests
             $"Clients compose {total} api/ URLs in total, above the recorded ledger of {Budget.Values.Sum()} (ADR 0543).");
     }
 
-    // Every root rel a client demands must actually be advertised by RootController.
+    // Every rel a client follows must actually be advertised by the API.
     //
-    // Converting a composed URL to a rel that does not exist swaps a working call for an exception, and the
-    // exception happens at RUNTIME, in whichever screen happens to use it — so it shows up as one unrelated test
-    // failing, or not at all if nothing exercises that path. That is exactly what happened while converting
-    // tranche A of issue #416: nine of the ten needed rels were added, `tags` was missed, and the only signal was
-    // two desktop tag tests failing several minutes later. This turns that into a build error naming the rel.
+    // Following a rel that does not exist is SILENT, which is what makes this worth a build-time check. ADR 0543
+    // makes a missing rel meaningful — it means "not available to you, here, now", so a client correctly hides
+    // the affordance — and that is exactly why a TYPO is indistinguishable from a legitimate absence at runtime.
+    // The rule that makes the design good is the rule that makes the mistake invisible. The one time it did
+    // surface loudly was luck: converting tranche A of #416, nine of ten rels were added and `tags` was missed,
+    // and the only signal was two desktop tag tests failing minutes later.
+    //
+    // Covers every way a client reaches a rel, because it used to cover only one of three (issue #431):
+    //   • the root/me call forms — HrefAsync("x"), RequireAsync("x"), RequireMeAsync("x"), MeHrefAsync("x");
+    //   • the comparison form — Links.FirstOrDefault(l => l.Rel == "x"), which is how the workflow transitions
+    //     and acl-inheritance are followed.
+    // `RequireMeAsync` is not a superstring of `RequireAsync`, so the whole me-rel family (11 rels) was invisible
+    // to the old alternation; the comparison form (8 rels) was never matched at all. That was ~19 of ~39 rels
+    // unchecked — none of them broken, which is precisely how it went unnoticed.
+    //
+    // Compared against rels advertised ANYWHERE in the Api, not just the resource that ought to carry each one.
+    // Checking rel-to-resource would need the client's context (which resource it holds), which a regex does not
+    // have; the achievable check is "this name exists in the API's vocabulary", and that is what catches the
+    // realistic failures — a typo and a server-side rename.
     [Fact]
-    public void Every_root_rel_the_clients_follow_is_advertised_by_the_api()
+    public void Every_rel_the_clients_follow_is_advertised_by_the_api()
     {
         var root = RepoRoot();
         var demanded = new SortedSet<string>(StringComparer.Ordinal);
 
         foreach (var file in ClientFiles(root))
         {
-            foreach (Match m in RootRelUse().Matches(File.ReadAllText(file)))
+            var text = File.ReadAllText(file);
+            foreach (Match m in RelFollowed().Matches(text))
+            {
+                demanded.Add(m.Groups["rel"].Value);
+            }
+
+            foreach (Match m in RelCompared().Matches(text))
             {
                 demanded.Add(m.Groups["rel"].Value);
             }
         }
 
-        var controller = File.ReadAllText(Path.Combine(root, "src", "SimplArchive.Api", "Controllers", "RootController.cs"));
-        var advertised = AdvertisedRel().Matches(controller).Select(m => m.Groups["rel"].Value).ToHashSet(StringComparer.Ordinal);
+        var advertised = new HashSet<string>(StringComparer.Ordinal);
+        var apiDir = Path.Combine(root, "src", "SimplArchive.Api");
+        foreach (var file in Directory.EnumerateFiles(apiDir, "*.cs", SearchOption.AllDirectories))
+        {
+            if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+            {
+                continue;
+            }
+
+            foreach (Match m in AdvertisedRel().Matches(File.ReadAllText(file)))
+            {
+                advertised.Add(m.Groups["rel"].Value);
+            }
+        }
 
         var missing = demanded.Where(r => !advertised.Contains(r)).ToList();
 
         Assert.True(missing.Count == 0,
-            "These root rels are followed by a client but not advertised by RootController — following one throws "
-            + "at runtime (ADR 0543):\n  " + string.Join("\n  ", missing));
+            "These rels are followed by a client but advertised nowhere in the API. Following one yields null, so "
+            + "the affordance silently never appears — no exception, no failing test (ADR 0543):\n  "
+            + string.Join("\n  ", missing));
 
-        // Anti-vacuous: if the regexes stop matching, the assertion above passes while checking nothing.
-        Assert.True(demanded.Count > 10, $"expected the clients to follow many root rels, found {demanded.Count} — the scan is probably broken");
+        Assert.True(demanded.Count > 25,
+            $"expected the clients to follow many rels, found {demanded.Count} — the scan is probably broken");
     }
 
-    [GeneratedRegex(@"(?:RequireAsync|HrefAsync|RootHrefAsync)\(""(?<rel>[A-Za-z]+)""")]
-    private static partial Regex RootRelUse();
+    // Anti-vacuous, sample-based rather than a count that grows with the work: a threshold on "how many rels
+    // exist" is a bet on the codebase's size, and the same trap LocalizationLiteralTests had to be rescued from.
+    [Fact]
+    public void The_rel_scanner_still_recognises_every_form()
+    {
+        Assert.Single(RelFollowed().Matches("""await ApiRoot.RequireAsync("documents")"""));
+        Assert.Single(RelFollowed().Matches("""await ApiRoot.HrefAsync("me")"""));
+        Assert.Single(RelFollowed().Matches("""await ApiRoot.RequireMeAsync("changePassword")"""));
+        Assert.Single(RelFollowed().Matches("""await ApiRoot.MeHrefAsync("webdavPassword")"""));
+        Assert.Single(RelCompared().Matches("""Links.FirstOrDefault(l => l.Rel == "acl-inheritance")"""));
+        Assert.Single(RelCompared().Matches("l.Rel is \"submit\""));
 
-    [GeneratedRegex(@"new Link\(""(?<rel>[A-Za-z]+)""")]
+        // Hyphenated rels must be seen: the earlier pattern was [A-Za-z]+, which silently could not match one.
+        Assert.Equal("external-links", RelFollowed().Match("""RequireAsync("external-links")""").Groups["rel"].Value);
+    }
+
+    // Every call shape that takes a rel NAME. RequireMeAsync/MeHrefAsync are spelled out: neither contains
+    // "RequireAsync" or is matched by it, which is how the me-rel family stayed invisible (#431).
+    [GeneratedRegex(@"(?:RequireMeAsync|MeHrefAsync|RootHrefAsync|RequireAsync|HrefAsync)\(""(?<rel>[A-Za-z0-9_-]+)""")]
+    private static partial Regex RelFollowed();
+
+    // The comparison form: scanning a resource's links for a rel rather than asking ApiRoot for it.
+    [GeneratedRegex(@"\.Rel\s*(?:==|is)\s*""(?<rel>[A-Za-z0-9_-]+)""")]
+    private static partial Regex RelCompared();
+
+    // How the API advertises one: `new Link("rel", …)`, or `new("rel", …)` inside a link collection. The href
+    // argument is deliberately unconstrained — it is a literal, an interpolation, or a Url.Action(...) call
+    // (that last one is how every paginated `next` is built), and pinning its shape only narrows what counts as
+    // "advertised" for no gain.
+    [GeneratedRegex(@"new (?:Link)?\(\s*""(?<rel>[A-Za-z0-9_-]+)"",")]
     private static partial Regex AdvertisedRel();
 
     // One definition of "a client source file", shared by both tests — so the rel guard and the ledger can never
