@@ -366,6 +366,24 @@ public class DocumentsController : ControllerBase
             links.Add(new Link("acl-inheritance", $"/api/documents/{documentId}/acl-entries/inheritance", "PUT"));
         }
 
+        // Editable metadata, advertised only where the edit would actually be accepted (ADR 0554). Each gate
+        // mirrors what its endpoint enforces — CanEditIndexData — so the rel's presence and the write's outcome
+        // cannot disagree. The folder/document split is applicability, not permission: a folder has no
+        // sensitivity label or OCR language, and a document has no contents order, so advertising either on the
+        // wrong kind would offer an affordance that can only fail.
+        if (rights.CanEditIndexData)
+        {
+            if (isFolder)
+            {
+                links.Add(new Link("contents-sort-order", $"/api/documents/{documentId}/contents-sort-order", "PUT"));
+            }
+            else
+            {
+                links.Add(new Link("sensitivity", $"/api/documents/{documentId}/sensitivity", "PUT"));
+                links.Add(new Link("ocr-languages", $"/api/documents/{documentId}/ocr-languages", "PUT"));
+            }
+        }
+
         // Check-out affordances (ADR "Document check-out / check-in"): offer check-out when it's free and the
         // caller can edit content; offer check-in when the caller holds the lock or can override someone else's.
         if (checkedOut is null && rights.CanEditContent)

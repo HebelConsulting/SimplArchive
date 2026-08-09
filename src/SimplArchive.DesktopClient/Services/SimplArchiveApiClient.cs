@@ -504,7 +504,9 @@ public sealed class SimplArchiveApiClient
     // Sets the folder's persisted default contents sort order (CanEditIndexData-gated).
     public async Task SetContentsSortOrderAsync(Guid folderId, int sortOrder, CancellationToken cancellationToken = default)
     {
-        var response = await _http.PutAsJsonAsync($"api/documents/{folderId}/contents-sort-order", new { sortOrder }, cancellationToken);
+        // Fetch-then-follow: a user-initiated write on one item, so one extra request when acting is the right
+        // trade against composing the path (ADR 0543, #416).
+        var response = await _http.PutAsJsonAsync(await DocumentRelAsync(folderId, "contents-sort-order", cancellationToken), new { sortOrder }, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException($"Could not set the contents sort order ({(int)response.StatusCode}).");
@@ -963,7 +965,7 @@ public sealed class SimplArchiveApiClient
     // Sets the document's OCR-language override (ordered codes) and re-runs the searchable-PDF conversion.
     public async Task SetOcrLanguagesAsync(Guid documentId, IReadOnlyList<string> codes, CancellationToken cancellationToken = default)
     {
-        var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/ocr-languages", new { languages = codes }, cancellationToken);
+        var response = await _http.PutAsJsonAsync(await DocumentRelAsync(documentId, "ocr-languages", cancellationToken), new { languages = codes }, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException($"Could not set OCR languages ({(int)response.StatusCode}).");
@@ -1024,7 +1026,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task SetSensitivityAsync(Guid documentId, Guid? labelId, CancellationToken cancellationToken = default)
     {
-        var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/sensitivity", new { labelId }, cancellationToken);
+        var response = await _http.PutAsJsonAsync(await DocumentRelAsync(documentId, "sensitivity", cancellationToken), new { labelId }, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException($"Could not set the sensitivity label ({(int)response.StatusCode}).");

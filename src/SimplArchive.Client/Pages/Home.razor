@@ -6256,13 +6256,13 @@
 
             if (_sysHasTiff && !_editOcrCodes.SequenceEqual(_origOcrCodes))
             {
-                var resp = await Http.PutAsJsonAsync($"api/documents/{item.Id}/ocr-languages", new { languages = _editOcrCodes });
+                var resp = await Http.PutAsJsonAsync(DetailHref("ocr-languages"), new { languages = _editOcrCodes });
                 if (resp.IsSuccessStatusCode) { _sysOcrCodes = [.. _editOcrCodes]; _origOcrCodes = [.. _editOcrCodes]; } else { failures.Add("OCR languages"); }
             }
 
             if (_editSensitivityId != _detailSensitivityId)
             {
-                var resp = await Http.PutAsJsonAsync($"api/documents/{item.Id}/sensitivity", new { labelId = _editSensitivityId });
+                var resp = await Http.PutAsJsonAsync(DetailHref("sensitivity"), new { labelId = _editSensitivityId });
                 if (resp.IsSuccessStatusCode)
                 {
                     _detailSensitivityId = _editSensitivityId;
@@ -6316,7 +6316,7 @@
             // for a document, which lists nothing, and when unchanged — so an ordinary edit sends no extra request.
             if (item.IsFolder && _editSortOrder != _detailSortOrder)
             {
-                var resp = await Http.PutAsJsonAsync($"api/documents/{item.Id}/contents-sort-order", new { sortOrder = (int)_editSortOrder });
+                var resp = await Http.PutAsJsonAsync(DetailHref("contents-sort-order"), new { sortOrder = (int)_editSortOrder });
                 if (resp.IsSuccessStatusCode)
                 {
                     _detailSortOrder = _editSortOrder;
