@@ -178,7 +178,7 @@
                 _reviewerId = null;
                 _rejectReason = "";
                 if (_workflowHref is not null) await LoadWorkflowAsync(_workflowHref);
-                Snackbar.Add($"Workflow: {_workflow?.StatusName}.", Severity.Success);
+                Snackbar.Add(string.Format(Strings.Get("StWorkflowStatus"), _workflow?.StatusName), Severity.Success);
             }
             else
             {

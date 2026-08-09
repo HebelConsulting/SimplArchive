@@ -3600,4 +3600,34 @@
   <data name="WorkflowReassignToPlaceholder" xml:space="preserve">
     <value>Reasignar a…</value>
   </data>
+  <data name="StPasskeyAdded" xml:space="preserve">
+    <value>Clave de acceso '{0}' añadida.</value>
+  </data>
+  <data name="StErrCreateSaStatus" xml:space="preserve">
+    <value>No se pudo crear la cuenta de servicio ({0}).</value>
+  </data>
+  <data name="StErrCreateSa" xml:space="preserve">
+    <value>No se pudo crear la cuenta de servicio.</value>
+  </data>
+  <data name="StErrRotateSecretStatus" xml:space="preserve">
+    <value>No se pudo rotar el secreto ({0}).</value>
+  </data>
+  <data name="StErrRotateSecret" xml:space="preserve">
+    <value>No se pudo rotar el secreto.</value>
+  </data>
+  <data name="StErrGrantRightNotHeld" xml:space="preserve">
+    <value>No puede conceder un derecho que usted mismo no tiene.</value>
+  </data>
+  <data name="StErrUpdateSaStatus" xml:space="preserve">
+    <value>No se pudo actualizar la cuenta de servicio ({0}).</value>
+  </data>
+  <data name="StErrUpdateSa" xml:space="preserve">
+    <value>No se pudo actualizar la cuenta de servicio.</value>
+  </data>
+  <data name="StErrRevokeSa" xml:space="preserve">
+    <value>No se pudo revocar la cuenta de servicio.</value>
+  </data>
+  <data name="SaEditNameRights" xml:space="preserve">
+    <value>Editar nombre y derechos</value>
+  </data>
 </root>

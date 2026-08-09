@@ -178,7 +178,7 @@
     private async Task CompareAsync()
     {
         var parameters = new DialogParameters { ["DocumentId"] = DocumentId, ["DocumentName"] = DocumentName };
-        var dialog = await DialogService.ShowAsync<CompareVersionsDialog>("Compare versions", parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+        var dialog = await DialogService.ShowAsync<CompareVersionsDialog>(Strings.Get("CvTitle"), parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
         if ((await dialog.Result) is { Canceled: false, Data: true })
         {
             _changed = true;

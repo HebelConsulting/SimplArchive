@@ -82,7 +82,7 @@
             var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireMeAsync("passkeyRegister"), new { attestationResponse = attestation, token = optionsBody.Token, name = _newName.Trim() });
             if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("PasskeyRegisterError"), Severity.Error); return; }
 
-            Snackbar.Add($"Passkey '{_newName.Trim()}' added.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StPasskeyAdded"), _newName.Trim()), Severity.Success);
             _newName = "";
             await LoadAsync();
         }
@@ -101,7 +101,7 @@
         var resp = await Http.DeleteAsync($"api/users/me/passkeys/{p.Id}");
         if (resp.IsSuccessStatusCode)
         {
-            Snackbar.Add($"Removed '{p.Name}'.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StRemovedName"), p.Name), Severity.Success);
             await LoadAsync();
         }
     }

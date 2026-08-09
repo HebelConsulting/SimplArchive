@@ -11,12 +11,11 @@ namespace SimplArchive.UnitTests;
 // menus, labels, table headers) and English where you ACT (snackbars, confirmations, dialog titles opened from
 // code). That is why it survives review: the surfaces that get looked at are the ones that were done (issue #423).
 //
-// This is a RATCHET, like ClientHypermediaTests. 264 literals were recorded when it was adopted (after the
-// check-out flow was converted); each is recorded per file, and a file's count changing IN EITHER DIRECTION
-// fails the build — adding one is a regression, and
-// converting one requires lowering the budget in the same commit, so the remaining work stays a readable number
-// rather than "partly localised". Home.razor's 167 went first (the workbench's snackbars and dialog titles),
-// then the desktop's views; 19 remain, all in the web dialogs.
+// This was a RATCHET, like ClientHypermediaTests: 264 literals recorded per file at adoption, a file's count
+// changing IN EITHER DIRECTION failing the build, so the work stayed a readable number rather than "partly
+// localised". THE BUDGET IS NOW EMPTY — Home.razor's 167 went first (the workbench's snackbars and dialog
+// titles), then the desktop's 11 views, then the web dialogs — so the assertion has flipped from "no more than
+// the recorded count" to "none at all", and any new unkeyed literal fails the build wherever it appears.
 //
 // Roughly 30 of that original 264 were never real: the AXAML regex was matching inside longer attribute names
 // and counting `SizeToContent="Height"` as user-facing text (see AxamlTextLiteral). A ledger is only worth
@@ -29,9 +28,9 @@ namespace SimplArchive.UnitTests;
 // real and uncounted. Lowering this to zero is necessary, not sufficient.
 public partial class LocalizationLiteralTests
 {
-    // Snackbar.Add("…") and Snackbar.Add($"…") — the runtime feedback that is English today. The
-    // interpolated form matters: it is how every "Checked out '{name}'" success message is written, and
-    // an earlier version of this regex missed all of them, understating the ledger.
+    // Snackbar.Add("…") and Snackbar.Add($"…") — the runtime feedback a user meets while ACTING, which is where
+    // the gap was found. The interpolated form matters: it is how every "Checked out '{name}'" message is
+    // written, and an earlier version of this regex missed all of them, understating the ledger.
     [GeneratedRegex(@"Snackbar\.Add\(\s*\$?""")]
     private static partial Regex SnackbarLiteral();
 
@@ -62,18 +61,13 @@ public partial class LocalizationLiteralTests
         "Beyond Compare",          // a third-party diff tool, named as itself
     ];
 
-    // Seeded from the counts at adoption. LOWER an entry when you key a string; never raise one.
-    private static readonly Dictionary<string, int> Budget = new()
-    {
-        ["src/SimplArchive.Client/Dialogs/PasskeysDialog.razor"] = 2,
-        ["src/SimplArchive.Client/Dialogs/ServiceAccountsDialog.razor"] = 14,
-        ["src/SimplArchive.Client/Dialogs/VersionsDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/WorkflowDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Layout/MainLayout.razor"] = 1,
-    };
+    // Empty, and meant to stay that way: every user-facing literal in both clients is keyed. An entry here is
+    // now only a temporary parking space if a large conversion has to land in stages — add one, and remove it in
+    // the same series of commits. Never add one to make a new literal pass.
+    private static readonly Dictionary<string, int> Budget = new();
 
     [Fact]
-    public void Unkeyed_user_facing_literals_do_not_exceed_the_recorded_budget()
+    public void No_client_carries_an_unkeyed_user_facing_literal()
     {
         var root = RepoRoot();
         var actual = CountByFile(root);
@@ -100,24 +94,24 @@ public partial class LocalizationLiteralTests
         }
 
         Assert.True(problems.Count == 0,
-            "The localisation ledger is out of date (issue #423):\n" + string.Join("\n", problems));
+            "User-facing text must come from SimplArchive.Localization (issue #423):\n" + string.Join("\n", problems));
     }
 
     // A tripwire on the headline number, so a bulk regression cannot hide behind per-file budgets.
     [Fact]
-    public void The_remaining_localisation_work_is_visible()
+    public void The_total_is_still_zero()
     {
         var total = CountByFile(RepoRoot()).Values.Sum();
         Assert.True(total <= Budget.Values.Sum(),
-            $"Clients carry {total} unkeyed user-facing literals, above the recorded ledger of {Budget.Values.Sum()}.");
+            $"Clients carry {total} unkeyed user-facing literals; the budget allows {Budget.Values.Sum()}.");
     }
 
     // Anti-vacuous: if the regexes stop matching, every assertion above passes while checking nothing.
     //
-    // This used to be "total > 50", which was really a bet that the work would never get done — the count is 19
-    // now, so that tripwire would have failed the build for FINISHING the task it exists to track, and the
-    // obvious repair (lower the number) walks the same bet forward. Testing the regexes against samples instead
-    // holds whatever the remaining count is, including zero.
+    // This used to be "total > 50", which was really a bet that the work would never get done — and it has been:
+    // the count is ZERO, so that tripwire would now fail the build for FINISHING the task it exists to track, and
+    // the obvious repair (lower the number) just walks the same bet forward. Testing the regexes against samples
+    // instead holds at any remaining count, which is the only version of this guard that survives success.
     [Fact]
     public void The_scanner_still_recognises_what_it_is_looking_for()
     {

@@ -3600,4 +3600,34 @@
   <data name="WorkflowReassignToPlaceholder" xml:space="preserve">
     <value>Neu zuweisen an…</value>
   </data>
+  <data name="StPasskeyAdded" xml:space="preserve">
+    <value>Passkey „{0}“ hinzugefügt.</value>
+  </data>
+  <data name="StErrCreateSaStatus" xml:space="preserve">
+    <value>Das Servicekonto konnte nicht erstellt werden ({0}).</value>
+  </data>
+  <data name="StErrCreateSa" xml:space="preserve">
+    <value>Das Servicekonto konnte nicht erstellt werden.</value>
+  </data>
+  <data name="StErrRotateSecretStatus" xml:space="preserve">
+    <value>Das Secret konnte nicht erneuert werden ({0}).</value>
+  </data>
+  <data name="StErrRotateSecret" xml:space="preserve">
+    <value>Das Secret konnte nicht erneuert werden.</value>
+  </data>
+  <data name="StErrGrantRightNotHeld" xml:space="preserve">
+    <value>Sie können kein Recht vergeben, das Sie selbst nicht besitzen.</value>
+  </data>
+  <data name="StErrUpdateSaStatus" xml:space="preserve">
+    <value>Das Servicekonto konnte nicht aktualisiert werden ({0}).</value>
+  </data>
+  <data name="StErrUpdateSa" xml:space="preserve">
+    <value>Das Servicekonto konnte nicht aktualisiert werden.</value>
+  </data>
+  <data name="StErrRevokeSa" xml:space="preserve">
+    <value>Das Servicekonto konnte nicht widerrufen werden.</value>
+  </data>
+  <data name="SaEditNameRights" xml:space="preserve">
+    <value>Name und Rechte bearbeiten</value>
+  </data>
 </root>
