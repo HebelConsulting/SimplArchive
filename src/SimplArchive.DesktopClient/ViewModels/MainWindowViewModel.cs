@@ -5180,6 +5180,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
             _detailSensitivityWatermark = s.Watermark;
             DetailSensitivityId = s.LabelId;
             _detailExternalLinksHref = detail.ExternalLinksHref;
+            // The rels this resource advertised, so the calls below follow addresses instead of composing
+            // them from the id (ADR 0543, issue #416). Captured here because `detail` is scoped to this try.
+            _detailLinks = detail.Links;
             _detailDocumentName = detail.Name;
             CanShareDocument = detail.ExternalLinksHref is not null;
             // Folder-only, and read from the resource because a child folder's order is never fetched by the
@@ -5191,11 +5194,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // Sensitivity watermark on the preview (ADR "Document watermarking") — when the label's watermark flag is set.
         Preview.WatermarkText = _detailSensitivityWatermark ? $"{_detailSensitivityName} · {UserDisplayName}" : "";
         // Whether the current user follows this document (ADR "Document subscriptions").
-        try { DetailSubscribed = await _api.GetSubscriptionAsync(documentId); } catch (Exception) { DetailSubscribed = false; }
+        try { DetailSubscribed = await _api.GetSubscriptionAsync(DetailHref("subscription")); } catch (Exception) { DetailSubscribed = false; }
 
         // Free-form tags (ADR "Document tags").
         DetailTags.Clear();
-        try { foreach (var t in await _api.GetTagsAsync(documentId)) DetailTags.Add(t); } catch (Exception) { /* leave empty */ }
+        try { foreach (var t in await _api.GetTagsAsync(DetailHref("tags"))) DetailTags.Add(t); } catch (Exception) { /* leave empty */ }
         HasDetailTags = DetailTags.Count > 0;
 
         var fields = await _api.GetSystemFieldsAsync(documentId);
@@ -5441,7 +5444,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             try
             {
-                var stored = await _api.SetTagsAsync(documentId, editTags);
+                var stored = await _api.SetTagsAsync(DetailHref("tags"), editTags);
                 DetailTags.Clear();
                 foreach (var t in stored) DetailTags.Add(t);
                 HasDetailTags = DetailTags.Count > 0;
@@ -5620,6 +5623,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // (issue #385). Null when the tenant has the feature off or the caller may not share this document, which is
     // exactly what hides the affordance — a missing rel means "not available to you, here, now".
     private string? _detailExternalLinksHref;
+
+    private IReadOnlyDictionary<string, string>? _detailLinks;
+
+    // The advertised href for a rel on the document currently shown in the detail pane. Throws rather than
+    // composing: a rel the resource did not advertise means the action is not available here (ADR 0543).
+    private string DetailHref(string rel) =>
+        _detailLinks is not null && _detailLinks.TryGetValue(rel, out var href)
+            ? href
+            : throw new InvalidOperationException($"The '{rel}' rel was not advertised for the open document.");
 
     private string _detailDocumentName = "";
 

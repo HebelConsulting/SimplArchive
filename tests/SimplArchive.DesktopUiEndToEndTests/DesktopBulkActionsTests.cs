@@ -38,7 +38,7 @@ public class DesktopBulkActionsTests
         Assert.Equal(3, tagged.Succeeded);
         foreach (var id in ids)
         {
-            Assert.Equal(new[] { "batch", "reviewed" }, await api.GetTagsAsync(id));
+            Assert.Equal(new[] { "batch", "reviewed" }, await api.GetTagsAsync((await api.GetDocumentDetailAsync(id)).Href("tags")));
         }
 
         var confidential = (await api.GetSensitivityLabelsAsync()).Items.Single(l => l.Name == "Confidential");

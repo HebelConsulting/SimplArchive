@@ -988,7 +988,20 @@ public sealed class SimplArchiveApiClient
     // resource once, here, is what makes the rel reachable.
     // ContentsSortOrder is meaningful for a FOLDER only. It rides along here because the detail pane for a child
     // folder is opened from its parent's listing, where the child's own setting has never been fetched (#408).
-    public sealed record DocumentDetailInfo(string Name, DocumentSensitivityInfo Sensitivity, string? ExternalLinksHref, int ContentsSortOrder);
+    // Links carries the rels the resource advertised, so a caller that already fetched the detail follows one
+    // instead of composing a path (ADR 0543, issue #416). ExternalLinksHref predates this and stays: its ABSENCE
+    // is meaningful (tenant switch off, or a folder), which is a different question from "what is its address".
+    public sealed record DocumentDetailInfo(string Name, DocumentSensitivityInfo Sensitivity, string? ExternalLinksHref, int ContentsSortOrder,
+        IReadOnlyDictionary<string, string>? Links = null)
+    {
+        /// <summary>The advertised href for <paramref name="rel"/>; throws rather than composing one.</summary>
+        public string Href(string rel) =>
+            Links is not null && Links.TryGetValue(rel, out var href)
+                ? href
+                : throw new InvalidOperationException(
+                    $"The '{rel}' rel was not advertised for '{Name}'. Follow a rel the resource offers, or fetch "
+                    + "the resource — do not compose the URL (ADR 0543).");
+    }
 
     public async Task<DocumentDetailInfo> GetDocumentDetailAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
@@ -1005,7 +1018,8 @@ public sealed class SimplArchiveApiClient
             // rel means "not available to you, here, now", so the affordance is simply not offered (ADR 0543).
             // A FOLDER never carries it: sharing one is refused, so the icon must not appear either.
             RelHref(json, "external-links"),
-            json.TryGetProperty("contentsSortOrder", out var so) && so.ValueKind == JsonValueKind.Number ? so.GetInt32() : 0);
+            json.TryGetProperty("contentsSortOrder", out var so) && so.ValueKind == JsonValueKind.Number ? so.GetInt32() : 0,
+            ParseLinks(json));
     }
 
     public async Task SetSensitivityAsync(Guid documentId, Guid? labelId, CancellationToken cancellationToken = default)
@@ -1059,15 +1073,17 @@ public sealed class SimplArchiveApiClient
 
     // Free-form tags (ADR "Document tags"). GET the document's tags; PUT-replaces the whole set (the server
     // normalizes/dedupes and returns the stored set); the tenant tag catalog backs add-box autocomplete.
-    public async Task<IReadOnlyList<string>> GetTagsAsync(Guid documentId, CancellationToken cancellationToken = default)
+    // Takes the advertised href (detail.Href("tags")), not a document id (ADR 0543, issue #416).
+    public async Task<IReadOnlyList<string>> GetTagsAsync(string tagsHref, CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/tags", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(tagsHref, cancellationToken);
         return ReadTags(json);
     }
 
-    public async Task<IReadOnlyList<string>> SetTagsAsync(Guid documentId, IEnumerable<string> tags, CancellationToken cancellationToken = default)
+    // Same advertised href as the GET — the tags resource is one address, read or replaced (ADR 0543, #416).
+    public async Task<IReadOnlyList<string>> SetTagsAsync(string tagsHref, IEnumerable<string> tags, CancellationToken cancellationToken = default)
     {
-        var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/tags", new { tags = tags.ToArray() }, cancellationToken);
+        var response = await _http.PutAsJsonAsync(tagsHref, new { tags = tags.ToArray() }, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException($"Could not set tags ({(int)response.StatusCode}).");
@@ -1178,18 +1194,47 @@ public sealed class SimplArchiveApiClient
     }
 
     // Whether the current user follows (subscribes to) the document (ADR "Document subscriptions").
-    public async Task<bool> GetSubscriptionAsync(Guid documentId, CancellationToken cancellationToken = default)
+    // For a caller that holds an ID and no resource: FETCH the document and return the named rel. One round
+    // trip, then follow — never a composed sub-resource path. The `api/documents/{id}` here is the irreducible
+    // case (turning an id back into a resource) and is the single composition these paths need, instead of one
+    // per sub-resource (ADR 0543, issue #416).
+    //
+    // Prefer the href overloads wherever the resource is already in hand — the detail pane holds it, so the pane
+    // pays nothing.
+    private async Task<string> DocumentRelAsync(Guid documentId, string rel, CancellationToken cancellationToken)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/subscription", cancellationToken);
+        var doc = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}", cancellationToken);
+        var links = ParseLinks(doc);
+        return links is not null && links.TryGetValue(rel, out var href)
+            ? href
+            : throw new InvalidOperationException($"Document {documentId} advertised no '{rel}' rel (ADR 0543).");
+    }
+
+    public async Task<bool> GetSubscriptionAsync(Guid documentId, CancellationToken cancellationToken = default) =>
+        await GetSubscriptionAsync(await DocumentRelAsync(documentId, "subscription", cancellationToken), cancellationToken);
+
+    public async Task SetSubscriptionAsync(Guid documentId, bool subscribe, CancellationToken cancellationToken = default) =>
+        await SetSubscriptionAsync(await DocumentRelAsync(documentId, "subscription", cancellationToken), subscribe, cancellationToken);
+
+    public async Task<IReadOnlyList<ReminderInfo>> GetRemindersAsync(Guid documentId, CancellationToken cancellationToken = default) =>
+        await GetRemindersAsync(await DocumentRelAsync(documentId, "reminders", cancellationToken), cancellationToken);
+
+    public async Task CreateReminderAsync(Guid documentId, DateTimeOffset remindAt, string? note, int recurrence, Guid? targetUserId, CancellationToken cancellationToken = default) =>
+        await CreateReminderAsync(await DocumentRelAsync(documentId, "reminders", cancellationToken), remindAt, note, recurrence, targetUserId, cancellationToken);
+
+    // Takes the advertised href (detail.Href("subscription")) — one address, read/followed/unfollowed.
+    public async Task<bool> GetSubscriptionAsync(string subscriptionHref, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>(subscriptionHref, cancellationToken);
         return json.TryGetProperty("subscribed", out var s) && s.ValueKind == JsonValueKind.True;
     }
 
     // Follow (subscribe = true) or unfollow (false) the document.
-    public async Task SetSubscriptionAsync(Guid documentId, bool subscribe, CancellationToken cancellationToken = default)
+    public async Task SetSubscriptionAsync(string subscriptionHref, bool subscribe, CancellationToken cancellationToken = default)
     {
         using var response = subscribe
-            ? await _http.PutAsync($"api/documents/{documentId}/subscription", null, cancellationToken)
-            : await _http.DeleteAsync($"api/documents/{documentId}/subscription", cancellationToken);
+            ? await _http.PutAsync(subscriptionHref, null, cancellationToken)
+            : await _http.DeleteAsync(subscriptionHref, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException($"Could not update your subscription ({(int)response.StatusCode}).");
@@ -1264,9 +1309,10 @@ public sealed class SimplArchiveApiClient
     }
 
     // The caller's pending reminders on the document (set by or targeted at them).
-    public async Task<IReadOnlyList<ReminderInfo>> GetRemindersAsync(Guid documentId, CancellationToken cancellationToken = default)
+    // Takes the advertised href (detail.Href("reminders")).
+    public async Task<IReadOnlyList<ReminderInfo>> GetRemindersAsync(string remindersHref, CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/reminders", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(remindersHref, cancellationToken);
         var list = new List<ReminderInfo>();
         if (json.TryGetProperty("reminders", out var reminders))
         {
@@ -1286,10 +1332,10 @@ public sealed class SimplArchiveApiClient
     }
 
     // Sets a reminder; targetUserId null = the caller. Returns nothing on success, throws on a rejected request.
-    public async Task CreateReminderAsync(Guid documentId, DateTimeOffset remindAt, string? note, int recurrence, Guid? targetUserId, CancellationToken cancellationToken = default)
+    public async Task CreateReminderAsync(string remindersHref, DateTimeOffset remindAt, string? note, int recurrence, Guid? targetUserId, CancellationToken cancellationToken = default)
     {
         var body = new { remindAt, note, recurrence, targetUserId };
-        using var response = await _http.PostAsJsonAsync($"api/documents/{documentId}/reminders", body, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(remindersHref, body, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException($"Could not set the reminder ({(int)response.StatusCode}).");

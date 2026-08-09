@@ -51,6 +51,13 @@ public partial class ClientHypermediaTests
         // sensitivity label — so the per-document external-links rel had nowhere to be picked up from. One read
         // now serves both and carries the rel, which is what let the dialog follow it instead of composing a URL.
         //
+        // 151 → 145 (issue #416): the document resource advertises `tags`, `reminders` and `subscription`, and
+        // every read and write follows one. Six literals for one shared DocumentRelAsync helper — the callers
+        // that hold only an id fetch the resource once and follow the rel, instead of composing a path per
+        // sub-resource. The detail pane, which already holds the resource, pays nothing. Done as ONE change — rel, carried into DocumentDetailInfo, threaded to every call site —
+        // because splitting those is what produced the Node.Links-always-null regression: the model gained a
+        // field, the call sites used it, and nothing verified the value arrived.
+        //
         // 152 → 151 (issue #416, tranche B): GetVersionsAsync takes the advertised href. The enabling change is
         // on the SERVER — a listed item now advertises its own unconditional sub-resources, so a client holding a
         // row has addresses rather than just an id. Without that, following a rel would have cost a `self` fetch
@@ -64,7 +71,7 @@ public partial class ClientHypermediaTests
         // rels via the cached RootHrefAsync. What remains here is overwhelmingly the interpolated kind
         // ($"api/documents/{id}/…"), which needs a resource in hand rather than a path — the structural half of
         // the burn-down, and a separate piece of work.
-        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 151,
+        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 145,
     };
 
     [Fact]

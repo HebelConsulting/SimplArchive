@@ -338,6 +338,13 @@ public class DocumentsController : ControllerBase
             new("move", Url.Action(nameof(Move), new { documentId })!, "PUT"),
             new("set-primary-location", Url.Action(nameof(SetPrimaryLocation), new { documentId })!, "PUT"),
             new("assignable-reviewers", Url.Action(nameof(AssignableReviewers), new { documentId })!, "GET"),
+            // The caller's own relationship to this document. UNCONDITIONAL: anyone who may see a document may
+            // read its tags, its own reminders and its own subscription. The rights that differ govern WRITING,
+            // and a write answers for itself — hiding the address would not be "not available to you", it would
+            // just make the client compose one (ADR 0543, issue #416).
+            new("tags", $"/api/documents/{documentId}/tags", "GET"),
+            new("reminders", $"/api/documents/{documentId}/reminders", "GET"),
+            new("subscription", $"/api/documents/{documentId}/subscription", "GET"),
         };
 
         if (externalLinksAllowed)

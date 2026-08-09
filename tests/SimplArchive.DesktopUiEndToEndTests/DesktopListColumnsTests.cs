@@ -28,7 +28,7 @@ public class DesktopListColumnsTests
         var docName = $"coldoc-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(folder.Id, docName, Encoding.UTF8.GetBytes(new string('y', 2048)));
         var doc = (await api.GetChildrenAsync(folder.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
-        await api.SetTagsAsync(doc.Id, ["Red"]);
+        await api.SetTagsAsync((await api.GetDocumentDetailAsync(doc.Id)).Href("tags"), ["Red"]);
 
         var node = (await api.GetChildrenAsync(folder.Href("children"))).Single(n => n.Id == doc.Id);
         Assert.Equal("Basic Entry", node.DocumentType);   // auto-classified mask name
