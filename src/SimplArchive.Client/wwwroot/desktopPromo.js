@@ -8,5 +8,11 @@ window.simplArchiveDesktop = {
         return 'linux';
     },
     noticeDismissed: function () { return localStorage.getItem('sa.desktopClientNoticeDismissed') === '1'; },
-    dismissNotice: function () { localStorage.setItem('sa.desktopClientNoticeDismissed', '1'); }
+    // Called the moment the checkbox changes, not when the dialog closes: the modal can also be dismissed by
+    // clicking the backdrop, which closes it WITHOUT running any of its own handlers — so a visitor who ticked
+    // the box and clicked outside lost the choice and met the promo again next visit (#427).
+    setNoticeDismissed: function (dismissed) {
+        if (dismissed) { localStorage.setItem('sa.desktopClientNoticeDismissed', '1'); }
+        else { localStorage.removeItem('sa.desktopClientNoticeDismissed'); }
+    }
 };

@@ -1,11 +1,12 @@
 @inject IJSRuntime JsRuntime
 
-@* One-time post-logon desktop-client promo (ADR 0505). "Don't show again" persists in localStorage. *@
+@* One-time post-logon desktop-client promo (ADR 0505). "Don't show again" persists in localStorage the moment
+   it is ticked — see PersistChoiceAsync (#427). *@
 <MudDialog>
     <DialogContent>
         <div style="max-width: 440px;">
             <MudText Typo="Typo.body1">@Strings.Get("DesktopNoticeBody")</MudText>
-            <MudCheckBox T="bool" @bind-Value="_dontShowAgain" Class="mt-3" Color="Color.Primary" Label="@Strings.Get("DesktopNoticeDontShow")" />
+            <MudCheckBox T="bool" @bind-Value="_dontShowAgain" @bind-Value:after="PersistChoiceAsync" Class="mt-3" Color="Color.Primary" Label="@Strings.Get("DesktopNoticeDontShow")" />
         </div>
     </DialogContent>
     <DialogActions>
@@ -25,16 +26,16 @@
     {
         var os = await JsRuntime.InvokeAsync<string>("simplArchiveDesktop.resolveOs");
         await JsRuntime.InvokeVoidAsync("open", $"/download/clients/{os}/", "_blank");
-        await CloseAsync();
+        CloseAsync();
     }
 
-    private async Task CloseAsync()
-    {
-        if (_dontShowAgain)
-        {
-            await JsRuntime.InvokeVoidAsync("simplArchiveDesktop.dismissNotice");
-        }
+    // Persist as soon as the box changes, rather than on the way out. A MudDialog also closes on a BACKDROP
+    // CLICK, which runs none of its own handlers, so writing in CloseAsync silently threw the choice away for a
+    // visitor who ticked the box and then clicked outside — the modal looked both dismissed and accepted, and
+    // came back on the next visit (#427). Ticking IS the decision, so it is recorded then, and unticking undoes
+    // it, which also keeps every future dismissal path correct for free.
+    private Task PersistChoiceAsync() =>
+        JsRuntime.InvokeVoidAsync("simplArchiveDesktop.setNoticeDismissed", _dontShowAgain).AsTask();
 
-        Dialog.Close();
-    }
+    private void CloseAsync() => Dialog.Close();
 }
