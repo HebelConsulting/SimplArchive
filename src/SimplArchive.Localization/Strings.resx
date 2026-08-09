@@ -3552,4 +3552,52 @@
   <data name="StErrSetColour" xml:space="preserve">
     <value>Could not set the colour (use #RRGGBB).</value>
   </data>
+  <data name="CmpOpenBothFiles" xml:space="preserve">
+    <value>Open both files in Beyond Compare — or get it from scootersoftware.com</value>
+  </data>
+  <data name="CmpOpenBothVersions" xml:space="preserve">
+    <value>Open both versions in Beyond Compare — or get it from scootersoftware.com</value>
+  </data>
+  <data name="DropShortcutHint" xml:space="preserve">
+    <value>Place a shortcut here; the item stays where it is</value>
+  </data>
+  <data name="DropMoveHint" xml:space="preserve">
+    <value>Move the item here (change its folder)</value>
+  </data>
+  <data name="FilingCommentPrompt" xml:space="preserve">
+    <value>Comment (optional):</value>
+  </data>
+  <data name="FilingCommentBlankHint" xml:space="preserve">
+    <value>Leave blank to post "Filed a new document."</value>
+  </data>
+  <data name="PkRemoveThis" xml:space="preserve">
+    <value>Remove this passkey</value>
+  </data>
+  <data name="PvToggleNotes" xml:space="preserve">
+    <value>Show / hide notes</value>
+  </data>
+  <data name="PvFindPrev" xml:space="preserve">
+    <value>Previous match</value>
+  </data>
+  <data name="PvFindNext" xml:space="preserve">
+    <value>Next match</value>
+  </data>
+  <data name="RefOpenFolderTip" xml:space="preserve">
+    <value>Open this folder</value>
+  </data>
+  <data name="RefMakePrimaryTip" xml:space="preserve">
+    <value>Make this the primary location</value>
+  </data>
+  <data name="OptionalPlaceholder" xml:space="preserve">
+    <value>Optional</value>
+  </data>
+  <data name="SlColWatermark" xml:space="preserve">
+    <value>Watermark</value>
+  </data>
+  <data name="WorkflowReviewerPlaceholder" xml:space="preserve">
+    <value>Reviewer…</value>
+  </data>
+  <data name="WorkflowReassignToPlaceholder" xml:space="preserve">
+    <value>Reassign to…</value>
+  </data>
 </root>

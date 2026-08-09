@@ -3552,4 +3552,52 @@
   <data name="StErrSetColour" xml:space="preserve">
     <value>Die Farbe konnte nicht gesetzt werden (Format #RRGGBB).</value>
   </data>
+  <data name="CmpOpenBothFiles" xml:space="preserve">
+    <value>Beide Dateien in Beyond Compare öffnen — oder es von scootersoftware.com beziehen</value>
+  </data>
+  <data name="CmpOpenBothVersions" xml:space="preserve">
+    <value>Beide Versionen in Beyond Compare öffnen — oder es von scootersoftware.com beziehen</value>
+  </data>
+  <data name="DropShortcutHint" xml:space="preserve">
+    <value>Hier eine Verknüpfung ablegen; das Element bleibt, wo es ist</value>
+  </data>
+  <data name="DropMoveHint" xml:space="preserve">
+    <value>Das Element hierher verschieben (Ordner wechseln)</value>
+  </data>
+  <data name="FilingCommentPrompt" xml:space="preserve">
+    <value>Kommentar (optional):</value>
+  </data>
+  <data name="FilingCommentBlankHint" xml:space="preserve">
+    <value>Leer lassen, um „Neues Dokument abgelegt.“ zu posten</value>
+  </data>
+  <data name="PkRemoveThis" xml:space="preserve">
+    <value>Diesen Passkey entfernen</value>
+  </data>
+  <data name="PvToggleNotes" xml:space="preserve">
+    <value>Notizen ein-/ausblenden</value>
+  </data>
+  <data name="PvFindPrev" xml:space="preserve">
+    <value>Vorheriger Treffer</value>
+  </data>
+  <data name="PvFindNext" xml:space="preserve">
+    <value>Nächster Treffer</value>
+  </data>
+  <data name="RefOpenFolderTip" xml:space="preserve">
+    <value>Diesen Ordner öffnen</value>
+  </data>
+  <data name="RefMakePrimaryTip" xml:space="preserve">
+    <value>Dies als primären Ablageort festlegen</value>
+  </data>
+  <data name="OptionalPlaceholder" xml:space="preserve">
+    <value>Optional</value>
+  </data>
+  <data name="SlColWatermark" xml:space="preserve">
+    <value>Wasserzeichen</value>
+  </data>
+  <data name="WorkflowReviewerPlaceholder" xml:space="preserve">
+    <value>Prüfer…</value>
+  </data>
+  <data name="WorkflowReassignToPlaceholder" xml:space="preserve">
+    <value>Neu zuweisen an…</value>
+  </data>
 </root>

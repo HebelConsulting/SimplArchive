@@ -28,20 +28,20 @@
                 <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
                     <!-- Sticky notes: Add needs CanAnnotate (ADR "CanAnnotate right"); show/hide needs only read. -->
                     <Button Command="{Binding AddNoteCommand}" IsVisible="{Binding CanAddNote}"
-                            ToolTip.Tip="Add a sticky note" Height="26" Padding="6,0">
+                            ToolTip.Tip="{loc:Tr AddStickyNote}" Height="26" Padding="6,0">
                         <i:Icon Value="mdi-note-plus-outline" />
                     </Button>
                     <!-- Markup tools (ADR "Annotation markup"): drag on the page to draw. -->
                     <Button Command="{Binding SelectShapeToolCommand}" CommandParameter="1" IsVisible="{Binding CanAddNote}"
-                            ToolTip.Tip="Highlight (drag to draw)" Height="26" Padding="6,0">
+                            ToolTip.Tip="{loc:Tr PvHighlight}" Height="26" Padding="6,0">
                         <i:Icon Value="mdi-marker" />
                     </Button>
                     <Button Command="{Binding SelectShapeToolCommand}" CommandParameter="2" IsVisible="{Binding CanAddNote}"
-                            ToolTip.Tip="Rectangle (drag to draw)" Height="26" Padding="6,0">
+                            ToolTip.Tip="{loc:Tr PvRectangle}" Height="26" Padding="6,0">
                         <i:Icon Value="mdi-rectangle-outline" />
                     </Button>
                     <Button Command="{Binding SelectShapeToolCommand}" CommandParameter="3" IsVisible="{Binding CanAddNote}"
-                            ToolTip.Tip="Arrow (drag to draw)" Height="26" Padding="6,0">
+                            ToolTip.Tip="{loc:Tr PvArrow}" Height="26" Padding="6,0">
                         <i:Icon Value="mdi-arrow-top-right" />
                     </Button>
                     <!-- Colour palette (ADR "Highlighting redesign"): sets the draw colour for new shapes AND recolours the selection. Shown while drawing or with a selection. -->
@@ -52,26 +52,26 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:AnnotationSwatch">
                                 <Button Command="{Binding $parent[ItemsControl].DataContext.SetAnnotationColorCommand}" CommandParameter="{Binding Hex}"
-                                        Width="18" Height="18" Padding="0" MinWidth="0" Background="{Binding Brush}" ToolTip.Tip="Set colour" />
+                                        Width="18" Height="18" Padding="0" MinWidth="0" Background="{Binding Brush}" ToolTip.Tip="{loc:Tr TagsSetColour}" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                     <Button Command="{Binding ToggleNotesCommand}" IsVisible="{Binding AnnotationsAvailable}"
-                            ToolTip.Tip="Show / hide notes" Height="26" Padding="6,0">
+                            ToolTip.Tip="{loc:Tr PvToggleNotes}" Height="26" Padding="6,0">
                         <i:Icon Value="mdi-note-multiple-outline" />
                     </Button>
                     <!-- Multi-select actions (ADR "Annotation multi-select"): Ctrl-click / marquee to select, then
                          copy / paste / delete the selection. -->
                     <Button Command="{Binding CopySelectedAnnotationsCommand}" IsEnabled="{Binding HasSelectedAnnotations}"
-                            IsVisible="{Binding CanAddNote}" ToolTip.Tip="Copy selected annotations" Height="26" Padding="6,0">
+                            IsVisible="{Binding CanAddNote}" ToolTip.Tip="{loc:Tr CopyAnnotationsTip}" Height="26" Padding="6,0">
                         <i:Icon Value="mdi-content-copy" />
                     </Button>
                     <Button Command="{Binding PasteAnnotationsCommand}" IsEnabled="{Binding HasClipboardAnnotations}"
-                            IsVisible="{Binding CanAddNote}" ToolTip.Tip="Paste annotations" Height="26" Padding="6,0">
+                            IsVisible="{Binding CanAddNote}" ToolTip.Tip="{loc:Tr PasteAnnotationsTip}" Height="26" Padding="6,0">
                         <i:Icon Value="mdi-content-paste" />
                     </Button>
                     <Button Command="{Binding DeleteSelectedAnnotationsCommand}" IsEnabled="{Binding HasSelectedAnnotations}"
-                            IsVisible="{Binding CanAddNote}" ToolTip.Tip="Delete selected annotations (Del)" Height="26" Padding="6,0">
+                            IsVisible="{Binding CanAddNote}" ToolTip.Tip="{loc:Tr DeleteAnnotationsTip}" Height="26" Padding="6,0">
                         <i:Icon Value="mdi-delete-outline" />
                     </Button>
                     <Button Command="{Binding TogglePreviewFullscreenCommand}"
@@ -81,12 +81,12 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding CanFindInDocument}">
                     <i:Icon Value="mdi-magnify" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
-                    <TextBox Text="{Binding FindQuery}" Watermark="Find in document…" Tag="find" Width="240" Height="26" Padding="4,2" VerticalContentAlignment="Center" />
+                    <TextBox Text="{Binding FindQuery}" Watermark="{loc:Tr FindInDocument}" Tag="find" Width="240" Height="26" Padding="4,2" VerticalContentAlignment="Center" />
                     <TextBlock Text="{Binding FindPosition}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" MinWidth="44"
                                IsVisible="{Binding FindQuery, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                    <Button Command="{Binding FindPreviousCommand}" IsEnabled="{Binding CanFindNavigate}" ToolTip.Tip="Previous match" Height="26" Padding="6,0"><i:Icon Value="mdi-chevron-up" /></Button>
-                    <Button Command="{Binding FindNextCommand}" IsEnabled="{Binding CanFindNavigate}" ToolTip.Tip="Next match" Height="26" Padding="6,0"><i:Icon Value="mdi-chevron-down" /></Button>
-                    <Button Command="{Binding ClearFindCommand}" ToolTip.Tip="Clear" Height="26" Padding="6,0"
+                    <Button Command="{Binding FindPreviousCommand}" IsEnabled="{Binding CanFindNavigate}" ToolTip.Tip="{loc:Tr PvFindPrev}" Height="26" Padding="6,0"><i:Icon Value="mdi-chevron-up" /></Button>
+                    <Button Command="{Binding FindNextCommand}" IsEnabled="{Binding CanFindNavigate}" ToolTip.Tip="{loc:Tr PvFindNext}" Height="26" Padding="6,0"><i:Icon Value="mdi-chevron-down" /></Button>
+                    <Button Command="{Binding ClearFindCommand}" ToolTip.Tip="{loc:Tr AuditClear}" Height="26" Padding="6,0"
                             IsVisible="{Binding FindQuery, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"><i:Icon Value="mdi-close" /></Button>
                 </StackPanel>
             </WrapPanel>

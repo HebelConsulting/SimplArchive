@@ -3552,4 +3552,52 @@
   <data name="StErrSetColour" xml:space="preserve">
     <value>No se pudo establecer el color (use #RRGGBB).</value>
   </data>
+  <data name="CmpOpenBothFiles" xml:space="preserve">
+    <value>Abrir ambos archivos en Beyond Compare — o consíguelo en scootersoftware.com</value>
+  </data>
+  <data name="CmpOpenBothVersions" xml:space="preserve">
+    <value>Abrir ambas versiones en Beyond Compare — o consíguelo en scootersoftware.com</value>
+  </data>
+  <data name="DropShortcutHint" xml:space="preserve">
+    <value>Colocar aquí un acceso directo; el elemento permanece donde está</value>
+  </data>
+  <data name="DropMoveHint" xml:space="preserve">
+    <value>Mover el elemento aquí (cambiar su carpeta)</value>
+  </data>
+  <data name="FilingCommentPrompt" xml:space="preserve">
+    <value>Comentario (opcional):</value>
+  </data>
+  <data name="FilingCommentBlankHint" xml:space="preserve">
+    <value>Déjelo en blanco para publicar "Nuevo documento archivado."</value>
+  </data>
+  <data name="PkRemoveThis" xml:space="preserve">
+    <value>Quitar esta clave de acceso</value>
+  </data>
+  <data name="PvToggleNotes" xml:space="preserve">
+    <value>Mostrar / ocultar notas</value>
+  </data>
+  <data name="PvFindPrev" xml:space="preserve">
+    <value>Coincidencia anterior</value>
+  </data>
+  <data name="PvFindNext" xml:space="preserve">
+    <value>Coincidencia siguiente</value>
+  </data>
+  <data name="RefOpenFolderTip" xml:space="preserve">
+    <value>Abrir esta carpeta</value>
+  </data>
+  <data name="RefMakePrimaryTip" xml:space="preserve">
+    <value>Establecer como ubicación principal</value>
+  </data>
+  <data name="OptionalPlaceholder" xml:space="preserve">
+    <value>Opcional</value>
+  </data>
+  <data name="SlColWatermark" xml:space="preserve">
+    <value>Marca de agua</value>
+  </data>
+  <data name="WorkflowReviewerPlaceholder" xml:space="preserve">
+    <value>Revisor…</value>
+  </data>
+  <data name="WorkflowReassignToPlaceholder" xml:space="preserve">
+    <value>Reasignar a…</value>
+  </data>
 </root>

@@ -3552,4 +3552,52 @@
   <data name="StErrSetColour" xml:space="preserve">
     <value>Non è stato possibile impostare il colore (usare #RRGGBB).</value>
   </data>
+  <data name="CmpOpenBothFiles" xml:space="preserve">
+    <value>Apri entrambi i file in Beyond Compare — oppure scaricalo da scootersoftware.com</value>
+  </data>
+  <data name="CmpOpenBothVersions" xml:space="preserve">
+    <value>Apri entrambe le versioni in Beyond Compare — oppure scaricalo da scootersoftware.com</value>
+  </data>
+  <data name="DropShortcutHint" xml:space="preserve">
+    <value>Inserisci qui un collegamento; l'elemento resta dov'è</value>
+  </data>
+  <data name="DropMoveHint" xml:space="preserve">
+    <value>Sposta qui l'elemento (cambia cartella)</value>
+  </data>
+  <data name="FilingCommentPrompt" xml:space="preserve">
+    <value>Commento (facoltativo):</value>
+  </data>
+  <data name="FilingCommentBlankHint" xml:space="preserve">
+    <value>Lascia vuoto per pubblicare "Nuovo documento archiviato."</value>
+  </data>
+  <data name="PkRemoveThis" xml:space="preserve">
+    <value>Rimuovi questa passkey</value>
+  </data>
+  <data name="PvToggleNotes" xml:space="preserve">
+    <value>Mostra / nascondi le note</value>
+  </data>
+  <data name="PvFindPrev" xml:space="preserve">
+    <value>Corrispondenza precedente</value>
+  </data>
+  <data name="PvFindNext" xml:space="preserve">
+    <value>Corrispondenza successiva</value>
+  </data>
+  <data name="RefOpenFolderTip" xml:space="preserve">
+    <value>Apri questa cartella</value>
+  </data>
+  <data name="RefMakePrimaryTip" xml:space="preserve">
+    <value>Imposta questa come posizione principale</value>
+  </data>
+  <data name="OptionalPlaceholder" xml:space="preserve">
+    <value>Facoltativo</value>
+  </data>
+  <data name="SlColWatermark" xml:space="preserve">
+    <value>Filigrana</value>
+  </data>
+  <data name="WorkflowReviewerPlaceholder" xml:space="preserve">
+    <value>Revisore…</value>
+  </data>
+  <data name="WorkflowReassignToPlaceholder" xml:space="preserve">
+    <value>Riassegna a…</value>
+  </data>
 </root>

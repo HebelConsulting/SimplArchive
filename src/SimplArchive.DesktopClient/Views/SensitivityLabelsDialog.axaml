@@ -14,7 +14,7 @@
             <TextBox Text="{Binding NewName}" Watermark="new label…" Width="160" />
             <TextBox Text="{Binding NewColor}" Watermark="#RRGGBB" Width="100" />
             <NumericUpDown Value="{Binding NewRank}" Minimum="0" Maximum="100" Width="90" />
-            <CheckBox Content="Watermark" IsChecked="{Binding NewWatermark}" />
+            <CheckBox Content="{loc:Tr SlColWatermark}" IsChecked="{Binding NewWatermark}" />
             <Button Content="Add" Command="{Binding CreateCommand}" />
         </StackPanel>
 

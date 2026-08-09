@@ -36,7 +36,7 @@
             <TimePicker Grid.Row="1" Grid.Column="1" SelectedTime="{Binding ReminderTime}" ClockIdentifier="24HourClock" HorizontalAlignment="Left" />
 
             <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr AnnTitle}" VerticalAlignment="Center" />
-            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Note}" Watermark="Optional" />
+            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Note}" Watermark="{loc:Tr OptionalPlaceholder}" />
 
             <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr RemRepeat}" VerticalAlignment="Center" />
             <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding RecurrenceOptions}" SelectedIndex="{Binding RecurrenceIndex}" HorizontalAlignment="Stretch" />
@@ -56,7 +56,7 @@
 
         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
             <Button Content="{loc:Tr Close}" Click="OnClose" IsCancel="True" />
-            <Button Content="Set reminder" Command="{Binding CreateCommand}" IsDefault="True" />
+            <Button Content="{loc:Tr ReminderSet}" Command="{Binding CreateCommand}" IsDefault="True" />
         </StackPanel>
     </StackPanel>
 </Window>

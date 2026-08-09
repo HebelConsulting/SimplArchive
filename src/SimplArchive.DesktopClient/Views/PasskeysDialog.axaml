@@ -27,7 +27,7 @@
         </Border>
 
         <Grid>
-            <TextBlock x:Name="EmptyLabel" Text="No passkeys yet." Foreground="{DynamicResource WbFaint}"
+            <TextBlock x:Name="EmptyLabel" Text="{loc:Tr NoPasskeys}" Foreground="{DynamicResource WbFaint}"
                        VerticalAlignment="Top" IsVisible="False" />
             <ListBox x:Name="KeyList">
                 <ListBox.ItemTemplate>
@@ -38,7 +38,7 @@
                                 <TextBlock Text="{Binding Name}" />
                                 <TextBlock Text="{Binding Meta}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                             </StackPanel>
-                            <Button Grid.Column="2" Click="OnRemove" ToolTip.Tip="Remove this passkey">
+                            <Button Grid.Column="2" Click="OnRemove" ToolTip.Tip="{loc:Tr PkRemoveThis}">
                                 <i:Icon Value="mdi-delete-outline" />
                             </Button>
                         </Grid>

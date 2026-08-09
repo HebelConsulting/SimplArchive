@@ -24,15 +24,15 @@
                     <TextBlock Text="{Binding FolderPath}" FontSize="11" Foreground="{DynamicResource WbMuted}" TextWrapping="Wrap" />
                 </StackPanel>
             </RadioButton>
-            <RadioButton GroupName="filing" IsChecked="{Binding ModePicked}" Content="Choose a folder…" />
+            <RadioButton GroupName="filing" IsChecked="{Binding ModePicked}" Content="{loc:Tr FilingChooseFolder}" />
         </StackPanel>
 
-        <TextBlock DockPanel.Dock="Top" Text="Choose the target folder:" Margin="0,0,0,8" IsEnabled="{Binding ModePicked}" />
+        <TextBlock DockPanel.Dock="Top" Text="{loc:Tr FilingChooseTarget}" Margin="0,0,0,8" IsEnabled="{Binding ModePicked}" />
 
         <!-- Optional feed comment on the filed document(s) (ADR "Filing posts a feed comment"). -->
         <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,10,0,0">
-            <TextBlock Text="Comment (optional):" Foreground="{DynamicResource WbMuted}" FontSize="12" />
-            <TextBox Text="{Binding Comment}" Watermark="Leave blank to post &quot;Filed a new document.&quot;" AcceptsReturn="True" MinHeight="46" />
+            <TextBlock Text="{loc:Tr FilingCommentPrompt}" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+            <TextBox Text="{Binding Comment}" Watermark="{loc:Tr FilingCommentBlankHint}" AcceptsReturn="True" MinHeight="46" />
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,6,0,0">
                 <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
                 <Button Content="{loc:Tr FpFile}" Click="OnOk" IsDefault="True" />

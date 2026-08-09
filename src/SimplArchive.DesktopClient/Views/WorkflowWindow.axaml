@@ -36,39 +36,39 @@
 
                     <!-- Submit for review (Draft/Rejected). -->
                     <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding CanSubmit}">
-                        <ComboBox ItemsSource="{Binding Reviewers}" SelectedItem="{Binding SelectedReviewer}" MinWidth="190" PlaceholderText="Reviewer…">
+                        <ComboBox ItemsSource="{Binding Reviewers}" SelectedItem="{Binding SelectedReviewer}" MinWidth="190" PlaceholderText="{loc:Tr WorkflowReviewerPlaceholder}">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate><TextBlock Text="{Binding DisplayName}" /></DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        <Button Content="Submit for review" Command="{Binding SubmitCommand}" IsEnabled="{Binding !Busy}" />
+                        <Button Content="{loc:Tr WorkflowSubmit}" Command="{Binding SubmitCommand}" IsEnabled="{Binding !Busy}" />
                     </StackPanel>
 
                     <!-- Approve / Reject (the assigned reviewer). -->
                     <StackPanel Spacing="6" IsVisible="{Binding CanReview}">
-                        <Button Content="Approve" Command="{Binding ApproveCommand}" IsEnabled="{Binding !Busy}" HorizontalAlignment="Left" />
+                        <Button Content="{loc:Tr WorkflowApprove}" Command="{Binding ApproveCommand}" IsEnabled="{Binding !Busy}" HorizontalAlignment="Left" />
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBox Text="{Binding RejectReason}" Watermark="Rejection reason" MinWidth="230" />
-                            <Button Content="Reject" Command="{Binding RejectCommand}" IsEnabled="{Binding !Busy}" />
+                            <TextBox Text="{Binding RejectReason}" Watermark="{loc:Tr WorkflowRejectReason}" MinWidth="230" />
+                            <Button Content="{loc:Tr WorkflowReject}" Command="{Binding RejectCommand}" IsEnabled="{Binding !Busy}" />
                         </StackPanel>
                     </StackPanel>
 
                     <!-- Reassign (delegate/re-route — the reviewer or an editor). -->
                     <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding CanReassign}">
-                        <ComboBox ItemsSource="{Binding Reviewers}" SelectedItem="{Binding SelectedReviewer}" MinWidth="190" PlaceholderText="Reassign to…">
+                        <ComboBox ItemsSource="{Binding Reviewers}" SelectedItem="{Binding SelectedReviewer}" MinWidth="190" PlaceholderText="{loc:Tr WorkflowReassignToPlaceholder}">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate><TextBlock Text="{Binding DisplayName}" /></DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        <Button Content="Reassign" Command="{Binding ReassignCommand}" IsEnabled="{Binding !Busy}" />
+                        <Button Content="{loc:Tr WorkflowReassign}" Command="{Binding ReassignCommand}" IsEnabled="{Binding !Busy}" />
                     </StackPanel>
 
                     <!-- Release (Approved). -->
-                    <Button Content="Release" Command="{Binding ReleaseCommand}" IsVisible="{Binding CanRelease}" IsEnabled="{Binding !Busy}" HorizontalAlignment="Left" />
+                    <Button Content="{loc:Tr WorkflowRelease}" Command="{Binding ReleaseCommand}" IsVisible="{Binding CanRelease}" IsEnabled="{Binding !Busy}" HorizontalAlignment="Left" />
 
                     <!-- History. -->
                     <StackPanel IsVisible="{Binding HasHistory}" Spacing="1">
-                        <TextBlock Text="History" Foreground="{DynamicResource WbMuted}" FontSize="12" Margin="0,6,0,2" />
+                        <TextBlock Text="{loc:Tr WorkflowHistory}" Foreground="{DynamicResource WbMuted}" FontSize="12" Margin="0,6,0,2" />
                         <ItemsControl ItemsSource="{Binding History}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:WorkflowHistoryItemViewModel">

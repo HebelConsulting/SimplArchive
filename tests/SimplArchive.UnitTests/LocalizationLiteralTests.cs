@@ -15,7 +15,12 @@ namespace SimplArchive.UnitTests;
 // check-out flow was converted); each is recorded per file, and a file's count changing IN EITHER DIRECTION
 // fails the build — adding one is a regression, and
 // converting one requires lowering the budget in the same commit, so the remaining work stays a readable number
-// rather than "partly localised".
+// rather than "partly localised". Home.razor's 167 went first (the workbench's snackbars and dialog titles),
+// then the desktop's views; 19 remain, all in the web dialogs.
+//
+// Roughly 30 of that original 264 were never real: the AXAML regex was matching inside longer attribute names
+// and counting `SizeToContent="Height"` as user-facing text (see AxamlTextLiteral). A ledger is only worth
+// keeping if its number means something, so the regex was fixed rather than the entries quietly deleted.
 //
 // What it scans, and why only these three: they are the shapes that are unambiguously user-facing and mechanically
 // detectable. A bare literal in C# might be a log message, a CSS class or a test fixture, so scanning for those
@@ -34,10 +39,28 @@ public partial class LocalizationLiteralTests
     [GeneratedRegex(@"ShowAsync<[^>]+>\(\s*\$?""")]
     private static partial Regex DialogTitleLiteral();
 
-    // Avalonia markup: Content/Text/ToolTip.Tip/Watermark/Title set to a literal rather than {loc:Tr …}.
-    // Requires a capital-then-lowercase start so it does not match style values, brushes or enum names.
-    [GeneratedRegex(@"(?:Content|Text|Header|ToolTip\.Tip|Watermark|Title)=""[A-Z][a-z][^""{]{2,}""")]
+    // Avalonia markup: a text-bearing attribute set to a literal rather than {loc:Tr …}. Requires a
+    // capital-then-lowercase start so it does not match style values, brushes or enum names.
+    //
+    // The (?<![A-Za-z]) matters more than it looks. Without it the alternation matches INSIDE a longer attribute
+    // name, and the ledger fills with things no user ever reads: `SizeToContent="Height"` was counted as
+    // user-facing text in ~30 files (the `Content` branch, capturing the layout value) — nearly every desktop
+    // dialog's entry. The same accident cut the other way too: `PlaceholderText="Reviewer…"` was caught only
+    // because `Text` matched inside `PlaceholderText`, so a real untranslated string was found by luck. It is
+    // listed explicitly now, and the boundary keeps the count honest in both directions (issue #423).
+    [GeneratedRegex(@"(?<![A-Za-z])(?:Content|Text|Header|ToolTip\.Tip|Watermark|Title|PlaceholderText)=""[A-Z][a-z][^""{]{2,}""")]
     private static partial Regex AxamlTextLiteral();
+
+    // Text that must NOT be translated, so counting it would make the ledger unreachable rather than informative:
+    // the product name, the vendor's own name and postal address in the About dialog, and a third-party tool's
+    // name. Kept as an explicit list with this reason rather than silently widened regexes.
+    private static readonly string[] NotTranslatable =
+    [
+        "SimplArchive",            // the product's own name
+        "Hebel Consulting GmbH",   // the vendor's registered name
+        "Schweighofplatz 7",       // the vendor's postal address (About dialog)
+        "Beyond Compare",          // a third-party diff tool, named as itself
+    ];
 
     // Seeded from the counts at adoption. LOWER an entry when you key a string; never raise one.
     private static readonly Dictionary<string, int> Budget = new()
@@ -47,47 +70,6 @@ public partial class LocalizationLiteralTests
         ["src/SimplArchive.Client/Dialogs/VersionsDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/WorkflowDialog.razor"] = 1,
         ["src/SimplArchive.Client/Layout/MainLayout.razor"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/AboutDialog.axaml"] = 4,
-        ["src/SimplArchive.DesktopClient/Views/AnnotationDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/BulkSensitivityDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/BulkTagsDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/ChangePasswordDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/CompareCheckoutDialog.axaml"] = 2,
-        ["src/SimplArchive.DesktopClient/Views/CompareVersionsDialog.axaml"] = 2,
-        ["src/SimplArchive.DesktopClient/Views/ConfirmDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/ConnectionLostDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/DropActionDialog.axaml"] = 3,
-        ["src/SimplArchive.DesktopClient/Views/DuplicateUploadDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/ExportDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/ExtendRetentionDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/ExternalLinkDetailDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/FolderPickerDialog.axaml"] = 4,
-        ["src/SimplArchive.DesktopClient/Views/GeneratedPasswordDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/HardDeleteAllDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/ImportOptionsDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/LegalHoldDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/LogonWindow.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 2,
-        ["src/SimplArchive.DesktopClient/Views/ManageAccessDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/MfaSetupDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/NewFolderDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/NotificationPreferencesDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/PasskeysDialog.axaml"] = 2,
-        ["src/SimplArchive.DesktopClient/Views/PreviewPane.axaml"] = 13,
-        ["src/SimplArchive.DesktopClient/Views/PrincipalDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/ProfilePhotoDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/ReferencesDialog.axaml"] = 3,
-        ["src/SimplArchive.DesktopClient/Views/ReminderDialog.axaml"] = 3,
-        ["src/SimplArchive.DesktopClient/Views/RenameDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/ReplacementReviewerDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/SendToInboxDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/SensitivityLabelsDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/ServiceAccountEditDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/ServiceAccountSecretDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/ShareSavedSearchDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/VersionsDialog.axaml"] = 2,
-        ["src/SimplArchive.DesktopClient/Views/WebDavDialog.axaml"] = 1,
-        ["src/SimplArchive.DesktopClient/Views/WorkflowWindow.axaml"] = 9,
     };
 
     [Fact]
@@ -128,9 +110,30 @@ public partial class LocalizationLiteralTests
         var total = CountByFile(RepoRoot()).Values.Sum();
         Assert.True(total <= Budget.Values.Sum(),
             $"Clients carry {total} unkeyed user-facing literals, above the recorded ledger of {Budget.Values.Sum()}.");
+    }
 
-        // Anti-vacuous: if the regexes stop matching, every assertion here passes while checking nothing.
-        Assert.True(total > 50, $"expected the scan to find many literals, found {total} — it is probably broken");
+    // Anti-vacuous: if the regexes stop matching, every assertion above passes while checking nothing.
+    //
+    // This used to be "total > 50", which was really a bet that the work would never get done — the count is 19
+    // now, so that tripwire would have failed the build for FINISHING the task it exists to track, and the
+    // obvious repair (lower the number) walks the same bet forward. Testing the regexes against samples instead
+    // holds whatever the remaining count is, including zero.
+    [Fact]
+    public void The_scanner_still_recognises_what_it_is_looking_for()
+    {
+        Assert.Single(SnackbarLiteral().Matches("""Snackbar.Add("Could not save.", Severity.Error);"""));
+        Assert.Single(SnackbarLiteral().Matches("""Snackbar.Add($"Saved '{name}'.", Severity.Success);"""));
+        Assert.Single(DialogTitleLiteral().Matches("""ShowAsync<RenameDialog>("Rename", parameters)"""));
+        Assert.Single(AxamlTextLiteral().Matches("""<Button Content="Set reminder" />"""));
+        Assert.Single(AxamlTextLiteral().Matches("""<TextBox PlaceholderText="Reviewer…" />"""));
+        Assert.Single(AxamlTextLiteral().Matches("""<Button ToolTip.Tip="Next match" />"""));
+
+        // …and does not fire on what it must ignore: a localised value, a layout property whose value merely
+        // looks like a word (the SizeToContent="Height" trap), or an enum-ish value.
+        Assert.Empty(AxamlTextLiteral().Matches("""<Button Content="{loc:Tr ReminderSet}" />"""));
+        Assert.Empty(AxamlTextLiteral().Matches("""<Window SizeToContent="Height" CanResize="False" />"""));
+        Assert.Empty(AxamlTextLiteral().Matches("""<TextBlock TextWrapping="Wrap" />"""));
+        Assert.Empty(SnackbarLiteral().Matches("""Snackbar.Add(Strings.Get("StSaved"), Severity.Success);"""));
     }
 
     private static Dictionary<string, int> CountByFile(string root)
@@ -162,7 +165,7 @@ public partial class LocalizationLiteralTests
                 var text = File.ReadAllText(file);
                 var n = SnackbarLiteral().Matches(text).Count
                     + DialogTitleLiteral().Matches(text).Count
-                    + AxamlTextLiteral().Matches(text).Count;
+                    + AxamlTextLiteral().Matches(text).Count(m => !NotTranslatable.Any(m.Value.Contains));
                 if (n > 0)
                 {
                     counts[Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/')] = n;

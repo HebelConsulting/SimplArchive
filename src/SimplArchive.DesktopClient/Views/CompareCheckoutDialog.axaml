@@ -14,7 +14,7 @@
             <TextBlock Text="→" VerticalAlignment="Center" />
             <TextBlock Text="{loc:Tr CoCompareWorking}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
             <Button Content="Beyond Compare" Command="{Binding OpenInBeyondCompareCommand}"
-                    ToolTip.Tip="Open both files in Beyond Compare — or get it from scootersoftware.com" />
+                    ToolTip.Tip="{loc:Tr CmpOpenBothFiles}" />
         </StackPanel>
 
         <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Foreground="{DynamicResource WbMuted}" FontSize="12" Margin="0,8,0,0" />

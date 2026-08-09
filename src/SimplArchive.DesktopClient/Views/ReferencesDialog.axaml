@@ -27,7 +27,7 @@
                     </StackPanel>
                     <TextBlock Text="{Binding PrimaryLocation.Path}" Foreground="{DynamicResource WbFaint}" FontSize="11" TextWrapping="Wrap" />
                 </StackPanel>
-                <Button Grid.Column="2" Click="OnOpenPrimary" ToolTip.Tip="Open this folder">
+                <Button Grid.Column="2" Click="OnOpenPrimary" ToolTip.Tip="{loc:Tr RefOpenFolderTip}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <i:Icon Value="mdi-folder-open" />
                         <TextBlock Text="{loc:Tr Open}" />
@@ -53,13 +53,13 @@
                                  a current primary to demote (ADR 0506). -->
                             <Button Click="OnMakePrimary"
                                     IsVisible="{Binding ((vm:ReferencesViewModel)DataContext).HasPrimary, RelativeSource={RelativeSource AncestorType=Window}}"
-                                    ToolTip.Tip="Make this the primary location">
+                                    ToolTip.Tip="{loc:Tr RefMakePrimaryTip}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <i:Icon Value="mdi-star" Foreground="#5b4ee6" />
                                     <TextBlock Text="{loc:Tr RefMakePrimary}" />
                                 </StackPanel>
                             </Button>
-                            <Button Click="OnOpen" ToolTip.Tip="Open this folder">
+                            <Button Click="OnOpen" ToolTip.Tip="{loc:Tr RefOpenFolderTip}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <i:Icon Value="mdi-folder-open" />
                                     <TextBlock Text="{loc:Tr Open}" />

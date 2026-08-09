@@ -20,7 +20,7 @@
             </ComboBox>
             <Button Content="{loc:Tr CompareButton}" Command="{Binding CompareCommand}" />
             <Button Content="Beyond Compare" Command="{Binding OpenInBeyondCompareCommand}"
-                    ToolTip.Tip="Open both versions in Beyond Compare — or get it from scootersoftware.com" />
+                    ToolTip.Tip="{loc:Tr CmpOpenBothVersions}" />
         </StackPanel>
 
         <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Foreground="{DynamicResource WbMuted}" FontSize="12" Margin="0,8,0,0" />

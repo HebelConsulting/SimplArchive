@@ -56,8 +56,8 @@
                         <TextBlock Grid.Column="3" Text="{Binding By}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" />
                         <TextBlock Grid.Column="4" Text="{Binding Comment}" ToolTip.Tip="{Binding Comment}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" />
                         <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                            <Button Click="OnOpen" ToolTip.Tip="Open" Padding="6,2"><i:Icon Value="mdi-open-in-app" /></Button>
-                            <Button Click="OnSaveAs" ToolTip.Tip="Save as…" Padding="6,2"><i:Icon Value="mdi-content-save-outline" /></Button>
+                            <Button Click="OnOpen" ToolTip.Tip="{loc:Tr MwOpen}" Padding="6,2"><i:Icon Value="mdi-open-in-app" /></Button>
+                            <Button Click="OnSaveAs" ToolTip.Tip="{loc:Tr RibbonSaveAs}" Padding="6,2"><i:Icon Value="mdi-content-save-outline" /></Button>
                         </StackPanel>
                     </Grid>
                 </DataTemplate>
