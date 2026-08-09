@@ -29,7 +29,7 @@ OUT_DIR="dist"
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
 
-for tool in dotnet zip tar magick; do
+for tool in dotnet zip tar; do
   command -v "$tool" >/dev/null 2>&1 || { echo "error: '$tool' is required but not found on PATH." >&2; exit 1; }
 done
 
@@ -76,10 +76,15 @@ README
   # tiny installer, because asking someone to place four files by hand is most of the reason nobody would.
   if [[ "$kind" == "tar" ]]; then
     echo "==> [$rid] Adding desktop entry + icons…"
-    local icon_src="$repo_root/src/SimplArchive.DesktopClient/Assets/cabinet-1024.png"
+    # The hicolor PNGs are COMMITTED (Assets/linux-icons), not generated here. Generating them needed
+    # ImageMagick, which the Docker build stage does not have — it installs only bash/zip/tar — so adding it to
+    # this script's preflight broke the image build (and with it the Trivy scan) the moment it was pushed. The
+    # icons are stable artefacts derived once from cabinet-1024.png; regenerating them per package run bought
+    # nothing and cost a build dependency in every environment that packages.
+    local icon_dir="$repo_root/src/SimplArchive.DesktopClient/Assets/linux-icons"
     for size in 48 64 128 256; do
       mkdir -p "$stage/share/icons/hicolor/${size}x${size}/apps"
-      magick "$icon_src" -resize "${size}x${size}" "$stage/share/icons/hicolor/${size}x${size}/apps/simplarchive.png"
+      cp "$icon_dir/${size}.png" "$stage/share/icons/hicolor/${size}x${size}/apps/simplarchive.png"
     done
 
     mkdir -p "$stage/share/applications"
