@@ -2657,7 +2657,13 @@
         // The thread's URL as the SERVER advertised it (the "chat" rel), not one this client composed — see
         // ADR 0543. Null for a synthetic tree node, and for a node from a list that doesn't emit the rel yet;
         // those fall back to a composed URL, which is what the hypermedia guard's allowlist is burning down.
-        string? ChatHref = null)
+        string? ChatHref = null,
+        // The row's own sub-resource addresses, as the listing advertised them (ADR 0543, issue #416) — a client
+        // holding a row follows these instead of rebuilding a path from its id. Null for a SYNTHETIC node (the
+        // Administration branch, the Personal-space groupings), which stands for no server resource, and for a
+        // row from a listing that does not advertise them; a caller with neither must FETCH the resource and
+        // follow its rel, never compose.
+        IReadOnlyDictionary<string, string>? Links = null)
     {
         public bool IsFolder => !HasVersions;
 
@@ -3836,7 +3842,7 @@
         // from the Inbox) shows. See the "refresh list pane on return" requirement.
         if (tab == Tab.Repositories && _selectedFolder is { } folder)
         {
-            _folderContents = await LoadContentsAsync(folder.Id, folder.RepositoryId, trackAsCurrentFolder: true);
+            _folderContents = await LoadContentsAsync(folder.Id, folder.RepositoryId, childrenHref: ChildrenHrefOf(folder), trackAsCurrentFolder: true);
             if (_selectedItem is { } sel && _folderContents.FirstOrDefault(n => n.Id == sel.Id) is { } fresh)
             {
                 await SelectItemAsync(fresh);
@@ -4324,7 +4330,7 @@
             Snackbar.Add(string.Format(Strings.Get("StPlacedUnderHold"), node.Name), Severity.Success);
             if (_selectedFolder is { } sf)
             {
-                _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, trackAsCurrentFolder: true);
+                _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, childrenHref: ChildrenHrefOf(sf), trackAsCurrentFolder: true);
             }
         }
         catch (Exception)
@@ -4360,7 +4366,7 @@
             await SelectHoldAsync(sel);
             if (_selectedFolder is { } sf)
             {
-                _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, trackAsCurrentFolder: true);
+                _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, childrenHref: ChildrenHrefOf(sf), trackAsCurrentFolder: true);
             }
         }
         catch (Exception)
@@ -4384,7 +4390,7 @@
             await LoadLegalHoldsAsync();
             if (_selectedFolder is { } sf)
             {
-                _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, trackAsCurrentFolder: true);
+                _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, childrenHref: ChildrenHrefOf(sf), trackAsCurrentFolder: true);
             }
         }
         catch (Exception)
@@ -5003,7 +5009,7 @@
     {
         if (_selectedFolder is { } sf)
         {
-            _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, trackAsCurrentFolder: true);
+            _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, childrenHref: ChildrenHrefOf(sf), trackAsCurrentFolder: true);
         }
     }
 
@@ -5307,7 +5313,7 @@
 
         // Folders are always sorted alphabetically in the tree (issue #339); the contents load orders for its list
         // default, so re-sort the folder nodes by name here.
-        var children = (await LoadContentsAsync(node.Id, node.RepositoryId)).Where(c => !c.HasVersions)
+        var children = (await LoadContentsAsync(node.Id, node.RepositoryId, childrenHref: ChildrenHrefOf(node))).Where(c => !c.HasVersions)
             .OrderBy(c => c.DisplayName, StringComparer.OrdinalIgnoreCase).Select(ToTreeItem).ToList();
 
         // The Personal repository nests the Inbox + Check-out launcher nodes above its real subfolders,
@@ -5336,10 +5342,13 @@
     // trackAsCurrentFolder: this load is the contents pane for the open folder (not a tree-child load), so capture
     // its persisted ContentsSortOrder as the default order + reset the ephemeral header sort (ADR "Per-folder
     // contents sort order").
-    private async Task<List<BrowseNode>> LoadContentsAsync(Guid folderId, Guid repositoryId, bool trackAsCurrentFolder = false)
+    // childrenHref: the address the caller already holds, from the row it is acting on. When null — a
+    // synthetic node, or a caller that only knows an id — the resource is FETCHED and its own `children`
+    // rel followed: one round trip, never a composed sub-resource path (ADR 0543, issue #416).
+    private async Task<List<BrowseNode>> LoadContentsAsync(Guid folderId, Guid repositoryId, bool trackAsCurrentFolder = false, string? childrenHref = null)
     {
         var nodes = new List<BrowseNode>();
-        var url = $"api/documents/{folderId}/children";
+        var url = childrenHref ?? await FetchChildrenHrefAsync(folderId);
         var first = true;
         while (url is not null)
         {
@@ -5355,7 +5364,8 @@
                 nodes.Add(new BrowseNode(c.Id, c.Name, c.HasChildren, c.HasVersions, c.HasSubfolders, c.HasReferences, RepositoryId: repositoryId, FileExtension: c.FileExtension, OnLegalHold: c.OnLegalHold,
                     CheckedOut: c.CheckedOut, CheckedOutByMe: c.CheckedOutByMe, CheckedOutByName: c.CheckedOutByName,
                     DocumentType: c.DocumentType, DocumentDate: c.DocumentDate, SizeBytes: c.SizeBytes, Tags: c.Tags, SensitivityLabelName: c.SensitivityLabelName, SensitivityLabelColor: c.SensitivityLabelColor, VersionCount: c.VersionCount, VersionCreatedAt: c.VersionCreatedAt,
-                    ChatHref: RelativeHref(c.Links, "chat")));
+                    ChatHref: RelativeHref(c.Links, "chat"),
+                    Links: RelMap(c.Links)));
             }
             url = RelativeHref(page?.Links, "next");
         }
@@ -5528,7 +5538,7 @@
         _selectedFolder = folder;
         _currentRepositoryId = folder?.RepositoryId ?? Guid.Empty;
         ClearDetail();
-        _folderContents = folder is null ? [] : await LoadContentsAsync(folder.Id, folder.RepositoryId);
+        _folderContents = folder is null ? [] : await LoadContentsAsync(folder.Id, folder.RepositoryId, childrenHref: ChildrenHrefOf(folder));
 
         // A folder has its own comment thread, and — since issue #408 — its own detail pane: the same one a
         // document gets, because a folder is a Document with a mask and index data of its own.
@@ -6327,7 +6337,7 @@
                 await ReloadRootsAsync();
                 if (_selectedFolder is { } folder)
                 {
-                    _folderContents = await LoadContentsAsync(folder.Id, folder.RepositoryId, trackAsCurrentFolder: true);
+                    _folderContents = await LoadContentsAsync(folder.Id, folder.RepositoryId, childrenHref: ChildrenHrefOf(folder), trackAsCurrentFolder: true);
                 }
 
                 var fresh = (_folderContents ?? []).FirstOrDefault(c => c.Id == item.Id) ?? item with { Name = _sysName };
@@ -6740,7 +6750,7 @@
         await ReloadRootsAsync();
         if (_selectedFolder is { } folder)
         {
-            _folderContents = await LoadContentsAsync(folder.Id, folder.RepositoryId, trackAsCurrentFolder: true);
+            _folderContents = await LoadContentsAsync(folder.Id, folder.RepositoryId, childrenHref: ChildrenHrefOf(folder), trackAsCurrentFolder: true);
         }
         if (_selectedItem is { } item)
         {
@@ -8997,6 +9007,45 @@
     private record InboxDraftField { public Guid FieldDefinitionId { get; set; } public List<string> Values { get; set; } = []; }
     private record UploadInboxResponse { public string Name { get; set; } = ""; public string UploadUrl { get; set; } = ""; }
     private record InboxUsersResponse { public List<InboxUserOption> Users { get; set; } = []; }
+
+    // The row's advertised children address, or null when the listing carried none.
+    private static string? ChildrenHrefOf(BrowseNode node) =>
+        node.Links is not null && node.Links.TryGetValue("children", out var href) ? href : null;
+
+    // Turns an id back into an address by FETCHING the resource and following its own `children` rel. The
+    // `api/documents/{id}` here is the one composition that cannot be avoided — it is the irreducible case of
+    // having an id and no resource — and it is deliberately the only one on this path.
+    private async Task<string> FetchChildrenHrefAsync(Guid folderId)
+    {
+        var doc = await Http.GetFromJsonAsync<DocumentLinksResponse>($"api/documents/{folderId}");
+        return RelativeHref(doc?.Links, "children")
+            ?? throw new InvalidOperationException($"Document {folderId} advertised no 'children' rel (ADR 0543).");
+    }
+
+    private sealed class DocumentLinksResponse
+    {
+        public List<LinkResponse>? Links { get; set; }
+    }
+
+    // rel -> href for a resource's advertised links, so a row carries its addresses rather than its id alone.
+    private static IReadOnlyDictionary<string, string>? RelMap(List<LinkResponse>? links)
+    {
+        if (links is null || links.Count == 0)
+        {
+            return null;
+        }
+
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var l in links)
+        {
+            if (!string.IsNullOrEmpty(l.Rel) && RelativeHref(links, l.Rel) is { } href)
+            {
+                map[l.Rel] = href;
+            }
+        }
+
+        return map.Count == 0 ? null : map;
+    }
 
     private static string? RelativeHref(List<LinkResponse>? links, string rel)
     {
