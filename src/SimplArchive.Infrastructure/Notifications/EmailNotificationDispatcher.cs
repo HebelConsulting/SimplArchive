@@ -37,7 +37,7 @@ public sealed class EmailNotificationDispatcher : IEmailNotificationDispatcher
         // is not an option here. Order does not affect which notifications get sent: a sent one has EmailedAt
         // stamped and leaves this set, so successive sweeps drain it. The exception is an address that fails
         // PERMANENTLY — it stays pending forever, and BatchSize of those would stall everything behind them.
-        // That needs an attempt counter or a dead-letter row, not an ORDER BY; it is not introduced here.
+        // That needs an attempt counter or a dead-letter row, not an ORDER BY; tracked as issue #433.
         var pending = await (
             from n in _dbContext.Notifications.IgnoreQueryFilters(TenantFilterOnly)
             where n.EmailedAt == null
