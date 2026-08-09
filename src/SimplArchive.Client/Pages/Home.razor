@@ -5242,7 +5242,7 @@
                 foreach (var r in page?.Repositories ?? [])
                 {
                     // A repository is its own repository scope.
-                    shared.Add(ToTreeItem(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, RepositoryId: r.Id)));
+                    shared.Add(ToTreeItem(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, RepositoryId: r.Id, Links: RelMap(r.Links))));
                 }
                 url = RelativeHref(page?.Links, "next");
             }
@@ -5739,21 +5739,25 @@
 
         try
         {
+            // The document resource first: it carries the computed retention schedule (ADR "Retention policies"),
+            // the sensitivity label (ADR "Data classification"), AND the rels for everything else this pane
+            // loads — so the calls below follow advertised addresses instead of composing them (ADR 0543, #416).
+            // Fetched before the others rather than after, which is the only change needed to make them follow.
+            var detail = await Http.GetFromJsonAsync<DocumentDetailResponse>($"api/documents/{item.Id}");
+            _detailLinks = RelMap(detail?.Links);
+
             _detailMaskId = null;
-            var mask = await Http.GetFromJsonAsync<MaskResponse>($"api/documents/{item.Id}/mask");
+            // mask + index-data come from the ROW's own rels — the listing advertises them, so no second fetch.
+            var mask = await Http.GetFromJsonAsync<MaskResponse>(RowOrDetailHref(item, "mask"));
             _detailMaskName = mask?.Name;
             _detailMaskId = mask?.MaskId;
             _detailVersionNumber = mask?.VersionNumber;
 
-            var index = await Http.GetFromJsonAsync<IndexDataResponse>($"api/documents/{item.Id}/index-data");
+            var index = await Http.GetFromJsonAsync<IndexDataResponse>(RowOrDetailHref(item, "index-data"));
             _detailIndexData = index?.Fields ?? [];
 
-            // Free-form tags (ADR "Document tags").
-            _detailTags = (await Http.GetFromJsonAsync<TagsResponse>($"api/documents/{item.Id}/tags"))?.Tags ?? [];
-
-            // The document resource carries the computed retention schedule (ADR "Retention policies") + the
-            // sensitivity label (ADR "Data classification / sensitivity labels").
-            var detail = await Http.GetFromJsonAsync<DocumentDetailResponse>($"api/documents/{item.Id}");
+            // Free-form tags (ADR "Document tags") — advertised on the resource, not on a listing row.
+            _detailTags = (await Http.GetFromJsonAsync<TagsResponse>(DetailHref("tags")))?.Tags ?? [];
             _detailRetention = detail?.Retention;
             _detailSensitivityId = detail?.SensitivityLabelId;
             _detailSensitivityName = detail?.SensitivityLabelName ?? "";
@@ -5773,7 +5777,7 @@
             }
 
             // Whether the current user follows this document (ADR "Document subscriptions").
-            var sub = await Http.GetFromJsonAsync<SubscriptionResponse>($"api/documents/{item.Id}/subscription");
+            var sub = await Http.GetFromJsonAsync<SubscriptionResponse>(DetailHref("subscription"));
             _detailSubscribed = sub?.Subscribed ?? false;
 
             var versions = await Http.GetFromJsonAsync<VersionListResponse>($"api/documents/{item.Id}/versions");
@@ -5801,6 +5805,14 @@
         }
         catch (HttpRequestException)
         {
+            _detailIndexData ??= [];
+        }
+        catch (InvalidOperationException)
+        {
+            // A rel this pane expected was not advertised. Degrade the PANE — never let it escape: this runs on
+            // a render path, so an unhandled exception blanks the whole workbench, list and tree included, not
+            // just the part that could not load. That is exactly what happened when tree roots were built
+            // without their links (#416): one missing rel took the entire page down.
             _detailIndexData ??= [];
         }
 
@@ -5948,8 +5960,8 @@
         {
             var target = _detailSubscribed;
             using var response = target
-                ? await Http.DeleteAsync($"api/documents/{item.Id}/subscription")
-                : await Http.PutAsync($"api/documents/{item.Id}/subscription", null);
+                ? await Http.DeleteAsync(DetailHref("subscription"))
+                : await Http.PutAsync(DetailHref("subscription"), null);
             response.EnsureSuccessStatusCode();
             _detailSubscribed = !target;
             Snackbar.Add(_detailSubscribed ? "Following this document." : "Unfollowed.", Severity.Success);
@@ -6265,7 +6277,7 @@
             var editTags = _editTags.Select(t => t.Trim().ToLowerInvariant()).Where(t => t.Length is > 0 and <= 100).Distinct().ToList();
             if (!editTags.OrderBy(t => t).SequenceEqual(_origTags.OrderBy(t => t)))
             {
-                var resp = await Http.PutAsJsonAsync($"api/documents/{item.Id}/tags", new { tags = editTags });
+                var resp = await Http.PutAsJsonAsync(DetailHref("tags"), new { tags = editTags });
                 if (resp.IsSuccessStatusCode)
                 {
                     _detailTags = (await resp.Content.ReadFromJsonAsync<TagsResponse>())?.Tags ?? [];
@@ -9027,6 +9039,25 @@
         public List<LinkResponse>? Links { get; set; }
     }
 
+    // The rels the OPEN document's resource advertised (set when the detail pane loads).
+    private IReadOnlyDictionary<string, string>? _detailLinks;
+
+    private string DetailHref(string rel) => HrefOrThrow(_detailLinks, rel);
+
+    // The row's own advertised rel when it has one — no extra call — else the OPEN RESOURCE's, which this pane
+    // has already fetched. Not every BrowseNode comes from a listing: a reference row, or a node built from an
+    // id when navigating to a referencing folder, carries nothing. Those are exactly the "I hold an id, not a
+    // resource" case, and the answer is to follow the resource we just fetched — never to compose (ADR 0543).
+    private string RowOrDetailHref(BrowseNode item, string rel) =>
+        item.Links is not null && item.Links.TryGetValue(rel, out var href) ? href : DetailHref(rel);
+
+    // Throws rather than composing a fallback: a rel that was not advertised means the action is not available
+    // here (ADR 0543), and rebuilding the path would paper over exactly what this is replacing.
+    private static string HrefOrThrow(IReadOnlyDictionary<string, string>? links, string rel) =>
+        links is not null && links.TryGetValue(rel, out var href)
+            ? href
+            : throw new InvalidOperationException($"The '{rel}' rel was not advertised (ADR 0543).");
+
     // rel -> href for a resource's advertised links, so a row carries its addresses rather than its id alone.
     private static IReadOnlyDictionary<string, string>? RelMap(List<LinkResponse>? links)
     {
@@ -9065,7 +9096,7 @@
     private record ArchiveEntryDto { public string Name { get; set; } = ""; public string Path { get; set; } = ""; public long Size { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record RepositoryListResponse { public List<RepositorySummary> Repositories { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
     private record PersonalRepositoryResponse { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasSubfolders { get; set; } }
-    private record RepositorySummary { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } }
+    private record RepositorySummary { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public List<LinkResponse>? Links { get; set; } }
     // Mirrors the server FolderContentsSortOrder enum (ADR "Per-folder contents sort order").
     private enum FolderContentsSortOrder { Name = 0, DocumentDate = 1, Created = 2 }
     private record DocumentChildrenResponse { public List<DocumentSummary> Children { get; set; } = []; public FolderContentsSortOrder ContentsSortOrder { get; set; } public List<LinkResponse> Links { get; set; } = []; }
