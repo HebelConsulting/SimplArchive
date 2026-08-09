@@ -42,6 +42,18 @@
     </Application.Resources>
     <Application.Styles>
         <FluentTheme />
+        <!-- The app icon on EVERY window's title bar and taskbar entry (#421). Set once here rather than on 44
+             windows: only MainWindow carried Icon=, so the logon window — the first thing a user sees — and
+             every dialog showed the platform default.
+
+             `:is(Window)` says "this type or anything derived from it", which is what is meant, since every
+             window here is a subclass. A bare `Window` selector was measured to work too (Avalonia 11.3), so
+             this is about saying it unambiguously rather than repairing a bug. Verified by the icon-test hook, which
+             asserts a window that never sets Icon= itself ends up with one — the title bar is not in a headless
+             screenshot, so nothing else would notice this silently reverting to the platform default. -->
+        <Style Selector=":is(Window)">
+            <Setter Property="Icon" Value="/Assets/cabinet.png" />
+        </Style>
         <!-- The folder-glyph colours, application-wide so every pane that draws a folder uses the SAME rules
              (ADR 0547): the tree, the contents list and the detail-pane header. Defined once here rather than
              inside one view's styles, because "a folder looks like a folder wherever it appears" is precisely

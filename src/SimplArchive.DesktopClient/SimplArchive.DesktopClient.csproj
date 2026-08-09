@@ -1,7 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <!-- WinExe, not Exe: a console-subsystem binary makes Windows attach a console window that OWNS the
+         process, so closing it killed the client mid-session with no warning and no chance to save (#421).
+         On macOS and Linux this is identical to Exe, so it is set unconditionally rather than per-RID.
+         The headless diagnostic flags still print — Program.Main attaches to the parent console for them. -->
+    <OutputType>WinExe</OutputType>
+    <!-- The Windows executable's icon, in Explorer, the taskbar and the title bar. Multi-resolution
+         (16/32/48/64/96/128/256) generated from the same Assets/cabinet-1024.png artwork as the macOS .icns. -->
+    <ApplicationIcon>Assets/app.ico</ApplicationIcon>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 

@@ -11,9 +11,34 @@ namespace SimplArchive.DesktopClient;
 
 internal static class Program
 {
+    // ATTACH_PARENT_PROCESS — attach to the console of whatever launched us, if there is one.
+    private const uint AttachParentProcess = 0xFFFFFFFF;
+
+    // DllImport rather than the newer LibraryImport: the latter's source generator emits unsafe code, which
+    // would mean turning on AllowUnsafeBlocks for the whole project to gain nothing — this is one call with a
+    // blittable argument and a bool return, which the classic marshaller handles without any of that.
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool AttachConsole(uint dwProcessId);
+
     [STAThread]
     public static void Main(string[] args)
     {
+        // The app is a WINDOWS subsystem binary (#421), so Windows gives it no console — which is the point: a
+        // console window that owns the GUI process kills the session when a user tidies it away. The cost is
+        // that the headless verification hooks (--screenshot, --selftest, --render-pdf, the VM-check flags)
+        // would print into nowhere when run from a terminal. So when there ARE arguments, we attach to the
+        // launching console first.
+        //
+        // Any argument means a diagnostic run: a normal launch — Explorer, the taskbar, a shortcut — passes
+        // none. That is a more durable test than listing the flags, which would silently rot as flags are added.
+        // It must happen before ANY console use, because .NET binds the console streams lazily on first touch.
+        // Nothing to do on macOS/Linux, where the process already has whatever stdout it was given.
+        if (args.Length > 0 && OperatingSystem.IsWindows())
+        {
+            AttachConsole(AttachParentProcess); // false simply means there was no parent console — nothing to do
+        }
+
         // Crash guard (ADR "Desktop crash guard"): surface unhandled background/unobserved exceptions in the
         // "lost connection" modal instead of taking the app down. UI-thread async-void handlers are guarded
         // separately via Safe.Fire.
@@ -32,6 +57,31 @@ internal static class Program
 
         // Register the Material Design Icons provider (backs the <i:Icon Value="mdi-…" /> glyphs).
         IconProvider.Current.Register<MaterialDesignIconProvider>();
+
+        // Check that the app icon reaches EVERY window, not just MainWindow: `--icon-test` (#421).
+        //
+        // Worth a hook of its own because the failure is invisible: the icon lives on the TITLE BAR, which a
+        // headless screenshot does not render, so a style that silently stopped applying would look identical
+        // in every capture we take. Removing the style makes this report FAILED, which is what says the check
+        // measures the style rather than some default.
+        if (args.Contains("--icon-test"))
+        {
+            AppBuilder.Configure<App>()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia()
+                .WithInterFont()
+                .SetupWithoutStarting();
+
+            // A window that never set Icon= itself, so a pass can only come from the application-wide style.
+            var window = new Views.LogonWindow();
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            var ok = window.Icon is not null;
+            Console.WriteLine($"LogonWindow.Icon set by the app-wide style: {ok}");
+            Console.WriteLine(ok ? "OK" : "FAILED");
+            return;
+        }
 
         // VM-level check that Reset restores default proportions + expands every pane, even from a fully
         // collapsed/messed-up layout: `--reset-layout-test`. (The visual re-expand needs a real desktop —
