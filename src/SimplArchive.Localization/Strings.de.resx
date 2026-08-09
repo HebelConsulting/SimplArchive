@@ -3258,4 +3258,298 @@
   <data name="ApiErrCannotChangeRootInheritance" xml:space="preserve">
     <value>Die Vererbung kann an einem Archiv nicht geändert werden — es gibt keinen übergeordneten Ordner, von dem geerbt werden könnte.</value>
   </data>
+  <data name="StErrRecolour" xml:space="preserve">
+    <value>Die Auswahl konnte nicht umgefärbt werden.</value>
+  </data>
+  <data name="StAnnClickToPlace" xml:space="preserve">
+    <value>Klicken Sie auf eine Stelle der Seite, um eine Notiz zu platzieren.</value>
+  </data>
+  <data name="StAnnDragToDraw" xml:space="preserve">
+    <value>Ziehen Sie auf der Seite, um zu zeichnen.</value>
+  </data>
+  <data name="StErrAddMarkup" xml:space="preserve">
+    <value>Die Markierung konnte nicht hinzugefügt werden.</value>
+  </data>
+  <data name="AnnNewNoteTitle" xml:space="preserve">
+    <value>Neue Notiz</value>
+  </data>
+  <data name="StErrAddNote" xml:space="preserve">
+    <value>Die Notiz konnte nicht hinzugefügt werden.</value>
+  </data>
+  <data name="StErrMoveNote" xml:space="preserve">
+    <value>Die Notiz konnte nicht verschoben werden.</value>
+  </data>
+  <data name="StErrResizeNote" xml:space="preserve">
+    <value>Die Größe der Notiz konnte nicht geändert werden.</value>
+  </data>
+  <data name="StErrMoveSelection" xml:space="preserve">
+    <value>Die Auswahl konnte nicht verschoben werden.</value>
+  </data>
+  <data name="StErrDeleteSelection" xml:space="preserve">
+    <value>Die Auswahl konnte nicht gelöscht werden.</value>
+  </data>
+  <data name="StCopiedAnnotations" xml:space="preserve">
+    <value>{0} Anmerkung(en) kopiert.</value>
+  </data>
+  <data name="StErrPasteAnnotations" xml:space="preserve">
+    <value>Die Anmerkungen konnten nicht eingefügt werden.</value>
+  </data>
+  <data name="StErrCheckConversions" xml:space="preserve">
+    <value>Ausstehende Konvertierungen konnten nicht geprüft werden.</value>
+  </data>
+  <data name="StNoConversionNeeded" xml:space="preserve">
+    <value>Es müssen keine Dokumente konvertiert werden.</value>
+  </data>
+  <data name="StQueuedConversion" xml:space="preserve">
+    <value>{0} Dokument(e) zur Konvertierung in durchsuchbare PDFs eingereiht.</value>
+  </data>
+  <data name="StErrConversionStart" xml:space="preserve">
+    <value>Die Konvertierung konnte nicht gestartet werden.</value>
+  </data>
+  <data name="StErrLoadRecycleBin" xml:space="preserve">
+    <value>Der Papierkorb konnte nicht geladen werden.</value>
+  </data>
+  <data name="StRestored" xml:space="preserve">
+    <value>„{0}“ wiederhergestellt.</value>
+  </data>
+  <data name="StErrRestoreItem" xml:space="preserve">
+    <value>Das Element konnte nicht wiederhergestellt werden.</value>
+  </data>
+  <data name="StErrRestoreSelected" xml:space="preserve">
+    <value>Die ausgewählten Elemente konnten nicht wiederhergestellt werden.</value>
+  </data>
+  <data name="StPermanentlyDeleted" xml:space="preserve">
+    <value>„{0}“ endgültig gelöscht.</value>
+  </data>
+  <data name="StErrHardDeleteHold" xml:space="preserve">
+    <value>Endgültiges Löschen nicht möglich — das Element unterliegt einer gesetzlichen Sperre.</value>
+  </data>
+  <data name="StErrHardDelete" xml:space="preserve">
+    <value>Das Element konnte nicht endgültig gelöscht werden.</value>
+  </data>
+  <data name="RbHardDeleteSelected" xml:space="preserve">
+    <value>Ausgewählte endgültig löschen</value>
+  </data>
+  <data name="StErrPurgeSelected" xml:space="preserve">
+    <value>Die ausgewählten Elemente konnten nicht endgültig entfernt werden.</value>
+  </data>
+  <data name="StRecycleBinEmptied" xml:space="preserve">
+    <value>Der Papierkorb wurde endgültig geleert.</value>
+  </data>
+  <data name="StErrEmptyRecycleBin" xml:space="preserve">
+    <value>Der Papierkorb konnte nicht geleert werden.</value>
+  </data>
+  <data name="StDocumentDisposed" xml:space="preserve">
+    <value>Dokument ausgesondert.</value>
+  </data>
+  <data name="StRetentionExtended" xml:space="preserve">
+    <value>Aufbewahrung verlängert.</value>
+  </data>
+  <data name="StErrExtendRetention" xml:space="preserve">
+    <value>Die Aufbewahrung konnte nicht verlängert werden.</value>
+  </data>
+  <data name="StPlacedUnderHold" xml:space="preserve">
+    <value>„{0}“ unter gesetzliche Sperre gestellt.</value>
+  </data>
+  <data name="StErrPlaceHold" xml:space="preserve">
+    <value>Die gesetzliche Sperre konnte nicht gesetzt werden.</value>
+  </data>
+  <data name="StAuditExported" xml:space="preserve">
+    <value>Audit-Protokoll exportiert.</value>
+  </data>
+  <data name="StErrExportAudit" xml:space="preserve">
+    <value>Das Audit-Protokoll konnte nicht exportiert werden: {0}</value>
+  </data>
+  <data name="StPreparingExport" xml:space="preserve">
+    <value>Export wird vorbereitet…</value>
+  </data>
+  <data name="StExportReady" xml:space="preserve">
+    <value>Export bereit.</value>
+  </data>
+  <data name="StErrExport" xml:space="preserve">
+    <value>Export nicht möglich: {0}</value>
+  </data>
+  <data name="StImporting" xml:space="preserve">
+    <value>Import läuft…</value>
+  </data>
+  <data name="StImportFailedStatus" xml:space="preserve">
+    <value>Import fehlgeschlagen ({0}).</value>
+  </data>
+  <data name="StImported" xml:space="preserve">
+    <value>„{0}“ importiert ({1} Dokumente, {2} Versionen{3}).</value>
+  </data>
+  <data name="StImportFailed" xml:space="preserve">
+    <value>Import fehlgeschlagen: {0}</value>
+  </data>
+  <data name="StRetentionUpdated" xml:space="preserve">
+    <value>Aufbewahrung aktualisiert.</value>
+  </data>
+  <data name="StErrUpdateRetention" xml:space="preserve">
+    <value>Die Aufbewahrung konnte nicht aktualisiert werden: {0}</value>
+  </data>
+  <data name="StPurgedEvents" xml:space="preserve">
+    <value>{0} Ereignis(se) endgültig entfernt.</value>
+  </data>
+  <data name="StErrPurge" xml:space="preserve">
+    <value>Endgültiges Entfernen nicht möglich: {0}</value>
+  </data>
+  <data name="StTenantNameTaken" xml:space="preserve">
+    <value>Ein anderer aktiver Mandant verwendet diesen Namen bereits.</value>
+  </data>
+  <data name="StTenantCheckFields" xml:space="preserve">
+    <value>Prüfen Sie Name, OCR-Sprachen, Aufbewahrungs-/Ablaufwerte sowie Webhook-URL und -Secret.</value>
+  </data>
+  <data name="StErrSaveSettings" xml:space="preserve">
+    <value>Die Einstellungen konnten nicht gespeichert werden.</value>
+  </data>
+  <data name="StSaveWebhookFirst" xml:space="preserve">
+    <value>Speichern Sie Webhook-URL und -Secret, bevor Sie einen Test senden.</value>
+  </data>
+  <data name="StTestEventDelivered" xml:space="preserve">
+    <value>Testereignis erfolgreich zugestellt.</value>
+  </data>
+  <data name="StTestDeliveryFailed" xml:space="preserve">
+    <value>Testzustellung fehlgeschlagen: {0}</value>
+  </data>
+  <data name="StRepoNameTaken" xml:space="preserve">
+    <value>Ein Archiv mit diesem Namen existiert bereits.</value>
+  </data>
+  <data name="StNoPermCreateRepo" xml:space="preserve">
+    <value>Sie haben keine Berechtigung, Archive anzulegen.</value>
+  </data>
+  <data name="StErrCreateRepo" xml:space="preserve">
+    <value>Das Archiv konnte nicht erstellt werden.</value>
+  </data>
+  <data name="StErrReadZip" xml:space="preserve">
+    <value>„{0}“ konnte nicht gelesen werden.</value>
+  </data>
+  <data name="StErrDownloadEntry" xml:space="preserve">
+    <value>„{0}“ konnte nicht heruntergeladen werden.</value>
+  </data>
+  <data name="StErrCommentPost" xml:space="preserve">
+    <value>Der Kommentar konnte nicht gesendet werden.</value>
+  </data>
+  <data name="StErrPostReply" xml:space="preserve">
+    <value>Die Antwort konnte nicht gesendet werden.</value>
+  </data>
+  <data name="StNameTaken" xml:space="preserve">
+    <value>Hier existiert bereits ein Ordner oder Dokument mit dem Namen „{0}“.</value>
+  </data>
+  <data name="StErrFolderCreate" xml:space="preserve">
+    <value>Der Ordner konnte nicht erstellt werden.</value>
+  </data>
+  <data name="StBulkFailedStatus" xml:space="preserve">
+    <value>Sammelaktion fehlgeschlagen ({0}).</value>
+  </data>
+  <data name="StBulkFailed" xml:space="preserve">
+    <value>Sammelaktion fehlgeschlagen: {0}</value>
+  </data>
+  <data name="StErrRemoveReference" xml:space="preserve">
+    <value>Die Verknüpfung konnte nicht entfernt werden.</value>
+  </data>
+  <data name="StNoPermHere" xml:space="preserve">
+    <value>Sie haben hier keine Berechtigung dafür.</value>
+  </data>
+  <data name="StStaleReload" xml:space="preserve">
+    <value>Dieses Element wurde zwischenzeitlich geändert — bitte neu laden und erneut versuchen.</value>
+  </data>
+  <data name="StOperationFailed" xml:space="preserve">
+    <value>Der Vorgang konnte nicht abgeschlossen werden.</value>
+  </data>
+  <data name="StNoReplacementReviewer" xml:space="preserve">
+    <value>Es ist kein anderer aktiver Benutzer verfügbar, der die Prüfungen übernehmen könnte.</value>
+  </data>
+  <data name="StCannotGrantMoreRights" xml:space="preserve">
+    <value>Sie können nur Rechte vergeben, die Sie selbst besitzen; das Ändern von Mandantenadministrator erfordert einen Mandantenadministrator.</value>
+  </data>
+  <data name="StNoPermRename" xml:space="preserve">
+    <value>Sie haben keine Berechtigung, dieses Element umzubenennen.</value>
+  </data>
+  <data name="StErrRenameItem" xml:space="preserve">
+    <value>Das Element konnte nicht umbenannt werden.</value>
+  </data>
+  <data name="StNoPermDelete" xml:space="preserve">
+    <value>Sie haben keine Berechtigung, dieses Element zu löschen.</value>
+  </data>
+  <data name="StErrDeleteItem" xml:space="preserve">
+    <value>Das Element konnte nicht gelöscht werden.</value>
+  </data>
+  <data name="StErrChangeSharing" xml:space="preserve">
+    <value>Die Freigabe konnte nicht geändert werden.</value>
+  </data>
+  <data name="DupDlgTitle" xml:space="preserve">
+    <value>Doppeltes Dokument</value>
+  </data>
+  <data name="StReferencedInstead" xml:space="preserve">
+    <value>Statt „{0}“ hochzuladen wurde das vorhandene Dokument verknüpft.</value>
+  </data>
+  <data name="StReferenceExists" xml:space="preserve">
+    <value>In diesem Ordner existiert bereits eine Verknüpfung zu diesem Dokument.</value>
+  </data>
+  <data name="StErrCreateReference" xml:space="preserve">
+    <value>Die Verknüpfung konnte nicht erstellt werden.</value>
+  </data>
+  <data name="StUploadNameTaken" xml:space="preserve">
+    <value>„{0}“: Hier existiert bereits ein Dokument mit diesem Namen.</value>
+  </data>
+  <data name="StUploadNoPermission" xml:space="preserve">
+    <value>„{0}“: Sie haben keine Berechtigung, hier hochzuladen.</value>
+  </data>
+  <data name="StUploadNotStarted" xml:space="preserve">
+    <value>„{0}“: Der Upload konnte nicht gestartet werden.</value>
+  </data>
+  <data name="StUploaded" xml:space="preserve">
+    <value>„{0}“ hochgeladen.</value>
+  </data>
+  <data name="StUploadNotFinalized" xml:space="preserve">
+    <value>„{0}“: Der Upload wurde gespeichert, konnte aber nicht abgeschlossen werden.</value>
+  </data>
+  <data name="StVersionBlocked" xml:space="preserve">
+    <value>„{0}“: Das Dokument ist ausgecheckt oder unterliegt einer gesetzlichen Sperre.</value>
+  </data>
+  <data name="StVersionNoPermission" xml:space="preserve">
+    <value>„{0}“: Sie haben keine Berechtigung, hier eine Version hinzuzufügen.</value>
+  </data>
+  <data name="StVersionNotStarted" xml:space="preserve">
+    <value>„{0}“: Eine neue Version konnte nicht gestartet werden.</value>
+  </data>
+  <data name="StVersionNotFinalized" xml:space="preserve">
+    <value>„{0}“: Die Version wurde gespeichert, konnte aber nicht abgeschlossen werden.</value>
+  </data>
+  <data name="StFileError" xml:space="preserve">
+    <value>„{0}“: {1}</value>
+  </data>
+  <data name="StSetUpWebDavFirst" xml:space="preserve">
+    <value>Richten Sie zuerst den WebDAV-Zugriff ein (Kontomenü → WebDAV-Zugriff…).</value>
+  </data>
+  <data name="StCopiedWebDavUrl" xml:space="preserve">
+    <value>WebDAV-URL kopiert: {0}</value>
+  </data>
+  <data name="StErrCopyWebDavUrl" xml:space="preserve">
+    <value>Die WebDAV-URL konnte nicht kopiert werden.</value>
+  </data>
+  <data name="StUploadedToInbox" xml:space="preserve">
+    <value>{0} Datei(en) in Ihren Posteingang hochgeladen.</value>
+  </data>
+  <data name="StSomeUploadsFailed" xml:space="preserve">
+    <value>Einige Dateien konnten nicht hochgeladen werden.</value>
+  </data>
+  <data name="StErrMaskSave" xml:space="preserve">
+    <value>Die Maske konnte nicht gespeichert werden.</value>
+  </data>
+  <data name="StErrMoveItemStatus" xml:space="preserve">
+    <value>Das Element konnte nicht verschoben werden ({0}).</value>
+  </data>
+  <data name="StErrMoveItem" xml:space="preserve">
+    <value>Das Element konnte nicht verschoben werden.</value>
+  </data>
+  <data name="StErrDeleteNamed" xml:space="preserve">
+    <value>„{0}“ konnte nicht gelöscht werden.</value>
+  </data>
+  <data name="StErrRenameTaken" xml:space="preserve">
+    <value>Umbenennen nicht möglich (der Name ist möglicherweise vergeben).</value>
+  </data>
+  <data name="StErrSetColour" xml:space="preserve">
+    <value>Die Farbe konnte nicht gesetzt werden (Format #RRGGBB).</value>
+  </data>
 </root>

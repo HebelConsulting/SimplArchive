@@ -44,7 +44,9 @@ public class WebProfilePhotoSelfServiceTests
         await page.Locator(".wb-ug-rows").GetByText("Demo Admin", new() { Exact = true }).ClickAsync();
         await Expect(page.Locator(".wb-ug-photo img")).ToBeVisibleAsync();
         await page.GetByRole(AriaRole.Button, new() { Name = "Remove" }).ClickAsync();
-        await Expect(page.GetByText("Photo removed.")).ToBeVisibleAsync();
+        // "Profile photo removed." — the web adopted the desktop's wording when the two clients were put on one
+        // key (#423, ADR 0511), which also matches its own "Profile photo updated." above.
+        await Expect(page.GetByText("Profile photo removed.")).ToBeVisibleAsync();
         await Expect(page.Locator(".wb-ug-photo img")).Not.ToBeVisibleAsync();
     }
 }

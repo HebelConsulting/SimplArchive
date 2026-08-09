@@ -3258,4 +3258,298 @@
   <data name="ApiErrCannotChangeRootInheritance" xml:space="preserve">
     <value>Inheritance can't be changed on a repository root — it has no parent folder to inherit from.</value>
   </data>
+  <data name="StErrRecolour" xml:space="preserve">
+    <value>Could not recolour the selection.</value>
+  </data>
+  <data name="StAnnClickToPlace" xml:space="preserve">
+    <value>Click a spot on the page to place a note.</value>
+  </data>
+  <data name="StAnnDragToDraw" xml:space="preserve">
+    <value>Drag on the page to draw.</value>
+  </data>
+  <data name="StErrAddMarkup" xml:space="preserve">
+    <value>Could not add the markup.</value>
+  </data>
+  <data name="AnnNewNoteTitle" xml:space="preserve">
+    <value>New note</value>
+  </data>
+  <data name="StErrAddNote" xml:space="preserve">
+    <value>Could not add the note.</value>
+  </data>
+  <data name="StErrMoveNote" xml:space="preserve">
+    <value>Could not move the note.</value>
+  </data>
+  <data name="StErrResizeNote" xml:space="preserve">
+    <value>Could not resize the note.</value>
+  </data>
+  <data name="StErrMoveSelection" xml:space="preserve">
+    <value>Could not move the selection.</value>
+  </data>
+  <data name="StErrDeleteSelection" xml:space="preserve">
+    <value>Could not delete the selection.</value>
+  </data>
+  <data name="StCopiedAnnotations" xml:space="preserve">
+    <value>Copied {0} annotation(s).</value>
+  </data>
+  <data name="StErrPasteAnnotations" xml:space="preserve">
+    <value>Could not paste the annotations.</value>
+  </data>
+  <data name="StErrCheckConversions" xml:space="preserve">
+    <value>Could not check pending conversions.</value>
+  </data>
+  <data name="StNoConversionNeeded" xml:space="preserve">
+    <value>No documents need conversion.</value>
+  </data>
+  <data name="StQueuedConversion" xml:space="preserve">
+    <value>Queued {0} document(s) for searchable-PDF conversion.</value>
+  </data>
+  <data name="StErrConversionStart" xml:space="preserve">
+    <value>Could not start the conversion.</value>
+  </data>
+  <data name="StErrLoadRecycleBin" xml:space="preserve">
+    <value>Could not load the recycle bin.</value>
+  </data>
+  <data name="StRestored" xml:space="preserve">
+    <value>Restored '{0}'.</value>
+  </data>
+  <data name="StErrRestoreItem" xml:space="preserve">
+    <value>Could not restore the item.</value>
+  </data>
+  <data name="StErrRestoreSelected" xml:space="preserve">
+    <value>Could not restore the selected items.</value>
+  </data>
+  <data name="StPermanentlyDeleted" xml:space="preserve">
+    <value>Permanently deleted '{0}'.</value>
+  </data>
+  <data name="StErrHardDeleteHold" xml:space="preserve">
+    <value>Can't hard-delete — the item is under a legal hold.</value>
+  </data>
+  <data name="StErrHardDelete" xml:space="preserve">
+    <value>Could not hard-delete the item.</value>
+  </data>
+  <data name="RbHardDeleteSelected" xml:space="preserve">
+    <value>Hard-delete selected</value>
+  </data>
+  <data name="StErrPurgeSelected" xml:space="preserve">
+    <value>Could not purge the selected items.</value>
+  </data>
+  <data name="StRecycleBinEmptied" xml:space="preserve">
+    <value>The recycle bin was permanently emptied.</value>
+  </data>
+  <data name="StErrEmptyRecycleBin" xml:space="preserve">
+    <value>Could not empty the recycle bin.</value>
+  </data>
+  <data name="StDocumentDisposed" xml:space="preserve">
+    <value>Document disposed.</value>
+  </data>
+  <data name="StRetentionExtended" xml:space="preserve">
+    <value>Retention extended.</value>
+  </data>
+  <data name="StErrExtendRetention" xml:space="preserve">
+    <value>Could not extend retention.</value>
+  </data>
+  <data name="StPlacedUnderHold" xml:space="preserve">
+    <value>'{0}' placed under legal hold.</value>
+  </data>
+  <data name="StErrPlaceHold" xml:space="preserve">
+    <value>Could not place the legal hold.</value>
+  </data>
+  <data name="StAuditExported" xml:space="preserve">
+    <value>Audit log exported.</value>
+  </data>
+  <data name="StErrExportAudit" xml:space="preserve">
+    <value>Could not export the audit log: {0}</value>
+  </data>
+  <data name="StPreparingExport" xml:space="preserve">
+    <value>Preparing export…</value>
+  </data>
+  <data name="StExportReady" xml:space="preserve">
+    <value>Export ready.</value>
+  </data>
+  <data name="StErrExport" xml:space="preserve">
+    <value>Could not export: {0}</value>
+  </data>
+  <data name="StImporting" xml:space="preserve">
+    <value>Importing…</value>
+  </data>
+  <data name="StImportFailedStatus" xml:space="preserve">
+    <value>Import failed ({0}).</value>
+  </data>
+  <data name="StImported" xml:space="preserve">
+    <value>Imported "{0}" ({1} documents, {2} versions{3}).</value>
+  </data>
+  <data name="StImportFailed" xml:space="preserve">
+    <value>Import failed: {0}</value>
+  </data>
+  <data name="StRetentionUpdated" xml:space="preserve">
+    <value>Retention updated.</value>
+  </data>
+  <data name="StErrUpdateRetention" xml:space="preserve">
+    <value>Could not update retention: {0}</value>
+  </data>
+  <data name="StPurgedEvents" xml:space="preserve">
+    <value>Purged {0} event(s).</value>
+  </data>
+  <data name="StErrPurge" xml:space="preserve">
+    <value>Could not purge: {0}</value>
+  </data>
+  <data name="StTenantNameTaken" xml:space="preserve">
+    <value>Another active tenant already uses this name.</value>
+  </data>
+  <data name="StTenantCheckFields" xml:space="preserve">
+    <value>Check the name, OCR languages, retention/expiry values and the webhook URL/secret.</value>
+  </data>
+  <data name="StErrSaveSettings" xml:space="preserve">
+    <value>Could not save the settings.</value>
+  </data>
+  <data name="StSaveWebhookFirst" xml:space="preserve">
+    <value>Save the webhook URL + secret before sending a test.</value>
+  </data>
+  <data name="StTestEventDelivered" xml:space="preserve">
+    <value>Test event delivered successfully.</value>
+  </data>
+  <data name="StTestDeliveryFailed" xml:space="preserve">
+    <value>Test delivery failed: {0}</value>
+  </data>
+  <data name="StRepoNameTaken" xml:space="preserve">
+    <value>A repository with that name already exists.</value>
+  </data>
+  <data name="StNoPermCreateRepo" xml:space="preserve">
+    <value>You don't have permission to create repositories.</value>
+  </data>
+  <data name="StErrCreateRepo" xml:space="preserve">
+    <value>Could not create the repository.</value>
+  </data>
+  <data name="StErrReadZip" xml:space="preserve">
+    <value>Could not read '{0}'.</value>
+  </data>
+  <data name="StErrDownloadEntry" xml:space="preserve">
+    <value>Could not download '{0}'.</value>
+  </data>
+  <data name="StErrCommentPost" xml:space="preserve">
+    <value>Could not post the comment.</value>
+  </data>
+  <data name="StErrPostReply" xml:space="preserve">
+    <value>Could not post the reply.</value>
+  </data>
+  <data name="StNameTaken" xml:space="preserve">
+    <value>A folder or document named '{0}' already exists here.</value>
+  </data>
+  <data name="StErrFolderCreate" xml:space="preserve">
+    <value>Could not create the folder.</value>
+  </data>
+  <data name="StBulkFailedStatus" xml:space="preserve">
+    <value>Bulk action failed ({0}).</value>
+  </data>
+  <data name="StBulkFailed" xml:space="preserve">
+    <value>Bulk action failed: {0}</value>
+  </data>
+  <data name="StErrRemoveReference" xml:space="preserve">
+    <value>Could not remove the reference.</value>
+  </data>
+  <data name="StNoPermHere" xml:space="preserve">
+    <value>You don't have permission to do that here.</value>
+  </data>
+  <data name="StStaleReload" xml:space="preserve">
+    <value>This item changed since you loaded it — refresh and try again.</value>
+  </data>
+  <data name="StOperationFailed" xml:space="preserve">
+    <value>The operation could not be completed.</value>
+  </data>
+  <data name="StNoReplacementReviewer" xml:space="preserve">
+    <value>No other active user is available to take over the reviews.</value>
+  </data>
+  <data name="StCannotGrantMoreRights" xml:space="preserve">
+    <value>You can only grant rights you hold yourself; changing tenant-admin needs a tenant admin.</value>
+  </data>
+  <data name="StNoPermRename" xml:space="preserve">
+    <value>You don't have permission to rename this item.</value>
+  </data>
+  <data name="StErrRenameItem" xml:space="preserve">
+    <value>Could not rename the item.</value>
+  </data>
+  <data name="StNoPermDelete" xml:space="preserve">
+    <value>You don't have permission to delete this item.</value>
+  </data>
+  <data name="StErrDeleteItem" xml:space="preserve">
+    <value>Could not delete the item.</value>
+  </data>
+  <data name="StErrChangeSharing" xml:space="preserve">
+    <value>Could not change sharing.</value>
+  </data>
+  <data name="DupDlgTitle" xml:space="preserve">
+    <value>Duplicate document</value>
+  </data>
+  <data name="StReferencedInstead" xml:space="preserve">
+    <value>Referenced the existing document instead of uploading '{0}'.</value>
+  </data>
+  <data name="StReferenceExists" xml:space="preserve">
+    <value>A reference to that document already exists in this folder.</value>
+  </data>
+  <data name="StErrCreateReference" xml:space="preserve">
+    <value>Could not create the reference.</value>
+  </data>
+  <data name="StUploadNameTaken" xml:space="preserve">
+    <value>'{0}': a document with that name already exists here.</value>
+  </data>
+  <data name="StUploadNoPermission" xml:space="preserve">
+    <value>'{0}': you don't have permission to upload here.</value>
+  </data>
+  <data name="StUploadNotStarted" xml:space="preserve">
+    <value>'{0}': upload could not be started.</value>
+  </data>
+  <data name="StUploaded" xml:space="preserve">
+    <value>Uploaded '{0}'.</value>
+  </data>
+  <data name="StUploadNotFinalized" xml:space="preserve">
+    <value>'{0}': the upload was stored but could not be finalized.</value>
+  </data>
+  <data name="StVersionBlocked" xml:space="preserve">
+    <value>'{0}': the document is checked out or under a legal hold.</value>
+  </data>
+  <data name="StVersionNoPermission" xml:space="preserve">
+    <value>'{0}': you don't have permission to add a version here.</value>
+  </data>
+  <data name="StVersionNotStarted" xml:space="preserve">
+    <value>'{0}': a new version could not be started.</value>
+  </data>
+  <data name="StVersionNotFinalized" xml:space="preserve">
+    <value>'{0}': the version was stored but could not be finalized.</value>
+  </data>
+  <data name="StFileError" xml:space="preserve">
+    <value>'{0}': {1}</value>
+  </data>
+  <data name="StSetUpWebDavFirst" xml:space="preserve">
+    <value>Set up WebDAV access first (account menu → WebDAV access…).</value>
+  </data>
+  <data name="StCopiedWebDavUrl" xml:space="preserve">
+    <value>Copied WebDAV URL: {0}</value>
+  </data>
+  <data name="StErrCopyWebDavUrl" xml:space="preserve">
+    <value>Could not copy the WebDAV URL.</value>
+  </data>
+  <data name="StUploadedToInbox" xml:space="preserve">
+    <value>Uploaded {0} file(s) to your inbox.</value>
+  </data>
+  <data name="StSomeUploadsFailed" xml:space="preserve">
+    <value>Some files could not be uploaded.</value>
+  </data>
+  <data name="StErrMaskSave" xml:space="preserve">
+    <value>Could not save the mask.</value>
+  </data>
+  <data name="StErrMoveItemStatus" xml:space="preserve">
+    <value>Could not move the item ({0}).</value>
+  </data>
+  <data name="StErrMoveItem" xml:space="preserve">
+    <value>Could not move the item.</value>
+  </data>
+  <data name="StErrDeleteNamed" xml:space="preserve">
+    <value>Could not delete '{0}'.</value>
+  </data>
+  <data name="StErrRenameTaken" xml:space="preserve">
+    <value>Could not rename (the name may be taken).</value>
+  </data>
+  <data name="StErrSetColour" xml:space="preserve">
+    <value>Could not set the colour (use #RRGGBB).</value>
+  </data>
 </root>

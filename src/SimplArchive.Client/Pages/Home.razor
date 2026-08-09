@@ -2975,7 +2975,7 @@
                 };
                 request.Headers.TryAddWithoutValidation("If-Match", $"\"{a.Etag}\"");
                 var resp = await Http.SendAsync(request);
-                if (!resp.IsSuccessStatusCode) { Snackbar.Add("Could not recolour the selection.", Severity.Error); break; }
+                if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrRecolour"), Severity.Error); break; }
             }
 
             await LoadAnnotationsAsync();
@@ -3056,7 +3056,7 @@
             await _previewModule.InvokeVoidAsync("setAddMode", true);
         }
 
-        Snackbar.Add("Click a spot on the page to place a note.", Severity.Info);
+        Snackbar.Add(Strings.Get("StAnnClickToPlace"), Severity.Info);
     }
 
     private async Task StopAddNoteAsync()
@@ -3082,7 +3082,7 @@
         await SetShapeToolAsync(_annotationTool == kind ? 0 : kind);
         if (_annotationTool > 0)
         {
-            Snackbar.Add("Drag on the page to draw.", Severity.Info);
+            Snackbar.Add(Strings.Get("StAnnDragToDraw"), Severity.Info);
         }
     }
 
@@ -3111,7 +3111,7 @@
             new { pageIndex, kind, positionX = x, positionY = y, width, height, text = "", color = _annotationColor });
         if (!resp.IsSuccessStatusCode)
         {
-            Snackbar.Add("Could not add the markup.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrAddMarkup"), Severity.Error);
             return;
         }
 
@@ -3128,7 +3128,7 @@
             return;
         }
 
-        var dialog = await DialogService.ShowAsync<AnnotationDialog>("New note", new DialogParameters
+        var dialog = await DialogService.ShowAsync<AnnotationDialog>(Strings.Get("AnnNewNoteTitle"), new DialogParameters
         {
             ["Text"] = "",
             ["NoteColor"] = "#FFEB3B",
@@ -3146,7 +3146,7 @@
         var resp = await Http.PostAsJsonAsync(_pvAnnotationsUrl.TrimStart('/'), new { pageIndex, kind = 0, positionX = x, positionY = y, width = 0.22, height = 0.06, text = edit.Text, color = edit.Color });
         if (!resp.IsSuccessStatusCode)
         {
-            Snackbar.Add("Could not add the note.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrAddNote"), Severity.Error);
             return;
         }
 
@@ -3240,7 +3240,7 @@
         }
         else
         {
-            Snackbar.Add("Could not move the note.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrMoveNote"), Severity.Error);
             await LoadAnnotationsAsync(); // snap back to the persisted position + refresh the etag
         }
 
@@ -3276,7 +3276,7 @@
         }
         else
         {
-            Snackbar.Add("Could not resize the note.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrResizeNote"), Severity.Error);
             await LoadAnnotationsAsync();
         }
 
@@ -3351,7 +3351,7 @@
             var resp = await Http.SendAsync(request);
             if (!resp.IsSuccessStatusCode)
             {
-                Snackbar.Add("Could not move the selection.", Severity.Error);
+                Snackbar.Add(Strings.Get("StErrMoveSelection"), Severity.Error);
                 break;
             }
         }
@@ -3372,7 +3372,7 @@
             var resp = await Http.SendAsync(request);
             if (!resp.IsSuccessStatusCode)
             {
-                Snackbar.Add("Could not delete the selection.", Severity.Error);
+                Snackbar.Add(Strings.Get("StErrDeleteSelection"), Severity.Error);
                 break;
             }
         }
@@ -3387,7 +3387,7 @@
         _annotationClipboard.Clear();
         _annotationClipboard.AddRange(_annotations.Where(a => _selectedAnnotationIds.Contains(a.Id)));
         _hasAnnotationClipboard = _annotationClipboard.Count > 0;
-        if (_hasAnnotationClipboard) Snackbar.Add($"Copied {_annotationClipboard.Count} annotation(s).", Severity.Info);
+        if (_hasAnnotationClipboard) Snackbar.Add(string.Format(Strings.Get("StCopiedAnnotations"), _annotationClipboard.Count), Severity.Info);
     }
 
     // Paste the clipboard as offset duplicates on their original page/version; then reload.
@@ -3405,7 +3405,7 @@
                 new { pageIndex = a.PageIndex, kind = a.Kind, positionX = nx, positionY = ny, width = w, height = h, text = a.Text, color = a.Color });
             if (!resp.IsSuccessStatusCode)
             {
-                Snackbar.Add("Could not paste the annotations.", Severity.Error);
+                Snackbar.Add(Strings.Get("StErrPasteAnnotations"), Severity.Error);
                 break;
             }
         }
@@ -3661,7 +3661,7 @@
     {
         if (!await ImpersonationSvc.StartAsync(p.Id))
         {
-            Snackbar.Add("Could not impersonate this user.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrImpersonate"), Severity.Error);
         }
     }
     private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanManageServiceAccounts { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public bool CanManageInboxes { get; set; } public Guid? UserId { get; set; } public string UserName { get; set; } = ""; }
@@ -3680,13 +3680,13 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not check pending conversions.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrCheckConversions"), Severity.Error);
             return;
         }
 
         if (pending == 0)
         {
-            Snackbar.Add("No documents need conversion.", Severity.Info);
+            Snackbar.Add(Strings.Get("StNoConversionNeeded"), Severity.Info);
             return;
         }
 
@@ -3708,7 +3708,7 @@
             if (resp.IsSuccessStatusCode)
             {
                 var count = (await resp.Content.ReadFromJsonAsync<BackfillResponse>())?.Count ?? 0;
-                Snackbar.Add($"Queued {count} document(s) for searchable-PDF conversion.", Severity.Success);
+                Snackbar.Add(string.Format(Strings.Get("StQueuedConversion"), count), Severity.Success);
             }
             else
             {
@@ -3717,7 +3717,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not start the conversion.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrConversionStart"), Severity.Error);
         }
     }
 
@@ -3942,7 +3942,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not load the recycle bin.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrLoadRecycleBin"), Severity.Error);
         }
         StateHasChanged();
     }
@@ -4027,13 +4027,13 @@
         var response = await Http.PostAsync($"api/documents/{item.Id}/restore", null);
         if (response.IsSuccessStatusCode)
         {
-            Snackbar.Add($"Restored '{item.Name}'.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StRestored"), item.Name), Severity.Success);
             if (_rbSelected?.Id == item.Id) { _rbSelected = null; ClearRbPreview(); }
             await LoadRecycleBinAsync();
         }
         else
         {
-            Snackbar.Add("Could not restore the item.", Severity.Warning);
+            Snackbar.Add(Strings.Get("StErrRestoreItem"), Severity.Warning);
         }
     }
 
@@ -4067,7 +4067,7 @@
         }
         else
         {
-            Snackbar.Add("Could not restore the selected items.", Severity.Warning);
+            Snackbar.Add(Strings.Get("StErrRestoreSelected"), Severity.Warning);
         }
     }
 
@@ -4079,17 +4079,17 @@
         var response = await Http.PostAsync($"api/documents/{item.Id}/purge", null);
         if (response.IsSuccessStatusCode)
         {
-            Snackbar.Add($"Permanently deleted '{item.Name}'.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StPermanentlyDeleted"), item.Name), Severity.Success);
             if (_rbSelected?.Id == item.Id) { _rbSelected = null; ClearRbPreview(); }
             await LoadRecycleBinAsync();
         }
         else if (response.StatusCode == HttpStatusCode.Conflict)
         {
-            Snackbar.Add("Can't hard-delete — the item is under a legal hold.", Severity.Warning);
+            Snackbar.Add(Strings.Get("StErrHardDeleteHold"), Severity.Warning);
         }
         else
         {
-            Snackbar.Add("Could not hard-delete the item.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrHardDelete"), Severity.Error);
         }
     }
 
@@ -4097,7 +4097,7 @@
     // as Hard-delete all; protected (legal-hold / WORM) items are skipped server-side and reported.
     private async Task PurgeSelectedAsync()
     {
-        var result = await (await DialogService.ShowAsync<HardDeleteAllDialog>("Hard-delete selected")).Result;
+        var result = await (await DialogService.ShowAsync<HardDeleteAllDialog>(Strings.Get("RbHardDeleteSelected"))).Result;
         if (result is not { Canceled: false })
         {
             return;
@@ -4117,7 +4117,7 @@
         }
         else
         {
-            Snackbar.Add("Could not purge the selected items.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrPurgeSelected"), Severity.Error);
         }
     }
 
@@ -4125,7 +4125,7 @@
 
     private async Task HardDeleteAllAsync()
     {
-        var result = await (await DialogService.ShowAsync<HardDeleteAllDialog>("Hard-delete all")).Result;
+        var result = await (await DialogService.ShowAsync<HardDeleteAllDialog>(Strings.Get("RbHardDeleteAll"))).Result;
         if (result is not { Canceled: false })
         {
             return;
@@ -4134,14 +4134,14 @@
         var response = await Http.PostAsync("api/recycle-bin/purge", null);
         if (response.IsSuccessStatusCode)
         {
-            Snackbar.Add("The recycle bin was permanently emptied.", Severity.Success);
+            Snackbar.Add(Strings.Get("StRecycleBinEmptied"), Severity.Success);
             _rbSelected = null;
             ClearRbPreview();
             await LoadRecycleBinAsync();
         }
         else
         {
-            Snackbar.Add("Could not empty the recycle bin.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrEmptyRecycleBin"), Severity.Error);
         }
     }
 
@@ -4175,7 +4175,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not load the retention schedule.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrLoadRetention"), Severity.Error);
         }
         StateHasChanged();
     }
@@ -4197,7 +4197,7 @@
         using var resp = await Http.PostAsync($"api/retention/{row.DocumentId}/dispose", null);
         if (resp.IsSuccessStatusCode)
         {
-            Snackbar.Add("Document disposed.", Severity.Success);
+            Snackbar.Add(Strings.Get("StDocumentDisposed"), Severity.Success);
             await LoadRetentionScheduleAsync();
         }
         else
@@ -4209,7 +4209,7 @@
     private async Task ExtendRetentionAsync(RetentionItemDto row)
     {
         var parameters = new DialogParameters { [nameof(Dialogs.ExtendRetentionDialog.DocumentName)] = row.DocumentName };
-        var dialog = await DialogService.ShowAsync<Dialogs.ExtendRetentionDialog>("Extend retention", parameters);
+        var dialog = await DialogService.ShowAsync<Dialogs.ExtendRetentionDialog>(Strings.Get("ExtRetTitle"), parameters);
         var result = await dialog.Result;
         if (result is null || result.Canceled || result.Data is not string until)
         {
@@ -4219,12 +4219,12 @@
         using var resp = await Http.PostAsJsonAsync($"api/retention/{row.DocumentId}/extend", new { until });
         if (resp.IsSuccessStatusCode)
         {
-            Snackbar.Add("Retention extended.", Severity.Success);
+            Snackbar.Add(Strings.Get("StRetentionExtended"), Severity.Success);
             await LoadRetentionScheduleAsync();
         }
         else
         {
-            Snackbar.Add("Could not extend retention.", Severity.Warning);
+            Snackbar.Add(Strings.Get("StErrExtendRetention"), Severity.Warning);
         }
     }
 
@@ -4259,7 +4259,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not load legal holds.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrLoadHolds"), Severity.Error);
         }
         StateHasChanged();
     }
@@ -4289,12 +4289,12 @@
         {
             using var response = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("legalHolds"), new { name = result.Name, reason = result.Reason });
             response.EnsureSuccessStatusCode();
-            Snackbar.Add($"Legal hold '{result.Name}' created.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StHoldCreated"), result.Name), Severity.Success);
             await LoadLegalHoldsAsync();
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not create the legal hold.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrCreateHold"), Severity.Error);
         }
     }
 
@@ -4313,7 +4313,7 @@
             var hold = await created.Content.ReadFromJsonAsync<LegalHoldDto>();
             using var added = await Http.PostAsJsonAsync($"api/legal-holds/{hold!.Id}/items", new { documentId = node.Id });
             added.EnsureSuccessStatusCode();
-            Snackbar.Add($"'{node.Name}' placed under legal hold.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StPlacedUnderHold"), node.Name), Severity.Success);
             if (_selectedFolder is { } sf)
             {
                 _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, trackAsCurrentFolder: true);
@@ -4321,7 +4321,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not place the legal hold.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrPlaceHold"), Severity.Error);
         }
     }
 
@@ -4347,7 +4347,7 @@
         {
             using var response = await Http.PostAsync($"api/legal-holds/{sel.Id}/release", null);
             response.EnsureSuccessStatusCode();
-            Snackbar.Add("Legal hold released.", Severity.Success);
+            Snackbar.Add(Strings.Get("StHoldReleased"), Severity.Success);
             await LoadLegalHoldsAsync();
             await SelectHoldAsync(sel);
             if (_selectedFolder is { } sf)
@@ -4357,7 +4357,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not release the hold.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrReleaseHold"), Severity.Error);
         }
     }
 
@@ -4381,14 +4381,14 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not remove the document from the hold.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrRemoveFromHold"), Severity.Error);
         }
     }
 
     private async Task<LegalHoldDialog.LegalHoldFormResult?> ShowLegalHoldDialogAsync(string? suggestedName = null)
     {
         var parameters = new DialogParameters<LegalHoldDialog> { { x => x.SuggestedName, suggestedName } };
-        var dialog = await DialogService.ShowAsync<LegalHoldDialog>("New legal hold", parameters);
+        var dialog = await DialogService.ShowAsync<LegalHoldDialog>(Strings.Get("LhDlgTitle"), parameters);
         var result = await dialog.Result;
         return result is { Canceled: false, Data: LegalHoldDialog.LegalHoldFormResult r } ? r : null;
     }
@@ -4446,11 +4446,11 @@
             using var stream = new MemoryStream(bytes);
             using var streamRef = new DotNetStreamReference(stream);
             await JS.InvokeVoidAsync("downloadFileFromStream", $"audit-export-{DateTime.UtcNow:yyyyMMdd-HHmmss}.ndjson", streamRef);
-            Snackbar.Add("Audit log exported.", Severity.Success);
+            Snackbar.Add(Strings.Get("StAuditExported"), Severity.Success);
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Could not export the audit log: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(Strings.Get("StErrExportAudit"), ex.Message), Severity.Error);
         }
     }
 
@@ -4465,7 +4465,7 @@
         }
 
         var root = _selectedFolder;
-        var dialog = await DialogService.ShowAsync<ExportDialog>("Export", new DialogParameters { ["RootName"] = root.Name });
+        var dialog = await DialogService.ShowAsync<ExportDialog>(Strings.Get("SaRightExport"), new DialogParameters { ["RootName"] = root.Name });
         if ((await dialog.Result) is not { Canceled: false, Data: ExportDialog.ExportOptions options })
         {
             return;
@@ -4481,16 +4481,16 @@
             if (options.CreatedBy is { } cb) query.Add($"createdBy={Uri.EscapeDataString(cb)}");
             if (options.IncludePermissions) query.Add("includePermissions=true");
 
-            Snackbar.Add("Preparing export…", Severity.Info);
+            Snackbar.Add(Strings.Get("StPreparingExport"), Severity.Info);
             var bytes = await Http.GetByteArrayAsync($"api/documents/{root.Id}/export?" + string.Join("&", query));
             using var stream = new MemoryStream(bytes);
             using var streamRef = new DotNetStreamReference(stream);
             await JS.InvokeVoidAsync("downloadFileFromStream", $"{root.Name}-export-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip", streamRef);
-            Snackbar.Add("Export ready.", Severity.Success);
+            Snackbar.Add(Strings.Get("StExportReady"), Severity.Success);
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Could not export: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(Strings.Get("StErrExport"), ex.Message), Severity.Error);
         }
     }
 
@@ -4499,7 +4499,7 @@
     // + the update-existing flag; the archive is POSTed as multipart form data.
     private async Task OpenImportDialogAsync()
     {
-        var dialog = await DialogService.ShowAsync<ImportDialog>("Import", new DialogParameters { ["TargetName"] = _selectedFolder?.Name });
+        var dialog = await DialogService.ShowAsync<ImportDialog>(Strings.Get("SaRightImport"), new DialogParameters { ["TargetName"] = _selectedFolder?.Name });
         if ((await dialog.Result) is not { Canceled: false, Data: ImportDialog.Result options })
         {
             return;
@@ -4507,7 +4507,7 @@
 
         try
         {
-            Snackbar.Add("Importing…", Severity.Info);
+            Snackbar.Add(Strings.Get("StImporting"), Severity.Info);
             using var content = new MultipartFormDataContent();
             var fileContent = new ByteArrayContent(options.Bytes);
             fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
@@ -4518,18 +4518,18 @@
             var resp = await Http.PostAsync($"{basePath}{query}", content);
             if (!resp.IsSuccessStatusCode)
             {
-                Snackbar.Add($"Import failed ({(int)resp.StatusCode}).", Severity.Error);
+                Snackbar.Add(string.Format(Strings.Get("StImportFailedStatus"), (int)resp.StatusCode), Severity.Error);
                 return;
             }
 
             var result = await resp.Content.ReadFromJsonAsync<ImportResultDto>();
             var skipped = result?.Skipped > 0 ? $", {result.Skipped} already imported" : "";
-            Snackbar.Add($"Imported \"{result?.RootName}\" ({result?.Documents} documents, {result?.Versions} versions{skipped}).", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StImported"), result?.RootName, result?.Documents, result?.Versions, skipped), Severity.Success);
             await RefreshAsync();
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Import failed: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(Strings.Get("StImportFailed"), ex.Message), Severity.Error);
         }
     }
 
@@ -4565,14 +4565,14 @@
             if (resp.IsSuccessStatusCode)
             {
                 _auditRetention = await resp.Content.ReadFromJsonAsync<RetentionDto>();
-                Snackbar.Add("Retention updated.", Severity.Success);
+                Snackbar.Add(Strings.Get("StRetentionUpdated"), Severity.Success);
             }
             else
             {
                 Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to change retention." : "Could not update retention.", Severity.Warning);
             }
         }
-        catch (Exception ex) { Snackbar.Add($"Could not update retention: {ex.Message}", Severity.Error); }
+        catch (Exception ex) { Snackbar.Add(string.Format(Strings.Get("StErrUpdateRetention"), ex.Message), Severity.Error); }
         finally { _auditRetentionBusy = false; }
     }
 
@@ -4597,7 +4597,7 @@
             if (resp.IsSuccessStatusCode)
             {
                 var result = await resp.Content.ReadFromJsonAsync<PurgeDto>();
-                Snackbar.Add($"Purged {result?.PurgedCount ?? 0} event(s).", Severity.Success);
+                Snackbar.Add(string.Format(Strings.Get("StPurgedEvents"), result?.PurgedCount ?? 0), Severity.Success);
                 await LoadRetentionAsync();
                 await RunAuditSearchAsync();
             }
@@ -4606,7 +4606,7 @@
                 Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to purge." : "Could not purge.", Severity.Warning);
             }
         }
-        catch (Exception ex) { Snackbar.Add($"Could not purge: {ex.Message}", Severity.Error); }
+        catch (Exception ex) { Snackbar.Add(string.Format(Strings.Get("StErrPurge"), ex.Message), Severity.Error); }
         finally { _auditRetentionBusy = false; }
     }
 
@@ -4635,7 +4635,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Could not verify the audit log: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(Strings.Get("StErrVerifyAudit"), ex.Message), Severity.Error);
         }
         finally
         {
@@ -4655,7 +4655,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Could not verify the WORM segments: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(Strings.Get("StErrVerifyWorm"), ex.Message), Severity.Error);
         }
         finally
         {
@@ -4719,7 +4719,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Could not load the audit log: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(Strings.Get("StErrLoadAudit"), ex.Message), Severity.Error);
         }
         finally
         {
@@ -4782,7 +4782,7 @@
     private async Task OpenWorkflowAsync(Guid documentId)
     {
         var parameters = new DialogParameters { ["DocumentId"] = documentId };
-        var dialog = await DialogService.ShowAsync<WorkflowDialog>("Workflow", parameters, new DialogOptions { CloseButton = true });
+        var dialog = await DialogService.ShowAsync<WorkflowDialog>(Strings.Get("WfTitle"), parameters, new DialogOptions { CloseButton = true });
         await dialog.Result;
         await LoadTasksAsync();
     }
@@ -4906,7 +4906,7 @@
         try
         {
             (await Http.DeleteAsync($"api/documents/{node.Id}/checkout")).EnsureSuccessStatusCode();
-            Snackbar.Add($"Released the check-out of '{node.Name}'.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StReleasedCheckout"), node.Name), Severity.Success);
             await ReloadCurrentFolderAsync();
         }
         catch (Exception) { Snackbar.Add(Strings.Get("CoErrOverride"), Severity.Error); }
@@ -5080,23 +5080,23 @@
         long? storageQuotaBytes = _tenantEdit.StorageQuotaMb is { } mb ? (long)mb * 1024 * 1024 : null;
         var body = new { name = _tenantEdit.Name, defaultOcrLanguages = ocr, auditRetentionDays = _tenantEdit.AuditRetentionDays, checkoutTtlDays = _tenantEdit.CheckoutTtlDays, checkoutWarningDays = _tenantEdit.CheckoutWarningDays, wormLockMode = _tenantEdit.WormLockMode, requireMfa = _tenantEdit.RequireMfa, allowPasskeyLogin = _tenantEdit.AllowPasskeyLogin, requireDispositionReview = _tenantEdit.RequireDispositionReview, restrictTagsToCatalog = _tenantEdit.RestrictTagsToCatalog, enforceClearance = _tenantEdit.EnforceClearance, allowExternalLinks = _tenantEdit.AllowExternalLinks, showExternalLinkUrl = _tenantEdit.ShowExternalLinkUrl, externalLinkMaxDays = _tenantEdit.ExternalLinkMaxDays, externalLinkDefaultAccesses = _tenantEdit.ExternalLinkDefaultAccesses, storageQuotaBytes, incompleteUploadCleanupDays = _tenantEdit.IncompleteUploadCleanupDays, auditWebhookUrl = webhookUrl, auditWebhookSecret = webhookSecret };
         var resp = await Http.PutAsJsonAsync(await ApiRoot.RequireAsync("tenantSettings"), body);
-        if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add("Another active tenant already uses this name.", Severity.Warning); return; }
-        if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add("Check the name, OCR languages, retention/expiry values and the webhook URL/secret.", Severity.Warning); return; }
-        if (!resp.IsSuccessStatusCode) { Snackbar.Add("Could not save the settings.", Severity.Error); return; }
+        if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add(Strings.Get("StTenantNameTaken"), Severity.Warning); return; }
+        if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add(Strings.Get("StTenantCheckFields"), Severity.Warning); return; }
+        if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrSaveSettings"), Severity.Error); return; }
         _tenant = await resp.Content.ReadFromJsonAsync<TenantSettingsDto>();
         SyncTenantEditFromTenant();
         _tenantEditing = false;
-        Snackbar.Add("Tenant settings saved.", Severity.Success);
+        Snackbar.Add(Strings.Get("StTenantSaved"), Severity.Success);
     }
 
     private async Task TestWebhookAsync()
     {
         var resp = await Http.PostAsync("api/tenant-settings/audit-webhook/test", null);
-        if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add("Save the webhook URL + secret before sending a test.", Severity.Warning); return; }
-        if (!resp.IsSuccessStatusCode) { Snackbar.Add("Could not send the test event.", Severity.Error); return; }
+        if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add(Strings.Get("StSaveWebhookFirst"), Severity.Warning); return; }
+        if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrTestEvent"), Severity.Error); return; }
         var result = await resp.Content.ReadFromJsonAsync<TestWebhookResult>();
-        if (result?.Success == true) Snackbar.Add("Test event delivered successfully.", Severity.Success);
-        else Snackbar.Add($"Test delivery failed: {result?.Error ?? "unknown error"}", Severity.Warning);
+        if (result?.Success == true) Snackbar.Add(Strings.Get("StTestEventDelivered"), Severity.Success);
+        else Snackbar.Add(string.Format(Strings.Get("StTestDeliveryFailed"), result?.Error ?? "unknown error"), Severity.Warning);
     }
 
     private record TestWebhookResult { public bool Success { get; set; } public string? Error { get; set; } }
@@ -5104,17 +5104,17 @@
     private async Task RecomputeStorageAsync()
     {
         var resp = await Http.PostAsync("api/tenant-settings/recompute-storage", null);
-        if (!resp.IsSuccessStatusCode) { Snackbar.Add("Could not recompute storage usage.", Severity.Error); return; }
+        if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrRecompute"), Severity.Error); return; }
         _tenant = await resp.Content.ReadFromJsonAsync<TenantSettingsDto>();
         if (!_tenantEditing) SyncTenantEditFromTenant();
-        Snackbar.Add("Storage usage recomputed.", Severity.Success);
+        Snackbar.Add(Strings.Get("StStorageRecomputed"), Severity.Success);
     }
 
     // Manage the tenant's configurable sensitivity labels (ADR "Configurable sensitivity labels + upload
     // defaults"); reload the picker list on close so a detail-pane edit sees any changes.
     private async Task OpenSensitivityLabelsAsync()
     {
-        var dialog = await DialogService.ShowAsync<SensitivityLabelsDialog>("Sensitivity labels", new DialogOptions { MaxWidth = MaxWidth.Medium });
+        var dialog = await DialogService.ShowAsync<SensitivityLabelsDialog>(Strings.Get("SlTitle"), new DialogOptions { MaxWidth = MaxWidth.Medium });
         await dialog.Result;
         await LoadSensitivityLabelsAsync();
     }
@@ -5124,10 +5124,10 @@
         var input = await JS.InvokeAsync<string?>("prompt", "New repository name:");
         if (string.IsNullOrWhiteSpace(input)) return;
         var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("repositories"), new { name = input.Trim() });
-        if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add("A repository with that name already exists.", Severity.Warning); return; }
-        if (resp.StatusCode == System.Net.HttpStatusCode.Forbidden) { Snackbar.Add("You don't have permission to create repositories.", Severity.Error); return; }
-        if (!resp.IsSuccessStatusCode) { Snackbar.Add("Could not create the repository.", Severity.Error); return; }
-        Snackbar.Add($"Created repository '{input.Trim()}'.", Severity.Success);
+        if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add(Strings.Get("StRepoNameTaken"), Severity.Warning); return; }
+        if (resp.StatusCode == System.Net.HttpStatusCode.Forbidden) { Snackbar.Add(Strings.Get("StNoPermCreateRepo"), Severity.Error); return; }
+        if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrCreateRepo"), Severity.Error); return; }
+        Snackbar.Add(string.Format(Strings.Get("StCreatedRepo"), input.Trim()), Severity.Success);
         await ReloadRootsAsync();
     }
 
@@ -5642,7 +5642,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add($"Could not read '{zip.Name}'.", Severity.Error);
+            Snackbar.Add(string.Format(Strings.Get("StErrReadZip"), zip.Name), Severity.Error);
         }
     }
 
@@ -5665,7 +5665,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add($"Could not download '{entry.Name}'.", Severity.Error);
+            Snackbar.Add(string.Format(Strings.Get("StErrDownloadEntry"), entry.Name), Severity.Error);
         }
     }
 
@@ -5913,7 +5913,7 @@
             ["DocumentId"] = item.Id,
             ["DocumentName"] = _sysName,
         };
-        await DialogService.ShowAsync<Dialogs.ReminderDialog>("Reminders", parameters);
+        await DialogService.ShowAsync<Dialogs.ReminderDialog>(Strings.Get("RemTitle"), parameters);
     }
 
     // Whether the current user follows the selected document (ADR "Document subscriptions").
@@ -5938,7 +5938,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not update your subscription.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrSubscription"), Severity.Error);
         }
     }
 
@@ -5980,7 +5980,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not update your subscription.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrSubscription"), Severity.Error);
         }
     }
 
@@ -6102,7 +6102,7 @@
         }
         catch (HttpRequestException e)
         {
-            Snackbar.Add($"Could not start editing: {e.Message}", Severity.Error);
+            Snackbar.Add(string.Format(Strings.Get("StErrStartEdit"), e.Message), Severity.Error);
         }
         finally
         {
@@ -6116,7 +6116,7 @@
     private async Task OpenVersionsAsync(BrowseNode item)
     {
         var parameters = new DialogParameters { ["DocumentId"] = item.Id, ["DocumentName"] = item.Name };
-        var dialog = await DialogService.ShowAsync<Dialogs.VersionsDialog>("Versions", parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+        var dialog = await DialogService.ShowAsync<Dialogs.VersionsDialog>(Strings.Get("RibbonVersions"), parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
         if ((await dialog.Result) is { Canceled: false, Data: true } && _selectedItem?.Id == item.Id)
         {
             await SelectItemAsync(item);
@@ -6131,7 +6131,7 @@
         }
 
         var parameters = new DialogParameters { ["DocumentId"] = item.Id, ["DocumentName"] = item.Name };
-        var dialog = await DialogService.ShowAsync<Dialogs.CompareVersionsDialog>("Compare versions", parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+        var dialog = await DialogService.ShowAsync<Dialogs.CompareVersionsDialog>(Strings.Get("CvTitle"), parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
         // A restore (ADR "Version restore") closes the dialog with true — reselect the document so the detail
         // pane + preview reflect the new current version.
         if ((await dialog.Result) is { Canceled: false, Data: true })
@@ -6306,12 +6306,12 @@
 
             if (failures.Count > 0)
             {
-                Snackbar.Add($"Could not save: {string.Join("; ", failures)}", Severity.Warning);
+                Snackbar.Add(string.Format(Strings.Get("StErrSaveJoin"), string.Join("; ", failures)), Severity.Warning);
                 return; // stay in edit mode so the rejected field can be fixed
             }
 
             _isEditing = false;
-            Snackbar.Add("Saved.", Severity.Success);
+            Snackbar.Add(Strings.Get("StSaved"), Severity.Success);
             if (nameChanged)
             {
                 // Rebuild the tree/list so rows show the new name, then reselect the *fresh* node (the old
@@ -6656,7 +6656,7 @@
         }
         else
         {
-            Snackbar.Add("Could not post the comment.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrCommentPost"), Severity.Error);
         }
     }
 
@@ -6676,7 +6676,7 @@
         }
         else
         {
-            Snackbar.Add("Could not post the reply.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrPostReply"), Severity.Error);
         }
     }
 
@@ -6706,16 +6706,16 @@
         var response = await Http.PostAsJsonAsync($"api/documents/{folder.Id}/children", new { name });
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
-            Snackbar.Add($"A folder or document named '{name}' already exists here.", Severity.Warning);
+            Snackbar.Add(string.Format(Strings.Get("StNameTaken"), name), Severity.Warning);
             return;
         }
         if (!response.IsSuccessStatusCode)
         {
-            Snackbar.Add("Could not create the folder.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrFolderCreate"), Severity.Error);
             return;
         }
 
-        Snackbar.Add($"Created folder '{name}'.", Severity.Success);
+        Snackbar.Add(string.Format(Strings.Get("StCreatedFolder"), name), Severity.Success);
         await RefreshAsync();
     }
 
@@ -6801,7 +6801,7 @@
 
     private async Task BulkAddTagsAsync()
     {
-        var dialog = await DialogService.ShowAsync<Dialogs.BulkTagsDialog>("Add tags");
+        var dialog = await DialogService.ShowAsync<Dialogs.BulkTagsDialog>(Strings.Get("BulkTagsConfirm"));
         if ((await dialog.Result) is { Canceled: false, Data: List<string> tags } && tags.Count > 0)
         {
             await RunBulkAsync("/api/documents/bulk/tags", new { ids = _bulkIds.ToList(), tags }, "tagged");
@@ -6810,7 +6810,7 @@
 
     private async Task BulkSensitivityAsync()
     {
-        var dialog = await DialogService.ShowAsync<Dialogs.BulkSensitivityDialog>("Set sensitivity");
+        var dialog = await DialogService.ShowAsync<Dialogs.BulkSensitivityDialog>(Strings.Get("BulkSensTitle"));
         if ((await dialog.Result) is { Canceled: false, Data: int label })
         {
             await RunBulkAsync("/api/documents/bulk/sensitivity", new { ids = _bulkIds.ToList(), label }, "classified");
@@ -6824,7 +6824,7 @@
             var response = await Http.PostAsJsonAsync(url, body);
             if (!response.IsSuccessStatusCode)
             {
-                Snackbar.Add($"Bulk action failed ({(int)response.StatusCode}).", Severity.Error);
+                Snackbar.Add(string.Format(Strings.Get("StBulkFailedStatus"), (int)response.StatusCode), Severity.Error);
                 return;
             }
 
@@ -6834,7 +6834,7 @@
         }
         catch (Exception e)
         {
-            Snackbar.Add($"Bulk action failed: {e.Message}", Severity.Error);
+            Snackbar.Add(string.Format(Strings.Get("StBulkFailed"), e.Message), Severity.Error);
             return;
         }
 
@@ -6953,11 +6953,11 @@
         var response = await Http.DeleteAsync($"api/documents/{folder.Id}/references/{node.ReferenceId}");
         if (!response.IsSuccessStatusCode)
         {
-            Snackbar.Add("Could not remove the reference.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrRemoveReference"), Severity.Error);
             return;
         }
 
-        Snackbar.Add($"Removed the reference to '{node.Name}'.", Severity.Success);
+        Snackbar.Add(string.Format(Strings.Get("StRemovedRef"), node.Name), Severity.Success);
         await RefreshAsync();
     }
 
@@ -6968,7 +6968,7 @@
             { x => x.ItemId, node.Id },
             { x => x.ItemName, node.Name },
         };
-        var dialog = await DialogService.ShowAsync<ReferencesDialog>("References", parameters);
+        var dialog = await DialogService.ShowAsync<ReferencesDialog>(Strings.Get("RefDlgTitle"), parameters);
         var result = await dialog.Result;
         if (result is { Canceled: false, Data: ReferencesDialog.ReferencesResult r })
         {
@@ -7027,19 +7027,19 @@
                 Snackbar.Add(badRequest, Severity.Warning);
                 return false;
             case HttpStatusCode.Forbidden:
-                Snackbar.Add("You don't have permission to do that here.", Severity.Warning);
+                Snackbar.Add(Strings.Get("StNoPermHere"), Severity.Warning);
                 return false;
             case HttpStatusCode.Conflict:
                 Snackbar.Add(conflict, Severity.Warning);
                 return false;
             case HttpStatusCode.PreconditionFailed:
-                Snackbar.Add("This item changed since you loaded it — refresh and try again.", Severity.Warning);
+                Snackbar.Add(Strings.Get("StStaleReload"), Severity.Warning);
                 return false;
         }
 
         if (!response.IsSuccessStatusCode)
         {
-            Snackbar.Add("The operation could not be completed.", Severity.Error);
+            Snackbar.Add(Strings.Get("StOperationFailed"), Severity.Error);
             return false;
         }
 
@@ -7116,7 +7116,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not load users and groups.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrLoadUsers"), Severity.Error);
             return;
         }
 
@@ -7167,7 +7167,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not load group members.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrLoadMembers"), Severity.Error);
         }
     }
 
@@ -7194,7 +7194,7 @@
         if (resp.IsSuccessStatusCode)
         {
             await LoadGroupMembersAsync(group);
-            Snackbar.Add($"Added {option.Name}.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StAdded"), option.Name), Severity.Success);
         }
         else
         {
@@ -7213,11 +7213,11 @@
         if (resp.IsSuccessStatusCode)
         {
             _groupMembers.Remove(member);
-            Snackbar.Add($"Removed {member.Name}.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StRemovedName"), member.Name), Severity.Success);
         }
         else
         {
-            Snackbar.Add("Could not remove the member.", Severity.Warning);
+            Snackbar.Add(Strings.Get("StErrRemoveMember"), Severity.Warning);
         }
     }
 
@@ -7253,7 +7253,7 @@
         }
 
         var parameters = new DialogParameters<ProfilePhotoDialog> { { x => x.UserId, p.Id } };
-        var dialog = await DialogService.ShowAsync<ProfilePhotoDialog>("Profile photo", parameters);
+        var dialog = await DialogService.ShowAsync<ProfilePhotoDialog>(Strings.Get("PpTitle"), parameters);
         if (await dialog.Result is { Canceled: false })
         {
             await LoadPrincipalPhotoAsync(p);
@@ -7271,7 +7271,7 @@
         if (resp.IsSuccessStatusCode)
         {
             _principalPhotoUrl = null;
-            Snackbar.Add("Photo removed.", Severity.Success);
+            Snackbar.Add(Strings.Get("StPhotoRemoved"), Severity.Success);
         }
     }
 
@@ -7310,7 +7310,7 @@
                     { x => x.Password, result?.Password ?? "" },
                     { x => x.UserName, p.Name },
                 };
-                await (await DialogService.ShowAsync<GeneratedPasswordDialog>("Password reset", parameters)).Result;
+                await (await DialogService.ShowAsync<GeneratedPasswordDialog>(Strings.Get("GenPwTitle"), parameters)).Result;
             }
             else
             {
@@ -7319,7 +7319,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not reset the password.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrResetPw"), Severity.Error);
         }
     }
 
@@ -7352,7 +7352,7 @@
             if (resp.IsSuccessStatusCode)
             {
                 p.MfaEnabled = false;
-                Snackbar.Add($"Two-factor authentication reset for '{p.Name}'.", Severity.Success);
+                Snackbar.Add(string.Format(Strings.Get("StMfaResetFor"), p.Name), Severity.Success);
                 StateHasChanged();
             }
             else
@@ -7362,7 +7362,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not reset two-factor authentication.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrResetMfa"), Severity.Error);
         }
     }
 
@@ -7447,7 +7447,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not create.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrCreate"), Severity.Error);
         }
     }
 
@@ -7502,7 +7502,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not delete.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrDelete"), Severity.Error);
         }
     }
 
@@ -7514,7 +7514,7 @@
             .ToList();
         if (candidates.Count == 0)
         {
-            Snackbar.Add("No other active user is available to take over the reviews.", Severity.Warning);
+            Snackbar.Add(Strings.Get("StNoReplacementReviewer"), Severity.Warning);
             return;
         }
 
@@ -7523,7 +7523,7 @@
             [nameof(ReplacementReviewerDialog.UserName)] = user.Name,
             [nameof(ReplacementReviewerDialog.Candidates)] = candidates,
         };
-        var dialog = await DialogService.ShowAsync<ReplacementReviewerDialog>("Reassign pending reviews", parameters);
+        var dialog = await DialogService.ShowAsync<ReplacementReviewerDialog>(Strings.Get("RrTitle"), parameters);
         var result = await dialog.Result;
         if (result is null || result.Canceled || result.Data is not Guid replacementId)
         {
@@ -7533,13 +7533,13 @@
         using var retry = await Http.DeleteAsync($"api/users/{user.Id}?reassignReviewsTo={replacementId}");
         if (retry.IsSuccessStatusCode)
         {
-            Snackbar.Add("Reviews reassigned and user deactivated.", Severity.Success);
+            Snackbar.Add(Strings.Get("StReviewsReassigned"), Severity.Success);
             _selectedPrincipal = null;
             await LoadPrincipalsAsync();
         }
         else
         {
-            Snackbar.Add("Could not reassign the reviews.", Severity.Warning);
+            Snackbar.Add(Strings.Get("StErrReassign"), Severity.Warning);
         }
     }
 
@@ -7561,20 +7561,20 @@
             {
                 p.Rights = _editRights with { };
                 _ugEditing = false;
-                Snackbar.Add("Rights saved.", Severity.Success);
+                Snackbar.Add(Strings.Get("StRightsSaved"), Severity.Success);
             }
             else if (resp.StatusCode == HttpStatusCode.Forbidden)
             {
-                Snackbar.Add("You can only grant rights you hold yourself; changing tenant-admin needs a tenant admin.", Severity.Warning);
+                Snackbar.Add(Strings.Get("StCannotGrantMoreRights"), Severity.Warning);
             }
             else
             {
-                Snackbar.Add("Could not save rights.", Severity.Warning);
+                Snackbar.Add(Strings.Get("StErrSaveRights"), Severity.Warning);
             }
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not save rights.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrSaveRights"), Severity.Error);
         }
         finally
         {
@@ -7624,7 +7624,7 @@
     private async Task RenameAsync(BrowseNode node)
     {
         var parameters = new DialogParameters<RenameDialog> { { x => x.CurrentName, node.Name } };
-        var dialog = await DialogService.ShowAsync<RenameDialog>("Rename", parameters);
+        var dialog = await DialogService.ShowAsync<RenameDialog>(Strings.Get("RibbonRename"), parameters);
         var result = await dialog.Result;
         if (result is not { Canceled: false, Data: string newName } || newName == node.Name)
         {
@@ -7644,26 +7644,26 @@
         var response = await Http.SendAsync(request);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
-            Snackbar.Add($"A folder or document named '{newName}' already exists here.", Severity.Warning);
+            Snackbar.Add(string.Format(Strings.Get("StNameTaken"), newName), Severity.Warning);
             return;
         }
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
-            Snackbar.Add("You don't have permission to rename this item.", Severity.Warning);
+            Snackbar.Add(Strings.Get("StNoPermRename"), Severity.Warning);
             return;
         }
         if (response.StatusCode == HttpStatusCode.PreconditionFailed)
         {
-            Snackbar.Add("This item changed since you loaded it — refresh and try again.", Severity.Warning);
+            Snackbar.Add(Strings.Get("StStaleReload"), Severity.Warning);
             return;
         }
         if (!response.IsSuccessStatusCode)
         {
-            Snackbar.Add("Could not rename the item.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrRenameItem"), Severity.Error);
             return;
         }
 
-        Snackbar.Add($"Renamed to '{newName}'.", Severity.Success);
+        Snackbar.Add(string.Format(Strings.Get("StRenamedTo"), newName), Severity.Success);
         await RefreshAsync();
     }
 
@@ -7694,21 +7694,21 @@
         var response = await Http.SendAsync(request);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
-            Snackbar.Add("You don't have permission to delete this item.", Severity.Warning);
+            Snackbar.Add(Strings.Get("StNoPermDelete"), Severity.Warning);
             return;
         }
         if (response.StatusCode == HttpStatusCode.PreconditionFailed)
         {
-            Snackbar.Add("This item changed since you loaded it — refresh and try again.", Severity.Warning);
+            Snackbar.Add(Strings.Get("StStaleReload"), Severity.Warning);
             return;
         }
         if (!response.IsSuccessStatusCode)
         {
-            Snackbar.Add("Could not delete the item.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrDeleteItem"), Severity.Error);
             return;
         }
 
-        Snackbar.Add($"Deleted '{node.Name}'.", Severity.Success);
+        Snackbar.Add(string.Format(Strings.Get("StDeleted"), node.Name), Severity.Success);
         if (_selectedItem?.Id == node.Id)
         {
             ClearDetail();
@@ -7791,7 +7791,7 @@
         using var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("savedSearches"), new { name = name.Trim(), queryString = _lastSearchQueryString });
         if (resp.IsSuccessStatusCode)
         {
-            Snackbar.Add("Search saved.", Severity.Success);
+            Snackbar.Add(Strings.Get("StSearchSaved"), Severity.Success);
             await LoadSavedSearchesAsync();
         }
         else
@@ -7864,7 +7864,7 @@
             ["Targets"] = targets,
             ["InitialSelected"] = initialSelected,
         };
-        var dialog = await DialogService.ShowAsync<ShareSavedSearchDialog>("Share saved search", parameters);
+        var dialog = await DialogService.ShowAsync<ShareSavedSearchDialog>(Strings.Get("SssTitle"), parameters);
         if ((await dialog.Result) is not { Canceled: false, Data: ShareSavedSearchDialog.Result result })
         {
             return;
@@ -7879,7 +7879,7 @@
         }
         else
         {
-            Snackbar.Add("Could not change sharing.", Severity.Warning);
+            Snackbar.Add(Strings.Get("StErrChangeSharing"), Severity.Warning);
         }
     }
 
@@ -8232,7 +8232,7 @@
                 ["FileName"] = fileName,
                 ["Duplicates"] = dups.Select(d => (d.Id, d.Name, d.Path)).ToList(),
             };
-            var result = await (await DialogService.ShowAsync<Dialogs.DuplicateUploadDialog>("Duplicate document", parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })).Result;
+            var result = await (await DialogService.ShowAsync<Dialogs.DuplicateUploadDialog>(Strings.Get("DupDlgTitle"), parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })).Result;
             if (result is not { Canceled: false } || result.Data is not Dialogs.DuplicateUploadDialog.DuplicateUploadChoice choice)
             {
                 return "cancel";
@@ -8243,15 +8243,15 @@
                 var refResp = await Http.PostAsJsonAsync($"api/documents/{folderGuid}/references", new { targetId = choice.TargetId });
                 if (refResp.IsSuccessStatusCode)
                 {
-                    Snackbar.Add($"Referenced the existing document instead of uploading '{fileName}'.", Severity.Success);
+                    Snackbar.Add(string.Format(Strings.Get("StReferencedInstead"), fileName), Severity.Success);
                 }
                 else if (refResp.StatusCode == HttpStatusCode.Conflict)
                 {
-                    Snackbar.Add("A reference to that document already exists in this folder.", Severity.Warning);
+                    Snackbar.Add(Strings.Get("StReferenceExists"), Severity.Warning);
                 }
                 else
                 {
-                    Snackbar.Add("Could not create the reference.", Severity.Error);
+                    Snackbar.Add(Strings.Get("StErrCreateReference"), Severity.Error);
                 }
 
                 return "referenced";
@@ -8282,12 +8282,12 @@
             var create = await Http.PostAsJsonAsync($"api/documents/{folderId}/children", new { name = stem });
             if (create.StatusCode == HttpStatusCode.Conflict)
             {
-                Snackbar.Add($"'{fileName}': a document with that name already exists here.", Severity.Warning);
+                Snackbar.Add(string.Format(Strings.Get("StUploadNameTaken"), fileName), Severity.Warning);
                 return null;
             }
             if (create.StatusCode == HttpStatusCode.Forbidden)
             {
-                Snackbar.Add($"'{fileName}': you don't have permission to upload here.", Severity.Warning);
+                Snackbar.Add(string.Format(Strings.Get("StUploadNoPermission"), fileName), Severity.Warning);
                 return null;
             }
             create.EnsureSuccessStatusCode();
@@ -8301,7 +8301,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add($"'{fileName}': upload could not be started.", Severity.Error);
+            Snackbar.Add(string.Format(Strings.Get("StUploadNotStarted"), fileName), Severity.Error);
             return null;
         }
     }
@@ -8319,11 +8319,11 @@
             // The server assigns the mask at finalize (eMail for .eml/.msg, else Basic Entry) — see ADR
             // "Email auto-classification"; the client no longer classifies.
 
-            Snackbar.Add($"Uploaded '{fileName}'.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StUploaded"), fileName), Severity.Success);
         }
         catch (Exception)
         {
-            Snackbar.Add($"'{fileName}': the upload was stored but could not be finalized.", Severity.Error);
+            Snackbar.Add(string.Format(Strings.Get("StUploadNotFinalized"), fileName), Severity.Error);
         }
     }
 
@@ -8372,12 +8372,12 @@
             var versionResponse = await Http.PostAsJsonAsync($"api/documents/{documentId}/versions", new { fileExtension = extension });
             if (versionResponse.StatusCode == HttpStatusCode.Conflict)
             {
-                Snackbar.Add($"'{fileName}': the document is checked out or under a legal hold.", Severity.Warning);
+                Snackbar.Add(string.Format(Strings.Get("StVersionBlocked"), fileName), Severity.Warning);
                 return null;
             }
             if (versionResponse.StatusCode == HttpStatusCode.Forbidden)
             {
-                Snackbar.Add($"'{fileName}': you don't have permission to add a version here.", Severity.Warning);
+                Snackbar.Add(string.Format(Strings.Get("StVersionNoPermission"), fileName), Severity.Warning);
                 return null;
             }
             versionResponse.EnsureSuccessStatusCode();
@@ -8386,7 +8386,7 @@
         }
         catch (Exception)
         {
-            Snackbar.Add($"'{fileName}': a new version could not be started.", Severity.Error);
+            Snackbar.Add(string.Format(Strings.Get("StVersionNotStarted"), fileName), Severity.Error);
             return null;
         }
     }
@@ -8401,11 +8401,11 @@
             var versionComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
             (await Http.PutAsJsonAsync($"api/documents/{documentId}/versions/{versionId}", new { comment = versionComment })).EnsureSuccessStatusCode();
 
-            Snackbar.Add($"Filed '{fileName}' as a new version.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StFiledVersion"), fileName), Severity.Success);
         }
         catch (Exception)
         {
-            Snackbar.Add($"'{fileName}': the version was stored but could not be finalized.", Severity.Error);
+            Snackbar.Add(string.Format(Strings.Get("StVersionNotFinalized"), fileName), Severity.Error);
         }
     }
 
@@ -8432,7 +8432,7 @@
     [JSInvokable]
     public Task ReportUploadFailureAsync(string fileName, string message)
     {
-        Snackbar.Add($"'{fileName}': {message}", Severity.Error);
+        Snackbar.Add(string.Format(Strings.Get("StFileError"), fileName, message), Severity.Error);
         return Task.CompletedTask;
     }
 
@@ -8538,7 +8538,7 @@
             var status = await Http.GetFromJsonAsync<WebDavStatusDto>(await ApiRoot.RequireMeAsync("webdavPassword"));
             if (status is not { Enabled: true } || string.IsNullOrEmpty(status.Url))
             {
-                Snackbar.Add("Set up WebDAV access first (account menu → WebDAV access…).", Severity.Info);
+                Snackbar.Add(Strings.Get("StSetUpWebDavFirst"), Severity.Info);
                 return;
             }
 
@@ -8546,11 +8546,11 @@
             // Inbox/Check-out, + the shared repositories).
             var mountUrl = status.Url.TrimEnd('/');
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", mountUrl);
-            Snackbar.Add($"Copied WebDAV URL: {mountUrl}", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StCopiedWebDavUrl"), mountUrl), Severity.Success);
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not copy the WebDAV URL.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrCopyWebDavUrl"), Severity.Error);
         }
     }
 
@@ -8593,11 +8593,11 @@
                 (await AnonymousHttp.PutAsync(target.UploadUrl, content)).EnsureSuccessStatusCode();
             }
 
-            Snackbar.Add($"Uploaded {files.Count} file(s) to your inbox.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StUploadedToInbox"), files.Count), Severity.Success);
         }
         catch (Exception)
         {
-            Snackbar.Add("Some files could not be uploaded.", Severity.Error);
+            Snackbar.Add(Strings.Get("StSomeUploadsFailed"), Severity.Error);
         }
         finally
         {
@@ -8638,7 +8638,7 @@
         _inboxBusy = false;
         if (count > 0)
         {
-            Snackbar.Add($"Uploaded {count} file(s) to your inbox.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StUploadedToInbox"), count), Severity.Success);
         }
 
         await LoadInboxAsync();
@@ -8777,7 +8777,7 @@
             var resp = await Http.PutAsJsonAsync($"api/inbox/{Uri.EscapeDataString(item.Name)}/mask{item.SourceQuery}", body);
             if (resp.IsSuccessStatusCode)
             {
-                Snackbar.Add("Saved to the inbox item.", Severity.Success);
+                Snackbar.Add(Strings.Get("StMaskSaved"), Severity.Success);
                 var name = item.Name;
                 await LoadInboxAsync();                 // refresh the square-bracket indicator
                 var fresh = _inboxItems.FirstOrDefault(i => i.Name == name);
@@ -8788,7 +8788,7 @@
             }
             else
             {
-                Snackbar.Add("Could not save the mask.", Severity.Error);
+                Snackbar.Add(Strings.Get("StErrMaskSave"), Severity.Error);
             }
         }
         finally
@@ -8880,7 +8880,7 @@
             }
         }
 
-        Snackbar.Add($"Filed {filed} of {items.Count} item(s).", Severity.Success);
+        Snackbar.Add(string.Format(Strings.Get("StFiledOf"), filed, items.Count), Severity.Success);
         _inboxChecked.Clear();
         await LoadInboxAsync();
     }
@@ -8914,17 +8914,17 @@
             var response = await Http.PostAsJsonAsync(item.MoveHref, new { targetGroupId, targetUserId });
             if (!response.IsSuccessStatusCode)
             {
-                Snackbar.Add($"Could not move the item ({(int)response.StatusCode}).", Severity.Error);
+                Snackbar.Add(string.Format(Strings.Get("StErrMoveItemStatus"), (int)response.StatusCode), Severity.Error);
                 return;
             }
 
-            Snackbar.Add($"Moved '{item.Name}'.", Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StMoved"), item.Name), Severity.Success);
             ClearInboxSelection(item);
             await LoadInboxAsync();
         }
         catch (Exception)
         {
-            Snackbar.Add("Could not move the item.", Severity.Error);
+            Snackbar.Add(Strings.Get("StErrMoveItem"), Severity.Error);
         }
     }
 
@@ -8969,7 +8969,7 @@
         }
         else
         {
-            Snackbar.Add($"Could not delete '{item.Name}'.", Severity.Error);
+            Snackbar.Add(string.Format(Strings.Get("StErrDeleteNamed"), item.Name), Severity.Error);
         }
     }
 
@@ -9067,7 +9067,7 @@
         if (string.IsNullOrWhiteSpace(name) || name.Trim() == t.Name) return;
         var resp = await Http.PutAsJsonAsync($"api/tags/{t.Id}", new { name = name.Trim() });
         if (resp.IsSuccessStatusCode) await LoadTagCatalogAsync();
-        else Snackbar.Add("Could not rename (the name may be taken).", Severity.Warning);
+        else Snackbar.Add(Strings.Get("StErrRenameTaken"), Severity.Warning);
     }
 
     private async Task RecolourTagAsync(TagCatalogEntry t)
@@ -9076,7 +9076,7 @@
         if (color is null) return;
         var resp = await Http.PutAsJsonAsync($"api/tags/{t.Id}", new { color = color.Trim() });
         if (resp.IsSuccessStatusCode) await LoadTagCatalogAsync();
-        else Snackbar.Add("Could not set the colour (use #RRGGBB).", Severity.Warning);
+        else Snackbar.Add(Strings.Get("StErrSetColour"), Severity.Warning);
     }
 
     private async Task RetireTagAsync(TagCatalogEntry t)

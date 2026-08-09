@@ -47,7 +47,6 @@ public partial class LocalizationLiteralTests
         ["src/SimplArchive.Client/Dialogs/VersionsDialog.razor"] = 1,
         ["src/SimplArchive.Client/Dialogs/WorkflowDialog.razor"] = 1,
         ["src/SimplArchive.Client/Layout/MainLayout.razor"] = 1,
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 167,
         ["src/SimplArchive.DesktopClient/Views/AboutDialog.axaml"] = 4,
         ["src/SimplArchive.DesktopClient/Views/AnnotationDialog.axaml"] = 1,
         ["src/SimplArchive.DesktopClient/Views/BulkSensitivityDialog.axaml"] = 1,
