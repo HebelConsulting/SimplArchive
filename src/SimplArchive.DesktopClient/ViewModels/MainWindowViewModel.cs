@@ -909,13 +909,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             // Always expandable — it holds at least the Inbox + Check-out launcher nodes (ADR "GUI-tree Personal
             // space grouping"), even before any real subfolder exists.
-            Tree.Add(new TreeNodeViewModel(personal.Id, personal.Name, hasSubfolders: true, LoadPersonalChildrenAsync, isPersonal: true));
+            Tree.Add(new TreeNodeViewModel(personal.Id, personal.Name, hasSubfolders: true, LoadPersonalChildrenAsync, links: personal.Links, isPersonal: true));
         }
 
         // Shared repositories sorted alphabetically (issue #339); Personal stays pinned above them.
         foreach (var repository in repositories.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase))
         {
-            Tree.Add(new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync, hasReferences: repository.HasReferences, hasChildren: repository.HasChildren));
+            Tree.Add(new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync, links: repository.Links, hasReferences: repository.HasReferences, hasChildren: repository.HasChildren));
         }
 
         // Tenant admins get a synthetic "Administration → Users" branch (ADR "Tenant-admin Administration → Users
@@ -958,11 +958,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         return null;
     }
 
-    private Task<IEnumerable<TreeNodeViewModel>> LoadAdminRootAsync(Guid _) =>
+    private Task<IEnumerable<TreeNodeViewModel>> LoadAdminRootAsync(TreeNodeViewModel _) =>
         Task.FromResult<IEnumerable<TreeNodeViewModel>>(
             [new TreeNodeViewModel(Guid.Empty, "Users", true, LoadAdminUsersAsync, syntheticIcon: "mdi-account-group")]);
 
-    private async Task<IEnumerable<TreeNodeViewModel>> LoadAdminUsersAsync(Guid _)
+    private async Task<IEnumerable<TreeNodeViewModel>> LoadAdminUsersAsync(TreeNodeViewModel _)
     {
         var repos = await _api!.GetAdminPersonalRepositoriesAsync();
         // Each user's personal repo is a normal browsable node (Id = the repo; the admin's ACL bypass grants it).
@@ -978,30 +978,30 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // The Personal repository nests the Inbox + Check-out launcher nodes above its real subfolders, mirroring
     // /webdav/Personal (ADR "GUI-tree Personal space grouping"). Selecting a launcher switches to the matching
     // bottom tab (OnSelectedTreeNodeChanged), where the full staging / check-out UX lives.
-    private async Task<IEnumerable<TreeNodeViewModel>> LoadPersonalChildrenAsync(Guid folderId)
+    private async Task<IEnumerable<TreeNodeViewModel>> LoadPersonalChildrenAsync(TreeNodeViewModel node)
     {
         var launchers = new[]
         {
             new TreeNodeViewModel(Guid.Empty, "Inbox", false, null, personalKind: "inbox"),
             new TreeNodeViewModel(Guid.Empty, "Check-out", false, null, personalKind: "checkout"),
         };
-        return launchers.Concat(await LoadTreeChildrenAsync(folderId));
+        return launchers.Concat(await LoadTreeChildrenAsync(node));
     }
 
-    private async Task<IEnumerable<TreeNodeViewModel>> LoadTreeChildrenAsync(Guid folderId)
+    private async Task<IEnumerable<TreeNodeViewModel>> LoadTreeChildrenAsync(TreeNodeViewModel node)
     {
         // The tree shows folders only — real child folders plus references whose target is a folder (a
         // shortcut node whose Id is the target folder, so it expands the target's subtree). See ADR
         // "Referenced folder in the tree".
         // Folders are always sorted alphabetically in the tree (issue #339) — the children endpoint orders by
         // creation for its cursor, so re-sort by name here (all pages are loaded).
-        var children = await _api!.GetChildrenAsync(folderId);
+        var children = await _api!.GetChildrenAsync(node.Href("children"));
         var folderNodes = children
             .Where(c => !c.HasVersions)
             .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync, hasReferences: c.HasReferences, hasChildren: c.HasChildren));
+            .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync, links: c.Links, hasReferences: c.HasReferences, hasChildren: c.HasChildren));
 
-        var references = await _api.GetReferencesAsync(folderId);
+        var references = await _api.GetReferencesAsync(node.Id);
         var referenceNodes = references
             .Where(r => !r.HasVersions)
             .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
@@ -5914,7 +5914,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         trail.Add(BreadcrumbTrail());
 
         var repositories = await _api!.GetRepositoriesAsync();
-        var repositoryNode = new TreeNodeViewModel(repositories[0].Id, repositories[0].Name, repositories[0].HasSubfolders, LoadTreeChildrenAsync);
+        var repositoryNode = new TreeNodeViewModel(repositories[0].Id, repositories[0].Name, repositories[0].HasSubfolders, LoadTreeChildrenAsync, links: repositories[0].Links);
         SetBreadcrumbFromTreeNode(repositoryNode);
         await LoadFolderContentsAsync(repositoryNode.Id);
         trail.Add(BreadcrumbTrail());
@@ -5991,14 +5991,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var s = Guid.NewGuid().ToString("N")[..6];
         await _api.CreateFolderAsync(root.Id, $"rtree-A-{s}");
         await _api.CreateFolderAsync(root.Id, $"rtree-B-{s}");
-        var a = (await _api.GetChildrenAsync(root.Id)).First(c => c.Name == $"rtree-A-{s}");
-        var b = (await _api.GetChildrenAsync(root.Id)).First(c => c.Name == $"rtree-B-{s}");
+        var a = (await _api.GetChildrenAsync(root.Href("children"))).First(c => c.Name == $"rtree-A-{s}");
+        var b = (await _api.GetChildrenAsync(root.Href("children"))).First(c => c.Name == $"rtree-B-{s}");
         await _api.CreateFolderAsync(a.Id, $"rtree-F-{s}");
-        var f = (await _api.GetChildrenAsync(a.Id)).First(c => c.Name == $"rtree-F-{s}");
+        var f = (await _api.GetChildrenAsync(a.Href("children"))).First(c => c.Name == $"rtree-F-{s}");
 
         await _api.CreateReferenceAsync(b.Id, f.Id);
 
-        var bTreeChildren = (await LoadTreeChildrenAsync(b.Id)).ToList();
+        var bTreeChildren = (await LoadTreeChildrenAsync(new TreeNodeViewModel(b.Id, b.Name, false, null, links: b.Links))).ToList();
         var refNode = bTreeChildren.FirstOrDefault(n => n.IsReference);
         log.Add(refNode is not null && refNode.Id == f.Id && refNode.IconValue == "mdi-folder-arrow-right"
             ? "OK: referenced folder appears in the tree as a shortcut node targeting F."
@@ -6025,7 +6025,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         await LoadFolderContentsAsync(repository.Id);
         await CreateFolderAsync(name);
 
-        var treeChildren = (await LoadTreeChildrenAsync(repository.Id)).Select(n => n.Name).ToList();
+        var treeChildren = (await LoadTreeChildrenAsync(new TreeNodeViewModel(repository.Id, repository.Name, false, null, links: repository.Links))).Select(n => n.Name).ToList();
         log.Add(treeChildren.Contains(name) ? "OK: rebuilt tree loader returns the new folder." : "FAILED: new folder missing from tree.");
 
         Tree.Clear();
@@ -6033,7 +6033,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         log.Add(Tree.Count > 0 ? "OK: Refresh repopulated the tree." : "FAILED: Refresh left the tree empty.");
 
         // Clean up the test folder.
-        var created = (await _api.GetChildrenAsync(repository.Id)).First(c => c.Name == name);
+        var created = (await _api.GetChildrenAsync(repository.Href("children"))).First(c => c.Name == name);
         await _api.DeleteAsync(created.Id);
         return log;
     }
@@ -6256,12 +6256,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var destinationName = $"treedest-{suffix}";
         await CreateSubfolderAsync(root.Id, subjectName);
         await CreateSubfolderAsync(root.Id, destinationName);
-        var children = await _api!.GetChildrenAsync(root.Id);
+        var children = await _api!.GetChildrenAsync(root.Href("children"));
         var subject = children.First(c => c.Name == subjectName);
         var destination = children.First(c => c.Name == destinationName);
 
         await MoveFolderByIdAsync(subject.Id, subject.Name, destination.Id);
-        var moved = (await _api.GetChildrenAsync(destination.Id)).Any(c => c.Id == subject.Id);
+        var moved = (await _api.GetChildrenAsync(destination.Href("children"))).Any(c => c.Id == subject.Id);
 
         // Place a reference to the moved folder back under the repository root.
         await PlaceReferenceAsync(subject.Id, subject.Name, root.Id);
@@ -6345,7 +6345,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         var stillExpanded = Tree.Contains(repo) && repo.IsExpanded && repo.Children.Any(c => c.Name == name);
 
-        var created = (await _api!.GetChildrenAsync(repo.Id)).FirstOrDefault(c => c.Name == name);
+        var created = (await _api!.GetChildrenAsync(repo.Href("children"))).FirstOrDefault(c => c.Name == name);
         if (created is not null)
         {
             await DeleteFolderByIdAsync(created.Id);
@@ -6442,7 +6442,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return log;
         }
 
-        var children = (await LoadPersonalChildrenAsync(personal.Id)).ToList();
+        var children = (await LoadPersonalChildrenAsync(new TreeNodeViewModel(personal.Id, personal.Name, false, null, links: personal.Links))).ToList();
         log.Add(children is [{ PersonalKind: "inbox", IsLauncher: true, LauncherTab: 1, IconValue: "mdi-inbox-arrow-down" },
         { PersonalKind: "checkout", IsLauncher: true, LauncherTab: 2, IconValue: "mdi-lock-open-variant-outline" }, ..]
             ? "OK: Inbox + Check-out launchers nested first under Personal."

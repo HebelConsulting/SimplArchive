@@ -41,10 +41,10 @@ public class DesktopPersonalRepositoryTests
 
         // Alice files a private folder into her personal repository.
         await alice.CreateFolderAsync(aliceRepo.Id, "alice-private-" + suffix);
-        Assert.Contains(await alice.GetChildrenAsync(aliceRepo.Id), c => c.Name == "alice-private-" + suffix);
+        Assert.Contains(await alice.GetChildrenAsync(aliceRepo.Href("children")), c => c.Name == "alice-private-" + suffix);
 
         // Bob can't list Alice's personal repository (no ACL grant → the API denies it).
-        await Assert.ThrowsAsync<HttpRequestException>(() => bob.GetChildrenAsync(aliceRepo.Id));
+        await Assert.ThrowsAsync<HttpRequestException>(() => bob.GetChildrenAsync(aliceRepo.Href("children")));
 
         // Neither personal repository appears in the other user's shared repository list.
         Assert.DoesNotContain(await bob.GetRepositoriesAsync(), r => r.Id == aliceRepo.Id);

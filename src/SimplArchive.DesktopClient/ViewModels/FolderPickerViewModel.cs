@@ -95,11 +95,11 @@ public sealed partial class FolderPickerViewModel : ObservableObject
         }
     }
 
-    private async Task<IEnumerable<TreeNodeViewModel>> LoadChildrenAsync(Guid id)
+    private async Task<IEnumerable<TreeNodeViewModel>> LoadChildrenAsync(TreeNodeViewModel node)
     {
-        var children = await _api.GetChildrenAsync(id);
+        var children = await _api.GetChildrenAsync(node.Href("children"));
         return children
             .Where(c => !c.HasVersions) // folders only
-            .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadChildrenAsync));
+            .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadChildrenAsync, links: c.Links));
     }
 }

@@ -27,7 +27,7 @@ public class DesktopWorkflowReassignTests
         await client.CreateRepositoryAsync($"dt-wf-{suffix}");
         var repo = (await client.GetRepositoriesAsync()).First(r => r.Name == $"dt-wf-{suffix}");
         await client.UploadFileAsync(repo.Id, $"dt-wf-{suffix}.txt", Encoding.UTF8.GetBytes("reassign me"));
-        var doc = (await client.GetChildrenAsync(repo.Id)).First(c => c.HasVersions);
+        var doc = (await client.GetChildrenAsync(repo.Href("children"))).First(c => c.HasVersions);
 
         // Two reviewers — tenant admins so they can read the content (valid reviewer targets).
         var u1 = await client.CreateUserAsync($"dt-r1-{suffix}@example.test", $"Reviewer One {suffix}");

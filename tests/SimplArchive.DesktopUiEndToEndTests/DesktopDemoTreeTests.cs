@@ -20,7 +20,7 @@ public class DesktopDemoTreeTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
         var repo = (await api.GetRepositoriesAsync()).Single(r => r.Name == "Demo Repository");
-        var topLevel = (await api.GetChildrenAsync(repo.Id)).Select(n => n.Name).ToList();
+        var topLevel = (await api.GetChildrenAsync(repo.Href("children"))).Select(n => n.Name).ToList();
         Assert.Contains("Business Years", topLevel);
         Assert.Contains("Contracts", topLevel);
         Assert.Contains("General", topLevel);

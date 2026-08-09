@@ -23,11 +23,11 @@ public class DesktopCurrentVersionTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var folderName = $"curver-{Guid.NewGuid():N}";
         await api.CreateFolderAsync(repo.Id, folderName);
-        var folder = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == folderName);
+        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == folderName);
 
         var docName = $"curverdoc-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(folder.Id, docName, Encoding.UTF8.GetBytes("v1"));
-        var doc = (await api.GetChildrenAsync(folder.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
+        var doc = (await api.GetChildrenAsync(folder.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
 
         var v1 = await api.GetSystemFieldsAsync(doc.Id);
         Assert.NotNull(v1);

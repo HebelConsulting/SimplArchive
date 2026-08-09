@@ -24,7 +24,7 @@ public class DesktopListPaneDropFilingTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"dropver-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("v1"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
         await api.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes("v2 dropped"), ".txt", "dropped as a new version");
 
@@ -45,14 +45,14 @@ public class DesktopListPaneDropFilingTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var folderName = $"dropfolder-{Guid.NewGuid():N}";
         await api.CreateFolderAsync(repo.Id, folderName);
-        var folder = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == folderName);
+        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == folderName);
 
         var docName = $"dropped-{Guid.NewGuid():N}.txt";
         var newId = await api.UploadFileAsync(folder.Id, docName, Encoding.UTF8.GetBytes("body"), "filed via drop");
 
         // Find the created row and follow ITS advertised versions rel — upload returns an id, and an id is not
         // an address (ADR 0543).
-        var created = (await api.GetChildrenAsync(folder.Id)).Single(n => n.Id == newId);
+        var created = (await api.GetChildrenAsync(folder.Href("children"))).Single(n => n.Id == newId);
         // The filing comment lands on the created document's first version (ADR 0528), not a chat comment.
         var versions = await api.GetVersionsAsync(created.Href("versions"));
         Assert.Equal("filed via drop", versions.Single(v => v.VersionNumber == 1).Comment);

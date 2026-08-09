@@ -24,7 +24,7 @@ public class DesktopVersionRestoreTests
         var name = $"restore-{Guid.NewGuid():N}.txt";
         var contentA = $"A-{Guid.NewGuid():N}";
         await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes(contentA));
-        var doc = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
         // A second version of the same document, with different content.
         await api.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes($"B-{Guid.NewGuid():N}"), ".txt");

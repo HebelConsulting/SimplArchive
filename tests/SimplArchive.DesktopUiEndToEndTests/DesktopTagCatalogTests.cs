@@ -27,7 +27,7 @@ public class DesktopTagCatalogTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var docName = $"tagcat-{suffix}.txt";
         await api.UploadFileAsync(repo.Id, docName, Encoding.UTF8.GetBytes("body"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
         await api.SetTagsAsync(doc.Id, [alpha]);
 
         // Create a second, coloured catalog tag directly.

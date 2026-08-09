@@ -22,7 +22,7 @@ public class DesktopFolderSubscriptionTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"watched-{Guid.NewGuid():N}";
         await api.CreateFolderAsync(repo.Id, name);
-        var folder = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == name);
+        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
 
         Assert.False(await api.GetSubscriptionAsync(folder.Id)); // not following by default
 

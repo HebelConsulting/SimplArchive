@@ -24,7 +24,7 @@ public class DesktopLegalHoldTests
         var repo = (await api.GetRepositoriesAsync())[0];
         var folderName = $"Hold {suffix}";
         await api.CreateFolderAsync(repo.Id, folderName);
-        var folder = (await api.GetChildrenAsync(repo.Id)).First(c => c.Name == folderName);
+        var folder = (await api.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == folderName);
 
         // Place a hold covering the folder; it shows on the hold + the folder reports it.
         var hold = await api.CreateLegalHoldAsync($"Matter {suffix}", "test");

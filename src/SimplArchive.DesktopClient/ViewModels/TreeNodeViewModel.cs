@@ -8,10 +8,13 @@ namespace SimplArchive.DesktopClient.ViewModels;
 // first time the node is expanded. See ADR "Desktop workbench UI".
 public sealed partial class TreeNodeViewModel : ObservableObject
 {
-    private readonly Func<Guid, Task<IEnumerable<TreeNodeViewModel>>>? _loadChildren;
+    // Takes the NODE, not its id (ADR 0543, issue #416). A node knows its own addresses; passing an id forced
+    // the loader to rebuild `api/documents/{id}/children` from a template, which is how an id-shaped tree model
+    // makes every consumer compose URLs.
+    private readonly Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? _loadChildren;
     private bool _loaded;
 
-    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<Guid, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false, bool hasChildren = true)
+    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false, bool hasChildren = true, IReadOnlyDictionary<string, string>? links = null)
     {
         Id = id;
         Name = name;
@@ -22,6 +25,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         PersonalKind = personalKind;
         HasReferences = hasReferences;
         HasChildren = hasChildren;
+        Links = links;
 
         // A placeholder child makes the expander appear before the real children are loaded.
         if (hasSubfolders)
@@ -35,6 +39,19 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     // For a referenced folder, Id is the TARGET folder's id — so expanding loads the target's children,
     // selecting loads its contents, and a drop files into it, all through the existing Id paths. See ADR
     // "Referenced folder in the tree".
+    // The addresses the server advertised for this node, as the listing carried them (ADR 0543). Null for the
+    // SYNTHETIC rows — Administration, the personal-space groupings, the placeholder — which stand for no server
+    // resource at all, so there is nothing to follow and Href() correctly refuses.
+    public IReadOnlyDictionary<string, string>? Links { get; }
+
+    /// <summary>The advertised href for <paramref name="rel"/>; throws rather than composing one.</summary>
+    public string Href(string rel) =>
+        Links is not null && Links.TryGetValue(rel, out var href)
+            ? href
+            : throw new InvalidOperationException(
+                $"The '{rel}' rel was not advertised for tree node '{Name}'. Follow a rel the resource offers, or "
+                + "fetch the resource — do not compose the URL (ADR 0543).");
+
     public Guid Id { get; }
 
     public string Name { get; }
@@ -130,7 +147,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
         _loaded = true;
         Children.Clear();
-        foreach (var child in await _loadChildren(Id))
+        foreach (var child in await _loadChildren(this))
         {
             child.Parent = this;
             Children.Add(child);
@@ -164,7 +181,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
         _loaded = true; // mark loaded so re-expanding doesn't double-load via OnIsExpandedChanged
         Children.Clear();
-        foreach (var child in await _loadChildren(Id))
+        foreach (var child in await _loadChildren(this))
         {
             child.Parent = this;
             Children.Add(child);

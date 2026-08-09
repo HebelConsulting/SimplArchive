@@ -26,7 +26,7 @@ public class DesktopChatReplyTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"chat-{Guid.NewGuid():N}";
         await api.CreateFolderAsync(repo.Id, name);
-        var folder = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == name);
+        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
 
         await api.PostCommentAsync(folder.Id, "Is this the final layout?", parentCommentId: null);
         var top = (await api.GetCommentsAsync(folder.Id)).Single(c => c.Body == "Is this the final layout?");

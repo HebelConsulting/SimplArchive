@@ -38,7 +38,7 @@ public class DesktopApiErrorLocalizationTests
         var repo = (await api.GetRepositoriesAsync())[0];
         var folderName = $"i18n-{suffix}";
         await api.CreateFolderAsync(repo.Id, folderName);
-        var folder = (await api.GetChildrenAsync(repo.Id)).First(c => c.Name == folderName);
+        var folder = (await api.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == folderName);
         var hold = await api.CreateLegalHoldAsync($"Matter {suffix}", "localisation guard");
         await api.AddLegalHoldItemAsync(hold.Id, folder.Id);
 

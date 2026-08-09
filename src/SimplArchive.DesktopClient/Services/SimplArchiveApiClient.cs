@@ -442,11 +442,36 @@ public sealed class SimplArchiveApiClient
             json.TryGetProperty("hasChildren", out var hc) && hc.GetBoolean(),
             HasVersions: false,
             json.TryGetProperty("hasSubfolders", out var hs) && hs.GetBoolean(),
-            HasReferences: false);
+            HasReferences: false,
+            // The resource advertises `children` — carry it, or the Personal tree node has no address to expand
+            // by and Href() throws (ADR 0543). Hand-built Nodes are exactly where this is easy to forget, which
+            // is what DesktopListingRelsTests now guards.
+            Links: ParseLinks(json));
     }
 
-    public Task<List<Node>> GetChildrenAsync(Guid folderId, CancellationToken cancellationToken = default) =>
-        LoadPagedAsync($"api/documents/{folderId}/children", "children", ParseNode, cancellationToken);
+    // Takes the advertised href (node.Href("children")), not a folder id (ADR 0543, issue #416). Every listing
+    // that can produce a row here advertises it — the children listing and the repositories listing both do.
+    public Task<List<Node>> GetChildrenAsync(string childrenHref, CancellationToken cancellationToken = default) =>
+        LoadPagedAsync(childrenHref, "children", ParseNode, cancellationToken);
+
+    // For a caller that has only an ID and no resource — a breadcrumb, a restored selection, a self-test — this
+    // FETCHES the document and follows its own `children` rel. One round trip, then a rel; never a composed
+    // sub-resource path.
+    //
+    // The `api/documents/{id}` below is the one composition this cannot avoid, and it is the irreducible case:
+    // turning an id back into a resource. Everything else in the client now follows an address the server
+    // advertised. Prefer the href overload wherever a row or node is in hand — this exists so the remaining
+    // id-shaped call sites (the view model tracks "where am I" as a Guid) do not have to rebuild sub-resource
+    // paths while that state is still id-shaped.
+    public async Task<List<Node>> GetChildrenAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var doc = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}", cancellationToken);
+        var links = ParseLinks(doc);
+        return links is not null && links.TryGetValue("children", out var href)
+            ? await GetChildrenAsync(href, cancellationToken)
+            : throw new InvalidOperationException(
+                $"The document resource {documentId} advertised no 'children' rel — nothing to follow (ADR 0543).");
+    }
 
     // The item's ancestor folder ids, repository-root first down to its immediate parent (issue #340) — used to
     // reveal a search hit in the lazy tree. Empty for an item filed at a repository root.
@@ -2569,7 +2594,10 @@ public sealed class SimplArchiveApiClient
         item.TryGetProperty("sensitivityLabelName", out var sln) ? sln.GetString() ?? "" : "",
         item.TryGetProperty("sensitivityLabelColor", out var slc) && slc.ValueKind == JsonValueKind.String ? slc.GetString() : null,
         item.TryGetProperty("versionCount", out var vc) && vc.ValueKind == JsonValueKind.Number ? vc.GetInt32() : 0,
-        item.TryGetProperty("versionCreatedAt", out var vca) && vca.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(vca.GetString(), out var vcaDt) ? vcaDt : null);
+        item.TryGetProperty("versionCreatedAt", out var vca) && vca.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(vca.GetString(), out var vcaDt) ? vcaDt : null,
+        // The row's advertised addresses. WITHOUT this every Node.Links is null and Href() throws — which
+        // is exactly what shipped in 2aeaae0, because the edit that added it silently did not apply.
+        ParseLinks(item));
 
     // rel -> href for one resource's advertised links, relative (the HttpClient has the base address).
     private static IReadOnlyDictionary<string, string>? ParseLinks(JsonElement item)

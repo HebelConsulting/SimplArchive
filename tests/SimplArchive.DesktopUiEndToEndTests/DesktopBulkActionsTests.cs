@@ -29,7 +29,7 @@ public class DesktopBulkActionsTests
         {
             await api.UploadFileAsync(repo.Id, $"{prefix}-{i}.txt", Encoding.UTF8.GetBytes("x"));
         }
-        var children = await api.GetChildrenAsync(repo.Id);
+        var children = await api.GetChildrenAsync(repo.Href("children"));
         var targetId = children.Single(n => n.Name == targetName).Id;
         var ids = children.Where(n => n.Name.StartsWith(prefix)).Select(n => n.Id).ToList();
         Assert.Equal(3, ids.Count);
@@ -73,7 +73,7 @@ public class DesktopBulkActionsTests
         {
             await api.UploadFileAsync(repo.Id, $"{prefix}-{i}.txt", Encoding.UTF8.GetBytes("x"));
         }
-        var children = await api.GetChildrenAsync(repo.Id);
+        var children = await api.GetChildrenAsync(repo.Href("children"));
         var targetId = children.Single(n => n.Name == targetName).Id;
         var ids = children.Where(n => n.Name.StartsWith(prefix)).Select(n => n.Id).ToList();
         Assert.Equal(2, ids.Count);
@@ -82,7 +82,7 @@ public class DesktopBulkActionsTests
         Assert.Equal(2, referenced.Succeeded);
 
         // The originals stay put, and the target now holds a shortcut to each.
-        var stillHome = (await api.GetChildrenAsync(repo.Id)).Select(n => n.Id).ToHashSet();
+        var stillHome = (await api.GetChildrenAsync(repo.Href("children"))).Select(n => n.Id).ToHashSet();
         Assert.Contains(ids[0], stillHome);
         Assert.Contains(ids[1], stillHome);
         var refs = (await api.GetReferencesAsync(targetId)).Select(r => r.TargetId).ToHashSet();

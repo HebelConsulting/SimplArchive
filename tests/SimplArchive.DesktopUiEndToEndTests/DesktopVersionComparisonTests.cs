@@ -23,7 +23,7 @@ public class DesktopVersionComparisonTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var fileName = $"cmp-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("one\ntwo\nthree\n"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
         await api.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes("one\nTWO edited\nthree\nfour\n"), ".txt");
 
         var versions = await api.GetVersionsAsync(doc.Href("versions"));
@@ -32,7 +32,7 @@ public class DesktopVersionComparisonTests
 
         // The listing carries the confirmed-version count that gates the "Compare versions" action (ADR
         // "Compare-versions gating + default") — 2 here, so the action is enabled.
-        Assert.Equal(2, (await api.GetChildrenAsync(repo.Id)).Single(n => n.Id == doc.Id).VersionCount);
+        Assert.Equal(2, (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Id == doc.Id).VersionCount);
 
         var cmp = await api.GetVersionComparisonAsync(doc.Id, versions[1].Id, versions[0].Id);
         Assert.True(cmp.Available);

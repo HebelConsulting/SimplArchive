@@ -22,7 +22,7 @@ public class DesktopReminderTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"rem-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("remind me"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
         // The target catalog includes at least the demo admin.
         Assert.NotEmpty(await api.GetReminderTargetsAsync(doc.Id));

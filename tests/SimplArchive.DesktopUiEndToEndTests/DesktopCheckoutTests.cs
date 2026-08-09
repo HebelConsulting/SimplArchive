@@ -25,7 +25,7 @@ public class DesktopCheckoutTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var fileName = $"co-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("original content"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
 
         await api.CheckOutAsync(doc.Id);
 
@@ -51,7 +51,7 @@ public class DesktopCheckoutTests
         // Stash-based check-in → the server promotes the stash to a new version + releases the lock.
         await vm.CheckInCommand.ExecuteAsync(row);
         Assert.DoesNotContain(vm.Items, i => i.Id == doc.Id);
-        Assert.False((await api.GetChildrenAsync(repo.Id)).Single(n => n.Id == doc.Id).CheckedOut);
+        Assert.False((await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Id == doc.Id).CheckedOut);
         var bytes = await api.DownloadCurrentVersionAsync(doc.Id);
         Assert.Equal("edited via webdav", Encoding.UTF8.GetString(bytes));
     }
@@ -65,7 +65,7 @@ public class DesktopCheckoutTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var fileName = $"cmp-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("line one\nline two\nline three\n"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
 
         await api.CheckOutAsync(doc.Id);
         await api.SaveWorkingCopyAsync(doc.Id, Encoding.UTF8.GetBytes("line one\nline two CHANGED\nline three\n"));
@@ -94,7 +94,7 @@ public class DesktopCheckoutTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var fileName = $"un-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("v1"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
         await api.CheckOutAsync(doc.Id);
 
         var vm = new CheckoutTabViewModel();
@@ -118,7 +118,7 @@ public class DesktopCheckoutTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var fileName = $"ext-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("v1"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
         await api.CheckOutAsync(doc.Id);
 
         // Extend (self-service, ADR "Self-service check-out extension") — no throw, and the lock is retained.

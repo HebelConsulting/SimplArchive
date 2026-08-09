@@ -23,7 +23,7 @@ public class DesktopDocumentTagsTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"tags-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("tagged"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
         Assert.Empty(await api.GetTagsAsync(doc.Id)); // none by default
 

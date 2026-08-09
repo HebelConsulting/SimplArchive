@@ -22,7 +22,7 @@ public class DesktopSubscriptionTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"sub-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("follow me"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
         Assert.False(await api.GetSubscriptionAsync(doc.Id)); // not following by default
 

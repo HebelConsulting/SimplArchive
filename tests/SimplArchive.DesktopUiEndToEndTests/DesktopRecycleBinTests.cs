@@ -23,7 +23,7 @@ public class DesktopRecycleBinTests
         // Create a throwaway folder in the demo repository, then soft-delete it.
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         await api.CreateFolderAsync(repo.Id, name);
-        var folder = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == name);
+        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
         await api.DeleteAsync(folder.Id);
 
         // The tenant-wide recycle-bin list shows it, with a full path and an audit-derived "deleted by".
@@ -40,7 +40,7 @@ public class DesktopRecycleBinTests
         await vm.RestoreCommand.ExecuteAsync(row);
         await vm.LoadAsync();
         Assert.DoesNotContain(vm.Items, i => i.Id == folder.Id);
-        Assert.Contains(await api.GetChildrenAsync(repo.Id), n => n.Id == folder.Id); // back in the repo
+        Assert.Contains(await api.GetChildrenAsync(repo.Href("children")), n => n.Id == folder.Id); // back in the repo
 
         // Delete again, then permanently hard-delete it from the recycle bin.
         await api.DeleteAsync(folder.Id);
@@ -61,7 +61,7 @@ public class DesktopRecycleBinTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var names = new[] { $"bulk-a-{tag}", $"bulk-b-{tag}", $"bulk-c-{tag}" };
         foreach (var n in names) await api.CreateFolderAsync(repo.Id, n);
-        var folders = (await api.GetChildrenAsync(repo.Id)).Where(n => names.Contains(n.Name)).ToList();
+        var folders = (await api.GetChildrenAsync(repo.Href("children"))).Where(n => names.Contains(n.Name)).ToList();
         foreach (var f in folders) await api.DeleteAsync(f.Id);
 
         var vm = new RecycleBinTabViewModel();
@@ -77,7 +77,7 @@ public class DesktopRecycleBinTests
         await vm.RestoreSelectedCommand.ExecuteAsync(null);
         await vm.LoadAsync();
 
-        var back = (await api.GetChildrenAsync(repo.Id)).Select(n => n.Name).ToHashSet();
+        var back = (await api.GetChildrenAsync(repo.Href("children"))).Select(n => n.Name).ToHashSet();
         Assert.Contains(names[0], back);
         Assert.Contains(names[1], back);
         Assert.DoesNotContain(names[2], back); // C still deleted
@@ -94,7 +94,7 @@ public class DesktopRecycleBinTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var names = new[] { $"purge-a-{tag}", $"purge-b-{tag}" };
         foreach (var n in names) await api.CreateFolderAsync(repo.Id, n);
-        var folders = (await api.GetChildrenAsync(repo.Id)).Where(n => names.Contains(n.Name)).ToList();
+        var folders = (await api.GetChildrenAsync(repo.Href("children"))).Where(n => names.Contains(n.Name)).ToList();
         foreach (var f in folders) await api.DeleteAsync(f.Id);
 
         var vm = new RecycleBinTabViewModel { IsTenantAdmin = true };
@@ -110,6 +110,6 @@ public class DesktopRecycleBinTests
         Assert.DoesNotContain(vm.Items, i => names.Contains(i.Name)); // gone from the bin
         var ids = folders.Select(f => f.Id).ToHashSet();
         // The rows are permanently gone — restoring them is no longer possible (not in the recycle bin).
-        Assert.DoesNotContain(await api.GetChildrenAsync(repo.Id), n => ids.Contains(n.Id));
+        Assert.DoesNotContain(await api.GetChildrenAsync(repo.Href("children")), n => ids.Contains(n.Id));
     }
 }

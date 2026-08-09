@@ -25,7 +25,7 @@ public class DesktopVersionsDialogTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"vers-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("one\n"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
         await api.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes("two\n"), ".txt");
 
         var vm = new VersionsViewModel();

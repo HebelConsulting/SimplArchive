@@ -23,14 +23,14 @@ public class DesktopListColumnsTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var folderName = $"cols-{Guid.NewGuid():N}";
         await api.CreateFolderAsync(repo.Id, folderName);
-        var folder = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == folderName);
+        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == folderName);
 
         var docName = $"coldoc-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(folder.Id, docName, Encoding.UTF8.GetBytes(new string('y', 2048)));
-        var doc = (await api.GetChildrenAsync(folder.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
+        var doc = (await api.GetChildrenAsync(folder.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
         await api.SetTagsAsync(doc.Id, ["Red"]);
 
-        var node = (await api.GetChildrenAsync(folder.Id)).Single(n => n.Id == doc.Id);
+        var node = (await api.GetChildrenAsync(folder.Href("children"))).Single(n => n.Id == doc.Id);
         Assert.Equal("Basic Entry", node.DocumentType);   // auto-classified mask name
         Assert.Equal(2048, node.SizeBytes);
         Assert.NotNull(node.DocumentDate);

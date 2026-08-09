@@ -166,7 +166,19 @@ public class RepositoriesController : ControllerBase
                     HasChildren = candidate.HasChildren,
                     HasVersions = candidate.HasVersions,
                     HasSubfolders = candidate.HasSubfolders,
-                    Links = [new Link("self", Url.Action(nameof(Get), new { repositoryId = candidate.Id })!, "GET")],
+                    // A repository root is where the tree starts, so its row carries the address of what a
+                    // client does next — list its children. Without it the client has an id and no address and
+                    // composes the path (ADR 0543, issue #416); fetching `self` first would cost a round trip
+                    // per row. Unconditional rels only, as on the children listing: checkout/external-links/
+                    // acl-inheritance depend on per-row rights a listing does not compute, and a listing is the
+                    // wrong place to answer "may I?" — so their absence here does NOT mean "not available".
+                    Links =
+                    [
+                        new Link("self", Url.Action(nameof(Get), new { repositoryId = candidate.Id })!, "GET"),
+                        new Link("children", $"/api/documents/{candidate.Id}/children", "GET"),
+                        new Link("index-data", $"/api/documents/{candidate.Id}/index-data", "GET"),
+                        new Link("mask", $"/api/documents/{candidate.Id}/mask", "GET"),
+                    ],
                 });
             }
 

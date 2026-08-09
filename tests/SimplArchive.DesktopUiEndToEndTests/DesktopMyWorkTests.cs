@@ -22,7 +22,7 @@ public class DesktopMyWorkTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"mywork-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("dashboard"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
         // A due-soon reminder + following the document.
         await api.CreateReminderAsync(doc.Id, DateTimeOffset.UtcNow.AddDays(1), "Dashboard check", recurrence: 0, targetUserId: null);

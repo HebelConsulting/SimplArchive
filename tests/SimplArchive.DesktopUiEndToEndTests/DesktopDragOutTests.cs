@@ -32,7 +32,7 @@ public class DesktopDragOutTests
         // A folder with one document inside.
         var folderName = $"dragfolder-{Guid.NewGuid():N}";
         await api.CreateFolderAsync(repo.Id, folderName);
-        var folder = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == folderName);
+        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == folderName);
         var childName = $"child-{Guid.NewGuid():N}.txt";
         var childBytes = Encoding.UTF8.GetBytes($"child-{Guid.NewGuid():N}");
         await api.UploadFileAsync(folder.Id, childName, childBytes);

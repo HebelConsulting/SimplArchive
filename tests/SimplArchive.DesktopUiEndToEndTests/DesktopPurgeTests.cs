@@ -23,7 +23,7 @@ public class DesktopPurgeTests
         var repo = (await api.GetRepositoriesAsync())[0];
         var folderName = $"Purge {suffix}";
         await api.CreateFolderAsync(repo.Id, folderName);
-        var folder = (await api.GetChildrenAsync(repo.Id)).First(c => c.Name == folderName);
+        var folder = (await api.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == folderName);
 
         // Delete it, then purge it permanently.
         await api.DeleteAsync(folder.Id);

@@ -25,7 +25,7 @@ public class DesktopManageAccessTests
         var repo = (await api.GetRepositoriesAsync())[0];
         var folderName = $"acl-{suffix}";
         await api.CreateFolderAsync(repo.Id, folderName);
-        var folder = (await api.GetChildrenAsync(repo.Id)).First(c => c.Name == folderName);
+        var folder = (await api.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == folderName);
 
         // A fresh active user to grant to — it shows up in the grantable-principals picker by display name.
         var granteeName = $"Grantee {suffix}";
@@ -67,7 +67,7 @@ public class DesktopManageAccessTests
         var repo = (await api.GetRepositoriesAsync())[0];
         var folderName = $"inh-{suffix}";
         await api.CreateFolderAsync(repo.Id, folderName);
-        var folder = (await api.GetChildrenAsync(repo.Id)).First(c => c.Name == folderName);
+        var folder = (await api.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == folderName);
 
         // A fresh child inherits — no own grants.
         var before = await api.GetAclAsync(folder.Id);
@@ -107,7 +107,7 @@ public class DesktopManageAccessTests
         var repo = (await api.GetRepositoriesAsync())[0];
         var folderName = $"eff-{suffix}";
         await api.CreateFolderAsync(repo.Id, folderName);
-        var folder = (await api.GetChildrenAsync(repo.Id)).First(c => c.Name == folderName);
+        var folder = (await api.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == folderName);
 
         // Break inheritance so the folder's own grants actually govern it — a grant on a still-inheriting item is
         // a no-op (only the governing scope's grants apply, ADR 0183).

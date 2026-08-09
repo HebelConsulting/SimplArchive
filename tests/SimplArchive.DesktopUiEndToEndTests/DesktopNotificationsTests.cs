@@ -25,7 +25,7 @@ public class DesktopNotificationsTests
         await admin.CreateRepositoryAsync($"dt-notif-{suffix}");
         var repo = (await admin.GetRepositoriesAsync()).First(r => r.Name == $"dt-notif-{suffix}");
         await admin.UploadFileAsync(repo.Id, $"notif-{suffix}.txt", Encoding.UTF8.GetBytes("hi"));
-        var doc = (await admin.GetChildrenAsync(repo.Id)).First(c => c.HasVersions);
+        var doc = (await admin.GetChildrenAsync(repo.Href("children"))).First(c => c.HasVersions);
 
         // A fresh reviewer (tenant admin so they can read the content), with a password to log in.
         var email = $"dt-reviewer-{suffix}@example.test";

@@ -24,7 +24,7 @@ public class DesktopAnnotationTests
 
         var repo = (await api.GetRepositoriesAsync())[0];
         await api.UploadFileAsync(repo.Id, $"noted-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).First(n => n.Name == $"noted-{suffix}");
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"noted-{suffix}");
 
         var preview = await api.GetPreviewAsync(doc.Id);
         Assert.NotNull(preview.AnnotationsUrl);
@@ -66,7 +66,7 @@ public class DesktopAnnotationTests
 
         var repo = (await api.GetRepositoriesAsync())[0];
         await api.UploadFileAsync(repo.Id, $"sized-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).First(n => n.Name == $"sized-{suffix}");
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"sized-{suffix}");
         var url = (await api.GetPreviewAsync(doc.Id)).AnnotationsUrl!;
 
         // A note is created as a sized box (kind 0 + width/height) so it renders as an always-visible box
@@ -98,7 +98,7 @@ public class DesktopAnnotationTests
 
         var repo = (await api.GetRepositoriesAsync())[0];
         await api.UploadFileAsync(repo.Id, $"multi-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).First(n => n.Name == $"multi-{suffix}");
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"multi-{suffix}");
         var url = (await api.GetPreviewAsync(doc.Id)).AnnotationsUrl!;
 
         // Two notes + a highlight on page 0.
@@ -149,7 +149,7 @@ public class DesktopAnnotationTests
 
         var repo = (await api.GetRepositoriesAsync())[0];
         await api.UploadFileAsync(repo.Id, $"hl-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).First(n => n.Name == $"hl-{suffix}");
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"hl-{suffix}");
         var url = (await api.GetPreviewAsync(doc.Id)).AnnotationsUrl!;
 
         // A highlight (kind 1) drawn in the default colour.
@@ -191,7 +191,7 @@ public class DesktopAnnotationTests
 
         var repo = (await api.GetRepositoriesAsync())[0];
         await api.UploadFileAsync(repo.Id, $"tool-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).First(n => n.Name == $"tool-{suffix}");
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"tool-{suffix}");
         var url = (await api.GetPreviewAsync(doc.Id)).AnnotationsUrl!;
 
         var vm = new PreviewViewModel { Api = api };
@@ -216,7 +216,7 @@ public class DesktopAnnotationTests
 
         var repo = (await api.GetRepositoriesAsync())[0];
         await api.UploadFileAsync(repo.Id, $"markup-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
-        var doc = (await api.GetChildrenAsync(repo.Id)).First(n => n.Name == $"markup-{suffix}");
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"markup-{suffix}");
         var url = (await api.GetPreviewAsync(doc.Id)).AnnotationsUrl!;
 
         // A highlight box (kind 1) carries a width/height and no text.

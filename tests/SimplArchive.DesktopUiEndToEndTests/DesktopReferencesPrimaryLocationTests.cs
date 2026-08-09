@@ -25,12 +25,12 @@ public class DesktopReferencesPrimaryLocationTests
         var nameB = $"pl-b-{Guid.NewGuid():N}";
         await api.CreateFolderAsync(repo.Id, nameA);
         await api.CreateFolderAsync(repo.Id, nameB);
-        var folderA = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == nameA);
-        var folderB = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == nameB);
+        var folderA = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == nameA);
+        var folderB = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == nameB);
 
         var docName = $"pl-doc-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(folderA.Id, docName, Encoding.UTF8.GetBytes("body"));
-        var doc = (await api.GetChildrenAsync(folderA.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
+        var doc = (await api.GetChildrenAsync(folderA.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
 
         // A pre-existing reference to the doc in Folder B — promotion should drop it as redundant.
         await api.CreateReferenceAsync(folderB.Id, doc.Id);

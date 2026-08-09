@@ -24,7 +24,7 @@ public class DesktopExternalLinksTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"share-{Guid.NewGuid():N}";
         await api.CreateFolderAsync(repo.Id, name);
-        var folder = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == name);
+        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
 
         var detail = await api.GetDocumentDetailAsync(folder.Id);
 
@@ -54,7 +54,7 @@ public class DesktopExternalLinksTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"rel-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("shareable"));
-        var document = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+        var document = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
         var before = await api.GetTenantSettingsAsync();
         try
@@ -87,7 +87,7 @@ public class DesktopExternalLinksTests
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"nofolder-{Guid.NewGuid():N}";
         await api.CreateFolderAsync(repo.Id, name);
-        var folder = (await api.GetChildrenAsync(repo.Id)).Single(n => n.Name == name);
+        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
 
         var before = await api.GetTenantSettingsAsync();
         try
