@@ -63,12 +63,18 @@ public sealed class ApiRoot
     {
         if (_meRels is null)
         {
-            await _gate.WaitAsync(cancellationToken);
+            // Resolve the root href BEFORE taking the gate. SemaphoreSlim is not reentrant, so calling
+            // HrefAsync (which takes the same gate) while holding it deadlocks — and because the gate is then
+            // never released, every later ApiRoot call in the app blocks behind it too. That is not a subtle
+            // failure: the whole workbench freezes, which is how it took out all four CI legs at once.
+            var meHref = await HrefAsync("me", cancellationToken);
+
+            // Its own gate, so a me-lookup and a root-lookup can never wait on each other again.
+            await _meGate.WaitAsync(cancellationToken);
             try
             {
                 if (_meRels is null)
                 {
-                    var meHref = await HrefAsync("me", cancellationToken);
                     var me = meHref is null ? null : await _http.GetFromJsonAsync<RootResponse>(meHref, cancellationToken);
                     _meRels = me?.Links
                         .Where(l => !string.IsNullOrEmpty(l.Rel) && !string.IsNullOrEmpty(l.Href))
@@ -77,7 +83,7 @@ public sealed class ApiRoot
             }
             finally
             {
-                _gate.Release();
+                _meGate.Release();
             }
         }
 
@@ -89,6 +95,7 @@ public sealed class ApiRoot
         await MeHrefAsync(rel, cancellationToken)
         ?? throw new InvalidOperationException($"The 'me' resource does not advertise the '{rel}' rel.");
 
+    private readonly SemaphoreSlim _meGate = new(1, 1);
     private Dictionary<string, string>? _meRels;
 
     private async Task<Dictionary<string, string>> LoadAsync(CancellationToken cancellationToken)
