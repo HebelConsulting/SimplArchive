@@ -723,7 +723,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         if (value is { IsSynthetic: false })
         {
             SetBreadcrumbFromTreeNode(value);
-            await LoadFolderContentsAsync(value.Id);
+            // The selected node's own address — no re-fetch to rediscover where its children live.
+            await LoadFolderContentsAsync(value.Id, value.Links is null ? null : value.Href("children"));
         }
     }
 
@@ -745,7 +746,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         SetBreadcrumbFromTreeNode(node);
-        await LoadFolderContentsAsync(node.Id);
+        await LoadFolderContentsAsync(node.Id, node.Links is null ? null : node.Href("children"));
     }
 
     async partial void OnSelectedItemChanged(NodeViewModel? value)
@@ -1012,7 +1013,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // ---- Contents / breadcrumb ------------------------------------------------------------------------
 
-    private async Task LoadFolderContentsAsync(Guid folderId)
+    // childrenHref: the address the caller already holds — a tree node's or a breadcrumb's. When null (a
+    // restored selection, an import that only knows an id) the api client fetches the resource and follows its
+    // own `children` rel: one round trip, never a composed sub-resource path (ADR 0543, issue #416).
+    private async Task LoadFolderContentsAsync(Guid folderId, string? childrenHref = null)
     {
         if (_api is null)
         {
@@ -1037,7 +1041,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Status = Strings.Get("StLoading");
         try
         {
-            var children = await _api.GetChildrenAsync(folderId);
+            var children = childrenHref is null
+                ? await _api.GetChildrenAsync(folderId)
+                : await _api.GetChildrenAsync(childrenHref);
             var references = await _api.GetReferencesAsync(folderId);
             // The folder's persisted default contents order (ADR "Per-folder contents sort order"); opening a
             // fresh folder resets any ephemeral column-header sort back to that default.
@@ -1242,7 +1248,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Breadcrumbs.Add(new BreadcrumbViewModel { Name = "Repositories", FolderId = null, ShowSeparator = false });
         foreach (var ancestor in chain)
         {
-            Breadcrumbs.Add(new BreadcrumbViewModel { Name = ancestor.Name, FolderId = ancestor.Id, ShowSeparator = true });
+            Breadcrumbs.Add(new BreadcrumbViewModel { Name = ancestor.Name, FolderId = ancestor.Id, ChildrenHref = ancestor.Links is null ? null : ancestor.Href("children"), ShowSeparator = true });
         }
     }
 
@@ -1268,7 +1274,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             Breadcrumbs.RemoveAt(i);
         }
 
-        await LoadFolderContentsAsync(folderId);
+        await LoadFolderContentsAsync(folderId, crumb.ChildrenHref);
     }
 
     [RelayCommand(CanExecute = nameof(HasSelection))]
@@ -1314,8 +1320,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
             // Drill into a folder, or a document that has child documents (an email with filed attachments,
             // ADR "Email attachments as child documents") — append it to the breadcrumb path and list its
             // contents.
-            Breadcrumbs.Add(new BreadcrumbViewModel { Name = node.Name, FolderId = node.Id, ShowSeparator = Breadcrumbs.Count > 0 });
-            await LoadFolderContentsAsync(node.Id);
+            Breadcrumbs.Add(new BreadcrumbViewModel { Name = node.Name, FolderId = node.Id, ShowSeparator = Breadcrumbs.Count > 0, ChildrenHref = node.Links is null ? null : node.Href("children") });
+            await LoadFolderContentsAsync(node.Id, node.Links is null ? null : node.Href("children"));
             return;
         }
 
