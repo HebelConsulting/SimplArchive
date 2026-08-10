@@ -112,7 +112,9 @@ public sealed class SimplArchiveApiClient
     public sealed record MaskInfo(Guid? MaskId, string? Name, int? VersionNumber);
 
     // A tenant mask option for the mask-change dropdown (ADR "Editable mask on the detail pane").
-    public sealed record MaskOptionInfo(Guid Id, string Name);
+    // SelfHref is the address the mask catalogue advertised for this mask — reading its fields follows that
+    // rather than rebuilding /api/masks/{id} from the id beside it (ADR 0543/0555).
+    public sealed record MaskOptionInfo(Guid Id, string Name, string? SelfHref = null);
 
     // A mask's field definition + type, for building the type-aware editor.
     public sealed record MaskFieldInfo(Guid Id, string Name, string DataType, bool IsRequired);
@@ -159,7 +161,21 @@ public sealed class SimplArchiveApiClient
 
     public sealed record UserCard(string DisplayName, string Email, bool IsActive, string? PhotoHref);
 
-    public sealed record RecycleBinItem(Guid Id, string Name, DateTimeOffset DeletedAt);
+    /// <summary>A row that carries the addresses its listing advertised (ADR 0543/0555).</summary>
+    public interface IAdvertisesLinks
+    {
+        string Name { get; }
+
+        string? Href(string rel);
+    }
+
+    // The per-repository view of a soft-deleted item. Same actions as the tenant-wide row below and therefore
+    // the same shape, so restore/purge are written ONCE and take either (CLAUDE.md: one generic, not N copies).
+    public sealed record RecycleBinItem(Guid Id, string Name, DateTimeOffset DeletedAt,
+        IReadOnlyDictionary<string, string>? Links = null) : IAdvertisesLinks
+    {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
 
     // A file entry inside a browsed .zip (ADR "Zip file browsing") — not a real Document.
     // A zip entry. DownloadHref is the address its own row advertised — an entry is not a storage object, so
@@ -212,9 +228,15 @@ public sealed class SimplArchiveApiClient
     // A server-inbox item — a staged file (ADR "S3-backed inbox"). Download is a presigned URL; HasMask tells
     // whether a `{name}.mask.json` staging sidecar exists (ADR "Inbox item classification + preview"). Group/User
     // label a non-own item's source queue (ADR 0532); MoveUrl is its move action, source query already baked in.
+    // Links are the addresses the listing advertised for THIS item — preview, mask, file, move and its own
+    // deletion — each already carrying the right source prefix for a group or another user's inbox, which is
+    // exactly the part the client used to rebuild by hand (ADR 0543/0555, issue #416).
     public sealed record InboxItemInfo(string Name, long Size, string DownloadUrl, bool HasMask,
-        Guid? GroupId = null, string? GroupName = null, Guid? UserId = null, string? UserName = null, string MoveUrl = "")
+        Guid? GroupId = null, string? GroupName = null, Guid? UserId = null, string? UserName = null, string MoveUrl = "",
+        IReadOnlyDictionary<string, string>? Links = null)
     {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+
         // Own items (no group/user source) get "Send to…"; a group/other-user item gets "Move to my inbox".
         public bool IsOwn => GroupId is null && UserId is null;
 
@@ -706,7 +728,7 @@ public sealed class SimplArchiveApiClient
                     item.TryGetProperty("size", out var s) ? s.GetInt64() : 0,
                     Link("download"),
                     item.TryGetProperty("hasMask", out var hm) && hm.GetBoolean(),
-                    Id("groupId"), Str("groupName"), Id("userId"), Str("userName"), Link("move")));
+                    Id("groupId"), Str("groupName"), Id("userId"), Str("userName"), Link("move"), ParseLinks(item)));
             }
         }
 
@@ -751,9 +773,9 @@ public sealed class SimplArchiveApiClient
 
     // The inbox item's preview (renditions on the object key) — same Preview shape as a document's, so it feeds
     // the same rendering + hit-overlay pipeline. 204 (no preview available) yields an all-null Preview.
-    public async Task<Preview> GetInboxPreviewAsync(string name, string sourceQuery = "", CancellationToken cancellationToken = default)
+    public async Task<Preview> GetInboxPreviewAsync(InboxItemInfo item, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.GetAsync($"api/inbox/{Uri.EscapeDataString(name)}/preview{sourceQuery}", cancellationToken);
+        using var response = await _http.GetAsync(RequireHref(item, "preview"), cancellationToken);
         if (response.StatusCode == HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
         {
             return new Preview(null, false, null, null, null, "");
@@ -770,13 +792,13 @@ public sealed class SimplArchiveApiClient
             DownloadUrl: null,
             Link("text-layout"),
             Link("preview-pages"),
-            System.IO.Path.GetExtension(name));
+            System.IO.Path.GetExtension(item.Name));
     }
 
     // Reads an inbox item's staged mask/index-data draft (the `{name}.mask.json` sidecar); MaskId null = none.
-    public async Task<InboxMaskDraft> GetInboxMaskAsync(string name, string sourceQuery = "", CancellationToken cancellationToken = default)
+    public async Task<InboxMaskDraft> GetInboxMaskAsync(InboxItemInfo item, CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/inbox/{Uri.EscapeDataString(name)}/mask{sourceQuery}", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(RequireHref(item, "mask"), cancellationToken);
         return ParseInboxMaskDraft(json);
     }
 
@@ -807,11 +829,11 @@ public sealed class SimplArchiveApiClient
 
     // Writes (or, when nothing is staged, clears) an inbox item's staged mask/index-data draft. Name +
     // documentDate ("yyyy-MM-dd", or null) are the staged system fields.
-    public async Task SetInboxMaskAsync(string name, string? stagedName, string? documentDate, Guid? maskId,
-        IEnumerable<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> fields, IReadOnlyList<string>? ocrLanguages = null, string sourceQuery = "", CancellationToken cancellationToken = default)
+    public async Task SetInboxMaskAsync(InboxItemInfo item, string? stagedName, string? documentDate, Guid? maskId,
+        IEnumerable<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> fields, IReadOnlyList<string>? ocrLanguages = null, CancellationToken cancellationToken = default)
     {
         var body = new { name = stagedName, documentDate, maskId, fields = fields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.Values }), ocrLanguages = ocrLanguages is { Count: > 0 } o ? o : null };
-        (await _http.PutAsJsonAsync($"api/inbox/{Uri.EscapeDataString(name)}/mask{sourceQuery}", body, cancellationToken)).EnsureSuccessStatusCode();
+        (await _http.PutAsJsonAsync(RequireHref(item, "mask"), body, cancellationToken)).EnsureSuccessStatusCode();
     }
 
     // Uploads a local file into the server inbox: POST for a presigned URL, then PUT the bytes to it.
@@ -823,9 +845,9 @@ public sealed class SimplArchiveApiClient
         (await Anonymous.PutAsync(uploadUrl, content, cancellationToken)).EnsureSuccessStatusCode();
     }
 
-    public async Task FileInboxItemAsync(string name, Guid folderId, string? comment = null, string sourceQuery = "", CancellationToken cancellationToken = default)
+    public async Task FileInboxItemAsync(InboxItemInfo item, Guid folderId, string? comment = null, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync($"api/inbox/{Uri.EscapeDataString(name)}/file{sourceQuery}", new { folderId, comment }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(RequireHref(item, "file"), new { folderId, comment }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to file into that folder.");
@@ -835,9 +857,9 @@ public sealed class SimplArchiveApiClient
     }
 
     // Files the inbox item as a new version of an existing document (ADR "Context-aware inbox filing dialog").
-    public async Task FileInboxItemAsVersionAsync(string name, Guid documentId, string? comment = null, string sourceQuery = "", CancellationToken cancellationToken = default)
+    public async Task FileInboxItemAsVersionAsync(InboxItemInfo item, Guid documentId, string? comment = null, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync($"api/inbox/{Uri.EscapeDataString(name)}/file{sourceQuery}", new { documentId, comment }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(RequireHref(item, "file"), new { documentId, comment }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to add a version to that document.");
@@ -846,8 +868,9 @@ public sealed class SimplArchiveApiClient
         response.EnsureSuccessStatusCode();
     }
 
-    public Task DeleteInboxItemAsync(string name, string sourceQuery = "", CancellationToken cancellationToken = default) =>
-        _http.DeleteAsync($"api/inbox/{Uri.EscapeDataString(name)}{sourceQuery}", cancellationToken);
+    // The item's OWN address, which the listing advertises as `self` with DELETE as its method.
+    public Task DeleteInboxItemAsync(InboxItemInfo item, CancellationToken cancellationToken = default) =>
+        _http.DeleteAsync(RequireHref(item, "self"), cancellationToken);
 
     public async Task<string> GetDocumentNameAsync(Guid documentId, CancellationToken cancellationToken = default) =>
         (await GetDocumentDetailAsync(documentId, cancellationToken)).Name;
@@ -870,7 +893,7 @@ public sealed class SimplArchiveApiClient
         {
             foreach (var m in masks.EnumerateArray())
             {
-                list.Add(new MaskOptionInfo(m.GetProperty("id").GetGuid(), m.GetProperty("name").GetString() ?? ""));
+                list.Add(new MaskOptionInfo(m.GetProperty("id").GetGuid(), m.GetProperty("name").GetString() ?? "", RelHref(m, "self")));
             }
         }
 
@@ -878,9 +901,11 @@ public sealed class SimplArchiveApiClient
     }
 
     // A mask's field definitions (+ types), for building the type-aware editors.
-    public async Task<IReadOnlyList<MaskFieldInfo>> GetMaskFieldsAsync(Guid maskId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<MaskFieldInfo>> GetMaskFieldsAsync(MaskOptionInfo mask, CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/masks/{maskId}", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(
+            mask.SelfHref ?? throw new InvalidOperationException($"The mask '{mask.Name}' advertised no 'self' rel (ADR 0543/0555)."),
+            cancellationToken);
         var list = new List<MaskFieldInfo>();
         if (json.TryGetProperty("fields", out var fields))
         {
@@ -1291,20 +1316,49 @@ public sealed class SimplArchiveApiClient
     // that's refused is skipped, not an error).
     public sealed record BulkResult(int Succeeded, int Skipped);
 
-    public Task<BulkResult> BulkMoveAsync(IEnumerable<Guid> ids, Guid parentId, CancellationToken cancellationToken = default) =>
-        PostBulkAsync("api/documents/bulk/move", new { ids = ids.ToArray(), parentId }, cancellationToken);
+    // The five operations are rels on the batch INDEX, which the root advertises as `documentsBulk` — a set of
+    // ids belongs to no single resource, so there was nowhere else for them to hang (ADR 0543, issue #416).
+    // Read once and cached, like the API root's own rels and the audit log's: five fixed addresses that do not
+    // change between calls, so a screenful of bulk clicks does not re-read the index each time (ADR 0557).
+    private async Task<string> BulkRelAsync(string rel, CancellationToken cancellationToken)
+    {
+        if (_bulkLinks is null)
+        {
+            await _bulkGate.WaitAsync(cancellationToken);
+            try
+            {
+                _bulkLinks ??= ParseLinks(await _http.GetFromJsonAsync<JsonElement>(
+                    await RootHrefAsync("documentsBulk", cancellationToken), cancellationToken))
+                    ?? new Dictionary<string, string>();
+            }
+            finally
+            {
+                _bulkGate.Release();
+            }
+        }
 
-    public Task<BulkResult> BulkReferenceAsync(IEnumerable<Guid> ids, Guid parentId, CancellationToken cancellationToken = default) =>
-        PostBulkAsync("api/documents/bulk/reference", new { ids = ids.ToArray(), parentId }, cancellationToken);
+        return _bulkLinks.TryGetValue(rel, out var href)
+            ? href
+            : throw new InvalidOperationException($"The bulk index advertised no '{rel}' rel (ADR 0543).");
+    }
 
-    public Task<BulkResult> BulkDeleteAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default) =>
-        PostBulkAsync("api/documents/bulk/delete", new { ids = ids.ToArray() }, cancellationToken);
+    private IReadOnlyDictionary<string, string>? _bulkLinks;
+    private readonly SemaphoreSlim _bulkGate = new(1, 1);
 
-    public Task<BulkResult> BulkAddTagsAsync(IEnumerable<Guid> ids, IEnumerable<string> tags, CancellationToken cancellationToken = default) =>
-        PostBulkAsync("api/documents/bulk/tags", new { ids = ids.ToArray(), tags = tags.ToArray() }, cancellationToken);
+    public async Task<BulkResult> BulkMoveAsync(IEnumerable<Guid> ids, Guid parentId, CancellationToken cancellationToken = default) =>
+        await PostBulkAsync(await BulkRelAsync("move", cancellationToken), new { ids = ids.ToArray(), parentId }, cancellationToken);
 
-    public Task<BulkResult> BulkSetSensitivityAsync(IEnumerable<Guid> ids, Guid? labelId, CancellationToken cancellationToken = default) =>
-        PostBulkAsync("api/documents/bulk/sensitivity", new { ids = ids.ToArray(), labelId }, cancellationToken);
+    public async Task<BulkResult> BulkReferenceAsync(IEnumerable<Guid> ids, Guid parentId, CancellationToken cancellationToken = default) =>
+        await PostBulkAsync(await BulkRelAsync("reference", cancellationToken), new { ids = ids.ToArray(), parentId }, cancellationToken);
+
+    public async Task<BulkResult> BulkDeleteAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default) =>
+        await PostBulkAsync(await BulkRelAsync("delete", cancellationToken), new { ids = ids.ToArray() }, cancellationToken);
+
+    public async Task<BulkResult> BulkAddTagsAsync(IEnumerable<Guid> ids, IEnumerable<string> tags, CancellationToken cancellationToken = default) =>
+        await PostBulkAsync(await BulkRelAsync("tags", cancellationToken), new { ids = ids.ToArray(), tags = tags.ToArray() }, cancellationToken);
+
+    public async Task<BulkResult> BulkSetSensitivityAsync(IEnumerable<Guid> ids, Guid? labelId, CancellationToken cancellationToken = default) =>
+        await PostBulkAsync(await BulkRelAsync("sensitivity", cancellationToken), new { ids = ids.ToArray(), labelId }, cancellationToken);
 
     private async Task<BulkResult> PostBulkAsync(string url, object body, CancellationToken cancellationToken)
     {
@@ -1941,9 +1995,9 @@ public sealed class SimplArchiveApiClient
 
     // Restores a soft-deleted document/folder (and its cascade-deleted descendants). Idempotent, no If-Match
     // (ADR 0196). 403 = no permission (CanDelete).
-    public async Task RestoreAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task RestoreAsync(IAdvertisesLinks entry, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync($"api/documents/{documentId}/restore", null, cancellationToken);
+        using var response = await _http.PostAsync(RequireHref(entry, "restore"), null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to restore this item.");
@@ -1953,13 +2007,17 @@ public sealed class SimplArchiveApiClient
     }
 
     // Every deleted Document at any depth under a repository root (ADR 0196).
-    public Task<List<RecycleBinItem>> GetRecycleBinAsync(Guid repositoryId, CancellationToken cancellationToken = default) =>
-        LoadPagedAsync($"api/repositories/{repositoryId}/recycle-bin", "items", ParseRecycleBinItem, cancellationToken);
+    // Follows the repository ROW's own `recycle-bin` rel (issue #416) — a repository is a document, and its bin
+    // is one of the addresses the listing hands over.
+    public Task<List<RecycleBinItem>> GetRecycleBinAsync(Node repository, CancellationToken cancellationToken = default) =>
+        LoadPagedAsync(
+            repository.Href("recycle-bin") ?? throw new InvalidOperationException($"The repository '{repository.Name}' advertised no 'recycle-bin' rel (ADR 0543/0555)."),
+            "items", ParseRecycleBinItem, cancellationToken);
 
     // Permanently purges a recycle-bin item + its subtree (ADR "Manual hard-delete / purge") — tenant-admin only.
-    public async Task PurgeAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task PurgeAsync(IAdvertisesLinks entry, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync($"api/documents/{documentId}/purge", null, cancellationToken);
+        using var response = await _http.PostAsync(RequireHref(entry, "purge"), null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("Only a tenant administrator can permanently purge items.");
@@ -1974,9 +2032,12 @@ public sealed class SimplArchiveApiClient
     }
 
     // Empties a repository's recycle bin — permanently purges every item in it (ADR "Manual hard-delete / purge").
-    public async Task EmptyRecycleBinAsync(Guid repositoryId, CancellationToken cancellationToken = default)
+    public async Task EmptyRecycleBinAsync(Node repository, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync($"api/repositories/{repositoryId}/recycle-bin/purge", null, cancellationToken);
+        var bin = await _http.GetFromJsonAsync<JsonElement>(
+            repository.Href("recycle-bin") ?? throw new InvalidOperationException($"The repository '{repository.Name}' advertised no 'recycle-bin' rel (ADR 0543/0555)."),
+            cancellationToken);
+        using var response = await _http.PostAsync(RequireRel(bin, "purge-all", $"The recycle bin of '{repository.Name}'"), null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("Only a tenant administrator can empty the recycle bin.");
@@ -1987,11 +2048,21 @@ public sealed class SimplArchiveApiClient
 
     // One soft-deleted document in the tenant-wide recycle bin (ADR "Recycle bin tab" / "Desktop recycle bin
     // parity"): its name, full path, when it was deleted, and by whom (from the audit trail).
-    public sealed record RecycleBinEntry(Guid Id, string Name, string Path, DateTimeOffset DeletedAt, string DeletedBy);
+    // A soft-deleted document. Its own `restore`/`purge` addresses come from the ROW, because the document is
+    // behind the soft-delete query filter — there is no resource left to fetch them from (ADR 0543/0555).
+    public sealed record RecycleBinEntry(Guid Id, string Name, string Path, DateTimeOffset DeletedAt, string DeletedBy,
+        IReadOnlyDictionary<string, string>? Links = null) : IAdvertisesLinks
+    {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
+
+    // The bin plus what can be done to it as a whole — captured where the collection is read, so the tab does
+    // not pay a request per button (ADR 0557).
+    public sealed record RecycleBinList(IReadOnlyList<RecycleBinEntry> Items, IReadOnlyDictionary<string, string> Links);
 
     // Every soft-deleted document the caller can see, tenant-wide (ADR "Recycle bin tab") — capped at 500 by the
     // Api (Truncated flag ignored here; the tab tells the user if more exist via the status line).
-    public async Task<List<RecycleBinEntry>> GetRecycleBinItemsAsync(CancellationToken cancellationToken = default)
+    public async Task<RecycleBinList> GetRecycleBinItemsAsync(CancellationToken cancellationToken = default)
     {
         var response = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("recycleBin", cancellationToken), cancellationToken);
         var items = new List<RecycleBinEntry>();
@@ -2004,18 +2075,19 @@ public sealed class SimplArchiveApiClient
                     item.GetProperty("name").GetString() ?? "",
                     item.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "",
                     item.GetProperty("deletedAt").GetDateTimeOffset(),
-                    item.TryGetProperty("deletedBy", out var db) ? db.GetString() ?? "—" : "—"));
+                    item.TryGetProperty("deletedBy", out var db) ? db.GetString() ?? "—" : "—",
+                    ParseLinks(item)));
             }
         }
 
-        return items;
+        return new RecycleBinList(items, ParseLinks(response) ?? new Dictionary<string, string>());
     }
 
     // Empties the whole tenant-wide recycle bin — permanently purges every soft-deleted document (ADR "Recycle
     // bin tab") — tenant-admin only.
-    public async Task PurgeRecycleBinAsync(CancellationToken cancellationToken = default)
+    public async Task PurgeRecycleBinAsync(string purgeAllHref, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync("api/recycle-bin/purge", null, cancellationToken);
+        using var response = await _http.PostAsync(purgeAllHref, null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("Only a tenant administrator can empty the recycle bin.");
@@ -2026,9 +2098,9 @@ public sealed class SimplArchiveApiClient
 
     // Bulk restore (ADR "Bulk restore from the recycle bin") — restores each requested soft-deleted document +
     // its subtree in one call; returns how many were restored vs skipped (already active / gone / not permitted).
-    public async Task<(int Restored, int Skipped)> RestoreManyAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
+    public async Task<(int Restored, int Skipped)> RestoreManyAsync(string restoreSelectedHref, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync("api/recycle-bin/restore", new { ids }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(restoreSelectedHref, new { ids }, cancellationToken);
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         return (json.GetProperty("restored").GetInt32(), json.GetProperty("skipped").GetInt32());
@@ -2036,9 +2108,9 @@ public sealed class SimplArchiveApiClient
 
     // Bulk purge of selected items (ADR "Bulk purge of selected recycle-bin items") — tenant-admin; permanently
     // removes each requested recycle-bin root + subtree; returns purged vs skipped (gone / active / held / WORM).
-    public async Task<(int Purged, int Skipped)> PurgeManyAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
+    public async Task<(int Purged, int Skipped)> PurgeManyAsync(string purgeSelectedHref, IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync("api/recycle-bin/purge-selected", new { ids }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(purgeSelectedHref, new { ids }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("Only a tenant administrator can purge items.");
@@ -2388,7 +2460,8 @@ public sealed class SimplArchiveApiClient
 
     public async Task<List<DuplicateInfo>> FindDuplicatesAsync(string hash, CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/duplicates?hash={hash}", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(
+            $"{await RootHrefAsync("duplicates", cancellationToken)}?hash={hash}", cancellationToken);
         var list = new List<DuplicateInfo>();
         if (json.TryGetProperty("duplicates", out var arr))
         {
@@ -2905,7 +2978,8 @@ public sealed class SimplArchiveApiClient
     private static RecycleBinItem ParseRecycleBinItem(JsonElement item) => new(
         item.GetProperty("id").GetGuid(),
         item.GetProperty("name").GetString() ?? "",
-        item.GetProperty("deletedAt").GetDateTimeOffset());
+        item.GetProperty("deletedAt").GetDateTimeOffset(),
+        ParseLinks(item));
 
     private static Comment ParseComment(JsonElement item) => new(
         item.GetProperty("id").GetGuid(),
@@ -3376,6 +3450,14 @@ public sealed class SimplArchiveApiClient
         ParseLinks(resource) is { } links && links.TryGetValue(rel, out var href)
             ? href
             : throw new InvalidOperationException($"{what} advertised no '{rel}' rel (ADR 0543).");
+
+    private static string RequireHref(IAdvertisesLinks row, string rel) =>
+        row.Href(rel)
+        ?? throw new InvalidOperationException($"The row '{row.Name}' advertised no '{rel}' rel (ADR 0543/0555).");
+
+    private static string RequireHref(InboxItemInfo item, string rel) =>
+        item.Href(rel)
+        ?? throw new InvalidOperationException($"The inbox item '{item.Name}' advertised no '{rel}' rel (ADR 0543/0555).");
 
     private static string RequireHref(LegalHoldInfo hold, string rel) =>
         hold.Href(rel)
@@ -3933,9 +4015,21 @@ public sealed class SimplArchiveApiClient
         bool CanSee, bool CanReadContent, bool CanEditContent, bool CanEditIndexData,
         bool CanCreateSubItems, bool CanDelete, bool CanMove, bool CanAnnotate, bool CanManagePermissions);
 
-    public sealed record AclEntryInfo(string PrincipalType, Guid PrincipalId, AclRights Rights);
+    // Both rows carry the address the WRITE goes to — an existing entry advertises `edit`/`remove`, a principal
+    // you may newly grant to advertises `grant`. Same shape, so the write is expressed once (ADR 0543/0555).
+    public sealed record AclEntryInfo(string PrincipalType, Guid PrincipalId, AclRights Rights,
+        IReadOnlyDictionary<string, string>? Links = null) : IAdvertisesLinks
+    {
+        public string Name => $"{PrincipalType}/{PrincipalId}";
 
-    public sealed record GrantablePrincipalInfo(string Type, Guid Id, string Name);
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
+
+    public sealed record GrantablePrincipalInfo(string Type, Guid Id, string Name,
+        IReadOnlyDictionary<string, string>? Links = null) : IAdvertisesLinks
+    {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
 
     // Everything the Manage-access dialog needs in one load. Forbidden = the caller lacks CanManagePermissions
     // (the list/picker endpoints 403), so the dialog shows a read-only message instead of a broken editor.
@@ -3988,7 +4082,8 @@ public sealed class SimplArchiveApiClient
                 entries.Add(new AclEntryInfo(
                     e.GetProperty("principalType").GetString() ?? "",
                     e.GetProperty("principalId").GetGuid(),
-                    ReadRights(e)));
+                    ReadRights(e),
+                    ParseLinks(e)));
             }
         }
 
@@ -4001,16 +4096,22 @@ public sealed class SimplArchiveApiClient
                 principals.Add(new GrantablePrincipalInfo(
                     p.GetProperty("type").GetString() ?? "",
                     p.GetProperty("id").GetGuid(),
-                    p.GetProperty("name").GetString() ?? ""));
+                    p.GetProperty("name").GetString() ?? "",
+                    ParseLinks(p)));
             }
         }
 
         return new AclInfo(false, breaksInheritance, entries, principals, inheritanceHref);
     }
 
-    public async Task SetAclEntryAsync(Guid documentId, string principalType, Guid principalId, AclRights rights, CancellationToken cancellationToken = default)
+    // Writes the rights at the address the ROW gave us for writing them — `grant` on a principal being added,
+    // `edit` on an entry already there. One method, because it is one operation: the two rels differ only in
+    // which side of the same address the server chose to advertise (ADR 0555).
+    public async Task SetAclEntryAsync(IAdvertisesLinks row, AclRights rights, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/acl-entries/{principalType}/{principalId}", rights, cancellationToken);
+        var href = row.Href("grant") ?? row.Href("edit")
+            ?? throw new InvalidOperationException($"The row '{row.Name}' advertised neither 'grant' nor 'edit' — you may not change its access (ADR 0543/0555).");
+        using var response = await _http.PutAsJsonAsync(href, rights, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException(Strings.Get("MaInsufficientRights"));
@@ -4019,9 +4120,9 @@ public sealed class SimplArchiveApiClient
         await ThrowIfProblemAsync(response, Strings.Get("MaLoadFailed"), cancellationToken);
     }
 
-    public async Task RevokeAclEntryAsync(Guid documentId, string principalType, Guid principalId, CancellationToken cancellationToken = default)
+    public async Task RevokeAclEntryAsync(AclEntryInfo entry, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.DeleteAsync($"api/documents/{documentId}/acl-entries/{principalType}/{principalId}", cancellationToken);
+        using var response = await _http.DeleteAsync(RequireHref(entry, "remove"), cancellationToken);
         await ThrowIfProblemAsync(response, Strings.Get("MaLoadFailed"), cancellationToken);
     }
 

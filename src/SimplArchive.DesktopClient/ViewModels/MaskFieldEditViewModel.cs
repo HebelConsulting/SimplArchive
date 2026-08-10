@@ -4,7 +4,10 @@ using SimplArchive.DesktopClient.Services;
 namespace SimplArchive.DesktopClient.ViewModels;
 
 // A mask choice in the mask-change dropdown (ADR "Editable mask on the detail pane"). MaskId null = "(No mask)".
-public sealed record MaskChoiceViewModel(Guid? MaskId, string Name)
+// Mask is the catalogue row the server sent, carried so reading the mask's fields follows the address it
+// advertised (ADR 0543/0555). Null for the "(No mask)" entry and for the designer-preview rows, which reach
+// no server — every real, selectable mask has it.
+public sealed record MaskChoiceViewModel(Guid? MaskId, string Name, SimplArchive.DesktopClient.Services.SimplArchiveApiClient.MaskOptionInfo? Mask = null)
 {
     public override string ToString() => Name;
 }

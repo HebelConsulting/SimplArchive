@@ -94,6 +94,37 @@ public class DocumentBulkController : ControllerBase
     // Move every selected item into one target folder. The target's existence + the caller's CanCreateSubItems
     // on it are validated once (a bad target fails the whole call); each item then needs its own CanMove, must
     // not be frozen / checked out by another, and must not create a cycle or a sibling-name clash — else skipped.
+    // The batch index (issue #416). These five operations act on a SET of ids, so no single resource owns
+    // them and — until this existed — nothing linked to any of them: the route answered five POSTs and no GET,
+    // which is the same shape that left `/api/admin` unreachable. A client is meant to be able to follow what
+    // it is offered, so a batch endpoint needs somewhere to be offered FROM.
+    //
+    // A resource of its own rather than five names on the API root (the root is the one document every client
+    // fetches, and it should not become the home for everything that fits nowhere else) and rather than five
+    // links on every children listing (a selection can span listings — search results, the recycle bin — and
+    // every listing response would carry them whether or not anything is selected).
+    //
+    // Deliberately not right-gated: this says what exists, and each operation enforces its own permissions per
+    // document when followed — the same contract as the API root itself.
+    [HttpGet]
+    public IActionResult Index() => Ok(new BulkIndexResource
+    {
+        Links =
+        [
+            new Link("self", "/api/documents/bulk", "GET"),
+            new Link("move", "/api/documents/bulk/move", "POST"),
+            new Link("reference", "/api/documents/bulk/reference", "POST"),
+            new Link("delete", "/api/documents/bulk/delete", "POST"),
+            new Link("tags", "/api/documents/bulk/tags", "POST"),
+            new Link("sensitivity", "/api/documents/bulk/sensitivity", "POST"),
+        ],
+    });
+
+    [HttpHead]
+    public IActionResult IndexHead() => NoContent();
+
+    public class BulkIndexResource : HypermediaResource;
+
     [HttpPost("move")]
     public async Task<IActionResult> Move([FromBody] BulkMoveRequest request, CancellationToken cancellationToken)
     {

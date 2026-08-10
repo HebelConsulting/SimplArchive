@@ -26,210 +26,84 @@ public partial class ClientHypermediaTests
     // way both clients actually build these, without flagging prose in a comment.
     private static readonly Regex ComposedApiUrl = new("\\$?\"api/", RegexOptions.Compiled);
 
-    // file (repo-relative, forward slashes) → composed "api/…" literals it still contains.
+    // Two different states, deliberately, because the two clients are at two different points.
     //
-    // Seeded from the counts at adoption. LOWER an entry when converting a call site; never raise one.
+    // THE DESKTOP CLIENT IS DONE. Its burn-down went 184 → 1, and the one that remains is a NAMED EXCEPTION
+    // rather than a budget: `SimplArchiveApiClient.DocumentAddress`, the single line that turns a document id
+    // back into a resource. A caller must do that when the only state it holds is a Guid, because a rel can be
+    // followed only from a resource you already have.
+    //
+    // It is NOT irreducible in principle, and calling it that would hide real work behind a principle. ADR 0555's
+    // answer is to hold the ROW, and then the address is `self`. It is irreducible only while (a) the desktop
+    // view-model's state is still id-shaped — `_currentFolderId`, a restored selection — and (b) the payloads
+    // that hand a client a bare document id (a notification, a task, a reminder, a search hit) do not also
+    // advertise that document's address. Closing both retires the exception — issue #443 records how.
+    //
+    // Why an exception beats a budget of 1: a budget of 1 permits ANY one composed URL anywhere in the file.
+    // This permits only that line, and fails the moment a second appears.
+    private const string ExceptionFile = "src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs";
+
+    private const int ExceptionCount = 1;
+
+    // THE WEB CLIENT IS NOT DONE, so it keeps the ratchet: the count must EQUAL the budget, so adding one fails
+    // and converting one fails until the number is lowered in the same commit. When this empties, delete the
+    // dictionary and the rule becomes "no client composes an API URL, except the named line above".
     private static readonly Dictionary<string, int> Budget = new()
     {
-        // 2 → 1 (#416, the web long tail): the version LIST is followed from the row's `versions` rel. The
-        // compare call itself stays and is the last composed URL in the web client: a link names ONE resource,
-        // and "these two versions against each other" has no advertised address. Converting it needs an API
-        // shape that can express the pair — a compare rel per version, or the pair as query parameters — which
-        // is a route change, not a client one.
-
-        // 95 → 84 (issue #416): the users & groups administration family. A user row advertises
-        // reset-password / reset-mfa / deactivate alongside rights and photo, a group row members / delete, and
-        // a member row its own `remove` — the pair being the only thing that knows both ends of a membership.
-        // Deleting a principal stopped branching on IsGroup to build two different paths: it follows whichever
-        // rel its row carries. Adding a member is the one composition left, and cannot be a rel as the API
-        // stands — the user being added is not in the members collection yet, so nothing the client holds can
-        // advertise the address; that needs the member in the BODY of a POST (recorded on the issue).
-        // 84 → 74 (issue #416): the detail pane and the row actions. The pane's own bootstrap read follows the
-        // ROW's `self` rel, which then makes everything it loads next — versions, mask, index-data — a rel on the
-        // resource it just read rather than a path rebuilt per call. Rename and delete follow the row's address,
-        // and the ETag probe now HEADs the SAME address the mutation will PUT/DELETE, instead of a path
-        // reconstructed from an id beside it.
-        //
-        // A reference row now advertises the TARGET document's `self` too, which is what makes rename/delete work
-        // on one: without it the row had an id and no address, and the conversion above would have turned those
-        // two actions into silent no-ops on a reference — caught before the suite ran, but only by asking which
-        // rows lack the rel rather than assuming every row carries it. Its own `delete` rel is followed now too.
-        //
-        // Move and set-primary-location are deliberately still composed: both are rels on the full document
-        // RESOURCE, and a listing row does not carry them (a listing is the wrong place to answer "may I?"), so
-        // converting them costs a fetch per row action and belongs with the tranche that adds it.
-        //
-        // 74 → 53 (issue #416): every action that belongs TO a collection now rides on that collection, and the
-        // rels are captured where the collection is READ — so the tab that already loaded the audit log, the
-        // tenant settings or the saved searches holds the addresses of everything that can be done to them, at
-        // no extra round trip. The audit log carries retention/export/purge/verify/worm-verify; tenant settings
-        // its two maintenance actions; a saved search its rewrite/delete/shares, but only when it is yours; a
-        // tag its rename/retire/merge; a retention row extend, and dispose only where no review is required.
-        // The searchable-PDF backfill takes a ROOT rel instead — it hangs off no collection a client has read.
-        // 53 → 51 (#416): the search-field catalogue follows the new root rel, and adding a group member
-        // follows one too now that the API takes the member in the BODY of a POST to the members collection.
+        // 95 → 51 across earlier tranches (#416): the workbench's document, audit, tenant, tag, saved-search and
+        // search-field families. What remains is dominated by the row actions that need the full document
+        // RESOURCE rather than a listing row — checkout, move, set-primary-location — which cost a fetch per row
+        // action, and by the version-compare pair. The desktop side solved the same problem by holding the row
+        // (ADR 0555); the web client's equivalent migration has not been done.
         ["src/SimplArchive.Client/Pages/Home.razor"] = 51,
-        // 184 → 183 (issue #385): the desktop read the document resource TWICE — once for its name, once for its
-        // sensitivity label — so the per-document external-links rel had nowhere to be picked up from. One read
-        // now serves both and carries the rel, which is what let the dialog follow it instead of composing a URL.
-        //
-        // 151 → 145 (issue #416): the document resource advertises `tags`, `reminders` and `subscription`, and
-        // every read and write follows one. Six literals for one shared DocumentRelAsync helper — the callers
-        // that hold only an id fetch the resource once and follow the rel, instead of composing a path per
-        // sub-resource. The detail pane, which already holds the resource, pays nothing. Done as ONE change — rel, carried into DocumentDetailInfo, threaded to every call site —
-        // because splitting those is what produced the Node.Links-always-null regression: the model gained a
-        // field, the call sites used it, and nothing verified the value arrived.
-        //
-        // 94 → 49 (issue #416): the DOCUMENT family — the largest single block left, and the one that made this
-        // file's count look structural rather than incidental. Every `api/documents/{id}/<sub-resource>` is now
-        // a rel: mask, index-data, versions, chat, children, ancestors, references, referencing-folders, move,
-        // set-primary-location, checkout/checkin, acl-entries, assignable-reviewers, archive-entries, export
-        // and import. Where the caller holds only an id, DocumentRelAsync fetches the resource once and follows
-        // — the trade already made for tags/reminders/subscription, now applied to the rest.
-        //
-        // Three shapes carried the rest. (1) The upload flow: create → add a version → finalize used to read an
-        // id out of each response and rebuild the next path; the create response now advertises `versions` and
-        // the pending version its own `self`, so all three steps follow. (2) Row-carrying types — a version
-        // (restore, document-date), a reference (delete), a zip entry (download) — act at the address their own
-        // row gave them, which is ADR 0555 applied one layer down. (3) GetAclAsync now reads the DOCUMENT first
-        // and works outwards: `acl-entries` is CanManagePermissions-gated, so its absence answers "may I manage
-        // access" without sending a request built to be refused with a 403.
-        //
-        // What remains here is other people's families and one line. The families — audit, inbox, bulk,
-        // recycle-bin, search, checkouts, legal-holds, retention, notifications — are each their own tranche and
-        // each needs its own server-side rels first; none of them is a document. The one line is
-        // DocumentAddress(id): the irreducible composition, turning an id back into a resource. It is
-        // deliberately NOT disguised as a rel-follow; centralising it is what makes the last step (id-shaped
-        // view-model state becoming a row that carries `self`, ADR 0555) a one-line change instead of a fortieth
-        // call site. The two ACL WRITES stay for the same reason — the address belongs to the grantable-principal
-        // row, and the callers that grant do not all hold one yet.
-        //
-        // Following rels must not cost a request per rel, and this tranche is where that stopped being theory:
-        // opening a folder wants children, references and the contents order, which would have been three
-        // document fetches. It is one — the folder's links are read once (or carried whole from the row that was
-        // clicked), and the contents order rides in the children envelope it was always in. Net effect on the
-        // hottest path in the client: FEWER requests than before the conversion, not more.
-        //
-        // 152 → 151 (issue #416, tranche B): GetVersionsAsync takes the advertised href. The enabling change is
-        // on the SERVER — a listed item now advertises its own unconditional sub-resources, so a client holding a
-        // row has addresses rather than just an id. Without that, following a rel would have cost a `self` fetch
-        // per row, and paying two calls to follow one rel is how a codebase talks itself back into string paths.
-        //
-        // 153 → 152 (issue #426): SetInheritanceAsync takes the advertised href instead of composing the path.
-        // The rel is CONDITIONAL, so following it also removes an affordance that could only ever fail — the
-        // clients no longer offer to break inheritance on a repository root.
-        //
-        // 183 → 153 (issue #416, tranche A): the 19 top-level COLLECTION roots now come from the API root's own
-        // rels via the cached RootHrefAsync. What remains here is overwhelmingly the interpolated kind
-        // ($"api/documents/{id}/…"), which needs a resource in hand rather than a path — the structural half of
-        // the burn-down, and a separate piece of work.
-        //
-        // 141 → 125 (issue #416): the caller's own account. The desktop had no `me` helper at all — the web
-        // client grew one an earlier tranche ago while this file kept composing thirteen /api/users/me/… paths,
-        // so this is a parity fix as much as a burn-down (ADR 0511 treats a web/desktop pair as one surface).
-        // A cached MeHrefAsync mirrors RootHrefAsync; password, photo, the three MFA calls, passkeys, the
-        // WebDAV password, the personal repository and notification preferences all follow rels the `me`
-        // resource already advertised. The last three come from rels added in the same change: a passkey row's
-        // own `self`, and a sensitivity label's `retire`/`unretire` — where WHICH rel is present is the label's
-        // state, so the row stopped deciding that from a `Retired` flag it interpreted itself.
-        //
-        // 125 → 118 (issue #416): the collection-action family, chosen because every one of these methods takes
-        // NO id — so none of them changes a public signature, and none runs into the 31 test call sites that
-        // stopped the users & groups family (recorded on the issue). The backfill follows a root rel; the
-        // tenant-settings maintenance actions, the audit log's retention policy and the saved-search share
-        // targets are rels ON the resource that owns them, so each reads that resource first. That read is the
-        // trade the root's "collection roots only" rule asks for, and it is paid per admin click rather than per
-        // screen. The audit one adds `?limit=1` to the advertised href so learning one number does not drag back
-        // a page of audit events — a query on a rel's href, not a path this client invented.
-        //
-        // 118 → 106 (issue #416, ADR 0555): the surface migration. Methods now take the ROW they act on, which
-        // carries the addresses the listing advertised, so the users & groups family follows rels instead of
-        // rebuilding paths — the family that had to be REVERTED when it was attempted against the old id-based
-        // surface. The creates return the row too: the create response is the resource, rels included, and
-        // returning only its id was what forced every follow-up call to compose.
-        //
-        // The test migration is the bulk of this and the compiler could only find part of it. Three runtime-only
-        // breakages remained after everything compiled: a row passed to AddWithValue (which takes object), a row
-        // in `new { reviewerId }` serialised as a whole object, and a row interpolated into a URL. All three are
-        // "a Guid became a row where the type system had stopped looking" — the desktop suite caught each.
-        //
-        // 106 → 96 (issue #416): with the surface migrated, the row-carrying families convert cheaply — tags,
-        // saved searches and service accounts each act through the row that advertised the address, and a
-        // revoked account or a search shared WITH you simply carries no write rels, so the affordance is the
-        // server's answer rather than IsActive/IsMine re-derived here. The search-field catalogue moved to a
-        // root rel: it is read before any search has run, so no search response exists to hang it off.
-        // 96 → 94 (#416): the two addresses that could NOT be expressed as rels are gone, because the API was
-        // reshaped rather than the client tricked. Comparing two versions is now GET /versions/compare?from=&to=
-        // — one advertised address with the pair as parameters, since a link names one resource and a pair has
-        // none. Adding a group member is POST /members with the user in the BODY, so the collection advertises
-        // `add-member` and the chosen principal travels as data; the keyed PUT is retired rather than kept
-        // beside it, because two ways to do one thing is how a client talks itself back into composing.
-        // 49 → 23 (issue #416): the families that are NOT documents. The surprise was how little the server
-        // needed — the API root already advertised `search`, `whoami`, `inboxGroups`, `inboxUsers`,
-        // `retentionSchedule` and `checkouts`, and the rows already carried their own actions. Almost all of
-        // this was a client that had never asked.
-        //
-        // Two server changes were required. A legal-hold ITEM now advertises `remove`: it is the only thing
-        // that knows both ends of the pairing, so a client holding the list had two ids and no address. And
-        // /api/admin finally answers — the root has always advertised an `admin` rel pointing at a route with
-        // no GET, which under ADR 0543 is worse than no rel at all: a client is meant to be able to follow what
-        // it is offered, so the only way to reach personal-repositories was to compose its path.
-        //
-        // Conditional rels did real work here. A released legal hold offers neither `release` nor `add-item`; a
-        // retention row withholds `dispose` while a review is required or a hold suspends it; a check-out
-        // offers `compare` only when there is a stash to diff. Each of those was a flag the client re-derived
-        // and could disagree with the server about.
-        //
-        // The audit collection's five rels are read once and cached, like the API root's own — they do not
-        // change between calls, and the audit tab would otherwise re-read the collection once per button.
-        //
-        // What is left: the inbox and recycle-bin families (their rels exist; it is a surface migration), the
-        // five bulk operations plus `duplicates` and `masks/{id}` (which need addresses the API does not yet
-        // advertise anywhere), the two ACL writes, and DocumentAddress.
-        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 23,
     };
 
     [Fact]
-    public void Clients_do_not_compose_api_urls_beyond_the_recorded_budget()
+    public void No_client_composes_an_api_url_except_the_one_named_exception()
     {
         var actual = CountByFile();
-
-        var regressions = new List<string>();
+        var offenders = new List<string>();
 
         foreach (var (file, count) in actual.OrderBy(kv => kv.Key))
         {
-            var budgeted = Budget.TryGetValue(file, out var b) ? b : 0;
-            if (count > budgeted)
+            var allowed = file == ExceptionFile ? ExceptionCount : Budget.TryGetValue(file, out var b) ? b : 0;
+            if (count > allowed)
             {
-                regressions.Add($"  {file}: {count} composed api/ URLs, budget {budgeted} — follow a link rel "
-                    + "from the resource instead of composing the URL (ADR 0543).");
+                offenders.Add($"  {file}: {count} composed api/ URL(s), {allowed} allowed — follow a link rel "
+                    + "from the resource instead of composing the URL (ADR 0543). If the caller holds only an id, "
+                    + "make it hold the ROW (ADR 0555), or add the rel to whatever handed it that id.");
             }
-            else if (count < budgeted)
+            else if (count < allowed && file != ExceptionFile)
             {
-                regressions.Add($"  {file}: {count} composed api/ URLs, budget {budgeted} — good news: lower the "
-                    + "budget in ClientHypermediaTests to {count} so the ledger stays honest.".Replace("{count}", count.ToString()));
+                offenders.Add($"  {file}: {count} composed api/ URL(s), budget {allowed} — good news: lower the "
+                    + $"budget in ClientHypermediaTests to {count} so the ledger stays honest.");
             }
         }
 
         foreach (var file in Budget.Keys.Where(f => !actual.ContainsKey(f)).OrderBy(f => f))
         {
-            regressions.Add($"  {file}: no composed api/ URLs left (or the file moved) — delete its budget entry.");
+            offenders.Add($"  {file}: no composed api/ URLs left (or the file moved) — delete its budget entry.");
         }
 
-        Assert.True(regressions.Count == 0,
-            "The client hypermedia ledger is out of date (ADR 0543):\n" + string.Join("\n", regressions));
+        Assert.True(offenders.Count == 0,
+            "A client is composing API URLs (ADR 0543):\n" + string.Join("\n", offenders));
     }
 
-    // The API owns its URL space, so no client should be inventing routes the server never advertised. This is the
-    // finish line the budget is walking towards; it is informational until the budget empties.
+    // The exception is a debt, not a licence, so it is asserted to still BE one line. If it is ever converted,
+    // this fails and the whole mechanism — both constants and both tests — is deleted rather than left behind
+    // asserting nothing. An exception nobody is forced to revisit is how a temporary carve-out becomes permanent.
     [Fact]
-    public void The_remaining_conversion_work_is_visible()
+    public void The_one_named_exception_is_still_exactly_one_line()
     {
-        var total = CountByFile().Values.Sum();
+        var actual = CountByFile();
+        var count = actual.TryGetValue(ExceptionFile, out var c) ? c : 0;
 
-        // Purely a tripwire on the headline number, so a bulk regression can't hide behind per-file budgets.
-        Assert.True(total <= Budget.Values.Sum(),
-            $"Clients compose {total} api/ URLs in total, above the recorded ledger of {Budget.Values.Sum()} (ADR 0543).");
+        Assert.True(count == ExceptionCount,
+            count == 0
+                ? $"{ExceptionFile} composes no api/ URL any more — the last one is gone. Delete ExceptionFile, "
+                  + "ExceptionCount and this test, and leave the rule as 'no client composes an API URL' (ADR 0543)."
+                : $"{ExceptionFile} composes {count} api/ URLs, expected exactly {ExceptionCount} "
+                  + "(DocumentAddress). A second one is a regression, not a new exception.");
     }
 
     // Every rel a client follows must actually be advertised by the API.

@@ -42,7 +42,8 @@ public class DesktopManageAccessTests
         var viewer = new SimplArchiveApiClient.AclRights(
             CanSee: true, CanReadContent: true, CanEditContent: false, CanEditIndexData: false,
             CanCreateSubItems: false, CanDelete: false, CanMove: false, CanAnnotate: false, CanManagePermissions: false);
-        await api.SetAclEntryAsync(folder.Id, "users", granteeId.Id, viewer);
+        var grantable = (await api.GetAclAsync(folder.Id)).Principals.Single(p => p.Type == "users" && p.Id == granteeId.Id);
+        await api.SetAclEntryAsync(grantable, viewer);
 
         // It reads back as a Viewer preset for that user.
         var afterGrant = await api.GetAclAsync(folder.Id);
@@ -51,7 +52,7 @@ public class DesktopManageAccessTests
         Assert.True(entry.Rights is { CanSee: true, CanReadContent: true, CanEditContent: false, CanManagePermissions: false });
 
         // Revoke → the grant is gone.
-        await api.RevokeAclEntryAsync(folder.Id, "users", granteeId.Id);
+        await api.RevokeAclEntryAsync(entry);
         Assert.DoesNotContain((await api.GetAclAsync(folder.Id)).Entries, e => e.PrincipalId == granteeId.Id);
 
         await api.DeleteAsync(folder.Id); // clean up
@@ -121,7 +122,8 @@ public class DesktopManageAccessTests
 
         // Grant the group Viewer directly on the folder (now the governing scope).
         var viewer = new SimplArchiveApiClient.AclRights(true, true, false, false, false, false, false, false, false);
-        await api.SetAclEntryAsync(folder.Id, "groups", groupId.Id, viewer);
+        var grantableGroup = (await api.GetAclAsync(folder.Id)).Principals.Single(p => p.Type == "groups" && p.Id == groupId.Id);
+        await api.SetAclEntryAsync(grantableGroup, viewer);
 
         var eff = await api.GetEffectiveAccessAsync(folder.Id);
 

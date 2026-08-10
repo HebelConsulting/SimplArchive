@@ -2220,6 +2220,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     UserId = item.UserId,
                     UserName = item.UserName,
                     MoveUrl = item.MoveUrl,
+                    Item = item,
                 });
             }
         }
@@ -2364,10 +2365,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await InboxPreview.RenderAsync(await _api.GetInboxPreviewAsync(value.Name, value.SourceQuery));
+            await InboxPreview.RenderAsync(await _api.GetInboxPreviewAsync(value.Item!));
             if (!InboxIsEmail)
             {
-                await LoadInboxMaskAsync(value.Name, value.SourceQuery);
+                await LoadInboxMaskAsync(value.Item!);
             }
 
             InboxItemFocused = true;
@@ -2378,7 +2379,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    private async Task LoadInboxMaskAsync(string name, string sourceQuery)
+    private async Task LoadInboxMaskAsync(SimplArchiveApiClient.InboxItemInfo item)
     {
         _loadingInboxMask = true;
         try
@@ -2387,10 +2388,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             InboxAvailableMasks.Add(new MaskChoiceViewModel(null, "(No mask)"));
             foreach (var mask in await _api!.GetMasksAsync())
             {
-                InboxAvailableMasks.Add(new MaskChoiceViewModel(mask.Id, mask.Name));
+                InboxAvailableMasks.Add(new MaskChoiceViewModel(mask.Id, mask.Name, mask));
             }
 
-            var draft = await _api.GetInboxMaskAsync(name, sourceQuery);
+            var name = item.Name;
+            var draft = await _api.GetInboxMaskAsync(item);
             _inboxDraftValues = draft.Fields.ToDictionary(f => f.FieldDefinitionId, f => f.Values);
             InboxName = string.IsNullOrEmpty(draft.Name) ? Path.GetFileNameWithoutExtension(name) : draft.Name;
             InboxDocumentDate = DateTime.TryParse(draft.DocumentDate, out var d) ? d.Date : null;
@@ -2411,7 +2413,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             InboxSelectedMaskChoice = draft.MaskId is { } staged
                 ? InboxAvailableMasks.FirstOrDefault(m => m.MaskId == staged) ?? InboxAvailableMasks[0]
                 : InboxAvailableMasks.FirstOrDefault(m => m.Name == "Basic Entry") ?? InboxAvailableMasks[0];
-            await LoadInboxMaskFieldsAsync(InboxSelectedMaskChoice?.MaskId, useDraftValues: true);
+            await LoadInboxMaskFieldsAsync(InboxSelectedMaskChoice?.Mask, useDraftValues: true);
         }
         finally
         {
@@ -2428,18 +2430,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        await LoadInboxMaskFieldsAsync(value?.MaskId, useDraftValues: false);
+        await LoadInboxMaskFieldsAsync(value?.Mask, useDraftValues: false);
     }
 
-    private async Task LoadInboxMaskFieldsAsync(Guid? maskId, bool useDraftValues)
+    private async Task LoadInboxMaskFieldsAsync(SimplArchiveApiClient.MaskOptionInfo? mask, bool useDraftValues)
     {
         InboxMaskEditFields.Clear();
-        if (_api is null || maskId is not { } id)
+        if (_api is null || mask is not { } chosen)
         {
             return;
         }
 
-        foreach (var field in await _api.GetMaskFieldsAsync(id))
+        foreach (var field in await _api.GetMaskFieldsAsync(chosen))
         {
             var values = useDraftValues && _inboxDraftValues.TryGetValue(field.Id, out var v) ? v : [];
             InboxMaskEditFields.Add(MaskFieldEditViewModel.Create(field, values));
@@ -2463,7 +2465,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             var stagedName = string.IsNullOrWhiteSpace(InboxName) ? null : InboxName.Trim();
             var docDate = InboxDocumentDate?.ToString("yyyy-MM-dd");
             var ocr = InboxStgScannable && _inboxStgOcrCodes.Count > 0 ? _inboxStgOcrCodes : null;
-            await _api.SetInboxMaskAsync(item.Name, stagedName, docDate, maskId, fields, ocr, item.SourceQuery);
+            await _api.SetInboxMaskAsync(item.Item!, stagedName, docDate, maskId, fields, ocr);
             item.HasMask = maskId is not null || fields.Any(f => f.Item2.Count > 0) || stagedName is not null || docDate is not null || ocr is not null;
             Status = Strings.Get("StMaskSaved");
         }
@@ -2538,7 +2540,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.FileInboxItemAsync(item.Name, folderId, comment, item.SourceQuery);
+            await _api.FileInboxItemAsync(item.Item!, folderId, comment);
             Status = string.Format(Strings.Get("StFiled"), item.Name);
             await RefreshInboxAsync();
         }
@@ -2558,7 +2560,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.FileInboxItemAsVersionAsync(item.Name, documentId, comment, item.SourceQuery);
+            await _api.FileInboxItemAsVersionAsync(item.Item!, documentId, comment);
             Status = string.Format(Strings.Get("StFiledVersion"), item.Name);
             await RefreshInboxAsync();
 
@@ -2595,7 +2597,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             try
             {
-                await _api.FileInboxItemAsync(item.Name, folderId, comment, item.SourceQuery);
+                await _api.FileInboxItemAsync(item.Item!, folderId, comment);
                 filed++;
             }
             catch (Exception)
@@ -2615,7 +2617,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        await _api.DeleteInboxItemAsync(item.Name, item.SourceQuery);
+        await _api.DeleteInboxItemAsync(item.Item!);
         await RefreshInboxAsync();
     }
 
@@ -5347,12 +5349,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
             AvailableMasks.Add(new MaskChoiceViewModel(null, "(No mask)"));
             foreach (var mask in await _api.GetMasksAsync())
             {
-                AvailableMasks.Add(new MaskChoiceViewModel(mask.Id, mask.Name));
+                AvailableMasks.Add(new MaskChoiceViewModel(mask.Id, mask.Name, mask));
             }
 
             _originalMaskId = (await _api.GetMaskAsync(documentId)).MaskId;
             SelectedMaskChoice = AvailableMasks.FirstOrDefault(m => m.MaskId == _originalMaskId) ?? AvailableMasks[0];
-            await LoadMaskEditFieldsAsync(documentId, _originalMaskId, withCurrentValues: true);
+            await LoadMaskEditFieldsAsync(documentId, SelectedMaskChoice.Mask, withCurrentValues: true);
 
             IsEditing = true;
         }
@@ -5375,18 +5377,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        await LoadMaskEditFieldsAsync(documentId, value?.MaskId, withCurrentValues: false);
+        await LoadMaskEditFieldsAsync(documentId, value?.Mask, withCurrentValues: false);
     }
 
-    private async Task LoadMaskEditFieldsAsync(Guid documentId, Guid? maskId, bool withCurrentValues)
+    private async Task LoadMaskEditFieldsAsync(Guid documentId, SimplArchiveApiClient.MaskOptionInfo? mask, bool withCurrentValues)
     {
         MaskEditFields.Clear();
-        if (_api is null || maskId is not { } id)
+        if (_api is null || mask is not { } chosen)
         {
             return;
         }
 
-        var fields = await _api.GetMaskFieldsAsync(id);
+        var fields = await _api.GetMaskFieldsAsync(chosen);
         var valuesByName = withCurrentValues
             ? (await _api.GetIndexDataAsync(documentId)).ToDictionary(f => f.FieldName, f => f.Values)
             : new Dictionary<string, IReadOnlyList<string>>();
@@ -6343,10 +6345,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private async Task<bool> GrantAndRevokeAsync(Guid documentId, Guid granteeId, SimplArchiveApiClient.AclRights rights)
     {
-        await _api!.SetAclEntryAsync(documentId, "users", granteeId, rights);
-        var granted = (await _api.GetAclAsync(documentId)).Entries
-            .Any(e => e.PrincipalType == "users" && e.PrincipalId == granteeId && e.Rights.CanSee);
-        await _api.RevokeAclEntryAsync(documentId, "users", granteeId);
+        // Grant through the principal row the ACL view offers, then revoke through the entry row that grant
+        // produced — the same path the dialog takes, which is the point of a self-test (ADR 0555).
+        var before = await _api!.GetAclAsync(documentId);
+        await _api.SetAclEntryAsync(before.Principals.Single(p => p.Type == "users" && p.Id == granteeId), rights);
+
+        var after = await _api.GetAclAsync(documentId);
+        var entry = after.Entries.FirstOrDefault(e => e.PrincipalType == "users" && e.PrincipalId == granteeId);
+        var granted = entry is { Rights.CanSee: true };
+        if (entry is not null)
+        {
+            await _api.RevokeAclEntryAsync(entry);
+        }
+
         return granted;
     }
 
@@ -6437,7 +6448,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var name = "inboxdrop-" + Guid.NewGuid().ToString("N")[..8] + ".txt";
         await UploadFilesToInboxAsync(new[] { (name, System.Text.Encoding.UTF8.GetBytes("dropped into the inbox")) });
         var present = ServerInbox.Any(i => i.Name == name);
-        await _api!.DeleteInboxItemAsync(name);
+        if (ServerInbox.FirstOrDefault(i => i.Name == name) is { } uploaded)
+        {
+            await _api!.DeleteInboxItemAsync(uploaded.Item!);
+        }
+
         return present;
     }
 
@@ -6468,7 +6483,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var leftOwnInbox = ServerInbox.All(i => i.Name != name);                                  // gone from mine
         var inRecipientInbox = (await _api.GetInboxAsync(user: recipient.Id)).Any(i => i.Name == name); // now theirs
 
-        await _api.DeleteInboxItemAsync(name, $"?user={recipient.Id}");
+        if ((await _api.GetInboxAsync(user: recipient.Id)).FirstOrDefault(i => i.Name == name) is { } handedOver)
+        {
+            await _api.DeleteInboxItemAsync(handedOver);
+        }
+
         await _api.DeleteUserAsync(recipient);
         return leftOwnInbox && inRecipientInbox;
     }

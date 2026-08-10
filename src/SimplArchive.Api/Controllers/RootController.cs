@@ -35,6 +35,10 @@ public class RootController : ControllerBase
                 new Link("self", "/api", "GET"),
                 new Link("repositories", "/api/repositories", "GET"),
                 new Link("search", "/api/search", "GET"),
+                // Acting on a SET of documents, and finding the ones that already exist by content hash —
+                // neither belongs to a resource a client would otherwise be holding (issue #416).
+                new Link("documentsBulk", "/api/documents/bulk", "GET"),
+                new Link("duplicates", "/api/duplicates", "GET"),
                 new Link("tasks", "/api/tasks", "GET"),
                 new Link("reminders", "/api/reminders", "GET"),
                 new Link("subscriptions", "/api/subscriptions", "GET"),

@@ -188,6 +188,7 @@ public class RepositoriesController : ControllerBase
                         // opening any other folder does — so the row must carry both, or a client following
                         // rels has to fall back to fetching the resource on the one node it starts from.
                         new Link("references", $"/api/documents/{candidate.Id}/references", "GET"),
+                        new Link("recycle-bin", $"/api/repositories/{candidate.Id}/recycle-bin", "GET"),
                         new Link("index-data", $"/api/documents/{candidate.Id}/index-data", "GET"),
                         new Link("mask", $"/api/documents/{candidate.Id}/mask", "GET"),
                     ],

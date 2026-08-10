@@ -15,6 +15,14 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 {
     private SimplArchiveApiClient? _api;
 
+    // What the BIN itself offers — restore-selected / purge-selected / purge-all — captured where the
+    // collection is read, so a tab full of buttons costs no extra request (ADR 0557).
+    private IReadOnlyDictionary<string, string> _binLinks = new Dictionary<string, string>();
+
+    private string BinRel(string rel) => _binLinks.TryGetValue(rel, out var href)
+        ? href
+        : throw new InvalidOperationException($"The recycle bin advertised no '{rel}' rel (ADR 0543).");
+
     // Set by MainWindowViewModel to route messages to the shared bottom status bar.
     public Action<string>? StatusReporter { get; set; }
 
@@ -81,10 +89,13 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
         ClearDetail();
         try
         {
-            foreach (var item in await _api.GetRecycleBinItemsAsync())
+            var bin = await _api.GetRecycleBinItemsAsync();
+            _binLinks = bin.Links;
+            foreach (var item in bin.Items)
             {
                 var row = new RecycleBinRowViewModel
                 {
+                    Entry = item,
                     Id = item.Id,
                     Name = item.Name,
                     Path = item.Path,
@@ -199,7 +210,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
         try
         {
-            await _api.RestoreAsync(item.Id);
+            await _api.RestoreAsync(item.Entry!);
             Report($"Restored '{item.Name}'.");
             await LoadAsync();
         }
@@ -273,7 +284,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
         try
         {
-            var (restored, skipped) = await _api.RestoreManyAsync(ids);
+            var (restored, skipped) = await _api.RestoreManyAsync(BinRel("restore-selected"), ids);
             Report(skipped > 0 ? $"Restored {restored} item(s), skipped {skipped}." : $"Restored {restored} item(s).");
             await LoadAsync();
         }
@@ -300,7 +311,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
         try
         {
-            var (purged, skipped) = await _api.PurgeManyAsync(ids);
+            var (purged, skipped) = await _api.PurgeManyAsync(BinRel("purge-selected"), ids);
             Report(skipped > 0 ? $"Permanently deleted {purged} item(s), skipped {skipped} (legal hold / locked)." : $"Permanently deleted {purged} item(s).");
             await LoadAsync();
         }
@@ -321,7 +332,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
         try
         {
-            await _api.PurgeAsync(item.Id);
+            await _api.PurgeAsync(item.Entry!);
             Report($"Permanently deleted '{item.Name}'.");
             await LoadAsync();
         }
@@ -346,7 +357,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
         try
         {
-            await _api.PurgeRecycleBinAsync();
+            await _api.PurgeRecycleBinAsync(BinRel("purge-all"));
             Report("The recycle bin was permanently emptied.");
             await LoadAsync();
         }
@@ -364,6 +375,10 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 // One row in the recycle-bin list: a soft-deleted document with its full path, when it was deleted, and by whom.
 public sealed partial class RecycleBinRowViewModel : ObservableObject
 {
+    // The row the server sent — restore / purge follow the addresses it advertised (ADR 0543/0555). Null only
+    // for the designer-preview rows, which reach no server.
+    public SimplArchive.DesktopClient.Services.SimplArchiveApiClient.RecycleBinEntry? Entry { get; init; }
+
     public required Guid Id { get; init; }
     public required string Name { get; init; }
     public required string Path { get; init; }

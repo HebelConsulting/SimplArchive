@@ -22,6 +22,10 @@ public sealed partial class InboxItemViewModel : ObservableObject
     public string? UserName { get; init; }
     public string MoveUrl { get; init; } = "";
 
+    // The row the server sent — preview / mask / file / delete follow the addresses IT advertised, each already
+    // carrying the right source prefix (ADR 0543/0555). Null only for the designer-preview rows below.
+    public SimplArchive.DesktopClient.Services.SimplArchiveApiClient.InboxItemInfo? Item { get; init; }
+
     public bool IsOwn => GroupId is null && UserId is null;
     public string SourceQuery => GroupId is { } g ? $"?group={g}" : UserId is { } u ? $"?user={u}" : "";
     public string? SourceLabel => GroupName ?? UserName;

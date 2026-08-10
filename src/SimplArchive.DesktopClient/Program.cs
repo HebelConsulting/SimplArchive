@@ -886,15 +886,15 @@ internal static class Program
         Console.WriteLine("deleting…");
         await api.DeleteAsync(created.Id);
         var afterDelete = await api.GetChildrenAsync(root.Href("children"));
-        var recycled = await api.GetRecycleBinAsync(root.Id);
+        var recycled = await api.GetRecycleBinAsync(root);
         Console.WriteLine(afterDelete.All(c => c.Id != created.Id) && recycled.Any(r => r.Id == created.Id)
             ? "OK: gone from folder, present in recycle bin."
             : "FAILED: delete/recycle-bin state wrong.");
 
         Console.WriteLine("restoring…");
-        await api.RestoreAsync(created.Id);
+        await api.RestoreAsync(recycled.Single(r => r.Id == created.Id));
         var afterRestore = await api.GetChildrenAsync(root.Href("children"));
-        var recycledAfter = await api.GetRecycleBinAsync(root.Id);
+        var recycledAfter = await api.GetRecycleBinAsync(root);
         Console.WriteLine(afterRestore.Any(c => c.Id == created.Id) && recycledAfter.All(r => r.Id != created.Id)
             ? "OK: restored to folder, cleared from recycle bin."
             : "FAILED: restore state wrong.");
