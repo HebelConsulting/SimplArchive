@@ -6,13 +6,15 @@ SimplArchive is a working, multi-tenant **Document Management System**, built en
 
 ## ▶ Try the live demo
 
-A live instance is running at **<https://demo.simplarchive.dev>** — log in and explore, nothing to install:
+A live instance is running at **<https://demo.simplarchive.dev>** — log in and explore, nothing to install. Three people are seeded, so you can also see the app from a colleague's side:
 
-| | |
-|---|---|
-| **URL** | **<https://demo.simplarchive.dev>** |
-| **Email** | `demo@simplarchive.dev` |
-| **Password** | `SimplDemo2026!` |
+| Sign in as | Email | Password | What it's for |
+|---|---|---|---|
+| **Demo Admin** | `demo@simplarchive.dev` | `SimplDemo2026!` | The tenant administrator — start here. Sees everything: administration, audit, retention, legal holds, every user's inbox. |
+| **Anna Meyer** | `anna@simplarchive.local` | `SimplDemo2026!` | An editor, and deliberately a **plain user without tenant-admin rights** — the account to use if you want to watch a permission actually deny something. |
+| **Tom Fischer** | `tom@simplarchive.local` | `SimplDemo2026!` | A clerk, also a plain user. Signing in as a second person is how the collaboration side shows up: chat and mentions from someone else, a workflow review arriving in another inbox, the shared *Scan Team* group inbox. |
+
+These are deliberately trivial, publicly posted credentials on a throwaway demo that wipes itself nightly — they are demo furniture, not an example of how the product handles secrets.
 
 It resets to a clean, known state every night, so feel free to create, upload, workflow, and delete anything. The user manual is one click away at [demo.simplarchive.dev/download/manual/](https://demo.simplarchive.dev/download/manual/).
 

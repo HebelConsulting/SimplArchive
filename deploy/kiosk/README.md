@@ -34,7 +34,10 @@ docker compose logs -f caddy   # watch the cert being obtained
 ```
 
 First boot takes a few minutes (image pulls + OpenBao provisioning + the initial search reindex). Then browse
-to https://demo.simplarchive.dev and log in as **demo@simplarchive.dev / SimplDemo2026!**.
+to https://demo.simplarchive.dev and log in as **demo@simplarchive.dev / SimplDemo2026!**. Two plain (non-admin)
+users share that password — **anna@simplarchive.local** (Anna Meyer) and **tom@simplarchive.local** (Tom Fischer);
+the seeder derives their domain from the demo admin's, so once a release carrying that change is rolled out they follow
+whatever `Demo__Administrator__Email` is set to — until then the deployed build still hard-codes `.local`.
 
 ## Daily reset
 

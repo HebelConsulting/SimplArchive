@@ -155,7 +155,8 @@ public static class DemoDataSeeder
         await dbContext.SaveChangesAsync();
 
         // ── Two extra users + a shared "Scan Team" group inbox (the group-inbox showcase, ADR 0532). ─────────────
-        var (annaId, _) = await SeedTeamAsync(dbContext, objectStorage, assembly, tenantId, repositoryId, adminId, now, demoPassword);
+        var (annaId, _) = await SeedTeamAsync(
+            dbContext, objectStorage, assembly, tenantId, repositoryId, adminId, now, demoPassword, provisioned.AdministratorEmail);
 
         // A real conversation on the offer (issue #380). The thread already carries the automatic entries — filed,
         // each version saved (ADR 0545) — so this puts what PEOPLE said alongside them, which is what the pane
@@ -312,19 +313,24 @@ public static class DemoDataSeeder
     // inboxes and the Scan Team group inbox shows an unfiled scan waiting to be picked up.
     private static async Task<(Guid AnnaId, Guid TomId)> SeedTeamAsync(
         SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
-        Guid tenantId, Guid repositoryId, Guid adminId, DateTimeOffset now, string demoPassword)
+        Guid tenantId, Guid repositoryId, Guid adminId, DateTimeOffset now, string demoPassword, string adminEmail)
     {
         var hasher = new PasswordHasher<User>();
 
-        User MakeUser(string email, string displayName)
+        // The extra logins take the ADMIN's domain rather than a hardcoded one, so a deployment that renames the
+        // demo admin (the kiosk uses @simplarchive.dev, local Compose @simplarchive.local) doesn't end up handing
+        // visitors three credentials straddling two domains — the READMEs list all three side by side (issue #432).
+        var domain = adminEmail.Split('@') is [_, var d] && !string.IsNullOrWhiteSpace(d) ? d : "simplarchive.local";
+
+        User MakeUser(string localPart, string displayName)
         {
-            var user = new User { Id = Guid.NewGuid(), TenantId = tenantId, Email = email, DisplayName = displayName, IsActive = true, CreatedAt = now };
+            var user = new User { Id = Guid.NewGuid(), TenantId = tenantId, Email = $"{localPart}@{domain}", DisplayName = displayName, IsActive = true, CreatedAt = now };
             user.PasswordHash = hasher.HashPassword(user, demoPassword); // same known demo password, so they can log in too
             return user;
         }
 
-        var anna = MakeUser("anna@simplarchive.local", "Anna Meyer");
-        var tom = MakeUser("tom@simplarchive.local", "Tom Fischer");
+        var anna = MakeUser("anna", "Anna Meyer");
+        var tom = MakeUser("tom", "Tom Fischer");
         dbContext.Users.Add(anna);
         dbContext.Users.Add(tom);
 
