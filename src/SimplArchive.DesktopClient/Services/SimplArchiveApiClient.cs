@@ -296,7 +296,7 @@ public sealed class SimplArchiveApiClient
         if (from is { } f) query.Add($"from={Uri.EscapeDataString(f.UtcDateTime.ToString("o"))}");
         if (to is { } t) query.Add($"to={Uri.EscapeDataString(t.UtcDateTime.ToString("o"))}");
 
-        var url = "api/audit-events/export" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
+        var url = await AuditRelAsync("export", cancellationToken) + (query.Count > 0 ? "?" + string.Join("&", query) : "");
         return await _http.GetByteArrayAsync(url, cancellationToken);
     }
 
@@ -347,7 +347,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<AuditVerifyInfo> VerifyAuditChainAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/audit-events/verify", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await AuditRelAsync("verify", cancellationToken), cancellationToken);
         return new AuditVerifyInfo(
             json.GetProperty("valid").GetBoolean(),
             json.GetProperty("checkedCount").GetInt32(),
@@ -359,7 +359,7 @@ public sealed class SimplArchiveApiClient
     // Verifies the sealed WORM segments against the DB (ADR "Audit WORM segment verify").
     public async Task<WormVerifyInfo> VerifyAuditWormAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/audit-events/worm-verify", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await AuditRelAsync("worm-verify", cancellationToken), cancellationToken);
         return new WormVerifyInfo(
             json.GetProperty("valid").GetBoolean(),
             json.GetProperty("segmentCount").GetInt32(),
@@ -368,18 +368,44 @@ public sealed class SimplArchiveApiClient
             json.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null);
     }
 
-    // The log's retention policy is a rel ON the audit-events collection (issue #416), so reaching it means
-    // reading that collection — and a page of audit events to learn one number is the "two round trips, one of
-    // them large" trap. `?limit=1` on the advertised href keeps the read trivial while the address still comes
-    // from the server: a query on a rel's href, not a path this client invented.
-    private async Task<string> AuditRetentionHrefAsync(CancellationToken cancellationToken)
+    // Retention, export, verify, worm-verify and purge are all rels ON the audit-events collection (issue
+    // #416), so reaching any of them means reading that collection — and pulling a page of audit events to
+    // learn one address is the "two round trips, one of them large" trap. `?limit=1` on the advertised href
+    // keeps the read trivial while the address still comes from the server: a query on a rel's href, not a
+    // path this client invented.
+    //
+    // Cached like the API root's own rels, and for the same reason: these five do not change between calls,
+    // and the audit tab would otherwise re-read the collection once per button.
+    private async Task<string> AuditRelAsync(string rel, CancellationToken cancellationToken)
     {
-        var href = await RootHrefAsync("auditEvents", cancellationToken);
-        var page = await _http.GetFromJsonAsync<JsonElement>($"{href}?limit=1", cancellationToken);
-        return ParseLinks(page) is { } links && links.TryGetValue("retention", out var retentionHref)
-            ? retentionHref
-            : throw new InvalidOperationException("The audit log advertised no 'retention' rel (ADR 0543).");
+        if (_auditLinks is null)
+        {
+            await _auditGate.WaitAsync(cancellationToken);
+            try
+            {
+                if (_auditLinks is null)
+                {
+                    var href = await RootHrefAsync("auditEvents", cancellationToken);
+                    var page = await _http.GetFromJsonAsync<JsonElement>($"{href}?limit=1", cancellationToken);
+                    _auditLinks = ParseLinks(page) ?? new Dictionary<string, string>();
+                }
+            }
+            finally
+            {
+                _auditGate.Release();
+            }
+        }
+
+        return _auditLinks.TryGetValue(rel, out var relHref)
+            ? relHref
+            : throw new InvalidOperationException($"The audit log advertised no '{rel}' rel (ADR 0543).");
     }
+
+    private IReadOnlyDictionary<string, string>? _auditLinks;
+    private readonly SemaphoreSlim _auditGate = new(1, 1);
+
+    private Task<string> AuditRetentionHrefAsync(CancellationToken cancellationToken) =>
+        AuditRelAsync("retention", cancellationToken);
 
     public async Task<AuditRetentionInfo> GetAuditRetentionAsync(CancellationToken cancellationToken = default) =>
         ParseRetention(await _http.GetFromJsonAsync<JsonElement>(await AuditRetentionHrefAsync(cancellationToken), cancellationToken));
@@ -398,7 +424,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<AuditPurgeInfo> PurgeAuditAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync("api/audit-events/purge", null, cancellationToken);
+        using var response = await _http.PostAsync(await AuditRelAsync("purge", cancellationToken), null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to purge the audit log.");
@@ -450,7 +476,10 @@ public sealed class SimplArchiveApiClient
     // Lists every user's personal repository (ADR "Tenant-admin Administration → Users view") — tenant-admin only.
     public async Task<List<AdminPersonalRepoInfo>> GetAdminPersonalRepositoriesAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/admin/personal-repositories", cancellationToken);
+        // The root's `admin` rel leads to the administration index, which advertises this list — two hops, but
+        // both of them followed rather than assembled, and paid once per admin screen (ADR 0543).
+        var admin = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("admin", cancellationToken), cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(RequireRel(admin, "personal-repositories", "The administration index"), cancellationToken);
         var list = new List<AdminPersonalRepoInfo>();
         if (json.TryGetProperty("repositories", out var array))
         {
@@ -613,7 +642,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<WhoAmIInfo> GetWhoAmIAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/diagnostics/whoami", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("whoami", cancellationToken), cancellationToken);
         return new WhoAmIInfo(
             json.TryGetProperty("userId", out var u) && u.ValueKind == JsonValueKind.String ? u.GetGuid() : null,
             json.TryGetProperty("tenantId", out var t) && t.ValueKind == JsonValueKind.String ? t.GetGuid() : null,
@@ -658,7 +687,9 @@ public sealed class SimplArchiveApiClient
     // caller's group inboxes, and user opens a specific user's inbox for a CanManageInboxes holder (ADR 0532).
     public async Task<IReadOnlyList<InboxItemInfo>> GetInboxAsync(bool includeGroups = false, Guid? user = null, CancellationToken cancellationToken = default)
     {
-        var url = user is { } viewUser ? $"api/inbox?user={viewUser}" : includeGroups ? "api/inbox?includeGroups=true" : await RootHrefAsync("inbox", cancellationToken);
+        // One advertised address, three views of it — a filter is a query parameter, not a different route.
+        var inbox = await RootHrefAsync("inbox", cancellationToken);
+        var url = user is { } viewUser ? $"{inbox}?user={viewUser}" : includeGroups ? $"{inbox}?includeGroups=true" : inbox;
         var json = await _http.GetFromJsonAsync<JsonElement>(url, cancellationToken);
         var items = new List<InboxItemInfo>();
         if (json.TryGetProperty("items", out var array))
@@ -683,12 +714,12 @@ public sealed class SimplArchiveApiClient
     }
 
     // The caller's effective group inboxes (ADR 0532) — the "Send to a group" choices.
-    public Task<IReadOnlyList<InboxTargetInfo>> GetInboxGroupsAsync(CancellationToken cancellationToken = default) =>
-        GetInboxTargetsAsync("api/inbox/groups", "groups", isGroup: true, cancellationToken);
+    public async Task<IReadOnlyList<InboxTargetInfo>> GetInboxGroupsAsync(CancellationToken cancellationToken = default) =>
+        await GetInboxTargetsAsync(await RootHrefAsync("inboxGroups", cancellationToken), "groups", isGroup: true, cancellationToken);
 
     // The other active tenant users (ADR 0532) — the "Send to a user" choices, and the admin user-picker list.
-    public Task<IReadOnlyList<InboxTargetInfo>> GetInboxUsersAsync(CancellationToken cancellationToken = default) =>
-        GetInboxTargetsAsync("api/inbox/users", "users", isGroup: false, cancellationToken);
+    public async Task<IReadOnlyList<InboxTargetInfo>> GetInboxUsersAsync(CancellationToken cancellationToken = default) =>
+        await GetInboxTargetsAsync(await RootHrefAsync("inboxUsers", cancellationToken), "users", isGroup: false, cancellationToken);
 
     private async Task<IReadOnlyList<InboxTargetInfo>> GetInboxTargetsAsync(string url, string arrayProp, bool isGroup, CancellationToken cancellationToken)
     {
@@ -2098,13 +2129,13 @@ public sealed class SimplArchiveApiClient
 
     // Free-text metadata search across the tenant (names + index-field values) — see ADR "Metadata search
     // (first slice)". Follows the next links to load all pages.
-    public Task<List<SearchResult>> SearchAsync(string query, CancellationToken cancellationToken = default) =>
-        LoadPagedAsync($"api/search?q={Uri.EscapeDataString(query)}", "results", ParseSearchResult, cancellationToken);
+    public async Task<List<SearchResult>> SearchAsync(string query, CancellationToken cancellationToken = default) =>
+        await LoadPagedAsync($"{await RootHrefAsync("search", cancellationToken)}?q={Uri.EscapeDataString(query)}", "results", ParseSearchResult, cancellationToken);
 
     // Runs a search from a pre-assembled query string (q + repositoryId + system[..]/fields[..] filters) —
     // see ADR "Search-refinement UI".
-    public Task<List<SearchResult>> SearchWithFiltersAsync(string queryString, CancellationToken cancellationToken = default) =>
-        LoadPagedAsync($"api/search?{queryString}", "results", ParseSearchResult, cancellationToken);
+    public async Task<List<SearchResult>> SearchWithFiltersAsync(string queryString, CancellationToken cancellationToken = default) =>
+        await LoadPagedAsync($"{await RootHrefAsync("search", cancellationToken)}?{queryString}", "results", ParseSearchResult, cancellationToken);
 
     // Search facets (ADR "Search facets") — document type / created-by / year counts to drill down by.
     public sealed record SearchFacetBucket(string Value, long Count);
@@ -2118,7 +2149,7 @@ public sealed class SimplArchiveApiClient
     {
         var results = new List<SearchResult>();
         var facets = new SearchFacets([], [], [], [], [], [], []);
-        string? next = $"api/search?{queryString}";
+        string? next = $"{await RootHrefAsync("search", cancellationToken)}?{queryString}";
         var first = true;
         while (next is not null)
         {
@@ -2470,7 +2501,12 @@ public sealed class SimplArchiveApiClient
 
     // ---- Check-out / check-in (ADR "Document check-out / check-in") -----------------------------------
 
-    public sealed record CheckoutItem(Guid Id, string Name, string Path, string Sha256, string FileExtension, bool HasStash, bool IsModified, string? StashDownloadUrl, DateTimeOffset? ExpiresAt);
+    // A held check-out, carrying the addresses its own row advertised (ADR 0543/0555): `checkin`,
+    // `working-copy`, `extend` and — only when there is a stash to diff — `compare`.
+    public sealed record CheckoutItem(Guid Id, string Name, string Path, string Sha256, string FileExtension, bool HasStash, bool IsModified, string? StashDownloadUrl, DateTimeOffset? ExpiresAt, IReadOnlyDictionary<string, string>? Links = null)
+    {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
 
     // Acquire the exclusive edit lock. 409 = already held by someone else; 403 = no permission / not a User.
     public async Task CheckOutAsync(Guid documentId, CancellationToken cancellationToken = default)
@@ -2493,7 +2529,7 @@ public sealed class SimplArchiveApiClient
     // holder force-releasing someone else's). Idempotent when not checked out.
     public async Task CheckInAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.DeleteAsync(await DocumentRelAsync(documentId, "checkin", cancellationToken), cancellationToken);
+        using var response = await _http.DeleteAsync(await DocumentRelAsync(documentId, "cancel-checkout", cancellationToken), cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to release this check-out.");
@@ -2505,9 +2541,9 @@ public sealed class SimplArchiveApiClient
     // Stash-based check-in (ADR 0513): the server promotes the cloud stash (the WebDAV-edited working copy) to a new
     // confirmed version and releases the lock — the desktop no longer uploads a local file. Holder-only; 400 if
     // there's no stash to check in (nothing changed).
-    public async Task CheckInFromStashAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task CheckInFromStashAsync(CheckoutItem checkout, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync($"api/checkouts/{documentId}/checkin", new { }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(RequireHref(checkout, "checkin"), new { }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to check in this document.");
@@ -2523,9 +2559,9 @@ public sealed class SimplArchiveApiClient
 
     // "Extend my check-out" (ADR "Self-service check-out extension") — resets the auto-release idle timer. The
     // holder or a CanOverrideCheckout admin; 409 if the document isn't checked out.
-    public async Task ExtendCheckoutAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task ExtendCheckoutAsync(CheckoutItem checkout, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync($"api/checkouts/{documentId}/extend", null, cancellationToken);
+        using var response = await _http.PostAsync(RequireHref(checkout, "extend"), null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to extend this check-out.");
@@ -2552,7 +2588,8 @@ public sealed class SimplArchiveApiClient
                     i.TryGetProperty("hasStash", out var hst) && hst.ValueKind == JsonValueKind.True,
                     i.TryGetProperty("isModified", out var im) && im.ValueKind == JsonValueKind.True,
                     i.TryGetProperty("stashDownloadUrl", out var sdu) && sdu.ValueKind == JsonValueKind.String ? sdu.GetString() : null,
-                    i.TryGetProperty("expiresAt", out var ea) && ea.ValueKind == JsonValueKind.String ? ea.GetDateTimeOffset() : null));
+                    i.TryGetProperty("expiresAt", out var ea) && ea.ValueKind == JsonValueKind.String ? ea.GetDateTimeOffset() : null,
+                    ParseLinks(i)));
             }
         }
 
@@ -2561,9 +2598,9 @@ public sealed class SimplArchiveApiClient
 
     // "Save to cloud" — uploads the in-progress working copy to the S3 stash so it survives logout/close and is
     // re-downloaded on next login (ADR "Check-out working-copy stash + exit guard"). Holder-only server-side.
-    public async Task SaveWorkingCopyAsync(Guid documentId, byte[] bytes, CancellationToken cancellationToken = default)
+    public async Task SaveWorkingCopyAsync(CheckoutItem checkout, byte[] bytes, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync($"api/checkouts/{documentId}/working-copy", new { }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(RequireHref(checkout, "working-copy"), new { }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't hold the check-out on this document.");
@@ -2694,9 +2731,9 @@ public sealed class SimplArchiveApiClient
 
     // Inline unified diff of a checked-out document's current version vs its working copy in check-out (ADR 0517).
     // Holder-only; Available=false when there's no working-copy stash or a side has no extractable text.
-    public async Task<VersionComparison> GetCheckoutComparisonAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<VersionComparison> GetCheckoutComparisonAsync(CheckoutItem checkout, CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/checkouts/{documentId}/compare", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(RequireHref(checkout, "compare"), cancellationToken);
         var lines = new List<DiffLineInfo>();
         if (json.TryGetProperty("lines", out var arr))
         {
@@ -3340,6 +3377,22 @@ public sealed class SimplArchiveApiClient
             ? href
             : throw new InvalidOperationException($"{what} advertised no '{rel}' rel (ADR 0543).");
 
+    private static string RequireHref(LegalHoldInfo hold, string rel) =>
+        hold.Href(rel)
+        ?? throw new InvalidOperationException($"The legal hold '{hold.Name}' advertised no '{rel}' rel — a RELEASED hold offers neither release nor add-item (ADR 0543/0555).");
+
+    private static string RequireHref(CheckoutItem checkout, string rel) =>
+        checkout.Href(rel)
+        ?? throw new InvalidOperationException($"The check-out on '{checkout.Name}' advertised no '{rel}' rel — `compare` is absent with no stash to diff (ADR 0543/0555).");
+
+    private static string RequireHref(NotificationInfo notification, string rel) =>
+        notification.Href(rel)
+        ?? throw new InvalidOperationException($"The notification row advertised no '{rel}' rel (ADR 0543/0555).");
+
+    private static string RequireHref(RetentionItemInfo item, string rel) =>
+        item.Href(rel)
+        ?? throw new InvalidOperationException($"'{item.DocumentName}' advertised no '{rel}' rel — a hold or a required review withholds it (ADR 0543/0555).");
+
     private static string RequireHref(VersionInfo version, string rel) =>
         version.Href(rel)
         ?? throw new InvalidOperationException($"Version {version.VersionNumber} advertised no '{rel}' rel — only a confirmed version offers one (ADR 0543/0555).");
@@ -3682,8 +3735,15 @@ public sealed class SimplArchiveApiClient
 
     // ---- In-app notifications viewer (ADR "Notification viewer + click-through") ---------------------
 
-    public sealed record NotificationInfo(Guid Id, string Type, string Title, string Body, Guid? DocumentId, Guid? DocumentParentId, DateTimeOffset CreatedAt, bool IsRead, int EventCount = 1);
-    public sealed record NotificationList(IReadOnlyList<NotificationInfo> Items, int UnreadCount);
+    // A notification row, carrying its own `read` address (ADR 0543/0555) — an already-read one advertises
+    // none, so "can this be marked read" is the server's answer rather than an IsRead flag re-interpreted here.
+    public sealed record NotificationInfo(Guid Id, string Type, string Title, string Body, Guid? DocumentId, Guid? DocumentParentId, DateTimeOffset CreatedAt, bool IsRead, int EventCount = 1, IReadOnlyDictionary<string, string>? Links = null)
+    {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
+
+    // ReadAllHref is the collection's own `read-all`; null when the server did not offer it.
+    public sealed record NotificationList(IReadOnlyList<NotificationInfo> Items, int UnreadCount, string? ReadAllHref = null);
 
     public async Task<NotificationList> GetNotificationsAsync(CancellationToken cancellationToken = default)
     {
@@ -3702,29 +3762,43 @@ public sealed class SimplArchiveApiClient
                     n.TryGetProperty("documentParentId", out var p) && p.ValueKind != JsonValueKind.Null ? p.GetGuid() : null,
                     n.GetProperty("createdAt").GetDateTimeOffset(),
                     n.TryGetProperty("isRead", out var r) && r.ValueKind == JsonValueKind.True,
-                    n.TryGetProperty("eventCount", out var ec) && ec.ValueKind == JsonValueKind.Number ? ec.GetInt32() : 1));
+                    n.TryGetProperty("eventCount", out var ec) && ec.ValueKind == JsonValueKind.Number ? ec.GetInt32() : 1,
+                    ParseLinks(n)));
             }
         }
 
-        return new NotificationList(items, json.TryGetProperty("unreadCount", out var uc) ? uc.GetInt32() : 0);
+        return new NotificationList(
+            items,
+            json.TryGetProperty("unreadCount", out var uc) ? uc.GetInt32() : 0,
+            ParseLinks(json) is { } links && links.TryGetValue("read-all", out var readAll) ? readAll : null);
     }
 
-    public async Task MarkNotificationReadAsync(Guid id, CancellationToken cancellationToken = default)
+    /// <summary>Marks one notification read at the address its own row advertised (ADR 0555).</summary>
+    public async Task MarkNotificationReadAsync(NotificationInfo notification, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync($"api/notifications/{id}/read", null, cancellationToken);
+        using var response = await _http.PostAsync(RequireHref(notification, "read"), null, cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
-    public async Task MarkAllNotificationsReadAsync(CancellationToken cancellationToken = default)
+    /// <summary>Marks everything read at the collection's own `read-all` address (ADR 0555).</summary>
+    public async Task MarkAllNotificationsReadAsync(string readAllHref, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync("api/notifications/read-all", null, cancellationToken);
+        using var response = await _http.PostAsync(readAllHref, null, cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
     // ---- Legal holds (ADR "Legal hold & retention enforcement") -------------------------------------
 
-    public sealed record LegalHoldInfo(Guid Id, string Name, string? Reason, DateTimeOffset PlacedAt, bool IsActive, int ItemCount, List<LegalHoldItemInfo> Items);
-    public sealed record LegalHoldItemInfo(Guid DocumentId, string DocumentName);
+    // A hold, carrying the addresses its own row advertised (ADR 0543/0555): `self`, plus `release`/`add-item`
+    // only while it is active — a released hold offers neither, so the affordance is the server's answer.
+    public sealed record LegalHoldInfo(Guid Id, string Name, string? Reason, DateTimeOffset PlacedAt, bool IsActive, int ItemCount, List<LegalHoldItemInfo> Items, IReadOnlyDictionary<string, string>? Links = null)
+    {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
+
+    // A covered document. RemoveHref is the pairing's own address — the item is the only thing that knows both
+    // ends of it — and is null once the hold is released.
+    public sealed record LegalHoldItemInfo(Guid DocumentId, string DocumentName, string? RemoveHref = null);
 
     public async Task<List<LegalHoldInfo>> GetLegalHoldsAsync(CancellationToken cancellationToken = default)
     {
@@ -3741,8 +3815,8 @@ public sealed class SimplArchiveApiClient
         return list;
     }
 
-    public async Task<LegalHoldInfo> GetLegalHoldAsync(Guid holdId, CancellationToken cancellationToken = default) =>
-        ParseLegalHold(await _http.GetFromJsonAsync<JsonElement>($"api/legal-holds/{holdId}", cancellationToken));
+    public async Task<LegalHoldInfo> GetLegalHoldAsync(LegalHoldInfo hold, CancellationToken cancellationToken = default) =>
+        ParseLegalHold(await _http.GetFromJsonAsync<JsonElement>(RequireHref(hold, "self"), cancellationToken));
 
     public async Task<LegalHoldInfo> CreateLegalHoldAsync(string name, string? reason, CancellationToken cancellationToken = default)
     {
@@ -3756,9 +3830,9 @@ public sealed class SimplArchiveApiClient
         return ParseLegalHold(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
     }
 
-    public async Task AddLegalHoldItemAsync(Guid holdId, Guid documentId, CancellationToken cancellationToken = default)
+    public async Task AddLegalHoldItemAsync(LegalHoldInfo hold, Guid documentId, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync($"api/legal-holds/{holdId}/items", new { documentId }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(RequireHref(hold, "add-item"), new { documentId }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException("The document is already on this hold.");
@@ -3767,18 +3841,20 @@ public sealed class SimplArchiveApiClient
         response.EnsureSuccessStatusCode();
     }
 
-    public async Task RemoveLegalHoldItemAsync(Guid holdId, Guid documentId, CancellationToken cancellationToken = default)
+    public async Task RemoveLegalHoldItemAsync(LegalHoldItemInfo item, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.DeleteAsync($"api/legal-holds/{holdId}/items/{documentId}", cancellationToken);
+        using var response = await _http.DeleteAsync(
+            item.RemoveHref ?? throw new InvalidOperationException($"'{item.DocumentName}' advertised no 'remove' rel — a released hold offers none (ADR 0543/0555)."),
+            cancellationToken);
         if (response.StatusCode != HttpStatusCode.NotFound)
         {
             response.EnsureSuccessStatusCode();
         }
     }
 
-    public async Task ReleaseLegalHoldAsync(Guid holdId, CancellationToken cancellationToken = default)
+    public async Task ReleaseLegalHoldAsync(LegalHoldInfo hold, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync($"api/legal-holds/{holdId}/release", null, cancellationToken);
+        using var response = await _http.PostAsync(RequireHref(hold, "release"), null, cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
@@ -3789,7 +3865,7 @@ public sealed class SimplArchiveApiClient
         {
             foreach (var i in itemsEl.EnumerateArray())
             {
-                items.Add(new LegalHoldItemInfo(i.GetProperty("documentId").GetGuid(), i.GetProperty("documentName").GetString() ?? ""));
+                items.Add(new LegalHoldItemInfo(i.GetProperty("documentId").GetGuid(), i.GetProperty("documentName").GetString() ?? "", RelHref(i, "remove")));
             }
         }
 
@@ -3800,17 +3876,23 @@ public sealed class SimplArchiveApiClient
             e.GetProperty("placedAt").GetDateTimeOffset(),
             e.TryGetProperty("isActive", out var a) && a.ValueKind == JsonValueKind.True,
             e.TryGetProperty("itemCount", out var c) ? c.GetInt32() : items.Count,
-            items);
+            items,
+            ParseLinks(e));
     }
 
     // ---- Retention schedule (ADR "Retention policies (auto-disposition)") ---------------------------
 
-    public sealed record RetentionItemInfo(Guid DocumentId, string DocumentName, int RetentionYears, string DispositionDate, bool Overdue, bool SuspendedByHold, string? RetentionOverrideUntil);
+    // A scheduled document. `dispose` is CONDITIONAL server-side — absent while a review is required or a hold
+    // suspends it — so the row's own links are what decide whether the action is offered (ADR 0543/0555).
+    public sealed record RetentionItemInfo(Guid DocumentId, string DocumentName, int RetentionYears, string DispositionDate, bool Overdue, bool SuspendedByHold, string? RetentionOverrideUntil, IReadOnlyDictionary<string, string>? Links = null)
+    {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
     public sealed record RetentionScheduleInfo(IReadOnlyList<RetentionItemInfo> Items, bool RequiresReview);
 
     public async Task<RetentionScheduleInfo> GetRetentionScheduleAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/retention/schedule", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("retentionSchedule", cancellationToken), cancellationToken);
         var list = new List<RetentionItemInfo>();
         if (json.TryGetProperty("items", out var items))
         {
@@ -3823,7 +3905,8 @@ public sealed class SimplArchiveApiClient
                     i.GetProperty("dispositionDate").GetString() ?? "",
                     i.TryGetProperty("overdue", out var o) && o.ValueKind == JsonValueKind.True,
                     i.TryGetProperty("suspendedByHold", out var s) && s.ValueKind == JsonValueKind.True,
-                    i.TryGetProperty("retentionOverrideUntil", out var ru) && ru.ValueKind == JsonValueKind.String ? ru.GetString() : null));
+                    i.TryGetProperty("retentionOverrideUntil", out var ru) && ru.ValueKind == JsonValueKind.String ? ru.GetString() : null,
+                    ParseLinks(i)));
             }
         }
 
@@ -3831,16 +3914,16 @@ public sealed class SimplArchiveApiClient
     }
 
     // Manually dispose an eligible document (ADR "Retention review-before-disposition").
-    public async Task DisposeRetentionAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task DisposeRetentionAsync(RetentionItemInfo item, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync($"api/retention/{documentId}/dispose", null, cancellationToken);
+        using var response = await _http.PostAsync(RequireHref(item, "dispose"), null, cancellationToken);
         await ThrowIfProblemAsync(response, "Could not dispose the document.", cancellationToken);
     }
 
     // Extend a document's retention to a new "retain until" date ("yyyy-MM-dd").
-    public async Task ExtendRetentionAsync(Guid documentId, string until, CancellationToken cancellationToken = default)
+    public async Task ExtendRetentionAsync(RetentionItemInfo item, string until, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync($"api/retention/{documentId}/extend", new { until }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(RequireHref(item, "extend"), new { until }, cancellationToken);
         await ThrowIfProblemAsync(response, "Could not extend retention.", cancellationToken);
     }
 

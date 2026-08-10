@@ -490,9 +490,9 @@ public partial class MainWindow : Window
 
     private void OnRemoveLegalHoldItem(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
-        if (DataContext is MainWindowViewModel vm && sender is Button { Tag: Guid documentId })
+        if (DataContext is MainWindowViewModel vm && sender is Button { Tag: LegalHoldItemRowViewModel row })
         {
-            await vm.RemoveHoldItemAsync(documentId);
+            await vm.RemoveHoldItemAsync(row);
         }
     });
 
@@ -547,13 +547,13 @@ public partial class MainWindow : Window
     private void OnCheckoutCompare(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api ||
-            (sender as Control)?.Tag is not CheckoutRowViewModel row)
+            (sender as Control)?.Tag is not CheckoutRowViewModel { Item: { } checkout } row)
         {
             return;
         }
 
         var ccvm = new CompareCheckoutViewModel();
-        await ccvm.SetupAsync(api, row.Id, row.DisplayName, row.FileExtension, row.StashDownloadUrl);
+        await ccvm.SetupAsync(api, checkout, row.DisplayName, row.FileExtension, row.StashDownloadUrl);
         await new CompareCheckoutDialog(ccvm).ShowDialog(this);
     });
 

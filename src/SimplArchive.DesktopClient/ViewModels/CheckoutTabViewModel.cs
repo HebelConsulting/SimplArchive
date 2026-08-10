@@ -58,6 +58,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
                     IsModified = item.IsModified,
                     ExpiresAt = item.ExpiresAt,
                     StashDownloadUrl = item.StashDownloadUrl,
+                    Item = item,
                 });
             }
 
@@ -111,14 +112,14 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     [RelayCommand]
     private async Task CheckIn(CheckoutRowViewModel? row)
     {
-        if (_api is null || row is null)
+        if (_api is null || row?.Item is not { } checkout)
         {
             return;
         }
 
         try
         {
-            await _api.CheckInFromStashAsync(row.Id);
+            await _api.CheckInFromStashAsync(checkout);
             Report($"Checked in '{row.Name}'.");
             await ReloadAllAsync();
         }
@@ -137,14 +138,14 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     [RelayCommand]
     private async Task Extend(CheckoutRowViewModel? row)
     {
-        if (_api is null || row is null)
+        if (_api is null || row?.Item is not { } checkout)
         {
             return;
         }
 
         try
         {
-            await _api.ExtendCheckoutAsync(row.Id);
+            await _api.ExtendCheckoutAsync(checkout);
             Report($"Extended the check-out of '{row.Name}'.");
             await ReloadAllAsync();
         }
@@ -215,6 +216,10 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
 public sealed class CheckoutRowViewModel
 {
     public required Guid Id { get; init; }
+
+    // The row the server sent — check-in / extend / compare follow the addresses IT advertised (ADR 0543/0555).
+    // Nullable because the designer-preview rows below are synthetic and reach no server; every real row has it.
+    public SimplArchive.DesktopClient.Services.SimplArchiveApiClient.CheckoutItem? Item { get; init; }
     public required string Name { get; init; }
     public required string Path { get; init; }
     public required string FileExtension { get; init; }

@@ -46,7 +46,7 @@ public class DesktopNotificationsTests
         Assert.False(n.IsRead);
 
         // Marking it read drops the unread count.
-        await reviewer.MarkNotificationReadAsync(n.Id);
+        await reviewer.MarkNotificationReadAsync(n);
         var after = await reviewer.GetNotificationsAsync();
         Assert.True(after.Items.First(x => x.Id == n.Id).IsRead);
         Assert.Equal(list.UnreadCount - 1, after.UnreadCount);

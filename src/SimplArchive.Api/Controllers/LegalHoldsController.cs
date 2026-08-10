@@ -63,7 +63,7 @@ public class LegalHoldsController : ControllerBase
         public List<LegalHoldItemResource> Items { get; set; } = [];
     }
 
-    public class LegalHoldItemResource
+    public class LegalHoldItemResource : HypermediaResource
     {
         public Guid DocumentId { get; set; }
         public string DocumentName { get; set; } = "";
@@ -299,6 +299,18 @@ public class LegalHoldsController : ControllerBase
                      orderby d.Name
                      select new LegalHoldItemResource { DocumentId = d.Id, DocumentName = d.Name }).ToListAsync(cancellationToken)
             : [];
+
+        // A covered document's own `remove` address (issue #416). It is the ITEM that knows both ends of the
+        // pairing, so without it a client holding the list has two ids and no address, and had to compose the
+        // path. Only while the hold is active — a released hold's items are history, not something to edit, so
+        // the rel's absence is the answer rather than a refusal after the click (ADR 0543).
+        if (hold.ReleasedAt is null)
+        {
+            foreach (var item in items)
+            {
+                item.Links = [new Link("remove", $"/api/legal-holds/{holdId}/items/{item.DocumentId}", "DELETE")];
+            }
+        }
 
         var links = new List<Link> { new("self", $"/api/legal-holds/{holdId}", "GET") };
         if (hold.ReleasedAt is null)

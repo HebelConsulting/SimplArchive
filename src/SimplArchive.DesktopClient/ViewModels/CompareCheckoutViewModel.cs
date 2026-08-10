@@ -28,10 +28,10 @@ public sealed partial class CompareCheckoutViewModel : ObservableObject
     // Only offered when Beyond Compare is actually installed (a native-client capability).
     public bool BeyondCompareAvailable { get; } = BeyondCompare.IsInstalled;
 
-    public async Task SetupAsync(SimplArchiveApiClient api, Guid documentId, string documentName, string fileExtension, string? stashDownloadUrl)
+    public async Task SetupAsync(SimplArchiveApiClient api, SimplArchiveApiClient.CheckoutItem checkout, string documentName, string fileExtension, string? stashDownloadUrl)
     {
         _api = api;
-        _documentId = documentId;
+        _documentId = checkout.Id;
         _fileExtension = fileExtension;
         _stashDownloadUrl = stashDownloadUrl;
         DocumentName = documentName;
@@ -41,7 +41,7 @@ public sealed partial class CompareCheckoutViewModel : ObservableObject
         Status = Strings.Get("StComparing");
         try
         {
-            var cmp = await api.GetCheckoutComparisonAsync(documentId);
+            var cmp = await api.GetCheckoutComparisonAsync(checkout);
             if (!cmp.Available)
             {
                 NotAvailable = true;

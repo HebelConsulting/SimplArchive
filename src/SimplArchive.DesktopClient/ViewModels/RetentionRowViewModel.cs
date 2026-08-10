@@ -2,8 +2,12 @@ namespace SimplArchive.DesktopClient.ViewModels;
 
 // A row in the Retention schedule tab (ADR "Retention policies (auto-disposition)" + "Retention
 // review-before-disposition"). Carries the document id + override so the Dispose/Extend actions can act on it.
-public sealed class RetentionRowViewModel(Guid documentId, string documentName, int retentionYears, string dispositionDate, bool overdue, bool suspendedByHold, string? retentionOverrideUntil)
+// Item is the row the server sent, carried whole so Dispose/Extend follow the addresses it advertised rather
+// than rebuilding paths from a document id (ADR 0543/0555).
+public sealed class RetentionRowViewModel(Guid documentId, string documentName, int retentionYears, string dispositionDate, bool overdue, bool suspendedByHold, string? retentionOverrideUntil, SimplArchive.DesktopClient.Services.SimplArchiveApiClient.RetentionItemInfo item)
 {
+    public SimplArchive.DesktopClient.Services.SimplArchiveApiClient.RetentionItemInfo Item { get; } = item;
+
     public Guid DocumentId { get; } = documentId;
     public string DocumentName { get; } = documentName;
     public string Retention { get; } = $"{retentionYears} years";

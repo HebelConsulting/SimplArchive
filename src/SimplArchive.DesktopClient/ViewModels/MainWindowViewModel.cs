@@ -513,6 +513,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // The current version's advertised `document-date` address (ADR 0543) — null until the system fields load.
     private string? _sysDocumentDateHref;
+
+    // The notification collection's advertised `read-all` address — null until the bell has loaded once.
+    private string? _notificationsReadAllHref;
     private IReadOnlyList<string> _sysOcrCodes = [];  // persisted (original) OCR codes
     private IReadOnlyList<string> _stagedOcrCodes = []; // picker-staged codes, persisted on Save
     private IReadOnlyList<SimplArchiveApiClient.OcrLanguageOption> _ocrCatalog = [];
@@ -3924,7 +3927,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             LegalHolds.Clear();
             foreach (var h in holds)
             {
-                LegalHolds.Add(new LegalHoldRowViewModel(h.Id, h.Name, h.IsActive, h.ItemCount));
+                LegalHolds.Add(new LegalHoldRowViewModel(h.Id, h.Name, h.IsActive, h.ItemCount, h));
             }
 
             SelectedLegalHold = LegalHolds.FirstOrDefault(h => h.Id == previousId);
@@ -3945,10 +3948,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var hold = await _api.GetLegalHoldAsync(value.Id);
+            var hold = await _api.GetLegalHoldAsync(value.Hold);
             foreach (var item in hold.Items)
             {
-                SelectedHoldItems.Add(new LegalHoldItemRowViewModel(item.DocumentId, item.DocumentName));
+                SelectedHoldItems.Add(new LegalHoldItemRowViewModel(item.DocumentId, item.DocumentName, item));
             }
         }
         catch (Exception)
@@ -3970,7 +3973,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             var hold = await _api.CreateLegalHoldAsync(name, reason);
             if (documentId is { } docId)
             {
-                await _api.AddLegalHoldItemAsync(hold.Id, docId);
+                await _api.AddLegalHoldItemAsync(hold, docId);
                 await ReloadCurrentFolderAsync(); // refresh the lock indicator
             }
 
@@ -3999,7 +4002,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.ReleaseLegalHoldAsync(hold.Id);
+            await _api.ReleaseLegalHoldAsync(hold.Hold);
             Status = Strings.Get("StHoldReleased");
             await LoadLegalHoldsAsync();
             await ReloadCurrentFolderAsync();
@@ -4010,7 +4013,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    public async Task RemoveHoldItemAsync(Guid documentId)
+    public async Task RemoveHoldItemAsync(LegalHoldItemRowViewModel row)
     {
         if (_api is null || SelectedLegalHold is not { } hold)
         {
@@ -4019,7 +4022,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.RemoveLegalHoldItemAsync(hold.Id, documentId);
+            await _api.RemoveLegalHoldItemAsync(row.Item);
             var reselect = hold;
             await LoadLegalHoldsAsync();
             SelectedLegalHold = LegalHolds.FirstOrDefault(h => h.Id == reselect.Id);
@@ -4072,7 +4075,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             RetentionItems.Clear();
             foreach (var item in schedule.Items)
             {
-                RetentionItems.Add(new RetentionRowViewModel(item.DocumentId, item.DocumentName, item.RetentionYears, item.DispositionDate, item.Overdue, item.SuspendedByHold, item.RetentionOverrideUntil));
+                RetentionItems.Add(new RetentionRowViewModel(item.DocumentId, item.DocumentName, item.RetentionYears, item.DispositionDate, item.Overdue, item.SuspendedByHold, item.RetentionOverrideUntil, item));
             }
         }
         catch (Exception)
@@ -4091,7 +4094,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.DisposeRetentionAsync(row.DocumentId);
+            await _api.DisposeRetentionAsync(row.Item);
             Status = string.Format(Strings.Get("StDisposed"), row.DocumentName);
             await LoadRetentionScheduleAsync();
         }
@@ -4116,7 +4119,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.ExtendRetentionAsync(row.DocumentId, until);
+            await _api.ExtendRetentionAsync(row.Item, until);
             Status = string.Format(Strings.Get("StExtendedRetention"), row.DocumentName);
             await LoadRetentionScheduleAsync();
         }
@@ -4902,6 +4905,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
 
             UnreadNotificationCount = list.UnreadCount;
+            _notificationsReadAllHref = list.ReadAllHref;
         }
         catch (Exception)
         {
@@ -4954,7 +4958,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        try { await _api.MarkAllNotificationsReadAsync(); } catch (Exception) { }
+        if (_notificationsReadAllHref is not { } readAllHref)
+        {
+            return;
+        }
+
+        try { await _api.MarkAllNotificationsReadAsync(readAllHref); } catch (Exception) { }
         foreach (var n in Notifications) n.IsRead = true;
         UnreadNotificationCount = 0;
     }
@@ -4970,7 +4979,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         if (_api is not null && !n.IsRead)
         {
-            try { await _api.MarkNotificationReadAsync(n.Id); } catch (Exception) { }
+            try { await _api.MarkNotificationReadAsync(n.Notification); } catch (Exception) { }
             n.IsRead = true;
             if (UnreadNotificationCount > 0) UnreadNotificationCount--;
         }

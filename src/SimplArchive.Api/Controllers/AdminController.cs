@@ -59,6 +59,27 @@ public class AdminController : ControllerBase
         _currentUserAccessor.UserId is { } userId
         && (await _userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken)).IsTenantAdmin;
 
+    // The administration index. The API root has always advertised an `admin` rel pointing here, and until now
+    // nothing answered it — a dangling rel, which under ADR 0543 is worse than no rel at all: a client is
+    // supposed to be able to follow what it is offered, so the only way to reach personal-repositories was to
+    // compose its path (issue #416). Listing the sub-resources here is what makes that unnecessary.
+    //
+    // Deliberately NOT gated on tenant-admin: this says what exists, and each linked resource enforces its own
+    // access when followed — the same contract as the root itself.
+    [HttpGet]
+    public IActionResult Index() => Ok(new AdminIndexResource
+    {
+        Links = [
+            new Link("self", "/api/admin", "GET"),
+            new Link("personal-repositories", "/api/admin/personal-repositories", "GET"),
+        ],
+    });
+
+    [HttpHead]
+    public IActionResult IndexHead() => NoContent();
+
+    public class AdminIndexResource : HypermediaResource;
+
     [HttpGet("personal-repositories")]
     public async Task<IActionResult> ListPersonalRepositories(CancellationToken cancellationToken)
     {

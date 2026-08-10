@@ -9,6 +9,7 @@ public sealed partial class NotificationRowViewModel : ObservableObject
 {
     public NotificationRowViewModel(SimplArchiveApiClient.NotificationInfo n)
     {
+        Notification = n;
         Id = n.Id;
         // Digest suffix "(×N)" when this notification coalesced several events (ADR "Notification digest / coalescing").
         Title = n.EventCount > 1 ? $"{n.Title} (×{n.EventCount})" : n.Title;
@@ -18,6 +19,9 @@ public sealed partial class NotificationRowViewModel : ObservableObject
         When = n.CreatedAt.LocalDateTime.ToString("g");
         _isRead = n.IsRead;
     }
+
+    // The row the server sent — "mark read" follows its own `read` address (ADR 0543/0555).
+    public SimplArchiveApiClient.NotificationInfo Notification { get; }
 
     public Guid Id { get; }
     public string Title { get; }

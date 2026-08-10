@@ -435,7 +435,9 @@ public class DocumentsController : ControllerBase
                  || (checkedOut is not null && _currentUserAccessor.UserId is { } uid
                      && (await _userSystemRights.GetEffectiveSystemRightsAsync(uid, cancellationToken)).CanOverrideCheckout))
         {
-            links.Add(new Link("checkin", $"/api/documents/{documentId}/checkout", "DELETE"));
+            // Releasing the lock and DISCARDING the working copy — named for that, not "checkin", which on a
+            // checkout row now means the POST that promotes the copy to a version (issue #416).
+            links.Add(new Link("cancel-checkout", $"/api/documents/{documentId}/checkout", "DELETE"));
         }
 
         return Ok(new DocumentResource

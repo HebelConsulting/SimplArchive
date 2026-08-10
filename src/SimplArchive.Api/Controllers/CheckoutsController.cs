@@ -258,7 +258,14 @@ public class CheckoutsController : ControllerBase
                 Links =
                 [
                     new Link("self", $"/api/documents/{d.Id}", "GET"),
-                    new Link("checkin", $"/api/documents/{d.Id}/checkout", "DELETE"),
+                    // Two DIFFERENT endings, named for what they do (issue #416). `checkin` promotes the
+                    // working copy to a new confirmed version; `cancel-checkout` releases the lock and throws
+                    // the copy away. `checkin` used to name the DELETE — the opposite of what a reader expects,
+                    // and the reason the desktop had to call its DELETE method CheckInAsync and the real one
+                    // CheckInFromStashAsync. Renaming a rel is the breaking direction under ADR 0543, taken
+                    // deliberately while the only clients following it are in this repository.
+                    new Link("checkin", $"/api/checkouts/{d.Id}/checkin", "POST"),
+                    new Link("cancel-checkout", $"/api/documents/{d.Id}/checkout", "DELETE"),
                     new Link("working-copy", $"/api/checkouts/{d.Id}/working-copy", "POST"),
                     new Link("extend", $"/api/checkouts/{d.Id}/extend", "POST"),
                     // The working copy against the current version (ADR 0517) — a rel, so the compare dialog

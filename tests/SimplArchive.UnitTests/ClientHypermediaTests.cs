@@ -164,7 +164,29 @@ public partial class ClientHypermediaTests
         // none. Adding a group member is POST /members with the user in the BODY, so the collection advertises
         // `add-member` and the chosen principal travels as data; the keyed PUT is retired rather than kept
         // beside it, because two ways to do one thing is how a client talks itself back into composing.
-        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 49,
+        // 49 → 23 (issue #416): the families that are NOT documents. The surprise was how little the server
+        // needed — the API root already advertised `search`, `whoami`, `inboxGroups`, `inboxUsers`,
+        // `retentionSchedule` and `checkouts`, and the rows already carried their own actions. Almost all of
+        // this was a client that had never asked.
+        //
+        // Two server changes were required. A legal-hold ITEM now advertises `remove`: it is the only thing
+        // that knows both ends of the pairing, so a client holding the list had two ids and no address. And
+        // /api/admin finally answers — the root has always advertised an `admin` rel pointing at a route with
+        // no GET, which under ADR 0543 is worse than no rel at all: a client is meant to be able to follow what
+        // it is offered, so the only way to reach personal-repositories was to compose its path.
+        //
+        // Conditional rels did real work here. A released legal hold offers neither `release` nor `add-item`; a
+        // retention row withholds `dispose` while a review is required or a hold suspends it; a check-out
+        // offers `compare` only when there is a stash to diff. Each of those was a flag the client re-derived
+        // and could disagree with the server about.
+        //
+        // The audit collection's five rels are read once and cached, like the API root's own — they do not
+        // change between calls, and the audit tab would otherwise re-read the collection once per button.
+        //
+        // What is left: the inbox and recycle-bin families (their rels exist; it is a surface migration), the
+        // five bulk operations plus `duplicates` and `masks/{id}` (which need addresses the API does not yet
+        // advertise anywhere), the two ACL writes, and DocumentAddress.
+        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 23,
     };
 
     [Fact]

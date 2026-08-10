@@ -1911,7 +1911,7 @@
                                                         <i:Icon Value="mdi-file-document-outline" Foreground="#5b4ee5" VerticalAlignment="Center" />
                                                         <TextBlock Text="{Binding DocumentName}" VerticalAlignment="Center" />
                                                     </StackPanel>
-                                                    <Button Grid.Column="1" Content="{loc:Tr UgRemove}" Click="OnRemoveLegalHoldItem" Tag="{Binding DocumentId}" />
+                                                    <Button Grid.Column="1" Content="{loc:Tr UgRemove}" Click="OnRemoveLegalHoldItem" Tag="{Binding}" />
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>

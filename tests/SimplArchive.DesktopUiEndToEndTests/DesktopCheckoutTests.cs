@@ -41,7 +41,7 @@ public class DesktopCheckoutTests
         Assert.EndsWith(".txt", row.DisplayName);
 
         // Edit via the cloud stash (what a WebDAV save does) → the tab reports Modified + offers Check in.
-        await api.SaveWorkingCopyAsync(doc.Id, Encoding.UTF8.GetBytes("edited via webdav"));
+        await api.SaveWorkingCopyAsync((await api.GetCheckoutsAsync()).Single(c => c.Id == doc.Id), Encoding.UTF8.GetBytes("edited via webdav"));
         await vm.LoadAsync();
         row = vm.Items.Single(i => i.Id == doc.Id);
         Assert.True(row.IsModified);
@@ -68,7 +68,7 @@ public class DesktopCheckoutTests
         var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
 
         await api.CheckOutAsync(doc.Id);
-        await api.SaveWorkingCopyAsync(doc.Id, Encoding.UTF8.GetBytes("line one\nline two CHANGED\nline three\n"));
+        await api.SaveWorkingCopyAsync((await api.GetCheckoutsAsync()).Single(c => c.Id == doc.Id), Encoding.UTF8.GetBytes("line one\nline two CHANGED\nline three\n"));
 
         // Load the row (it carries StashDownloadUrl) and drive the compare VM exactly as the dialog does.
         var tab = new CheckoutTabViewModel();
@@ -78,7 +78,7 @@ public class DesktopCheckoutTests
         Assert.True(row.IsModified);
 
         var vm = new CompareCheckoutViewModel();
-        await vm.SetupAsync(api, row.Id, row.DisplayName, row.FileExtension, row.StashDownloadUrl);
+        await vm.SetupAsync(api, row.Item!, row.DisplayName, row.FileExtension, row.StashDownloadUrl);
 
         Assert.False(vm.NotAvailable);
         Assert.Contains(vm.Lines, l => l.Op == 2 && l.Display.Contains("line two"));  // removed
@@ -122,7 +122,7 @@ public class DesktopCheckoutTests
         await api.CheckOutAsync(doc.Id);
 
         // Extend (self-service, ADR "Self-service check-out extension") — no throw, and the lock is retained.
-        await api.ExtendCheckoutAsync(doc.Id);
+        await api.ExtendCheckoutAsync((await api.GetCheckoutsAsync()).Single(c => c.Id == doc.Id));
         Assert.Contains(await api.GetCheckoutsAsync(), c => c.Id == doc.Id);
 
         // Clean up: release the lock.

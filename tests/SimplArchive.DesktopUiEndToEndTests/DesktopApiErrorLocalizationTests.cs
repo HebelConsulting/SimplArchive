@@ -40,7 +40,7 @@ public class DesktopApiErrorLocalizationTests
         await api.CreateFolderAsync(repo.Id, folderName);
         var folder = (await api.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == folderName);
         var hold = await api.CreateLegalHoldAsync($"Matter {suffix}", "localisation guard");
-        await api.AddLegalHoldItemAsync(hold.Id, folder.Id);
+        await api.AddLegalHoldItemAsync(hold, folder.Id);
 
         // Only CurrentUICulture — never Culture.Apply, which sets the process-global DefaultThreadCurrentUICulture
         // and would leak German into the culture-dependent messages other tests assert on in English. The setter
@@ -68,7 +68,7 @@ public class DesktopApiErrorLocalizationTests
         finally
         {
             CultureInfo.CurrentUICulture = original;
-            await api.ReleaseLegalHoldAsync(hold.Id);
+            await api.ReleaseLegalHoldAsync(hold);
             await api.DeleteAsync(folder.Id);
         }
     }

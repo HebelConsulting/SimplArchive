@@ -28,16 +28,16 @@ public class DesktopLegalHoldTests
 
         // Place a hold covering the folder; it shows on the hold + the folder reports it.
         var hold = await api.CreateLegalHoldAsync($"Matter {suffix}", "test");
-        await api.AddLegalHoldItemAsync(hold.Id, folder.Id);
-        var fetched = await api.GetLegalHoldAsync(hold.Id);
+        await api.AddLegalHoldItemAsync(hold, folder.Id);
+        var fetched = await api.GetLegalHoldAsync(hold);
         Assert.Contains(fetched.Items, i => i.DocumentId == folder.Id);
 
         // Frozen: deletion is refused (409 → the client throws).
         await Assert.ThrowsAnyAsync<Exception>(() => api.DeleteAsync(folder.Id));
 
         // Release → the hold is no longer active and the folder can be deleted.
-        await api.ReleaseLegalHoldAsync(hold.Id);
-        Assert.False((await api.GetLegalHoldAsync(hold.Id)).IsActive);
+        await api.ReleaseLegalHoldAsync(hold);
+        Assert.False((await api.GetLegalHoldAsync(hold)).IsActive);
         await api.DeleteAsync(folder.Id); // succeeds now (also cleans up)
     }
 }
