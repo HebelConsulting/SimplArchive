@@ -25,8 +25,23 @@ public partial class WebGuidedTourTests
 
     public WebGuidedTourTests(SelfHostedAppFixture app) => _app = app;
 
-    [GeneratedRegex(@"data-tour=""(?<anchor>[a-z0-9-]+)""")]
+    // The tour names anchors as bare, surface-neutral names in backticks (`pane-list`), because one step now
+    // serves the web AND the desktop client — the browser looks the name up as `data-tour`, the desktop as an
+    // accessibility automation id (issue #414). Scanning the prose for `data-tour="…"` therefore no longer
+    // finds them; scan the step blocks instead. The desktop guard parses the SAME file with the same shape.
+    [GeneratedRegex(@"^(?:anchor|action|expect):.*$", RegexOptions.Multiline)]
+    private static partial Regex StepLine();
+
+    [GeneratedRegex(@"`(?<anchor>(?:pane|tab|action)-[a-z0-9-]+)`")]
     private static partial Regex TourAnchor();
+
+    /// <summary>Every anchor named anywhere in the tour's step blocks, deduplicated.</summary>
+    internal static List<string> AnchorsNamedInTheTour(string tourMarkdown) =>
+        StepLine().Matches(tourMarkdown)
+            .SelectMany(line => TourAnchor().Matches(line.Value).Select(m => m.Groups["anchor"].Value))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(a => a, StringComparer.Ordinal)
+            .ToList();
 
     [Fact]
     public async Task Every_anchor_the_tour_names_exists_in_the_app()
@@ -34,11 +49,7 @@ public partial class WebGuidedTourTests
         var tourPath = Path.Combine(RepoRoot(), "src", "SimplArchive.Client", "wwwroot", "tour", "tour.md");
         Assert.True(File.Exists(tourPath), $"The published tour is missing: {tourPath}");
 
-        var anchors = TourAnchor().Matches(File.ReadAllText(tourPath))
-            .Select(m => m.Groups["anchor"].Value)
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(a => a, StringComparer.Ordinal)
-            .ToList();
+        var anchors = AnchorsNamedInTheTour(File.ReadAllText(tourPath));
 
         // Anti-vacuous, sample-independent: if the parse breaks, the loop below would assert nothing at all.
         Assert.True(anchors.Count >= 6, $"parsed only {anchors.Count} anchors from the tour — the scan is broken");
