@@ -32,18 +32,18 @@ public class DesktopWorkflowReassignTests
         // Two reviewers — tenant admins so they can read the content (valid reviewer targets).
         var u1 = await client.CreateUserAsync($"dt-r1-{suffix}@example.test", $"Reviewer One {suffix}");
         var u2 = await client.CreateUserAsync($"dt-r2-{suffix}@example.test", $"Reviewer Two {suffix}");
-        await client.SetUserRightsAsync(u1, TenantAdmin);
-        await client.SetUserRightsAsync(u2, TenantAdmin);
+        await client.SetRightsAsync(u1, TenantAdmin);
+        await client.SetRightsAsync(u2, TenantAdmin);
 
         // Submit to U1.
         var wf = await client.GetWorkflowAsync(doc.Id);
         Assert.NotNull(wf);
-        await client.PostWorkflowActionAsync(wf!.Links["submit"], new { reviewerId = u1 });
+        await client.PostWorkflowActionAsync(wf!.Links["submit"], new { reviewerId = u1.Id });
 
         // The reassign link is now offered (the demo admin is an editor); reassign to U2.
         wf = await client.GetWorkflowAsync(doc.Id);
         Assert.True(wf!.Links.ContainsKey("reassign"));
-        await client.PostWorkflowActionAsync(wf.Links["reassign"], new { reviewerId = u2 });
+        await client.PostWorkflowActionAsync(wf.Links["reassign"], new { reviewerId = u2.Id });
 
         wf = await client.GetWorkflowAsync(doc.Id);
         Assert.Equal("In Review", wf!.StatusName);
@@ -53,10 +53,10 @@ public class DesktopWorkflowReassignTests
         await Assert.ThrowsAsync<ReviewerHasPendingReviewsException>(() => client.DeleteUserAsync(u2));
 
         // Handing the review back to U1 deactivates U2 and moves the task.
-        await client.DeleteUserAsync(u2, u1);
+        await client.DeleteUserAsync(u2, u1.Id);
         wf = await client.GetWorkflowAsync(doc.Id);
         Assert.Equal($"Reviewer One {suffix}", wf!.AssignedToName);
-        Assert.False((await client.GetUsersAsync()).Single(u => u.Id == u2).IsActive);
+        Assert.False((await client.GetUsersAsync()).Single(u => u.Id == u2.Id).IsActive);
     }
 
     private static readonly SimplArchiveApiClient.SystemRightsData TenantAdmin =

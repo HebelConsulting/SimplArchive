@@ -91,7 +91,7 @@ public class AclEntriesController : ControllerBase
         public List<GrantablePrincipal> Principals { get; set; } = [];
     }
 
-    public class GrantablePrincipal
+    public class GrantablePrincipal : HypermediaResource
     {
         public string Type { get; set; } = "";   // users | groups | service-accounts
         public Guid Id { get; set; }
@@ -192,7 +192,16 @@ public class AclEntriesController : ControllerBase
         var fetched = await query.OrderBy(a => a.CreatedAt).ThenBy(a => a.Id).Take(pageSize + 1).ToListAsync(cancellationToken);
         var (page, hasMore) = Cursor.Split(fetched, pageSize);
 
-        var links = new List<Link> { new("self", Url.Action(nameof(List), new { documentId, cursor, limit = pageSize })!, "GET") };
+        // Everything the manage-access dialog needs hangs off the collection it has just opened (issue #416):
+        // the principals it may grant to, the resolved effective view, and the address a grant is written to.
+        // Granting to someone NEW has no address until a principal is chosen, so that rel rides on each
+        // grantable principal below rather than on this collection.
+        var links = new List<Link>
+        {
+            new("self", Url.Action(nameof(List), new { documentId, cursor, limit = pageSize })!, "GET"),
+            new("grantable-principals", Url.Action(nameof(GrantablePrincipals), new { documentId })!, "GET"),
+            new("effective", Url.Action(nameof(Effective), new { documentId })!, "GET"),
+        };
 
         if (hasMore)
         {
@@ -251,7 +260,17 @@ public class AclEntriesController : ControllerBase
             .Select(s => new GrantablePrincipal { Type = "service-accounts", Id = s.Id, Name = s.Name })
             .ToListAsync(cancellationToken);
 
-        return Ok(new GrantablePrincipalsResource { Principals = [.. groups, .. users, .. serviceAccounts] });
+        var principals = new List<GrantablePrincipal>([.. groups, .. users, .. serviceAccounts]);
+
+        // The address at which a grant FOR THIS PRINCIPAL is written (issue #416). A new grant has no resource
+        // yet, so there is nothing else that could carry its address — putting it on the picker's own rows is
+        // what lets the dialog save without composing /acl-entries/{type}/{id} from the selection.
+        foreach (var principal in principals)
+        {
+            principal.Links = [new Link("grant", $"/api/documents/{documentId}/acl-entries/{principal.Type}/{principal.Id}", "PUT")];
+        }
+
+        return Ok(new GrantablePrincipalsResource { Principals = principals });
     }
 
     [HttpHead("grantable-principals")]
@@ -890,7 +909,14 @@ public class AclEntriesController : ControllerBase
             CanManagePermissions = entry.CanManagePermissions,
             CanMove = entry.CanMove,
             CanAnnotate = entry.CanAnnotate,
-            Links = [new Link("self", $"/api/documents/{entry.DocumentId}/acl-entries/{principalType}/{principalId}", "GET")],
+            // The grant's own address: read it, replace it, remove it. One rel per verb, so the dialog's Save and
+            // Remove follow a link rather than rebuilding /acl-entries/{type}/{id} twice over (issue #416).
+            Links =
+            [
+                new Link("self", $"/api/documents/{entry.DocumentId}/acl-entries/{principalType}/{principalId}", "GET"),
+                new Link("edit", $"/api/documents/{entry.DocumentId}/acl-entries/{principalType}/{principalId}", "PUT"),
+                new Link("remove", $"/api/documents/{entry.DocumentId}/acl-entries/{principalType}/{principalId}", "DELETE"),
+            ],
         };
     }
 

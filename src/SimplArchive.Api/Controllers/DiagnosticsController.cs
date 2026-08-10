@@ -216,7 +216,14 @@ public class DiagnosticsController : ControllerBase
             CanManageInboxes = canManageInboxes,
             ImpersonatedBy = impersonatedBy,
             HasPhoto = hasPhoto,
-            Links = [new Link("self", Url.Action(nameof(WhoAmI))!, "GET")],
+
+            // The caller's own avatar, advertised only when there is one (issue #416). whoami is the resource
+            // the app bar already holds, so the rel belongs here rather than making the layout compose
+            // /users/{id}/photo from an id it happens to be carrying — and its presence is the same fact
+            // HasPhoto states, arrived at by the server instead of inferred by two clients separately.
+            Links = hasPhoto && _currentUserAccessor.UserId is { } photoUserId
+                ? [new Link("self", Url.Action(nameof(WhoAmI))!, "GET"), new Link("photo", $"/api/users/{photoUserId}/photo", "GET")]
+                : [new Link("self", Url.Action(nameof(WhoAmI))!, "GET")],
         });
     }
 

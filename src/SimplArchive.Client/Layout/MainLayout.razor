@@ -89,7 +89,8 @@
                     }
                     else
                     {
-                        <MudMenuItem Icon="@Icons.Material.Filled.DoneAll" OnClick="MarkAllNotificationsReadAsync">@Strings.Get("MarkAllRead")</MudMenuItem>
+                        @* Disabled straight off the rel: no "read-all" advertised means nothing is unread (ADR 0543). *@
+                        <MudMenuItem Icon="@Icons.Material.Filled.DoneAll" Disabled="@(_readAllHref is null)" OnClick="MarkAllNotificationsReadAsync">@Strings.Get("MarkAllRead")</MudMenuItem>
                         <MudDivider />
                         @foreach (var n in _notifications)
                         {
@@ -297,13 +298,18 @@
     private int _unreadCount;
     private readonly List<NotificationDto> _notifications = new();
 
+    // The collection's own "read-all" rel, captured when the menu loads. Null means the server is not offering it
+    // (nothing unread), which is what disables the button — rather than the client deciding for itself.
+    private string? _readAllHref;
+
     private Task OpenNotificationsAsync(MouseEventArgs e) => LoadNotificationsAsync().ContinueWith(_ => _notifMenu.OpenMenuAsync(e)).Unwrap();
 
     private async Task LoadUnreadCountAsync()
     {
         try
         {
-            _unreadCount = (await Http.GetFromJsonAsync<UnreadCountResponse>("api/notifications/unread-count"))?.UnreadCount ?? 0;
+            var href = await ApiRoot.RequireAsync("notificationsUnreadCount");
+            _unreadCount = (await Http.GetFromJsonAsync<UnreadCountResponse>(href))?.UnreadCount ?? 0;
         }
         catch (Exception) { }
     }
@@ -312,10 +318,13 @@
     {
         try
         {
-            var page = await Http.GetFromJsonAsync<NotificationsResponse>("api/notifications");
+            var page = await Http.GetFromJsonAsync<NotificationsResponse>(await ApiRoot.RequireAsync("notifications"));
             _notifications.Clear();
             _notifications.AddRange(page?.Notifications ?? []);
             _unreadCount = page?.UnreadCount ?? 0;
+            // "Mark all read" is the collection's rel, so the menu offers it only while the server says there is
+            // something to clear — the affordance and the outcome can't disagree (ADR 0543).
+            _readAllHref = page?.Links.FirstOrDefault(l => l.Rel == "read-all")?.Href.TrimStart('/');
             StateHasChanged();
         }
         catch (Exception) { }
@@ -323,10 +332,13 @@
 
     private async Task MarkNotificationReadAsync(NotificationDto n)
     {
-        if (!n.IsRead)
+        // The item carries its own `read` rel while unread; its absence IS "already read", so there is nothing
+        // left to POST and no path to compose (issue #416).
+        if (n.Links.FirstOrDefault(l => l.Rel == "read")?.Href is { } href)
         {
-            try { await Http.PostAsync($"api/notifications/{n.Id}/read", null); } catch (Exception) { }
+            try { await Http.PostAsync(href.TrimStart('/'), null); } catch (Exception) { }
             n.IsRead = true;
+            n.Links = [];
             if (_unreadCount > 0) _unreadCount--;
         }
     }
@@ -344,8 +356,14 @@
 
     private async Task MarkAllNotificationsReadAsync()
     {
-        try { await Http.PostAsync("api/notifications/read-all", null); } catch (Exception) { }
-        foreach (var n in _notifications) n.IsRead = true;
+        if (_readAllHref is null)
+        {
+            return;
+        }
+
+        try { await Http.PostAsync(_readAllHref, null); } catch (Exception) { }
+        foreach (var n in _notifications) { n.IsRead = true; n.Links = []; }
+        _readAllHref = null;
         _unreadCount = 0;
     }
 
@@ -376,12 +394,16 @@
     {
         try
         {
-            var me = await Http.GetFromJsonAsync<WhoAmI>("api/diagnostics/whoami");
+            var me = await Http.GetFromJsonAsync<WhoAmI>(await ApiRoot.RequireAsync("whoami"));
             _userId = me?.UserId;
             _displayName = me?.UserName;
             _impersonatedBy = me?.ImpersonatedBy;
             _mfaEnabled = me?.MfaEnabled ?? false;
-            _photoDataUrl = me is { HasPhoto: true, UserId: { } id } ? await FetchPhotoAsync(id) : null;
+            // whoami advertises `photo` exactly when there is one to fetch, so the rel's presence replaces both
+            // the HasPhoto check and the composed /users/{id}/photo path (issue #416).
+            _photoDataUrl = me?.Links.FirstOrDefault(l => l.Rel == "photo")?.Href is { } photoHref
+                ? await FetchPhotoAsync(photoHref.TrimStart('/'))
+                : null;
             await LoadUnreadCountAsync();
             if (_userId is not null)
             {
@@ -397,11 +419,11 @@
 
     // The photo endpoint is bearer-protected, so a raw <img src> (no token) would 401 — fetch the bytes
     // with the authenticated client and render a data URL instead.
-    private async Task<string?> FetchPhotoAsync(Guid userId)
+    private async Task<string?> FetchPhotoAsync(string photoHref)
     {
         try
         {
-            var bytes = await Http.GetByteArrayAsync($"api/users/{userId}/photo");
+            var bytes = await Http.GetByteArrayAsync(photoHref);
             return "data:image/png;base64," + Convert.ToBase64String(bytes);
         }
         catch (Exception)
@@ -414,11 +436,26 @@
     {
         var dialog = await DialogService.ShowAsync<ProfilePhotoDialog>(Strings.Get("PpTitle"));
         var result = await dialog.Result;
-        if (result is { Canceled: false } && _userId is { } id)
+        if (result is { Canceled: false })
         {
-            _photoDataUrl = await FetchPhotoAsync(id);
+            // Re-ask whoami rather than re-fetching a remembered address: a user who just uploaded their FIRST
+            // photo had no `photo` rel a moment ago, and the server advertising one now is precisely the signal
+            // that there is something to show (issue #416).
+            await RefreshPhotoAsync();
             StateHasChanged();
         }
+    }
+
+    private async Task RefreshPhotoAsync()
+    {
+        try
+        {
+            var me = await Http.GetFromJsonAsync<WhoAmI>(await ApiRoot.RequireAsync("whoami"));
+            _photoDataUrl = me?.Links.FirstOrDefault(l => l.Rel == "photo")?.Href is { } href
+                ? await FetchPhotoAsync(href.TrimStart('/'))
+                : null;
+        }
+        catch (Exception) { }
     }
 
     private async Task ChangeMyPasswordAsync()
@@ -479,12 +516,16 @@
         public bool HasPhoto { get; set; }
         public bool MfaEnabled { get; set; }
         public string? ImpersonatedBy { get; set; }
+        public List<LinkResponse> Links { get; set; } = new();
     }
+
+    private record LinkResponse { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
 
     private record NotificationsResponse
     {
         public List<NotificationDto> Notifications { get; set; } = new();
         public int UnreadCount { get; set; }
+        public List<LinkResponse> Links { get; set; } = new();
     }
 
     private record UnreadCountResponse { public int UnreadCount { get; set; } }
@@ -499,6 +540,7 @@
         public Guid? DocumentParentId { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
         public bool IsRead { get; set; }
+        public List<LinkResponse> Links { get; set; } = new();
 
         // Digest suffix "(×N)" when this notification coalesced several events (ADR "Notification digest / coalescing").
         public string CountSuffix => EventCount > 1 ? $" (×{EventCount})" : "";

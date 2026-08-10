@@ -38,18 +38,18 @@ public class DesktopServiceAccountsTests
 
         // Edit (PUT): rename + add CanImport → reads back.
         var newName = "dt-sa-edited-" + suffix;
-        await client.UpdateServiceAccountAsync(created.Id, newName, Rights(canExport: true, canImport: true));
+        await client.UpdateServiceAccountAsync(created, newName, Rights(canExport: true, canImport: true));
         var edited = (await client.GetServiceAccountsAsync()).Single(a => a.Id == created.Id);
         Assert.Equal(newName, edited.Name);
         Assert.True(edited.CanImport);
 
         // Rotate the secret → a fresh one-time secret.
-        var rotated = await client.RotateServiceAccountSecretAsync(created.Id);
+        var rotated = await client.RotateServiceAccountSecretAsync(created);
         Assert.NotEmpty(rotated.ClientSecret);
         Assert.NotEqual(secret.ClientSecret, rotated.ClientSecret);
 
         // Revoke → still listed, but inactive (one-way).
-        await client.RevokeServiceAccountAsync(created.Id);
+        await client.RevokeServiceAccountAsync(edited);
         var revoked = (await client.GetServiceAccountsAsync()).Single(a => a.Id == created.Id);
         Assert.False(revoked.IsActive);
     }

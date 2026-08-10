@@ -100,6 +100,14 @@
 
     [Parameter] public Guid DocumentId { get; set; }
 
+    // The document resource's own address (the row's `self` rel). The dialog needs TWO of its rels — the version
+    // list and the reviewer catalog — and `assignable-reviewers` is deliberately not on a listing row (a listing
+    // is the wrong place to answer "may I?"), so it fetches the resource once and follows both from there rather
+    // than composing either path (ADR 0543, issue #416).
+    [Parameter] public string? DocumentHref { get; set; }
+
+    private string? _assignableReviewersHref;
+
     private WorkflowResponse? _workflow;
     private string? _workflowHref;
     private List<UserOption> _reviewers = [];
@@ -119,7 +127,13 @@
             // Resolve the latest confirmed version's workflow link (the same "latest-confirmed" rule the
             // detail pane uses); the status-gating filter means this is the latest Released/never-submitted
             // version for a non-editor, but an editor sees the true latest.
-            var versions = await Http.GetFromJsonAsync<VersionListResponse>($"api/documents/{DocumentId}/versions");
+            if (DocumentHref is null) { return; }
+
+            var document = await Http.GetFromJsonAsync<DocumentLinksResponse>(DocumentHref);
+            _assignableReviewersHref = Rel(document?.Links, "assignable-reviewers");
+            if (Rel(document?.Links, "versions") is not { } versionsHref) { return; }
+
+            var versions = await Http.GetFromJsonAsync<VersionListResponse>(versionsHref);
             var confirmed = versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [];
             var latest = confirmed.OrderByDescending(v => v.VersionNumber ?? 0).FirstOrDefault();
             var wfHref = latest is null ? null : Rel(latest.Links, "workflow");
@@ -147,7 +161,7 @@
         // (ADR "Workflow assignable-reviewers endpoint"), no CanManageUsers needed.
         if ((HasLink("submit") || HasLink("reassign")) && _reviewers.Count == 0)
         {
-            try { _reviewers = (await Http.GetFromJsonAsync<AssignableReviewersResponse>($"api/documents/{DocumentId}/assignable-reviewers"))?.Reviewers ?? []; }
+            try { _reviewers = _assignableReviewersHref is null ? [] : (await Http.GetFromJsonAsync<AssignableReviewersResponse>(_assignableReviewersHref))?.Reviewers ?? []; }
             catch (Exception) { _reviewers = []; }
         }
     }
@@ -215,6 +229,7 @@
     }
 
     private record LinkResponse { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+    private record DocumentLinksResponse { public List<LinkResponse> Links { get; set; } = []; }
     private record WorkflowResponse
     {
         public int Status { get; set; }

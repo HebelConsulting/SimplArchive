@@ -74,6 +74,9 @@
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
 
     [Parameter] public Guid DocumentId { get; set; }
+
+    // The version list's address as the row advertised it (`versions` rel, issue #416) — not rebuilt from the id.
+    [Parameter] public string? VersionsHref { get; set; }
     [Parameter] public string DocumentName { get; set; } = "";
 
     private List<Row> _versions = [];
@@ -93,7 +96,9 @@
         _loading = true;
         try
         {
-            var resp = await Http.GetFromJsonAsync<VersionListResponse>($"api/documents/{DocumentId}/versions");
+            if (VersionsHref is null) { return; }
+
+            var resp = await Http.GetFromJsonAsync<VersionListResponse>(VersionsHref);
             var confirmed = (resp?.Versions ?? [])
                 .Where(v => v.Status == "Confirmed")
                 .OrderByDescending(v => v.VersionNumber ?? 0)

@@ -64,6 +64,9 @@
     private IMudDialogInstance Dialog { get; set; } = null!;
 
     [Parameter] public Guid ItemId { get; set; }
+
+    // Where this item is referenced from, as the row advertised it (`referencing-folders` rel, issue #416).
+    [Parameter] public string? ReferencingFoldersHref { get; set; }
     [Parameter] public string ItemName { get; set; } = "";
 
     private List<Folder> _folders = [];
@@ -76,7 +79,7 @@
     protected override async Task OnInitializedAsync()
     {
         var list = new List<Folder>();
-        var url = $"api/documents/{ItemId}/referencing-folders";
+        var url = ReferencingFoldersHref;
         var first = true;
         while (url is not null)
         {

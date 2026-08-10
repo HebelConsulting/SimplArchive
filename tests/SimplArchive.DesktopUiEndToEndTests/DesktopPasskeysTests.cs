@@ -38,7 +38,7 @@ public class DesktopPasskeysTests
             Guid tenantId;
             await using (var q = new NpgsqlCommand("SELECT \"TenantId\" FROM \"Users\" WHERE \"Id\" = @uid", conn))
             {
-                q.Parameters.AddWithValue("uid", userId);
+                q.Parameters.AddWithValue("uid", userId.Id);
                 tenantId = (Guid)(await q.ExecuteScalarAsync())!;
             }
 
@@ -47,7 +47,7 @@ public class DesktopPasskeysTests
                 "VALUES (@id,@tid,@uid,@cred,@pk,0,@aaguid,NULL,@name,now())", conn);
             insert.Parameters.AddWithValue("id", passkeyId);
             insert.Parameters.AddWithValue("tid", tenantId);
-            insert.Parameters.AddWithValue("uid", userId);
+            insert.Parameters.AddWithValue("uid", userId.Id);
             insert.Parameters.AddWithValue("cred", Guid.NewGuid().ToByteArray());
             insert.Parameters.AddWithValue("pk", new byte[] { 1, 2, 3, 4 });
             insert.Parameters.AddWithValue("aaguid", Guid.Empty);
@@ -61,7 +61,10 @@ public class DesktopPasskeysTests
         Assert.Equal("Seeded Key", seeded.Name);
         Assert.Equal(passkeyId, seeded.Id);
 
-        await user.RemovePasskeyAsync(seeded.Id);
+        // Removal follows the row's own `self` rel rather than a path rebuilt from the id (ADR 0543, issue
+        // #416) — so asserting the rel arrived is part of asserting removal works at all.
+        Assert.NotNull(seeded.RemoveHref);
+        await user.RemovePasskeyAsync(seeded.RemoveHref!);
         Assert.Empty(await user.GetPasskeysAsync());
     }
 }

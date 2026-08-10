@@ -371,6 +371,13 @@ public class DocumentsController : ControllerBase
         // is absent rather than leading to a 403. Neither client can work this out for itself: the resource
         // deliberately exposes no ParentId, because "is this a root" is the API's question to answer, not a fact
         // for two clients to reason about separately and drift on.
+        // The document's grants (issue #416). Gated on the same right the collection's own GET enforces, so the
+        // rel's absence is the manage-access affordance's answer rather than a 403 the client has to interpret.
+        if (rights.CanManagePermissions)
+        {
+            links.Add(new Link("acl-entries", $"/api/documents/{documentId}/acl-entries", "GET"));
+        }
+
         if (document.ParentId is not null && rights.CanManagePermissions)
         {
             links.Add(new Link("acl-inheritance", $"/api/documents/{documentId}/acl-entries/inheritance", "PUT"));

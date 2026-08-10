@@ -261,6 +261,9 @@ public class CheckoutsController : ControllerBase
                     new Link("checkin", $"/api/documents/{d.Id}/checkout", "DELETE"),
                     new Link("working-copy", $"/api/checkouts/{d.Id}/working-copy", "POST"),
                     new Link("extend", $"/api/checkouts/{d.Id}/extend", "POST"),
+                    // The working copy against the current version (ADR 0517) — a rel, so the compare dialog
+                    // stops rebuilding /checkouts/{id}/compare from an id it was handed (issue #416).
+                    new Link("compare", $"/api/checkouts/{d.Id}/compare", "GET"),
                 ],
             });
         }

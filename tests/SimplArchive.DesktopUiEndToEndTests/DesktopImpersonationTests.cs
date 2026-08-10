@@ -22,11 +22,11 @@ public class DesktopImpersonationTests
 
         var targetId = await api.CreateUserAsync($"imp-target-{Guid.NewGuid():N}@e2e.local", "Imp Target");
 
-        var impersonationToken = await SimplArchiveApiClient.ExchangeImpersonationTokenAsync(adminToken, targetId);
+        var impersonationToken = await SimplArchiveApiClient.ExchangeImpersonationTokenAsync(adminToken, targetId.Id);
         Assert.NotNull(impersonationToken);
 
         var whoami = await new SimplArchiveApiClient(impersonationToken!).GetWhoAmIAsync();
-        Assert.Equal(targetId, whoami.UserId);
+        Assert.Equal(targetId.Id, whoami.UserId);
         Assert.NotNull(whoami.ImpersonatedBy); // named the acting admin
     }
 }

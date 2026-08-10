@@ -220,7 +220,17 @@ public class SensitivityLabelsController : ControllerBase
         Color = l.Color,
         Watermark = l.Watermark,
         Retired = l.RetiredAt != null,
-        Links = [new Link("self", $"/api/sensitivity-labels/{l.Id}", "PUT")],
+
+        // Retire and un-retire are mutually exclusive by construction, so the pair is advertised as state rather
+        // than as two buttons the client greys out from a `Retired` flag it interprets itself (issue #416): a
+        // live label offers `retire`, a retired one offers `unretire`, and neither client has to know the paths.
+        Links =
+        [
+            new Link("self", $"/api/sensitivity-labels/{l.Id}", "PUT"),
+            l.RetiredAt is null
+                ? new Link("retire", $"/api/sensitivity-labels/{l.Id}", "DELETE")
+                : new Link("unretire", $"/api/sensitivity-labels/{l.Id}/unretire", "POST"),
+        ],
     };
 
     private async Task SaveOrConflictAsync(CancellationToken cancellationToken)

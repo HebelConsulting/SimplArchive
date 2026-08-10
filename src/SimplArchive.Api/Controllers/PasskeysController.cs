@@ -70,6 +70,13 @@ public class PasskeysController : ControllerBase
             .Select(c => new PasskeyResource { Id = c.Id, Name = c.Name, CreatedAt = c.CreatedAt, LastUsedAt = c.LastUsedAt })
             .ToListAsync(cancellationToken);
 
+        // Each passkey addresses itself, so removing one is a rel to follow rather than a path both clients
+        // rebuild from an id (issue #416).
+        foreach (var passkey in passkeys)
+        {
+            passkey.Links = [new Link("self", $"/api/users/me/passkeys/{passkey.Id}", "DELETE")];
+        }
+
         return Ok(new PasskeyListResource { Passkeys = passkeys, Links = [new Link("self", "/api/users/me/passkeys", "GET")] });
     }
 
@@ -203,7 +210,7 @@ public class PasskeysController : ControllerBase
         public List<PasskeyResource> Passkeys { get; set; } = [];
     }
 
-    public class PasskeyResource
+    public class PasskeyResource : HypermediaResource
     {
         public Guid Id { get; set; }
         public string Name { get; set; } = "";

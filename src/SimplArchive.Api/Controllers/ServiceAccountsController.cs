@@ -444,7 +444,19 @@ public class ServiceAccountsController : ControllerBase
             CanManageServiceAccounts = serviceAccount.CanManageServiceAccounts,
             CanImport = serviceAccount.CanImport,
             CanExport = serviceAccount.CanExport,
-            Links = [new Link("self", $"/api/service-accounts/{serviceAccount.Id}", "GET")],
+
+            // The three management actions as rels (issue #416). Only a LIVE account offers them: rotating the
+            // secret of a revoked account, or revoking it twice, are affordances whose outcome is already
+            // decided, and ADR 0543 makes their absence the client's cue to disable rather than to try.
+            Links = serviceAccount.IsActive
+                ?
+                [
+                    new Link("self", $"/api/service-accounts/{serviceAccount.Id}", "GET"),
+                    new Link("edit", $"/api/service-accounts/{serviceAccount.Id}", "PUT"),
+                    new Link("revoke", $"/api/service-accounts/{serviceAccount.Id}", "DELETE"),
+                    new Link("rotate-secret", $"/api/service-accounts/{serviceAccount.Id}/rotate-secret", "POST"),
+                ]
+                : [new Link("self", $"/api/service-accounts/{serviceAccount.Id}", "GET")],
         };
     }
 

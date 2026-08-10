@@ -294,9 +294,16 @@ public class GroupsController : ControllerBase
     // Idempotently ensures the membership exists — same principal-keyed-PUT shape AclEntriesController
     // already established (ADR "ACL grant management endpoints"), fitting here too since GroupMembership
     // carries no data beyond the relationship itself.
-    [HttpPut("{groupId:guid}/members/{userId:guid}")]
-    public async Task<IActionResult> AddMember(Guid groupId, Guid userId, CancellationToken cancellationToken)
+    // The member arrives in the BODY, not in the path (issue #416). Keyed on (group, user), an add has no
+    // address until a user is chosen — and the user being added is by definition NOT in the members collection
+    // yet, so no resource a client holds could ever advertise "/members/{thatUser}". As a POST to the collection
+    // it becomes a plain rel-follow: the members collection advertises `add-member`, and the chosen principal
+    // travels as data. The keyed PUT is gone rather than kept alongside; two ways to do one thing is how a
+    // client ends up composing the path again (ADR 0543).
+    [HttpPost("{groupId:guid}/members")]
+    public async Task<IActionResult> AddMember(Guid groupId, [FromBody] AddMemberRequest request, CancellationToken cancellationToken)
     {
+        var userId = request.UserId;
         if (!await CanManageUsersAsync(cancellationToken))
         {
             return Forbid();
@@ -319,6 +326,11 @@ public class GroupsController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    public class AddMemberRequest
+    {
+        public Guid UserId { get; set; }
     }
 
     private Task<string?> GroupNameAsync(Guid groupId, CancellationToken cancellationToken) =>
@@ -382,7 +394,12 @@ public class GroupsController : ControllerBase
         var fetched = await query.OrderBy(u => u.CreatedAt).ThenBy(u => u.Id).Take(pageSize + 1).ToListAsync(cancellationToken);
         var (page, hasMore) = Cursor.Split(fetched, pageSize);
 
-        var links = new List<Link> { new("self", Url.Action(nameof(ListMembers), new { groupId, cursor, limit = pageSize })!, "GET") };
+        var links = new List<Link>
+        {
+            new("self", Url.Action(nameof(ListMembers), new { groupId, cursor, limit = pageSize })!, "GET"),
+            // Adding someone to this group — the chosen user travels in the body, so one address serves them all.
+            new("add-member", $"/api/groups/{groupId}/members", "POST"),
+        };
 
         if (hasMore)
         {
@@ -397,7 +414,15 @@ public class GroupsController : ControllerBase
                 Id = u.Id,
                 Email = u.Email,
                 DisplayName = u.DisplayName,
-                Links = new List<Link> { new("self", $"/api/users/{u.Id}", "GET") },
+                // Removing THIS membership is addressed by the pair, so the rel belongs on the member row — the
+                // only resource that knows both ends of it. (Adding one has no such home: the user being added
+                // is not in this collection yet, so no resource the client holds can advertise that address.
+                // A rel becomes possible only if the API takes the member in the BODY of a POST here.)
+                Links = new List<Link>
+                {
+                    new("self", $"/api/users/{u.Id}", "GET"),
+                    new("remove", $"/api/groups/{groupId}/members/{u.Id}", "DELETE"),
+                },
             }).ToList(),
             Links = links,
         });
@@ -465,6 +490,9 @@ public class GroupsController : ControllerBase
             [
                 new Link("self", $"/api/groups/{group.Id}", "GET"),
                 new Link("rights", $"/api/groups/{group.Id}/rights", "PUT"),
+                // The group's membership, and removing the group itself (issue #416).
+                new Link("members", $"/api/groups/{group.Id}/members", "GET"),
+                new Link("delete", $"/api/groups/{group.Id}", "DELETE"),
             ],
         };
     }

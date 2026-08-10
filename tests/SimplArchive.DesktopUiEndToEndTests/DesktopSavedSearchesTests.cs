@@ -30,7 +30,7 @@ public class DesktopSavedSearchesTests
         await Assert.ThrowsAsync<ApiActionException>(() => api.SaveSearchAsync(name, "q=other"));
 
         // Delete → gone.
-        await api.DeleteSavedSearchAsync(saved.Id);
+        await api.DeleteSavedSearchAsync(saved);
         Assert.DoesNotContain(await api.GetSavedSearchesAsync(), s => s.Id == saved.Id);
     }
 
@@ -55,14 +55,14 @@ public class DesktopSavedSearchesTests
         var aUser = targets.First(t => t.Type == "user");
         await api.SetSavedSearchShareAsync(saved, 2, [(aUser.Type, aUser.Id)]);
         Assert.Equal(2, (await api.GetSavedSearchesAsync()).Single(s => s.Id == saved.Id).ShareScope);
-        var grants = await api.GetSavedSearchSharesAsync(saved.Id);
+        var grants = await api.GetSavedSearchSharesAsync(saved);
         Assert.Equal(aUser.Id, Assert.Single(grants).PrincipalId);
 
         // Back to private (scope 0) — the specific grants are cleared.
         await api.SetSavedSearchShareAsync(saved, 0, []);
         Assert.Equal(0, (await api.GetSavedSearchesAsync()).Single(s => s.Id == saved.Id).ShareScope);
-        Assert.Empty(await api.GetSavedSearchSharesAsync(saved.Id));
+        Assert.Empty(await api.GetSavedSearchSharesAsync(saved));
 
-        await api.DeleteSavedSearchAsync(saved.Id);
+        await api.DeleteSavedSearchAsync(saved);
     }
 }

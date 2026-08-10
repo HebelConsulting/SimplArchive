@@ -29,7 +29,9 @@ public partial class PasskeysDialog : Window
         Opened += async (_, _) => await LoadAsync();
     }
 
-    public sealed record PasskeyRow(Guid Id, string Name, string Meta);
+    // Carries the row's own removal address (its `self` rel) rather than just an id, so the delete button
+    // follows what the server advertised (ADR 0543, issue #416).
+    public sealed record PasskeyRow(Guid Id, string Name, string Meta, string? RemoveHref);
 
     private async Task LoadAsync()
     {
@@ -46,7 +48,7 @@ public partial class PasskeysDialog : Window
             {
                 var meta = $"Added {k.CreatedAt.LocalDateTime:yyyy-MM-dd}"
                     + (k.LastUsedAt is { } u ? $" · last used {u.LocalDateTime:yyyy-MM-dd}" : "");
-                _rows.Add(new PasskeyRow(k.Id, k.Name, meta));
+                _rows.Add(new PasskeyRow(k.Id, k.Name, meta, k.RemoveHref));
             }
 
             EmptyLabel.IsVisible = _rows.Count == 0;
@@ -94,7 +96,9 @@ public partial class PasskeysDialog : Window
 
         try
         {
-            await _api.RemovePasskeyAsync(row.Id);
+            if (row.RemoveHref is not { } removeHref) { return; }
+
+            await _api.RemovePasskeyAsync(removeHref);
             await LoadAsync();
         }
         catch (Exception)

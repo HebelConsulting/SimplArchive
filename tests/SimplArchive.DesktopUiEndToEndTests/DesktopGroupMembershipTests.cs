@@ -25,15 +25,15 @@ public class DesktopGroupMembershipTests
 
         Assert.Empty(await client.GetGroupMembersAsync(groupId));
 
-        await client.AddGroupMemberAsync(groupId, userId);
+        await client.AddGroupMemberAsync(groupId, userId.Id);
         var members = await client.GetGroupMembersAsync(groupId);
-        Assert.Contains(members, m => m.Id == userId);
+        Assert.Contains(members, m => m.Id == userId.Id);
 
-        // PUT is idempotent — adding again doesn't duplicate.
-        await client.AddGroupMemberAsync(groupId, userId);
+        // The POST is idempotent — adding again doesn't duplicate.
+        await client.AddGroupMemberAsync(groupId, userId.Id);
         Assert.Single(await client.GetGroupMembersAsync(groupId));
 
-        await client.RemoveGroupMemberAsync(groupId, userId);
+        await client.RemoveGroupMemberAsync(members.Single(m => m.Id == userId.Id));
         Assert.Empty(await client.GetGroupMembersAsync(groupId));
 
         // The group is empty now, so it can be deleted — cleanup.

@@ -3116,7 +3116,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        try { await _api.DeleteSavedSearchAsync(s.Id); } catch (Exception) { }
+        try { await _api.DeleteSavedSearchAsync(s); } catch (Exception) { }
         await LoadSavedSearchesAsync();
     }
 
@@ -3137,7 +3137,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             var targets = await _api.GetShareTargetsAsync();
             var current = s.ShareScope == 2
-                ? (await _api.GetSavedSearchSharesAsync(s.Id)).Select(g => $"{g.PrincipalType}:{g.PrincipalId}").ToHashSet()
+                ? (await _api.GetSavedSearchSharesAsync(s)).Select(g => $"{g.PrincipalType}:{g.PrincipalId}").ToHashSet()
                 : [];
             var options = targets.Select(t => new ShareSavedSearchViewModel.PrincipalOption(
                 t.Type, t.Id, t.Type == "group" ? $"{t.Name} (group)" : t.Name, current.Contains($"{t.Type}:{t.Id}")));
@@ -3718,7 +3718,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.AddGroupMemberAsync(group.Id, value.Id);
+            await _api.AddGroupMemberAsync(group.Source!, value.Id);
             await LoadGroupMembersAsync(group);
             Status = string.Format(Strings.Get("StAdded"), value.DisplayName);
         }
@@ -3746,7 +3746,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            foreach (var m in await _api.GetGroupMembersAsync(p.Id))
+            foreach (var m in await _api.GetGroupMembersAsync(p.Source!))
             {
                 GroupMembers.Add(m);
             }
@@ -3781,7 +3781,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.RemoveGroupMemberAsync(group.Id, member.Id);
+            await _api.RemoveGroupMemberAsync(member);
             GroupMembers.Remove(member);
             HasGroupMembers = GroupMembers.Count > 0;
             RebuildMemberCandidates();
@@ -3856,7 +3856,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.ResetUserMfaAsync(p.Id);
+            await _api.ResetUserMfaAsync(p.Source!);
             p.MfaEnabled = false;
             OnPropertyChanged(nameof(SelectedPrincipalMfaStatus));
             OnPropertyChanged(nameof(CanResetSelectedPrincipalMfa));
@@ -4437,7 +4437,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var password = await _api.ResetUserPasswordAsync(p.Id);
+            var password = await _api.ResetUserPasswordAsync(p.Source!);
             Status = string.Format(Strings.Get("StPwResetFor"), p.Name);
             return password;
         }
@@ -4463,7 +4463,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var bytes = await _api.GetUserPhotoAsync(id);
+            // My own avatar is a rel on the `me` resource; the id was only ever a way to rebuild the path.
+            var bytes = await _api.GetMyPhotoAsync();
             ProfilePhoto = bytes is null ? null : Decode(bytes);
         }
         catch (Exception)
@@ -4506,7 +4507,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var bytes = await _api.GetUserPhotoAsync(p.Id);
+            var bytes = await _api.GetUserPhotoAsync(p.Source!);
             SelectedPrincipalPhoto = bytes is null ? null : Decode(bytes);
         }
         catch (Exception)
@@ -4524,7 +4525,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.SetUserPhotoAsync(p.Id, png);
+            await _api.SetUserPhotoAsync(p.Source!, png);
             await LoadSelectedPrincipalPhotoAsync(p);
             Status = Strings.Get("StPhotoUpdated");
         }
@@ -4547,7 +4548,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.DeleteUserPhotoAsync(p.Id);
+            await _api.DeleteUserPhotoAsync(p.Source!);
             SelectedPrincipalPhoto = null;
             Status = Strings.Get("StPhotoRemoved");
         }
@@ -4601,7 +4602,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             // Groups first (two-person icon), then users, each alphabetical.
             foreach (var p in groups.Concat(users).OrderByDescending(p => p.IsGroup).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
             {
-                Principals.Add(new PrincipalRowViewModel(p.IsGroup, p.Id, p.Name, p.IsActive, p.Rights, p.MfaEnabled));
+                Principals.Add(new PrincipalRowViewModel(p.IsGroup, p.Id, p.Name, p.IsActive, p.Rights, p.MfaEnabled, p));
             }
 
             SelectedPrincipal = Principals.FirstOrDefault(p => p.Id == previousId && p.IsGroup == previousIsGroup);
@@ -4701,11 +4702,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             var rights = CurrentMatrixRights();
             if (p.IsGroup)
             {
-                await _api.SetGroupRightsAsync(p.Id, rights);
+                await _api.SetRightsAsync(p.Source!, rights);
             }
             else
             {
-                await _api.SetUserRightsAsync(p.Id, rights);
+                await _api.SetRightsAsync(p.Source!, rights);
             }
 
             p.Rights = rights;
@@ -4737,21 +4738,16 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var id = isGroup ? await _api.CreateGroupAsync(name) : await _api.CreateUserAsync(email, name);
+            var created = isGroup ? await _api.CreateGroupAsync(name) : await _api.CreateUserAsync(email, name);
             if (copyRights is not null)
             {
-                if (isGroup)
-                {
-                    await _api.SetGroupRightsAsync(id, copyRights);
-                }
-                else
-                {
-                    await _api.SetUserRightsAsync(id, copyRights);
-                }
+                // The create response IS the resource, rels included, so Copy applies the source's rights by
+                // following the new row's own `rights` rel — no re-fetch, no path rebuilt from an id (ADR 0555).
+                await _api.SetRightsAsync(created, copyRights);
             }
 
             await LoadPrincipalsAsync();
-            SelectedPrincipal = Principals.FirstOrDefault(p => p.IsGroup == isGroup && p.Id == id);
+            SelectedPrincipal = Principals.FirstOrDefault(p => p.IsGroup == isGroup && p.Id == created.Id);
             Status = isGroup ? "Group created." : "User created.";
         }
         catch (ApiActionException ex)
@@ -4779,11 +4775,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             if (p.IsGroup)
             {
-                await _api.DeleteGroupAsync(p.Id);
+                await _api.DeleteGroupAsync(p.Source!);
             }
             else
             {
-                await _api.DeleteUserAsync(p.Id);
+                await _api.DeleteUserAsync(p.Source!);
             }
 
             Status = p.IsGroup ? "Group deleted." : "User deactivated.";
@@ -4824,7 +4820,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.DeleteUserAsync(p.Id, replacementId);
+            await _api.DeleteUserAsync(p.Source!, replacementId);
             Status = Strings.Get("StReviewsReassigned");
             SelectedPrincipal = null;
             await LoadPrincipalsAsync();
@@ -5034,7 +5030,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             foreach (var t in (await _api.GetTagCatalogWithColorsAsync()).Items)
             {
-                TagCatalogAdmin.Add(new TagCatalogRow(t.Id, t.Name, t.Color));
+                TagCatalogAdmin.Add(new TagCatalogRow(t));
             }
         }
         catch (Exception) { /* not readable */ }
@@ -5068,7 +5064,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.UpdateTagAsync(row.Id, row.Name.Trim(), string.IsNullOrWhiteSpace(row.Color) ? "" : row.Color!.Trim());
+            await _api.UpdateTagAsync(row.Source, row.Name.Trim(), string.IsNullOrWhiteSpace(row.Color) ? "" : row.Color!.Trim());
             await LoadTagCatalogAsync();
         }
         catch (Exception e) { Status = e is ApiActionException a ? a.Message : "Could not update the tag."; }
@@ -5082,7 +5078,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        try { await _api.RetireTagAsync(row.Id); await LoadTagCatalogAsync(); }
+        try { await _api.RetireTagAsync(row.Source); await LoadTagCatalogAsync(); }
         catch (Exception e) { Status = e is ApiActionException a ? a.Message : "Could not retire the tag."; }
     }
 
@@ -5094,7 +5090,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        try { await _api.MergeTagAsync(row.Id, target.Id); await LoadTagCatalogAsync(); }
+        try { await _api.MergeTagAsync(row.Source, target.Id); await LoadTagCatalogAsync(); }
         catch (Exception e) { Status = e is ApiActionException a ? a.Message : "Could not merge the tags."; }
     }
 
@@ -6253,8 +6249,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
             CanSee: true, CanReadContent: true, CanEditContent: false, CanEditIndexData: false,
             CanCreateSubItems: false, CanDelete: false, CanMove: false, CanAnnotate: false, CanManagePermissions: false);
 
-        var rootGranted = await GrantAndRevokeAsync(root.Id, granteeId, viewer);
-        var subGranted = await GrantAndRevokeAsync(sub.Id, granteeId, viewer);
+        var rootGranted = await GrantAndRevokeAsync(root.Id, granteeId.Id, viewer);
+        var subGranted = await GrantAndRevokeAsync(sub.Id, granteeId.Id, viewer);
 
         await DeleteFolderByIdAsync(sub.Id); // clean up
         return (rootGranted, subGranted);
@@ -6420,7 +6416,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         UseApi(new SimplArchiveApiClient(accessToken));
         CanManageInboxes = (await _api!.GetWhoAmIAsync()).CanManageInboxes;
 
-        var recipientId = await _api.CreateUserAsync($"send-{Guid.NewGuid():N}@e2e.local", "Send Recipient");
+        var recipient = await _api.CreateUserAsync($"send-{Guid.NewGuid():N}@e2e.local", "Send Recipient");
 
         var name = "send-" + Guid.NewGuid().ToString("N")[..8] + ".txt";
         await UploadFilesToInboxAsync(new[] { (name, System.Text.Encoding.UTF8.GetBytes("hand-off")) });
@@ -6429,7 +6425,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return false;
         }
 
-        var target = (await GetInboxSendTargetsAsync()).FirstOrDefault(t => !t.IsGroup && t.Id == recipientId);
+        var target = (await GetInboxSendTargetsAsync()).FirstOrDefault(t => !t.IsGroup && t.Id == recipient.Id);
         if (target is null)
         {
             return false;
@@ -6437,10 +6433,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         await SendInboxItemAsync(item, target);
         var leftOwnInbox = ServerInbox.All(i => i.Name != name);                                  // gone from mine
-        var inRecipientInbox = (await _api.GetInboxAsync(user: recipientId)).Any(i => i.Name == name); // now theirs
+        var inRecipientInbox = (await _api.GetInboxAsync(user: recipient.Id)).Any(i => i.Name == name); // now theirs
 
-        await _api.DeleteInboxItemAsync(name, $"?user={recipientId}");
-        await _api.DeleteUserAsync(recipientId);
+        await _api.DeleteInboxItemAsync(name, $"?user={recipient.Id}");
+        await _api.DeleteUserAsync(recipient);
         return leftOwnInbox && inRecipientInbox;
     }
 

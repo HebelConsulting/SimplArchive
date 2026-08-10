@@ -375,7 +375,12 @@ public class DocumentVersionsController : ControllerBase
 
         var (page, hasMore) = Cursor.Split(fetched, pageSize);
 
-        var links = new List<Link> { new("self", Url.Action(nameof(List), new { documentId, cursor, limit = pageSize })!, "GET") };
+        var links = new List<Link>
+        {
+            new("self", Url.Action(nameof(List), new { documentId, cursor, limit = pageSize })!, "GET"),
+            // Comparing two of these versions — the client appends ?from=&to= to this advertised address.
+            new("compare", $"/api/documents/{documentId}/versions/compare", "GET"),
+        };
 
         if (hasMore)
         {
@@ -460,48 +465,54 @@ public class DocumentVersionsController : ControllerBase
     // Requires CanReadContent on both (via CanAccessVersionContentAsync, which also enforces workflow gating).
     // Available is false when either version has no extractable text (a binary/image format, or Tika unavailable
     // for office/PDF) — the client then shows "comparison not available for this format".
-    [HttpGet("{fromVersionId:guid}/compare/{toVersionId:guid}")]
-    public async Task<IActionResult> Compare(Guid documentId, Guid fromVersionId, Guid toVersionId, CancellationToken cancellationToken)
+    // The PAIR is expressed as a query, not as path segments (issue #416). A link names ONE resource, so
+    // "/versions/{from}/compare/{to}" could never be advertised — the client had to build it, which is exactly
+    // what ADR 0543 removes. As "/versions/compare?from=&to=" the collection advertises a single `compare`
+    // address and the client supplies its two operands as parameters, the same shape as any other filter.
+    [HttpGet("compare")]
+    public async Task<IActionResult> Compare(Guid documentId, [FromQuery] Guid from, [FromQuery] Guid to, CancellationToken cancellationToken)
     {
-        var from = await LoadForReadAsync(documentId, fromVersionId, cancellationToken);
-        var to = await LoadForReadAsync(documentId, toVersionId, cancellationToken);
-        if (from is null || to is null)
+        var fromVersionId = from;
+        var toVersionId = to;
+        var fromVersion = await LoadForReadAsync(documentId, fromVersionId, cancellationToken);
+        var toVersion = await LoadForReadAsync(documentId, toVersionId, cancellationToken);
+        if (fromVersion is null || toVersion is null)
         {
             return NotFound();
         }
 
-        if (!await CanAccessVersionContentAsync(from.Id, documentId, cancellationToken)
-            || !await CanAccessVersionContentAsync(to.Id, documentId, cancellationToken))
+        if (!await CanAccessVersionContentAsync(fromVersion.Id, documentId, cancellationToken)
+            || !await CanAccessVersionContentAsync(toVersion.Id, documentId, cancellationToken))
         {
             return Forbid();
         }
 
-        var comparison = await _comparer.CompareAsync(from.ObjectKey, to.ObjectKey, cancellationToken: cancellationToken);
+        var comparison = await _comparer.CompareAsync(fromVersion.ObjectKey, toVersion.ObjectKey, cancellationToken: cancellationToken);
 
         return Ok(new VersionComparisonResource
         {
-            FromVersionId = from.Id,
-            FromVersionNumber = from.VersionNumber,
-            ToVersionId = to.Id,
-            ToVersionNumber = to.VersionNumber,
+            FromVersionId = fromVersion.Id,
+            FromVersionNumber = fromVersion.VersionNumber,
+            ToVersionId = toVersion.Id,
+            ToVersionNumber = toVersion.VersionNumber,
             Available = comparison.Available,
             Lines = comparison.Lines.Select(l => new DiffLineResource { Op = (int)l.Op, Text = l.Text }).ToList(),
-            Links = [new Link("self", $"/api/documents/{documentId}/versions/{fromVersionId}/compare/{toVersionId}", "GET")],
+            Links = [new Link("self", $"/api/documents/{documentId}/versions/compare?from={fromVersionId}&to={toVersionId}", "GET")],
         });
     }
 
-    [HttpHead("{fromVersionId:guid}/compare/{toVersionId:guid}")]
-    public async Task<IActionResult> CompareHead(Guid documentId, Guid fromVersionId, Guid toVersionId, CancellationToken cancellationToken)
+    [HttpHead("compare")]
+    public async Task<IActionResult> CompareHead(Guid documentId, [FromQuery] Guid from, [FromQuery] Guid to, CancellationToken cancellationToken)
     {
-        var from = await LoadForReadAsync(documentId, fromVersionId, cancellationToken);
-        var to = await LoadForReadAsync(documentId, toVersionId, cancellationToken);
-        if (from is null || to is null)
+        var fromVersion = await LoadForReadAsync(documentId, from, cancellationToken);
+        var toVersion = await LoadForReadAsync(documentId, to, cancellationToken);
+        if (fromVersion is null || toVersion is null)
         {
             return NotFound();
         }
 
-        return await CanAccessVersionContentAsync(from.Id, documentId, cancellationToken)
-            && await CanAccessVersionContentAsync(to.Id, documentId, cancellationToken)
+        return await CanAccessVersionContentAsync(fromVersion.Id, documentId, cancellationToken)
+            && await CanAccessVersionContentAsync(toVersion.Id, documentId, cancellationToken)
             ? NoContent()
             : Forbid();
     }

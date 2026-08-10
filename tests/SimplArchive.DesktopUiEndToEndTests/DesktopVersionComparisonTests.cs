@@ -34,7 +34,9 @@ public class DesktopVersionComparisonTests
         // "Compare-versions gating + default") — 2 here, so the action is enabled.
         Assert.Equal(2, (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Id == doc.Id).VersionCount);
 
-        var cmp = await api.GetVersionComparisonAsync(doc.Id, versions[1].Id, versions[0].Id);
+        // The version collection advertises ONE compare address; the pair travels as query parameters.
+        var (_, compareHref) = await api.GetVersionsWithLinksAsync(doc.Href("versions"));
+        var cmp = await api.GetVersionComparisonAsync(compareHref!, versions[1].Id, versions[0].Id);
         Assert.True(cmp.Available);
         Assert.Contains(cmp.Lines, l => l.Op == 0 && l.Text == "one");     // unchanged
         Assert.Contains(cmp.Lines, l => l.Op == 2 && l.Text == "two");     // removed

@@ -66,7 +66,7 @@ public class RetentionController : ControllerBase
         public bool RequiresReview { get; set; }
     }
 
-    public class RetentionItemResource
+    public class RetentionItemResource : HypermediaResource
     {
         public Guid DocumentId { get; set; }
         public string DocumentName { get; set; } = "";
@@ -134,6 +134,20 @@ public class RetentionController : ControllerBase
 
         var requiresReview = _currentTenantAccessor.TenantId is { } tenantId
             && await _dbContext.Tenants.Where(t => t.Id == tenantId).Select(t => t.RequireDispositionReview).FirstOrDefaultAsync(cancellationToken);
+
+        // Each due document carries the two things that can be done to it. Dispose is only offered where the
+        // tenant does NOT require a review first — an affordance whose outcome is already decided is exactly
+        // what a missing rel is for (ADR 0543, issue #416).
+        foreach (var item in items)
+        {
+            item.Links = requiresReview
+                ? [new Link("extend", $"/api/retention/{item.DocumentId}/extend", "POST")]
+                :
+                [
+                    new Link("dispose", $"/api/retention/{item.DocumentId}/dispose", "POST"),
+                    new Link("extend", $"/api/retention/{item.DocumentId}/extend", "POST"),
+                ];
+        }
 
         return Ok(new RetentionScheduleResource
         {

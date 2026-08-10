@@ -175,6 +175,14 @@ public class RepositoriesController : ControllerBase
                     Links =
                     [
                         new Link("self", Url.Action(nameof(Get), new { repositoryId = candidate.Id })!, "GET"),
+                        // The SAME object seen as a document (ADR 0200 — a repository IS a document with no
+                        // parent). `self` here is the repository view, which answers different questions and
+                        // carries different rels; anything that needs the document view — its grants, its
+                        // sensitivity, its check-out state — must follow this instead. Without it a client
+                        // holding a repository row has no address for the document at all, and the manage-access
+                        // dialog read the repository resource, found no `acl-entries`, and told the user it had
+                        // no permission (issue #416).
+                        new Link("document", $"/api/documents/{candidate.Id}", "GET"),
                         new Link("children", $"/api/documents/{candidate.Id}/children", "GET"),
                         new Link("index-data", $"/api/documents/{candidate.Id}/index-data", "GET"),
                         new Link("mask", $"/api/documents/{candidate.Id}/mask", "GET"),

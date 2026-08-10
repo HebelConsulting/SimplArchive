@@ -31,7 +31,9 @@
     private IMudDialogInstance Dialog { get; set; } = null!;
 
     // null = the current user (PUT /users/me/photo); set = that user (admin, PUT /users/{id}/photo).
-    [Parameter] public Guid? UserId { get; set; }
+    // The address to PUT/DELETE this avatar at, followed from the user row's `photo` rel when an admin edits
+    // someone else's. Null means "my own", which the me resource answers for (issue #416).
+    [Parameter] public string? PhotoHref { get; set; }
 
     private ElementReference _host;
     private IJSObjectReference? _module;
@@ -39,10 +41,10 @@
     private bool _busy;
 
     // A method, not a property: following the "photo" rel is a lookup that may have to fetch the me
-    // resource first, and a property cannot await. Editing someone ELSE's photo is an admin action on
-    // that user, so it keeps the per-user path until a rel exists for it.
+    // resource first, and a property cannot await. Both sides are now rels — the caller's own from the me
+    // resource, another user's handed in from that user's row (issue #416).
     private async Task<string> PutUrlAsync() =>
-        UserId is { } id ? $"api/users/{id}/photo" : await ApiRoot.RequireMeAsync("photo");
+        PhotoHref ?? await ApiRoot.RequireMeAsync("photo");
 
     private async Task OnFileAsync(InputFileChangeEventArgs e)
     {

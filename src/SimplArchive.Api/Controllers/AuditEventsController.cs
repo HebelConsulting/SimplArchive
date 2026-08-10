@@ -173,7 +173,19 @@ public class AuditEventsController : ControllerBase
             .ToListAsync(cancellationToken);
         var (page, hasMore) = Cursor.Split(fetched, pageSize);
 
-        var links = new List<Link> { new("self", Url.Action(nameof(List), new { cursor, limit = pageSize })!, "GET") };
+        // The log's own retention policy — read and set at the same address. An action ON this collection, so
+        // it is a rel here rather than at the root, which is the rule RootController states (issue #416).
+        var links = new List<Link>
+        {
+            new("self", Url.Action(nameof(List), new { cursor, limit = pageSize })!, "GET"),
+            new("retention", Url.Action(nameof(GetRetention))!, "GET"),
+            // The rest of what can be done TO this log, advertised by the log itself rather than composed by
+            // each client: take a copy, drop what is past retention, and prove it has not been tampered with.
+            new("export", Url.Action(nameof(Export))!, "GET"),
+            new("purge", Url.Action(nameof(Purge))!, "POST"),
+            new("verify", Url.Action(nameof(Verify))!, "GET"),
+            new("worm-verify", Url.Action(nameof(WormVerify))!, "GET"),
+        };
         if (hasMore)
         {
             var nextCursor = Cursor.Encode(page[^1].Timestamp, page[^1].Id);

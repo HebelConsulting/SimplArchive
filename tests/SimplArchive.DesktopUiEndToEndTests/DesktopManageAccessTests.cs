@@ -36,23 +36,23 @@ public class DesktopManageAccessTests
         Assert.False(initial.Forbidden);
         Assert.False(initial.BreaksInheritance);
         Assert.Empty(initial.Entries);
-        Assert.Contains(initial.Principals, p => p.Type == "users" && p.Id == granteeId && p.Name == granteeName);
+        Assert.Contains(initial.Principals, p => p.Type == "users" && p.Id == granteeId.Id && p.Name == granteeName);
 
         // Grant the Viewer bundle (See + ReadContent).
         var viewer = new SimplArchiveApiClient.AclRights(
             CanSee: true, CanReadContent: true, CanEditContent: false, CanEditIndexData: false,
             CanCreateSubItems: false, CanDelete: false, CanMove: false, CanAnnotate: false, CanManagePermissions: false);
-        await api.SetAclEntryAsync(folder.Id, "users", granteeId, viewer);
+        await api.SetAclEntryAsync(folder.Id, "users", granteeId.Id, viewer);
 
         // It reads back as a Viewer preset for that user.
         var afterGrant = await api.GetAclAsync(folder.Id);
-        var entry = afterGrant.Entries.Single(e => e.PrincipalType == "users" && e.PrincipalId == granteeId);
+        var entry = afterGrant.Entries.Single(e => e.PrincipalType == "users" && e.PrincipalId == granteeId.Id);
         Assert.Equal("MaRoleViewer", ManageAccessViewModel.PresetLabelKey(entry.Rights));
         Assert.True(entry.Rights is { CanSee: true, CanReadContent: true, CanEditContent: false, CanManagePermissions: false });
 
         // Revoke → the grant is gone.
-        await api.RevokeAclEntryAsync(folder.Id, "users", granteeId);
-        Assert.DoesNotContain((await api.GetAclAsync(folder.Id)).Entries, e => e.PrincipalId == granteeId);
+        await api.RevokeAclEntryAsync(folder.Id, "users", granteeId.Id);
+        Assert.DoesNotContain((await api.GetAclAsync(folder.Id)).Entries, e => e.PrincipalId == granteeId.Id);
 
         await api.DeleteAsync(folder.Id); // clean up
     }
@@ -117,17 +117,17 @@ public class DesktopManageAccessTests
         var groupName = $"grp-{suffix}";
         var groupId = await api.CreateGroupAsync(groupName);
         var userId = await api.CreateUserAsync($"member-{suffix}@simplarchive.local", $"Member {suffix}");
-        await api.AddGroupMemberAsync(groupId, userId);
+        await api.AddGroupMemberAsync(groupId, userId.Id);
 
         // Grant the group Viewer directly on the folder (now the governing scope).
         var viewer = new SimplArchiveApiClient.AclRights(true, true, false, false, false, false, false, false, false);
-        await api.SetAclEntryAsync(folder.Id, "groups", groupId, viewer);
+        await api.SetAclEntryAsync(folder.Id, "groups", groupId.Id, viewer);
 
         var eff = await api.GetEffectiveAccessAsync(folder.Id);
 
         // The group appears as a direct grant, and its member is resolved as accessing "via group".
-        Assert.Contains(eff.Entries, e => e.Type == "groups" && e.Id == groupId && e.Access == "direct");
-        Assert.Contains(eff.Entries, e => e.Type == "users" && e.Id == userId && e.Access == "group" && e.ViaGroup == groupName);
+        Assert.Contains(eff.Entries, e => e.Type == "groups" && e.Id == groupId.Id && e.Access == "direct");
+        Assert.Contains(eff.Entries, e => e.Type == "users" && e.Id == userId.Id && e.Access == "group" && e.ViaGroup == groupName);
         // The demo admin bypasses the ACL — flagged as a tenant admin.
         Assert.Contains(eff.Entries, e => e.Type == "users" && e.Access == "admin");
 

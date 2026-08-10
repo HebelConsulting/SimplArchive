@@ -194,6 +194,14 @@
 
     protected override Task OnInitializedAsync() => LoadAsync();
 
+    // The document resource's address (the caller's `self` rel). Every other address this dialog uses is a rel
+    // ON it or on the grant collection it points to — the ACL list, the picker, the effective view, each grant's
+    // edit/remove, and the PUT that creates a new grant (ADR 0543, issue #416).
+    [Parameter] public string? DocumentHref { get; set; }
+
+    private string? _grantablePrincipalsHref;
+    private string? _effectiveHref;
+
     private async Task LoadAsync()
     {
         _loading = true;
@@ -201,18 +209,38 @@
         _loadError = false;
         try
         {
-            var listResponse = await Http.GetAsync($"api/documents/{DocumentId}/acl-entries");
+            if (DocumentHref is null)
+            {
+                _loadError = true;
+                return;
+            }
+
+            var doc = await Http.GetFromJsonAsync<DocDto>(DocumentHref);
+            _breaksInheritance = doc?.BreaksInheritance ?? false;
+            _inheritanceHref = Rel(doc?.Links, "acl-inheritance");
+
+            // No `acl-entries` rel means the server is not offering this document's grants to this caller —
+            // the same answer the 403 used to carry, arrived at before the request instead of after it.
+            if (Rel(doc?.Links, "acl-entries") is not { } aclHref)
+            {
+                _forbidden = true;
+                return;
+            }
+
+            var listResponse = await Http.GetAsync(aclHref);
             if (listResponse.StatusCode == System.Net.HttpStatusCode.Forbidden)
             {
                 _forbidden = true;
                 return;
             }
             listResponse.EnsureSuccessStatusCode();
-            _entries = (await listResponse.Content.ReadFromJsonAsync<AclListDto>())?.Entries ?? [];
-            _principals = (await Http.GetFromJsonAsync<PrincipalsDto>($"api/documents/{DocumentId}/acl-entries/grantable-principals"))?.Principals ?? [];
-            var doc = await Http.GetFromJsonAsync<DocDto>($"api/documents/{DocumentId}");
-            _breaksInheritance = doc?.BreaksInheritance ?? false;
-            _inheritanceHref = doc?.Links?.FirstOrDefault(l => l.Rel == "acl-inheritance")?.Href;
+            var list = await listResponse.Content.ReadFromJsonAsync<AclListDto>();
+            _entries = list?.Entries ?? [];
+            _grantablePrincipalsHref = Rel(list?.Links, "grantable-principals");
+            _effectiveHref = Rel(list?.Links, "effective");
+            _principals = _grantablePrincipalsHref is null
+                ? []
+                : (await Http.GetFromJsonAsync<PrincipalsDto>(_grantablePrincipalsHref))?.Principals ?? [];
         }
         catch (Exception)
         {
@@ -245,7 +273,9 @@
         _effectiveLoading = true;
         try
         {
-            var resp = await Http.GetFromJsonAsync<EffectiveDto>($"api/documents/{DocumentId}/acl-entries/effective");
+            if (_effectiveHref is null) { return; }
+
+            var resp = await Http.GetFromJsonAsync<EffectiveDto>(_effectiveHref);
             _effectiveInheritedFrom = resp?.InheritedFrom ?? "";
             _effective = (resp?.Entries ?? []).OrderBy(e => e.Type).ThenBy(e => e.Name).ToList();
         }
@@ -371,11 +401,17 @@
             return;
         }
 
+        // A new grant's address comes from the PRINCIPAL the user picked, an existing one's from its own row.
         var (type, id) = _editing.IsNew ? Split(_editing.PrincipalKey) : (_editing.PrincipalType, _editing.PrincipalId);
+        var target = _editing.IsNew
+            ? Rel(_principals.FirstOrDefault(p => p.Type == type && p.Id == id)?.Links, "grant")
+            : Rel(_entries.FirstOrDefault(e => e.PrincipalType == type && e.PrincipalId == id)?.Links, "edit");
+        if (target is null) { return; }
+
         _busy = true;
         try
         {
-            var response = await Http.PutAsJsonAsync($"api/documents/{DocumentId}/acl-entries/{type}/{id}", _editing.Rights);
+            var response = await Http.PutAsJsonAsync(target, _editing.Rights);
             if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
             {
                 Snackbar.Add(Strings.Get("MaInsufficientRights"), Severity.Warning);
@@ -413,7 +449,9 @@
         _busy = true;
         try
         {
-            var response = await Http.DeleteAsync($"api/documents/{DocumentId}/acl-entries/{e.PrincipalType}/{e.PrincipalId}");
+            if (Rel(e.Links, "remove") is not { } removeHref) { return; }
+
+            var response = await Http.DeleteAsync(removeHref);
             response.EnsureSuccessStatusCode();
             if (_editing is not null && !_editing.IsNew && _editing.PrincipalType == e.PrincipalType && _editing.PrincipalId == e.PrincipalId)
             {
@@ -531,7 +569,13 @@
             && CanMove == o.CanMove && CanAnnotate == o.CanAnnotate && CanManagePermissions == o.CanManagePermissions;
     }
 
-    private sealed class AclListDto { public List<AclEntryDto> Entries { get; set; } = []; }
+    private sealed class AclListDto { public List<AclEntryDto> Entries { get; set; } = []; public List<LinkDto>? Links { get; set; } }
+
+    private static string? Rel(List<LinkDto>? links, string rel)
+    {
+        var href = links?.FirstOrDefault(l => l.Rel == rel)?.Href;
+        return href is null ? null : href.TrimStart('/');
+    }
 
     private sealed class AclEntryDto
     {
@@ -547,6 +591,7 @@
         public bool CanMove { get; set; }
         public bool CanAnnotate { get; set; }
         public bool CanManagePermissions { get; set; }
+        public List<LinkDto>? Links { get; set; }
     }
 
     private sealed class PrincipalsDto { public List<PrincipalDto> Principals { get; set; } = []; }
@@ -556,6 +601,7 @@
         public string Type { get; set; } = "";
         public Guid Id { get; set; }
         public string Name { get; set; } = "";
+        public List<LinkDto>? Links { get; set; }
     }
 
     private sealed class DocDto

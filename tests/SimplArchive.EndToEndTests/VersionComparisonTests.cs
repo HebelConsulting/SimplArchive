@@ -26,7 +26,7 @@ public class VersionComparisonTests
         var v1 = await UploadVersionAsync(api, docId, ".txt", "alpha\nbeta\ngamma\n");
         var v2 = await UploadVersionAsync(api, docId, ".txt", "alpha\nBETA changed\ngamma\ndelta\n");
 
-        var cmp = await TestJson.Get(api, $"/api/documents/{docId}/versions/{v1}/compare/{v2}");
+        var cmp = await TestJson.Get(api, $"/api/documents/{docId}/versions/compare?from={v1}&to={v2}");
         Assert.True(cmp.GetProperty("available").GetBoolean());
         var lines = cmp.GetProperty("lines").EnumerateArray().Select(l => (Op: l.GetProperty("op").GetInt32(), Text: l.GetProperty("text").GetString())).ToList();
 
@@ -50,7 +50,7 @@ public class VersionComparisonTests
         // Random non-text bytes with a binary extension → no extractable text.
         var v2 = await UploadBytesVersionAsync(api, docId, ".bin", [0x00, 0x01, 0x02, 0xFF, 0xFE, 0x7A, 0x13, 0x37]);
 
-        var cmp = await TestJson.Get(api, $"/api/documents/{docId}/versions/{v1}/compare/{v2}");
+        var cmp = await TestJson.Get(api, $"/api/documents/{docId}/versions/compare?from={v1}&to={v2}");
         Assert.False(cmp.GetProperty("available").GetBoolean());
         Assert.Empty(cmp.GetProperty("lines").EnumerateArray());
     }
@@ -69,7 +69,7 @@ public class VersionComparisonTests
         // A service account with no grants can't compare.
         var (otherClientId, otherSecret) = await _factory.SeedServiceAccountInTenantAsync(tenantId, canManageRepositories: false);
         using var outsider = _factory.CreateAuthedClient(await _factory.GetTokenAsync(otherClientId, otherSecret));
-        Assert.Equal(HttpStatusCode.Forbidden, (await outsider.GetAsync($"/api/documents/{docId}/versions/{v1}/compare/{v2}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await outsider.GetAsync($"/api/documents/{docId}/versions/compare?from={v1}&to={v2}")).StatusCode);
     }
 
     private static Task<Guid> UploadVersionAsync(HttpClient api, Guid docId, string extension, string content) =>

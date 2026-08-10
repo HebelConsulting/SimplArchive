@@ -64,6 +64,14 @@
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
 
     [Parameter] public Guid DocumentId { get; set; }
+
+    // The version list's address, followed from the row's `versions` rel (issue #416). The compare call below
+    // still composes: comparing a PAIR has no rel to follow — a link names one resource, and there is no
+    // advertised address for "these two against each other". Converting it needs an API shape that can express
+    // the pair (a compare rel on a version, or the pair as query parameters), which is its own change.
+    [Parameter] public string? VersionsHref { get; set; }
+
+    private string? _compareHref;
     [Parameter] public string DocumentName { get; set; } = "";
 
     private List<VersionInfo> _versions = [];
@@ -74,7 +82,10 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var resp = await Http.GetFromJsonAsync<VersionListResponse>($"api/documents/{DocumentId}/versions");
+        if (VersionsHref is null) { return; }
+
+        var resp = await Http.GetFromJsonAsync<VersionListResponse>(VersionsHref);
+        _compareHref = resp?.Links?.FirstOrDefault(l => l.Rel == "compare")?.Href.TrimStart('/');
         _versions = (resp?.Versions ?? [])
             .Where(v => v.Status == "Confirmed")
             .OrderByDescending(v => v.VersionNumber ?? 0)
@@ -107,7 +118,11 @@
         _result = null;
         try
         {
-            _result = await Http.GetFromJsonAsync<CompareResult>($"api/documents/{DocumentId}/versions/{_fromId}/compare/{_toId}");
+            if (_compareHref is null) { return; }
+
+            // The collection advertises ONE compare address; the two versions travel as query parameters,
+            // because a link names one resource and a pair has none (issue #416, resolved by reshaping the API).
+            _result = await Http.GetFromJsonAsync<CompareResult>($"{_compareHref}?from={_fromId}&to={_toId}");
         }
         catch (Exception)
         {
@@ -128,7 +143,8 @@
     private static string Prefix(int op) => op switch { 1 => "+ ", 2 => "- ", _ => "  " };
 
     private record VersionInfo(Guid Id, int VersionNumber);
-    private record VersionListResponse { public List<VersionResponse> Versions { get; set; } = []; }
+    private record LinkDto { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+    private record VersionListResponse { public List<VersionResponse> Versions { get; set; } = []; public List<LinkDto> Links { get; set; } = []; }
     private record VersionResponse { public Guid Id { get; set; } public int? VersionNumber { get; set; } public string Status { get; set; } = ""; }
     private record CompareResult { public bool Available { get; set; } public List<DiffLine> Lines { get; set; } = []; }
     private record DiffLine { public int Op { get; set; } public string Text { get; set; } = ""; }

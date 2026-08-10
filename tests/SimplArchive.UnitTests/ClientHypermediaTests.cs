@@ -31,22 +31,44 @@ public partial class ClientHypermediaTests
     // Seeded from the counts at adoption. LOWER an entry when converting a call site; never raise one.
     private static readonly Dictionary<string, int> Budget = new()
     {
-        ["src/SimplArchive.Client/Dialogs/CompareCheckoutDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/CompareVersionsDialog.razor"] = 2,
-        ["src/SimplArchive.Client/Dialogs/FilingDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/FolderPickerDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/InboxSendDialog.razor"] = 2,
-        ["src/SimplArchive.Client/Dialogs/ManageAccessDialog.razor"] = 6,   // 7 → 6 (#426): the inheritance PUT follows the acl-inheritance rel
-        ["src/SimplArchive.Client/Dialogs/PasskeysDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/ProfilePhotoDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/ReferencesDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/ReminderDialog.razor"] = 4,
-        ["src/SimplArchive.Client/Dialogs/SensitivityLabelsDialog.razor"] = 3,
-        ["src/SimplArchive.Client/Dialogs/ServiceAccountsDialog.razor"] = 3,
-        ["src/SimplArchive.Client/Dialogs/VersionsDialog.razor"] = 1,
-        ["src/SimplArchive.Client/Dialogs/WorkflowDialog.razor"] = 2,
-        ["src/SimplArchive.Client/Layout/MainLayout.razor"] = 6,
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 95,    // 101 → 99 (#416): folder-follow fetches the resource and follows its subscription rel   // 108 → 101 (#416): the detail pane follows rels — the row's for mask/index-data, the resource's for tags/subscription
+        // 2 → 1 (#416, the web long tail): the version LIST is followed from the row's `versions` rel. The
+        // compare call itself stays and is the last composed URL in the web client: a link names ONE resource,
+        // and "these two versions against each other" has no advertised address. Converting it needs an API
+        // shape that can express the pair — a compare rel per version, or the pair as query parameters — which
+        // is a route change, not a client one.
+
+        // 95 → 84 (issue #416): the users & groups administration family. A user row advertises
+        // reset-password / reset-mfa / deactivate alongside rights and photo, a group row members / delete, and
+        // a member row its own `remove` — the pair being the only thing that knows both ends of a membership.
+        // Deleting a principal stopped branching on IsGroup to build two different paths: it follows whichever
+        // rel its row carries. Adding a member is the one composition left, and cannot be a rel as the API
+        // stands — the user being added is not in the members collection yet, so nothing the client holds can
+        // advertise the address; that needs the member in the BODY of a POST (recorded on the issue).
+        // 84 → 74 (issue #416): the detail pane and the row actions. The pane's own bootstrap read follows the
+        // ROW's `self` rel, which then makes everything it loads next — versions, mask, index-data — a rel on the
+        // resource it just read rather than a path rebuilt per call. Rename and delete follow the row's address,
+        // and the ETag probe now HEADs the SAME address the mutation will PUT/DELETE, instead of a path
+        // reconstructed from an id beside it.
+        //
+        // A reference row now advertises the TARGET document's `self` too, which is what makes rename/delete work
+        // on one: without it the row had an id and no address, and the conversion above would have turned those
+        // two actions into silent no-ops on a reference — caught before the suite ran, but only by asking which
+        // rows lack the rel rather than assuming every row carries it. Its own `delete` rel is followed now too.
+        //
+        // Move and set-primary-location are deliberately still composed: both are rels on the full document
+        // RESOURCE, and a listing row does not carry them (a listing is the wrong place to answer "may I?"), so
+        // converting them costs a fetch per row action and belongs with the tranche that adds it.
+        //
+        // 74 → 53 (issue #416): every action that belongs TO a collection now rides on that collection, and the
+        // rels are captured where the collection is READ — so the tab that already loaded the audit log, the
+        // tenant settings or the saved searches holds the addresses of everything that can be done to them, at
+        // no extra round trip. The audit log carries retention/export/purge/verify/worm-verify; tenant settings
+        // its two maintenance actions; a saved search its rewrite/delete/shares, but only when it is yours; a
+        // tag its rename/retire/merge; a retention row extend, and dispose only where no review is required.
+        // The searchable-PDF backfill takes a ROOT rel instead — it hangs off no collection a client has read.
+        // 53 → 51 (#416): the search-field catalogue follows the new root rel, and adding a group member
+        // follows one too now that the API takes the member in the BODY of a POST to the members collection.
+        ["src/SimplArchive.Client/Pages/Home.razor"] = 51,
         // 184 → 183 (issue #385): the desktop read the document resource TWICE — once for its name, once for its
         // sensitivity label — so the per-document external-links rel had nowhere to be picked up from. One read
         // now serves both and carries the rel, which is what let the dialog follow it instead of composing a URL.
@@ -71,7 +93,48 @@ public partial class ClientHypermediaTests
         // rels via the cached RootHrefAsync. What remains here is overwhelmingly the interpolated kind
         // ($"api/documents/{id}/…"), which needs a resource in hand rather than a path — the structural half of
         // the burn-down, and a separate piece of work.
-        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 141,
+        //
+        // 141 → 125 (issue #416): the caller's own account. The desktop had no `me` helper at all — the web
+        // client grew one an earlier tranche ago while this file kept composing thirteen /api/users/me/… paths,
+        // so this is a parity fix as much as a burn-down (ADR 0511 treats a web/desktop pair as one surface).
+        // A cached MeHrefAsync mirrors RootHrefAsync; password, photo, the three MFA calls, passkeys, the
+        // WebDAV password, the personal repository and notification preferences all follow rels the `me`
+        // resource already advertised. The last three come from rels added in the same change: a passkey row's
+        // own `self`, and a sensitivity label's `retire`/`unretire` — where WHICH rel is present is the label's
+        // state, so the row stopped deciding that from a `Retired` flag it interpreted itself.
+        //
+        // 125 → 118 (issue #416): the collection-action family, chosen because every one of these methods takes
+        // NO id — so none of them changes a public signature, and none runs into the 31 test call sites that
+        // stopped the users & groups family (recorded on the issue). The backfill follows a root rel; the
+        // tenant-settings maintenance actions, the audit log's retention policy and the saved-search share
+        // targets are rels ON the resource that owns them, so each reads that resource first. That read is the
+        // trade the root's "collection roots only" rule asks for, and it is paid per admin click rather than per
+        // screen. The audit one adds `?limit=1` to the advertised href so learning one number does not drag back
+        // a page of audit events — a query on a rel's href, not a path this client invented.
+        //
+        // 118 → 106 (issue #416, ADR 0555): the surface migration. Methods now take the ROW they act on, which
+        // carries the addresses the listing advertised, so the users & groups family follows rels instead of
+        // rebuilding paths — the family that had to be REVERTED when it was attempted against the old id-based
+        // surface. The creates return the row too: the create response is the resource, rels included, and
+        // returning only its id was what forced every follow-up call to compose.
+        //
+        // The test migration is the bulk of this and the compiler could only find part of it. Three runtime-only
+        // breakages remained after everything compiled: a row passed to AddWithValue (which takes object), a row
+        // in `new { reviewerId }` serialised as a whole object, and a row interpolated into a URL. All three are
+        // "a Guid became a row where the type system had stopped looking" — the desktop suite caught each.
+        //
+        // 106 → 96 (issue #416): with the surface migrated, the row-carrying families convert cheaply — tags,
+        // saved searches and service accounts each act through the row that advertised the address, and a
+        // revoked account or a search shared WITH you simply carries no write rels, so the affordance is the
+        // server's answer rather than IsActive/IsMine re-derived here. The search-field catalogue moved to a
+        // root rel: it is read before any search has run, so no search response exists to hang it off.
+        // 96 → 94 (#416): the two addresses that could NOT be expressed as rels are gone, because the API was
+        // reshaped rather than the client tricked. Comparing two versions is now GET /versions/compare?from=&to=
+        // — one advertised address with the pair as parameters, since a link names one resource and a pair has
+        // none. Adding a group member is POST /members with the user in the BODY, so the collection advertises
+        // `add-member` and the chosen principal travels as data; the keyed PUT is retired rather than kept
+        // beside it, because two ways to do one thing is how a client talks itself back into composing.
+        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 94,
     };
 
     [Fact]

@@ -117,11 +117,23 @@ public class NotificationsController : ControllerBase
             ? new Dictionary<Guid, Guid?>()
             : await _dbContext.Documents.Where(d => documentIds.Contains(d.Id)).ToDictionaryAsync(d => d.Id, d => d.ParentId, cancellationToken);
 
+        var unreadCount = await query.CountAsync(n => n.ReadAt == null, cancellationToken);
+
         var links = new List<Link>
         {
             new("self", Url.Action(nameof(List), new { cursor, limit = pageSize })!, "GET"),
             new("preferences", Url.Action(nameof(GetPreferences))!, "GET"),
+            new("unread-count", Url.Action(nameof(UnreadCount))!, "GET"),
         };
+
+        // "Mark everything read" — advertised only when something is actually unread, so the client can grey the
+        // affordance out from the rel instead of offering an action whose only effect would be a round trip.
+        // Gated on the WHOLE unread count, not this page's: an unread notification further down the cursor is
+        // still something read-all would clear, and hiding the rel there would make the button lie.
+        if (unreadCount > 0)
+        {
+            links.Add(new Link("read-all", Url.Action(nameof(MarkAllRead))!, "POST"));
+        }
         if (hasMore)
         {
             links.Add(new Link("next", Url.Action(nameof(List), new { cursor = Cursor.Encode(page[^1].CreatedAt, page[^1].Id), limit = pageSize })!, "GET"));
@@ -130,7 +142,7 @@ public class NotificationsController : ControllerBase
         return Ok(new NotificationsListResource
         {
             Notifications = page.Select(n => BuildResource(n, parents)).ToList(),
-            UnreadCount = await query.CountAsync(n => n.ReadAt == null, cancellationToken),
+            UnreadCount = unreadCount,
             Links = links,
         });
     }
@@ -283,5 +295,11 @@ public class NotificationsController : ControllerBase
         CreatedAt = n.CreatedAt,
         ReadAt = n.ReadAt,
         IsRead = n.ReadAt is not null,
+
+        // "Mark this one read" as a rel, so the bell menu stops composing /notifications/{id}/read (issue #416).
+        // Present only while it is unread: the POST is idempotent, so this is not about preventing a bad call —
+        // it is ADR 0543's "a missing rel is meaningful". An already-read notification offers nothing to do, and
+        // a client that reads the rel rather than the flag draws the same conclusion the server already reached.
+        Links = n.ReadAt is null ? [new Link("read", $"/api/notifications/{n.Id}/read", "POST")] : [],
     };
 }

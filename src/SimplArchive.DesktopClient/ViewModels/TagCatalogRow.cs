@@ -7,12 +7,17 @@ namespace SimplArchive.DesktopClient.ViewModels;
 // merge-target selection. The parent VM owns the save / retire / merge commands (taking the row as a parameter).
 public sealed partial class TagCatalogRow : ObservableObject
 {
-    public TagCatalogRow(System.Guid id, string name, string? color)
+    public TagCatalogRow(Services.SimplArchiveApiClient.TagCatalogItem source)
     {
-        Id = id;
-        Name = name;
-        Color = color;
+        Source = source;
+        Id = source.Id;
+        Name = source.Name;
+        Color = source.Color;
     }
+
+    // The api-client row this was built from — it carries the addresses the catalog advertised, and the
+    // client's methods take it rather than an id (ADR 0555).
+    public Services.SimplArchiveApiClient.TagCatalogItem Source { get; }
 
     public System.Guid Id { get; }
 

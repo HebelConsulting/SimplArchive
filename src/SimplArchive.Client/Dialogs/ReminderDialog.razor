@@ -21,7 +21,7 @@
                                     <div>@r.RemindAt.ToLocalTime().ToString("g")@(r.Recurrence != 0 ? string.Format(Strings.Get("ReminderRepeatsSuffix"), r.RecurrenceName.ToLowerInvariant()) : "")</div>
                                     <div class="mud-text-secondary" style="font-size:.8em;">@string.Format(Strings.Get("ReminderForLine"), r.TargetName, string.IsNullOrEmpty(r.Note) ? "" : " — " + r.Note)</div>
                                 </div>
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="@Strings.Get("ReminderCancelAria")" OnClick="@(() => CancelAsync(r.Id))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="@Strings.Get("ReminderCancelAria")" OnClick="@(() => CancelAsync(r))" />
                             </div>
                         </MudListItem>
                     }
@@ -69,14 +69,28 @@
     private List<TargetDto> _targets = [];
     private List<ReminderDto> _reminders = [];
 
+    // The document's reminder collection, handed in from the detail pane's `reminders` rel. Everything else the
+    // dialog needs — the target catalog, creating one, cancelling one — is a rel ON that collection or on a row
+    // of it, so this is the only address the dialog is told (ADR 0543, issue #416).
+    [Parameter] public string? RemindersHref { get; set; }
+
+    private string? _createHref;
+
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync()
     {
         try
         {
-            _targets = (await Http.GetFromJsonAsync<TargetsResponse>($"api/documents/{DocumentId}/reminders/targets"))?.Targets ?? [];
-            _reminders = (await Http.GetFromJsonAsync<ReminderListResponse>($"api/documents/{DocumentId}/reminders"))?.Reminders ?? [];
+            if (RemindersHref is null) { return; }
+
+            var list = await Http.GetFromJsonAsync<ReminderListResponse>(RemindersHref);
+            _reminders = list?.Reminders ?? [];
+            _createHref = Rel(list?.Links, "create");
+            if (Rel(list?.Links, "targets") is { } targetsHref)
+            {
+                _targets = (await Http.GetFromJsonAsync<TargetsResponse>(targetsHref))?.Targets ?? [];
+            }
         }
         catch (Exception)
         {
@@ -102,7 +116,9 @@
                 recurrence = _recurrence,
                 targetUserId = _target == Guid.Empty ? (Guid?)null : _target,
             };
-            using var response = await Http.PostAsJsonAsync($"api/documents/{DocumentId}/reminders", body);
+            if (_createHref is null) { return; }
+
+            using var response = await Http.PostAsJsonAsync(_createHref, body);
             if (response.IsSuccessStatusCode)
             {
                 Snackbar.Add(Strings.Get("ReminderSetOk"), Severity.Success);
@@ -124,11 +140,13 @@
         }
     }
 
-    private async Task CancelAsync(Guid id)
+    private async Task CancelAsync(ReminderDto reminder)
     {
+        if (Rel(reminder.Links, "cancel") is not { } href) { return; }
+
         try
         {
-            using var response = await Http.DeleteAsync($"api/documents/{DocumentId}/reminders/{id}");
+            using var response = await Http.DeleteAsync(href);
             await LoadAsync();
         }
         catch (Exception)
@@ -139,6 +157,13 @@
 
     private record TargetsResponse { public List<TargetDto> Targets { get; set; } = []; }
     private record TargetDto { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; }
-    private record ReminderListResponse { public List<ReminderDto> Reminders { get; set; } = []; }
-    private record ReminderDto { public Guid Id { get; set; } public DateTimeOffset RemindAt { get; set; } public string? Note { get; set; } public int Recurrence { get; set; } public string RecurrenceName { get; set; } = ""; public string TargetName { get; set; } = ""; }
+    private record ReminderListResponse { public List<ReminderDto> Reminders { get; set; } = []; public List<LinkDto> Links { get; set; } = []; }
+    private record LinkDto { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+    private record ReminderDto { public Guid Id { get; set; } public DateTimeOffset RemindAt { get; set; } public string? Note { get; set; } public int Recurrence { get; set; } public string RecurrenceName { get; set; } = ""; public string TargetName { get; set; } = ""; public List<LinkDto> Links { get; set; } = []; }
+
+    private static string? Rel(List<LinkDto>? links, string rel)
+    {
+        var href = links?.FirstOrDefault(l => l.Rel == rel)?.Href;
+        return href is null ? null : href.TrimStart('/');
+    }
 }

@@ -41,6 +41,9 @@
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
 
     [Parameter] public Guid DocumentId { get; set; }
+
+    // The diff's address, followed from the check-out row's `compare` rel (issue #416).
+    [Parameter] public string? CompareHref { get; set; }
     [Parameter] public string DocumentName { get; set; } = "";
 
     private bool _busy = true;
@@ -50,7 +53,9 @@
     {
         try
         {
-            _result = await Http.GetFromJsonAsync<CompareResult>($"api/checkouts/{DocumentId}/compare");
+            if (CompareHref is null) { return; }
+
+            _result = await Http.GetFromJsonAsync<CompareResult>(CompareHref);
         }
         catch (Exception)
         {

@@ -98,7 +98,9 @@
 
     private async Task RemoveAsync(PasskeyDto p)
     {
-        var resp = await Http.DeleteAsync($"api/users/me/passkeys/{p.Id}");
+        if (p.Links.FirstOrDefault(l => l.Rel == "self")?.Href.TrimStart('/') is not { } href) { return; }
+
+        var resp = await Http.DeleteAsync(href);
         if (resp.IsSuccessStatusCode)
         {
             Snackbar.Add(string.Format(Strings.Get("StRemovedName"), p.Name), Severity.Success);
@@ -109,6 +111,7 @@
     private void Close() => Dialog.Close();
 
     private record PasskeyListResponse { public List<PasskeyDto> Passkeys { get; set; } = []; }
-    private record PasskeyDto { public Guid Id { get; set; } public string Name { get; set; } = ""; public DateTimeOffset CreatedAt { get; set; } public DateTimeOffset? LastUsedAt { get; set; } }
+    private record LinkDto { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+    private record PasskeyDto { public Guid Id { get; set; } public string Name { get; set; } = ""; public DateTimeOffset CreatedAt { get; set; } public DateTimeOffset? LastUsedAt { get; set; } public List<LinkDto> Links { get; set; } = []; }
     private record RegisterOptionsResponse { public string Options { get; set; } = ""; public string Token { get; set; } = ""; }
 }

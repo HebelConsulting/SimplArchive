@@ -5,8 +5,14 @@ namespace SimplArchive.DesktopClient.ViewModels;
 
 // A user or group row in the Users & groups admin list (ADR "Users & groups administration tab"). The icon
 // distinguishes them: one person for a user, two for a group.
-public sealed class PrincipalRowViewModel(bool isGroup, Guid id, string name, bool isActive, SimplArchiveApiClient.SystemRightsData rights, bool mfaEnabled = false)
+public sealed class PrincipalRowViewModel(bool isGroup, Guid id, string name, bool isActive, SimplArchiveApiClient.SystemRightsData rights, bool mfaEnabled = false,
+    SimplArchiveApiClient.PrincipalInfo? source = null)
 {
+    // The api-client row this was built from — it carries the addresses the listing advertised, and the client's
+    // methods take it rather than an id (ADR 0555). Null only on the design-time sample rows, which stand for no
+    // server resource; every action checks before offering itself.
+    public SimplArchiveApiClient.PrincipalInfo? Source { get; } = source;
+
     public bool IsGroup { get; } = isGroup;
     public Guid Id { get; } = id;
     public string Name { get; } = name;

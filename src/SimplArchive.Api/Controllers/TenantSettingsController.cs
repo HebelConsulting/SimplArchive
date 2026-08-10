@@ -497,6 +497,13 @@ public class TenantSettingsController : ControllerBase
         AuditWebhookLastFailureAt = tenant.AuditWebhookLastFailureAt,
         AuditWebhookNextAttemptAt = tenant.AuditWebhookNextAttemptAt,
         AuditWebhookLastError = tenant.AuditWebhookLastError,
-        Links = [new Link("self", "/api/tenant-settings", "GET")],
+        Links =
+        [
+            new Link("self", "/api/tenant-settings", "GET"),
+            // Maintenance actions on these settings, advertised where the client already is (issue #416):
+            // recompute the storage figure shown here, and send a test delivery to the configured webhook.
+            new Link("recompute-storage", "/api/tenant-settings/recompute-storage", "POST"),
+            new Link("audit-webhook-test", "/api/tenant-settings/audit-webhook/test", "POST"),
+        ],
     };
 }

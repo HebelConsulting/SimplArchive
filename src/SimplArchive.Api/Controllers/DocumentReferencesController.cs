@@ -282,6 +282,10 @@ public class DocumentReferencesController : ControllerBase
         var links = new List<Link>
         {
             new("delete", $"/api/documents/{folderId}/references/{row.ReferenceId}", "DELETE"),
+            // The TARGET document's own address (issue #416). A reference row stands for a real document, and a
+            // client holding one may rename or delete that document — without this rel it has an id and no
+            // address, which is what made those actions compose a path.
+            new("self", $"/api/documents/{row.TargetId}", "GET"),
         };
 
         if (row.RealParentId is { } realParentId)

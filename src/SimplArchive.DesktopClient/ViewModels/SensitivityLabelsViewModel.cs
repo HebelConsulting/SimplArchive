@@ -32,7 +32,7 @@ public sealed partial class SensitivityLabelsViewModel : ObservableObject
         {
             foreach (var l in (await _api.GetSensitivityLabelsAsync()).Items)
             {
-                Labels.Add(new SensitivityLabelRow(l.Id, l.Name, l.Rank, l.Color, l.Watermark, l.Retired));
+                Labels.Add(new SensitivityLabelRow(l.Id, l.Name, l.Rank, l.Color, l.Watermark, l.Retired, l.SelfHref, l.RetireHref, l.UnretireHref));
             }
         }
         catch (Exception e) { Status = e.Message; }
@@ -65,7 +65,9 @@ public sealed partial class SensitivityLabelsViewModel : ObservableObject
 
         try
         {
-            await _api.UpdateSensitivityLabelAsync(row.Id, row.Name.Trim(), row.Rank, string.IsNullOrWhiteSpace(row.Color) ? null : row.Color!.Trim(), row.Watermark);
+            if (row.SelfHref is not { } selfHref) { return; }
+
+            await _api.UpdateSensitivityLabelAsync(selfHref, row.Name.Trim(), row.Rank, string.IsNullOrWhiteSpace(row.Color) ? null : row.Color!.Trim(), row.Watermark);
             await LoadAsync();
         }
         catch (Exception e) { Status = e is ApiActionException a ? a.Message : "Could not update the label."; }
@@ -81,7 +83,10 @@ public sealed partial class SensitivityLabelsViewModel : ObservableObject
 
         try
         {
-            if (row.Retired) { await _api.UnretireSensitivityLabelAsync(row.Id); } else { await _api.RetireSensitivityLabelAsync(row.Id); }
+            // Which rel is present decides the transition — the server already answered "retire or un-retire?".
+            if (row.UnretireHref is { } unretire) { await _api.UnretireSensitivityLabelAsync(unretire); }
+            else if (row.RetireHref is { } retire) { await _api.RetireSensitivityLabelAsync(retire); }
+            else { return; }
             await LoadAsync();
         }
         catch (Exception e) { Status = e is ApiActionException a ? a.Message : "Could not change the label."; }
@@ -90,7 +95,8 @@ public sealed partial class SensitivityLabelsViewModel : ObservableObject
 
 public sealed partial class SensitivityLabelRow : ObservableObject
 {
-    public SensitivityLabelRow(Guid id, string name, int rank, string? color, bool watermark, bool retired)
+    public SensitivityLabelRow(Guid id, string name, int rank, string? color, bool watermark, bool retired,
+        string? selfHref, string? retireHref, string? unretireHref)
     {
         Id = id;
         _name = name;
@@ -98,10 +104,19 @@ public sealed partial class SensitivityLabelRow : ObservableObject
         _color = color;
         _watermark = watermark;
         Retired = retired;
+        SelfHref = selfHref;
+        RetireHref = retireHref;
+        UnretireHref = unretireHref;
     }
 
     public Guid Id { get; }
     public bool Retired { get; }
+
+    // The addresses the server advertised for this row (ADR 0543, issue #416) — the view model follows them
+    // instead of rebuilding /sensitivity-labels/{id} three times over.
+    public string? SelfHref { get; }
+    public string? RetireHref { get; }
+    public string? UnretireHref { get; }
     public string RetireLabel => Retired ? "Un-retire" : "Retire";
 
     [ObservableProperty] private string _name;

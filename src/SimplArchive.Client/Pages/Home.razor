@@ -413,7 +413,7 @@
                     <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedItem is null)" OnClick="() => OpenVersionsAsync(_selectedItem!)" title="@Strings.Get("RibbonVersions")" aria-label="@Strings.Get("RibbonVersions")">
                         <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonVersions")</span>
                     </MudButton>
-                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedItem is null)" OnClick="() => OpenWorkflowAsync(_selectedItem!.Id)" title="@Strings.Get("RibbonStartWorkflow")" aria-label="@Strings.Get("RibbonStartWorkflow")">
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedItem is null)" OnClick="() => OpenWorkflowAsync(_selectedItem!)" title="@Strings.Get("RibbonStartWorkflow")" aria-label="@Strings.Get("RibbonStartWorkflow")">
                         <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonStartWorkflow")</span>
                     </MudButton>
                     <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="RefreshAsync" title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
@@ -547,7 +547,7 @@
                                         <MudMenuItem Icon="@Icons.Material.Filled.Sort" OnClick="@(() => BeginFolderSortEditAsync(tn))">@Strings.Get("FolderSortLabel")</MudMenuItem>
                                         <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteAsync(tn)">@Strings.Get("UgDelete")</MudMenuItem>
                                         <MudDivider />
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessAsync(tn.Id, tn.Name)">@Strings.Get("MaManageAccess")</MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessAsync(tn)">@Strings.Get("MaManageAccess")</MudMenuItem>
                                         @if (_canLegalHold)
                                         {
                                             <MudMenuItem Icon="@Icons.Material.Filled.Gavel" OnClick="() => PlaceLegalHoldAsync(tn)">@Strings.Get("CtxPlaceLegalHold")</MudMenuItem>
@@ -697,11 +697,11 @@
                                             }
                                             @if (!node.IsFolder)
                                             {
-                                                <MudMenuItem Icon="@Icons.Material.Filled.AccountTree" OnClick="() => OpenWorkflowAsync(node.Id)">@Strings.Get("CtxStartWorkflow")</MudMenuItem>
+                                                <MudMenuItem Icon="@Icons.Material.Filled.AccountTree" OnClick="() => OpenWorkflowAsync(node)">@Strings.Get("CtxStartWorkflow")</MudMenuItem>
                                             }
                                             @if (!node.IsReference)
                                             {
-                                                <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessAsync(node.Id, node.Name)">@Strings.Get("MaManageAccess")</MudMenuItem>
+                                                <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessAsync(node)">@Strings.Get("MaManageAccess")</MudMenuItem>
                                                 <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteAsync(node)">@Strings.Get("UgDelete")</MudMenuItem>
                                             }
                                         </MudMenu>
@@ -791,7 +791,7 @@
                                     @if (_detailCanManagePermissions)
                                     {
                                         <MudTooltip Text="@Strings.Get("MaManageAccess")">
-                                            <MudIconButton Size="Size.Small" aria-label="Manage access" Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessAsync(_selectedItem!.Id, _sysName)" />
+                                            <MudIconButton Size="Size.Small" aria-label="Manage access" Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessForSelectedAsync()" />
                                         </MudTooltip>
                                     }
                                     @* Edit the index data (issue #407). It belongs beside the thing it edits, in the row of
@@ -3690,7 +3690,7 @@
         int pending;
         try
         {
-            pending = (await Http.GetFromJsonAsync<BackfillResponse>("api/searchable-pdf/backfill"))?.Count ?? 0;
+            pending = (await Http.GetFromJsonAsync<BackfillResponse>(await ApiRoot.RequireAsync("searchablePdfBackfill")))?.Count ?? 0;
         }
         catch (Exception)
         {
@@ -3718,7 +3718,7 @@
 
         try
         {
-            var resp = await Http.PostAsync("api/searchable-pdf/backfill", null);
+            var resp = await Http.PostAsync(await ApiRoot.RequireAsync("searchablePdfBackfill"), null);
             if (resp.IsSuccessStatusCode)
             {
                 var count = (await resp.Content.ReadFromJsonAsync<BackfillResponse>())?.Count ?? 0;
@@ -4178,7 +4178,7 @@
     {
         try
         {
-            var response = await Http.GetFromJsonAsync<RetentionScheduleDto>("api/retention/schedule");
+            var response = await Http.GetFromJsonAsync<RetentionScheduleDto>(await ApiRoot.RequireAsync("retentionSchedule"));
             _retentionItems.Clear();
             if (response?.Items is { } items)
             {
@@ -4208,7 +4208,9 @@
             return;
         }
 
-        using var resp = await Http.PostAsync($"api/retention/{row.DocumentId}/dispose", null);
+        if (row.Href("dispose") is not { } disposeHref) { return; }
+
+        using var resp = await Http.PostAsync(disposeHref, null);
         if (resp.IsSuccessStatusCode)
         {
             Snackbar.Add(Strings.Get("StDocumentDisposed"), Severity.Success);
@@ -4230,7 +4232,9 @@
             return;
         }
 
-        using var resp = await Http.PostAsJsonAsync($"api/retention/{row.DocumentId}/extend", new { until });
+        if (row.Href("extend") is not { } extendHref) { return; }
+
+        using var resp = await Http.PostAsJsonAsync(extendHref, new { until });
         if (resp.IsSuccessStatusCode)
         {
             Snackbar.Add(Strings.Get("StRetentionExtended"), Severity.Success);
@@ -4245,6 +4249,11 @@
     private record RetentionScheduleDto { public List<RetentionItemDto> Items { get; set; } = new(); public bool Truncated { get; set; } public bool RequiresReview { get; set; } }
     private record RetentionItemDto
     {
+        public List<LinkResponse> Links { get; set; } = [];
+
+        // `extend` always; `dispose` only where the tenant does not require a disposition review first.
+        public string? Href(string rel) => Links.FirstOrDefault(l => l.Rel == rel)?.Href.TrimStart('/');
+
         public Guid DocumentId { get; set; }
         public string DocumentName { get; set; } = "";
         public int RetentionYears { get; set; }
@@ -4455,7 +4464,8 @@
                 query.Add($"to={Uri.EscapeDataString(to.Date.AddDays(1).ToUniversalTime().ToString("o"))}");
             }
 
-            var url = "api/audit-events/export" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
+            await EnsureAuditLinksAsync();
+            var url = _auditExportHref + (query.Count > 0 ? "?" + string.Join("&", query) : "");
             var bytes = await Http.GetByteArrayAsync(url);
             using var stream = new MemoryStream(bytes);
             using var streamRef = new DotNetStreamReference(stream);
@@ -4561,7 +4571,13 @@
     {
         try
         {
-            _auditRetention = await Http.GetFromJsonAsync<RetentionDto>("api/audit-events/retention");
+            // The policy is a rel ON the log, so it needs the log's links — and this can run BEFORE the list
+            // does, which is exactly how the pane rendered empty. Ask for one row rather than a page: enough to
+            // carry the rels, not enough to be a second real fetch (issue #416).
+            await EnsureAuditLinksAsync();
+            if (_auditRetentionHref is null) { return; }
+
+            _auditRetention = await Http.GetFromJsonAsync<RetentionDto>(_auditRetentionHref);
             _auditRetentionDaysEdit = _auditRetention?.RetentionDays ?? 365;
         }
         catch (Exception)
@@ -4575,7 +4591,10 @@
         _auditRetentionBusy = true;
         try
         {
-            var resp = await Http.PutAsJsonAsync("api/audit-events/retention", new { retentionDays = _auditRetentionDaysEdit });
+            await EnsureAuditLinksAsync();
+            if (_auditRetentionHref is null) { return; }
+
+            var resp = await Http.PutAsJsonAsync(_auditRetentionHref, new { retentionDays = _auditRetentionDaysEdit });
             if (resp.IsSuccessStatusCode)
             {
                 _auditRetention = await resp.Content.ReadFromJsonAsync<RetentionDto>();
@@ -4607,7 +4626,8 @@
         _auditRetentionBusy = true;
         try
         {
-            var resp = await Http.PostAsync("api/audit-events/purge", null);
+            await EnsureAuditLinksAsync();
+            var resp = await Http.PostAsync(_auditPurgeHref!, null);
             if (resp.IsSuccessStatusCode)
             {
                 var result = await resp.Content.ReadFromJsonAsync<PurgeDto>();
@@ -4645,7 +4665,8 @@
         _auditVerifyResult = null;
         try
         {
-            _auditVerifyResult = await Http.GetFromJsonAsync<AuditVerifyDto>("api/audit-events/verify");
+            await EnsureAuditLinksAsync();
+            _auditVerifyResult = await Http.GetFromJsonAsync<AuditVerifyDto>(_auditVerifyHref!);
         }
         catch (Exception ex)
         {
@@ -4665,7 +4686,8 @@
         _wormVerifyResult = null;
         try
         {
-            _wormVerifyResult = await Http.GetFromJsonAsync<WormVerifyDto>("api/audit-events/worm-verify");
+            await EnsureAuditLinksAsync();
+            _wormVerifyResult = await Http.GetFromJsonAsync<WormVerifyDto>(_auditWormVerifyHref!);
         }
         catch (Exception ex)
         {
@@ -4730,6 +4752,14 @@
                 _auditEvents.Add(e);
             }
             _auditNextCursor = ExtractCursor(RelativeHref(page?.Links, "next"));
+
+            // The log's own actions ride on the log (issue #416): its retention policy, the export, the purge,
+            // and the two integrity verifications. Captured here because this is where the collection is read.
+            _auditRetentionHref = RelativeHref(page?.Links, "retention");
+            _auditExportHref = RelativeHref(page?.Links, "export");
+            _auditPurgeHref = RelativeHref(page?.Links, "purge");
+            _auditVerifyHref = RelativeHref(page?.Links, "verify");
+            _auditWormVerifyHref = RelativeHref(page?.Links, "worm-verify");
         }
         catch (Exception ex)
         {
@@ -4738,6 +4768,30 @@
         finally
         {
             _auditLoading = false;
+        }
+    }
+
+    // Captures the audit log's own action rels if the list has not already done so. `?limit=1` on the
+    // advertised href keeps this to a token read — a query on a rel's href, not a path this client invented.
+    private async Task EnsureAuditLinksAsync()
+    {
+        if (_auditRetentionHref is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            var page = await Http.GetFromJsonAsync<AuditResponse>(await ApiRoot.RequireAsync("auditEvents") + "?limit=1");
+            _auditRetentionHref = RelativeHref(page?.Links, "retention");
+            _auditExportHref = RelativeHref(page?.Links, "export");
+            _auditPurgeHref = RelativeHref(page?.Links, "purge");
+            _auditVerifyHref = RelativeHref(page?.Links, "verify");
+            _auditWormVerifyHref = RelativeHref(page?.Links, "worm-verify");
+        }
+        catch (Exception)
+        {
+            // Leave them null — each action checks, and an absent rel disables it rather than composing a path.
         }
     }
 
@@ -4793,9 +4847,9 @@
     // The approval workflow is started + managed on demand from the ribbon / row menu, in a separate dialog
     // (ADR "Workflow start on demand", superseding the inline detail-pane panel). Refresh the Tasks badge
     // afterwards, since submitting/approving/etc. changes the caller's (or the reviewer's) task set.
-    private async Task OpenWorkflowAsync(Guid documentId)
+    private async Task OpenWorkflowAsync(BrowseNode node)
     {
-        var parameters = new DialogParameters { ["DocumentId"] = documentId };
+        var parameters = new DialogParameters { ["DocumentId"] = node.Id, ["DocumentHref"] = DocumentAddress(node) };
         var dialog = await DialogService.ShowAsync<WorkflowDialog>(Strings.Get("WfTitle"), parameters, new DialogOptions { CloseButton = true });
         await dialog.Result;
         await LoadTasksAsync();
@@ -4803,9 +4857,27 @@
 
     // Manage the ACL of a document or folder on demand (ADR "Manage-access UI for document/folder ACLs").
     // The dialog is self-contained (loads the grants + picker, gates itself on the caller's CanManagePermissions).
-    private async Task OpenManageAccessAsync(Guid documentId, string name)
+    // A row carries its own address; the detail pane prefers the resource it already fetched, falling back to
+    // the row's. Both end up handing the dialog ONE href to start from (ADR 0543, issue #416).
+    //
+    // `document` before `self` because a REPOSITORY row's `self` is the repository view, which is a different
+    // resource with different rels — the document view is the one that carries the grants. A repository is a
+    // document (ADR 0200), but only the server can say at which address, which is why it advertises both.
+    private Task OpenManageAccessAsync(BrowseNode node) =>
+        OpenManageAccessAsync(node.Id, node.Name, DocumentAddress(node));
+
+    private static string? DocumentAddress(BrowseNode node) =>
+        node.Links?.GetValueOrDefault("document") ?? node.Links?.GetValueOrDefault("self");
+
+    private Task OpenManageAccessForSelectedAsync() =>
+        OpenManageAccessAsync(
+            _selectedItem!.Id,
+            _sysName,
+            _detailLinks?.GetValueOrDefault("self") ?? DocumentAddress(_selectedItem!));
+
+    private async Task OpenManageAccessAsync(Guid documentId, string name, string? documentHref)
     {
-        var parameters = new DialogParameters { ["DocumentId"] = documentId, ["DocumentName"] = name };
+        var parameters = new DialogParameters { ["DocumentId"] = documentId, ["DocumentName"] = name, ["DocumentHref"] = documentHref };
         await DialogService.ShowAsync<ManageAccessDialog>(Strings.Get("MaManageAccess"), parameters, new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
     }
 
@@ -4975,7 +5047,7 @@
     // Compare the working copy against the current version as an inline unified diff (ADR 0517). Modified rows only.
     private async Task OpenCompareCheckoutAsync(CheckoutDto c)
     {
-        var parameters = new DialogParameters { ["DocumentId"] = c.Id, ["DocumentName"] = c.Name };
+        var parameters = new DialogParameters { ["DocumentId"] = c.Id, ["DocumentName"] = c.Name, ["CompareHref"] = RelativeHref(c.Links, "compare") };
         await DialogService.ShowAsync<Dialogs.CompareCheckoutDialog>(Strings.Get("CoCompareTitle"), parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
     }
 
@@ -5029,6 +5101,7 @@
         public string? StashDownloadUrl { get; set; }
         public string? DownloadUrl { get; set; }
         public DateTimeOffset? ExpiresAt { get; set; }
+        public List<LinkResponse> Links { get; set; } = [];
     }
 
     private record WorkingCopyUploadResponse { public string UploadUrl { get; set; } = ""; }
@@ -5051,6 +5124,7 @@
         try
         {
             _tenant = await Http.GetFromJsonAsync<TenantSettingsDto>(await ApiRoot.RequireAsync("tenantSettings"));
+            _tenantLinks = RelMap(_tenant?.Links);
             if (_ocrCatalog.Count == 0)
             {
                 _ocrCatalog = (await Http.GetFromJsonAsync<OcrCatalogResponse>(await ApiRoot.RequireAsync("ocrLanguages")))?.Languages ?? [];
@@ -5105,7 +5179,9 @@
 
     private async Task TestWebhookAsync()
     {
-        var resp = await Http.PostAsync("api/tenant-settings/audit-webhook/test", null);
+        if (_tenantLinks?.GetValueOrDefault("audit-webhook-test") is not { } webhookTestHref) { return; }
+
+        var resp = await Http.PostAsync(webhookTestHref, null);
         if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add(Strings.Get("StSaveWebhookFirst"), Severity.Warning); return; }
         if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrTestEvent"), Severity.Error); return; }
         var result = await resp.Content.ReadFromJsonAsync<TestWebhookResult>();
@@ -5117,7 +5193,9 @@
 
     private async Task RecomputeStorageAsync()
     {
-        var resp = await Http.PostAsync("api/tenant-settings/recompute-storage", null);
+        if (_tenantLinks?.GetValueOrDefault("recompute-storage") is not { } recomputeHref) { return; }
+
+        var resp = await Http.PostAsync(recomputeHref, null);
         if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrRecompute"), Severity.Error); return; }
         _tenant = await resp.Content.ReadFromJsonAsync<TenantSettingsDto>();
         if (!_tenantEditing) SyncTenantEditFromTenant();
@@ -5147,6 +5225,9 @@
 
     private record TenantSettingsDto
     {
+        // The settings resource advertises its own maintenance actions (issue #416).
+        public List<LinkResponse> Links { get; set; } = [];
+
         // External links (ADR 0546) — the tenant master switch plus its two caps.
         public bool AllowExternalLinks { get; set; }
 
@@ -5376,7 +5457,8 @@
             var page = await Http.GetFromJsonAsync<ReferenceListResponse>(refUrl);
             foreach (var r in page?.References ?? [])
             {
-                nodes.Add(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, r.HasReferences, true, r.ReferenceId, r.RealParentId, repositoryId));
+                nodes.Add(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, r.HasReferences, true, r.ReferenceId, r.RealParentId, repositoryId,
+                    Links: RelMap(r.Links)));
             }
             refUrl = RelativeHref(page?.Links, "next");
         }
@@ -5744,7 +5826,15 @@
             // the sensitivity label (ADR "Data classification"), AND the rels for everything else this pane
             // loads — so the calls below follow advertised addresses instead of composing them (ADR 0543, #416).
             // Fetched before the others rather than after, which is the only change needed to make them follow.
-            var detail = await Http.GetFromJsonAsync<DocumentDetailResponse>($"api/documents/{item.Id}");
+            // DocumentAddress, not `self`: on a REPOSITORY row `self` is the repository view, whose rels are a
+            // different set — reading it here silently cost the pane its document rels (contents-sort-order
+            // among them). ADR 0200 says a repository IS a document; only the server can say at which address.
+            if (DocumentAddress(item) is not { } detailSelfHref)
+            {
+                return;
+            }
+
+            var detail = await Http.GetFromJsonAsync<DocumentDetailResponse>(detailSelfHref);
             _detailLinks = RelMap(detail?.Links);
 
             _detailMaskId = null;
@@ -5781,7 +5871,7 @@
             var sub = await Http.GetFromJsonAsync<SubscriptionResponse>(DetailHref("subscription"));
             _detailSubscribed = sub?.Subscribed ?? false;
 
-            var versions = await Http.GetFromJsonAsync<VersionListResponse>($"api/documents/{item.Id}/versions");
+            var versions = await Http.GetFromJsonAsync<VersionListResponse>(DetailHref("versions"));
             var confirmed = versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [];
             var latest = PickCurrent(confirmed, versions?.CurrentVersionId);
             string? textLayoutUrl = null;
@@ -5943,6 +6033,7 @@
         {
             ["DocumentId"] = item.Id,
             ["DocumentName"] = _sysName,
+            ["RemindersHref"] = _detailLinks?.GetValueOrDefault("reminders"),
         };
         await DialogService.ShowAsync<Dialogs.ReminderDialog>(Strings.Get("RemTitle"), parameters);
     }
@@ -6147,7 +6238,7 @@
     // launcher. A make-current there returns true, so reselect the document to reflect the new current version.
     private async Task OpenVersionsAsync(BrowseNode item)
     {
-        var parameters = new DialogParameters { ["DocumentId"] = item.Id, ["DocumentName"] = item.Name };
+        var parameters = new DialogParameters { ["DocumentId"] = item.Id, ["DocumentName"] = item.Name, ["VersionsHref"] = item.Links?.GetValueOrDefault("versions") };
         var dialog = await DialogService.ShowAsync<Dialogs.VersionsDialog>(Strings.Get("RibbonVersions"), parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
         if ((await dialog.Result) is { Canceled: false, Data: true } && _selectedItem?.Id == item.Id)
         {
@@ -6162,7 +6253,7 @@
             return;
         }
 
-        var parameters = new DialogParameters { ["DocumentId"] = item.Id, ["DocumentName"] = item.Name };
+        var parameters = new DialogParameters { ["DocumentId"] = item.Id, ["DocumentName"] = item.Name, ["VersionsHref"] = item.Links?.GetValueOrDefault("versions") };
         var dialog = await DialogService.ShowAsync<Dialogs.CompareVersionsDialog>(Strings.Get("CvTitle"), parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
         // A restore (ADR "Version restore") closes the dialog with true — reselect the document so the detail
         // pane + preview reflect the new current version.
@@ -6236,8 +6327,8 @@
             var newName = _editName.Trim();
             if (newName.Length > 0 && newName != _origName)
             {
-                var etag = await GetETagAsync(item.Id);
-                using var req = new HttpRequestMessage(HttpMethod.Put, $"api/documents/{item.Id}") { Content = JsonContent.Create(new { name = newName }) };
+                var etag = await GetETagAsync(DetailHref("self"));
+                using var req = new HttpRequestMessage(HttpMethod.Put, DetailHref("self")) { Content = JsonContent.Create(new { name = newName }) };
                 if (etag is not null)
                 {
                     req.Headers.TryAddWithoutValidation("If-Match", etag);
@@ -6294,17 +6385,17 @@
                 {
                     if (_origMaskId is not null)
                     {
-                        (await Http.DeleteAsync($"api/documents/{item.Id}/mask")).EnsureSuccessStatusCode();
+                        (await Http.DeleteAsync(DetailHref("mask"))).EnsureSuccessStatusCode();
                     }
                 }
                 else
                 {
                     // Fill index data first, then (re)assign the mask (which re-checks required fields).
                     var body = new { fields = _editFields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.ToValues() }) };
-                    (await Http.PutAsJsonAsync($"api/documents/{item.Id}/index-data", body)).EnsureSuccessStatusCode();
+                    (await Http.PutAsJsonAsync(DetailHref("index-data"), body)).EnsureSuccessStatusCode();
                     if (_editMaskId != _origMaskId)
                     {
-                        (await Http.PutAsJsonAsync($"api/documents/{item.Id}/mask", new { maskId = _editMaskId })).EnsureSuccessStatusCode();
+                        (await Http.PutAsJsonAsync(DetailHref("mask"), new { maskId = _editMaskId })).EnsureSuccessStatusCode();
                     }
                 }
             }
@@ -6781,7 +6872,14 @@
             return;
         }
 
-        var etag = await GetETagAsync(node.Id);
+        if (DocumentAddress(node) is not { } selfHref)
+        {
+            return;
+        }
+
+        // The ETag probe follows the row's address; the `move` rel that would replace the path below lives on
+        // the full document resource, not on a listing row, so converting it needs a fetch first (issue #416).
+        var etag = await GetETagAsync(selfHref);
         using var request = new HttpRequestMessage(HttpMethod.Put, $"api/documents/{node.Id}/parent")
         {
             Content = JsonContent.Create(new { parentId = folderId }),
@@ -6982,7 +7080,14 @@
             return;
         }
 
-        var response = await Http.DeleteAsync($"api/documents/{folder.Id}/references/{node.ReferenceId}");
+        // The reference row advertises its own removal address — the pair (folder, reference) is exactly what it
+        // stands for, so nothing here needs rebuilding (issue #416).
+        if (node.Links?.GetValueOrDefault("delete") is not { } removeReferenceHref)
+        {
+            return;
+        }
+
+        var response = await Http.DeleteAsync(removeReferenceHref);
         if (!response.IsSuccessStatusCode)
         {
             Snackbar.Add(Strings.Get("StErrRemoveReference"), Severity.Error);
@@ -6999,6 +7104,7 @@
         {
             { x => x.ItemId, node.Id },
             { x => x.ItemName, node.Name },
+            { x => x.ReferencingFoldersHref, node.Links?.GetValueOrDefault("referencing-folders") },
         };
         var dialog = await DialogService.ShowAsync<ReferencesDialog>(Strings.Get("RefDlgTitle"), parameters);
         var result = await dialog.Result;
@@ -7021,7 +7127,13 @@
     // (move + leave a reference at the old home). Same If-Match contract as MoveAsync.
     private async Task PromotePrimaryLocationAsync(BrowseNode node, Guid folderId)
     {
-        var etag = await GetETagAsync(node.Id);
+        if (DocumentAddress(node) is not { } selfHref)
+        {
+            return;
+        }
+
+        // As in MoveAsync: `set-primary-location` is a rel on the document resource, not on the row.
+        var etag = await GetETagAsync(selfHref);
         using var request = new HttpRequestMessage(HttpMethod.Put, $"api/documents/{node.Id}/primary-location")
         {
             Content = JsonContent.Create(new { folderId }),
@@ -7130,7 +7242,7 @@
                 var page = await Http.GetFromJsonAsync<GroupsAdminResponse>(gurl);
                 foreach (var g in page?.Groups ?? [])
                 {
-                    rows.Add(new PrincipalRow { IsGroup = true, Id = g.Id, Name = g.Name, Rights = g.Rights ?? new() });
+                    rows.Add(new PrincipalRow { IsGroup = true, Id = g.Id, Name = g.Name, Rights = g.Rights ?? new(), Links = RelMap(g.Links) });
                 }
                 gurl = RelativeHref(page?.Links, "next");
             }
@@ -7141,7 +7253,7 @@
                 var page = await Http.GetFromJsonAsync<UsersAdminResponse>(uurl);
                 foreach (var u in page?.Users ?? [])
                 {
-                    rows.Add(new PrincipalRow { IsGroup = false, Id = u.Id, Name = u.DisplayName, IsActive = u.IsActive, MfaEnabled = u.MfaEnabled, Rights = u.Rights ?? new() });
+                    rows.Add(new PrincipalRow { IsGroup = false, Id = u.Id, Name = u.DisplayName, IsActive = u.IsActive, MfaEnabled = u.MfaEnabled, Rights = u.Rights ?? new(), PhotoHref = RelativeHref(u.Links, "photo"), Links = RelMap(u.Links) });
                 }
                 uurl = RelativeHref(page?.Links, "next");
             }
@@ -7174,11 +7286,17 @@
     // ---- Group membership (ADR "Group membership editing") -------------------------------------------
 
     private readonly List<MemberOption> _groupMembers = [];
-    private record MemberOption(Guid Id, string Name);
+
+    // The members collection's `add-member` address, captured when the list loads.
+    private string? _groupMembersAddHref;
+    // RemoveHref is the member row's own `remove` rel — the only resource that knows both ends of the
+    // (group, user) pair a membership is addressed by (issue #416).
+    private record MemberOption(Guid Id, string Name, string? RemoveHref = null);
 
     private async Task LoadGroupMembersAsync(PrincipalRow? p)
     {
         _groupMembers.Clear();
+        _groupMembersAddHref = null;
         if (p is null || !p.IsGroup)
         {
             return;
@@ -7186,14 +7304,15 @@
 
         try
         {
-            var url = $"api/groups/{p.Id}/members";
+            var url = p.Href("members");
             while (url is not null)
             {
                 var page = await Http.GetFromJsonAsync<MembersResponse>(url);
                 foreach (var m in page?.Members ?? [])
                 {
-                    _groupMembers.Add(new MemberOption(m.Id, m.DisplayName));
+                    _groupMembers.Add(new MemberOption(m.Id, m.DisplayName, RelativeHref(m.Links, "remove")));
                 }
+                _groupMembersAddHref ??= RelativeHref(page?.Links, "add-member");
                 url = RelativeHref(page?.Links, "next");
             }
         }
@@ -7222,7 +7341,11 @@
             return;
         }
 
-        using var resp = await Http.PutAsync($"api/groups/{group.Id}/members/{option.Id}", null);
+        // The API now takes the member in the BODY of a POST to the collection, so this follows a rel like
+        // everything else — the chosen user travels as data rather than as a path segment (issue #416).
+        if (_groupMembersAddHref is null) { return; }
+
+        using var resp = await Http.PostAsJsonAsync(_groupMembersAddHref, new { userId = option.Id });
         if (resp.IsSuccessStatusCode)
         {
             await LoadGroupMembersAsync(group);
@@ -7241,7 +7364,9 @@
             return;
         }
 
-        using var resp = await Http.DeleteAsync($"api/groups/{group.Id}/members/{member.Id}");
+        if (member.RemoveHref is not { } removeHref) { return; }
+
+        using var resp = await Http.DeleteAsync(removeHref);
         if (resp.IsSuccessStatusCode)
         {
             _groupMembers.Remove(member);
@@ -7254,7 +7379,7 @@
     }
 
     private record MembersResponse { public List<MemberDto> Members { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-    private record MemberDto { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; }
+    private record MemberDto { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; public List<LinkResponse> Links { get; set; } = []; }
 
     // The photo endpoint is bearer-protected, so fetch the bytes with the authenticated client and render a
     // data URL (a raw <img src> sends no token) — ADR "User profile photo". 404 → no photo.
@@ -7268,7 +7393,9 @@
 
         try
         {
-            var bytes = await Http.GetByteArrayAsync($"api/users/{p.Id}/photo");
+            if (p.PhotoHref is not { } photoHref) { return; }
+
+            var bytes = await Http.GetByteArrayAsync(photoHref);
             _principalPhotoUrl = "data:image/png;base64," + Convert.ToBase64String(bytes);
         }
         catch (Exception)
@@ -7284,7 +7411,7 @@
             return;
         }
 
-        var parameters = new DialogParameters<ProfilePhotoDialog> { { x => x.UserId, p.Id } };
+        var parameters = new DialogParameters<ProfilePhotoDialog> { { x => x.PhotoHref, p.PhotoHref } };
         var dialog = await DialogService.ShowAsync<ProfilePhotoDialog>(Strings.Get("PpTitle"), parameters);
         if (await dialog.Result is { Canceled: false })
         {
@@ -7299,7 +7426,9 @@
             return;
         }
 
-        using var resp = await Http.DeleteAsync($"api/users/{p.Id}/photo");
+        if (p.PhotoHref is not { } photoHref) { return; }
+
+        using var resp = await Http.DeleteAsync(photoHref);
         if (resp.IsSuccessStatusCode)
         {
             _principalPhotoUrl = null;
@@ -7333,7 +7462,9 @@
 
         try
         {
-            using var resp = await Http.PostAsync($"api/users/{p.Id}/reset-password", null);
+            if (p.Href("reset-password") is not { } resetPasswordHref) { return; }
+
+            using var resp = await Http.PostAsync(resetPasswordHref, null);
             if (resp.IsSuccessStatusCode)
             {
                 var result = await resp.Content.ReadFromJsonAsync<ResetPasswordResult>();
@@ -7380,7 +7511,9 @@
 
         try
         {
-            using var resp = await Http.PostAsync($"api/users/{p.Id}/mfa/reset", null);
+            if (p.Href("reset-mfa") is not { } resetMfaHref) { return; }
+
+            using var resp = await Http.PostAsync(resetMfaHref, null);
             if (resp.IsSuccessStatusCode)
             {
                 p.MfaEnabled = false;
@@ -7504,7 +7637,11 @@
 
         try
         {
-            using var resp = await Http.DeleteAsync(p.IsGroup ? $"api/groups/{p.Id}" : $"api/users/{p.Id}");
+            // One rel per kind — the server names the address for removing this principal, so the client no
+            // longer branches on IsGroup to build two different paths.
+            if ((p.IsGroup ? p.Href("delete") : p.Href("deactivate")) is not { } removeHref) { return; }
+
+            using var resp = await Http.DeleteAsync(removeHref);
             if (resp.IsSuccessStatusCode)
             {
                 Snackbar.Add(p.IsGroup ? "Group deleted." : "User deactivated.", Severity.Success);
@@ -7562,7 +7699,10 @@
             return;
         }
 
-        using var retry = await Http.DeleteAsync($"api/users/{user.Id}?reassignReviewsTo={replacementId}");
+        // The reassignment is a QUERY on the advertised address, not a path this client invents.
+        if (user.Href("deactivate") is not { } deactivateHref) { return; }
+
+        using var retry = await Http.DeleteAsync($"{deactivateHref}?reassignReviewsTo={replacementId}");
         if (retry.IsSuccessStatusCode)
         {
             Snackbar.Add(Strings.Get("StReviewsReassigned"), Severity.Success);
@@ -7587,7 +7727,7 @@
         _ugBusy = true;
         try
         {
-            var path = p.IsGroup ? $"api/groups/{p.Id}/rights" : $"api/users/{p.Id}/rights";
+            if (p.Href("rights") is not { } path) { return; }
             using var resp = await Http.PutAsJsonAsync(path, _editRights);
             if (resp.IsSuccessStatusCode)
             {
@@ -7622,6 +7762,14 @@
         public bool IsActive { get; set; } = true;
         public bool MfaEnabled { get; set; }
         public SystemRightsDto Rights { get; set; } = new();
+
+        // The addresses the listing advertised for this row (issue #416): a user carries photo /
+        // reset-password / reset-mfa / deactivate, a group carries members / delete, and both carry rights.
+        // A group has no photo, which is also why that affordance is hidden for one.
+        public string? PhotoHref { get; set; }
+        public IReadOnlyDictionary<string, string>? Links { get; set; }
+
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
     }
 
     private sealed record RightField(string Label, Func<SystemRightsDto, bool> Get, Action<SystemRightsDto, bool> Set);
@@ -7646,8 +7794,8 @@
         public int ClearanceRank { get; set; }
     }
 
-    private record UserAdminDto { public Guid Id { get; set; } public string Email { get; set; } = ""; public string DisplayName { get; set; } = ""; public bool IsActive { get; set; } public bool MfaEnabled { get; set; } public SystemRightsDto? Rights { get; set; } }
-    private record GroupAdminDto { public Guid Id { get; set; } public string Name { get; set; } = ""; public SystemRightsDto? Rights { get; set; } }
+    private record UserAdminDto { public Guid Id { get; set; } public string Email { get; set; } = ""; public string DisplayName { get; set; } = ""; public bool IsActive { get; set; } public bool MfaEnabled { get; set; } public SystemRightsDto? Rights { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record GroupAdminDto { public Guid Id { get; set; } public string Name { get; set; } = ""; public SystemRightsDto? Rights { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record UsersAdminResponse { public List<UserAdminDto> Users { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
     private record GroupsAdminResponse { public List<GroupAdminDto> Groups { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
 
@@ -7663,8 +7811,13 @@
             return;
         }
 
-        var etag = await GetETagAsync(node.Id);
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"api/documents/{node.Id}")
+        if (DocumentAddress(node) is not { } selfHref)
+        {
+            return;
+        }
+
+        var etag = await GetETagAsync(selfHref);
+        using var request = new HttpRequestMessage(HttpMethod.Put, selfHref)
         {
             Content = JsonContent.Create(new { name = newName }),
         };
@@ -7716,8 +7869,13 @@
             return;
         }
 
-        var etag = await GetETagAsync(node.Id);
-        using var request = new HttpRequestMessage(HttpMethod.Delete, $"api/documents/{node.Id}");
+        if (DocumentAddress(node) is not { } selfHref)
+        {
+            return;
+        }
+
+        var etag = await GetETagAsync(selfHref);
+        using var request = new HttpRequestMessage(HttpMethod.Delete, selfHref);
         if (etag is not null)
         {
             request.Headers.TryAddWithoutValidation("If-Match", etag);
@@ -7785,9 +7943,11 @@
         }
     }
 
-    private async Task<string?> GetETagAsync(Guid id)
+    // Takes the document's advertised address (its `self` rel), so the concurrency probe hits the same resource
+    // the mutation below will — rather than a path rebuilt from an id (ADR 0543, issue #416).
+    private async Task<string?> GetETagAsync(string selfHref)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Head, $"api/documents/{id}");
+        using var request = new HttpRequestMessage(HttpMethod.Head, selfHref);
         var response = await Http.SendAsync(request);
         return response.Headers.ETag?.Tag;
     }
@@ -7803,7 +7963,12 @@
     // ---- Saved searches (ADR "Saved searches") ------------------------------------------------------
     private async Task LoadSavedSearchesAsync()
     {
-        try { _savedSearches = (await Http.GetFromJsonAsync<SavedSearchesResponse>(await ApiRoot.RequireAsync("savedSearches")))?.SavedSearches ?? []; }
+        try
+        {
+            var savedSearchPage = await Http.GetFromJsonAsync<SavedSearchesResponse>(await ApiRoot.RequireAsync("savedSearches"));
+            _savedSearches = savedSearchPage?.SavedSearches ?? [];
+            _savedSearchShareTargetsHref = RelativeHref(savedSearchPage?.Links, "share-targets");
+        }
         catch (Exception) { _savedSearches = []; }
     }
 
@@ -7844,7 +8009,9 @@
 
     private async Task DeleteSavedSearchAsync(SavedSearchDto s)
     {
-        using var resp = await Http.DeleteAsync($"api/saved-searches/{s.Id}");
+        if (s.Href("delete") is not { } deleteHref) { return; }
+
+        using var resp = await Http.DeleteAsync(deleteHref);
         if (resp.IsSuccessStatusCode)
         {
             await LoadSavedSearchesAsync();
@@ -7872,7 +8039,7 @@
         var targets = new List<ShareSavedSearchDialog.TargetOption>();
         try
         {
-            var t = await Http.GetFromJsonAsync<ShareTargetsResponse>("api/saved-searches/share-targets");
+            var t = await Http.GetFromJsonAsync<ShareTargetsResponse>(_savedSearchShareTargetsHref!);
             targets.AddRange((t?.Users ?? []).Select(u => new ShareSavedSearchDialog.TargetOption("user", u.Id, u.DisplayName)));
             targets.AddRange((t?.Groups ?? []).Select(g => new ShareSavedSearchDialog.TargetOption("group", g.Id, g.Name)));
         }
@@ -7883,7 +8050,7 @@
         {
             try
             {
-                var shares = await Http.GetFromJsonAsync<SharesResponse>($"api/saved-searches/{s.Id}/shares");
+                var shares = await Http.GetFromJsonAsync<SharesResponse>(s.Href("shares")!);
                 initialSelected.AddRange((shares?.Shares ?? []).Select(g => $"{g.PrincipalType}:{g.PrincipalId}"));
             }
             catch (Exception) { /* none */ }
@@ -7903,7 +8070,9 @@
         }
 
         var shareBody = result.Selected.Select(k => new { type = k.Split(':')[0], id = Guid.Parse(k.Split(':')[1]) }).ToList();
-        using var resp = await Http.PutAsJsonAsync($"api/saved-searches/{s.Id}", new { name = s.Name, queryString = s.QueryString, shareScope = result.Scope, shares = shareBody });
+        if (s.Href("self") is not { } selfHref) { return; }
+
+        using var resp = await Http.PutAsJsonAsync(selfHref, new { name = s.Name, queryString = s.QueryString, shareScope = result.Scope, shares = shareBody });
         if (resp.IsSuccessStatusCode)
         {
             Snackbar.Add(result.Scope switch { 1 => $"Shared '{s.Name}' with everyone.", 2 => $"Shared '{s.Name}' with specific people.", _ => $"'{s.Name}' is now private." }, Severity.Success);
@@ -7929,8 +8098,17 @@
         return "";
     }
 
-    private record SavedSearchesResponse { public List<SavedSearchDto> SavedSearches { get; set; } = []; }
-    private record SavedSearchDto { public Guid Id { get; set; } public string Name { get; set; } = ""; public string QueryString { get; set; } = ""; public int ShareScope { get; set; } public bool IsMine { get; set; } public string OwnerName { get; set; } = ""; }
+    private record SavedSearchesResponse { public List<SavedSearchDto> SavedSearches { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
+    private record SavedSearchDto
+    {
+        public Guid Id { get; set; } public string Name { get; set; } = ""; public string QueryString { get; set; } = "";
+        public int ShareScope { get; set; } public bool IsMine { get; set; } public string OwnerName { get; set; } = "";
+        public List<LinkResponse> Links { get; set; } = [];
+
+        // Only the owner's rows advertise self/delete/shares, so a search shared WITH you carries none of them
+        // and its actions disable from the server's answer rather than from IsMine (issue #416).
+        public string? Href(string rel) => Links.FirstOrDefault(l => l.Rel == rel)?.Href.TrimStart('/');
+    }
     private record ShareTargetsResponse { public List<ShareTargetUserDto> Users { get; set; } = []; public List<ShareTargetGroupDto> Groups { get; set; } = []; }
     private record ShareTargetUserDto { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; }
     private record ShareTargetGroupDto { public Guid Id { get; set; } public string Name { get; set; } = ""; }
@@ -8055,7 +8233,7 @@
     {
         try
         {
-            var fields = await Http.GetFromJsonAsync<SearchFieldsResponse>("api/search/fields");
+            var fields = await Http.GetFromJsonAsync<SearchFieldsResponse>(await ApiRoot.RequireAsync("searchFields"));
             _availableFields = (fields?.Fields ?? []).Select(f => new SearchFieldOption(f.Name, f.DataType)).ToList();
 
             var repos = new List<SearchRepoOption>();
@@ -9044,6 +9222,16 @@
     // The rels the OPEN document's resource advertised (set when the detail pane loads).
     private IReadOnlyDictionary<string, string>? _detailLinks;
 
+    // Collection-level rels, captured where each collection is read (ADR 0543, issue #416). Null until then,
+    // which is what disables the action rather than the client composing a path for it.
+    private IReadOnlyDictionary<string, string>? _tenantLinks;
+    private string? _savedSearchShareTargetsHref;
+    private string? _auditRetentionHref;
+    private string? _auditExportHref;
+    private string? _auditPurgeHref;
+    private string? _auditVerifyHref;
+    private string? _auditWormVerifyHref;
+
     private string DetailHref(string rel) => HrefOrThrow(_detailLinks, rel);
 
     // For an action on a node whose resource is not open — "Follow folder" from the tree context menu — FETCH
@@ -9118,7 +9306,7 @@
     private record DocumentSummary { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool HasReferences { get; set; } public bool OnLegalHold { get; set; } public bool CheckedOut { get; set; } public bool CheckedOutByMe { get; set; } public string CheckedOutByName { get; set; } = ""; public string FileExtension { get; set; } = ""; public string DocumentType { get; set; } = ""; public DateOnly? DocumentDate { get; set; } public long? SizeBytes { get; set; } public List<string> Tags { get; set; } = []; public Guid? SensitivityLabelId { get; set; } public string SensitivityLabelName { get; set; } = ""; public string? SensitivityLabelColor { get; set; } public int VersionCount { get; set; } public DateTimeOffset? VersionCreatedAt { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record UserCardResponse { public Guid UserId { get; set; } public string DisplayName { get; set; } = ""; public string Email { get; set; } = ""; public bool IsActive { get; set; } public bool HasPhoto { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record ReferenceListResponse { public List<ReferenceSummary> References { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-    private record ReferenceSummary { public Guid ReferenceId { get; set; } public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool HasReferences { get; set; } public Guid? RealParentId { get; set; } }
+    private record ReferenceSummary { public Guid ReferenceId { get; set; } public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool HasReferences { get; set; } public Guid? RealParentId { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record DocNameResponse { public string Name { get; set; } = ""; }
     private record SearchResponse { public List<SearchHit> Results { get; set; } = []; public FacetsDto? Facets { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record FacetsDto { public List<FacetBucket> DocumentTypes { get; set; } = []; public List<FacetBucket> CreatedBy { get; set; } = []; public List<FacetBucket> Years { get; set; } = []; public List<FacetBucket> Tags { get; set; } = []; public List<FacetBucket> FileTypes { get; set; } = []; public List<FacetBucket> SensitivityLabels { get; set; } = []; public List<FieldFacetDto> Fields { get; set; } = []; }
@@ -9131,7 +9319,15 @@
     private record MaskResponse { public Guid? MaskId { get; set; } public string? Name { get; set; } public int? VersionNumber { get; set; } }
     private record IndexDataResponse { public List<FieldGroup> Fields { get; set; } = []; }
     private record TagsResponse { public List<string> Tags { get; set; } = []; public List<TagCatalogEntry> Catalog { get; set; } = []; public bool CanManage { get; set; } }
-    private record TagCatalogEntry { public Guid Id { get; set; } public string Name { get; set; } = ""; public string? Color { get; set; } }
+    private record TagCatalogEntry
+    {
+        public Guid Id { get; set; } public string Name { get; set; } = ""; public string? Color { get; set; }
+        public List<LinkResponse> Links { get; set; } = [];
+
+        // self (rename/recolour), retire, merge — the catalog lists only LIVE tags, so `unretire` has no row
+        // here and is correctly absent (issue #416).
+        public string? Href(string rel) => Links.FirstOrDefault(l => l.Rel == rel)?.Href.TrimStart('/');
+    }
 
     // ---- Tag catalog admin (ADR "Tag controlled vocabulary") ----------------------------------------
     private List<TagCatalogEntry> _catalogTags = [];
@@ -9168,7 +9364,9 @@
     {
         var name = await JS.InvokeAsync<string?>("prompt", "Rename tag (documents are re-tagged):", t.Name);
         if (string.IsNullOrWhiteSpace(name) || name.Trim() == t.Name) return;
-        var resp = await Http.PutAsJsonAsync($"api/tags/{t.Id}", new { name = name.Trim() });
+        if (t.Href("self") is not { } renameHref) { return; }
+
+        var resp = await Http.PutAsJsonAsync(renameHref, new { name = name.Trim() });
         if (resp.IsSuccessStatusCode) await LoadTagCatalogAsync();
         else Snackbar.Add(Strings.Get("StErrRenameTaken"), Severity.Warning);
     }
@@ -9177,7 +9375,9 @@
     {
         var color = await JS.InvokeAsync<string?>("prompt", "Tag colour as #RRGGBB (blank to clear):", t.Color ?? "");
         if (color is null) return;
-        var resp = await Http.PutAsJsonAsync($"api/tags/{t.Id}", new { color = color.Trim() });
+        if (t.Href("self") is not { } recolourHref) { return; }
+
+        var resp = await Http.PutAsJsonAsync(recolourHref, new { color = color.Trim() });
         if (resp.IsSuccessStatusCode) await LoadTagCatalogAsync();
         else Snackbar.Add(Strings.Get("StErrSetColour"), Severity.Warning);
     }
@@ -9185,14 +9385,18 @@
     private async Task RetireTagAsync(TagCatalogEntry t)
     {
         if (!await JS.InvokeAsync<bool>("confirm", $"Retire '{t.Name}'? It stays on documents that already have it but won't be offered for new tagging.")) return;
-        await Http.DeleteAsync($"api/tags/{t.Id}");
+        if (t.Href("retire") is not { } retireHref) { return; }
+
+        await Http.DeleteAsync(retireHref);
         await LoadTagCatalogAsync();
     }
 
     private async Task MergeTagAsync(TagCatalogEntry from, TagCatalogEntry into)
     {
         if (!await JS.InvokeAsync<bool>("confirm", $"Merge '{from.Name}' into '{into.Name}'? Every document tagged '{from.Name}' becomes '{into.Name}', and '{from.Name}' is removed from the catalog.")) return;
-        await Http.PostAsJsonAsync($"api/tags/{from.Id}/merge", new { intoId = into.Id });
+        if (from.Href("merge") is not { } mergeHref) { return; }
+
+        await Http.PostAsJsonAsync(mergeHref, new { intoId = into.Id });
         await LoadTagCatalogAsync();
     }
     private record FieldGroup { public string FieldName { get; set; } = ""; public List<string> Values { get; set; } = []; }

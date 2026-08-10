@@ -66,7 +66,7 @@ public partial class ServiceAccountsWindow : Window
                 false, false, false, false, false, false,
                 result.CanManageRepositories, result.CanManageMasks, result.CanManageServiceAccounts, false, false,
                 result.CanExport, result.CanImport);
-            await vm.Client.UpdateServiceAccountAsync(row.Id, result.Name, rights);
+            await vm.Client.UpdateServiceAccountAsync(row.Info, result.Name, rights);
             await vm.LoadAsync();
         });
     });
@@ -80,7 +80,7 @@ public partial class ServiceAccountsWindow : Window
 
         await RunAsync(vm, async () =>
         {
-            var secret = await vm.Client.RotateServiceAccountSecretAsync(row.Id);
+            var secret = await vm.Client.RotateServiceAccountSecretAsync(row.Info);
             await new ServiceAccountSecretDialog(secret.ClientId, secret.ClientSecret).ShowDialog(this);
         });
     });
@@ -100,7 +100,7 @@ public partial class ServiceAccountsWindow : Window
 
         await RunAsync(vm, async () =>
         {
-            await vm.Client.RevokeServiceAccountAsync(row.Id);
+            await vm.Client.RevokeServiceAccountAsync(row.Info);
             await vm.LoadAsync();
         });
     });

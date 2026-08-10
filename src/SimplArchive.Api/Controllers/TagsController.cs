@@ -75,6 +75,19 @@ public partial class TagsController : ControllerBase
             .Select(t => new TagResource { Id = t.Id, Name = t.Name, Color = t.Color })
             .ToListAsync(cancellationToken);
 
+        // Each catalog row addresses itself: rename/recolour (PUT), retire (DELETE) and merge-into-another
+        // (POST). Only the LIVE tags are listed here, so `unretire` has no row to hang off and is not offered
+        // (issue #416).
+        foreach (var tag in catalog)
+        {
+            tag.Links =
+            [
+                new Link("self", $"/api/tags/{tag.Id}", "PUT"),
+                new Link("retire", $"/api/tags/{tag.Id}", "DELETE"),
+                new Link("merge", $"/api/tags/{tag.Id}/merge", "POST"),
+            ];
+        }
+
         return Ok(new TagsResource
         {
             Tags = catalog.Select(t => t.Name).ToList(),

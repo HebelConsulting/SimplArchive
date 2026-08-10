@@ -22,10 +22,10 @@ public class DesktopSensitivityClearanceTests
 
         // A user gets clearance 2 via the rights bundle; it reads back on the user resource.
         var userId = await client.CreateUserAsync($"clr-{suffix}@example.test", "clr-user-" + suffix);
-        await client.SetUserRightsAsync(userId, new SimplArchiveApiClient.SystemRightsData(
+        await client.SetRightsAsync(userId, new SimplArchiveApiClient.SystemRightsData(
             false, false, false, false, false, false, false, false, false, false, false, false, false, ClearanceRank: 2));
 
-        var user = (await client.GetUsersAsync()).Single(u => u.Id == userId);
+        var user = (await client.GetUsersAsync()).Single(u => u.Id == userId.Id);
         Assert.Equal(2, user.Rights.ClearanceRank);
 
         // The tenant EnforceClearance switch round-trips through the Tenant tab api (leave it OFF so the shared

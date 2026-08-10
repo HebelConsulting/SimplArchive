@@ -182,12 +182,25 @@ public sealed class SimplArchiveApiClient
 
     // A user or group in the combined admin list (ADR "Users & groups administration tab"). IsActive is
     // meaningful only for a user (a group has no active/inactive concept).
-    public sealed record PrincipalInfo(bool IsGroup, Guid Id, string Name, bool IsActive, SystemRightsData Rights, bool MfaEnabled = false);
+    // Links are the row's own advertised addresses (ADR 0543/0555): rights, photo, reset-password, reset-mfa,
+    // deactivate for a user; rights, members, delete for a group. The client's methods take this row and follow
+    // one of them, instead of rebuilding /users/{id}/… and /groups/{id}/… paths from an id.
+    public sealed record PrincipalInfo(bool IsGroup, Guid Id, string Name, bool IsActive, SystemRightsData Rights, bool MfaEnabled = false,
+        IReadOnlyDictionary<string, string>? Links = null)
+    {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
 
     // A machine-to-machine service account (ADR 0203/0534). ClientId is the OAuth client_id; the client_secret is
     // only ever returned once on create/rotate (see NewSecret) and is never carried on a list/read.
+    // A REVOKED account advertises none of edit/revoke/rotate-secret, so the row's actions disable from the
+    // server's answer rather than from IsActive re-derived here (issue #416).
     public sealed record ServiceAccountInfo(Guid Id, string Name, string ClientId, bool IsActive,
-        bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts, bool CanImport, bool CanExport);
+        bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts, bool CanImport, bool CanExport,
+        IReadOnlyDictionary<string, string>? Links = null)
+    {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
 
     // The one-time client_id + client_secret shown after create/rotate — never retrievable again.
     public sealed record ServiceAccountSecret(string ClientId, string ClientSecret);
@@ -236,7 +249,9 @@ public sealed class SimplArchiveApiClient
     public sealed record TaskInfo(Guid DocumentId, Guid? ParentId, Guid VersionId, string DocumentName, int? VersionNumber, DateTimeOffset AssignedAt);
 
     // A user option for the reviewer picker.
-    public sealed record UserOptionInfo(Guid Id, string DisplayName);
+    // RemoveHref is set only where the option came from a collection whose rows advertise a removal address —
+    // a group's members; it is null for pickers such as reminder targets (issue #416).
+    public sealed record UserOptionInfo(Guid Id, string DisplayName, string? RemoveHref = null);
 
     // Audit log (ADRs "Audit trail (first slice)" / "... hash chain" / "... retention and purge").
     public sealed record AuditEventInfo(DateTimeOffset Timestamp, string ActorType, string ActorName, string Action, string? TargetType, string? TargetName, string? Details);
@@ -337,12 +352,25 @@ public sealed class SimplArchiveApiClient
             json.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null);
     }
 
+    // The log's retention policy is a rel ON the audit-events collection (issue #416), so reaching it means
+    // reading that collection — and a page of audit events to learn one number is the "two round trips, one of
+    // them large" trap. `?limit=1` on the advertised href keeps the read trivial while the address still comes
+    // from the server: a query on a rel's href, not a path this client invented.
+    private async Task<string> AuditRetentionHrefAsync(CancellationToken cancellationToken)
+    {
+        var href = await RootHrefAsync("auditEvents", cancellationToken);
+        var page = await _http.GetFromJsonAsync<JsonElement>($"{href}?limit=1", cancellationToken);
+        return ParseLinks(page) is { } links && links.TryGetValue("retention", out var retentionHref)
+            ? retentionHref
+            : throw new InvalidOperationException("The audit log advertised no 'retention' rel (ADR 0543).");
+    }
+
     public async Task<AuditRetentionInfo> GetAuditRetentionAsync(CancellationToken cancellationToken = default) =>
-        ParseRetention(await _http.GetFromJsonAsync<JsonElement>("api/audit-events/retention", cancellationToken));
+        ParseRetention(await _http.GetFromJsonAsync<JsonElement>(await AuditRetentionHrefAsync(cancellationToken), cancellationToken));
 
     public async Task<AuditRetentionInfo> SetAuditRetentionAsync(int retentionDays, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PutAsJsonAsync("api/audit-events/retention", new { retentionDays }, cancellationToken);
+        using var response = await _http.PutAsJsonAsync(await AuditRetentionHrefAsync(cancellationToken), new { retentionDays }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to change audit retention.");
@@ -429,7 +457,7 @@ public sealed class SimplArchiveApiClient
     // the caller has no personal space (e.g. a ServiceAccount → 403) so the tree still renders shared repositories.
     public async Task<Node?> GetPersonalRepositoryAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync("api/me/personal-repository", null, cancellationToken);
+        using var response = await _http.PostAsync(await MeHrefAsync("personalRepository", cancellationToken), null, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             return null;
@@ -567,14 +595,15 @@ public sealed class SimplArchiveApiClient
     // searchable PDFs for existing TIFFs").
     public async Task<int> GetTiffBackfillPendingAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/searchable-pdf/backfill", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("searchablePdfBackfill", cancellationToken), cancellationToken);
         return json.TryGetProperty("count", out var c) ? c.GetInt32() : 0;
     }
 
     // Enqueues a searchable-PDF conversion for every current TIFF; returns how many were enqueued.
     public async Task<int> TriggerTiffBackfillAsync(CancellationToken cancellationToken = default)
     {
-        var response = await _http.PostAsync("api/searchable-pdf/backfill", null, cancellationToken);
+        // Same address as the status read above — the root advertises it once and both verbs follow it.
+        var response = await _http.PostAsync(await RootHrefAsync("searchablePdfBackfill", cancellationToken), null, cancellationToken);
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         return json.TryGetProperty("count", out var c) ? c.GetInt32() : 0;
@@ -978,7 +1007,10 @@ public sealed class SimplArchiveApiClient
     // per-tenant label on the document (id/name/colour + whether it watermarks), read from the document resource.
     public sealed record DocumentSensitivityInfo(Guid? LabelId, string Name, string? Color, bool Watermark);
 
-    public sealed record SensitivityLabelInfo(Guid Id, string Name, int Rank, string? Color, bool Watermark, bool Retired);
+    // SelfHref / RetireHref / UnretireHref are the addresses the catalog row advertised. Exactly one of the last
+    // two is present, and which one it is expresses the label's state (ADR 0543, issue #416).
+    public sealed record SensitivityLabelInfo(Guid Id, string Name, int Rank, string? Color, bool Watermark, bool Retired,
+        string? SelfHref = null, string? RetireHref = null, string? UnretireHref = null);
     public sealed record SensitivityLabelCatalog(IReadOnlyList<SensitivityLabelInfo> Items, bool CanManage);
 
     public async Task<DocumentSensitivityInfo> GetDocumentSensitivityAsync(Guid documentId, CancellationToken cancellationToken = default) =>
@@ -1044,13 +1076,19 @@ public sealed class SimplArchiveApiClient
         {
             foreach (var l in arr.EnumerateArray())
             {
+                var links = ParseLinks(l) ?? new Dictionary<string, string>();
                 items.Add(new SensitivityLabelInfo(
                     l.GetProperty("id").GetGuid(),
                     l.GetProperty("name").GetString() ?? "",
                     l.TryGetProperty("rank", out var r) ? r.GetInt32() : 0,
                     l.TryGetProperty("color", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null,
                     l.TryGetProperty("watermark", out var w) && w.ValueKind == JsonValueKind.True,
-                    l.TryGetProperty("retired", out var rt) && rt.ValueKind == JsonValueKind.True));
+                    l.TryGetProperty("retired", out var rt) && rt.ValueKind == JsonValueKind.True,
+                    links.GetValueOrDefault("self"),
+                    // Exactly one of these is advertised, and which one IS the label's state — the client no
+                    // longer decides "retire or un-retire?" from the Retired flag (issue #416).
+                    links.GetValueOrDefault("retire"),
+                    links.GetValueOrDefault("unretire")));
             }
         }
 
@@ -1063,17 +1101,18 @@ public sealed class SimplArchiveApiClient
         if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ErrorMessageAsync(resp, "Could not add the label."));
     }
 
-    public async Task UpdateSensitivityLabelAsync(Guid id, string name, int rank, string? color, bool watermark, CancellationToken cancellationToken = default)
+    /// <summary>Updates a label at the address its own catalog row advertised (`self`).</summary>
+    public async Task UpdateSensitivityLabelAsync(string selfHref, string name, int rank, string? color, bool watermark, CancellationToken cancellationToken = default)
     {
-        var resp = await _http.PutAsJsonAsync($"api/sensitivity-labels/{id}", new { name, rank, color, watermark }, cancellationToken);
+        var resp = await _http.PutAsJsonAsync(selfHref, new { name, rank, color, watermark }, cancellationToken);
         if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ErrorMessageAsync(resp, "Could not update the label."));
     }
 
-    public async Task RetireSensitivityLabelAsync(Guid id, CancellationToken cancellationToken = default) =>
-        (await _http.DeleteAsync($"api/sensitivity-labels/{id}", cancellationToken)).EnsureSuccessStatusCode();
+    public async Task RetireSensitivityLabelAsync(string retireHref, CancellationToken cancellationToken = default) =>
+        (await _http.DeleteAsync(retireHref, cancellationToken)).EnsureSuccessStatusCode();
 
-    public async Task UnretireSensitivityLabelAsync(Guid id, CancellationToken cancellationToken = default) =>
-        (await _http.PostAsync($"api/sensitivity-labels/{id}/unretire", null, cancellationToken)).EnsureSuccessStatusCode();
+    public async Task UnretireSensitivityLabelAsync(string unretireHref, CancellationToken cancellationToken = default) =>
+        (await _http.PostAsync(unretireHref, null, cancellationToken)).EnsureSuccessStatusCode();
 
     // Free-form tags (ADR "Document tags"). GET the document's tags; PUT-replaces the whole set (the server
     // normalizes/dedupes and returns the stored set); the tenant tag catalog backs add-box autocomplete.
@@ -1108,7 +1147,12 @@ public sealed class SimplArchiveApiClient
             : [];
 
     // ---- Tag catalog admin (ADR "Tag controlled vocabulary") ----------------------------------------
-    public sealed record TagCatalogItem(Guid Id, string Name, string? Color);
+    // The catalog lists LIVE tags, each advertising self (rename/recolour), retire and merge (issue #416).
+    public sealed record TagCatalogItem(Guid Id, string Name, string? Color,
+        IReadOnlyDictionary<string, string>? Links = null)
+    {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
     public sealed record TagCatalog(IReadOnlyList<TagCatalogItem> Items, bool CanManage);
 
     public async Task<TagCatalog> GetTagCatalogWithColorsAsync(CancellationToken cancellationToken = default)
@@ -1122,7 +1166,8 @@ public sealed class SimplArchiveApiClient
                 items.Add(new TagCatalogItem(
                     e.GetProperty("id").GetGuid(),
                     e.GetProperty("name").GetString() ?? "",
-                    e.TryGetProperty("color", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null));
+                    e.TryGetProperty("color", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null,
+                    ParseLinks(e)));
             }
         }
 
@@ -1135,18 +1180,19 @@ public sealed class SimplArchiveApiClient
         if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ErrorMessageAsync(resp, "Could not add the tag."));
     }
 
-    public async Task UpdateTagAsync(Guid id, string? name, string? color, CancellationToken cancellationToken = default)
+    public async Task UpdateTagAsync(TagCatalogItem tag, string? name, string? color, CancellationToken cancellationToken = default)
     {
-        var resp = await _http.PutAsJsonAsync($"api/tags/{id}", new { name, color }, cancellationToken);
+        var resp = await _http.PutAsJsonAsync(RequireHref(tag, "self"), new { name, color }, cancellationToken);
         if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ErrorMessageAsync(resp, "Could not update the tag."));
     }
 
-    public async Task RetireTagAsync(Guid id, CancellationToken cancellationToken = default) =>
-        (await _http.DeleteAsync($"api/tags/{id}", cancellationToken)).EnsureSuccessStatusCode();
+    public async Task RetireTagAsync(TagCatalogItem tag, CancellationToken cancellationToken = default) =>
+        (await _http.DeleteAsync(RequireHref(tag, "retire"), cancellationToken)).EnsureSuccessStatusCode();
 
-    public async Task MergeTagAsync(Guid id, Guid intoId, CancellationToken cancellationToken = default)
+    /// <summary>Merges one tag into another, following the source row's own `merge` rel.</summary>
+    public async Task MergeTagAsync(TagCatalogItem tag, Guid intoId, CancellationToken cancellationToken = default)
     {
-        var resp = await _http.PostAsJsonAsync($"api/tags/{id}/merge", new { intoId }, cancellationToken);
+        var resp = await _http.PostAsJsonAsync(RequireHref(tag, "merge"), new { intoId }, cancellationToken);
         if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ErrorMessageAsync(resp, "Could not merge the tags."));
     }
 
@@ -1636,11 +1682,23 @@ public sealed class SimplArchiveApiClient
         return ParseTenantSettings(j);
     }
 
+    // The tenant-settings resource's own maintenance actions (issue #416). Both are rels ON that resource, so
+    // reaching them means reading it first — paid once per admin click, which is the trade the root's
+    // "collection roots only" rule asks for: an action on a resource is advertised by that resource, not by the
+    // root. (Contrast the notification badge, which is polled and therefore earned a root rel of its own.)
+    private async Task<string> TenantSettingsRelAsync(string rel, CancellationToken cancellationToken)
+    {
+        var settings = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("tenantSettings", cancellationToken), cancellationToken);
+        return ParseLinks(settings) is { } links && links.TryGetValue(rel, out var href)
+            ? href
+            : throw new InvalidOperationException($"Tenant settings advertised no '{rel}' rel (ADR 0543).");
+    }
+
     // Sends a synthetic test event to the tenant's saved SIEM webhook (ADR "Audit webhook test delivery") — returns
     // whether the endpoint accepted it + the error on failure.
     public async Task<(bool Success, string? Error)> TestAuditWebhookAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync("api/tenant-settings/audit-webhook/test", null, cancellationToken);
+        using var response = await _http.PostAsync(await TenantSettingsRelAsync("audit-webhook-test", cancellationToken), null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.BadRequest)
         {
             throw new ApiActionException("Save the webhook URL + secret before sending a test.");
@@ -1660,7 +1718,7 @@ public sealed class SimplArchiveApiClient
     // Rebuilds the tenant's used-storage counter from the actual stored blobs (ADR "Per-tenant storage quota").
     public async Task<TenantSettingsInfo> RecomputeStorageAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync("api/tenant-settings/recompute-storage", null, cancellationToken);
+        using var response = await _http.PostAsync(await TenantSettingsRelAsync("recompute-storage", cancellationToken), null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to recompute storage usage.");
@@ -2043,8 +2101,12 @@ public sealed class SimplArchiveApiClient
     // ---- Saved searches (ADR "Saved searches") ------------------------------------------------------
 
     // ShareScope: 0 = Private, 1 = Everyone, 2 = Specific (ADR "Scoped saved-search sharing").
-    public sealed record SavedSearchInfo(Guid Id, string Name, string QueryString, int ShareScope, bool IsMine, string OwnerName)
+    // Only the OWNER's rows advertise self/delete/shares, so a search shared with you carries none of them.
+    public sealed record SavedSearchInfo(Guid Id, string Name, string QueryString, int ShareScope, bool IsMine, string OwnerName,
+        IReadOnlyDictionary<string, string>? Links = null)
     {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+
         public bool IsEveryone => ShareScope == 1;
         public bool IsSpecific => ShareScope == 2;
     }
@@ -2066,7 +2128,8 @@ public sealed class SimplArchiveApiClient
                     s.GetProperty("queryString").GetString() ?? "",
                     s.TryGetProperty("shareScope", out var sc) ? sc.GetInt32() : 0,
                     !s.TryGetProperty("isMine", out var mine) || mine.ValueKind != JsonValueKind.False,
-                    s.TryGetProperty("ownerName", out var on) ? on.GetString() ?? "" : ""));
+                    s.TryGetProperty("ownerName", out var on) ? on.GetString() ?? "" : "",
+                    ParseLinks(s)));
             }
         }
 
@@ -2076,7 +2139,14 @@ public sealed class SimplArchiveApiClient
     // The picker options (active users + groups) for the share dialog.
     public async Task<List<ShareTargetInfo>> GetShareTargetsAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/saved-searches/share-targets", cancellationToken);
+        // `share-targets` is advertised by the saved-searches collection — the dialog that needs it opens from
+        // that list, so the read is one the screen has effectively already paid for.
+        var collection = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("savedSearches", cancellationToken), cancellationToken);
+        var targetsHref = ParseLinks(collection) is { } collectionLinks && collectionLinks.TryGetValue("share-targets", out var t)
+            ? t
+            : throw new InvalidOperationException("Saved searches advertised no 'share-targets' rel (ADR 0543).");
+
+        var json = await _http.GetFromJsonAsync<JsonElement>(targetsHref, cancellationToken);
         var list = new List<ShareTargetInfo>();
         if (json.TryGetProperty("users", out var users))
         {
@@ -2098,9 +2168,9 @@ public sealed class SimplArchiveApiClient
     }
 
     // The current specific-principal grants on my search (owner-only).
-    public async Task<List<ShareGrantInfo>> GetSavedSearchSharesAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<List<ShareGrantInfo>> GetSavedSearchSharesAsync(SavedSearchInfo search, CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/saved-searches/{id}/shares", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(RequireHref(search, "shares"), cancellationToken);
         var list = new List<ShareGrantInfo>();
         if (json.TryGetProperty("shares", out var arr))
         {
@@ -2129,15 +2199,15 @@ public sealed class SimplArchiveApiClient
     public async Task SetSavedSearchShareAsync(SavedSearchInfo search, int shareScope, IReadOnlyList<(string Type, Guid Id)> shares, CancellationToken cancellationToken = default)
     {
         using var response = await _http.PutAsJsonAsync(
-            $"api/saved-searches/{search.Id}",
+            RequireHref(search, "self"),
             new { name = search.Name, queryString = search.QueryString, shareScope, shares = shares.Select(s => new { type = s.Type, id = s.Id }) },
             cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
-    public async Task DeleteSavedSearchAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task DeleteSavedSearchAsync(SavedSearchInfo search, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.DeleteAsync($"api/saved-searches/{id}", cancellationToken);
+        using var response = await _http.DeleteAsync(RequireHref(search, "delete"), cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
@@ -2146,7 +2216,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<IReadOnlyList<SearchField>> GetSearchFieldsAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/search/fields", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("searchFields", cancellationToken), cancellationToken);
         var fields = new List<SearchField>();
         if (json.TryGetProperty("fields", out var array))
         {
@@ -2468,6 +2538,17 @@ public sealed class SimplArchiveApiClient
 
     // The confirmed versions of a document (newest first), each with its presigned download URL.
     // Takes the advertised href (node.Href("versions")), not a document id (ADR 0543, issue #416).
+    /// <summary>
+    /// The version list plus the collection's own `compare` address — one read, so a screen that offers
+    /// comparison does not pay a second request to learn where to send it (issue #416).
+    /// </summary>
+    public async Task<(List<VersionInfo> Versions, string? CompareHref)> GetVersionsWithLinksAsync(string versionsHref, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>(versionsHref, cancellationToken);
+        var compareHref = ParseLinks(json) is { } links && links.TryGetValue("compare", out var href) ? href : null;
+        return (await GetVersionsAsync(versionsHref, cancellationToken), compareHref);
+    }
+
     public async Task<List<VersionInfo>> GetVersionsAsync(string versionsHref, CancellationToken cancellationToken = default)
     {
         var json = await _http.GetFromJsonAsync<JsonElement>(versionsHref, cancellationToken);
@@ -2505,9 +2586,11 @@ public sealed class SimplArchiveApiClient
         return confirmed.Select(v => v with { IsCurrent = v.Id == currentId }).ToList();
     }
 
-    public async Task<VersionComparison> GetVersionComparisonAsync(Guid documentId, Guid fromVersionId, Guid toVersionId, CancellationToken cancellationToken = default)
+    // Takes the version collection's advertised `compare` address; the two versions travel as query parameters,
+    // because a link names ONE resource and a pair has none (issue #416, resolved by reshaping the API).
+    public async Task<VersionComparison> GetVersionComparisonAsync(string compareHref, Guid fromVersionId, Guid toVersionId, CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/versions/{fromVersionId}/compare/{toVersionId}", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>($"{compareHref}?from={fromVersionId}&to={toVersionId}", cancellationToken);
         var lines = new List<DiffLineInfo>();
         if (json.TryGetProperty("lines", out var arr))
         {
@@ -2749,6 +2832,46 @@ public sealed class SimplArchiveApiClient
     // abandons hypermedia and goes back to composing paths (issue #416).
     private IReadOnlyDictionary<string, string>? _rootLinks;
     private readonly SemaphoreSlim _rootGate = new(1, 1);
+
+    // The caller's own "me" resource, cached for the same reason as the root. Everything about the signed-in
+    // account hangs off it — password, photo, MFA, passkeys, WebDAV password, personal repository, notification
+    // preferences — so this is the desktop's counterpart to the web client's MeHrefAsync (issue #416). Without
+    // it every one of those was a composed /api/users/me/… path, which is thirteen private routes copied into a
+    // second codebase.
+    private IReadOnlyDictionary<string, string>? _meLinks;
+    private readonly SemaphoreSlim _meGate = new(1, 1);
+
+    /// <summary>
+    /// The href for a rel on the caller's own "me" resource. Throws when it is not advertised.
+    /// </summary>
+    public async Task<string> MeHrefAsync(string rel, CancellationToken cancellationToken = default)
+    {
+        if (_meLinks is null)
+        {
+            // Resolve the root href BEFORE taking the gate: these are separate semaphores, but taking one while
+            // holding the other is how the web client deadlocked its whole workbench (ADR 0543 notes), so keep
+            // the acquisition order trivially safe by not nesting at all.
+            var meHref = await RootHrefAsync("me", cancellationToken);
+
+            await _meGate.WaitAsync(cancellationToken);
+            try
+            {
+                if (_meLinks is null)
+                {
+                    var me = await _http.GetFromJsonAsync<JsonElement>(meHref, cancellationToken);
+                    _meLinks = ParseLinks(me) ?? new Dictionary<string, string>();
+                }
+            }
+            finally
+            {
+                _meGate.Release();
+            }
+        }
+
+        return _meLinks.TryGetValue(rel, out var href)
+            ? href
+            : throw new InvalidOperationException($"The 'me' resource does not advertise the '{rel}' rel.");
+    }
 
     /// <summary>
     /// The href for a root-level rel. Throws when the server does not advertise it — for the collections a screen
@@ -3083,7 +3206,11 @@ public sealed class SimplArchiveApiClient
     public async Task<List<PrincipalInfo>> GetGroupsAsync(CancellationToken cancellationToken = default) =>
         await LoadPagedAsync(await RootHrefAsync("groups", cancellationToken), "groups", ParseGroup, cancellationToken);
 
-    public async Task<Guid> CreateUserAsync(string email, string displayName, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Creates a user and returns the created ROW — not its id. The create response is the resource, rels
+    /// included, so a caller that goes on to act on what it created already holds the addresses (ADR 0555).
+    /// </summary>
+    public async Task<PrincipalInfo> CreateUserAsync(string email, string displayName, CancellationToken cancellationToken = default)
     {
         using var response = await _http.PostAsJsonAsync(await RootHrefAsync("users", cancellationToken), new { email, displayName }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
@@ -3097,11 +3224,10 @@ public sealed class SimplArchiveApiClient
         }
 
         response.EnsureSuccessStatusCode();
-        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        return json.GetProperty("id").GetGuid();
+        return ParseUser(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
     }
 
-    public async Task<Guid> CreateGroupAsync(string name, CancellationToken cancellationToken = default)
+    public async Task<PrincipalInfo> CreateGroupAsync(string name, CancellationToken cancellationToken = default)
     {
         using var response = await _http.PostAsJsonAsync(await RootHrefAsync("groups", cancellationToken), new { name }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
@@ -3115,17 +3241,30 @@ public sealed class SimplArchiveApiClient
         }
 
         response.EnsureSuccessStatusCode();
-        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        return json.GetProperty("id").GetGuid();
+        return ParseGroup(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
     }
 
-    public Task SetUserRightsAsync(Guid id, SystemRightsData rights, CancellationToken cancellationToken = default) =>
-        SetRightsAsync($"api/users/{id}/rights", rights, cancellationToken);
+    private static string RequireHref(TagCatalogItem tag, string rel) =>
+        tag.Href(rel)
+        ?? throw new InvalidOperationException($"The tag '{tag.Name}' advertised no '{rel}' rel (ADR 0543/0555).");
 
-    public Task SetGroupRightsAsync(Guid id, SystemRightsData rights, CancellationToken cancellationToken = default) =>
-        SetRightsAsync($"api/groups/{id}/rights", rights, cancellationToken);
+    private static string RequireHref(SavedSearchInfo search, string rel) =>
+        search.Href(rel)
+        ?? throw new InvalidOperationException($"The saved search advertised no '{rel}' rel — it is not yours to change (ADR 0543/0555).");
 
-    private async Task SetRightsAsync(string path, SystemRightsData rights, CancellationToken cancellationToken)
+    private static string RequireHref(ServiceAccountInfo account, string rel) =>
+        account.Href(rel)
+        ?? throw new InvalidOperationException($"The service account advertised no '{rel}' rel — a revoked account offers none (ADR 0543/0555).");
+
+    private static string RequireHref(PrincipalInfo principal, string rel) =>
+        principal.Href(rel)
+        ?? throw new InvalidOperationException($"The {(principal.IsGroup ? "group" : "user")} row advertised no '{rel}' rel (ADR 0543/0555).");
+
+    /// <summary>Sets a principal's system rights at the address its own row advertised.</summary>
+    public Task SetRightsAsync(PrincipalInfo principal, SystemRightsData rights, CancellationToken cancellationToken = default) =>
+        SetRightsCoreAsync(RequireHref(principal, "rights"), rights, cancellationToken);
+
+    private async Task SetRightsCoreAsync(string path, SystemRightsData rights, CancellationToken cancellationToken)
     {
         using var response = await _http.PutAsJsonAsync(path, rights, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
@@ -3140,9 +3279,11 @@ public sealed class SimplArchiveApiClient
     // Deactivates a user. If they still hold pending review tasks, the server refuses (409
     // REVIEWER_HAS_PENDING_REVIEWS) unless reassignReviewsTo hands them to a replacement reviewer (ADR
     // "Workflow review reassignment") — surfaced as ReviewerHasPendingReviewsException so the caller can prompt.
-    public async Task DeleteUserAsync(Guid id, Guid? reassignReviewsTo = null, CancellationToken cancellationToken = default)
+    public async Task DeleteUserAsync(PrincipalInfo user, Guid? reassignReviewsTo = null, CancellationToken cancellationToken = default)
     {
-        var url = reassignReviewsTo is { } r ? $"api/users/{id}?reassignReviewsTo={r}" : $"api/users/{id}";
+        // The reassignment is a QUERY on the advertised address, not a path this client invents.
+        var deactivateHref = RequireHref(user, "deactivate");
+        var url = reassignReviewsTo is { } r ? $"{deactivateHref}?reassignReviewsTo={r}" : deactivateHref;
         using var response = await _http.DeleteAsync(url, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
@@ -3171,9 +3312,9 @@ public sealed class SimplArchiveApiClient
     }
 
     // Deletes a group (409 if it still has child groups or members).
-    public async Task DeleteGroupAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task DeleteGroupAsync(PrincipalInfo group, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.DeleteAsync($"api/groups/{id}", cancellationToken);
+        using var response = await _http.DeleteAsync(RequireHref(group, "delete"), cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException("The group still has child groups or members.");
@@ -3212,9 +3353,9 @@ public sealed class SimplArchiveApiClient
     }
 
     // Edit an existing account's name + rights (PUT, ADR 0534) — escalation-capped server-side like create.
-    public async Task UpdateServiceAccountAsync(Guid id, string name, SystemRightsData rights, CancellationToken cancellationToken = default)
+    public async Task UpdateServiceAccountAsync(ServiceAccountInfo account, string name, SystemRightsData rights, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PutAsJsonAsync($"api/service-accounts/{id}", ToServiceAccountBody(name, rights), cancellationToken);
+        using var response = await _http.PutAsJsonAsync(RequireHref(account, "edit"), ToServiceAccountBody(name, rights), cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException($"A service account named '{name}' already exists.");
@@ -3229,9 +3370,9 @@ public sealed class SimplArchiveApiClient
     }
 
     // Rotate the secret — mints a new client_secret and invalidates the old one; returns the one-time secret.
-    public async Task<ServiceAccountSecret> RotateServiceAccountSecretAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<ServiceAccountSecret> RotateServiceAccountSecretAsync(ServiceAccountInfo account, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync($"api/service-accounts/{id}/rotate-secret", null, cancellationToken);
+        using var response = await _http.PostAsync(RequireHref(account, "rotate-secret"), null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to manage service accounts.");
@@ -3243,9 +3384,9 @@ public sealed class SimplArchiveApiClient
     }
 
     // Revoke — one-way, sets IsActive = false; the credentials stop working immediately.
-    public async Task RevokeServiceAccountAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task RevokeServiceAccountAsync(ServiceAccountInfo account, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.DeleteAsync($"api/service-accounts/{id}", cancellationToken);
+        using var response = await _http.DeleteAsync(RequireHref(account, "revoke"), cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to manage service accounts.");
@@ -3273,14 +3414,15 @@ public sealed class SimplArchiveApiClient
             e.GetProperty("name").GetString() ?? "",
             e.TryGetProperty("clientId", out var c) ? c.GetString() ?? "" : "",
             !e.TryGetProperty("isActive", out var a) || a.ValueKind == JsonValueKind.True,
-            B("canManageRepositories"), B("canManageMasks"), B("canManageServiceAccounts"), B("canImport"), B("canExport"));
+            B("canManageRepositories"), B("canManageMasks"), B("canManageServiceAccounts"), B("canImport"), B("canExport"),
+            ParseLinks(e));
     }
 
     // ---- Passwords (ADR "User password management") -------------------------------------------------
 
     public async Task ChangeMyPasswordAsync(string currentPassword, string newPassword, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PutAsJsonAsync("api/users/me/password", new { currentPassword, newPassword }, cancellationToken);
+        using var response = await _http.PutAsJsonAsync(await MeHrefAsync("changePassword", cancellationToken), new { currentPassword, newPassword }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.BadRequest)
         {
             throw new ApiActionException("The current password is incorrect.");
@@ -3293,23 +3435,23 @@ public sealed class SimplArchiveApiClient
     public sealed record WebDavStatus(bool Enabled, string Username, string Url, string? Password);
 
     public async Task<WebDavStatus> GetWebDavStatusAsync(CancellationToken cancellationToken = default) =>
-        await _http.GetFromJsonAsync<WebDavStatus>("api/me/webdav-password", cancellationToken) ?? new WebDavStatus(false, "", "", null);
+        await _http.GetFromJsonAsync<WebDavStatus>(await MeHrefAsync("webdavPassword", cancellationToken), cancellationToken) ?? new WebDavStatus(false, "", "", null);
 
     // Generate/regenerate — returns the plaintext password (shown once).
     public async Task<WebDavStatus> GenerateWebDavPasswordAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync("api/me/webdav-password", null, cancellationToken);
+        using var response = await _http.PostAsync(await MeHrefAsync("webdavPassword", cancellationToken), null, cancellationToken);
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<WebDavStatus>(cancellationToken))!;
     }
 
     public async Task RevokeWebDavPasswordAsync(CancellationToken cancellationToken = default) =>
-        (await _http.DeleteAsync("api/me/webdav-password", cancellationToken)).EnsureSuccessStatusCode();
+        (await _http.DeleteAsync(await MeHrefAsync("webdavPassword", cancellationToken), cancellationToken)).EnsureSuccessStatusCode();
 
     // Admin reset — returns the generated password (shown once).
-    public async Task<string> ResetUserPasswordAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task<string> ResetUserPasswordAsync(PrincipalInfo user, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync($"api/users/{userId}/reset-password", null, cancellationToken);
+        using var response = await _http.PostAsync(RequireHref(user, "reset-password"), null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to reset passwords.");
@@ -3328,7 +3470,7 @@ public sealed class SimplArchiveApiClient
     // a pending, not-yet-active enrollment).
     public async Task<MfaEnrollInfo> EnrollMfaAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync("api/users/me/mfa/enroll", null, cancellationToken);
+        using var response = await _http.PostAsync(await MeHrefAsync("mfaEnroll", cancellationToken), null, cancellationToken);
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         return new MfaEnrollInfo(
@@ -3340,7 +3482,7 @@ public sealed class SimplArchiveApiClient
     // Confirms enrollment with a code; returns the one-time recovery codes (shown once).
     public async Task<List<string>> EnableMfaAsync(string code, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync("api/users/me/mfa/enable", new { code }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(await MeHrefAsync("mfaEnable", cancellationToken), new { code }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.BadRequest)
         {
             throw new ApiActionException("That authentication code isn't right.");
@@ -3353,14 +3495,14 @@ public sealed class SimplArchiveApiClient
 
     public async Task DisableMfaAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await _http.DeleteAsync("api/users/me/mfa", cancellationToken);
+        using var response = await _http.DeleteAsync(await MeHrefAsync("mfa", cancellationToken), cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
     // Admin reset — disables a locked-out user's two-factor.
-    public async Task ResetUserMfaAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task ResetUserMfaAsync(PrincipalInfo user, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync($"api/users/{userId}/mfa/reset", null, cancellationToken);
+        using var response = await _http.PostAsync(RequireHref(user, "reset-mfa"), null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to reset two-factor authentication.");
@@ -3373,30 +3515,35 @@ public sealed class SimplArchiveApiClient
     // List + remove are plain API calls the native app makes directly; registration needs a browser
     // attestation ceremony and is delegated to the system browser (see OidcLoopbackAuthenticator).
 
-    public sealed record PasskeyInfo(Guid Id, string Name, DateTimeOffset CreatedAt, DateTimeOffset? LastUsedAt);
+    // RemoveHref is the row's own `self` rel: a passkey addresses itself, so removing one follows a link the
+    // list already carried instead of rebuilding /users/me/passkeys/{id} from an id (issue #416).
+    public sealed record PasskeyInfo(Guid Id, string Name, DateTimeOffset CreatedAt, DateTimeOffset? LastUsedAt, string? RemoveHref = null);
 
     public async Task<List<PasskeyInfo>> GetPasskeysAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/users/me/passkeys", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await MeHrefAsync("passkeys", cancellationToken), cancellationToken);
         var list = new List<PasskeyInfo>();
         if (json.TryGetProperty("passkeys", out var passkeys))
         {
             foreach (var p in passkeys.EnumerateArray())
             {
+                var links = ParseLinks(p);
                 list.Add(new PasskeyInfo(
                     p.GetProperty("id").GetGuid(),
                     p.GetProperty("name").GetString() ?? "",
                     p.GetProperty("createdAt").GetDateTimeOffset(),
-                    p.TryGetProperty("lastUsedAt", out var lu) && lu.ValueKind != JsonValueKind.Null ? lu.GetDateTimeOffset() : null));
+                    p.TryGetProperty("lastUsedAt", out var lu) && lu.ValueKind != JsonValueKind.Null ? lu.GetDateTimeOffset() : null,
+                    links is not null && links.TryGetValue("self", out var removeHref) ? removeHref : null));
             }
         }
 
         return list;
     }
 
-    public async Task RemovePasskeyAsync(Guid id, CancellationToken cancellationToken = default)
+    /// <summary>Removes a passkey by the address its own row advertised (its `self` rel).</summary>
+    public async Task RemovePasskeyAsync(string removeHref, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.DeleteAsync($"api/users/me/passkeys/{id}", cancellationToken);
+        using var response = await _http.DeleteAsync(removeHref, cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
@@ -3406,7 +3553,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<List<NotificationPreferenceInfo>> GetNotificationPreferencesAsync(CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>("api/notifications/preferences", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await MeHrefAsync("notificationPreferences", cancellationToken), cancellationToken);
         var list = new List<NotificationPreferenceInfo>();
         if (json.TryGetProperty("preferences", out var prefs))
         {
@@ -3425,7 +3572,7 @@ public sealed class SimplArchiveApiClient
     public async Task SetNotificationPreferencesAsync(IEnumerable<NotificationPreferenceInfo> preferences, CancellationToken cancellationToken = default)
     {
         var body = new { preferences = preferences.Select(p => new { type = p.Type, emailEnabled = p.EmailEnabled }) };
-        using var response = await _http.PutAsJsonAsync("api/notifications/preferences", body, cancellationToken);
+        using var response = await _http.PutAsJsonAsync(await MeHrefAsync("notificationPreferences", cancellationToken), body, cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
@@ -3746,12 +3893,14 @@ public sealed class SimplArchiveApiClient
 
     // ---- Group membership (ADR "Group membership editing") ------------------------------------------
 
-    public Task<List<UserOptionInfo>> GetGroupMembersAsync(Guid groupId, CancellationToken cancellationToken = default) =>
-        LoadPagedAsync($"api/groups/{groupId}/members", "members", ParseMember, cancellationToken);
+    public Task<List<UserOptionInfo>> GetGroupMembersAsync(PrincipalInfo group, CancellationToken cancellationToken = default) =>
+        LoadPagedAsync(RequireHref(group, "members"), "members", ParseMember, cancellationToken);
 
-    public async Task AddGroupMemberAsync(Guid groupId, Guid userId, CancellationToken cancellationToken = default)
+    // The API takes the member in the BODY of a POST to the collection now, so the group row's `members`
+    // address serves every add — the chosen user travels as data, not as a path segment (issue #416).
+    public async Task AddGroupMemberAsync(PrincipalInfo group, Guid userId, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PutAsync($"api/groups/{groupId}/members/{userId}", null, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(RequireHref(group, "members"), new { userId }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to manage members.");
@@ -3760,9 +3909,11 @@ public sealed class SimplArchiveApiClient
         response.EnsureSuccessStatusCode();
     }
 
-    public async Task RemoveGroupMemberAsync(Guid groupId, Guid userId, CancellationToken cancellationToken = default)
+    public async Task RemoveGroupMemberAsync(UserOptionInfo member, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.DeleteAsync($"api/groups/{groupId}/members/{userId}", cancellationToken);
+        var removeHref = member.RemoveHref
+            ?? throw new InvalidOperationException("The member row advertised no 'remove' rel (ADR 0543/0555).");
+        using var response = await _http.DeleteAsync(removeHref, cancellationToken);
         if (response.StatusCode != HttpStatusCode.NotFound)
         {
             response.EnsureSuccessStatusCode();
@@ -3770,15 +3921,17 @@ public sealed class SimplArchiveApiClient
     }
 
     private static UserOptionInfo ParseMember(JsonElement e) =>
-        new(e.GetProperty("id").GetGuid(), e.GetProperty("displayName").GetString() ?? "");
+        new(e.GetProperty("id").GetGuid(),
+            e.GetProperty("displayName").GetString() ?? "",
+            ParseLinks(e) is { } links && links.TryGetValue("remove", out var removeHref) ? removeHref : null);
 
     // ---- Profile photo (ADR "User profile photo") ---------------------------------------------------
 
-    public Task SetUserPhotoAsync(Guid userId, byte[] png, CancellationToken cancellationToken = default) =>
-        PutPhotoAsync($"api/users/{userId}/photo", png, cancellationToken);
+    public Task SetUserPhotoAsync(PrincipalInfo user, byte[] png, CancellationToken cancellationToken = default) =>
+        PutPhotoAsync(RequireHref(user, "photo"), png, cancellationToken);
 
-    public Task SetMyPhotoAsync(byte[] png, CancellationToken cancellationToken = default) =>
-        PutPhotoAsync("api/users/me/photo", png, cancellationToken);
+    public async Task SetMyPhotoAsync(byte[] png, CancellationToken cancellationToken = default) =>
+        await PutPhotoAsync(await MeHrefAsync("photo", cancellationToken), png, cancellationToken);
 
     private async Task PutPhotoAsync(string url, byte[] png, CancellationToken cancellationToken)
     {
@@ -3798,10 +3951,17 @@ public sealed class SimplArchiveApiClient
         response.EnsureSuccessStatusCode();
     }
 
+    /// <summary>The caller's OWN avatar, at the address the `me` resource advertises for it.</summary>
+    public async Task<byte[]?> GetMyPhotoAsync(CancellationToken cancellationToken = default) =>
+        await GetPhotoAsync(await MeHrefAsync("photo", cancellationToken), cancellationToken);
+
     // The normalized PNG bytes, or null if the user has no photo.
-    public async Task<byte[]?> GetUserPhotoAsync(Guid userId, CancellationToken cancellationToken = default)
+    public Task<byte[]?> GetUserPhotoAsync(PrincipalInfo user, CancellationToken cancellationToken = default) =>
+        GetPhotoAsync(RequireHref(user, "photo"), cancellationToken);
+
+    private async Task<byte[]?> GetPhotoAsync(string photoHref, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.GetAsync($"api/users/{userId}/photo", cancellationToken);
+        using var response = await _http.GetAsync(photoHref, cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             return null;
@@ -3811,9 +3971,16 @@ public sealed class SimplArchiveApiClient
         return await response.Content.ReadAsByteArrayAsync(cancellationToken);
     }
 
-    public async Task DeleteUserPhotoAsync(Guid userId, CancellationToken cancellationToken = default)
+    /// <summary>Removes the caller's OWN avatar, at the address the `me` resource advertises.</summary>
+    public Task DeleteMyPhotoAsync(CancellationToken cancellationToken = default) =>
+        DeletePhotoAsync(MeHrefAsync("photo", cancellationToken), cancellationToken);
+
+    public Task DeleteUserPhotoAsync(PrincipalInfo user, CancellationToken cancellationToken = default) =>
+        DeletePhotoAsync(Task.FromResult(RequireHref(user, "photo")), cancellationToken);
+
+    private async Task DeletePhotoAsync(Task<string> photoHref, CancellationToken cancellationToken)
     {
-        using var response = await _http.DeleteAsync($"api/users/{userId}/photo", cancellationToken);
+        using var response = await _http.DeleteAsync(await photoHref, cancellationToken);
         if (response.StatusCode != HttpStatusCode.NotFound)
         {
             response.EnsureSuccessStatusCode();
@@ -3826,14 +3993,17 @@ public sealed class SimplArchiveApiClient
         e.GetProperty("displayName").GetString() ?? "",
         !e.TryGetProperty("isActive", out var a) || a.ValueKind == JsonValueKind.True,
         ParseRights(e),
-        e.TryGetProperty("mfaEnabled", out var mfa) && mfa.ValueKind == JsonValueKind.True);
+        e.TryGetProperty("mfaEnabled", out var mfa) && mfa.ValueKind == JsonValueKind.True,
+        ParseLinks(e));
 
     private static PrincipalInfo ParseGroup(JsonElement e) => new(
         true,
         e.GetProperty("id").GetGuid(),
         e.GetProperty("name").GetString() ?? "",
         true,
-        ParseRights(e));
+        ParseRights(e),
+        false,
+        ParseLinks(e));
 
     private static SystemRightsData ParseRights(JsonElement e)
     {

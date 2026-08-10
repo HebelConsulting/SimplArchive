@@ -20,6 +20,9 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
     private SimplArchiveApiClient? _api;
     private Guid _documentId;
 
+    // The collection's advertised `compare` address; the two versions travel as query parameters (issue #416).
+    private string? _compareHref;
+
     [ObservableProperty] private string _documentName = "";
     [ObservableProperty] private string _status = "";
     [ObservableProperty] private bool _notAvailable;
@@ -49,7 +52,9 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
         DocumentName = documentName;
 
         Versions.Clear();
-        foreach (var v in await api.GetVersionsAsync(versionsHref))
+        var (versions, compareHref) = await api.GetVersionsWithLinksAsync(versionsHref);
+        _compareHref = compareHref;
+        foreach (var v in versions)
         {
             Versions.Add(new VersionOption(v.Id, v.VersionNumber ?? 0, v.FileExtension, v.DownloadUrl));
         }
@@ -101,7 +106,9 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
         Status = Strings.Get("StComparing");
         try
         {
-            var cmp = await _api.GetVersionComparisonAsync(_documentId, FromVersion.Id, ToVersion.Id);
+            if (_compareHref is null) { return; }
+
+            var cmp = await _api.GetVersionComparisonAsync(_compareHref, FromVersion.Id, ToVersion.Id);
             if (!cmp.Available)
             {
                 NotAvailable = true;

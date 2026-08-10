@@ -854,6 +854,17 @@ public class UsersController : ControllerBase
             [
                 new Link("self", $"/api/users/{user.Id}", "GET"),
                 new Link("rights", $"/api/users/{user.Id}/rights", "PUT"),
+                // Setting this user's avatar — the admin counterpart of the me resource's own `photo` rel
+                // (issue #416). The list is already CanManageUsers-gated, which is the same right the PUT
+                // enforces, so anyone holding this row may use it. Its absence elsewhere is what kept the
+                // profile-photo dialog composing /users/{id}/photo for the admin case.
+                new Link("photo", $"/api/users/{user.Id}/photo", "PUT"),
+                // The remaining administrative actions on this user (issue #416). All are gated by the same
+                // CanManageUsers right that gates the listing itself, so anyone holding this row may use them —
+                // which is why they are unconditional here rather than recomputed per row.
+                new Link("reset-password", $"/api/users/{user.Id}/reset-password", "POST"),
+                new Link("reset-mfa", $"/api/users/{user.Id}/mfa/reset", "POST"),
+                new Link("deactivate", $"/api/users/{user.Id}", "DELETE"),
             ],
         };
     }

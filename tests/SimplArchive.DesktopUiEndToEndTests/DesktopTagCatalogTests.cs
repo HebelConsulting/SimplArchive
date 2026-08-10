@@ -40,18 +40,18 @@ public class DesktopTagCatalogTests
 
         // Rename 'alpha' → 'gamma…' cascades to the document.
         var gamma = $"gamma{suffix}";
-        await api.UpdateTagAsync(alphaDef.Id, gamma, null);
+        await api.UpdateTagAsync(alphaDef, gamma, null);
         Assert.Equal(new[] { gamma }, await api.GetTagsAsync((await api.GetDocumentDetailAsync(doc.Id)).Href("tags")));
 
         // Merge 'gamma' into 'beta' → the document now carries 'beta', and 'gamma' is gone from the catalog.
         var gammaDef = (await api.GetTagCatalogWithColorsAsync()).Items.Single(t => t.Name == gamma);
         var betaDef = (await api.GetTagCatalogWithColorsAsync()).Items.Single(t => t.Name == beta);
-        await api.MergeTagAsync(gammaDef.Id, betaDef.Id);
+        await api.MergeTagAsync(gammaDef, betaDef.Id);
         Assert.Equal(new[] { beta }, await api.GetTagsAsync((await api.GetDocumentDetailAsync(doc.Id)).Href("tags")));
         Assert.DoesNotContain((await api.GetTagCatalogWithColorsAsync()).Items, t => t.Name == gamma);
 
         // Retire 'beta' → excluded from the active catalog.
-        await api.RetireTagAsync(betaDef.Id);
+        await api.RetireTagAsync(betaDef);
         Assert.DoesNotContain((await api.GetTagCatalogWithColorsAsync()).Items, t => t.Name == beta);
     }
 }

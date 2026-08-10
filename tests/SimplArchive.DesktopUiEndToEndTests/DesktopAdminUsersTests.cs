@@ -29,7 +29,7 @@ public class DesktopAdminUsersTests
 
         // The admin lists every personal repository — the throwaway user's is present.
         var repos = await admin.GetAdminPersonalRepositoriesAsync();
-        Assert.Contains(repos, r => r.RepositoryId == userRepo!.Id && r.UserId == userId);
+        Assert.Contains(repos, r => r.RepositoryId == userRepo!.Id && r.UserId == userId.Id);
 
         // The admin can browse into it (empty, but reachable via the ACL bypass).
         var children = await admin.GetChildrenAsync(userRepo!.Id);

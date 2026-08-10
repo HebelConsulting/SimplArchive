@@ -40,7 +40,7 @@ public class DesktopRealtimeNotificationsTests
         var repo = (await admin.GetRepositoriesAsync()).First(r => r.Name == $"rt-{suffix}");
         using var http = new HttpClient { BaseAddress = new Uri(_app.BaseUrl) };
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
-        (await http.PutAsJsonAsync($"api/documents/{repo.Id}/acl-entries/users/{userId}", new { canSee = true, canReadContent = true })).EnsureSuccessStatusCode();
+        (await http.PutAsJsonAsync($"api/documents/{repo.Id}/acl-entries/users/{userId.Id}", new { canSee = true, canReadContent = true })).EnsureSuccessStatusCode();
 
         var completed = await Task.WhenAny(received.Task, Task.Delay(TimeSpan.FromSeconds(15)));
         Assert.True(completed == received.Task, "the desktop realtime client should receive a pushed notification after the grant");

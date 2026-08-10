@@ -159,7 +159,7 @@ public class MasksController : ControllerBase
         return CreatedAtAction(nameof(Get), new { maskId = mask.Id }, resource);
     }
 
-    public class MaskSummaryResource
+    public class MaskSummaryResource : HypermediaResource
     {
         public Guid Id { get; set; }
 
@@ -184,6 +184,13 @@ public class MasksController : ControllerBase
             .OrderBy(v => v.Name)
             .Select(v => new MaskSummaryResource { Id = v.MaskId, Name = v.Name, VersionNumber = v.VersionNumber })
             .ToListAsync(cancellationToken);
+
+        // Each summary addresses the full mask — its field definitions — so a client holding a row follows the
+        // rel instead of rebuilding /masks/{id} (issue #416).
+        foreach (var mask in masks)
+        {
+            mask.Links = [new Link("self", $"/api/masks/{mask.Id}", "GET")];
+        }
 
         return Ok(new MaskListResource { Masks = masks, Links = [new Link("self", "/api/masks", "GET")] });
     }

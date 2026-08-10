@@ -141,10 +141,31 @@ public class SavedSearchesController : ControllerBase
             })
             .ToListAsync(cancellationToken);
 
+        // A saved search addresses itself and its shares; only the OWNER may rewrite or delete one, so those two
+        // rels are absent on a search shared with you — the client greys the row's actions from the rels rather
+        // than re-deriving ownership from IsMine (issue #416).
+        foreach (var item in items)
+        {
+            item.Links = item.IsMine
+                ?
+                [
+                    new Link("self", $"/api/saved-searches/{item.Id}", "PUT"),
+                    new Link("delete", $"/api/saved-searches/{item.Id}", "DELETE"),
+                    new Link("shares", $"/api/saved-searches/{item.Id}/shares", "GET"),
+                ]
+                : [];
+        }
+
         return Ok(new SavedSearchesResource
         {
             SavedSearches = items,
-            Links = [new Link("self", "/api/saved-searches", "GET")],
+            Links =
+            [
+                new Link("self", "/api/saved-searches", "GET"),
+                // Who a search may be shared WITH — a collection in its own right, needed by the share dialog
+                // before it has picked anything.
+                new Link("share-targets", "/api/saved-searches/share-targets", "GET"),
+            ],
         });
     }
 

@@ -127,7 +127,14 @@ public class DocumentRemindersController : ControllerBase
                 Mine = r.Mine,
                 Links = [new Link("cancel", $"/api/documents/{documentId}/reminders/{r.Id}", "DELETE")],
             })],
-            Links = [new Link("self", $"/api/documents/{documentId}/reminders", "GET")],
+            Links =
+            [
+                new Link("self", $"/api/documents/{documentId}/reminders", "GET"),
+                // Setting one, and the people it may be set for (issue #416). Both hang off the collection the
+                // dialog already has open, so it follows them instead of rebuilding two more paths from an id.
+                new Link("create", $"/api/documents/{documentId}/reminders", "POST"),
+                new Link("targets", $"/api/documents/{documentId}/reminders/targets", "GET"),
+            ],
         });
     }
 

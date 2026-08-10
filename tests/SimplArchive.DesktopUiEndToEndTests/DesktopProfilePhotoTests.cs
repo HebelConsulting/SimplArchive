@@ -44,7 +44,7 @@ public class DesktopProfilePhotoTests
         var me = (await client.GetWhoAmIAsync()).UserId!.Value;
         await client.SetMyPhotoAsync(Png(256, 256));
         Assert.True((await client.GetWhoAmIAsync()).HasPhoto);
-        await client.DeleteUserPhotoAsync(me);
+        await client.DeleteMyPhotoAsync();
         Assert.False((await client.GetWhoAmIAsync()).HasPhoto);
     }
 

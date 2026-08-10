@@ -2,6 +2,7 @@
    (from /api/inbox/groups) or any other user in the tenant (from /api/inbox/users) — and return the chosen
    target. The controller enforces "exactly one target"; this dialog offers a single-select so only one can win. *@
 @inject HttpClient Http
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
 
 <MudDialog>
     <TitleContent>
@@ -63,8 +64,8 @@
     {
         try
         {
-            _groups = (await Http.GetFromJsonAsync<GroupsResponse>("api/inbox/groups"))?.Groups ?? [];
-            _users = (await Http.GetFromJsonAsync<UsersResponse>("api/inbox/users"))?.Users ?? [];
+            _groups = (await Http.GetFromJsonAsync<GroupsResponse>(await ApiRoot.RequireAsync("inboxGroups")))?.Groups ?? [];
+            _users = (await Http.GetFromJsonAsync<UsersResponse>(await ApiRoot.RequireAsync("inboxUsers")))?.Users ?? [];
         }
         catch (Exception)
         {
