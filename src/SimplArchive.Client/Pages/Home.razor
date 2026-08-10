@@ -404,7 +404,7 @@
                     <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedFolder is null)" OnClick="UploadAsync" title="@Strings.Get("Upload")" aria-label="@Strings.Get("Upload")">
                         <MudIcon Icon="@Icons.Material.Filled.Upload" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("Upload")</span>
                     </MudButton>
-                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedFolder is null)" OnClick="NewFolderAsync" title="@Strings.Get("NewFolder")" aria-label="@Strings.Get("NewFolder")">
+                    <MudButton Class="wb-rib-btn" data-tour="action-new-folder" Size="Size.Small" Disabled="@(_selectedFolder is null)" OnClick="NewFolderAsync" title="@Strings.Get("NewFolder")" aria-label="@Strings.Get("NewFolder")">
                         <MudIcon Icon="@Icons.Material.Filled.CreateNewFolder" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("NewFolder")</span>
                     </MudButton>
                     <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_downloadUrl is null)" OnClick="DownloadAsync" title="@Strings.Get("Download")" aria-label="@Strings.Get("Download")">
@@ -759,7 +759,7 @@
                                     @if (_isEditing)
                                     {
                                         <MudTooltip Text="@Strings.Get("Save")">
-                                            <MudIconButton Size="Size.Small" aria-label="@Strings.Get("Save")" Color="Color.Primary"
+                                            <MudIconButton data-tour="action-save-index" Size="Size.Small" aria-label="@Strings.Get("Save")" Color="Color.Primary"
                                                            Icon="@Icons.Material.Filled.Save" OnClick="SaveDetailAsync" Disabled="_detailBusy" />
                                         </MudTooltip>
                                         <MudTooltip Text="@Strings.Get("Cancel")">
@@ -791,7 +791,7 @@
                                     @if (_detailCanManagePermissions)
                                     {
                                         <MudTooltip Text="@Strings.Get("MaManageAccess")">
-                                            <MudIconButton Size="Size.Small" aria-label="Manage access" Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessForSelectedAsync()" />
+                                            <MudIconButton data-tour="action-manage-access" Size="Size.Small" aria-label="Manage access" Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessForSelectedAsync()" />
                                         </MudTooltip>
                                     }
                                     @* Edit the index data (issue #407). It belongs beside the thing it edits, in the row of
@@ -802,7 +802,7 @@
                                     @if (CanEditDetail)
                                     {
                                         <MudTooltip Text="@Strings.Get("Edit")">
-                                            <MudIconButton Size="Size.Small" aria-label="@Strings.Get("Edit")" Icon="@Icons.Material.Filled.Edit"
+                                            <MudIconButton data-tour="action-edit-index" Size="Size.Small" aria-label="@Strings.Get("Edit")" Icon="@Icons.Material.Filled.Edit"
                                                            OnClick="BeginEditAsync" Disabled="_detailBusy" />
                                         </MudTooltip>
                                     }

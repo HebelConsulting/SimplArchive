@@ -60,6 +60,47 @@ public partial class WebGuidedTourTests
             }
         }
 
+        // Some anchors only exist in a STATE the tour puts the app into — `action-save-index` appears when
+        // editing begins and is gone once saved, which is exactly what its step asserts. Checking only the
+        // resting state would report those as missing and push someone to delete a step that works. So enter
+        // edit mode and re-check what the first pass did not find (issue #414, full track).
+        if (missing.Count > 0 && await page.Locator("[data-tour='action-edit-index']").CountAsync() > 0)
+        {
+            await page.Locator("[data-tour='action-edit-index']").ClickAsync();
+
+            // Blazor re-renders the pane before the edit-only controls exist; checking instantly would report
+            // them missing and blame the tour for a race in the test.
+            foreach (var anchor in missing)
+            {
+                try
+                {
+                    await page.Locator($"[data-tour='{anchor}']").First.WaitForAsync(new() { Timeout = 5000 });
+                }
+                catch (TimeoutException)
+                {
+                    // Genuinely absent — the re-check below records it.
+                }
+            }
+
+            var stillMissing = new List<string>();
+            foreach (var anchor in missing)
+            {
+                if (await page.Locator($"[data-tour='{anchor}']").CountAsync() == 0)
+                {
+                    stillMissing.Add(anchor);
+                }
+            }
+
+            // Leave the app as it was found — this fixture is shared with every other UI test.
+            var cancel = page.GetByRole(AriaRole.Button, new() { Name = "Cancel" });
+            if (await cancel.CountAsync() > 0)
+            {
+                await cancel.First.ClickAsync();
+            }
+
+            missing = stillMissing;
+        }
+
         Assert.True(missing.Count == 0,
             "The published guided tour names anchors that no longer exist in the app, so a visitor's agent would "
             + "follow it into nothing (issue #414):\n  " + string.Join("\n  ", missing)

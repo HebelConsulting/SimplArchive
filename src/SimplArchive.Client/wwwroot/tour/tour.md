@@ -26,20 +26,29 @@ someone impatient; say more about permissions to an administrator.
 **Tooling is yours.** Nothing here names a browser driver, a recorder or an editor. Those change; the product's
 structure is what we can promise to keep true.
 
-**Two tracks** are assembled from the same steps, so a corrected step is corrected once:
+**Two tracks, one list of steps.** Every step carries a `tracks:` key saying which tracks it belongs to. Read the
+steps in order and perform the ones tagged with your track; skip the rest. There is no second document to fall out
+of date with this one — a corrected step is corrected once, for both tracks.
 
 | Track | Where | Shape |
 |---|---|---|
-| **Quick** | the public demo | ~3 minutes, **read-only** — navigate and explain, never write. Other visitors are using the same instance. |
-| **Full** | your own `docker compose up` | ~15 minutes, hands-on — upload, file, index, share. The instance is yours. |
+| **Quick** | the public demo | ~3 minutes, **read-only** — navigate and explain, never write. Other visitors are using the same instance, and it resets nightly. |
+| **Full** | your own `docker compose up` | ~15 minutes, hands-on — upload, file, index, share. The instance is yours, so it can show the product actually working. |
+
+**Pick the track by where you are.** If the address is the public demo, you are on the quick track and must not
+run `full` steps: they write, and someone else may be watching the same screen. On your own instance, run
+everything — the full track includes every quick step, so the narration still builds in order.
 
 ---
 
-## Quick track (read-only, safe on the shared demo)
+## The steps
+
+In order. Perform the ones whose `tracks:` includes yours.
 
 ### Step 1 — Where you land
 
 ```yaml
+tracks: [quick, full]
 anchor: '[data-tour="pane-tree"]'
 goal: show the workbench shell
 expect: '[data-tour="pane-tree"]' exists and '[data-tour="pane-list"]' exists
@@ -51,6 +60,7 @@ say: >
 ### Step 2 — The archive tree
 
 ```yaml
+tracks: [quick, full]
 anchor: '[data-tour="pane-tree"]'
 goal: point out that the tree shows only what this user may see
 expect: '[data-tour="pane-tree"]' has attribute data-tour-roots >= 1
@@ -62,6 +72,7 @@ say: >
 ### Step 3 — A folder's contents
 
 ```yaml
+tracks: [quick, full]
 anchor: '[data-tour="pane-list"]'
 action: click a folder in '[data-tour="pane-tree"]'
 goal: show the contents list responding to the tree
@@ -74,6 +85,7 @@ say: >
 ### Step 4 — Index data beside the document
 
 ```yaml
+tracks: [quick, full]
 anchor: '[data-tour="pane-index"]'
 action: click a document row in '[data-tour="pane-list"]'
 goal: show metadata and preview side by side
@@ -86,6 +98,7 @@ say: >
 ### Step 5 — The conversation on the document
 
 ```yaml
+tracks: [quick, full]
 anchor: '[data-tour="pane-chat"]'
 goal: show that discussion lives on the document
 expect: '[data-tour="pane-chat"]' exists
@@ -97,6 +110,7 @@ say: >
 ### Step 6 — Everything else is a tab
 
 ```yaml
+tracks: [quick, full]
 anchor: '[data-tour="tab-bar"]'
 goal: show the breadth without leaving the shell
 expect: '[data-tour="tab-audit"]' exists and '[data-tour="tab-search"]' exists
@@ -108,6 +122,7 @@ say: >
 ### Step 7 — The audit trail
 
 ```yaml
+tracks: [quick, full]
 anchor: '[data-tour="tab-audit"]'
 action: click '[data-tour="tab-audit"]'
 goal: show that everything is recorded
@@ -117,9 +132,10 @@ say: >
   the rest trustworthy, and it is not something that can be added convincingly afterwards.
 ```
 
-### Step 8 — Close
+### Step 8 — Close (quick track)
 
 ```yaml
+tracks: [quick]
 anchor: '[data-tour="pane-tree"]'
 goal: end where you started
 expect: '[data-tour="pane-tree"]' exists
@@ -130,11 +146,88 @@ say: >
 
 ---
 
-## Full track (your own instance — writes are fine)
+## Hands-on steps (full track only)
 
-Run the quick track first, then continue. These steps write, so use a local
-`docker compose up` instance rather than the shared demo.
+These write. They assume your own `docker compose up` instance — on the shared demo they would change what
+someone else is looking at.
 
-*Not yet written.* The anchors the write steps need — upload, filing, index editing, sharing — are not published
-yet, and publishing an anchor implies promising to keep it. Better an honestly short tour than one whose second
-half quietly stops working. Track: issue #414.
+### Step 9 — Make a folder of your own
+
+```yaml
+tracks: [full]
+anchor: '[data-tour="action-new-folder"]'
+action: select a repository in '[data-tour="pane-tree"]', then click '[data-tour="action-new-folder"]' and name it
+goal: show that structure is yours to make, not a fixed hierarchy
+expect: '[data-tour="pane-list"]' has attribute data-tour-rows >= 1
+say: >
+  A folder is not a special kind of object here — it is a document that happens to have no file attached, in the
+  same tree as everything else. That is why the same permissions and the same audit trail cover it.
+```
+
+### Step 10 — Put a document in it
+
+```yaml
+tracks: [full]
+anchor: '[data-tour="pane-list"]'
+action: drag a file from your desktop onto '[data-tour="pane-list"]'
+goal: show filing by drag-and-drop, and that the browser uploads directly to storage
+expect: '[data-tour="pane-list"]' has attribute data-tour-rows increased by 1
+say: >
+  The file went straight from your machine to object storage — the application server never touched the bytes, it
+  only said where they belong. That is what lets this scale to documents nobody wants to stream through an API.
+```
+
+### Step 11 — Say what it is
+
+```yaml
+tracks: [full]
+anchor: '[data-tour="action-edit-index"]'
+action: select the new document, click '[data-tour="action-edit-index"]', fill a field, click '[data-tour="action-save-index"]'
+goal: show index data as structured metadata, not tags bolted on
+expect: '[data-tour="action-save-index"]' exists while editing, and is gone after saving
+say: >
+  What you can fill in comes from the mask — the document type. So "invoice" and "contract" ask for different
+  things, and the answers stay searchable as fields rather than as free text buried in the file.
+```
+
+### Step 12 — Decide who else sees it
+
+```yaml
+tracks: [full]
+anchor: '[data-tour="action-manage-access"]'
+action: with the document selected, click '[data-tour="action-manage-access"]'
+goal: show permissions as something granted on the object, inherited down the tree
+expect: '[data-tour="action-manage-access"]' exists
+say: >
+  Rights are granted here and inherited by everything beneath, unless a folder deliberately breaks that chain. The
+  effective view shows what a person actually ends up with, which is the question you usually need answered — and
+  it is why the tree earlier showed only what you may see.
+```
+
+### Step 13 — Find it again
+
+```yaml
+tracks: [full]
+anchor: '[data-tour="tab-search"]'
+action: open '[data-tour="tab-search"]' and search for a word from the document you filed
+goal: show full-text search over content, not just names
+expect: '[data-tour="tab-search"][data-tour-active="true"]'
+say: >
+  Search reads inside the documents — extracted text, OCR for scans — so you can find a contract by a clause
+  rather than by remembering what you called the file. The index-field values you just filled in are searchable
+  the same way.
+```
+
+### Step 14 — Close (full track)
+
+```yaml
+tracks: [full]
+anchor: '[data-tour="tab-audit"]'
+action: open '[data-tour="tab-audit"]'
+goal: end on the record of what the tour itself just did
+expect: '[data-tour="tab-audit"][data-tour-active="true"]'
+say: >
+  Everything you just did is in here — the folder, the upload, the metadata, the grant. Not as a side effect you
+  could switch off, but as an append-only, hash-chained record. Ending here is the point: the parts that make a
+  document system trustworthy are the ones you only notice when you go looking.
+```
