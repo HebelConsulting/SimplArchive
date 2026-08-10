@@ -958,7 +958,7 @@ internal static class Program
             : "FAILED: reference/realParentId wrong.");
 
         Console.WriteLine("removing the reference…");
-        await api.DeleteReferenceAsync(a.Id, reference!.ReferenceId);
+        await api.DeleteReferenceAsync(reference!.DeleteHref!);
         Console.WriteLine((await api.GetReferencesAsync(a.Id)).Count == 0 ? "OK: reference removed." : "FAILED: reference still present.");
 
         await api.DeleteAsync(a.Id); // cleanup (cascades C)

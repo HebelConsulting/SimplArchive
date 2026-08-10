@@ -80,6 +80,36 @@ public partial class ClientHypermediaTests
         // because splitting those is what produced the Node.Links-always-null regression: the model gained a
         // field, the call sites used it, and nothing verified the value arrived.
         //
+        // 94 → 49 (issue #416): the DOCUMENT family — the largest single block left, and the one that made this
+        // file's count look structural rather than incidental. Every `api/documents/{id}/<sub-resource>` is now
+        // a rel: mask, index-data, versions, chat, children, ancestors, references, referencing-folders, move,
+        // set-primary-location, checkout/checkin, acl-entries, assignable-reviewers, archive-entries, export
+        // and import. Where the caller holds only an id, DocumentRelAsync fetches the resource once and follows
+        // — the trade already made for tags/reminders/subscription, now applied to the rest.
+        //
+        // Three shapes carried the rest. (1) The upload flow: create → add a version → finalize used to read an
+        // id out of each response and rebuild the next path; the create response now advertises `versions` and
+        // the pending version its own `self`, so all three steps follow. (2) Row-carrying types — a version
+        // (restore, document-date), a reference (delete), a zip entry (download) — act at the address their own
+        // row gave them, which is ADR 0555 applied one layer down. (3) GetAclAsync now reads the DOCUMENT first
+        // and works outwards: `acl-entries` is CanManagePermissions-gated, so its absence answers "may I manage
+        // access" without sending a request built to be refused with a 403.
+        //
+        // What remains here is other people's families and one line. The families — audit, inbox, bulk,
+        // recycle-bin, search, checkouts, legal-holds, retention, notifications — are each their own tranche and
+        // each needs its own server-side rels first; none of them is a document. The one line is
+        // DocumentAddress(id): the irreducible composition, turning an id back into a resource. It is
+        // deliberately NOT disguised as a rel-follow; centralising it is what makes the last step (id-shaped
+        // view-model state becoming a row that carries `self`, ADR 0555) a one-line change instead of a fortieth
+        // call site. The two ACL WRITES stay for the same reason — the address belongs to the grantable-principal
+        // row, and the callers that grant do not all hold one yet.
+        //
+        // Following rels must not cost a request per rel, and this tranche is where that stopped being theory:
+        // opening a folder wants children, references and the contents order, which would have been three
+        // document fetches. It is one — the folder's links are read once (or carried whole from the row that was
+        // clicked), and the contents order rides in the children envelope it was always in. Net effect on the
+        // hottest path in the client: FEWER requests than before the conversion, not more.
+        //
         // 152 → 151 (issue #416, tranche B): GetVersionsAsync takes the advertised href. The enabling change is
         // on the SERVER — a listed item now advertises its own unconditional sub-resources, so a client holding a
         // row has addresses rather than just an id. Without that, following a rel would have cost a `self` fetch
@@ -134,7 +164,7 @@ public partial class ClientHypermediaTests
         // none. Adding a group member is POST /members with the user in the BODY, so the collection advertises
         // `add-member` and the chosen principal travels as data; the keyed PUT is retired rather than kept
         // beside it, because two ways to do one thing is how a client talks itself back into composing.
-        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 94,
+        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 49,
     };
 
     [Fact]

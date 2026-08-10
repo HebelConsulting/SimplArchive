@@ -510,6 +510,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public string SysDocumentDateText => SysDocumentDate?.ToString("yyyy-MM-dd") ?? "";
 
     private Guid _sysCurrentVersionId;
+
+    // The current version's advertised `document-date` address (ADR 0543) — null until the system fields load.
+    private string? _sysDocumentDateHref;
     private IReadOnlyList<string> _sysOcrCodes = [];  // persisted (original) OCR codes
     private IReadOnlyList<string> _stagedOcrCodes = []; // picker-staged codes, persisted on Save
     private IReadOnlyList<SimplArchiveApiClient.OcrLanguageOption> _ocrCatalog = [];
@@ -724,7 +727,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             SetBreadcrumbFromTreeNode(value);
             // The selected node's own address — no re-fetch to rediscover where its children live.
-            await LoadFolderContentsAsync(value.Id, value.Links is null ? null : value.Href("children"));
+            await LoadFolderContentsAsync(value.Id, value.Links);
         }
     }
 
@@ -746,7 +749,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         SetBreadcrumbFromTreeNode(node);
-        await LoadFolderContentsAsync(node.Id, node.Links is null ? null : node.Href("children"));
+        await LoadFolderContentsAsync(node.Id, node.Links);
     }
 
     async partial void OnSelectedItemChanged(NodeViewModel? value)
@@ -1013,10 +1016,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // ---- Contents / breadcrumb ------------------------------------------------------------------------
 
-    // childrenHref: the address the caller already holds — a tree node's or a breadcrumb's. When null (a
-    // restored selection, an import that only knows an id) the api client fetches the resource and follows its
-    // own `children` rel: one round trip, never a composed sub-resource path (ADR 0543, issue #416).
-    private async Task LoadFolderContentsAsync(Guid folderId, string? childrenHref = null)
+    // folderLinks: the addresses the caller already holds — a tree node's or a list row's. When null (a restored
+    // selection, an import that only knows an id) this reads the folder resource ONCE and follows its rels from
+    // there: `children` for the contents and `references` for the shortcuts, with the contents order riding in
+    // the children envelope. One read, three follows — never a composed sub-resource path, and never a fetch per
+    // rel, which is the failure mode that talks a codebase back into string paths (ADR 0543, issue #416).
+    private async Task LoadFolderContentsAsync(Guid folderId, IReadOnlyDictionary<string, string>? folderLinks = null)
     {
         if (_api is null)
         {
@@ -1041,13 +1046,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Status = Strings.Get("StLoading");
         try
         {
-            var children = childrenHref is null
-                ? await _api.GetChildrenAsync(folderId)
-                : await _api.GetChildrenAsync(childrenHref);
-            var references = await _api.GetReferencesAsync(folderId);
-            // The folder's persisted default contents order (ADR "Per-folder contents sort order"); opening a
-            // fresh folder resets any ephemeral column-header sort back to that default.
-            _folderSortOrder = await _api.GetContentsSortOrderAsync(folderId);
+            // Use the caller's links only when they carry BOTH addresses this needs. A listing advertises a
+            // fixed set, and not every listing advertises the same one — so "the caller passed something" is not
+            // the same as "the caller passed enough", and reading the resource is the correct fallback rather
+            // than a KeyNotFoundException at the one node whose row is shaped differently.
+            var links = folderLinks is not null && folderLinks.ContainsKey("children") && folderLinks.ContainsKey("references")
+                ? folderLinks
+                : await _api.GetDocumentLinksAsync(folderId);
+            // The folder's persisted default contents order (ADR "Per-folder contents sort order") arrives with
+            // the contents; opening a fresh folder resets any ephemeral column-header sort back to that default.
+            var (children, sortOrder) = await _api.GetFolderContentsAsync(links["children"]);
+            var references = await _api.GetReferencesAsync(links["references"]);
+            _folderSortOrder = sortOrder;
             _headerSortActive = false;
             OnPropertyChanged(nameof(DetailSortText));
             OnPropertyChanged(nameof(DetailIsFolder));
@@ -1090,6 +1100,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     HasReferences = reference.HasReferences,
                     IsReference = true,
                     ReferenceId = reference.ReferenceId,
+                    ReferenceDeleteHref = reference.DeleteHref,
                     RealParentId = reference.RealParentId,
                 });
             }
@@ -1248,7 +1259,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Breadcrumbs.Add(new BreadcrumbViewModel { Name = "Repositories", FolderId = null, ShowSeparator = false });
         foreach (var ancestor in chain)
         {
-            Breadcrumbs.Add(new BreadcrumbViewModel { Name = ancestor.Name, FolderId = ancestor.Id, ChildrenHref = ancestor.Links is null ? null : ancestor.Href("children"), ShowSeparator = true });
+            Breadcrumbs.Add(new BreadcrumbViewModel { Name = ancestor.Name, FolderId = ancestor.Id, Links = ancestor.Links, ShowSeparator = true });
         }
     }
 
@@ -1274,7 +1285,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             Breadcrumbs.RemoveAt(i);
         }
 
-        await LoadFolderContentsAsync(folderId, crumb.ChildrenHref);
+        await LoadFolderContentsAsync(folderId, crumb.Links);
     }
 
     [RelayCommand(CanExecute = nameof(HasSelection))]
@@ -1320,8 +1331,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
             // Drill into a folder, or a document that has child documents (an email with filed attachments,
             // ADR "Email attachments as child documents") — append it to the breadcrumb path and list its
             // contents.
-            Breadcrumbs.Add(new BreadcrumbViewModel { Name = node.Name, FolderId = node.Id, ShowSeparator = Breadcrumbs.Count > 0, ChildrenHref = node.Links is null ? null : node.Href("children") });
-            await LoadFolderContentsAsync(node.Id, node.Links is null ? null : node.Href("children"));
+            Breadcrumbs.Add(new BreadcrumbViewModel { Name = node.Name, FolderId = node.Id, ShowSeparator = Breadcrumbs.Count > 0, Links = node.Links });
+            await LoadFolderContentsAsync(node.Id, node.Links);
             return;
         }
 
@@ -1383,6 +1394,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     HasVersions = true,
                     IsArchiveEntry = true,
                     ArchiveEntryPath = entry.Path,
+                    ArchiveEntryDownloadHref = entry.DownloadHref,
                 });
             }
 
@@ -1409,12 +1421,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // Downloads one archive entry's bytes for the Save-as flow (the view picks the destination).
     public async Task<byte[]?> DownloadArchiveEntryAsync(NodeViewModel entry)
     {
-        if (_api is null || _archiveDocumentId is not { } documentId || entry.ArchiveEntryPath is not { } path)
+        if (_api is null || entry.ArchiveEntryDownloadHref is not { } href)
         {
             return null;
         }
 
-        return await _api.DownloadArchiveEntryAsync(documentId, path);
+        return await _api.DownloadArchiveEntryAsync(href);
     }
 
     // Resolves the latest confirmed version's download URL for a document (the view then shows a Save-as
@@ -1642,9 +1654,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
+            // Branch on WHAT THE ROW IS first, and only then on whether it gave us an address. Folding the
+            // href test into the `if` narrows it — and silently widens the `else`, which deletes the target
+            // DOCUMENT. A rel may legitimately be absent (ADR 0543), so "reference without a delete address"
+            // is a state that has to be handled, never one that falls through to a more destructive action.
             if (node.IsReference)
             {
-                await _api.DeleteReferenceAsync(folderId, node.ReferenceId);
+                if (node.ReferenceDeleteHref is not { } referenceDeleteHref)
+                {
+                    Status = string.Format(Strings.Get("StErrDeleteMsg"), $"'{node.Name}' offered no way to remove the shortcut.");
+                    return;
+                }
+
+                await _api.DeleteReferenceAsync(referenceDeleteHref);
                 Status = string.Format(Strings.Get("StRemovedRef"), node.Name);
             }
             else
@@ -5204,6 +5226,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         _sysCurrentVersionId = fields.CurrentVersionId;
+        _sysDocumentDateHref = fields.DocumentDateHref;
         SysCurrentVersion = fields.CurrentVersionNumber.ToString();
         SysCreated = fields.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
         SysCreatedBy = fields.CreatedByName;
@@ -5396,11 +5419,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         // Document date (on the current version).
-        if (_sysCurrentVersionId != Guid.Empty && SysDocumentDate is { } date && date != _originalDocumentDate)
+        if (_sysDocumentDateHref is { } dateHref && SysDocumentDate is { } date && date != _originalDocumentDate)
         {
             try
             {
-                await _api.SetDocumentDateAsync(documentId, _sysCurrentVersionId, date.ToString("yyyy-MM-dd"));
+                await _api.SetDocumentDateAsync(dateHref, date.ToString("yyyy-MM-dd"));
                 _originalDocumentDate = date;
             }
             catch (Exception e) { failures.Add($"document date ({e.Message})"); }
@@ -5803,6 +5826,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _sysOcrCodes = [];
         _stagedOcrCodes = [];
         _sysCurrentVersionId = Guid.Empty;
+        _sysDocumentDateHref = null;
         IsEditing = false;
         CanEditDetail = false;
         MaskEditFields.Clear();

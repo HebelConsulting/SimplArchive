@@ -69,6 +69,12 @@ public sealed class NodeViewModel
 
     public string? ArchiveEntryPath { get; init; }
 
+    // The entry's own advertised download address (ADR 0543) — the client never rebuilds it from the path.
+    public string? ArchiveEntryDownloadHref { get; init; }
+
+    // A reference row's own advertised `delete` address (ADR 0543); null for anything that is not a reference.
+    public string? ReferenceDeleteHref { get; init; }
+
     // List-row columns (ADR "List-row columns and sorting"): the assigned mask's name, the latest confirmed
     // version's document date + byte size, and the tags — all shown as sortable columns.
     public string DocumentType { get; init; } = "";

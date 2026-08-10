@@ -35,7 +35,7 @@ public class DesktopVersionRestoreTests
         var v1 = versions.Single(v => v.VersionNumber == 1);
 
         // Make v1 current → still exactly two versions, and v1 is now flagged current (no copy).
-        await api.RestoreVersionAsync(doc.Id, v1.Id);
+        await api.RestoreVersionAsync(v1);
         var after = await api.GetVersionsAsync(doc.Href("versions"));
         Assert.Equal(2, after.Count);
         var current = after.Single(v => v.IsCurrent);

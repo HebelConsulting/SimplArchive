@@ -67,7 +67,7 @@ public sealed partial class VersionsViewModel : ObservableObject
         {
             Versions.Add(new VersionRowViewModel(v.Id, v.VersionNumber ?? 0, v.DocumentDate,
                 v.CreatedAt == default ? "" : v.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
-                v.CreatedByName, v.DownloadUrl, v.FileExtension, v.IsCurrent, v.Comment));
+                v.CreatedByName, v.DownloadUrl, v.FileExtension, v.IsCurrent, v.Comment, v));
         }
 
         Loaded = true;
@@ -85,7 +85,7 @@ public sealed partial class VersionsViewModel : ObservableObject
         Status = Strings.Get("StMakingCurrent");
         try
         {
-            await _api.RestoreVersionAsync(_documentId, row.Id);
+            await _api.RestoreVersionAsync(row.Version);
             Changed = true;
             Status = string.Format(Strings.Get("StVersionCurrent"), row.VersionNumber);
             await ReloadAsync();
@@ -98,7 +98,10 @@ public sealed partial class VersionsViewModel : ObservableObject
 }
 
 // One row in the Versions dialog.
-public sealed record VersionRowViewModel(Guid Id, int VersionNumber, string DocumentDate, string Filed, string By, string? DownloadUrl, string FileExtension, bool IsCurrent, string? Comment = null)
+// Version is the row the server sent, carried whole so "Make current" follows its `restore` rel rather than
+// rebuilding a path from two ids (ADR 0543/0555). Deliberately has NO default: a row without it would compile
+// and then throw at the click.
+public sealed record VersionRowViewModel(Guid Id, int VersionNumber, string DocumentDate, string Filed, string By, string? DownloadUrl, string FileExtension, bool IsCurrent, string? Comment, SimplArchiveApiClient.VersionInfo Version)
 {
     public string Label => $"v{VersionNumber}";
     public bool CanMakeCurrent => !IsCurrent;

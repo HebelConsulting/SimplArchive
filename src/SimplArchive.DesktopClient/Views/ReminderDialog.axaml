@@ -22,7 +22,7 @@
                         </StackPanel>
                         <Button Grid.Column="1" Content="{loc:Tr Cancel}" FontSize="11"
                                 Command="{Binding $parent[Window].((vm:ReminderDialogViewModel)DataContext).CancelReminderCommand}"
-                                CommandParameter="{Binding Id}" />
+                                CommandParameter="{Binding}" />
                     </Grid>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>

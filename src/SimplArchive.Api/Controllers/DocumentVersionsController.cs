@@ -943,6 +943,11 @@ public class DocumentVersionsController : ControllerBase
             // Sticky notes / positional annotations pinned to this version's pages (ADR "Document annotations
             // (sticky notes)"). Static link — the endpoint lists them on demand.
             links.Add(new Link("annotations", $"/api/documents/{version.DocumentId}/versions/{version.Id}/annotations", "GET"));
+
+            // This version's issuing date (ADR "System-field search"). Static like `restore` above — the PUT
+            // enforces CanEditIndexData plus the frozen/checked-out guards, and resolving all of that per row
+            // would put a rights + legal-hold + checkout lookup on every version in the list.
+            links.Add(new Link("document-date", $"/api/documents/{version.DocumentId}/versions/{version.Id}/document-date", "PUT"));
         }
 
         return new DocumentVersionResource

@@ -39,15 +39,24 @@ public partial class ReminderDialogViewModel : ObservableObject
     public ObservableCollection<SimplArchiveApiClient.UserOptionInfo> Targets { get; } = [];
     public ObservableCollection<SimplArchiveApiClient.ReminderInfo> Reminders { get; } = [];
 
+    // The reminders collection is read FIRST because it carries both halves of this dialog: the rows, and the
+    // address of the target picker. Loading the picker separately would read the document and the collection
+    // twice over (ADR 0543, issue #416) — following rels is not supposed to cost a request per rel.
     public async Task LoadAsync()
     {
         Targets.Clear();
         Targets.Add(new SimplArchiveApiClient.UserOptionInfo(Guid.Empty, "Myself"));
+        SelectedTarget = Targets[0];
+
+        string? targetsHref = null;
+        Reminders.Clear();
         try
         {
-            foreach (var t in await _api.GetReminderTargetsAsync(_documentId))
+            var (reminders, href) = await _api.GetRemindersViewAsync(_documentId);
+            targetsHref = href;
+            foreach (var r in reminders)
             {
-                Targets.Add(t);
+                Reminders.Add(r);
             }
         }
         catch (Exception)
@@ -55,10 +64,26 @@ public partial class ReminderDialogViewModel : ObservableObject
             // best-effort
         }
 
-        SelectedTarget = Targets[0];
-        await ReloadRemindersAsync();
+        if (targetsHref is null)
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var t in await _api.GetReminderTargetsAsync(targetsHref))
+            {
+                Targets.Add(t);
+            }
+        }
+        catch (Exception)
+        {
+            // best-effort — the picker then offers "Myself" only.
+        }
     }
 
+    // Only the rows change after a create/cancel; the picker and its address do not, so a reload re-reads the
+    // collection alone rather than repeating the whole load.
     private async Task ReloadRemindersAsync()
     {
         Reminders.Clear();
@@ -99,11 +124,11 @@ public partial class ReminderDialogViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task CancelReminderAsync(Guid reminderId)
+    private async Task CancelReminderAsync(SimplArchiveApiClient.ReminderInfo reminder)
     {
         try
         {
-            await _api.CancelReminderAsync(_documentId, reminderId);
+            await _api.CancelReminderAsync(reminder);
             await ReloadRemindersAsync();
         }
         catch (ApiActionException e)

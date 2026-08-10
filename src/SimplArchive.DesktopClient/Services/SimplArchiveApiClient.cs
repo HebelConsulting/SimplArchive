@@ -120,9 +120,11 @@ public sealed class SimplArchiveApiClient
     // System-field values shown always (separate from the mask, ADR "System fields + OCR-language mask
     // field"). Created/CreatedBy/DocumentDate are the currently-shown version's; the OCR-language override +
     // TIFF-source come from the latest TIFF version.
+    // DocumentDateHref is the current version's own `document-date` address — the detail pane's Save follows it
+    // instead of rebuilding a path out of the two ids beside it (ADR 0543, issue #416).
     public sealed record SystemFields(
         Guid CurrentVersionId, int CurrentVersionNumber, DateTimeOffset CreatedAt, string CreatedByName, string DocumentDate,
-        bool HasTiffVersion, string? OcrLanguages, string FileExtension);
+        bool HasTiffVersion, string? OcrLanguages, string FileExtension, string? DocumentDateHref = null);
 
     public sealed record OcrLanguageOption(string Code, string DisplayName);
 
@@ -160,7 +162,9 @@ public sealed class SimplArchiveApiClient
     public sealed record RecycleBinItem(Guid Id, string Name, DateTimeOffset DeletedAt);
 
     // A file entry inside a browsed .zip (ADR "Zip file browsing") — not a real Document.
-    public sealed record ArchiveEntryInfo(string Name, string Path, long Size);
+    // A zip entry. DownloadHref is the address its own row advertised — an entry is not a storage object, so
+    // the Api proxies these bytes and the path lives in the server's URL, not in one the client assembles.
+    public sealed record ArchiveEntryInfo(string Name, string Path, long Size, string? DownloadHref = null);
 
     // The signed-in principal's ids + display names (ADR "S3-backed inbox") — names drive the local folder
     // path. IsTenantAdmin gates admin-only actions (e.g. the searchable-PDF backfill).
@@ -234,8 +238,11 @@ public sealed class SimplArchiveApiClient
     // A reference (shortcut) filed in a folder — see ADR "Desktop drag-and-drop move and reference".
     // TargetId/Name/HasVersions/HasSubfolders describe the referenced item; ReferenceId identifies the
     // shortcut row (for delete); RealParentId is the target's real home folder (for "Go to …").
+    // DeleteHref is the shortcut row's own `delete` address (ADR 0543) — the pair of ids that used to rebuild
+    // it are still here because the tree needs them, but nothing composes a URL out of them any more.
     public sealed record Reference(
-        Guid ReferenceId, Guid TargetId, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, Guid? RealParentId);
+        Guid ReferenceId, Guid TargetId, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, Guid? RealParentId,
+        string? DeleteHref = null);
 
     // The approval workflow on a version (ADR "Workflow / document state model", 0009). Status is the
     // WorkflowStatus int; Links maps each valid-transition rel (submit/approve/reject/release) to its href.
@@ -304,7 +311,7 @@ public sealed class SimplArchiveApiClient
         if (!string.IsNullOrWhiteSpace(options.CreatedBy)) query.Add($"createdBy={Uri.EscapeDataString(options.CreatedBy.Trim())}");
         if (options.IncludePermissions) query.Add("includePermissions=true");
 
-        return await _http.GetByteArrayAsync($"api/documents/{rootId}/export?" + string.Join("&", query), cancellationToken);
+        return await _http.GetByteArrayAsync(await DocumentRelAsync(rootId, "export", cancellationToken) + "?" + string.Join("&", query), cancellationToken);
     }
 
     // Imports an export archive (ADR "Repository import"). targetFolderId == null → a new repository; otherwise
@@ -316,7 +323,16 @@ public sealed class SimplArchiveApiClient
         file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
         content.Add(file, "file", "import.zip");
 
-        var basePath = targetFolderId is { } id ? $"api/documents/{id}/import" : "api/repositories/import";
+        // Into a folder → the folder's own `import` rel; a brand-new repository → the one the repositories
+        // COLLECTION advertises, since the archive's root becomes a sibling of everything in it and belongs to
+        // no repository in particular. `?limit=1` so learning one address doesn't drag back a page of
+        // ACL-filtered repositories (ADR 0543, issue #416).
+        var basePath = targetFolderId is { } id
+            ? await DocumentRelAsync(id, "import", cancellationToken)
+            : RequireRel(
+                await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("repositories", cancellationToken) + "?limit=1", cancellationToken),
+                "import",
+                "The repositories collection");
         var url = $"{basePath}?updateExisting={(updateExisting ? "true" : "false")}&includePermissions={(includePermissions ? "true" : "false")}&merge={(merge ? "true" : "false")}&leafConflict={leafConflict}";
         var response = await _http.PostAsync(url, content, cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -482,30 +498,51 @@ public sealed class SimplArchiveApiClient
     public Task<List<Node>> GetChildrenAsync(string childrenHref, CancellationToken cancellationToken = default) =>
         LoadPagedAsync(childrenHref, "children", ParseNode, cancellationToken);
 
+    /// <summary>
+    /// A folder's contents AND its persisted contents order, from the one listing that already carries both.
+    /// Following rels must not turn one screen into N requests, and the order travelling in the children
+    /// envelope is precisely so a client does not have to ask for it separately (ADR 0543, issue #416).
+    /// </summary>
+    public async Task<(List<Node> Children, int SortOrder)> GetFolderContentsAsync(string childrenHref, CancellationToken cancellationToken = default)
+    {
+        var sortOrder = 1;
+        var first = true;
+        var children = await LoadPagedAsync(childrenHref, "children", ParseNode, cancellationToken, page =>
+        {
+            if (first)
+            {
+                sortOrder = ReadContentsSortOrder(page);
+                first = false;
+            }
+        });
+
+        return (children, sortOrder);
+    }
+
     // For a caller that has only an ID and no resource — a breadcrumb, a restored selection, a self-test — this
     // FETCHES the document and follows its own `children` rel. One round trip, then a rel; never a composed
     // sub-resource path.
     //
-    // The `api/documents/{id}` below is the one composition this cannot avoid, and it is the irreducible case:
-    // turning an id back into a resource. Everything else in the client now follows an address the server
-    // advertised. Prefer the href overload wherever a row or node is in hand — this exists so the remaining
-    // id-shaped call sites (the view model tracks "where am I" as a Guid) do not have to rebuild sub-resource
-    // paths while that state is still id-shaped.
-    public async Task<List<Node>> GetChildrenAsync(Guid documentId, CancellationToken cancellationToken = default)
-    {
-        var doc = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}", cancellationToken);
-        var links = ParseLinks(doc);
-        return links is not null && links.TryGetValue("children", out var href)
-            ? await GetChildrenAsync(href, cancellationToken)
-            : throw new InvalidOperationException(
-                $"The document resource {documentId} advertised no 'children' rel — nothing to follow (ADR 0543).");
-    }
+    // Prefer the href overload wherever a row or node is in hand — this exists so the remaining id-shaped call
+    // sites (the view model tracks "where am I" as a Guid) do not have to rebuild sub-resource paths while that
+    // state is still id-shaped.
+    public async Task<List<Node>> GetChildrenAsync(Guid documentId, CancellationToken cancellationToken = default) =>
+        await GetChildrenAsync(await DocumentRelAsync(documentId, "children", cancellationToken), cancellationToken);
+
+    /// <summary>
+    /// Every address a document advertises, from ONE read (ADR 0543/0555). For a caller that holds an id and
+    /// needs several of the document's sub-resources at once — opening a folder wants children, references and
+    /// the contents order — this is what keeps "follow a rel" from meaning "fetch the document once per rel".
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, string>> GetDocumentLinksAsync(Guid documentId, CancellationToken cancellationToken = default) =>
+        ParseLinks(await _http.GetFromJsonAsync<JsonElement>(DocumentAddress(documentId), cancellationToken))
+        ?? throw new InvalidOperationException($"Document {documentId} advertised no links at all (ADR 0543).");
 
     // The item's ancestor folder ids, repository-root first down to its immediate parent (issue #340) — used to
     // reveal a search hit in the lazy tree. Empty for an item filed at a repository root.
     public async Task<List<Guid>> GetAncestorsAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/ancestors", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "ancestors", cancellationToken), cancellationToken);
         var ids = new List<Guid>();
         if (json.TryGetProperty("ancestors", out var arr) && arr.ValueKind == JsonValueKind.Array)
         {
@@ -523,11 +560,18 @@ public sealed class SimplArchiveApiClient
 
     // The folder's persisted default contents sort order (ADR "Per-folder contents sort order") from the children
     // listing envelope — 0=Name / 1=DocumentDate / 2=Created; DocumentDate (1) when unavailable.
-    public async Task<int> GetContentsSortOrderAsync(Guid folderId, CancellationToken cancellationToken = default)
-    {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{folderId}/children?limit=1", cancellationToken);
-        return json.TryGetProperty("contentsSortOrder", out var so) && so.ValueKind == JsonValueKind.Number ? so.GetInt32() : 1;
-    }
+    //
+    // The order travels IN the children envelope, so a screen that is listing the folder anyway should call
+    // GetFolderContentsAsync and read both from one response. This overload is for the callers that want only
+    // the number (a VM check), and it asks for a single row rather than a page to get it.
+    public async Task<int> GetContentsSortOrderAsync(Guid folderId, CancellationToken cancellationToken = default) =>
+        await GetContentsSortOrderAsync(await DocumentRelAsync(folderId, "children", cancellationToken), cancellationToken);
+
+    public async Task<int> GetContentsSortOrderAsync(string childrenHref, CancellationToken cancellationToken = default) =>
+        ReadContentsSortOrder(await _http.GetFromJsonAsync<JsonElement>(childrenHref + "?limit=1", cancellationToken));
+
+    private static int ReadContentsSortOrder(JsonElement envelope) =>
+        envelope.TryGetProperty("contentsSortOrder", out var so) && so.ValueKind == JsonValueKind.Number ? so.GetInt32() : 1;
 
     // Sets the folder's persisted default contents sort order (CanEditIndexData-gated).
     public async Task SetContentsSortOrderAsync(Guid folderId, int sortOrder, CancellationToken cancellationToken = default)
@@ -555,16 +599,17 @@ public sealed class SimplArchiveApiClient
                 entries.Add(new ArchiveEntryInfo(
                     e.GetProperty("name").GetString() ?? "",
                     e.GetProperty("path").GetString() ?? "",
-                    e.TryGetProperty("size", out var size) ? size.GetInt64() : 0));
+                    e.TryGetProperty("size", out var size) ? size.GetInt64() : 0,
+                    RelHref(e, "download")));
             }
         }
 
         return entries;
     }
 
-    // Downloads one archive entry's bytes (the Api proxies these — an entry isn't a storage object).
-    public Task<byte[]> DownloadArchiveEntryAsync(Guid documentId, string entryPath, CancellationToken cancellationToken = default) =>
-        _http.GetByteArrayAsync($"api/documents/{documentId}/archive-entries/content?path={Uri.EscapeDataString(entryPath)}", cancellationToken);
+    // Downloads one archive entry's bytes at the address its row advertised (ADR 0543/0555).
+    public Task<byte[]> DownloadArchiveEntryAsync(string downloadHref, CancellationToken cancellationToken = default) =>
+        _http.GetByteArrayAsync(downloadHref, cancellationToken);
 
     public async Task<WhoAmIInfo> GetWhoAmIAsync(CancellationToken cancellationToken = default)
     {
@@ -778,7 +823,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<MaskInfo> GetMaskAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        var mask = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/mask", cancellationToken);
+        var mask = await _http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "mask", cancellationToken), cancellationToken);
         return new MaskInfo(
             mask.TryGetProperty("maskId", out var mid) && mid.ValueKind == JsonValueKind.String ? mid.GetGuid() : null,
             mask.TryGetProperty("name", out var n) ? n.GetString() : null,
@@ -824,13 +869,13 @@ public sealed class SimplArchiveApiClient
     // Assigns (or changes) the document's mask. 400 REQUIRED_FIELD_MISSING surfaces as a friendly message.
     public async Task SetMaskAsync(Guid documentId, Guid maskId, CancellationToken cancellationToken = default)
     {
-        var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/mask", new { maskId }, cancellationToken);
+        var response = await _http.PutAsJsonAsync(await DocumentRelAsync(documentId, "mask", cancellationToken), new { maskId }, cancellationToken);
         await ThrowIfProblemAsync(response, "Could not assign the mask", cancellationToken);
     }
 
     public async Task ClearMaskAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        var response = await _http.DeleteAsync($"api/documents/{documentId}/mask", cancellationToken);
+        var response = await _http.DeleteAsync(await DocumentRelAsync(documentId, "mask", cancellationToken), cancellationToken);
         await ThrowIfProblemAsync(response, "Could not clear the mask", cancellationToken);
     }
 
@@ -838,7 +883,7 @@ public sealed class SimplArchiveApiClient
     public async Task SetIndexDataAsync(Guid documentId, IEnumerable<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> fields, CancellationToken cancellationToken = default)
     {
         var body = new { fields = fields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.Values }) };
-        var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/index-data", body, cancellationToken);
+        var response = await _http.PutAsJsonAsync(await DocumentRelAsync(documentId, "index-data", cancellationToken), body, cancellationToken);
         await ThrowIfProblemAsync(response, "Could not save the index data", cancellationToken);
     }
 
@@ -877,7 +922,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<List<IndexField>> GetIndexDataAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        var response = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/index-data", cancellationToken);
+        var response = await _http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "index-data", cancellationToken), cancellationToken);
         var fields = new List<IndexField>();
         if (response.TryGetProperty("fields", out var items))
         {
@@ -928,7 +973,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<SystemFields?> GetSystemFieldsAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        var response = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/versions", cancellationToken);
+        var response = await _http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "versions", cancellationToken), cancellationToken);
         if (PickCurrentVersionElement(response) is not { } picked)
         {
             return null;
@@ -975,7 +1020,8 @@ public sealed class SimplArchiveApiClient
             Str(cur, "documentDate"),
             tiff is not null,
             ocr,
-            Str(cur, "fileExtension"));
+            Str(cur, "fileExtension"),
+            RelHref(cur, "document-date"));
     }
 
     public async Task<IReadOnlyList<OcrLanguageOption>> GetOcrLanguageCatalogAsync(CancellationToken cancellationToken = default)
@@ -1041,7 +1087,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task<DocumentDetailInfo> GetDocumentDetailAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(DocumentAddress(documentId), cancellationToken);
 
         return new DocumentDetailInfo(
             json.TryGetProperty("name", out var name) ? name.GetString() ?? "" : "",
@@ -1243,17 +1289,23 @@ public sealed class SimplArchiveApiClient
             json.TryGetProperty("skipped", out var k) ? k.GetInt32() : 0);
     }
 
-    // Whether the current user follows (subscribes to) the document (ADR "Document subscriptions").
+    // The ONE place in this client where an id becomes a document address (ADR 0543, issue #416).
+    //
+    // It is the irreducible composition — turning an id back into a resource — and it is deliberately NOT
+    // pretended away: every OTHER address now comes from a rel, so what remains is a single line naming a
+    // single route, rather than forty call sites each knowing a different piece of the API's URL space. It
+    // disappears for good when the last id-shaped view-model state becomes a row that carries its own `self`
+    // (ADR 0555); until then, centralising it is what makes that final step a one-line change.
+    private static string DocumentAddress(Guid documentId) => $"api/documents/{documentId}";
+
     // For a caller that holds an ID and no resource: FETCH the document and return the named rel. One round
-    // trip, then follow — never a composed sub-resource path. The `api/documents/{id}` here is the irreducible
-    // case (turning an id back into a resource) and is the single composition these paths need, instead of one
-    // per sub-resource (ADR 0543, issue #416).
+    // trip, then follow — never a composed sub-resource path.
     //
     // Prefer the href overloads wherever the resource is already in hand — the detail pane holds it, so the pane
     // pays nothing.
     private async Task<string> DocumentRelAsync(Guid documentId, string rel, CancellationToken cancellationToken)
     {
-        var doc = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}", cancellationToken);
+        var doc = await _http.GetFromJsonAsync<JsonElement>(DocumentAddress(documentId), cancellationToken);
         var links = ParseLinks(doc);
         return links is not null && links.TryGetValue(rel, out var href)
             ? href
@@ -1267,7 +1319,19 @@ public sealed class SimplArchiveApiClient
         await SetSubscriptionAsync(await DocumentRelAsync(documentId, "subscription", cancellationToken), subscribe, cancellationToken);
 
     public async Task<IReadOnlyList<ReminderInfo>> GetRemindersAsync(Guid documentId, CancellationToken cancellationToken = default) =>
-        await GetRemindersAsync(await DocumentRelAsync(documentId, "reminders", cancellationToken), cancellationToken);
+        (await GetRemindersViewAsync(documentId, cancellationToken)).Reminders;
+
+    /// <summary>
+    /// The document's reminders AND the address of its target picker, from ONE read of the collection that
+    /// advertises both. The Remind… dialog wants the two together; asking for them separately would mean
+    /// fetching the document twice and the collection twice, which is how following rels turns into four
+    /// requests where there used to be two (ADR 0543, issue #416).
+    /// </summary>
+    public async Task<(IReadOnlyList<ReminderInfo> Reminders, string TargetsHref)> GetRemindersViewAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var collection = await _http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "reminders", cancellationToken), cancellationToken);
+        return (ParseReminders(collection), RequireRel(collection, "targets", $"The reminders collection for {documentId}"));
+    }
 
     public async Task CreateReminderAsync(Guid documentId, DateTimeOffset remindAt, string? note, int recurrence, Guid? targetUserId, CancellationToken cancellationToken = default) =>
         await CreateReminderAsync(await DocumentRelAsync(documentId, "reminders", cancellationToken), remindAt, note, recurrence, targetUserId, cancellationToken);
@@ -1291,8 +1355,12 @@ public sealed class SimplArchiveApiClient
         }
     }
 
-    // A document reminder (Wiedervorlage, ADR "Document reminders").
-    public sealed record ReminderInfo(Guid Id, DateTimeOffset RemindAt, string? Note, int Recurrence, string RecurrenceName, string TargetName);
+    // A document reminder (Wiedervorlage, ADR "Document reminders"). Carries its own links, so cancelling one
+    // follows the `cancel` rel the row advertised rather than rebuilding a path from two ids (ADR 0543/0555).
+    public sealed record ReminderInfo(Guid Id, DateTimeOffset RemindAt, string? Note, int Recurrence, string RecurrenceName, string TargetName, IReadOnlyDictionary<string, string>? Links = null)
+    {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
 
     // Dashboard rows (ADR "My work dashboard"): a due-soon reminder / a followed document, each with the
     // document + its parent folder for click-through.
@@ -1343,9 +1411,14 @@ public sealed class SimplArchiveApiClient
     }
 
     // Active tenant users the caller can target a reminder at (the picker).
-    public async Task<IReadOnlyList<UserOptionInfo>> GetReminderTargetsAsync(Guid documentId, CancellationToken cancellationToken = default)
+    //
+    // The picker belongs to the reminders COLLECTION, which is what advertises `targets` — hanging "/targets"
+    // off the reminders href would be composing a URL out of one the server happened to give us, which is the
+    // same mistake in nicer clothing (ADR 0543). Callers that also want the reminders should take both from
+    // GetRemindersViewAsync and pass the href here, so the collection is read once rather than twice.
+    public async Task<IReadOnlyList<UserOptionInfo>> GetReminderTargetsAsync(string targetsHref, CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/reminders/targets", cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(targetsHref, cancellationToken);
         var list = new List<UserOptionInfo>();
         if (json.TryGetProperty("targets", out var targets))
         {
@@ -1360,9 +1433,11 @@ public sealed class SimplArchiveApiClient
 
     // The caller's pending reminders on the document (set by or targeted at them).
     // Takes the advertised href (detail.Href("reminders")).
-    public async Task<IReadOnlyList<ReminderInfo>> GetRemindersAsync(string remindersHref, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ReminderInfo>> GetRemindersAsync(string remindersHref, CancellationToken cancellationToken = default) =>
+        ParseReminders(await _http.GetFromJsonAsync<JsonElement>(remindersHref, cancellationToken));
+
+    private static List<ReminderInfo> ParseReminders(JsonElement json)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>(remindersHref, cancellationToken);
         var list = new List<ReminderInfo>();
         if (json.TryGetProperty("reminders", out var reminders))
         {
@@ -1374,7 +1449,8 @@ public sealed class SimplArchiveApiClient
                     r.TryGetProperty("note", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null,
                     r.GetProperty("recurrence").GetInt32(),
                     r.TryGetProperty("recurrenceName", out var rn) ? rn.GetString() ?? "" : "",
-                    r.TryGetProperty("targetName", out var tn) ? tn.GetString() ?? "" : ""));
+                    r.TryGetProperty("targetName", out var tn) ? tn.GetString() ?? "" : "",
+                    ParseLinks(r)));
             }
         }
 
@@ -1392,19 +1468,20 @@ public sealed class SimplArchiveApiClient
         }
     }
 
-    public async Task CancelReminderAsync(Guid documentId, Guid reminderId, CancellationToken cancellationToken = default)
+    /// <summary>Cancels the reminder at the address its own row advertised (ADR 0555).</summary>
+    public async Task CancelReminderAsync(ReminderInfo reminder, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.DeleteAsync($"api/documents/{documentId}/reminders/{reminderId}", cancellationToken);
+        using var response = await _http.DeleteAsync(RequireHref(reminder, "cancel"), cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException($"Could not cancel the reminder ({(int)response.StatusCode}).");
         }
     }
 
-    // Sets the given version's document (issuing) date ("yyyy-MM-dd").
-    public async Task SetDocumentDateAsync(Guid documentId, Guid versionId, string documentDate, CancellationToken cancellationToken = default)
+    // Sets a version's document (issuing) date ("yyyy-MM-dd") at the address the version row advertised.
+    public async Task SetDocumentDateAsync(string documentDateHref, string documentDate, CancellationToken cancellationToken = default)
     {
-        var response = await _http.PutAsJsonAsync($"api/documents/{documentId}/versions/{versionId}/document-date", new { documentDate }, cancellationToken);
+        var response = await _http.PutAsJsonAsync(documentDateHref, new { documentDate }, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException($"Could not set the document date ({(int)response.StatusCode}).");
@@ -1414,7 +1491,7 @@ public sealed class SimplArchiveApiClient
     // The latest confirmed version's preview + download links plus whether the preview is a converted rendition.
     public async Task<Preview> GetPreviewAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        var response = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/versions", cancellationToken);
+        var response = await _http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "versions", cancellationToken), cancellationToken);
         // The current version honoring the server's currentVersionId pointer (issue #265), else the latest confirmed.
         if (PickCurrentVersionElement(response) is not { } picked)
         {
@@ -1582,7 +1659,7 @@ public sealed class SimplArchiveApiClient
     public async Task<ChatThread> GetChatAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
         string? mentionableUsersHref = null;
-        var messages = await LoadPagedAsync($"api/documents/{documentId}/chat", "messages", ParseComment, cancellationToken,
+        var messages = await LoadPagedAsync(await DocumentRelAsync(documentId, "chat", cancellationToken), "messages", ParseComment, cancellationToken,
             // First page only: the rel describes the thread, not the page.
             page => mentionableUsersHref ??= FindLink(page, "mentionable-users"));
 
@@ -1618,14 +1695,14 @@ public sealed class SimplArchiveApiClient
         var payload = parentCommentId is { } parent
             ? new { body, parentMessageId = parent }
             : (object)new { body };
-        using var response = await _http.PostAsJsonAsync($"api/documents/{documentId}/chat", payload, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(await DocumentRelAsync(documentId, "chat", cancellationToken), payload, cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
     // Creates a folder = a child Document with no version (ADR 0175). Duplicate name -> 409, no permission -> 403.
     public async Task CreateFolderAsync(Guid parentId, string name, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync($"api/documents/{parentId}/children", new { name }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(await DocumentRelAsync(parentId, "children", cancellationToken), new { name }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException($"A folder or document named '{name}' already exists here.");
@@ -1778,7 +1855,7 @@ public sealed class SimplArchiveApiClient
     public async Task RenameAsync(Guid documentId, string newName, CancellationToken cancellationToken = default)
     {
         var etag = await GetETagAsync(documentId, cancellationToken);
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"api/documents/{documentId}")
+        using var request = new HttpRequestMessage(HttpMethod.Put, DocumentAddress(documentId))
         {
             Content = JsonContent.Create(new { name = newName }),
         };
@@ -1811,7 +1888,7 @@ public sealed class SimplArchiveApiClient
     public async Task DeleteAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
         var etag = await GetETagAsync(documentId, cancellationToken);
-        using var request = new HttpRequestMessage(HttpMethod.Delete, $"api/documents/{documentId}");
+        using var request = new HttpRequestMessage(HttpMethod.Delete, DocumentAddress(documentId));
         if (etag is not null)
         {
             request.Headers.IfMatch.Add(etag);
@@ -1942,12 +2019,15 @@ public sealed class SimplArchiveApiClient
     }
 
     // The references (shortcuts) filed in a folder — see ADR "Desktop drag-and-drop move and reference".
-    public Task<List<Reference>> GetReferencesAsync(Guid folderId, CancellationToken cancellationToken = default) =>
-        LoadPagedAsync($"api/documents/{folderId}/references", "references", ParseReference, cancellationToken);
+    public async Task<List<Reference>> GetReferencesAsync(Guid folderId, CancellationToken cancellationToken = default) =>
+        await LoadPagedAsync(await DocumentRelAsync(folderId, "references", cancellationToken), "references", ParseReference, cancellationToken);
+
+    public Task<List<Reference>> GetReferencesAsync(string referencesHref, CancellationToken cancellationToken = default) =>
+        LoadPagedAsync(referencesHref, "references", ParseReference, cancellationToken);
 
     // The folders that reference a given item (with full paths) — see ADR "References-of-an-item list".
-    public Task<List<ReferencingFolder>> GetReferencingFoldersAsync(Guid documentId, CancellationToken cancellationToken = default) =>
-        LoadPagedAsync($"api/documents/{documentId}/referencing-folders", "folders", ParseReferencingFolder, cancellationToken);
+    public async Task<List<ReferencingFolder>> GetReferencingFoldersAsync(Guid documentId, CancellationToken cancellationToken = default) =>
+        await LoadPagedAsync(await DocumentRelAsync(documentId, "referencing-folders", cancellationToken), "folders", ParseReferencingFolder, cancellationToken);
 
     // The full references view — the item's real primary location plus every referencing folder (ADR 0506). The
     // primary location is a top-level object on the first page (not part of the paged array), so this can't reuse
@@ -1956,7 +2036,7 @@ public sealed class SimplArchiveApiClient
     {
         var folders = new List<ReferencingFolder>();
         ReferencingFolder? primary = null;
-        string? next = $"api/documents/{documentId}/referencing-folders";
+        string? next = await DocumentRelAsync(documentId, "referencing-folders", cancellationToken);
         var first = true;
 
         while (next is not null)
@@ -1988,7 +2068,7 @@ public sealed class SimplArchiveApiClient
     public async Task SetPrimaryLocationAsync(Guid documentId, Guid folderId, CancellationToken cancellationToken = default)
     {
         var etag = await GetETagAsync(documentId, cancellationToken);
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"api/documents/{documentId}/primary-location")
+        using var request = new HttpRequestMessage(HttpMethod.Put, await DocumentRelAsync(documentId, "set-primary-location", cancellationToken))
         {
             Content = JsonContent.Create(new { folderId }),
         };
@@ -2236,7 +2316,7 @@ public sealed class SimplArchiveApiClient
     public async Task MoveAsync(Guid documentId, Guid newParentId, CancellationToken cancellationToken = default)
     {
         var etag = await GetETagAsync(documentId, cancellationToken);
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"api/documents/{documentId}/parent")
+        using var request = new HttpRequestMessage(HttpMethod.Put, await DocumentRelAsync(documentId, "move", cancellationToken))
         {
             Content = JsonContent.Create(new { parentId = newParentId }),
         };
@@ -2295,7 +2375,7 @@ public sealed class SimplArchiveApiClient
 
     public async Task CreateReferenceAsync(Guid folderId, Guid targetId, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsJsonAsync($"api/documents/{folderId}/references", new { targetId }, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(await DocumentRelAsync(folderId, "references", cancellationToken), new { targetId }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.BadRequest)
         {
             throw new ApiActionException("Can't reference an item into itself or one of its own sub-folders.");
@@ -2314,10 +2394,10 @@ public sealed class SimplArchiveApiClient
         response.EnsureSuccessStatusCode();
     }
 
-    // Removes a reference (the shortcut only, never the target).
-    public async Task DeleteReferenceAsync(Guid folderId, Guid referenceId, CancellationToken cancellationToken = default)
+    // Removes a reference (the shortcut only, never the target) at the address its own row advertised.
+    public async Task DeleteReferenceAsync(string deleteHref, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.DeleteAsync($"api/documents/{folderId}/references/{referenceId}", cancellationToken);
+        using var response = await _http.DeleteAsync(deleteHref, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to remove this reference.");
@@ -2329,7 +2409,7 @@ public sealed class SimplArchiveApiClient
     // Reads the current ETag (a HEAD, cheaper than GET) so a rename/delete can send it as If-Match.
     private async Task<EntityTagHeaderValue?> GetETagAsync(Guid documentId, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Head, $"api/documents/{documentId}");
+        using var request = new HttpRequestMessage(HttpMethod.Head, DocumentAddress(documentId));
         using var response = await _http.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
         return response.Headers.ETag;
@@ -2348,7 +2428,7 @@ public sealed class SimplArchiveApiClient
         var name = Path.GetFileNameWithoutExtension(fileName);
         var extension = Path.GetExtension(fileName);
 
-        using var createResponse = await _http.PostAsJsonAsync($"api/documents/{folderId}/children", new { name }, cancellationToken);
+        using var createResponse = await _http.PostAsJsonAsync(await DocumentRelAsync(folderId, "children", cancellationToken), new { name }, cancellationToken);
         if (createResponse.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException($"'{fileName}': a document with that name already exists here.");
@@ -2360,15 +2440,17 @@ public sealed class SimplArchiveApiClient
         }
 
         createResponse.EnsureSuccessStatusCode();
-        var documentId = (await createResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken)).GetProperty("id").GetGuid();
+        // The create response IS the new document — id AND the address of its versions collection. Reading only
+        // the id here is what used to force the next two steps to rebuild paths from it (ADR 0543, issue #416).
+        var created = await createResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        var documentId = created.GetProperty("id").GetGuid();
 
         // The filing comment is the first version's "why this revision" note (ADR 0528) — set on the version,
         // not posted to the chat feed as it used to be.
         var versionComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
-        using var versionResponse = await _http.PostAsJsonAsync($"api/documents/{documentId}/versions", new { fileExtension = extension, comment = versionComment }, cancellationToken);
+        using var versionResponse = await _http.PostAsJsonAsync(RequireRel(created, "versions", "The created document"), new { fileExtension = extension, comment = versionComment }, cancellationToken);
         versionResponse.EnsureSuccessStatusCode();
         var version = await versionResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        var versionId = version.GetProperty("id").GetGuid();
         var uploadUrl = version.GetProperty("uploadUrl").GetString()!;
 
         using var uploadContent = new ByteArrayContent(bytes);
@@ -2376,7 +2458,8 @@ public sealed class SimplArchiveApiClient
         using var uploadResponse = await Anonymous.PutAsync(uploadUrl, uploadContent, cancellationToken);
         uploadResponse.EnsureSuccessStatusCode();
 
-        using var finalizeResponse = await _http.PutAsync($"api/documents/{documentId}/versions/{versionId}", null, cancellationToken);
+        // Finalize is a PUT to the version's OWN address, which the create response just advertised as `self`.
+        using var finalizeResponse = await _http.PutAsync(RequireRel(version, "self", "The pending version"), null, cancellationToken);
         finalizeResponse.EnsureSuccessStatusCode();
 
         // The server assigns the mask at finalize (eMail for .eml/.msg, else Basic Entry) — ADR "Email
@@ -2392,7 +2475,7 @@ public sealed class SimplArchiveApiClient
     // Acquire the exclusive edit lock. 409 = already held by someone else; 403 = no permission / not a User.
     public async Task CheckOutAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PutAsync($"api/documents/{documentId}/checkout", null, cancellationToken);
+        using var response = await _http.PutAsync(await DocumentRelAsync(documentId, "checkout", cancellationToken), null, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException("This document is already checked out by another user.");
@@ -2410,7 +2493,7 @@ public sealed class SimplArchiveApiClient
     // holder force-releasing someone else's). Idempotent when not checked out.
     public async Task CheckInAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.DeleteAsync($"api/documents/{documentId}/checkout", cancellationToken);
+        using var response = await _http.DeleteAsync(await DocumentRelAsync(documentId, "checkin", cancellationToken), cancellationToken);
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
             throw new ApiActionException("You don't have permission to release this check-out.");
@@ -2516,17 +2599,22 @@ public sealed class SimplArchiveApiClient
     }
 
     // ---- Version comparison (ADR "Document version comparison") ----
+    // A version row, carrying the links its own row advertised — `restore` and `document-date` are followed
+    // from here rather than rebuilt from a document id and a version id (ADR 0543/0555).
     public sealed record VersionInfo(Guid Id, int? VersionNumber, string Status, string FileExtension, string? DownloadUrl,
         string DocumentDate = "", DateTimeOffset CreatedAt = default, string CreatedByName = "", bool IsCurrent = false,
-        string? Comment = null);
+        string? Comment = null, IReadOnlyDictionary<string, string>? Links = null)
+    {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
     public sealed record DiffLineInfo(int Op, string Text);
     public sealed record VersionComparison(bool Available, List<DiffLineInfo> Lines);
 
     // Restores (rolls back to) an earlier version (ADR "Version restore") — creates a new current version from
     // its content. Throws on a rejected request (403 no edit rights, 409 workflow/hold/checkout).
-    public async Task RestoreVersionAsync(Guid documentId, Guid versionId, CancellationToken cancellationToken = default)
+    public async Task RestoreVersionAsync(VersionInfo version, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PostAsync($"api/documents/{documentId}/versions/{versionId}/restore", null, cancellationToken);
+        using var response = await _http.PostAsync(RequireHref(version, "restore"), null, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             var reason = response.StatusCode == HttpStatusCode.Conflict
@@ -2575,7 +2663,8 @@ public sealed class SimplArchiveApiClient
                     v.TryGetProperty("documentDate", out var dd) ? dd.GetString() ?? "" : "",
                     v.TryGetProperty("createdAt", out var ca) && ca.ValueKind == JsonValueKind.String ? ca.GetDateTimeOffset() : default,
                     v.TryGetProperty("createdByName", out var cb) ? cb.GetString() ?? "" : "",
-                    Comment: v.TryGetProperty("comment", out var cm) && cm.ValueKind == JsonValueKind.String ? cm.GetString() : null));
+                    Comment: v.TryGetProperty("comment", out var cm) && cm.ValueKind == JsonValueKind.String ? cm.GetString() : null,
+                    Links: ParseLinks(v)));
             }
         }
 
@@ -2635,7 +2724,7 @@ public sealed class SimplArchiveApiClient
         // The check-in comment is the new version's "why this revision" note (ADR 0528) — set on the version
         // itself, not posted to the chat feed as it used to be.
         var versionComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
-        using var versionResponse = await _http.PostAsJsonAsync($"api/documents/{documentId}/versions", new { fileExtension, comment = versionComment }, cancellationToken);
+        using var versionResponse = await _http.PostAsJsonAsync(await DocumentRelAsync(documentId, "versions", cancellationToken), new { fileExtension, comment = versionComment }, cancellationToken);
         if (versionResponse.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException("This document is checked out by another user or under a legal hold.");
@@ -2643,7 +2732,6 @@ public sealed class SimplArchiveApiClient
 
         versionResponse.EnsureSuccessStatusCode();
         var version = await versionResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        var versionId = version.GetProperty("id").GetGuid();
         var uploadUrl = version.GetProperty("uploadUrl").GetString()!;
 
         using var uploadContent = new ByteArrayContent(bytes);
@@ -2651,7 +2739,7 @@ public sealed class SimplArchiveApiClient
         using var uploadResponse = await Anonymous.PutAsync(uploadUrl, uploadContent, cancellationToken);
         uploadResponse.EnsureSuccessStatusCode();
 
-        using var finalizeResponse = await _http.PutAsync($"api/documents/{documentId}/versions/{versionId}", null, cancellationToken);
+        using var finalizeResponse = await _http.PutAsync(RequireRel(version, "self", "The pending version"), null, cancellationToken);
         finalizeResponse.EnsureSuccessStatusCode();
     }
 
@@ -2774,7 +2862,8 @@ public sealed class SimplArchiveApiClient
         item.TryGetProperty("hasVersions", out var hv) && hv.GetBoolean(),
         item.TryGetProperty("hasSubfolders", out var hs) && hs.GetBoolean(),
         item.TryGetProperty("hasReferences", out var hr) && hr.GetBoolean(),
-        item.TryGetProperty("realParentId", out var rp) && rp.ValueKind != JsonValueKind.Null ? rp.GetGuid() : null);
+        item.TryGetProperty("realParentId", out var rp) && rp.ValueKind != JsonValueKind.Null ? rp.GetGuid() : null,
+        RelHref(item, "delete"));
 
     private static RecycleBinItem ParseRecycleBinItem(JsonElement item) => new(
         item.GetProperty("id").GetGuid(),
@@ -3093,7 +3182,7 @@ public sealed class SimplArchiveApiClient
     // The latest confirmed version's workflow (null if the document has no confirmed version).
     public async Task<WorkflowInfo?> GetWorkflowAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        var response = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/versions", cancellationToken);
+        var response = await _http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "versions", cancellationToken), cancellationToken);
         if (!response.TryGetProperty("versions", out var versions))
         {
             return null;
@@ -3180,7 +3269,7 @@ public sealed class SimplArchiveApiClient
     {
         try
         {
-            var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/assignable-reviewers", cancellationToken);
+            var json = await _http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "assignable-reviewers", cancellationToken), cancellationToken);
             var list = new List<UserOptionInfo>();
             if (json.TryGetProperty("reviewers", out var reviewers))
             {
@@ -3243,6 +3332,21 @@ public sealed class SimplArchiveApiClient
         response.EnsureSuccessStatusCode();
         return ParseGroup(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
     }
+
+    // Follows a rel off a resource the client just READ or just CREATED — the case where the address is already
+    // in hand and only needs picking up, as opposed to DocumentRelAsync's "I hold an id, fetch the resource".
+    private static string RequireRel(JsonElement resource, string rel, string what) =>
+        ParseLinks(resource) is { } links && links.TryGetValue(rel, out var href)
+            ? href
+            : throw new InvalidOperationException($"{what} advertised no '{rel}' rel (ADR 0543).");
+
+    private static string RequireHref(VersionInfo version, string rel) =>
+        version.Href(rel)
+        ?? throw new InvalidOperationException($"Version {version.VersionNumber} advertised no '{rel}' rel — only a confirmed version offers one (ADR 0543/0555).");
+
+    private static string RequireHref(ReminderInfo reminder, string rel) =>
+        reminder.Href(rel)
+        ?? throw new InvalidOperationException($"The reminder row advertised no '{rel}' rel (ADR 0543/0555).");
 
     private static string RequireHref(TagCatalogItem tag, string rel) =>
         tag.Href(rel)
@@ -3757,9 +3861,34 @@ public sealed class SimplArchiveApiClient
     // (#426, ADR 0543).
     public sealed record AclInfo(bool Forbidden, bool BreaksInheritance, List<AclEntryInfo> Entries, List<GrantablePrincipalInfo> Principals, string? InheritanceHref);
 
+    // Reads the document FIRST and works outwards from what it advertises (ADR 0543, issue #416). The order
+    // matters: `acl-entries` is gated on CanManagePermissions, so its ABSENCE is the answer the dialog needs —
+    // it no longer discovers "you may not manage access" by sending a request designed to be refused with a 403.
+    // The collection then hands over `grantable-principals`, so the picker is one link away rather than a second
+    // path assembled here. The whole call is best-effort in the same direction it always was: any failure reads
+    // as "no rights", which hides affordances rather than offering ones that cannot work.
     public async Task<AclInfo> GetAclAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        using var listResponse = await _http.GetAsync($"api/documents/{documentId}/acl-entries", cancellationToken);
+        JsonElement doc;
+        try
+        {
+            doc = await _http.GetFromJsonAsync<JsonElement>(DocumentAddress(documentId), cancellationToken);
+        }
+        catch (HttpRequestException)
+        {
+            return new AclInfo(true, false, [], [], null);
+        }
+
+        var docLinks = ParseLinks(doc) ?? new Dictionary<string, string>();
+        if (!docLinks.TryGetValue("acl-entries", out var aclHref))
+        {
+            return new AclInfo(true, false, [], [], null);
+        }
+
+        var breaksInheritance = doc.TryGetProperty("breaksInheritance", out var bi) && bi.ValueKind == JsonValueKind.True;
+        docLinks.TryGetValue("acl-inheritance", out var inheritanceHref);
+
+        using var listResponse = await _http.GetAsync(aclHref, cancellationToken);
         if (listResponse.StatusCode == HttpStatusCode.Forbidden)
         {
             return new AclInfo(true, false, [], [], null);
@@ -3781,7 +3910,7 @@ public sealed class SimplArchiveApiClient
         }
 
         var principals = new List<GrantablePrincipalInfo>();
-        var pj = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/acl-entries/grantable-principals", cancellationToken);
+        var pj = await _http.GetFromJsonAsync<JsonElement>(RequireRel(listJson, "grantable-principals", "The ACL collection"), cancellationToken);
         if (pj.TryGetProperty("principals", out var ps))
         {
             foreach (var p in ps.EnumerateArray())
@@ -3791,30 +3920,6 @@ public sealed class SimplArchiveApiClient
                     p.GetProperty("id").GetGuid(),
                     p.GetProperty("name").GetString() ?? ""));
             }
-        }
-
-        var breaksInheritance = false;
-        string? inheritanceHref = null;
-        try
-        {
-            var doc = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}", cancellationToken);
-            breaksInheritance = doc.TryGetProperty("breaksInheritance", out var bi) && bi.ValueKind == JsonValueKind.True;
-            if (doc.TryGetProperty("links", out var links) && links.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var l in links.EnumerateArray())
-                {
-                    if (l.TryGetProperty("rel", out var rel) && rel.GetString() == "acl-inheritance")
-                    {
-                        inheritanceHref = l.TryGetProperty("href", out var h) ? h.GetString() : null;
-                        break;
-                    }
-                }
-            }
-        }
-        catch
-        {
-            // Best-effort — the inheritance line just reads "inherits" if the document GET fails, and the toggle
-            // stays hidden, which is the safe direction: it cannot offer an action we could not confirm.
         }
 
         return new AclInfo(false, breaksInheritance, entries, principals, inheritanceHref);
@@ -3843,9 +3948,12 @@ public sealed class SimplArchiveApiClient
 
     // The resolved "who can actually access this" view (ADR 0488): effective grants resolved to people (groups
     // expanded to members, tenant admins flagged).
+    // `effective` is a rel on the ACL COLLECTION, so the collection is read first — one hop that also answers
+    // "may I see this at all" by whether the document advertised `acl-entries` (ADR 0543).
     public async Task<EffectiveAccessInfo> GetEffectiveAccessAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        var json = await _http.GetFromJsonAsync<JsonElement>($"api/documents/{documentId}/acl-entries/effective", cancellationToken);
+        var collection = await _http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "acl-entries", cancellationToken), cancellationToken);
+        var json = await _http.GetFromJsonAsync<JsonElement>(RequireRel(collection, "effective", "The ACL collection"), cancellationToken);
 
         var entries = new List<EffectiveAccessEntryInfo>();
         if (json.TryGetProperty("entries", out var es))

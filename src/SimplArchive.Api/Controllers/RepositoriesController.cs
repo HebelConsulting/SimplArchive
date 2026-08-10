@@ -184,6 +184,10 @@ public class RepositoriesController : ControllerBase
                         // no permission (issue #416).
                         new Link("document", $"/api/documents/{candidate.Id}", "GET"),
                         new Link("children", $"/api/documents/{candidate.Id}/children", "GET"),
+                        // Opening a repository lists its children AND the shortcuts filed in it, exactly as
+                        // opening any other folder does — so the row must carry both, or a client following
+                        // rels has to fall back to fetching the resource on the one node it starts from.
+                        new Link("references", $"/api/documents/{candidate.Id}/references", "GET"),
                         new Link("index-data", $"/api/documents/{candidate.Id}/index-data", "GET"),
                         new Link("mask", $"/api/documents/{candidate.Id}/mask", "GET"),
                     ],
@@ -194,7 +198,15 @@ public class RepositoriesController : ControllerBase
             lastExaminedId = candidate.Id;
         }
 
-        var links = new List<Link> { new("self", Url.Action(nameof(List), new { cursor, limit = pageSize })!, "GET") };
+        // Import an export archive as a brand-new top-level repository. It belongs to the COLLECTION, not to any
+        // repository in it — the archive's root becomes a new sibling — which is exactly why the client had
+        // nowhere to follow from and composed the path instead (issue #416). Static like the document-level
+        // `import`: the CanImport system right is already in the client's hands from whoami.
+        var links = new List<Link>
+        {
+            new("self", Url.Action(nameof(List), new { cursor, limit = pageSize })!, "GET"),
+            new("import", Url.Action(nameof(Import))!, "POST"),
+        };
 
         if (hasMore && lastExaminedCreatedAt is { } lastCreatedAt && lastExaminedId is { } lastId)
         {

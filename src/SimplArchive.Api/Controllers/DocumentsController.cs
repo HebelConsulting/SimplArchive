@@ -337,6 +337,7 @@ public class DocumentsController : ControllerBase
         {
             new("self", Url.Action(nameof(Get), new { documentId })!, "GET"),
             new("children", Url.Action(nameof(ListChildren), new { documentId })!, "GET"),
+            new("ancestors", Url.Action(nameof(ListAncestors), new { documentId })!, "GET"),
             new("mask", Url.Action(nameof(GetMask), new { documentId })!, "GET"),
             new("index-data", Url.Action(nameof(GetIndexData), new { documentId })!, "GET"),
             new("versions", $"/api/documents/{documentId}/versions", "GET"),
@@ -346,6 +347,13 @@ public class DocumentsController : ControllerBase
             new("references", $"/api/documents/{documentId}/references", "GET"),
             new("referencing-folders", Url.Action(nameof(ListReferencingFolders), new { documentId })!, "GET"),
             new("move", Url.Action(nameof(Move), new { documentId })!, "PUT"),
+            // This subtree as a downloadable archive (ADR "Repository export"). STATIC, like `move` and a
+            // version's `restore` beside it: the gate is the CanExport SYSTEM right, which a client already
+            // holds from /diagnostics/whoami and uses to draw the affordance — so making the rel conditional
+            // would buy nothing the client doesn't know and would put two system-rights lookups on the
+            // hottest read in the app. The conditional rels here are the ones a client CANNOT work out for
+            // itself (is this a folder, a zip, a root, does the tenant allow external links).
+            new("export", Url.Action(nameof(Export), new { documentId })!, "GET"),
             new("set-primary-location", Url.Action(nameof(SetPrimaryLocation), new { documentId })!, "PUT"),
             new("assignable-reviewers", Url.Action(nameof(AssignableReviewers), new { documentId })!, "GET"),
             // The caller's own relationship to this document. UNCONDITIONAL: anyone who may see a document may
@@ -394,6 +402,14 @@ public class DocumentsController : ControllerBase
         if (isArchive && rights.CanReadContent)
         {
             links.Add(new Link("archive-entries", $"/api/documents/{documentId}/archive-entries", "GET"));
+        }
+
+        // Graft an export archive in under this folder (ADR "Repository import"). Right-gated like `export`
+        // above and static for the same reason; the isFolder test is APPLICABILITY, not permission — an import
+        // needs somewhere to put a subtree, and a leaf document is not that.
+        if (isFolder)
+        {
+            links.Add(new Link("import", Url.Action(nameof(Import), new { documentId })!, "POST"));
         }
 
         if (rights.CanEditIndexData)
@@ -1802,11 +1818,18 @@ public class DocumentsController : ControllerBase
         await _queue.EnqueueAsync(child.Id, cancellationToken);
         await _audit.RecordAsync(AuditActions.DocumentCreated, "Document", child.Id, child.Name, cancellationToken: cancellationToken);
 
+        // `versions` alongside `self` because creating a child is step one of a THREE-step upload (create,
+        // add a version, finalize), and a create response that hands back only an id is precisely what forces
+        // the next two steps to be composed from it (ADR 0543, issue #416).
         var resource = new DocumentSummaryResource
         {
             Id = child.Id,
             Name = child.Name,
-            Links = [new Link("self", $"/api/documents/{child.Id}", "GET")],
+            Links =
+            [
+                new Link("self", $"/api/documents/{child.Id}", "GET"),
+                new Link("versions", $"/api/documents/{child.Id}/versions", "GET"),
+            ],
         };
 
         return CreatedAtAction(nameof(Get), new { documentId = child.Id }, resource);
