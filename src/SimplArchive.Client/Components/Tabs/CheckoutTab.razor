@@ -1,0 +1,180 @@
+@using System.Net
+@using SimplArchive.Client.Services
+@inject HttpClient Http
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+@* The Check-out tab of the workbench (ADRs "Check-out working-copy stash + exit guard", "Web check-out"),
+   extracted from Home.razor per ADR 0558: what this user holds locked, and what can be done with each —
+   download or replace the cloud working copy, check in, compare, extend, or cancel.
+
+   The LIST is the shell's, not this tab's: the bottom tab bar draws a badge with its count, so it is held
+   once and passed in rather than fetched twice (ADR 0557). Actions that change it call Refresh. *@
+
+            @* The caller's checked-out documents + their cloud working copy (ADR "Check-out working-copy stash").
+               The browser has no local folder, so the flow is manual: Download from stash (edit externally),
+               Upload to stash (put the edited file back), then Check in (promote the stash to a new version). *@
+            <div class="wb-checkout pa-4" style="overflow:auto;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <MudText Typo="Typo.h6">@Strings.Get("CoHeader")</MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="() => Refresh.InvokeAsync()" title="@Strings.Get("RibbonRefresh")" />
+                    @* Copy the SimplArchive WebDAV mount URL — parity with the Inbox tab (ADR 0509); the Check-out folder lives under the mounted resource. *@
+                    <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="() => CopyWebDavUrl.InvokeAsync()" StartIcon="@Icons.Material.Filled.ContentCopy">@Strings.Get("InboxCopyDav")</MudButton>
+                </div>
+                @if (Checkouts.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("CoEmpty")</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Bordered="false">
+                        <thead><tr><th>@Strings.Get("ColDocument")</th><th>@Strings.Get("CoColRepoPath")</th><th>@Strings.Get("CoColWorkingCopy")</th><th>@Strings.Get("CoColAutoRelease")</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var c in Checkouts)
+                            {
+                                <tr>
+                                    <td>@c.Name@c.FileExtension</td>
+                                    <td class="mud-text-secondary">@c.Path</td>
+                                    <td>@(c.IsModified ? Strings.Get("CoModified") : "—")</td>
+                                    <td>
+                                        @if (c.ExpiresAt is { } exp)
+                                        {
+                                            <MudText Typo="Typo.body2" Color="@((exp - DateTimeOffset.UtcNow).TotalDays <= 1 ? Color.Warning : Color.Default)">
+                                                @exp.ToLocalTime().ToString("g")@((exp - DateTimeOffset.UtcNow).TotalDays <= 1 ? Strings.Get("CoSoon") : "")
+                                            </MudText>
+                                        }
+                                        else
+                                        {
+                                            <span class="mud-text-secondary">@Strings.Get("CoNever")</span>
+                                        }
+                                    </td>
+                                    <td style="text-align:right; white-space:nowrap;">
+                                        <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.CloudDownload" OnClick="() => DownloadFromStashAsync(c)">@Strings.Get("CoDownloadStash")</MudButton>
+                                        <MudFileUpload T="IBrowserFile" FilesChanged="@(f => UploadToStashAsync(c, f))" Class="d-inline" Style="display:inline-block; margin:0;">
+                                            <CustomContent Context="upload">
+                                                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.CloudUpload" OnClick="@(() => upload.OpenFilePickerAsync())">@Strings.Get("CoUploadStash")</MudButton>
+                                            </CustomContent>
+                                        </MudFileUpload>
+                                        @if (c.ExpiresAt is not null)
+                                        {
+                                            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.MoreTime" OnClick="() => ExtendCheckoutAsync(c)">@Strings.Get("CoExtend")</MudButton>
+                                        }
+                                        @if (c.IsModified)
+                                        {
+                                            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Difference" OnClick="() => OpenCompareCheckoutAsync(c)">@Strings.Get("CoCompare")</MudButton>
+                                        }
+                                        <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Check" Disabled="@(!c.IsModified)" OnClick="() => CheckInFromStashAsync(c)">@Strings.Get("CoCheckIn")</MudButton>
+                                        <MudButton Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Filled.LockOpen" OnClick="() => CancelCheckoutAsync(c)">@Strings.Get("CoCancel")</MudButton>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            </div>
+        
+
+@code {
+    /// <summary>The caller's held check-outs. Owned by the shell, which also badges the tab bar with the count.</summary>
+    [Parameter]
+    public IReadOnlyList<CheckoutDto> Checkouts { get; set; } = [];
+
+    /// <summary>Reloads that list after an action here changes it.</summary>
+    [Parameter]
+    public EventCallback Refresh { get; set; }
+
+    /// <summary>Reveals a document in the Repositories panes — navigating is the shell's job (ADR 0558).</summary>
+    [Parameter]
+    public EventCallback<(Guid DocumentId, Guid? ParentId)> OpenRequested { get; set; }
+
+    /// <summary>
+    /// Copies the caller's WebDAV URL. Owned by the shell because the Inbox tab offers it too — one
+    /// implementation with two callers, rather than the same clipboard flow written twice (ADR 0558).
+    /// </summary>
+    [Parameter]
+    public EventCallback CopyWebDavUrl { get; set; }
+
+    private async Task<bool> Confirm(string message, string yes) =>
+        await DialogService.ShowMessageBoxAsync(new MessageBoxOptions { Title = yes, Message = message, YesText = yes, CancelText = "Cancel" }) == true;
+
+    // Download from stash: fetch the cloud working copy (or the current version if no stash yet) as a file.
+    private async Task DownloadFromStashAsync(CheckoutDto c)
+    {
+        var url = c.StashDownloadUrl ?? c.DownloadUrl;
+        if (url is null) { Snackbar.Add(Strings.Get("CoErrNothingToDownload"), Severity.Warning); return; }
+        try
+        {
+            var stream = await PresignedTransfer.Anonymous.GetStreamAsync(url);
+            using var streamRef = new DotNetStreamReference(stream);
+            await JS.InvokeVoidAsync("downloadFileFromStream", c.Name + c.FileExtension, streamRef);
+        }
+        catch (Exception) { Snackbar.Add(Strings.Get("CoErrDownload"), Severity.Error); }
+    }
+
+    // Upload to stash: put the edited file back into the cloud working copy (a presigned PUT).
+    private async Task UploadToStashAsync(CheckoutDto c, IBrowserFile? file)
+    {
+        if (file is null) return;
+        try
+        {
+            var target = await (await Http.PostAsJsonAsync($"api/checkouts/{c.Id}/working-copy", new { })).Content.ReadFromJsonAsync<WorkingCopyUploadResponse>();
+            using var buffer = new MemoryStream();
+            await file.OpenReadStream(maxAllowedSize: 500L * 1024 * 1024).CopyToAsync(buffer);
+            using var content = new ByteArrayContent(buffer.ToArray());
+            (await PresignedTransfer.Anonymous.PutAsync(target!.UploadUrl, content)).EnsureSuccessStatusCode();
+            Snackbar.Add(string.Format(Strings.Get("CoOkUploaded"), c.Name), Severity.Success);
+            await Refresh.InvokeAsync();
+        }
+        catch (Exception) { Snackbar.Add(Strings.Get("CoErrUpload"), Severity.Error); }
+    }
+
+    // Check in: promote the cloud stash to a new version + release (server-side).
+    private async Task CheckInFromStashAsync(CheckoutDto c)
+    {
+        try
+        {
+            var resp = await Http.PostAsync($"api/checkouts/{c.Id}/checkin", null);
+            if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add(Strings.Get("CoErrUploadFirst"), Severity.Warning); return; }
+            resp.EnsureSuccessStatusCode();
+            Snackbar.Add(string.Format(Strings.Get("CoOkCheckedIn"), c.Name), Severity.Success);
+            await Refresh.InvokeAsync();
+            await Refresh.InvokeAsync();
+        }
+        catch (Exception) { Snackbar.Add(Strings.Get("CoErrCheckIn"), Severity.Error); }
+    }
+
+    // Compare the working copy against the current version as an inline unified diff (ADR 0517). Modified rows only.
+    private async Task OpenCompareCheckoutAsync(CheckoutDto c)
+    {
+        var parameters = new DialogParameters { ["DocumentId"] = c.Id, ["DocumentName"] = c.Name, ["CompareHref"] = Links.Href(c.Links, "compare") };
+        await DialogService.ShowAsync<Dialogs.CompareCheckoutDialog>(Strings.Get("CoCompareTitle"), parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+    }
+
+    // Extend my check-out: reset the auto-release idle timer (ADR "Self-service check-out extension").
+    private async Task ExtendCheckoutAsync(CheckoutDto c)
+    {
+        try
+        {
+            (await Http.PostAsync($"api/checkouts/{c.Id}/extend", null)).EnsureSuccessStatusCode();
+            Snackbar.Add(string.Format(Strings.Get("CoOkExtended"), c.Name), Severity.Success);
+            await Refresh.InvokeAsync();
+        }
+        catch (Exception) { Snackbar.Add(Strings.Get("CoErrExtend"), Severity.Error); }
+    }
+
+    // Cancel check-out: release the lock without committing (discards any stash server-side).
+    private async Task CancelCheckoutAsync(CheckoutDto c)
+    {
+        if (!await Confirm(string.Format(Strings.Get("CoConfirmCancel"), c.Name), Strings.Get("CoCancelTitle"))) return;
+        try
+        {
+            (await Http.DeleteAsync($"api/documents/{c.Id}/checkout")).EnsureSuccessStatusCode();
+            Snackbar.Add(string.Format(Strings.Get("CoOkReleased"), c.Name), Severity.Success);
+            await Refresh.InvokeAsync();
+            await Refresh.InvokeAsync();
+        }
+        catch (Exception) { Snackbar.Add(Strings.Get("CoErrCancel"), Severity.Error); }
+    }
+}

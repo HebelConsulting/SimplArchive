@@ -1,0 +1,26 @@
+using SimplArchive.Client.Hypermedia;
+
+namespace SimplArchive.Client.Models;
+
+/// <summary>
+/// A document the caller has checked out, and the addresses its row advertised (ADR 0543).
+/// </summary>
+/// <remarks>
+/// Shared: the shell holds the list because the bottom tab bar draws a badge with its count, and the
+/// Check-out tab renders the rows. One shape read two ways rather than two shapes (ADR 0558).
+/// </remarks>
+public record CheckoutListResponse { public List<CheckoutDto> Items { get; set; } = []; }
+public record CheckoutDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = "";
+    public string Path { get; set; } = "";
+    public string FileExtension { get; set; } = "";
+    public bool HasStash { get; set; }
+    public bool IsModified { get; set; }
+    public string? StashDownloadUrl { get; set; }
+    public string? DownloadUrl { get; set; }
+    public DateTimeOffset? ExpiresAt { get; set; }
+    public List<LinkResponse> Links { get; set; } = [];
+}
+public record WorkingCopyUploadResponse { public string UploadUrl { get; set; } = ""; }

@@ -58,7 +58,12 @@ public partial class ClientHypermediaTests
         // 51 = 48 + 3 after the workbench page was decomposed (ADR 0558). The budget is keyed by FILE, so
         // moving code moves composed URLs — and the two numbers still summing to 51 is what proves the
         // extraction was a pure move rather than a rewrite that quietly gained or lost a call.
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 48,
+        // 51 = 44 + 4 + 3 as the page is decomposed (ADR 0558). The budget is keyed by FILE, so moving code
+        // moves composed URLs; the numbers still summing to 51 is what proves each extraction was a pure move.
+        ["src/SimplArchive.Client/Pages/Home.razor"] = 44,
+        // The check-out stash addresses — download, replace, check in, cancel. The rels exist server-side
+        // (#441 renamed `checkin` to mean the POST that actually checks in); this is the client half.
+        ["src/SimplArchive.Client/Components/Tabs/CheckoutTab.razor"] = 4,
         // The three legal-hold addresses: creating a matter for one document, adding an item, and removing
         // one. The rels exist server-side (#441 added the item's own `remove`); this is the client half,
         // which belongs to the web burn-down rather than to the extraction that carried them here.
