@@ -140,6 +140,17 @@ public class RecycleBinController : ControllerBase
                 [
                     new Link("restore", $"/api/documents/{root.Id}/restore", "POST"),
                     new Link("purge", $"/api/documents/{root.Id}/purge", "POST"),
+
+                    // What the client shows when a deleted item is SELECTED: its mask, index data, chat and
+                    // versions (the last carrying the preview/text-layout rels for the pane). They ride on the
+                    // row on purpose — a listing's addresses arrive with the listing and cost nothing, whereas
+                    // advertising only `self` would spend one fetch per selection just to learn four addresses
+                    // that were already known here (ADR 0557). Reading a soft-deleted document's detail is
+                    // exactly what the recycle bin is for, so these are as much part of the row as restore.
+                    new Link("mask", $"/api/documents/{root.Id}/mask", "GET"),
+                    new Link("index-data", $"/api/documents/{root.Id}/index-data", "GET"),
+                    new Link("chat", $"/api/documents/{root.Id}/chat", "GET"),
+                    new Link("versions", $"/api/documents/{root.Id}/versions", "GET"),
                 ],
             });
         }

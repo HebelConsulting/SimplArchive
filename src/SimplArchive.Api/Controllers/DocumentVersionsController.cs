@@ -881,9 +881,19 @@ public class DocumentVersionsController : ControllerBase
     // dropped as a duplicate of Document.Name (ADR "Drop redundant Short Description / Doc Date mask
     // fields", superseding ADR "Download filename from Short Description") — a document is named after its
     // file, so Name already is the full filename, and using it directly also stays correct after a rename.
+    // Bypasses the soft-delete filter, like every other read on this controller: List and Get serve a
+    // RECYCLE-BIN document on purpose (the detail pane previews a deleted item), and without this the filter
+    // matched zero rows and SingleAsync threw — a bare 500 on GET /documents/{id}/versions for any deleted
+    // document. It stayed invisible because the recycle-bin pane reads its four detail addresses best-effort
+    // and swallows the failure, so the preview simply never appeared.
+    //
+    // Safe for the mutating callers too (Finalize/Restore/SetDocumentDate): those keep the filter on the
+    // document itself, so by the time they get here the document is not deleted and this resolves the same
+    // row. Only "SoftDeleteFilter" is named, so tenant isolation stays enforced.
     private async Task<string> LoadDocumentNameAsync(Guid documentId, CancellationToken cancellationToken)
     {
         return await _dbContext.Documents
+            .IgnoreQueryFilters(["SoftDeleteFilter"])
             .Where(d => d.Id == documentId)
             .Select(d => d.Name)
             .SingleAsync(cancellationToken);

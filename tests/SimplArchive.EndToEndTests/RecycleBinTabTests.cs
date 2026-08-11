@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace SimplArchive.EndToEndTests;
 
@@ -55,6 +56,64 @@ public class RecycleBinTabTests
         (await admin.PostAsync("/api/recycle-bin/purge", null)).EnsureSuccessStatusCode();
         Assert.Empty((await TestJson.Get(admin, "/api/recycle-bin")).GetProperty("items").EnumerateArray());
         Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync($"/api/documents/{folderId}/index-data")).StatusCode);
+    }
+
+    // Selecting a row in the recycle bin shows the deleted item's mask, index data, chat and versions — so the
+    // row must ADVERTISE those four addresses, not leave the client to build them from the id (ADR 0543).
+    //
+    // They belong on the row rather than behind a `self` the client would fetch first: a listing's addresses
+    // arrive with the listing and cost nothing, whereas a `self` hop would spend a request per selection to
+    // learn four addresses already known when the list was built (ADR 0557).
+    //
+    // Each rel is FOLLOWED here, not just matched by name. A rel that is advertised but does not resolve is the
+    // failure this guards against, and it is invisible to a test that only reads the link list — a missing rel
+    // is meaningful in this API (it means "not available to you"), so a typo and a deliberate absence look
+    // identical until something follows one.
+    [Fact]
+    public async Task A_recycle_bin_row_advertises_the_detail_addresses_the_pane_reads()
+    {
+        var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+
+        const string password = "recycle-rels-1234";
+        var adminEmail = $"rbrels-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, adminEmail, password, "Recycle Rels Admin");
+        await _factory.GrantTenantAdminAsync(adminEmail);
+        using var admin = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(adminEmail, password));
+
+        var repoId = (await TestJson.Post(owner, "/api/repositories", new { name = $"RecycleRels {Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+        var docId = (await TestJson.Post(owner, $"/api/documents/{repoId}/children", new { name = "a deleted doc" })).GetProperty("id").GetGuid();
+
+        var etag = (await admin.SendAsync(new HttpRequestMessage(HttpMethod.Head, $"/api/documents/{docId}"))).Headers.ETag!.ToString();
+        var del = new HttpRequestMessage(HttpMethod.Delete, $"/api/documents/{docId}");
+        del.Headers.TryAddWithoutValidation("If-Match", etag);
+        (await admin.SendAsync(del)).EnsureSuccessStatusCode();
+
+        var row = (await TestJson.Get(admin, "/api/recycle-bin")).GetProperty("items").EnumerateArray()
+            .Single(i => i.GetProperty("id").GetGuid() == docId);
+
+        foreach (var rel in new[] { "mask", "index-data", "chat", "versions", "restore", "purge" })
+        {
+            var href = row.GetProperty("links").EnumerateArray()
+                .FirstOrDefault(l => l.GetProperty("rel").GetString() == rel) is { ValueKind: JsonValueKind.Object } link
+                ? link.GetProperty("href").GetString()
+                : null;
+
+            Assert.True(href is not null, $"a recycle-bin row advertises no '{rel}' rel — the client would have to compose that URL (ADR 0543)");
+        }
+
+        // Follow the four read rels: each resolves for a SOFT-DELETED document, which is the whole point.
+        foreach (var rel in new[] { "mask", "index-data", "chat", "versions" })
+        {
+            var href = row.GetProperty("links").EnumerateArray()
+                .First(l => l.GetProperty("rel").GetString() == rel).GetProperty("href").GetString()!;
+
+            var response = await admin.GetAsync(href);
+            Assert.True(response.StatusCode == HttpStatusCode.OK,
+                $"following '{rel}' → {href} returned {(int)response.StatusCode} {response.StatusCode}, expected 200. "
+                + "The recycle bin's detail pane reads this for a SOFT-DELETED document; the client swallows the "
+                + "failure as a partial detail, so a broken read here is invisible in the UI.");
+        }
     }
 
     [Fact]
