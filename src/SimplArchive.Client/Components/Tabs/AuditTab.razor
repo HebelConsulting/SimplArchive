@@ -1,0 +1,452 @@
+@using System.Net
+@using SimplArchive.Client.Dialogs
+@inject HttpClient Http
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+@* The Audit tab of the workbench (ADR "Audit trail (first slice)"), extracted from Home.razor per ADR 0558.
+   A filter bar over a newest-first, cursor-paginated table of security-sensitive events, plus the tenant's
+   retention window and the two integrity checks (hash chain + sealed WORM segments).
+
+   Everything it needs, it owns: the filters, the page, the retention state and the five collection rels it
+   follows. The ONE thing it cannot know for itself is whether the caller may change retention, which is a
+   tenant-wide fact the shell already resolved — so that arrives as a parameter rather than being fetched a
+   second time here. *@
+
+            @* Audit log viewer (ADR "Audit trail (first slice)"): a filter bar over a newest-first table
+               of security-sensitive events, cursor-paginated via a "Load more" button. *@
+            <div class="wb-audit">
+                <div class="wb-audit-filters">
+                    <MudTextField @bind-Value="_auditActionFilter" Label="@Strings.Get("AuditActionLabel")" Placeholder="@Strings.Get("AuditActionPlaceholder")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:220px;" />
+                    <MudDatePicker @bind-Date="_auditFrom" Label="@Strings.Get("AuditFrom")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:170px;" />
+                    <MudDatePicker @bind-Date="_auditTo" Label="@Strings.Get("AuditTo")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:170px;" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="RunAuditSearchAsync">@Strings.Get("AuditApply")</MudButton>
+                    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Clear" OnClick="ClearAuditFiltersAsync">@Strings.Get("AuditClear")</MudButton>
+                    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportAuditAsync" Class="ml-auto">@Strings.Get("AuditExport")</MudButton>
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.VerifiedUser" OnClick="VerifyAuditChainAsync" Disabled="_auditVerifying">@Strings.Get("AuditVerify")</MudButton>
+                    @if (_auditVerifyResult is { } vr)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="@(vr.Valid ? Color.Success : Color.Error)" Icon="@(vr.Valid ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.GppBad)">
+                            @(vr.Valid ? string.Format(Strings.Get("AuditChainIntact"), vr.CheckedCount) : string.Format(Strings.Get("AuditTampered"), vr.BrokenAtSequence))
+                        </MudChip>
+                    }
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Lock" OnClick="VerifyWormSegmentsAsync" Disabled="_wormVerifying">@Strings.Get("AuditVerifyWorm")</MudButton>
+                    @if (_wormVerifyResult is { } wv)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="@(wv.Valid ? Color.Success : Color.Error)" Icon="@(wv.Valid ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.GppBad)">
+                            @(wv.Valid ? string.Format(Strings.Get("AuditWormIntact"), wv.CheckedCount, wv.SegmentCount) : string.Format(Strings.Get("AuditWormBroken"), wv.Reason, wv.BrokenAtSequence))
+                        </MudChip>
+                    }
+                </div>
+                @if (_auditRetention is { } rt)
+                {
+                    <div class="wb-audit-retention">
+                        <MudIcon Icon="@Icons.Material.Filled.AutoDelete" Size="Size.Small" />
+                        @if (IsTenantAdmin)
+                        {
+                            <span>@Strings.Get("AuditRetentionLabel")</span>
+                            <MudNumericField T="int" @bind-Value="_auditRetentionDaysEdit" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:110px;" />
+                            <span class="mud-text-secondary" style="font-size:.8em;">@Strings.Get("AuditRetentionDaysHint")</span>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SaveRetentionAsync" Disabled="_auditRetentionBusy">@Strings.Get("Save")</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.DeleteSweep" OnClick="PurgeAuditAsync" Disabled="_auditRetentionBusy">@Strings.Get("AuditPurgeNow")</MudButton>
+                        }
+                        else
+                        {
+                            <span class="mud-text-secondary" style="font-size:.85em;">@Strings.Get("AuditRetentionLabel") @(rt.RetentionDays == 0 ? Strings.Get("AuditKeepForever") : string.Format(Strings.Get("AuditDays"), rt.RetentionDays))</span>
+                        }
+                        @if (rt.ChainStartSequence > 0)
+                        {
+                            <span class="mud-text-secondary" style="font-size:.8em; margin-left:auto;">@string.Format(Strings.Get("AuditRetainedFrom"), rt.ChainStartSequence)@(rt.LastPurgedAt is { } lp ? string.Format(Strings.Get("AuditLastPurged"), lp.ToLocalTime().ToString("yyyy-MM-dd")) : "")</span>
+                        }
+                    </div>
+                }
+                <div class="wb-audit-rows">
+                    @if (_auditLoading && _auditEvents.Count == 0)
+                    {
+                        <div class="wb-preview-empty"><MudProgressCircular Indeterminate="true" Size="Size.Small" /></div>
+                    }
+                    else if (_auditEvents.Count == 0)
+                    {
+                        <div class="wb-preview-empty"><MudText Typo="Typo.body2">@Strings.Get("AuditNoEvents")</MudText></div>
+                    }
+                    else
+                    {
+                        <table class="wb-audit-table">
+                            <thead>
+                                <tr><th>@Strings.Get("AuditColWhen")</th><th>@Strings.Get("AuditColActor")</th><th>@Strings.Get("AuditActionLabel")</th><th>@Strings.Get("AuditColTarget")</th><th>@Strings.Get("AuditColDetails")</th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var e in _auditEvents)
+                                {
+                                    <tr>
+                                        <td style="white-space:nowrap;">@e.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                        <td>@e.ActorName <span class="mud-text-secondary" style="font-size:.75em;">(@e.ActorType)</span></td>
+                                        <td style="white-space:nowrap;">@e.Action</td>
+                                        <td>@(string.IsNullOrEmpty(e.TargetName) ? e.TargetType : $"{e.TargetType}: {e.TargetName}")</td>
+                                        <td class="mud-text-secondary">@e.Details</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                        @if (_auditNextCursor is not null)
+                        {
+                            <div style="padding:8px; text-align:center;">
+                                <MudButton Variant="Variant.Outlined" Disabled="_auditLoading" OnClick="LoadMoreAuditAsync">@Strings.Get("LoadMore")</MudButton>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        
+
+@code {
+    /// <summary>
+    /// Whether the caller may edit the retention window and purge. Resolved once by the shell from
+    /// /diagnostics/whoami; re-reading it per tab would be a request to learn something already known.
+    /// </summary>
+    [Parameter]
+    public bool IsTenantAdmin { get; set; }
+
+    // The tab loads on first render rather than on tab activation: the component only exists while its tab is
+    // shown, so "am I visible" is no longer a question it has to ask the shell (ADR 0558).
+    //
+    // BOTH halves, in the shell's original order. The retention bar is a separate read from the event page, and
+    // carrying only the obvious one across is how an extraction silently drops behaviour — WebAuditTests caught
+    // exactly that here.
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRetentionAsync();
+        await RunAuditSearchAsync();
+    }
+
+    // The five rels the audit COLLECTION advertises, captured where that collection is read (ADR 0543/0557).
+    // Null until the first page has been read, which is what disables an action rather than the client
+    // composing a path for it.
+    private string? _auditRetentionHref;
+    private string? _auditExportHref;
+    private string? _auditPurgeHref;
+    private string? _auditVerifyHref;
+    private string? _auditWormVerifyHref;
+
+    // ---- Audit log viewer (ADR "Audit trail (first slice)") ------------------------------------------
+    private readonly List<AuditEventDto> _auditEvents = new();
+    private string _auditActionFilter = "";
+    private DateTime? _auditFrom;
+    private DateTime? _auditTo;
+    private string? _auditNextCursor;
+    private bool _auditLoading;
+    private bool _auditVerifying;
+    private AuditVerifyDto? _auditVerifyResult;
+    private RetentionDto? _auditRetention;
+    private int _auditRetentionDaysEdit;
+    private bool _auditRetentionBusy;
+
+    // Export the tenant's audit log (respecting the current filters) as NDJSON (ADR "Audit trail export") — a
+    // SIEM-native feed; each line carries the Sequence + Hash for external verification. Fetched with the
+    // authenticated client, then handed to the browser via the blob-download JS helper.
+    private async Task ExportAuditAsync()
+    {
+        try
+        {
+            var query = new List<string>();
+            if (!string.IsNullOrWhiteSpace(_auditActionFilter))
+            {
+                query.Add($"action={Uri.EscapeDataString(_auditActionFilter.Trim())}");
+            }
+            if (_auditFrom is { } from)
+            {
+                query.Add($"from={Uri.EscapeDataString(from.ToUniversalTime().ToString("o"))}");
+            }
+            if (_auditTo is { } to)
+            {
+                query.Add($"to={Uri.EscapeDataString(to.Date.AddDays(1).ToUniversalTime().ToString("o"))}");
+            }
+
+            await EnsureAuditLinksAsync();
+            var url = _auditExportHref + (query.Count > 0 ? "?" + string.Join("&", query) : "");
+            var bytes = await Http.GetByteArrayAsync(url);
+            using var stream = new MemoryStream(bytes);
+            using var streamRef = new DotNetStreamReference(stream);
+            await JS.InvokeVoidAsync("downloadFileFromStream", $"audit-export-{DateTime.UtcNow:yyyyMMdd-HHmmss}.ndjson", streamRef);
+            Snackbar.Add(Strings.Get("StAuditExported"), Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(string.Format(Strings.Get("StErrExportAudit"), ex.Message), Severity.Error);
+        }
+    }
+    // The tenant's audit retention window + purge state (ADR "Audit trail retention and purge").
+    private async Task LoadRetentionAsync()
+    {
+        try
+        {
+            // The policy is a rel ON the log, so it needs the log's links — and this can run BEFORE the list
+            // does, which is exactly how the pane rendered empty. Ask for one row rather than a page: enough to
+            // carry the rels, not enough to be a second real fetch (issue #416).
+            await EnsureAuditLinksAsync();
+            if (_auditRetentionHref is null) { return; }
+
+            _auditRetention = await Http.GetFromJsonAsync<RetentionDto>(_auditRetentionHref);
+            _auditRetentionDaysEdit = _auditRetention?.RetentionDays ?? 365;
+        }
+        catch (Exception)
+        {
+            _auditRetention = null;
+        }
+    }
+
+    private async Task SaveRetentionAsync()
+    {
+        _auditRetentionBusy = true;
+        try
+        {
+            await EnsureAuditLinksAsync();
+            if (_auditRetentionHref is null) { return; }
+
+            var resp = await Http.PutAsJsonAsync(_auditRetentionHref, new { retentionDays = _auditRetentionDaysEdit });
+            if (resp.IsSuccessStatusCode)
+            {
+                _auditRetention = await resp.Content.ReadFromJsonAsync<RetentionDto>();
+                Snackbar.Add(Strings.Get("StRetentionUpdated"), Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to change retention." : "Could not update retention.", Severity.Warning);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add(string.Format(Strings.Get("StErrUpdateRetention"), ex.Message), Severity.Error); }
+        finally { _auditRetentionBusy = false; }
+    }
+
+    private async Task PurgeAuditAsync()
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = "Purge aged audit events",
+            Message = $"Permanently delete audit events older than {(_auditRetentionDaysEdit == 0 ? "— (retention disabled)" : $"{_auditRetentionDaysEdit} days")}? The tamper-evidence chain stays verifiable over the retained events.",
+            YesText = "Purge",
+            CancelText = "Cancel",
+        });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        _auditRetentionBusy = true;
+        try
+        {
+            await EnsureAuditLinksAsync();
+            var resp = await Http.PostAsync(_auditPurgeHref!, null);
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = await resp.Content.ReadFromJsonAsync<PurgeDto>();
+                Snackbar.Add(string.Format(Strings.Get("StPurgedEvents"), result?.PurgedCount ?? 0), Severity.Success);
+                await LoadRetentionAsync();
+                await RunAuditSearchAsync();
+            }
+            else
+            {
+                Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to purge." : "Could not purge.", Severity.Warning);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add(string.Format(Strings.Get("StErrPurge"), ex.Message), Severity.Error); }
+        finally { _auditRetentionBusy = false; }
+    }
+
+    private record RetentionDto
+    {
+        public int RetentionDays { get; set; }
+        public long ChainStartSequence { get; set; }
+        public DateTimeOffset? LastPurgedAt { get; set; }
+    }
+
+    private record PurgeDto
+    {
+        public int PurgedCount { get; set; }
+        public long ChainStartSequence { get; set; }
+    }
+
+    // Verify the tenant's audit hash chain (ADR "Audit trail hash chain") — the server walks it and recomputes
+    // each link; the chip shows intact-or-tampered.
+    private async Task VerifyAuditChainAsync()
+    {
+        _auditVerifying = true;
+        _auditVerifyResult = null;
+        try
+        {
+            await EnsureAuditLinksAsync();
+            _auditVerifyResult = await Http.GetFromJsonAsync<AuditVerifyDto>(_auditVerifyHref!);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(string.Format(Strings.Get("StErrVerifyAudit"), ex.Message), Severity.Error);
+        }
+        finally
+        {
+            _auditVerifying = false;
+        }
+    }
+
+    // Verify the sealed WORM segments against the DB (ADR "Audit WORM segment verify") — the immutable segments
+    // catch a DB tamper the chain check can't; the chip shows intact-or-tampered.
+    private async Task VerifyWormSegmentsAsync()
+    {
+        _wormVerifying = true;
+        _wormVerifyResult = null;
+        try
+        {
+            await EnsureAuditLinksAsync();
+            _wormVerifyResult = await Http.GetFromJsonAsync<WormVerifyDto>(_auditWormVerifyHref!);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(string.Format(Strings.Get("StErrVerifyWorm"), ex.Message), Severity.Error);
+        }
+        finally
+        {
+            _wormVerifying = false;
+        }
+    }
+
+    private bool _wormVerifying;
+    private WormVerifyDto? _wormVerifyResult;
+    private record WormVerifyDto { public bool Valid { get; set; } public int SegmentCount { get; set; } public int CheckedCount { get; set; } public long? BrokenAtSequence { get; set; } public string? Reason { get; set; } }
+
+    private async Task RunAuditSearchAsync()
+    {
+        _auditEvents.Clear();
+        _auditNextCursor = null;
+        _auditVerifyResult = null;
+        await LoadAuditAsync(reset: true);
+    }
+
+    private async Task ClearAuditFiltersAsync()
+    {
+        _auditActionFilter = "";
+        _auditFrom = null;
+        _auditTo = null;
+        await RunAuditSearchAsync();
+    }
+
+    private Task LoadMoreAuditAsync() => LoadAuditAsync(reset: false);
+
+    private async Task LoadAuditAsync(bool reset)
+    {
+        _auditLoading = true;
+        try
+        {
+            var query = new List<string>();
+            if (!string.IsNullOrWhiteSpace(_auditActionFilter))
+            {
+                query.Add($"action={Uri.EscapeDataString(_auditActionFilter.Trim())}");
+            }
+            if (_auditFrom is { } from)
+            {
+                query.Add($"from={Uri.EscapeDataString(from.ToUniversalTime().ToString("o"))}");
+            }
+            if (_auditTo is { } to)
+            {
+                // Inclusive of the whole "to" day.
+                query.Add($"to={Uri.EscapeDataString(to.Date.AddDays(1).ToUniversalTime().ToString("o"))}");
+            }
+            if (!reset && _auditNextCursor is not null)
+            {
+                query.Add($"cursor={Uri.EscapeDataString(_auditNextCursor)}");
+            }
+
+            var url = await ApiRoot.RequireAsync("auditEvents") + (query.Count > 0 ? "?" + string.Join("&", query) : "");
+            var page = await Http.GetFromJsonAsync<AuditResponse>(url);
+            foreach (var e in page?.Events ?? [])
+            {
+                _auditEvents.Add(e);
+            }
+            _auditNextCursor = ExtractCursor(Links.Href(page?.Links, "next"));
+
+            // The log's own actions ride on the log (issue #416): its retention policy, the export, the purge,
+            // and the two integrity verifications. Captured here because this is where the collection is read.
+            _auditRetentionHref = Links.Href(page?.Links, "retention");
+            _auditExportHref = Links.Href(page?.Links, "export");
+            _auditPurgeHref = Links.Href(page?.Links, "purge");
+            _auditVerifyHref = Links.Href(page?.Links, "verify");
+            _auditWormVerifyHref = Links.Href(page?.Links, "worm-verify");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(string.Format(Strings.Get("StErrLoadAudit"), ex.Message), Severity.Error);
+        }
+        finally
+        {
+            _auditLoading = false;
+        }
+    }
+
+    // Captures the audit log's own action rels if the list has not already done so. `?limit=1` on the
+    // advertised href keeps this to a token read — a query on a rel's href, not a path this client invented.
+    private async Task EnsureAuditLinksAsync()
+    {
+        if (_auditRetentionHref is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            var page = await Http.GetFromJsonAsync<AuditResponse>(await ApiRoot.RequireAsync("auditEvents") + "?limit=1");
+            _auditRetentionHref = Links.Href(page?.Links, "retention");
+            _auditExportHref = Links.Href(page?.Links, "export");
+            _auditPurgeHref = Links.Href(page?.Links, "purge");
+            _auditVerifyHref = Links.Href(page?.Links, "verify");
+            _auditWormVerifyHref = Links.Href(page?.Links, "worm-verify");
+        }
+        catch (Exception)
+        {
+            // Leave them null — each action checks, and an absent rel disables it rather than composing a path.
+        }
+    }
+
+    private static string? ExtractCursor(string? nextHref)
+    {
+        if (string.IsNullOrEmpty(nextHref))
+        {
+            return null;
+        }
+        var idx = nextHref.IndexOf("cursor=", StringComparison.Ordinal);
+        if (idx < 0)
+        {
+            return null;
+        }
+        var value = nextHref[(idx + "cursor=".Length)..];
+        var amp = value.IndexOf('&');
+        if (amp >= 0)
+        {
+            value = value[..amp];
+        }
+        return Uri.UnescapeDataString(value);
+    }
+
+    private record AuditResponse
+    {
+        public List<AuditEventDto> Events { get; set; } = new();
+        public List<LinkResponse> Links { get; set; } = [];
+    }
+
+    private record AuditVerifyDto
+    {
+        public bool Valid { get; set; }
+        public int CheckedCount { get; set; }
+        public long? BrokenAtSequence { get; set; }
+    }
+
+    private record AuditEventDto
+    {
+        public DateTimeOffset Timestamp { get; set; }
+        public string ActorType { get; set; } = "";
+        public string ActorName { get; set; } = "";
+        public string Action { get; set; } = "";
+        public string? TargetType { get; set; }
+        public string? TargetName { get; set; }
+        public string? Details { get; set; }
+    }
+}

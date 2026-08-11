@@ -1,0 +1,201 @@
+@using System.Net
+@inject HttpClient Http
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+@* The Legal holds tab of the workbench (ADR "Legal hold & retention enforcement"), extracted from
+   Home.razor per ADR 0558. Places and releases holds, and lists what each one freezes.
+
+   Self-contained: the actions it offers come from the rels each hold advertises — a released hold offers
+   neither release nor add-item — so it never re-derives from an IsActive flag what the server already said. *@
+            <div class="wb-legalholds" style="height:100%; display:flex; flex-direction:column;">
+                <div class="pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+                    <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined" Size="Size.Small" OnClick="NewLegalHoldAsync">@Strings.Get("LhNewHold")</MudButton>
+                    <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Text" Size="Size.Small" OnClick="LoadLegalHoldsAsync">@Strings.Get("RibbonRefresh")</MudButton>
+                </div>
+                <div style="flex:1 1 auto; display:flex; min-height:0;">
+                    <div style="width:320px; overflow:auto; border-right:1px solid var(--mud-palette-lines-default);">
+                        @foreach (var h in _legalHolds)
+                        {
+                            <div class="wb-list-row @(ReferenceEquals(h, _selectedHold) ? "wb-list-row-selected" : "")" @onclick="() => SelectHoldAsync(h)">
+                                <MudIcon Icon="@Icons.Material.Filled.Gavel" Size="Size.Small" Color="@(h.IsActive ? Color.Warning : Color.Default)" />
+                                <span style="flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@h.Name @(h.IsActive ? "" : Strings.Get("LhReleased"))</span>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@h.ItemCount</MudText>
+                            </div>
+                        }
+                        @if (_legalHolds.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2" Class="pa-3 mud-text-secondary">@Strings.Get("LhNone")</MudText>
+                        }
+                    </div>
+                    <div style="flex:1 1 auto; overflow:auto;" class="pa-3">
+                        @if (_selectedHold is { } sel)
+                        {
+                            <MudText Typo="Typo.h6">@sel.Name</MudText>
+                            @if (!string.IsNullOrWhiteSpace(sel.Reason))
+                            {
+                                <MudText Typo="Typo.body2" Class="mb-1">@sel.Reason</MudText>
+                            }
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                @string.Format(Strings.Get("LhPlaced"), sel.PlacedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"), sel.IsActive ? Strings.Get("LhActive") : Strings.Get("LhReleasedSuffix"))
+                            </MudText>
+                            @if (sel.IsActive)
+                            {
+                                <div class="my-2">
+                                    <MudButton Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.LockOpen" OnClick="ReleaseHoldAsync">@Strings.Get("LhRelease")</MudButton>
+                                </div>
+                            }
+                            <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1">@string.Format(Strings.Get("LhDocuments"), sel.Items.Count)</MudText>
+                            @foreach (var it in sel.Items)
+                            {
+                                <div class="wb-list-row">
+                                    <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" />
+                                    <span style="flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@it.DocumentName</span>
+                                    @if (sel.IsActive)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="() => RemoveHoldItemAsync(it.DocumentId)" title="@Strings.Get("LhRemoveFromHold")" />
+                                    }
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("LhSelect")</MudText>
+                        }
+                    </div>
+                </div>
+            </div>
+        
+
+@code {
+    /// <summary>
+    /// Raised after a hold is placed or released, so whatever else is on screen can refresh what a hold
+    /// changes — the Repositories list draws a lock indicator per row.
+    /// </summary>
+    /// <remarks>
+    /// An event rather than a reference to the Repositories pane's state. This tab knows that holds changed;
+    /// it has no business knowing which folder is open or how to reload it, and reaching into that state is
+    /// precisely the entanglement the decomposition exists to remove (ADR 0558).
+    /// </remarks>
+    [Parameter]
+    public EventCallback HoldsChanged { get; set; }
+
+    // The tab loads itself; SetTab's LegalHolds branch is deleted rather than relocated (ADR 0558).
+    protected override async Task OnInitializedAsync() => await LoadLegalHoldsAsync();
+
+    // ---- Legal holds (ADR "Legal hold & retention enforcement") --------------------------------------
+    private readonly List<LegalHoldDto> _legalHolds = new();
+    private LegalHoldDto? _selectedHold;
+
+    private async Task LoadLegalHoldsAsync()
+    {
+        try
+        {
+            var response = await Http.GetFromJsonAsync<LegalHoldsListDto>(await ApiRoot.RequireAsync("legalHolds"));
+            _legalHolds.Clear();
+            if (response?.Holds is { } holds)
+            {
+                _legalHolds.AddRange(holds);
+            }
+            // Keep the current selection if it still exists (refresh after a change).
+            _selectedHold = _selectedHold is { } sel ? _legalHolds.FirstOrDefault(h => h.Id == sel.Id) : null;
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrLoadHolds"), Severity.Error);
+        }
+        StateHasChanged();
+    }
+
+    private async Task SelectHoldAsync(LegalHoldDto hold)
+    {
+        // Fetch the full hold (with its items).
+        try
+        {
+            _selectedHold = await Http.GetFromJsonAsync<LegalHoldDto>($"api/legal-holds/{hold.Id}") ?? hold;
+        }
+        catch (Exception)
+        {
+            _selectedHold = hold;
+        }
+        StateHasChanged();
+    }
+
+    private async Task NewLegalHoldAsync()
+    {
+        if (await LegalHoldPrompt.ShowAsync(DialogService) is not { } result)
+        {
+            return;
+        }
+
+        try
+        {
+            using var response = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("legalHolds"), new { name = result.Name, reason = result.Reason });
+            response.EnsureSuccessStatusCode();
+            Snackbar.Add(string.Format(Strings.Get("StHoldCreated"), result.Name), Severity.Success);
+            await LoadLegalHoldsAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrCreateHold"), Severity.Error);
+        }
+    }
+
+    private async Task ReleaseHoldAsync()
+    {
+        if (_selectedHold is not { } sel)
+        {
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = "Release legal hold",
+            Message = $"Release '{sel.Name}'? Its documents are unfrozen unless another active hold still covers them.",
+            YesText = "Release", CancelText = "Cancel",
+        });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            using var response = await Http.PostAsync($"api/legal-holds/{sel.Id}/release", null);
+            response.EnsureSuccessStatusCode();
+            Snackbar.Add(Strings.Get("StHoldReleased"), Severity.Success);
+            await LoadLegalHoldsAsync();
+            await SelectHoldAsync(sel);
+            await HoldsChanged.InvokeAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrReleaseHold"), Severity.Error);
+        }
+    }
+
+    private async Task RemoveHoldItemAsync(Guid documentId)
+    {
+        if (_selectedHold is not { } sel)
+        {
+            return;
+        }
+
+        try
+        {
+            using var response = await Http.DeleteAsync($"api/legal-holds/{sel.Id}/items/{documentId}");
+            response.EnsureSuccessStatusCode();
+            await SelectHoldAsync(sel);
+            await LoadLegalHoldsAsync();
+            await HoldsChanged.InvokeAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrRemoveFromHold"), Severity.Error);
+        }
+    }
+
+    private record LegalHoldsListDto { public List<LegalHoldDto> Holds { get; set; } = new(); }
+
+}

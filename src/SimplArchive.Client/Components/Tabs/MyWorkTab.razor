@@ -1,0 +1,117 @@
+@inject HttpClient Http
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
+
+@* The My work tab of the workbench (ADR "My work dashboard"), extracted from Home.razor per ADR 0558:
+   what is waiting for this user — due reminders and the documents they follow — with click-through to each.
+
+   Click-through is an EventCallback rather than a call into the tree: this tab knows which document the user
+   picked, not how the Repositories pane reveals it. *@
+            @* Personal dashboard (ADR "My work dashboard"): overdue + due-soon reminders, followed
+               documents, and review tasks — three stacked sections, each item navigating to its document. *@
+            <div class="wb-mywork pa-4" style="overflow:auto;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <MudText Typo="Typo.h6">@Strings.Get("MyWorkHeader")</MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadMyWorkAsync" title="Refresh" />
+                </div>
+
+                <MudText Typo="Typo.subtitle2" Class="mt-2">@Strings.Get("MyWorkReminders")</MudText>
+                @if (_dashReminders.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("MyWorkNothingDue")</MudText>
+                }
+                else
+                {
+                    <MudList T="string" Dense="true" Style="max-width:700px;">
+                        @foreach (var r in _dashReminders)
+                        {
+                            <MudListItem T="string" OnClick="() => NavigateToDocumentAsync(r.DocumentId, r.ParentId)" Icon="@(r.Overdue ? Icons.Material.Filled.Warning : Icons.Material.Filled.Alarm)" IconColor="@(r.Overdue ? Color.Error : Color.Default)">
+                                <b>@r.DocumentName</b> — @(r.Overdue ? Strings.Get("MyWorkWasDue") : Strings.Get("MyWorkDue"))@r.RemindAt.LocalDateTime.ToString("g")@(r.Recurrence != 0 ? $" · {r.RecurrenceName.ToLowerInvariant()}" : "")@(string.IsNullOrEmpty(r.Note) ? "" : $" — {r.Note}")
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+
+                <MudText Typo="Typo.subtitle2" Class="mt-4">@Strings.Get("MyWorkFollowing")</MudText>
+                @if (_dashFollowing.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("MyWorkNotFollowing")</MudText>
+                }
+                else
+                {
+                    <MudList T="string" Dense="true" Style="max-width:700px;">
+                        @foreach (var f in _dashFollowing)
+                        {
+                            <MudListItem T="string" OnClick="() => NavigateToDocumentAsync(f.DocumentId, f.ParentId)" Icon="@Icons.Material.Filled.Notifications">@f.DocumentName</MudListItem>
+                        }
+                    </MudList>
+                }
+
+                <MudText Typo="Typo.subtitle2" Class="mt-4">@Strings.Get("MyWorkReviewTasks")</MudText>
+                @if (Tasks.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("MyWorkNoReview")</MudText>
+                }
+                else
+                {
+                    <MudList T="string" Dense="true" Style="max-width:700px;">
+                        @foreach (var t in Tasks)
+                        {
+                            <MudListItem T="string" OnClick="() => NavigateToDocumentAsync(t.DocumentId, t.ParentId)" Icon="@Icons.Material.Filled.Task">
+                                <b>@t.DocumentName</b>@(t.VersionNumber is { } n ? $" v{n}" : "")@(t.IsOverdue ? Strings.Get("MyWorkOverdueSuffix") : "")
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+            </div>
+        
+
+@code {
+    /// <summary>Raised when a row is clicked, so the shell can reveal that document in the Repositories tree.</summary>
+    [Parameter]
+    public EventCallback<(Guid DocumentId, Guid? ParentId)> OpenRequested { get; set; }
+
+    /// <summary>Asks the shell to refresh the task list this tab displays but does not own.</summary>
+    [Parameter]
+    public EventCallback TasksRefreshRequested { get; set; }
+
+    /// <summary>
+    /// The caller's open review tasks, which the Tasks tab already loads. Passed in rather than fetched again:
+    /// two tabs showing the same list should not be two reads of it (ADR 0557).
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<TaskItem> Tasks { get; set; } = [];
+
+    // The tab loads itself; SetTab's MyWork branch is deleted rather than relocated (ADR 0558).
+    protected override async Task OnInitializedAsync() => await LoadMyWorkAsync();
+
+    // ---- My work dashboard (ADR "My work dashboard") ------------------------------------------------------
+    private List<DashReminder> _dashReminders = [];
+    private List<DashFollowed> _dashFollowing = [];
+
+    private async Task LoadMyWorkAsync()
+    {
+        try
+        {
+            _dashReminders = (await Http.GetFromJsonAsync<DashReminderResponse>(await ApiRoot.RequireAsync("reminders")))?.Reminders ?? [];
+            _dashFollowing = (await Http.GetFromJsonAsync<DashFollowedResponse>(await ApiRoot.RequireAsync("subscriptions")))?.Followed ?? [];
+            await TasksRefreshRequested.InvokeAsync();
+        }
+        catch (Exception)
+        {
+            _dashReminders = [];
+            _dashFollowing = [];
+        }
+    }
+
+    // Navigate to a document from a dashboard item (opens its parent folder + selects it).
+    // Navigating is the shell's job — it owns the tree and list panes. This tab only says which document the
+    // user picked (ADR 0558); the same callback serves a reminder row, a followed row and a review task.
+    private Task NavigateToDocumentAsync(Guid documentId, Guid? parentId) =>
+        OpenRequested.InvokeAsync((documentId, parentId));
+
+    private record DashReminderResponse { public List<DashReminder> Reminders { get; set; } = []; }
+    private record DashReminder { public Guid DocumentId { get; set; } public Guid? ParentId { get; set; } public string DocumentName { get; set; } = ""; public DateTimeOffset RemindAt { get; set; } public string? Note { get; set; } public int Recurrence { get; set; } public string RecurrenceName { get; set; } = ""; public bool Overdue { get; set; } }
+    private record DashFollowedResponse { public List<DashFollowed> Followed { get; set; } = []; }
+    private record DashFollowed { public Guid DocumentId { get; set; } public Guid? ParentId { get; set; } public string DocumentName { get; set; } = ""; }
+
+}

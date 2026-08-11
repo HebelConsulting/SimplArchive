@@ -1911,44 +1911,7 @@
             }
             else if (_activeTab == Tab.Tags)
             {
-                @* The tenant tag catalog (ADR "Tag controlled vocabulary") — admin curation. *@
-                <div class="wb-tags pa-4" style="overflow:auto; max-width:720px;">
-                    <MudText Typo="Typo.h6" Class="mb-2">@Strings.Get("TagsCatalogHeader")</MudText>
-                    <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">@Strings.Get("TagsCatalogDesc")</MudText>
-
-                    <div style="display:flex; gap:8px; align-items:center; margin-bottom:16px;">
-                        <MudTextField T="string" @bind-Value="_newTagName" Placeholder="@Strings.Get("TagsNewPlaceholder")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:220px;" />
-                        <MudTextField T="string" @bind-Value="_newTagColor" Placeholder="#RRGGBB" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:120px;" />
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateTagAsync">@Strings.Get("TagsAdd")</MudButton>
-                    </div>
-
-                    <MudSimpleTable Dense="true" Hover="true" Style="max-width:680px;">
-                        <thead><tr><th>@Strings.Get("TagsColTag")</th><th style="width:200px;">@Strings.Get("TagsColActions")</th></tr></thead>
-                        <tbody>
-                            @foreach (var t in _catalogTags)
-                            {
-                                <tr>
-                                    <td><MudChip T="string" Size="Size.Small" Style="@ChipStyle(t.Color)">@t.Name</MudChip></td>
-                                    <td>
-                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" title="@Strings.Get("RibbonRename")" OnClick="@(() => RenameTagAsync(t))" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.Palette" Size="Size.Small" title="@Strings.Get("TagsSetColour")" OnClick="@(() => RecolourTagAsync(t))" />
-                                        <MudMenu Icon="@Icons.Material.Filled.CallMerge" Size="Size.Small" Dense="true" title="@Strings.Get("TagsMergeInto")">
-                                            @foreach (var other in _catalogTags.Where(x => x.Id != t.Id))
-                                            {
-                                                <MudMenuItem OnClick="@(() => MergeTagAsync(t, other))">@other.Name</MudMenuItem>
-                                            }
-                                        </MudMenu>
-                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="@Strings.Get("TagsRetire")" OnClick="@(() => RetireTagAsync(t))" />
-                                    </td>
-                                </tr>
-                            }
-                            @if (_catalogTags.Count == 0)
-                            {
-                                <tr><td colspan="2" class="mud-text-secondary">@Strings.Get("TagsEmpty")</td></tr>
-                            }
-                        </tbody>
-                    </MudSimpleTable>
-                </div>
+                <TagsTab CatalogChanged="LoadTagCatalogAsync" />
             }
             else if (_activeTab == Tab.Tasks)
             {
@@ -2000,63 +1963,7 @@
             }
             else if (_activeTab == Tab.MyWork)
             {
-                @* Personal dashboard (ADR "My work dashboard"): overdue + due-soon reminders, followed
-                   documents, and review tasks — three stacked sections, each item navigating to its document. *@
-                <div class="wb-mywork pa-4" style="overflow:auto;">
-                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                        <MudText Typo="Typo.h6">@Strings.Get("MyWorkHeader")</MudText>
-                        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadMyWorkAsync" title="Refresh" />
-                    </div>
-
-                    <MudText Typo="Typo.subtitle2" Class="mt-2">@Strings.Get("MyWorkReminders")</MudText>
-                    @if (_dashReminders.Count == 0)
-                    {
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("MyWorkNothingDue")</MudText>
-                    }
-                    else
-                    {
-                        <MudList T="string" Dense="true" Style="max-width:700px;">
-                            @foreach (var r in _dashReminders)
-                            {
-                                <MudListItem T="string" OnClick="() => NavigateToDocumentAsync(r.DocumentId, r.ParentId)" Icon="@(r.Overdue ? Icons.Material.Filled.Warning : Icons.Material.Filled.Alarm)" IconColor="@(r.Overdue ? Color.Error : Color.Default)">
-                                    <b>@r.DocumentName</b> — @(r.Overdue ? Strings.Get("MyWorkWasDue") : Strings.Get("MyWorkDue"))@r.RemindAt.LocalDateTime.ToString("g")@(r.Recurrence != 0 ? $" · {r.RecurrenceName.ToLowerInvariant()}" : "")@(string.IsNullOrEmpty(r.Note) ? "" : $" — {r.Note}")
-                                </MudListItem>
-                            }
-                        </MudList>
-                    }
-
-                    <MudText Typo="Typo.subtitle2" Class="mt-4">@Strings.Get("MyWorkFollowing")</MudText>
-                    @if (_dashFollowing.Count == 0)
-                    {
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("MyWorkNotFollowing")</MudText>
-                    }
-                    else
-                    {
-                        <MudList T="string" Dense="true" Style="max-width:700px;">
-                            @foreach (var f in _dashFollowing)
-                            {
-                                <MudListItem T="string" OnClick="() => NavigateToDocumentAsync(f.DocumentId, f.ParentId)" Icon="@Icons.Material.Filled.Notifications">@f.DocumentName</MudListItem>
-                            }
-                        </MudList>
-                    }
-
-                    <MudText Typo="Typo.subtitle2" Class="mt-4">@Strings.Get("MyWorkReviewTasks")</MudText>
-                    @if (_tasks.Count == 0)
-                    {
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("MyWorkNoReview")</MudText>
-                    }
-                    else
-                    {
-                        <MudList T="string" Dense="true" Style="max-width:700px;">
-                            @foreach (var t in _tasks)
-                            {
-                                <MudListItem T="string" OnClick="() => OpenTaskAsync(t)" Icon="@Icons.Material.Filled.Task">
-                                    <b>@t.DocumentName</b>@(t.VersionNumber is { } n ? $" v{n}" : "")@(t.IsOverdue ? Strings.Get("MyWorkOverdueSuffix") : "")
-                                </MudListItem>
-                            }
-                        </MudList>
-                    }
-                </div>
+                <MyWorkTab Tasks="_tasks" TasksRefreshRequested="LoadTasksAsync" OpenRequested="NavigateToDocumentAsync" />
             }
             else if (_activeTab == Tab.UsersGroups)
             {
@@ -2209,213 +2116,15 @@
             }
             else if (_activeTab == Tab.Audit)
             {
-                @* Audit log viewer (ADR "Audit trail (first slice)"): a filter bar over a newest-first table
-                   of security-sensitive events, cursor-paginated via a "Load more" button. *@
-                <div class="wb-audit">
-                    <div class="wb-audit-filters">
-                        <MudTextField @bind-Value="_auditActionFilter" Label="@Strings.Get("AuditActionLabel")" Placeholder="@Strings.Get("AuditActionPlaceholder")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:220px;" />
-                        <MudDatePicker @bind-Date="_auditFrom" Label="@Strings.Get("AuditFrom")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:170px;" />
-                        <MudDatePicker @bind-Date="_auditTo" Label="@Strings.Get("AuditTo")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:170px;" />
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="RunAuditSearchAsync">@Strings.Get("AuditApply")</MudButton>
-                        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Clear" OnClick="ClearAuditFiltersAsync">@Strings.Get("AuditClear")</MudButton>
-                        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportAuditAsync" Class="ml-auto">@Strings.Get("AuditExport")</MudButton>
-                        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.VerifiedUser" OnClick="VerifyAuditChainAsync" Disabled="_auditVerifying">@Strings.Get("AuditVerify")</MudButton>
-                        @if (_auditVerifyResult is { } vr)
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="@(vr.Valid ? Color.Success : Color.Error)" Icon="@(vr.Valid ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.GppBad)">
-                                @(vr.Valid ? string.Format(Strings.Get("AuditChainIntact"), vr.CheckedCount) : string.Format(Strings.Get("AuditTampered"), vr.BrokenAtSequence))
-                            </MudChip>
-                        }
-                        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Lock" OnClick="VerifyWormSegmentsAsync" Disabled="_wormVerifying">@Strings.Get("AuditVerifyWorm")</MudButton>
-                        @if (_wormVerifyResult is { } wv)
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="@(wv.Valid ? Color.Success : Color.Error)" Icon="@(wv.Valid ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.GppBad)">
-                                @(wv.Valid ? string.Format(Strings.Get("AuditWormIntact"), wv.CheckedCount, wv.SegmentCount) : string.Format(Strings.Get("AuditWormBroken"), wv.Reason, wv.BrokenAtSequence))
-                            </MudChip>
-                        }
-                    </div>
-                    @if (_auditRetention is { } rt)
-                    {
-                        <div class="wb-audit-retention">
-                            <MudIcon Icon="@Icons.Material.Filled.AutoDelete" Size="Size.Small" />
-                            @if (_isTenantAdmin)
-                            {
-                                <span>@Strings.Get("AuditRetentionLabel")</span>
-                                <MudNumericField T="int" @bind-Value="_auditRetentionDaysEdit" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:110px;" />
-                                <span class="mud-text-secondary" style="font-size:.8em;">@Strings.Get("AuditRetentionDaysHint")</span>
-                                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SaveRetentionAsync" Disabled="_auditRetentionBusy">@Strings.Get("Save")</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.DeleteSweep" OnClick="PurgeAuditAsync" Disabled="_auditRetentionBusy">@Strings.Get("AuditPurgeNow")</MudButton>
-                            }
-                            else
-                            {
-                                <span class="mud-text-secondary" style="font-size:.85em;">@Strings.Get("AuditRetentionLabel") @(rt.RetentionDays == 0 ? Strings.Get("AuditKeepForever") : string.Format(Strings.Get("AuditDays"), rt.RetentionDays))</span>
-                            }
-                            @if (rt.ChainStartSequence > 0)
-                            {
-                                <span class="mud-text-secondary" style="font-size:.8em; margin-left:auto;">@string.Format(Strings.Get("AuditRetainedFrom"), rt.ChainStartSequence)@(rt.LastPurgedAt is { } lp ? string.Format(Strings.Get("AuditLastPurged"), lp.ToLocalTime().ToString("yyyy-MM-dd")) : "")</span>
-                            }
-                        </div>
-                    }
-                    <div class="wb-audit-rows">
-                        @if (_auditLoading && _auditEvents.Count == 0)
-                        {
-                            <div class="wb-preview-empty"><MudProgressCircular Indeterminate="true" Size="Size.Small" /></div>
-                        }
-                        else if (_auditEvents.Count == 0)
-                        {
-                            <div class="wb-preview-empty"><MudText Typo="Typo.body2">@Strings.Get("AuditNoEvents")</MudText></div>
-                        }
-                        else
-                        {
-                            <table class="wb-audit-table">
-                                <thead>
-                                    <tr><th>@Strings.Get("AuditColWhen")</th><th>@Strings.Get("AuditColActor")</th><th>@Strings.Get("AuditActionLabel")</th><th>@Strings.Get("AuditColTarget")</th><th>@Strings.Get("AuditColDetails")</th></tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var e in _auditEvents)
-                                    {
-                                        <tr>
-                                            <td style="white-space:nowrap;">@e.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
-                                            <td>@e.ActorName <span class="mud-text-secondary" style="font-size:.75em;">(@e.ActorType)</span></td>
-                                            <td style="white-space:nowrap;">@e.Action</td>
-                                            <td>@(string.IsNullOrEmpty(e.TargetName) ? e.TargetType : $"{e.TargetType}: {e.TargetName}")</td>
-                                            <td class="mud-text-secondary">@e.Details</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                            @if (_auditNextCursor is not null)
-                            {
-                                <div style="padding:8px; text-align:center;">
-                                    <MudButton Variant="Variant.Outlined" Disabled="_auditLoading" OnClick="LoadMoreAuditAsync">@Strings.Get("LoadMore")</MudButton>
-                                </div>
-                            }
-                        }
-                    </div>
-                </div>
+                <AuditTab IsTenantAdmin="_isTenantAdmin" />
             }
             else if (_activeTab == Tab.LegalHolds)
             {
-                <div class="wb-legalholds" style="height:100%; display:flex; flex-direction:column;">
-                    <div class="pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
-                        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined" Size="Size.Small" OnClick="NewLegalHoldAsync">@Strings.Get("LhNewHold")</MudButton>
-                        <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Text" Size="Size.Small" OnClick="LoadLegalHoldsAsync">@Strings.Get("RibbonRefresh")</MudButton>
-                    </div>
-                    <div style="flex:1 1 auto; display:flex; min-height:0;">
-                        <div style="width:320px; overflow:auto; border-right:1px solid var(--mud-palette-lines-default);">
-                            @foreach (var h in _legalHolds)
-                            {
-                                <div class="wb-list-row @(ReferenceEquals(h, _selectedHold) ? "wb-list-row-selected" : "")" @onclick="() => SelectHoldAsync(h)">
-                                    <MudIcon Icon="@Icons.Material.Filled.Gavel" Size="Size.Small" Color="@(h.IsActive ? Color.Warning : Color.Default)" />
-                                    <span style="flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@h.Name @(h.IsActive ? "" : Strings.Get("LhReleased"))</span>
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@h.ItemCount</MudText>
-                                </div>
-                            }
-                            @if (_legalHolds.Count == 0)
-                            {
-                                <MudText Typo="Typo.body2" Class="pa-3 mud-text-secondary">@Strings.Get("LhNone")</MudText>
-                            }
-                        </div>
-                        <div style="flex:1 1 auto; overflow:auto;" class="pa-3">
-                            @if (_selectedHold is { } sel)
-                            {
-                                <MudText Typo="Typo.h6">@sel.Name</MudText>
-                                @if (!string.IsNullOrWhiteSpace(sel.Reason))
-                                {
-                                    <MudText Typo="Typo.body2" Class="mb-1">@sel.Reason</MudText>
-                                }
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                    @string.Format(Strings.Get("LhPlaced"), sel.PlacedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"), sel.IsActive ? Strings.Get("LhActive") : Strings.Get("LhReleasedSuffix"))
-                                </MudText>
-                                @if (sel.IsActive)
-                                {
-                                    <div class="my-2">
-                                        <MudButton Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.LockOpen" OnClick="ReleaseHoldAsync">@Strings.Get("LhRelease")</MudButton>
-                                    </div>
-                                }
-                                <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1">@string.Format(Strings.Get("LhDocuments"), sel.Items.Count)</MudText>
-                                @foreach (var it in sel.Items)
-                                {
-                                    <div class="wb-list-row">
-                                        <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" />
-                                        <span style="flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@it.DocumentName</span>
-                                        @if (sel.IsActive)
-                                        {
-                                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="() => RemoveHoldItemAsync(it.DocumentId)" title="@Strings.Get("LhRemoveFromHold")" />
-                                        }
-                                    </div>
-                                }
-                            }
-                            else
-                            {
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("LhSelect")</MudText>
-                            }
-                        </div>
-                    </div>
-                </div>
+                <LegalHoldsTab HoldsChanged="RefreshOpenFolderAsync" />
             }
             else if (_activeTab == Tab.Retention)
             {
-                <div class="wb-retention" style="height:100%; display:flex; flex-direction:column;">
-                    <div class="pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default); display:flex; align-items:center; gap:8px;">
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                            @if (_retentionRequiresReview)
-                            {
-                                @((MarkupString)Strings.Get("RetDescReview"))
-                            }
-                            else
-                            {
-                                @((MarkupString)Strings.Get("RetDescAuto"))
-                            }
-                        </MudText>
-                        <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Text" Size="Size.Small" OnClick="LoadRetentionScheduleAsync" Class="ml-auto">@Strings.Get("RibbonRefresh")</MudButton>
-                    </div>
-                    <div style="flex:1 1 auto; overflow:auto;">
-                        <MudTable Items="_retentionItems" Dense="true" Hover="true" Bordered="false" Elevation="0">
-                            <HeaderContent>
-                                <MudTh>@Strings.Get("ColDocument")</MudTh>
-                                <MudTh>@Strings.Get("RetColRetention")</MudTh>
-                                <MudTh>@Strings.Get("RetColDisposition")</MudTh>
-                                <MudTh>@Strings.Get("RetColStatus")</MudTh>
-                                <MudTh>@Strings.Get("RetColActions")</MudTh>
-                            </HeaderContent>
-                            <RowTemplate Context="row">
-                                <MudTd>@row.DocumentName</MudTd>
-                                <MudTd>@string.Format(Strings.Get("RetYears"), row.RetentionYears)</MudTd>
-                                <MudTd>@row.DispositionDate@(row.RetentionOverrideUntil is { } o ? string.Format(Strings.Get("RetRetainedUntil"), o) : "")</MudTd>
-                                <MudTd>
-                                    @if (row.SuspendedByHold)
-                                    {
-                                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Lock">@Strings.Get("RetSuspended")</MudChip>
-                                    }
-                                    else if (row.Overdue)
-                                    {
-                                        <MudChip T="string" Size="Size.Small" Color="Color.Error">@Strings.Get("RetDue")</MudChip>
-                                    }
-                                    else
-                                    {
-                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">@Strings.Get("RetScheduled")</MudChip>
-                                    }
-                                </MudTd>
-                                <MudTd>
-                                    @if (row.Overdue && !row.SuspendedByHold)
-                                    {
-                                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="() => DisposeRetentionAsync(row)">@Strings.Get("RetDispose")</MudButton>
-                                    }
-                                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => ExtendRetentionAsync(row)">@Strings.Get("RetExtend")</MudButton>
-                                </MudTd>
-                            </RowTemplate>
-                        </MudTable>
-                        @if (_retentionItems.Count == 0)
-                        {
-                            <MudText Typo="Typo.body2" Class="pa-3 mud-text-secondary">@Strings.Get("RetNone")</MudText>
-                        }
-                        @if (_retentionTruncated)
-                        {
-                            <MudText Typo="Typo.caption" Class="pa-3 mud-text-secondary">@Strings.Get("RetTruncated")</MudText>
-                        }
-                    </div>
-                </div>
+                <RetentionTab />
             }
             else if (_activeTab == Tab.RecycleBin)
             {
@@ -2633,62 +2342,15 @@
     // open/detail/drop act on the target), ReferenceId identifies the shortcut, RealParentId is the target's
     // home folder. HasReferences marks an item that at least one reference targets. See ADR "Web client
     // move/reference/search UI".
-    private record BrowseNode(Guid Id, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders,
-        bool HasReferences = false, bool IsReference = false, Guid ReferenceId = default, Guid? RealParentId = null,
-        Guid RepositoryId = default, string FileExtension = "", bool OnLegalHold = false,
-        bool CheckedOut = false, bool CheckedOutByMe = false, string CheckedOutByName = "",
-        // Synthetic tenant-admin tree nodes (ADR "Tenant-admin Administration → Users view"): "admin-root" and
-        // "admin-users" load their children from the admin endpoint, not GET /documents/{id}/children.
-        string AdminKind = "",
-        // Synthetic Personal-space tree nodes (ADR "GUI-tree Personal space grouping"): "personal-root" (the
-        // Personal repository, which also injects Inbox/Check-out children) and the leaf launchers "inbox" /
-        // "checkout" (clicking them switches to the corresponding bottom tab, mirroring /webdav/Personal).
-        string PersonalKind = "",
-        // List-row columns (ADR "List-row columns and sorting").
-        string DocumentType = "", DateOnly? DocumentDate = null, long? SizeBytes = null, IReadOnlyList<string>? Tags = null,
-        // The data-classification sensitivity label (ADR "Configurable sensitivity labels + upload defaults") —
-        // the label name + colour for the list-row badge; empty name = None (no badge).
-        string? SensitivityLabelName = null, string? SensitivityLabelColor = null,
-        // Confirmed-version count (ADR "Versions dialog") — gates the row's "Versions…" menu item (> 1).
-        int VersionCount = 0,
-        // The latest confirmed version's CreatedAt (filing timestamp) — the "Created" contents-sort key (ADR
-        // "Per-folder contents sort order"). Null for a folder / version-less doc.
-        DateTimeOffset? VersionCreatedAt = null,
-        // The thread's URL as the SERVER advertised it (the "chat" rel), not one this client composed — see
-        // ADR 0543. Null for a synthetic tree node, and for a node from a list that doesn't emit the rel yet;
-        // those fall back to a composed URL, which is what the hypermedia guard's allowlist is burning down.
-        string? ChatHref = null,
-        // The row's own sub-resource addresses, as the listing advertised them (ADR 0543, issue #416) — a client
-        // holding a row follows these instead of rebuilding a path from its id. Null for a SYNTHETIC node (the
-        // Administration branch, the Personal-space groupings), which stands for no server resource, and for a
-        // row from a listing that does not advertise them; a caller with neither must FETCH the resource and
-        // follow its rel, never compose.
-        IReadOnlyDictionary<string, string>? Links = null)
+
+    // Reload the open folder's contents. Raised by tabs whose actions change what a row shows — a legal hold
+    // draws a lock indicator — so they announce the change and the shell decides what to redraw (ADR 0558).
+    private async Task RefreshOpenFolderAsync()
     {
-        public bool IsFolder => !HasVersions;
-
-        // An EMPTY folder — no subfolders and no documents (ADR "Empty-folder tree icon", issue #352). The tree
-        // tints its glyph so you can see at a glance which folders hold nothing, without expanding them.
-        // HasChildren (any child) is the right flag, not HasSubfolders (which only drives the expander caret): a
-        // folder holding only documents is a tree leaf but is NOT empty. The pseudo-nodes are excluded — the
-        // Administration branch and the Inbox / Check-out launchers aren't folders, and the Personal root always
-        // holds those launchers.
-        public bool IsEmptyFolder => IsFolder && !HasChildren && AdminKind == "" && PersonalKind == "";
-
-        // Which glyph colour this node takes in the tree (ADR "Folder icon scheme"), as the CSS class that
-        // carries it. Gold is for containers only, so the Inbox / Check-out launchers and the Administration
-        // branch go muted — the Personal ROOT is a container and stays gold.
-        public string TreeGlyphClass =>
-            IsEmptyFolder ? "wb-tree-empty"
-            : AdminKind != "" || PersonalKind is "inbox" or "checkout" ? "wb-tree-muted"
-            : "wb-tree-folder";
-
-        // A checked-out document is shown as "[holder] name" (ADR "Check-out working-copy stash").
-        public string DisplayName => CheckedOut && !string.IsNullOrEmpty(CheckedOutByName) ? $"[{CheckedOutByName}] {Name}" : Name;
-
-        public bool CheckedOutByOther => CheckedOut && !CheckedOutByMe;
-
-        public IReadOnlyList<string> TagList => Tags ?? [];
+        if (_selectedFolder is { } sf)
+        {
+            _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, childrenHref: ChildrenHrefOf(sf), trackAsCurrentFolder: true);
+        }
     }
 
     private Tab _activeTab = Tab.Repositories;
@@ -2823,7 +2485,30 @@
     private List<string>? _detailTags;
     private List<string> _editTags = [];
     private List<string> _origTags = [];
+    // The tag catalogue as the SHELL uses it: names for the index pane's autocomplete, colours for the
+    // list-row chips. The Tags tab manages the catalogue and raises CatalogChanged; this is the shell's own
+    // read of it, not a second owner of the tab's state (ADR 0558).
     private List<string> _tagCatalog = [];
+    private Dictionary<string, string?> _tagColors = new();
+
+    private static string ChipStyle(string? color) => string.IsNullOrEmpty(color) ? "" : $"background:{color}; color:#fff;";
+
+    private string? TagColor(string name) => _tagColors.TryGetValue(name, out var c) ? c : null;
+
+    private async Task LoadTagCatalogAsync()
+    {
+        try
+        {
+            var resp = await Http.GetFromJsonAsync<TagsResponse>(await ApiRoot.RequireAsync("tags"));
+            var catalog = resp?.Catalog ?? [];
+            _tagCatalog = catalog.Select(t => t.Name).ToList();
+            _tagColors = catalog.ToDictionary(t => t.Name, t => t.Color);
+        }
+        catch (Exception)
+        {
+            // Best-effort: autocomplete falls back to free text and chips render uncoloured.
+        }
+    }
     private string? _newTag;
 
     // System fields (read-only display) — derived from the latest confirmed version (ADR 0273).
@@ -2870,9 +2555,6 @@
     private bool _pvFullscreen;                // in-app maximize of the preview pane (ADR 0295)
 
     private record PvResult { public string Kind { get; set; } = ""; public string Text { get; set; } = ""; }
-    private record TextLayoutResponse { public List<TextLayoutPage> Pages { get; set; } = []; }
-    private record TextLayoutPage { public List<TextLayoutWord> Words { get; set; } = []; }
-    private record TextLayoutWord { public string Text { get; set; } = ""; public double X { get; set; } public double Y { get; set; } public double Width { get; set; } public double Height { get; set; } }
 
     // Renders a preview (image/pdf/text) with its hit-overlay into the JS host (preview.js). `previewUrl` is the
     // presigned rendition URL; `textLayoutUrl` is the version's text-layout link (may be null / 204).
@@ -3874,19 +3556,9 @@
             await LoadTenantSettingsAsync();
         }
 
-        if (tab == Tab.Tags)
-        {
-            await LoadTagCatalogAsync();
-        }
-
         if (tab == Tab.Tasks)
         {
             await LoadTasksAsync();
-        }
-
-        if (tab == Tab.MyWork)
-        {
-            await LoadMyWorkAsync();
         }
 
         if (tab == Tab.UsersGroups)
@@ -3896,30 +3568,15 @@
             await LoadSensitivityLabelsAsync();
         }
 
-        if (tab == Tab.Audit)
-        {
-            await LoadRetentionAsync();
-            if (_auditEvents.Count == 0)
-            {
-                await RunAuditSearchAsync();
-            }
-        }
-
-        if (tab == Tab.LegalHolds)
-        {
-            await LoadLegalHoldsAsync();
-        }
-
-        if (tab == Tab.Retention)
-        {
-            await LoadRetentionScheduleAsync();
-        }
-
         if (tab == Tab.RecycleBin)
         {
             ClearRbPreview();
             await LoadRecycleBinAsync();
         }
+
+        // Tab.Audit loads itself: the component exists only while its tab is shown, so the shell no longer has
+        // to know what that tab needs or when (ADR 0558).
+
     }
 
     // ---- Recycle bin tab (ADR "Recycle bin tab") — tenant-wide list + isolated detail/preview/chat ----
@@ -3977,9 +3634,9 @@
             _rbComments = (await Http.GetFromJsonAsync<ChatMessageListResponse>($"api/documents/{item.Id}/chat"))?.Messages ?? new();
 
             var versions = await Http.GetFromJsonAsync<VersionListResponse>($"api/documents/{item.Id}/versions");
-            var latest = PickCurrent(versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [], versions?.CurrentVersionId);
-            var previewUrl = latest is null ? null : RelativeToAbsolute(RelativeHref(latest.Links, "preview"));
-            var textLayoutUrl = latest is null ? null : RelativeHref(latest.Links, "text-layout");
+            var latest = VersionListResponse.PickCurrent(versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [], versions?.CurrentVersionId);
+            var previewUrl = latest is null ? null : RelativeToAbsolute(Links.Href(latest.Links, "preview"));
+            var textLayoutUrl = latest is null ? null : Links.Href(latest.Links, "text-layout");
             _rbPv.Converted = latest?.PreviewConverted ?? false;
             await RenderRbPreviewAsync(previewUrl, textLayoutUrl);
         }
@@ -4169,162 +3826,14 @@
         public string DeletedBy { get; set; } = "";
     }
 
-    // ---- Retention schedule (ADR "Retention policies (auto-disposition)") ----------------------------
-    private readonly List<RetentionItemDto> _retentionItems = new();
-    private bool _retentionTruncated;
-    private bool _retentionRequiresReview;
-
-    private async Task LoadRetentionScheduleAsync()
-    {
-        try
-        {
-            var response = await Http.GetFromJsonAsync<RetentionScheduleDto>(await ApiRoot.RequireAsync("retentionSchedule"));
-            _retentionItems.Clear();
-            if (response?.Items is { } items)
-            {
-                _retentionItems.AddRange(items);
-            }
-            _retentionTruncated = response?.Truncated ?? false;
-            _retentionRequiresReview = response?.RequiresReview ?? false;
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrLoadRetention"), Severity.Error);
-        }
-        StateHasChanged();
-    }
-
-    private async Task DisposeRetentionAsync(RetentionItemDto row)
-    {
-        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
-        {
-            Title = "Dispose document",
-            Message = $"Dispose '{row.DocumentName}'? It will be moved to the recycle bin.",
-            YesText = "Dispose",
-            CancelText = "Cancel",
-        });
-        if (confirmed != true)
-        {
-            return;
-        }
-
-        if (row.Href("dispose") is not { } disposeHref) { return; }
-
-        using var resp = await Http.PostAsync(disposeHref, null);
-        if (resp.IsSuccessStatusCode)
-        {
-            Snackbar.Add(Strings.Get("StDocumentDisposed"), Severity.Success);
-            await LoadRetentionScheduleAsync();
-        }
-        else
-        {
-            Snackbar.Add(resp.StatusCode == HttpStatusCode.Conflict ? "Under a legal hold — can't dispose." : "Could not dispose.", Severity.Warning);
-        }
-    }
-
-    private async Task ExtendRetentionAsync(RetentionItemDto row)
-    {
-        var parameters = new DialogParameters { [nameof(Dialogs.ExtendRetentionDialog.DocumentName)] = row.DocumentName };
-        var dialog = await DialogService.ShowAsync<Dialogs.ExtendRetentionDialog>(Strings.Get("ExtRetTitle"), parameters);
-        var result = await dialog.Result;
-        if (result is null || result.Canceled || result.Data is not string until)
-        {
-            return;
-        }
-
-        if (row.Href("extend") is not { } extendHref) { return; }
-
-        using var resp = await Http.PostAsJsonAsync(extendHref, new { until });
-        if (resp.IsSuccessStatusCode)
-        {
-            Snackbar.Add(Strings.Get("StRetentionExtended"), Severity.Success);
-            await LoadRetentionScheduleAsync();
-        }
-        else
-        {
-            Snackbar.Add(Strings.Get("StErrExtendRetention"), Severity.Warning);
-        }
-    }
-
-    private record RetentionScheduleDto { public List<RetentionItemDto> Items { get; set; } = new(); public bool Truncated { get; set; } public bool RequiresReview { get; set; } }
-    private record RetentionItemDto
-    {
-        public List<LinkResponse> Links { get; set; } = [];
-
-        // `extend` always; `dispose` only where the tenant does not require a disposition review first.
-        public string? Href(string rel) => Links.FirstOrDefault(l => l.Rel == rel)?.Href.TrimStart('/');
-
-        public Guid DocumentId { get; set; }
-        public string DocumentName { get; set; } = "";
-        public int RetentionYears { get; set; }
-        public string DispositionDate { get; set; } = "";
-        public bool Overdue { get; set; }
-        public bool SuspendedByHold { get; set; }
-        public string? RetentionOverrideUntil { get; set; }
-    }
-
-    // ---- Legal holds (ADR "Legal hold & retention enforcement") --------------------------------------
-    private readonly List<LegalHoldDto> _legalHolds = new();
-    private LegalHoldDto? _selectedHold;
-
-    private async Task LoadLegalHoldsAsync()
-    {
-        try
-        {
-            var response = await Http.GetFromJsonAsync<LegalHoldsListDto>(await ApiRoot.RequireAsync("legalHolds"));
-            _legalHolds.Clear();
-            if (response?.Holds is { } holds)
-            {
-                _legalHolds.AddRange(holds);
-            }
-            // Keep the current selection if it still exists (refresh after a change).
-            _selectedHold = _selectedHold is { } sel ? _legalHolds.FirstOrDefault(h => h.Id == sel.Id) : null;
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrLoadHolds"), Severity.Error);
-        }
-        StateHasChanged();
-    }
-
-    private async Task SelectHoldAsync(LegalHoldDto hold)
-    {
-        // Fetch the full hold (with its items).
-        try
-        {
-            _selectedHold = await Http.GetFromJsonAsync<LegalHoldDto>($"api/legal-holds/{hold.Id}") ?? hold;
-        }
-        catch (Exception)
-        {
-            _selectedHold = hold;
-        }
-        StateHasChanged();
-    }
-
-    private async Task NewLegalHoldAsync()
-    {
-        if (await ShowLegalHoldDialogAsync() is not { } result)
-        {
-            return;
-        }
-
-        try
-        {
-            using var response = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("legalHolds"), new { name = result.Name, reason = result.Reason });
-            response.EnsureSuccessStatusCode();
-            Snackbar.Add(string.Format(Strings.Get("StHoldCreated"), result.Name), Severity.Success);
-            await LoadLegalHoldsAsync();
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrCreateHold"), Severity.Error);
-        }
-    }
-
+    // ---- Legal hold from a document row (ADR "Legal hold & retention enforcement") -------------------
+    // A row action on the CONTENTS pane, not part of the Legal holds tab: it acts on the document under the
+    // cursor. It stays in the shell for the same reason export/import do — what it belongs to is the thing it
+    // acts on, not the tab that happens to list the results (ADR 0558).
     // Places a legal hold on a specific document from the contents-pane ⋮ menu: creates a new matter covering it.
     private async Task PlaceLegalHoldAsync(BrowseNode node)
     {
-        if (await ShowLegalHoldDialogAsync(node.Name) is not { } result)
+        if (await LegalHoldPrompt.ShowAsync(DialogService, node.Name) is not { } result)
         {
             return;
         }
@@ -4337,10 +3846,7 @@
             using var added = await Http.PostAsJsonAsync($"api/legal-holds/{hold!.Id}/items", new { documentId = node.Id });
             added.EnsureSuccessStatusCode();
             Snackbar.Add(string.Format(Strings.Get("StPlacedUnderHold"), node.Name), Severity.Success);
-            if (_selectedFolder is { } sf)
-            {
-                _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, childrenHref: ChildrenHrefOf(sf), trackAsCurrentFolder: true);
-            }
+            await RefreshOpenFolderAsync();
         }
         catch (Exception)
         {
@@ -4348,136 +3854,9 @@
         }
     }
 
-    private async Task ReleaseHoldAsync()
-    {
-        if (_selectedHold is not { } sel)
-        {
-            return;
-        }
-
-        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
-        {
-            Title = "Release legal hold",
-            Message = $"Release '{sel.Name}'? Its documents are unfrozen unless another active hold still covers them.",
-            YesText = "Release", CancelText = "Cancel",
-        });
-        if (confirmed != true)
-        {
-            return;
-        }
-
-        try
-        {
-            using var response = await Http.PostAsync($"api/legal-holds/{sel.Id}/release", null);
-            response.EnsureSuccessStatusCode();
-            Snackbar.Add(Strings.Get("StHoldReleased"), Severity.Success);
-            await LoadLegalHoldsAsync();
-            await SelectHoldAsync(sel);
-            if (_selectedFolder is { } sf)
-            {
-                _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, childrenHref: ChildrenHrefOf(sf), trackAsCurrentFolder: true);
-            }
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrReleaseHold"), Severity.Error);
-        }
-    }
-
-    private async Task RemoveHoldItemAsync(Guid documentId)
-    {
-        if (_selectedHold is not { } sel)
-        {
-            return;
-        }
-
-        try
-        {
-            using var response = await Http.DeleteAsync($"api/legal-holds/{sel.Id}/items/{documentId}");
-            response.EnsureSuccessStatusCode();
-            await SelectHoldAsync(sel);
-            await LoadLegalHoldsAsync();
-            if (_selectedFolder is { } sf)
-            {
-                _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, childrenHref: ChildrenHrefOf(sf), trackAsCurrentFolder: true);
-            }
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrRemoveFromHold"), Severity.Error);
-        }
-    }
-
-    private async Task<LegalHoldDialog.LegalHoldFormResult?> ShowLegalHoldDialogAsync(string? suggestedName = null)
-    {
-        var parameters = new DialogParameters<LegalHoldDialog> { { x => x.SuggestedName, suggestedName } };
-        var dialog = await DialogService.ShowAsync<LegalHoldDialog>(Strings.Get("LhDlgTitle"), parameters);
-        var result = await dialog.Result;
-        return result is { Canceled: false, Data: LegalHoldDialog.LegalHoldFormResult r } ? r : null;
-    }
-
-    private record LegalHoldsListDto { public List<LegalHoldDto> Holds { get; set; } = new(); }
-    private record LegalHoldDto
-    {
-        public Guid Id { get; set; }
-        public string Name { get; set; } = "";
-        public string? Reason { get; set; }
-        public DateTimeOffset PlacedAt { get; set; }
-        public DateTimeOffset? ReleasedAt { get; set; }
-        public bool IsActive { get; set; }
-        public int ItemCount { get; set; }
-        public List<LegalHoldItemDto> Items { get; set; } = new();
-    }
-    private record LegalHoldItemDto { public Guid DocumentId { get; set; } public string DocumentName { get; set; } = ""; }
-
-    // ---- Audit log viewer (ADR "Audit trail (first slice)") ------------------------------------------
-    private readonly List<AuditEventDto> _auditEvents = new();
-    private string _auditActionFilter = "";
-    private DateTime? _auditFrom;
-    private DateTime? _auditTo;
-    private string? _auditNextCursor;
-    private bool _auditLoading;
-    private bool _auditVerifying;
-    private AuditVerifyDto? _auditVerifyResult;
-    private RetentionDto? _auditRetention;
-    private int _auditRetentionDaysEdit;
-    private bool _auditRetentionBusy;
-
-    // Export the tenant's audit log (respecting the current filters) as NDJSON (ADR "Audit trail export") — a
-    // SIEM-native feed; each line carries the Sequence + Hash for external verification. Fetched with the
-    // authenticated client, then handed to the browser via the blob-download JS helper.
-    private async Task ExportAuditAsync()
-    {
-        try
-        {
-            var query = new List<string>();
-            if (!string.IsNullOrWhiteSpace(_auditActionFilter))
-            {
-                query.Add($"action={Uri.EscapeDataString(_auditActionFilter.Trim())}");
-            }
-            if (_auditFrom is { } from)
-            {
-                query.Add($"from={Uri.EscapeDataString(from.ToUniversalTime().ToString("o"))}");
-            }
-            if (_auditTo is { } to)
-            {
-                query.Add($"to={Uri.EscapeDataString(to.Date.AddDays(1).ToUniversalTime().ToString("o"))}");
-            }
-
-            await EnsureAuditLinksAsync();
-            var url = _auditExportHref + (query.Count > 0 ? "?" + string.Join("&", query) : "");
-            var bytes = await Http.GetByteArrayAsync(url);
-            using var stream = new MemoryStream(bytes);
-            using var streamRef = new DotNetStreamReference(stream);
-            await JS.InvokeVoidAsync("downloadFileFromStream", $"audit-export-{DateTime.UtcNow:yyyyMMdd-HHmmss}.ndjson", streamRef);
-            Snackbar.Add(Strings.Get("StAuditExported"), Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add(string.Format(Strings.Get("StErrExportAudit"), ex.Message), Severity.Error);
-        }
-    }
-
+    // ---- Repository export / import (ADRs "Repository export" / "Repository import") -----------------
+    // Acts on the SELECTED FOLDER, so it belongs to the Repositories surface and stays in the shell — it had
+    // drifted into the audit and legal-hold sections, which is what made both of those extractions catch it.
     // Export the selected repository/folder + subtree to a .zip (ADR "Repository export"). Tenant-admin-only.
     // The filter dialog collects the version selection + date/creator filters; the zip is fetched with the
     // authenticated client and handed to the browser via the blob-download helper.
@@ -4566,279 +3945,6 @@
         public int Skipped { get; set; }
     }
 
-    // The tenant's audit retention window + purge state (ADR "Audit trail retention and purge").
-    private async Task LoadRetentionAsync()
-    {
-        try
-        {
-            // The policy is a rel ON the log, so it needs the log's links — and this can run BEFORE the list
-            // does, which is exactly how the pane rendered empty. Ask for one row rather than a page: enough to
-            // carry the rels, not enough to be a second real fetch (issue #416).
-            await EnsureAuditLinksAsync();
-            if (_auditRetentionHref is null) { return; }
-
-            _auditRetention = await Http.GetFromJsonAsync<RetentionDto>(_auditRetentionHref);
-            _auditRetentionDaysEdit = _auditRetention?.RetentionDays ?? 365;
-        }
-        catch (Exception)
-        {
-            _auditRetention = null;
-        }
-    }
-
-    private async Task SaveRetentionAsync()
-    {
-        _auditRetentionBusy = true;
-        try
-        {
-            await EnsureAuditLinksAsync();
-            if (_auditRetentionHref is null) { return; }
-
-            var resp = await Http.PutAsJsonAsync(_auditRetentionHref, new { retentionDays = _auditRetentionDaysEdit });
-            if (resp.IsSuccessStatusCode)
-            {
-                _auditRetention = await resp.Content.ReadFromJsonAsync<RetentionDto>();
-                Snackbar.Add(Strings.Get("StRetentionUpdated"), Severity.Success);
-            }
-            else
-            {
-                Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to change retention." : "Could not update retention.", Severity.Warning);
-            }
-        }
-        catch (Exception ex) { Snackbar.Add(string.Format(Strings.Get("StErrUpdateRetention"), ex.Message), Severity.Error); }
-        finally { _auditRetentionBusy = false; }
-    }
-
-    private async Task PurgeAuditAsync()
-    {
-        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
-        {
-            Title = "Purge aged audit events",
-            Message = $"Permanently delete audit events older than {(_auditRetentionDaysEdit == 0 ? "— (retention disabled)" : $"{_auditRetentionDaysEdit} days")}? The tamper-evidence chain stays verifiable over the retained events.",
-            YesText = "Purge",
-            CancelText = "Cancel",
-        });
-        if (confirmed != true)
-        {
-            return;
-        }
-
-        _auditRetentionBusy = true;
-        try
-        {
-            await EnsureAuditLinksAsync();
-            var resp = await Http.PostAsync(_auditPurgeHref!, null);
-            if (resp.IsSuccessStatusCode)
-            {
-                var result = await resp.Content.ReadFromJsonAsync<PurgeDto>();
-                Snackbar.Add(string.Format(Strings.Get("StPurgedEvents"), result?.PurgedCount ?? 0), Severity.Success);
-                await LoadRetentionAsync();
-                await RunAuditSearchAsync();
-            }
-            else
-            {
-                Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to purge." : "Could not purge.", Severity.Warning);
-            }
-        }
-        catch (Exception ex) { Snackbar.Add(string.Format(Strings.Get("StErrPurge"), ex.Message), Severity.Error); }
-        finally { _auditRetentionBusy = false; }
-    }
-
-    private record RetentionDto
-    {
-        public int RetentionDays { get; set; }
-        public long ChainStartSequence { get; set; }
-        public DateTimeOffset? LastPurgedAt { get; set; }
-    }
-
-    private record PurgeDto
-    {
-        public int PurgedCount { get; set; }
-        public long ChainStartSequence { get; set; }
-    }
-
-    // Verify the tenant's audit hash chain (ADR "Audit trail hash chain") — the server walks it and recomputes
-    // each link; the chip shows intact-or-tampered.
-    private async Task VerifyAuditChainAsync()
-    {
-        _auditVerifying = true;
-        _auditVerifyResult = null;
-        try
-        {
-            await EnsureAuditLinksAsync();
-            _auditVerifyResult = await Http.GetFromJsonAsync<AuditVerifyDto>(_auditVerifyHref!);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add(string.Format(Strings.Get("StErrVerifyAudit"), ex.Message), Severity.Error);
-        }
-        finally
-        {
-            _auditVerifying = false;
-        }
-    }
-
-    // Verify the sealed WORM segments against the DB (ADR "Audit WORM segment verify") — the immutable segments
-    // catch a DB tamper the chain check can't; the chip shows intact-or-tampered.
-    private async Task VerifyWormSegmentsAsync()
-    {
-        _wormVerifying = true;
-        _wormVerifyResult = null;
-        try
-        {
-            await EnsureAuditLinksAsync();
-            _wormVerifyResult = await Http.GetFromJsonAsync<WormVerifyDto>(_auditWormVerifyHref!);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add(string.Format(Strings.Get("StErrVerifyWorm"), ex.Message), Severity.Error);
-        }
-        finally
-        {
-            _wormVerifying = false;
-        }
-    }
-
-    private bool _wormVerifying;
-    private WormVerifyDto? _wormVerifyResult;
-    private record WormVerifyDto { public bool Valid { get; set; } public int SegmentCount { get; set; } public int CheckedCount { get; set; } public long? BrokenAtSequence { get; set; } public string? Reason { get; set; } }
-
-    private async Task RunAuditSearchAsync()
-    {
-        _auditEvents.Clear();
-        _auditNextCursor = null;
-        _auditVerifyResult = null;
-        await LoadAuditAsync(reset: true);
-    }
-
-    private async Task ClearAuditFiltersAsync()
-    {
-        _auditActionFilter = "";
-        _auditFrom = null;
-        _auditTo = null;
-        await RunAuditSearchAsync();
-    }
-
-    private Task LoadMoreAuditAsync() => LoadAuditAsync(reset: false);
-
-    private async Task LoadAuditAsync(bool reset)
-    {
-        _auditLoading = true;
-        try
-        {
-            var query = new List<string>();
-            if (!string.IsNullOrWhiteSpace(_auditActionFilter))
-            {
-                query.Add($"action={Uri.EscapeDataString(_auditActionFilter.Trim())}");
-            }
-            if (_auditFrom is { } from)
-            {
-                query.Add($"from={Uri.EscapeDataString(from.ToUniversalTime().ToString("o"))}");
-            }
-            if (_auditTo is { } to)
-            {
-                // Inclusive of the whole "to" day.
-                query.Add($"to={Uri.EscapeDataString(to.Date.AddDays(1).ToUniversalTime().ToString("o"))}");
-            }
-            if (!reset && _auditNextCursor is not null)
-            {
-                query.Add($"cursor={Uri.EscapeDataString(_auditNextCursor)}");
-            }
-
-            var url = await ApiRoot.RequireAsync("auditEvents") + (query.Count > 0 ? "?" + string.Join("&", query) : "");
-            var page = await Http.GetFromJsonAsync<AuditResponse>(url);
-            foreach (var e in page?.Events ?? [])
-            {
-                _auditEvents.Add(e);
-            }
-            _auditNextCursor = ExtractCursor(RelativeHref(page?.Links, "next"));
-
-            // The log's own actions ride on the log (issue #416): its retention policy, the export, the purge,
-            // and the two integrity verifications. Captured here because this is where the collection is read.
-            _auditRetentionHref = RelativeHref(page?.Links, "retention");
-            _auditExportHref = RelativeHref(page?.Links, "export");
-            _auditPurgeHref = RelativeHref(page?.Links, "purge");
-            _auditVerifyHref = RelativeHref(page?.Links, "verify");
-            _auditWormVerifyHref = RelativeHref(page?.Links, "worm-verify");
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add(string.Format(Strings.Get("StErrLoadAudit"), ex.Message), Severity.Error);
-        }
-        finally
-        {
-            _auditLoading = false;
-        }
-    }
-
-    // Captures the audit log's own action rels if the list has not already done so. `?limit=1` on the
-    // advertised href keeps this to a token read — a query on a rel's href, not a path this client invented.
-    private async Task EnsureAuditLinksAsync()
-    {
-        if (_auditRetentionHref is not null)
-        {
-            return;
-        }
-
-        try
-        {
-            var page = await Http.GetFromJsonAsync<AuditResponse>(await ApiRoot.RequireAsync("auditEvents") + "?limit=1");
-            _auditRetentionHref = RelativeHref(page?.Links, "retention");
-            _auditExportHref = RelativeHref(page?.Links, "export");
-            _auditPurgeHref = RelativeHref(page?.Links, "purge");
-            _auditVerifyHref = RelativeHref(page?.Links, "verify");
-            _auditWormVerifyHref = RelativeHref(page?.Links, "worm-verify");
-        }
-        catch (Exception)
-        {
-            // Leave them null — each action checks, and an absent rel disables it rather than composing a path.
-        }
-    }
-
-    private static string? ExtractCursor(string? nextHref)
-    {
-        if (string.IsNullOrEmpty(nextHref))
-        {
-            return null;
-        }
-        var idx = nextHref.IndexOf("cursor=", StringComparison.Ordinal);
-        if (idx < 0)
-        {
-            return null;
-        }
-        var value = nextHref[(idx + "cursor=".Length)..];
-        var amp = value.IndexOf('&');
-        if (amp >= 0)
-        {
-            value = value[..amp];
-        }
-        return Uri.UnescapeDataString(value);
-    }
-
-    private record AuditResponse
-    {
-        public List<AuditEventDto> Events { get; set; } = new();
-        public List<LinkResponse> Links { get; set; } = [];
-    }
-
-    private record AuditVerifyDto
-    {
-        public bool Valid { get; set; }
-        public int CheckedCount { get; set; }
-        public long? BrokenAtSequence { get; set; }
-    }
-
-    private record AuditEventDto
-    {
-        public DateTimeOffset Timestamp { get; set; }
-        public string ActorType { get; set; } = "";
-        public string ActorName { get; set; } = "";
-        public string Action { get; set; } = "";
-        public string? TargetType { get; set; }
-        public string? TargetName { get; set; }
-        public string? Details { get; set; }
-    }
-
     // ---- Workflow + tasks (ADR "Workflow / document state model", 0009) ------------------------------
 
     private List<TaskItem> _tasks = [];
@@ -4895,6 +4001,17 @@
         }
     }
 
+    // Reveal a document in the Repositories panes, switching to that tab first. The shell owns this because it
+    // owns the tree and the list; tabs and dialogs hand back a document and let it navigate (ADR 0558).
+    private async Task NavigateToDocumentAsync(Guid documentId, Guid? parentId)
+    {
+        _activeTab = Tab.Repositories;
+        await (parentId is { } p ? NavigateToFolderAsync(p, documentId) : NavigateToFolderAsync(documentId));
+    }
+
+    private Task NavigateToDocumentAsync((Guid DocumentId, Guid? ParentId) target) =>
+        NavigateToDocumentAsync(target.DocumentId, target.ParentId);
+
     private async Task OpenTaskAsync(TaskItem task)
     {
         _activeTab = Tab.Repositories;
@@ -4906,51 +4023,6 @@
         {
             await NavigateToFolderAsync(task.DocumentId);
         }
-    }
-
-    // ---- My work dashboard (ADR "My work dashboard") ------------------------------------------------------
-    private List<DashReminder> _dashReminders = [];
-    private List<DashFollowed> _dashFollowing = [];
-
-    private async Task LoadMyWorkAsync()
-    {
-        try
-        {
-            _dashReminders = (await Http.GetFromJsonAsync<DashReminderResponse>(await ApiRoot.RequireAsync("reminders")))?.Reminders ?? [];
-            _dashFollowing = (await Http.GetFromJsonAsync<DashFollowedResponse>(await ApiRoot.RequireAsync("subscriptions")))?.Followed ?? [];
-            await LoadTasksAsync();
-        }
-        catch (Exception)
-        {
-            _dashReminders = [];
-            _dashFollowing = [];
-        }
-    }
-
-    // Navigate to a document from a dashboard item (opens its parent folder + selects it).
-    private async Task NavigateToDocumentAsync(Guid documentId, Guid? parentId)
-    {
-        _activeTab = Tab.Repositories;
-        await (parentId is { } p ? NavigateToFolderAsync(p, documentId) : NavigateToFolderAsync(documentId));
-    }
-
-    private record DashReminderResponse { public List<DashReminder> Reminders { get; set; } = []; }
-    private record DashReminder { public Guid DocumentId { get; set; } public Guid? ParentId { get; set; } public string DocumentName { get; set; } = ""; public DateTimeOffset RemindAt { get; set; } public string? Note { get; set; } public int Recurrence { get; set; } public string RecurrenceName { get; set; } = ""; public bool Overdue { get; set; } }
-    private record DashFollowedResponse { public List<DashFollowed> Followed { get; set; } = []; }
-    private record DashFollowed { public Guid DocumentId { get; set; } public Guid? ParentId { get; set; } public string DocumentName { get; set; } = ""; }
-
-    private record TaskListResponse { public List<TaskItem> Tasks { get; set; } = []; }
-
-    private record TaskItem
-    {
-        public Guid DocumentId { get; set; }
-        public Guid? ParentId { get; set; }
-        public Guid VersionId { get; set; }
-        public string DocumentName { get; set; } = "";
-        public int? VersionNumber { get; set; }
-        public DateTimeOffset AssignedAt { get; set; }
-        public DateTimeOffset? DueAt { get; set; }
-        public bool IsOverdue { get; set; }
     }
 
     // ---- Check-out (ADR "Check-out working-copy stash + exit guard", "Web check-out") -----------------
@@ -5047,7 +4119,7 @@
     // Compare the working copy against the current version as an inline unified diff (ADR 0517). Modified rows only.
     private async Task OpenCompareCheckoutAsync(CheckoutDto c)
     {
-        var parameters = new DialogParameters { ["DocumentId"] = c.Id, ["DocumentName"] = c.Name, ["CompareHref"] = RelativeHref(c.Links, "compare") };
+        var parameters = new DialogParameters { ["DocumentId"] = c.Id, ["DocumentName"] = c.Name, ["CompareHref"] = Links.Href(c.Links, "compare") };
         await DialogService.ShowAsync<Dialogs.CompareCheckoutDialog>(Strings.Get("CoCompareTitle"), parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
     }
 
@@ -5325,7 +4397,7 @@
                     // A repository is its own repository scope.
                     shared.Add(ToTreeItem(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, RepositoryId: r.Id, Links: RelMap(r.Links))));
                 }
-                url = RelativeHref(page?.Links, "next");
+                url = Links.Href(page?.Links, "next");
             }
 
             // Shared repositories sorted alphabetically (issue #339); Personal stays pinned above them.
@@ -5445,10 +4517,10 @@
                 nodes.Add(new BrowseNode(c.Id, c.Name, c.HasChildren, c.HasVersions, c.HasSubfolders, c.HasReferences, RepositoryId: repositoryId, FileExtension: c.FileExtension, OnLegalHold: c.OnLegalHold,
                     CheckedOut: c.CheckedOut, CheckedOutByMe: c.CheckedOutByMe, CheckedOutByName: c.CheckedOutByName,
                     DocumentType: c.DocumentType, DocumentDate: c.DocumentDate, SizeBytes: c.SizeBytes, Tags: c.Tags, SensitivityLabelName: c.SensitivityLabelName, SensitivityLabelColor: c.SensitivityLabelColor, VersionCount: c.VersionCount, VersionCreatedAt: c.VersionCreatedAt,
-                    ChatHref: RelativeHref(c.Links, "chat"),
+                    ChatHref: Links.Href(c.Links, "chat"),
                     Links: RelMap(c.Links)));
             }
-            url = RelativeHref(page?.Links, "next");
+            url = Links.Href(page?.Links, "next");
         }
 
         var refUrl = $"api/documents/{folderId}/references";
@@ -5460,7 +4532,7 @@
                 nodes.Add(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, r.HasReferences, true, r.ReferenceId, r.RealParentId, repositoryId,
                     Links: RelMap(r.Links)));
             }
-            refUrl = RelativeHref(page?.Links, "next");
+            refUrl = Links.Href(page?.Links, "next");
         }
 
         return nodes;
@@ -5861,7 +4933,7 @@
             _detailSortOrder = detail?.ContentsSortOrder ?? FolderContentsSortOrder.Name;
             // Captured from the resource's own rel (ADR 0543/0546) — the external-links dialog takes the href
             // rather than composing one, and its absence simply means the affordance isn't offered.
-            _detailExternalLinksHref = RelativeHref(detail?.Links, "external-links");
+            _detailExternalLinksHref = Links.Href(detail?.Links, "external-links");
             if (_sensitivityLabels.Count == 0)
             {
                 await LoadSensitivityLabelsAsync();
@@ -5873,15 +4945,15 @@
 
             var versions = await Http.GetFromJsonAsync<VersionListResponse>(DetailHref("versions"));
             var confirmed = versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [];
-            var latest = PickCurrent(confirmed, versions?.CurrentVersionId);
+            var latest = VersionListResponse.PickCurrent(confirmed, versions?.CurrentVersionId);
             string? textLayoutUrl = null;
             if (latest is not null)
             {
-                _pv.Url = RelativeToAbsolute(RelativeHref(latest.Links, "preview"));
-                _downloadUrl = RelativeToAbsolute(RelativeHref(latest.Links, "download"));
+                _pv.Url = RelativeToAbsolute(Links.Href(latest.Links, "preview"));
+                _downloadUrl = RelativeToAbsolute(Links.Href(latest.Links, "download"));
                 _pv.Converted = latest.PreviewConverted;
-                textLayoutUrl = RelativeHref(latest.Links, "text-layout");
-                _pvAnnotationsUrl = RelativeHref(latest.Links, "annotations");
+                textLayoutUrl = Links.Href(latest.Links, "text-layout");
+                _pvAnnotationsUrl = Links.Href(latest.Links, "annotations");
             }
 
             DeriveSystemFields(item, confirmed, versions?.CurrentVersionId);
@@ -5974,7 +5046,7 @@
         try
         {
             var root = await Http.GetFromJsonAsync<RootResponse>("api");
-            _myExternalLinksHref = RelativeHref(root?.Links, "externalLinks");
+            _myExternalLinksHref = Links.Href(root?.Links, "externalLinks");
         }
         catch (Exception)
         {
@@ -6154,7 +5226,7 @@
     // Created/Created-by/Document-date/File-extension, and the OCR override + TIFF-source from the latest TIFF.
     private void DeriveSystemFields(BrowseNode item, List<VersionResponse> confirmed, Guid? currentVersionId)
     {
-        var current = PickCurrent(confirmed, currentVersionId);
+        var current = VersionListResponse.PickCurrent(confirmed, currentVersionId);
         if (current is null)
         {
             return; // a folder or a document with no confirmed version yet
@@ -6540,7 +5612,7 @@
     // never decides for itself whether an author is a person (ADR 0543/0544).
     private RenderFragment AuthorMarkup(ChatMessageResponse message) => builder =>
     {
-        var cardHref = RelativeHref(message.Links, "author-card");
+        var cardHref = Links.Href(message.Links, "author-card");
         if (cardHref is null)
         {
             builder.AddContent(0, message.AuthorName);
@@ -6582,7 +5654,7 @@
 
         // The photo rel is present only when there is one, so this never probes for a 404 (ADR 0543). The bytes
         // are bearer-protected, so a raw <img src> would 401 — fetch and render a data URL, as MainLayout does.
-        if (RelativeHref(_authorCard?.Links, "photo") is { } photoHref)
+        if (Links.Href(_authorCard?.Links, "photo") is { } photoHref)
         {
             try
             {
@@ -6617,8 +5689,8 @@
                 var page = await Http.GetFromJsonAsync<ChatMessageListResponse>(url);
                 _comments.AddRange(page?.Messages ?? []);
                 // Captured from the FIRST page: the rel is a property of the thread, not of a page of it.
-                _mentionableUsersHref ??= RelativeHref(page?.Links, "mentionable-users");
-                url = RelativeHref(page?.Links, "next");
+                _mentionableUsersHref ??= Links.Href(page?.Links, "mentionable-users");
+                url = Links.Href(page?.Links, "next");
             }
         }
         catch (HttpRequestException)
@@ -7244,7 +6316,7 @@
                 {
                     rows.Add(new PrincipalRow { IsGroup = true, Id = g.Id, Name = g.Name, Rights = g.Rights ?? new(), Links = RelMap(g.Links) });
                 }
-                gurl = RelativeHref(page?.Links, "next");
+                gurl = Links.Href(page?.Links, "next");
             }
 
             var uurl = await ApiRoot.RequireAsync("users");
@@ -7253,9 +6325,9 @@
                 var page = await Http.GetFromJsonAsync<UsersAdminResponse>(uurl);
                 foreach (var u in page?.Users ?? [])
                 {
-                    rows.Add(new PrincipalRow { IsGroup = false, Id = u.Id, Name = u.DisplayName, IsActive = u.IsActive, MfaEnabled = u.MfaEnabled, Rights = u.Rights ?? new(), PhotoHref = RelativeHref(u.Links, "photo"), Links = RelMap(u.Links) });
+                    rows.Add(new PrincipalRow { IsGroup = false, Id = u.Id, Name = u.DisplayName, IsActive = u.IsActive, MfaEnabled = u.MfaEnabled, Rights = u.Rights ?? new(), PhotoHref = Links.Href(u.Links, "photo"), Links = RelMap(u.Links) });
                 }
-                uurl = RelativeHref(page?.Links, "next");
+                uurl = Links.Href(page?.Links, "next");
             }
         }
         catch (Exception)
@@ -7310,10 +6382,10 @@
                 var page = await Http.GetFromJsonAsync<MembersResponse>(url);
                 foreach (var m in page?.Members ?? [])
                 {
-                    _groupMembers.Add(new MemberOption(m.Id, m.DisplayName, RelativeHref(m.Links, "remove")));
+                    _groupMembers.Add(new MemberOption(m.Id, m.DisplayName, Links.Href(m.Links, "remove")));
                 }
-                _groupMembersAddHref ??= RelativeHref(page?.Links, "add-member");
-                url = RelativeHref(page?.Links, "next");
+                _groupMembersAddHref ??= Links.Href(page?.Links, "add-member");
+                url = Links.Href(page?.Links, "next");
             }
         }
         catch (Exception)
@@ -7967,7 +7039,7 @@
         {
             var savedSearchPage = await Http.GetFromJsonAsync<SavedSearchesResponse>(await ApiRoot.RequireAsync("savedSearches"));
             _savedSearches = savedSearchPage?.SavedSearches ?? [];
-            _savedSearchShareTargetsHref = RelativeHref(savedSearchPage?.Links, "share-targets");
+            _savedSearchShareTargetsHref = Links.Href(savedSearchPage?.Links, "share-targets");
         }
         catch (Exception) { _savedSearches = []; }
     }
@@ -8242,7 +7314,7 @@
             {
                 var page = await Http.GetFromJsonAsync<RepositoryListResponse>(url);
                 repos.AddRange((page?.Repositories ?? []).Select(r => new SearchRepoOption(r.Id, r.Name)));
-                url = RelativeHref(page?.Links, "next");
+                url = Links.Href(page?.Links, "next");
             }
             _searchRepos = repos;
             _searchMetadataLoaded = true;
@@ -8371,7 +7443,7 @@
                 var page = await Http.GetFromJsonAsync<SearchResponse>(url);
                 results.AddRange(page?.Results ?? []);
                 if (first) { _searchFacets = page?.Facets; first = false; } // facets are the same across pages
-                url = RelativeHref(page?.Links, "next");
+                url = Links.Href(page?.Links, "next");
             }
             _searchResults = results;
             _searchStatus = results.Count == 0 ? "No matches." : $"{results.Count} result(s).";
@@ -8720,9 +7792,9 @@
             var response = await Http.GetFromJsonAsync<InboxResponse>(url);
             _inboxItems = (response?.Items ?? []).Select(i => new InboxItem(
                 i.Name, i.Size, i.HasMask,
-                RelativeHref(i.Links, "download") ?? "", RelativeHref(i.Links, "preview") ?? "",
-                RelativeHref(i.Links, "file") ?? "", RelativeHref(i.Links, "self") ?? "",
-                RelativeHref(i.Links, "move") ?? "",
+                Links.Href(i.Links, "download") ?? "", Links.Href(i.Links, "preview") ?? "",
+                Links.Href(i.Links, "file") ?? "", Links.Href(i.Links, "self") ?? "",
+                Links.Href(i.Links, "move") ?? "",
                 i.GroupId, i.GroupName, i.UserId, i.UserName)).ToList();
             _inboxStatus = _inboxItems.Count == 0 ? "Your inbox is empty. Upload files to file them into a repository." : $"{_inboxItems.Count} item(s).";
         }
@@ -8886,7 +7958,7 @@
             {
                 var preview = await r.Content.ReadFromJsonAsync<InboxPreviewResponse>();
                 _pv.Converted = preview?.PreviewConverted ?? false;
-                var textLayoutUrl = RelativeHref(preview?.Links, "text-layout");
+                var textLayoutUrl = Links.Href(preview?.Links, "text-layout");
                 await RenderPreviewAsync(preview?.PreviewUrl, textLayoutUrl, seedQuery: null);
             }
         }
@@ -9210,7 +8282,7 @@
     private async Task<string> FetchChildrenHrefAsync(Guid folderId)
     {
         var doc = await Http.GetFromJsonAsync<DocumentLinksResponse>($"api/documents/{folderId}");
-        return RelativeHref(doc?.Links, "children")
+        return Links.Href(doc?.Links, "children")
             ?? throw new InvalidOperationException($"Document {folderId} advertised no 'children' rel (ADR 0543).");
     }
 
@@ -9226,11 +8298,6 @@
     // which is what disables the action rather than the client composing a path for it.
     private IReadOnlyDictionary<string, string>? _tenantLinks;
     private string? _savedSearchShareTargetsHref;
-    private string? _auditRetentionHref;
-    private string? _auditExportHref;
-    private string? _auditPurgeHref;
-    private string? _auditVerifyHref;
-    private string? _auditWormVerifyHref;
 
     private string DetailHref(string rel) => HrefOrThrow(_detailLinks, rel);
 
@@ -9243,7 +8310,7 @@
     private async Task<string> FetchDocumentRelAsync(Guid documentId, string rel)
     {
         var doc = await Http.GetFromJsonAsync<DocumentLinksResponse>($"api/documents/{documentId}");
-        return RelativeHref(doc?.Links, rel)
+        return Links.Href(doc?.Links, rel)
             ?? throw new InvalidOperationException($"Document {documentId} advertised no '{rel}' rel (ADR 0543).");
     }
 
@@ -9272,7 +8339,7 @@
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var l in links)
         {
-            if (!string.IsNullOrEmpty(l.Rel) && RelativeHref(links, l.Rel) is { } href)
+            if (!string.IsNullOrEmpty(l.Rel) && Links.Href(links, l.Rel) is { } href)
             {
                 map[l.Rel] = href;
             }
@@ -9281,20 +8348,14 @@
         return map.Count == 0 ? null : map;
     }
 
-    private static string? RelativeHref(List<LinkResponse>? links, string rel)
-    {
-        var href = links?.FirstOrDefault(l => l.Rel == rel)?.Href;
-        if (href is null) return null;
-        return href.StartsWith("http://") || href.StartsWith("https://") ? href : href.TrimStart('/');
-    }
-
-    private string? RelativeToAbsolute(string? href)
+    // Also used by the Recycle bin's isolated detail pane (ADR 0558), which resolves the same preview and
+    // download addresses against the same base.
+    internal string? RelativeToAbsolute(string? href)
     {
         if (href is null) return null;
         return href.StartsWith("http://") || href.StartsWith("https://") ? href : new Uri(Http.BaseAddress!, href).ToString();
     }
 
-    private record LinkResponse { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
     private record ArchiveEntriesResponse { public List<ArchiveEntryDto> Entries { get; set; } = []; }
     private record ArchiveEntryDto { public string Name { get; set; } = ""; public string Path { get; set; } = ""; public long Size { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record RepositoryListResponse { public List<RepositorySummary> Repositories { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
@@ -9316,110 +8377,8 @@
     private record SearchFieldItem { public string Name { get; set; } = ""; public int DataType { get; set; } }
     private record SearchHit { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool IsFolder { get; set; } public Guid? ParentId { get; set; } public string Path { get; set; } = ""; public string Highlight { get; set; } = ""; }
     private record CreateVersionResponse { public Guid Id { get; set; } public string UploadUrl { get; set; } = ""; }
-    private record MaskResponse { public Guid? MaskId { get; set; } public string? Name { get; set; } public int? VersionNumber { get; set; } }
-    private record IndexDataResponse { public List<FieldGroup> Fields { get; set; } = []; }
-    private record TagsResponse { public List<string> Tags { get; set; } = []; public List<TagCatalogEntry> Catalog { get; set; } = []; public bool CanManage { get; set; } }
-    private record TagCatalogEntry
-    {
-        public Guid Id { get; set; } public string Name { get; set; } = ""; public string? Color { get; set; }
-        public List<LinkResponse> Links { get; set; } = [];
 
-        // self (rename/recolour), retire, merge — the catalog lists only LIVE tags, so `unretire` has no row
-        // here and is correctly absent (issue #416).
-        public string? Href(string rel) => Links.FirstOrDefault(l => l.Rel == rel)?.Href.TrimStart('/');
-    }
 
-    // ---- Tag catalog admin (ADR "Tag controlled vocabulary") ----------------------------------------
-    private List<TagCatalogEntry> _catalogTags = [];
-    private Dictionary<string, string?> _tagColors = new();
-    private string _newTagName = "";
-    private string _newTagColor = "";
-
-    private static string ChipStyle(string? color) => string.IsNullOrEmpty(color) ? "" : $"background:{color}; color:#fff;";
-    private string? TagColor(string name) => _tagColors.TryGetValue(name, out var c) ? c : null;
-
-    private async Task LoadTagCatalogAsync()
-    {
-        try
-        {
-            var resp = await Http.GetFromJsonAsync<TagsResponse>(await ApiRoot.RequireAsync("tags"));
-            _catalogTags = resp?.Catalog ?? [];
-            _tagCatalog = _catalogTags.Select(t => t.Name).ToList();
-            _tagColors = _catalogTags.ToDictionary(t => t.Name, t => t.Color);
-        }
-        catch (Exception) { _catalogTags = []; }
-    }
-
-    private async Task CreateTagAsync()
-    {
-        var name = (_newTagName ?? "").Trim();
-        if (name.Length == 0) return;
-        var color = string.IsNullOrWhiteSpace(_newTagColor) ? null : _newTagColor.Trim();
-        var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("tags"), new { name, color });
-        if (resp.IsSuccessStatusCode) { _newTagName = ""; _newTagColor = ""; await LoadTagCatalogAsync(); }
-        else Snackbar.Add(resp.StatusCode == HttpStatusCode.Conflict ? "That tag already exists." : "Could not add the tag (check the colour is #RRGGBB).", Severity.Warning);
-    }
-
-    private async Task RenameTagAsync(TagCatalogEntry t)
-    {
-        var name = await JS.InvokeAsync<string?>("prompt", "Rename tag (documents are re-tagged):", t.Name);
-        if (string.IsNullOrWhiteSpace(name) || name.Trim() == t.Name) return;
-        if (t.Href("self") is not { } renameHref) { return; }
-
-        var resp = await Http.PutAsJsonAsync(renameHref, new { name = name.Trim() });
-        if (resp.IsSuccessStatusCode) await LoadTagCatalogAsync();
-        else Snackbar.Add(Strings.Get("StErrRenameTaken"), Severity.Warning);
-    }
-
-    private async Task RecolourTagAsync(TagCatalogEntry t)
-    {
-        var color = await JS.InvokeAsync<string?>("prompt", "Tag colour as #RRGGBB (blank to clear):", t.Color ?? "");
-        if (color is null) return;
-        if (t.Href("self") is not { } recolourHref) { return; }
-
-        var resp = await Http.PutAsJsonAsync(recolourHref, new { color = color.Trim() });
-        if (resp.IsSuccessStatusCode) await LoadTagCatalogAsync();
-        else Snackbar.Add(Strings.Get("StErrSetColour"), Severity.Warning);
-    }
-
-    private async Task RetireTagAsync(TagCatalogEntry t)
-    {
-        if (!await JS.InvokeAsync<bool>("confirm", $"Retire '{t.Name}'? It stays on documents that already have it but won't be offered for new tagging.")) return;
-        if (t.Href("retire") is not { } retireHref) { return; }
-
-        await Http.DeleteAsync(retireHref);
-        await LoadTagCatalogAsync();
-    }
-
-    private async Task MergeTagAsync(TagCatalogEntry from, TagCatalogEntry into)
-    {
-        if (!await JS.InvokeAsync<bool>("confirm", $"Merge '{from.Name}' into '{into.Name}'? Every document tagged '{from.Name}' becomes '{into.Name}', and '{from.Name}' is removed from the catalog.")) return;
-        if (from.Href("merge") is not { } mergeHref) { return; }
-
-        await Http.PostAsJsonAsync(mergeHref, new { intoId = into.Id });
-        await LoadTagCatalogAsync();
-    }
-    private record FieldGroup { public string FieldName { get; set; } = ""; public List<string> Values { get; set; } = []; }
-    private record VersionListResponse { public List<VersionResponse> Versions { get; set; } = []; public Guid? CurrentVersionId { get; set; } public int? CurrentVersionNumber { get; set; } }
-
-    // The document's current version = the server's CurrentVersionId pointer when set (ADR "Version-restore via a
-    // current-version pointer", issue #265), else the latest confirmed (fallback for an unpinned document).
-    private static VersionResponse? PickCurrent(List<VersionResponse> confirmed, Guid? currentVersionId)
-        => confirmed.FirstOrDefault(v => v.Id == currentVersionId) ?? confirmed.OrderByDescending(v => v.VersionNumber ?? 0).FirstOrDefault();
-    private record VersionResponse
-    {
-        public Guid Id { get; set; }
-        public int? VersionNumber { get; set; }
-        public string Status { get; set; } = "";
-        public bool PreviewConverted { get; set; }
-        public DateTimeOffset CreatedAt { get; set; }
-        public string? CreatedByName { get; set; }
-        public string? DocumentDate { get; set; }
-        public string? OcrLanguages { get; set; }
-        public string? FileExtension { get; set; }
-        public string? ObjectKey { get; set; }
-        public List<LinkResponse> Links { get; set; } = [];
-    }
 
     // Editable-mask + system-field support (slice A — ADRs 0273/0276/0278).
     private record MaskOption(Guid Id, string Name);
@@ -9466,12 +8425,9 @@
             _ => string.IsNullOrWhiteSpace(TextValue) ? [] : [TextValue.Trim()],
         };
     }
-    private record ChatMessageListResponse { public List<ChatMessageResponse> Messages { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-    private record ChatMessageResponse { public Guid Id { get; set; } public Guid? ParentMessageId { get; set; } public string Body { get; set; } = ""; public string AuthorName { get; set; } = ""; public Guid? AuthorUserId { get; set; } public DateTimeOffset CreatedAt { get; set; } public int Kind { get; set; } public int? VersionNumber { get; set; } public string? VersionComment { get; set; } public int? VersionCommentKind { get; set; } public List<ChatMentionResponse>? Mentions { get; set; } public List<LinkResponse> Links { get; set; } = []; }
 
     // The names behind a body's "@[id]" tokens, resolved by the server so the thread renders without a lookup
     // per token (issue #383).
-    private record ChatMentionResponse { public Guid UserId { get; set; } public string DisplayName { get; set; } = ""; }
 
     private record MentionableUserResponse { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; }
 

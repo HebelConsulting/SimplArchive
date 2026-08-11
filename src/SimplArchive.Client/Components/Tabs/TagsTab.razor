@@ -1,0 +1,137 @@
+@using System.Net
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
+@inject IDialogService DialogService
+@inject IJSRuntime JS
+
+@* The Tags tab of the workbench (ADR "Tag controlled vocabulary"), extracted from Home.razor per ADR 0558:
+   the tenant's tag catalogue — create, rename, recolour, retire, merge.
+
+   It MANAGES the catalogue; the shell also READS it, for the index pane's autocomplete and the chip colours
+   on list rows. So the tab raises CatalogChanged after every mutation rather than reaching into that state,
+   and each side keeps what it is responsible for. *@
+
+            @* The tenant tag catalog (ADR "Tag controlled vocabulary") — admin curation. *@
+            <div class="wb-tags pa-4" style="overflow:auto; max-width:720px;">
+                <MudText Typo="Typo.h6" Class="mb-2">@Strings.Get("TagsCatalogHeader")</MudText>
+                <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">@Strings.Get("TagsCatalogDesc")</MudText>
+
+                <div style="display:flex; gap:8px; align-items:center; margin-bottom:16px;">
+                    <MudTextField T="string" @bind-Value="_newTagName" Placeholder="@Strings.Get("TagsNewPlaceholder")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:220px;" />
+                    <MudTextField T="string" @bind-Value="_newTagColor" Placeholder="#RRGGBB" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:120px;" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateTagAsync">@Strings.Get("TagsAdd")</MudButton>
+                </div>
+
+                <MudSimpleTable Dense="true" Hover="true" Style="max-width:680px;">
+                    <thead><tr><th>@Strings.Get("TagsColTag")</th><th style="width:200px;">@Strings.Get("TagsColActions")</th></tr></thead>
+                    <tbody>
+                        @foreach (var t in _catalogTags)
+                        {
+                            <tr>
+                                <td><MudChip T="string" Size="Size.Small" Style="@ChipStyle(t.Color)">@t.Name</MudChip></td>
+                                <td>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" title="@Strings.Get("RibbonRename")" OnClick="@(() => RenameTagAsync(t))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Palette" Size="Size.Small" title="@Strings.Get("TagsSetColour")" OnClick="@(() => RecolourTagAsync(t))" />
+                                    <MudMenu Icon="@Icons.Material.Filled.CallMerge" Size="Size.Small" Dense="true" title="@Strings.Get("TagsMergeInto")">
+                                        @foreach (var other in _catalogTags.Where(x => x.Id != t.Id))
+                                        {
+                                            <MudMenuItem OnClick="@(() => MergeTagAsync(t, other))">@other.Name</MudMenuItem>
+                                        }
+                                    </MudMenu>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="@Strings.Get("TagsRetire")" OnClick="@(() => RetireTagAsync(t))" />
+                                </td>
+                            </tr>
+                        }
+                        @if (_catalogTags.Count == 0)
+                        {
+                            <tr><td colspan="2" class="mud-text-secondary">@Strings.Get("TagsEmpty")</td></tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </div>
+        
+
+@code {
+    /// <summary>
+    /// Raised after the catalogue changes, so the shell can refresh what it uses the tags FOR — autocomplete
+    /// in the index pane and the colours on list-row chips. The tab manages the catalogue; it does not own
+    /// everyone else's copy of it (ADR 0558).
+    /// </summary>
+    [Parameter]
+    public EventCallback CatalogChanged { get; set; }
+
+    // The tab loads itself; SetTab's Tags branch is deleted rather than relocated (ADR 0558).
+    protected override async Task OnInitializedAsync() => await LoadTagCatalogAsync();
+
+    // ---- Tag catalog admin (ADR "Tag controlled vocabulary") ----------------------------------------
+    private List<TagCatalogEntry> _catalogTags = [];
+    private Dictionary<string, string?> _tagColors = new();
+    private string _newTagName = "";
+    private string _newTagColor = "";
+
+    private static string ChipStyle(string? color) => string.IsNullOrEmpty(color) ? "" : $"background:{color}; color:#fff;";
+    private string? TagColor(string name) => _tagColors.TryGetValue(name, out var c) ? c : null;
+
+    private async Task LoadTagCatalogAsync()
+    {
+        try
+        {
+            var resp = await Http.GetFromJsonAsync<TagsResponse>(await ApiRoot.RequireAsync("tags"));
+            _catalogTags = resp?.Catalog ?? [];
+            _tagColors = _catalogTags.ToDictionary(t => t.Name, t => t.Color);
+            await CatalogChanged.InvokeAsync();
+        }
+        catch (Exception) { _catalogTags = []; }
+    }
+
+    private async Task CreateTagAsync()
+    {
+        var name = (_newTagName ?? "").Trim();
+        if (name.Length == 0) return;
+        var color = string.IsNullOrWhiteSpace(_newTagColor) ? null : _newTagColor.Trim();
+        var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("tags"), new { name, color });
+        if (resp.IsSuccessStatusCode) { _newTagName = ""; _newTagColor = ""; await LoadTagCatalogAsync(); }
+        else Snackbar.Add(resp.StatusCode == HttpStatusCode.Conflict ? "That tag already exists." : "Could not add the tag (check the colour is #RRGGBB).", Severity.Warning);
+    }
+
+    private async Task RenameTagAsync(TagCatalogEntry t)
+    {
+        var name = await JS.InvokeAsync<string?>("prompt", "Rename tag (documents are re-tagged):", t.Name);
+        if (string.IsNullOrWhiteSpace(name) || name.Trim() == t.Name) return;
+        if (t.Href("self") is not { } renameHref) { return; }
+
+        var resp = await Http.PutAsJsonAsync(renameHref, new { name = name.Trim() });
+        if (resp.IsSuccessStatusCode) await LoadTagCatalogAsync();
+        else Snackbar.Add(Strings.Get("StErrRenameTaken"), Severity.Warning);
+    }
+
+    private async Task RecolourTagAsync(TagCatalogEntry t)
+    {
+        var color = await JS.InvokeAsync<string?>("prompt", "Tag colour as #RRGGBB (blank to clear):", t.Color ?? "");
+        if (color is null) return;
+        if (t.Href("self") is not { } recolourHref) { return; }
+
+        var resp = await Http.PutAsJsonAsync(recolourHref, new { color = color.Trim() });
+        if (resp.IsSuccessStatusCode) await LoadTagCatalogAsync();
+        else Snackbar.Add(Strings.Get("StErrSetColour"), Severity.Warning);
+    }
+
+    private async Task RetireTagAsync(TagCatalogEntry t)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Retire '{t.Name}'? It stays on documents that already have it but won't be offered for new tagging.")) return;
+        if (t.Href("retire") is not { } retireHref) { return; }
+
+        await Http.DeleteAsync(retireHref);
+        await LoadTagCatalogAsync();
+    }
+
+    private async Task MergeTagAsync(TagCatalogEntry from, TagCatalogEntry into)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Merge '{from.Name}' into '{into.Name}'? Every document tagged '{from.Name}' becomes '{into.Name}', and '{from.Name}' is removed from the catalog.")) return;
+        if (from.Href("merge") is not { } mergeHref) { return; }
+
+        await Http.PostAsJsonAsync(mergeHref, new { intoId = into.Id });
+        await LoadTagCatalogAsync();
+    }
+}

@@ -55,7 +55,14 @@ public partial class ClientHypermediaTests
         // RESOURCE rather than a listing row — checkout, move, set-primary-location — which cost a fetch per row
         // action, and by the version-compare pair. The desktop side solved the same problem by holding the row
         // (ADR 0555); the web client's equivalent migration has not been done.
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 51,
+        // 51 = 48 + 3 after the workbench page was decomposed (ADR 0558). The budget is keyed by FILE, so
+        // moving code moves composed URLs — and the two numbers still summing to 51 is what proves the
+        // extraction was a pure move rather than a rewrite that quietly gained or lost a call.
+        ["src/SimplArchive.Client/Pages/Home.razor"] = 48,
+        // The three legal-hold addresses: creating a matter for one document, adding an item, and removing
+        // one. The rels exist server-side (#441 added the item's own `remove`); this is the client half,
+        // which belongs to the web burn-down rather than to the extraction that carried them here.
+        ["src/SimplArchive.Client/Components/Tabs/LegalHoldsTab.razor"] = 3,
     };
 
     [Fact]

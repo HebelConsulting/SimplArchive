@@ -1,0 +1,30 @@
+namespace SimplArchive.Client.Hypermedia;
+
+/// <summary>
+/// Reading an advertised address out of a resource's links (ADR 0543). A client follows these; it never
+/// composes the address itself.
+/// </summary>
+public static class Links
+{
+    /// <summary>
+    /// The address advertised for <paramref name="rel"/>, or null when the resource did not offer it — which
+    /// is meaningful: it means "not available to you, here, now", so the caller hides the affordance rather
+    /// than trying and handling a refusal (ADR 0543).
+    /// </summary>
+    /// <remarks>
+    /// Absolute addresses (a presigned storage URL) are returned untouched; server-relative ones lose their
+    /// leading slash so they compose correctly against the HttpClient's BaseAddress.
+    /// </remarks>
+    public static string? Href(List<LinkResponse>? links, string rel)
+    {
+        var href = links?.FirstOrDefault(l => l.Rel == rel)?.Href;
+        if (href is null)
+        {
+            return null;
+        }
+
+        return href.StartsWith("http://", StringComparison.Ordinal) || href.StartsWith("https://", StringComparison.Ordinal)
+            ? href
+            : href.TrimStart('/');
+    }
+}
