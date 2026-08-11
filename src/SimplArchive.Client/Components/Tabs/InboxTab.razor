@@ -1,0 +1,776 @@
+@using System.Net
+@using Microsoft.AspNetCore.Components.Forms
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
+@implements IAsyncDisposable
+
+@* The Inbox tab of the workbench (ADR "S3-backed inbox"), extracted from Home.razor per ADR 0558.
+
+   Staged files waiting to be filed into a repository: uploaded by picker or by dropping onto the list, given a
+   mask + index data here, then filed. Self-contained — it owns its list, its staging form, its drop-zone and
+   the DotNetObjectReference dropUpload.js calls back into, so nothing about it lives in the shell any more.
+
+   Two facts arrive as parameters rather than being re-fetched (ADR 0557): whether the caller may triage other
+   people's inboxes, and which folder the Repositories tree has selected, which pre-fills the filing target. *@
+
+@* Per-user S3-backed inbox (ADR "S3-backed inbox") — staged files to file into a repository. *@
+<div class="wb-search">
+    <div class="wb-search-bar">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload" HtmlTag="label" for="inbox-file-input">@Strings.Get("InboxUpload")</MudButton>
+        <InputFile id="inbox-file-input" OnChange="OnInboxInputChangeAsync" multiple style="display:none" />
+        <MudButton Variant="Variant.Text" OnClick="LoadInboxAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.Refresh">@Strings.Get("RibbonRefresh")</MudButton>
+        <MudButton Variant="Variant.Text" OnClick="@(() => CopyWebDavUrl.InvokeAsync())" Class="ml-2" StartIcon="@Icons.Material.Filled.ContentCopy">@Strings.Get("InboxCopyDav")</MudButton>
+        @* Own-items-only by default; the switch reveals my group inboxes (ADR 0532). Disabled while
+           viewing another user's inbox — the two selectors are mutually exclusive. *@
+        <MudSwitch T="bool" Value="_inboxIncludeGroups" ValueChanged="ToggleInboxGroupsAsync" Color="Color.Primary"
+                   Class="ml-3" Disabled="@(_inboxViewUserId is not null)" Label="@Strings.Get("InboxShowGroups")" />
+        @if (CanManageInboxes)
+        {
+            @* CanManageInboxes: open any user's inbox for triage; "My inbox" resets to own. *@
+            <MudSelect T="Guid?" Value="_inboxViewUserId" ValueChanged="ViewUserInboxAsync" Dense="true"
+                       Margin="Margin.Dense" Variant="Variant.Outlined" Class="ml-3" Style="min-width:210px;"
+                       Label="@Strings.Get("InboxUserPicker")">
+                <MudSelectItem T="Guid?" Value="@((Guid?)null)">@Strings.Get("InboxMine")</MudSelectItem>
+                @foreach (var u in _inboxUsers)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)u.Id)">@u.Name</MudSelectItem>
+                }
+            </MudSelect>
+        }
+        @if (_inboxChecked.Count >= 2)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="FileMultipleAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.DriveFileMove">@string.Format(Strings.Get("InboxFileN"), _inboxChecked.Count)</MudButton>
+        }
+        @if (_inboxBusy)
+        {
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="ml-2" />
+        }
+    </div>
+    <div class="wb-search-status">@_inboxStatus</div>
+    <div style="display:flex; flex:1 1 auto; min-height:0;">
+        @* Drop-zone: dropping OS files anywhere on this list uploads them straight into the inbox
+           (ADR "Inbox file-list drop-zone"). *@
+        <div class="wb-search-results wb-inbox-drop" style="flex:1 1 40%; min-width:0;" @ref="_dropZone">
+            <div class="wb-inbox-drophint"><MudIcon Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Small" /> @Strings.Get("InboxDropHint")</div>
+            @foreach (var item in _inboxItems)
+            {
+                <div class="wb-list-row @(item == _selectedInboxItem ? "wb-list-row-selected" : "")" @onclick="() => SelectInboxItemAsync(item)">
+                    <div @onclick:stopPropagation="true">
+                        <MudCheckBox T="bool" Value="_inboxChecked.Contains(item)" ValueChanged="@(v => ToggleInboxCheck(item, v))" Dense="true" Size="Size.Small" />
+                    </div>
+                    <MudIcon Icon="@(item.GroupId is not null ? Icons.Material.Filled.Group : item.UserId is not null ? Icons.Material.Filled.Person : Icons.Material.Filled.InsertDriveFile)" Size="Size.Small" />
+                    <span style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@item.DisplayName</span>
+                    @if (!item.IsOwn && item.SourceLabel is { } src)
+                    {
+                        @* Whose queue this item came from (a group, or — for an admin view — another user). *@
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default" Class="ma-0">@src</MudChip>
+                    }
+                    <span class="mud-text-secondary" style="font-size:.8em;">@SimplArchive.Client.Services.ByteSize.Format(item.Size)</span>
+                    <div @onclick:stopPropagation="true">
+                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
+                            <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => FileInboxItemAsync(item)">@Strings.Get("InboxFileToFolder")</MudMenuItem>
+                            @if (item.IsOwn)
+                            {
+                                @* Own items can be handed to a group or another user (ADR 0532). *@
+                                <MudMenuItem Icon="@Icons.Material.Filled.Send" OnClick="() => SendInboxItemAsync(item)">@Strings.Get("InboxSendTitle")</MudMenuItem>
+                            }
+                            else
+                            {
+                                @* A group/other-user item can be claimed into my own inbox. *@
+                                <MudMenuItem Icon="@Icons.Material.Filled.MoveToInbox" OnClick="() => MoveToMyInboxAsync(item)">@Strings.Get("InboxClaimToMine")</MudMenuItem>
+                            }
+                            <MudMenuItem Icon="@Icons.Material.Filled.Download" OnClick="() => DownloadInboxItemAsync(item)">@Strings.Get("Download")</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteInboxItemAsync(item)">@Strings.Get("RibbonDelete")</MudMenuItem>
+                        </MudMenu>
+                    </div>
+                </div>
+            }
+        </div>
+        @if (_selectedInboxItem is not null)
+        {
+            <div style="flex:1 1 60%; min-width:0; border-left:1px solid var(--mud-palette-lines-default); display:flex; flex-direction:column;">
+                @* Mask/index-data staging pane (ADRs 0279/0281/0285). *@
+                <div style="flex:0 0 auto; max-height:46%; overflow:auto; padding:10px 14px; border-bottom:1px solid var(--mud-palette-lines-default);">
+                    <MudText Typo="Typo.subtitle2">@_selectedInboxItem.Name</MudText>
+                    @if (_inboxIsEmail)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
+                            <MudIcon Icon="@Icons.Material.Filled.MarkEmailRead" Size="Size.Small" /> @Strings.Get("InboxEmailAutoMask")
+                        </MudText>
+                    }
+                    else
+                    {
+                        <table class="wb-sysfields">
+                            <tr><td>@Strings.Get("Name")</td><td><MudTextField @bind-Value="_inboxStgName" Margin="Margin.Dense" Variant="Variant.Outlined" /></td></tr>
+                            <tr><td>@Strings.Get("VerColDocDate")</td><td><MudDatePicker @bind-Date="_inboxStgDate" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" /></td></tr>
+                            @if (_inboxStgScannable)
+                            {
+                                @* OCR languages for a scannable item — staged + applied to the searchable-PDF conversion at filing (ADR "Inbox OCR-language staging"). *@
+                                <tr>
+                                    <td>@Strings.Get("SysOcrLanguages")</td>
+                                    <td>
+                                        <div class="wb-ocr-chips">
+                                            @foreach (var lang in _ocrCatalog)
+                                            {
+                                                var idx = _inboxStgOcrCodes.IndexOf(lang.Code);
+                                                <button type="button" class="wb-ocr-chip @(idx >= 0 ? "wb-ocr-chip-on" : "")" @onclick="() => ToggleInboxOcr(lang.Code)">@(idx >= 0 ? $"{idx + 1}. " : "")@lang.DisplayName</button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </table>
+                        <div class="wb-mask-edit">
+                            <div class="wb-mask-row">
+                                <span class="wb-mask-label">@Strings.Get("MaskLabel")</span>
+                                <MudSelect T="Guid?" Value="_inboxStgMaskId" ValueChanged="OnInboxStgMaskChanged" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
+                                    <MudSelectItem T="Guid?" Value="@((Guid?)null)">@Strings.Get("NoMask")</MudSelectItem>
+                                    @foreach (var m in _inboxStgMasks)
+                                    {
+                                        <MudSelectItem T="Guid?" Value="@((Guid?)m.Id)">@m.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </div>
+                            @foreach (var f in _inboxStgFields)
+                            {
+                                <div class="wb-mask-row">
+                                    <span class="wb-mask-label">@f.Label</span>
+                                    @if (f.IsDate)
+                                    {
+                                        <MudDatePicker @bind-Date="f.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                                    }
+                                    else if (f.IsBoolean)
+                                    {
+                                        <MudCheckBox T="bool" @bind-Value="f.BoolValue" />
+                                    }
+                                    else if (f.IsMultiSelect)
+                                    {
+                                        <MudTextField @bind-Value="f.TextValue" Lines="3" Placeholder="@Strings.Get("OneValuePerLine")" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                                    }
+                                    else
+                                    {
+                                        <MudTextField @bind-Value="f.TextValue" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <div class="wb-detail-actions">
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveInboxMaskAsync" Disabled="_inboxStgBusy">@Strings.Get("Save")</MudButton>
+                        </div>
+                    }
+                </div>
+                @* The inbox previews a STAGED file — nothing to annotate, so no Toolbar and no
+                   annotation host; the gestures become no-ops rather than missing features. *@
+                <PreviewPane @ref="_preview"
+                             Style="flex:1 1 auto; min-height:0; position:relative; display:flex; flex-direction:column;"
+                             EmptyText="@(_selectedInboxItem is null ? Strings.Get("NoItemSelected") : Strings.Get("NoPreview"))"
+                             ConvertedBadgeTooltip="This is a generated preview, not the original file." />
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+
+    /// <summary>
+    /// The folder currently selected in the Repositories tree, used to pre-fill the filing dialog. Arrives as a
+    /// parameter because the shell already holds it — asking the server again would be a request spent learning
+    /// something known (ADR 0557).
+    /// </summary>
+    [Parameter]
+    public Guid? CurrentFolderId { get; set; }
+
+    /// <summary>The selected folder's name, shown in the filing dialog beside its id.</summary>
+    [Parameter]
+    public string? CurrentFolderName { get; set; }
+
+    /// <summary>Whether the caller may open another user's inbox for triage (the CanManageInboxes right).</summary>
+    [Parameter]
+    public bool CanManageInboxes { get; set; }
+
+    /// <summary>
+    /// Copies the WebDAV mount URL. Stays in the shell because the Check-out tab offers the same action, and it
+    /// is stateless — a candidate for a small shared service when the shell is finally thinned (PR 4).
+    /// </summary>
+    [Parameter]
+    public EventCallback CopyWebDavUrl { get; set; }
+
+    /// <summary>
+    /// The document selected on the Repositories tab, offered as "file as a new version of it" (ADR 0286).
+    /// Null unless a real document is selected — the shell decides that, since it owns the selection.
+    /// </summary>
+    [Parameter]
+    public Guid? CurrentDocumentId { get; set; }
+
+    /// <summary>That document's name, shown in the filing dialog.</summary>
+    [Parameter]
+    public string? CurrentDocumentName { get; set; }
+
+    /// <summary>The signed-in user's id, used to tell own items from a group's.</summary>
+    [Parameter]
+    public Guid? MyUserId { get; set; }
+
+    // The tenant's OCR languages, fetched on demand the first time a scannable item is selected. The tab keeps
+    // its own copy rather than sharing the shell's: it is a small catalogue, read at most once per session here,
+    // and a cache shared across tabs is the coupling this decomposition is unwinding.
+    private List<OcrLanguageOption> _ocrCatalog = [];
+
+    private ElementReference _dropZone;
+    private bool _dropWired;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<InboxTab>? _selfRef;
+    private PreviewPane? _preview;
+
+    // A preview requested before the pane existed. The pane sits inside "is an item selected?", so the FIRST
+    // selection is what creates it — and rendering into a null ref would lose the preview silently (ADR 0558).
+    private (string? Url, string? Layout, bool Converted)? _pendingPreview;
+
+    protected override async Task OnInitializedAsync() => await LoadInboxAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _selfRef = DotNetObjectReference.Create(this);
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./dropUpload.js");
+        }
+
+        // Wire the file-list drop-zone once its element is real (ADR "Inbox file-list drop-zone"). initInboxDrop
+        // returns false until then, so simply retry on each render.
+        if (!_dropWired && _module is not null)
+        {
+            _dropWired = await _module.InvokeAsync<bool>("initInboxDrop", _dropZone, _selfRef);
+        }
+
+        // Last, after the wiring: this is the only await here that can take real time.
+        if (_pendingPreview is { } pending && _preview is not null)
+        {
+            _pendingPreview = null;
+            await ShowPreviewAsync(pending.Url, pending.Layout, pending.Converted);
+            StateHasChanged();
+        }
+    }
+
+    // Renders into the pane, or remembers the request until the pane exists (see _pendingPreview).
+    private async Task ShowPreviewAsync(string? url, string? layout, bool converted)
+    {
+        if (_preview is null)
+        {
+            _pendingPreview = (url, layout, converted);
+            return;
+        }
+
+        await _preview.RenderAsync(url, layout, converted);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _selfRef?.Dispose();
+        if (_module is not null)
+        {
+            try
+            {
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException) { /* page is going away */ }
+            catch (JSException) { /* module already torn down */ }
+        }
+    }
+
+    private List<InboxItem> _inboxItems = [];
+    private string _inboxStatus = "";
+    private bool _inboxBusy;
+    private InboxItem? _selectedInboxItem;
+    // Inbox view filters (ADR 0532): own-items-only by default; a toggle reveals my group inboxes, and a
+    // CanManageInboxes holder can open a specific user's inbox via the user-picker (mutually exclusive with groups).
+    private bool _inboxIncludeGroups;
+    private Guid? _inboxViewUserId;
+    private List<InboxUserOption> _inboxUsers = []; // the admin user-picker's choices (CanManageInboxes only)
+    private sealed record InboxUserOption(Guid Id, string Name);
+    private record InboxItem(string Name, long Size, bool HasMask, string DownloadHref, string PreviewHref, string FileHref, string DeleteHref, string MoveHref, Guid? GroupId, string? GroupName, Guid? UserId, string? UserName)
+    {
+        // Un-classified items (no staged mask sidecar) show in square brackets (ADRs 0279/0281).
+        public string DisplayName => HasMask ? Name : $"[{Name}]";
+
+        // A non-own item's source (ADR 0532): its `?group=`/`?user=` query is appended to the item endpoints the
+        // client builds from Name (preview / mask); the group/user name labels the row.
+        public string SourceQuery => GroupId is { } g ? $"?group={g}" : UserId is { } u ? $"?user={u}" : "";
+
+        // True for the caller's own items (no group/user source) — they get the "Send to…" action; non-own items
+        // get "Move to my inbox".
+        public bool IsOwn => GroupId is null && UserId is null;
+
+        // The `[GroupName]` / `[UserName]` source label shown before the name; null for own items.
+        public string? SourceLabel => GroupName ?? UserName;
+    }
+
+    private async Task LoadInboxAsync()
+    {
+        _inboxBusy = true;
+        _inboxStatus = "Loading…";
+        _inboxChecked.Clear();
+        try
+        {
+            // A CanManageInboxes holder gets a user-picker; load the tenant's users once for it.
+            if (CanManageInboxes && _inboxUsers.Count == 0)
+            {
+                var users = await Http.GetFromJsonAsync<InboxUsersResponse>("api/inbox/users");
+                _inboxUsers = users?.Users ?? [];
+            }
+
+            var url = _inboxViewUserId is { } viewUser
+                ? $"api/inbox?user={viewUser}"
+                : _inboxIncludeGroups ? "api/inbox?includeGroups=true" : await ApiRoot.RequireAsync("inbox");
+            var response = await Http.GetFromJsonAsync<InboxResponse>(url);
+            _inboxItems = (response?.Items ?? []).Select(i => new InboxItem(
+                i.Name, i.Size, i.HasMask,
+                Links.Href(i.Links, "download") ?? "", Links.Href(i.Links, "preview") ?? "",
+                Links.Href(i.Links, "file") ?? "", Links.Href(i.Links, "self") ?? "",
+                Links.Href(i.Links, "move") ?? "",
+                i.GroupId, i.GroupName, i.UserId, i.UserName)).ToList();
+            _inboxStatus = _inboxItems.Count == 0 ? "Your inbox is empty. Upload files to file them into a repository." : $"{_inboxItems.Count} item(s).";
+        }
+        catch (Exception)
+        {
+            _inboxStatus = "Could not load the inbox.";
+        }
+        finally
+        {
+            _inboxBusy = false;
+        }
+    }
+
+    private async Task OnInboxInputChangeAsync(InputFileChangeEventArgs e) => await OnInboxFilesSelectedAsync(e.GetMultipleFiles(100));
+
+    // Uploads each selected file straight into the S3 inbox: POST /api/inbox for a presigned URL, then PUT the
+    // bytes to it (cross-origin, unauthenticated — same direct-to-storage model as document upload).
+    private async Task OnInboxFilesSelectedAsync(IReadOnlyList<IBrowserFile> files)
+    {
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        _inboxBusy = true;
+        _inboxStatus = "Uploading…";
+        StateHasChanged();
+        try
+        {
+            foreach (var file in files)
+            {
+                var target = await (await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("inbox"), new { fileName = file.Name })).Content.ReadFromJsonAsync<UploadInboxResponse>();
+                if (target is null)
+                {
+                    continue;
+                }
+
+                using var buffer = new MemoryStream();
+                await file.OpenReadStream(maxAllowedSize: 200L * 1024 * 1024).CopyToAsync(buffer);
+                using var content = new ByteArrayContent(buffer.ToArray());
+                if (!string.IsNullOrWhiteSpace(file.ContentType))
+                {
+                    content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+                }
+
+                (await PresignedTransfer.Anonymous.PutAsync(target.UploadUrl, content)).EnsureSuccessStatusCode();
+            }
+
+            Snackbar.Add(string.Format(Strings.Get("StUploadedToInbox"), files.Count), Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StSomeUploadsFailed"), Severity.Error);
+        }
+        finally
+        {
+            _inboxBusy = false;
+            await LoadInboxAsync();
+        }
+    }
+
+    // ---- Inbox drop-zone upload (called from dropUpload.js, ADR "Inbox file-list drop-zone") --------------
+    // The browser reads the dropped files and PUTs them straight to storage; .NET only mints the presigned URL
+    // and refreshes, mirroring the document-upload drop path.
+    [JSInvokable]
+    public Task OnInboxUploadsStartingAsync(int count)
+    {
+        _inboxBusy = true;
+        _inboxStatus = $"Uploading {count} file(s)…";
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public async Task<string?> CreateInboxUploadTargetAsync(string fileName)
+    {
+        try
+        {
+            var target = await (await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("inbox"), new { fileName })).Content.ReadFromJsonAsync<UploadInboxResponse>();
+            return target?.UploadUrl;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnInboxUploadsCompleteAsync(int count)
+    {
+        _inboxBusy = false;
+        if (count > 0)
+        {
+            Snackbar.Add(string.Format(Strings.Get("StUploadedToInbox"), count), Severity.Success);
+        }
+
+        await LoadInboxAsync();
+    }
+
+    // ---- Inbox mask/index-data staging pane (ADRs 0279/0281/0285) ------------------------------------
+
+    private bool _inboxIsEmail;
+    private bool _inboxStgBusy;
+    private string _inboxStgName = "";
+    private DateTime? _inboxStgDate;
+    private Guid? _inboxStgMaskId;
+    private readonly List<EditField> _inboxStgFields = [];
+    private List<MaskSummary> _inboxStgMasks = [];
+    private Dictionary<Guid, List<string>> _inboxDraftValues = [];
+    // Staged OCR languages for a scannable item (.tif/.tiff/.pdf) — consumed at filing (ADR "Inbox OCR-language staging").
+    private List<string> _inboxStgOcrCodes = [];
+    private bool _inboxStgScannable;
+
+    private async Task SelectInboxItemAsync(InboxItem item)
+    {
+        _selectedInboxItem = item;
+        _preview?.Clear();
+        _inboxStgFields.Clear();
+        _inboxStgMasks = [];
+        _preview?.Clear();
+
+        // Resolve the rendition-backed preview URL (the `preview` link is an endpoint returning JSON, ADR 0279,
+        // not a direct file URL — so fetch it and use its previewUrl) plus its text-layout link, then render via
+        // the shared pdf.js host with the hit-overlay. 204 = no preview available.
+        try
+        {
+            using var r = await Http.GetAsync($"api/inbox/{Uri.EscapeDataString(item.Name)}/preview{item.SourceQuery}");
+            if (r.IsSuccessStatusCode && r.StatusCode != HttpStatusCode.NoContent)
+            {
+                var preview = await r.Content.ReadFromJsonAsync<InboxPreviewResponse>();
+
+                var textLayoutUrl = Links.Href(preview?.Links, "text-layout");
+                await ShowPreviewAsync(preview?.PreviewUrl, textLayoutUrl, preview?.PreviewConverted ?? false);
+            }
+        }
+        catch (Exception)
+        {
+            // Non-fatal — no preview.
+        }
+
+        // Emails are classified automatically by the system on filing — not offered a mask here (ADR 0285).
+        _inboxIsEmail = item.Name.EndsWith(".eml", StringComparison.OrdinalIgnoreCase) || item.Name.EndsWith(".msg", StringComparison.OrdinalIgnoreCase);
+        if (_inboxIsEmail)
+        {
+            return;
+        }
+
+        try
+        {
+            _inboxStgMasks = (await Http.GetFromJsonAsync<MaskListResponse>(await ApiRoot.RequireAsync("masks")))?.Masks ?? [];
+            var draft = await Http.GetFromJsonAsync<InboxMaskDraft>($"api/inbox/{Uri.EscapeDataString(item.Name)}/mask{item.SourceQuery}");
+            _inboxStgName = string.IsNullOrEmpty(draft?.Name) ? System.IO.Path.GetFileNameWithoutExtension(item.Name) : draft.Name;
+            _inboxStgDate = DateTime.TryParse(draft?.DocumentDate, out var d) ? d.Date : null;
+            _inboxDraftValues = (draft?.Fields ?? []).ToDictionary(f => f.FieldDefinitionId, f => f.Values);
+
+            // OCR languages: only offered for a scannable item, staged + consumed at filing (ADR "Inbox
+            // OCR-language staging"). Load the catalog on demand.
+            _inboxStgScannable = IsScannableExtension(item.Name);
+            _inboxStgOcrCodes = draft?.OcrLanguages ?? [];
+            if (_inboxStgScannable && _ocrCatalog.Count == 0)
+            {
+                _ocrCatalog = (await Http.GetFromJsonAsync<OcrCatalogResponse>(await ApiRoot.RequireAsync("ocrLanguages")))?.Languages ?? [];
+            }
+
+            // Preselect the staged mask, or default to "Basic Entry" for an un-classified item (ADR 0284).
+            _inboxStgMaskId = draft?.MaskId ?? _inboxStgMasks.FirstOrDefault(m => m.Name == "Basic Entry")?.Id;
+            await LoadInboxStgFieldsAsync(_inboxStgMaskId, useDraftValues: true);
+        }
+        catch (HttpRequestException)
+        {
+            // Non-fatal — the pane just shows an empty form.
+        }
+    }
+
+    private async Task LoadInboxStgFieldsAsync(Guid? maskId, bool useDraftValues)
+    {
+        _inboxStgFields.Clear();
+        if (maskId is not { } id)
+        {
+            return;
+        }
+
+        var fields = await Http.GetFromJsonAsync<MaskFieldsResponse>($"api/masks/{id}");
+        foreach (var f in fields?.Fields ?? [])
+        {
+            var values = useDraftValues && _inboxDraftValues.TryGetValue(f.Id, out var v) ? v : [];
+            _inboxStgFields.Add(EditField.Create(f, values));
+        }
+    }
+
+    private async Task OnInboxStgMaskChanged(Guid? maskId)
+    {
+        _inboxStgMaskId = maskId;
+        await LoadInboxStgFieldsAsync(maskId, useDraftValues: false);
+    }
+
+    // Toggle a staged OCR language (ordered: click appends the next priority, click again removes + renumbers).
+    private void ToggleInboxOcr(string code)
+    {
+        if (!_inboxStgOcrCodes.Remove(code))
+        {
+            _inboxStgOcrCodes.Add(code);
+        }
+    }
+
+    // OCR-language staging only applies to the scannable types the searchable-PDF conversion runs on at filing.
+    private static bool IsScannableExtension(string name) =>
+        System.IO.Path.GetExtension(name).ToLowerInvariant() is ".tif" or ".tiff" or ".pdf";
+
+    // Saves the staged Name/Document date/mask/index-data to the item's {name}.mask.json sidecar (ADR 0281).
+    private async Task SaveInboxMaskAsync()
+    {
+        if (_selectedInboxItem is not { } item)
+        {
+            return;
+        }
+
+        _inboxStgBusy = true;
+        try
+        {
+            var body = new
+            {
+                name = string.IsNullOrWhiteSpace(_inboxStgName) ? null : _inboxStgName.Trim(),
+                documentDate = _inboxStgDate?.ToString("yyyy-MM-dd"),
+                maskId = _inboxStgMaskId,
+                fields = _inboxStgFields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.ToValues() }),
+                ocrLanguages = _inboxStgScannable && _inboxStgOcrCodes.Count > 0 ? _inboxStgOcrCodes : null,
+            };
+
+            var resp = await Http.PutAsJsonAsync($"api/inbox/{Uri.EscapeDataString(item.Name)}/mask{item.SourceQuery}", body);
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add(Strings.Get("StMaskSaved"), Severity.Success);
+                var name = item.Name;
+                await LoadInboxAsync();                 // refresh the square-bracket indicator
+                var fresh = _inboxItems.FirstOrDefault(i => i.Name == name);
+                if (fresh is not null)
+                {
+                    await SelectInboxItemAsync(fresh);
+                }
+            }
+            else
+            {
+                Snackbar.Add(Strings.Get("StErrMaskSave"), Severity.Error);
+            }
+        }
+        finally
+        {
+            _inboxStgBusy = false;
+        }
+    }
+
+    private readonly HashSet<InboxItem> _inboxChecked = [];
+
+    private void ToggleInboxCheck(InboxItem item, bool on)
+    {
+        if (on) { _inboxChecked.Add(item); } else { _inboxChecked.Remove(item); }
+    }
+
+    // Shows the context-aware filing dialog seeded with the Repositories tab's current selection (ADR 0286).
+    private async Task<FilingDialog.FilingChoice?> ShowFilingDialogAsync(string title, bool bulk)
+    {
+        var parameters = new DialogParameters<FilingDialog>
+        {
+            { x => x.DocumentId, bulk ? null : CurrentDocumentId },
+            { x => x.DocumentName, CurrentDocumentId is null ? null : CurrentDocumentName },
+            { x => x.FolderId, CurrentFolderId },
+            { x => x.FolderName, CurrentFolderName },
+            { x => x.Bulk, bulk },
+        };
+        var dialog = await DialogService.ShowAsync<FilingDialog>(title, parameters);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: FilingDialog.FilingChoice choice } ? choice : null;
+    }
+
+    // Posts one file request (as a new version, or into a folder), with the optional feed comment (ADR 0287).
+    private async Task<bool> PostFileAsync(InboxItem item, FilingDialog.FilingChoice choice)
+    {
+        object body = choice.Mode == FilingDialog.FilingMode.AsVersion
+            ? new { documentId = choice.TargetId, comment = choice.Comment }
+            : new { folderId = choice.TargetId, comment = choice.Comment };
+
+        var response = await Http.PostAsJsonAsync(item.FileHref, body);
+        if (response.IsSuccessStatusCode)
+        {
+            return true;
+        }
+
+        Snackbar.Add(response.StatusCode == HttpStatusCode.Forbidden
+            ? $"You don't have permission to file '{item.Name}' there."
+            : $"Could not file '{item.Name}'.", Severity.Warning);
+        return false;
+    }
+
+    private async Task FileInboxItemAsync(InboxItem item)
+    {
+        var choice = await ShowFilingDialogAsync($"File '{item.Name}'", bulk: false);
+        if (choice is null)
+        {
+            return;
+        }
+
+        if (await PostFileAsync(item, choice))
+        {
+            Snackbar.Add(choice.Mode == FilingDialog.FilingMode.AsVersion ? $"Filed '{item.Name}' as a new version." : $"Filed '{item.Name}'.", Severity.Success);
+            ClearInboxSelection(item);
+            await LoadInboxAsync();
+        }
+    }
+
+    // Bulk-file the checked items into one folder, each with the same optional comment (ADR 0288).
+    private async Task FileMultipleAsync()
+    {
+        var items = _inboxItems.Where(_inboxChecked.Contains).ToList();
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        var choice = await ShowFilingDialogAsync($"File {items.Count} items", bulk: true);
+        if (choice is null)
+        {
+            return;
+        }
+
+        var filed = 0;
+        foreach (var it in items)
+        {
+            if (await PostFileAsync(it, choice))
+            {
+                filed++;
+            }
+        }
+
+        Snackbar.Add(string.Format(Strings.Get("StFiledOf"), filed, items.Count), Severity.Success);
+        _inboxChecked.Clear();
+        await LoadInboxAsync();
+    }
+
+    private async Task DownloadInboxItemAsync(InboxItem item) => await JS.InvokeVoidAsync("open", item.DownloadHref, "_blank");
+
+    // Send an OWN item into another inbox (ADR 0532): pick a group or a user, then move it there.
+    private async Task SendInboxItemAsync(InboxItem item)
+    {
+        var parameters = new DialogParameters<Dialogs.InboxSendDialog> { { x => x.ItemName, item.Name } };
+        var dialog = await DialogService.ShowAsync<Dialogs.InboxSendDialog>(Strings.Get("InboxSendTitle"), parameters);
+        if ((await dialog.Result) is { Canceled: false, Data: Dialogs.InboxSendDialog.SendTarget t })
+        {
+            await MoveInboxItemAsync(item, t.TargetGroupId, t.TargetUserId);
+        }
+    }
+
+    // Move a NON-own item (a group's, or another user's for an admin) into my own inbox to work it privately.
+    private async Task MoveToMyInboxAsync(InboxItem item)
+    {
+        if (MyUserId is { } me)
+        {
+            await MoveInboxItemAsync(item, null, me);
+        }
+    }
+
+    private async Task MoveInboxItemAsync(InboxItem item, Guid? targetGroupId, Guid? targetUserId)
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync(item.MoveHref, new { targetGroupId, targetUserId });
+            if (!response.IsSuccessStatusCode)
+            {
+                Snackbar.Add(string.Format(Strings.Get("StErrMoveItemStatus"), (int)response.StatusCode), Severity.Error);
+                return;
+            }
+
+            Snackbar.Add(string.Format(Strings.Get("StMoved"), item.Name), Severity.Success);
+            ClearInboxSelection(item);
+            await LoadInboxAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrMoveItem"), Severity.Error);
+        }
+    }
+
+    // The "show group inboxes" filter (ADR 0532) — off by default; clears any admin user-view when toggled.
+    private async Task ToggleInboxGroupsAsync(bool on)
+    {
+        _inboxIncludeGroups = on;
+        _inboxViewUserId = null;
+        await LoadInboxAsync();
+    }
+
+    // The admin user-picker (CanManageInboxes) — open a chosen user's inbox, or back to my own (null).
+    private async Task ViewUserInboxAsync(Guid? userId)
+    {
+        _inboxViewUserId = userId;
+        if (userId is not null)
+        {
+            _inboxIncludeGroups = false;
+        }
+
+        await LoadInboxAsync();
+    }
+
+    private async Task DeleteInboxItemAsync(InboxItem item)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = "Delete inbox item",
+            Message = $"Delete '{item.Name}' from your inbox?",
+            YesText = "Delete",
+            CancelText = "Cancel",
+        });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        if ((await Http.DeleteAsync(item.DeleteHref)).IsSuccessStatusCode)
+        {
+            ClearInboxSelection(item);
+            await LoadInboxAsync();
+        }
+        else
+        {
+            Snackbar.Add(string.Format(Strings.Get("StErrDeleteNamed"), item.Name), Severity.Error);
+        }
+    }
+
+    private void ClearInboxSelection(InboxItem item)
+    {
+        if (_selectedInboxItem == item)
+        {
+            _selectedInboxItem = null;
+            _preview?.Clear();
+        }
+    }
+
+    private record InboxResponse { public List<InboxItemDto> Items { get; set; } = []; }
+    private record InboxItemDto { public string Name { get; set; } = ""; public long Size { get; set; } public bool HasMask { get; set; } public Guid? GroupId { get; set; } public string? GroupName { get; set; } public Guid? UserId { get; set; } public string? UserName { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record InboxMaskDraft { public string? Name { get; set; } public string? DocumentDate { get; set; } public Guid? MaskId { get; set; } public List<InboxDraftField> Fields { get; set; } = []; public List<string>? OcrLanguages { get; set; } }
+    private record InboxPreviewResponse { public string? PreviewUrl { get; set; } public bool PreviewConverted { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record InboxDraftField { public Guid FieldDefinitionId { get; set; } public List<string> Values { get; set; } = []; }
+    private record UploadInboxResponse { public string Name { get; set; } = ""; public string UploadUrl { get; set; } = ""; }
+    private record InboxUsersResponse { public List<InboxUserOption> Users { get; set; } = []; }
+}

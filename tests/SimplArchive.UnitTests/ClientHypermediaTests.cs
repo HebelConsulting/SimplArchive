@@ -59,11 +59,13 @@ public partial class ClientHypermediaTests
         // The budget is keyed by FILE, so decomposing the workbench page (ADR 0558) MOVES composed URLs between
         // entries rather than removing them — and the entries still summing to the same total is what proves an
         // extraction was a pure move rather than a rewrite that quietly gained or lost a call. The running sum:
-        // 51 = 48 + 3, then 51 = 44 + 4 + 3, and now 50 = 43 + 4 + 3 — the Search extraction carried its region
-        // out AND converted the one URL in it (`api/search?…` → the root's `search` rel), so the total drops by
+        // 51 = 48 + 3, then 51 = 44 + 4 + 3, then 50 = 43 + 4 + 3 — the Search extraction carried its region
+        // out AND converted the one URL in it (`api/search?…` → the root's `search` rel), so the total dropped by
         // exactly the one that was converted. A move and a conversion in one commit are only legible because
-        // both numbers are stated.
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 43,
+        // both numbers are stated. Now 50 = 36 + 7 + 4 + 3: the Inbox extraction is a pure move, and its seven
+        // are the inbox's own item addresses, which belong to the web burn-down rather than to this extraction.
+        ["src/SimplArchive.Client/Pages/Home.razor"] = 36,
+        ["src/SimplArchive.Client/Components/Tabs/InboxTab.razor"] = 7,
         // The check-out stash addresses — download, replace, check in, cancel. The rels exist server-side
         // (#441 renamed `checkin` to mean the POST that actually checks in); this is the client half.
         ["src/SimplArchive.Client/Components/Tabs/CheckoutTab.razor"] = 4,
