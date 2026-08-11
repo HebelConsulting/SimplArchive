@@ -1,0 +1,381 @@
+@using SimplArchive.Client.Models
+@using SimplArchive.Client.Services
+@inject HttpClient Http
+
+@* The workbench's chat pane: the discussion thread on the selected object (ADR 0558). *@
+<div class="wb-chat" data-pane="chat" data-tour="pane-chat">
+    @if (Target is null)
+    {
+        <div class="wb-chat-empty">
+            <MudIcon Icon="@Icons.Material.Filled.Forum" Size="Size.Large" />
+            <MudText Typo="Typo.body2">@Strings.Get("SelectForComments")</MudText>
+        </div>
+    }
+    else
+    {
+        <div class="wb-chat-header" style="display:flex; align-items:center; gap:8px;">
+            <MudText Typo="Typo.subtitle2" style="flex:1 1 auto;">@Strings.Get("CommentsHeader")</MudText>
+            @* Follow a folder and its whole subtree (ADR "Folder / subtree subscriptions"). *@
+            @if (Target is { IsFolder: true })
+            {
+                <MudTooltip Text="@(FolderSubscribed ? Strings.Get("UnfollowFolder") : Strings.Get("FollowFolder"))">
+                    <MudIconButton Size="Size.Small" aria-label="Follow folder"
+                                   Icon="@(FolderSubscribed ? Icons.Material.Filled.Notifications : Icons.Material.Outlined.NotificationsNone)"
+                                   Color="@(FolderSubscribed ? Color.Primary : Color.Default)"
+                                   OnClick="@(() => ToggleFolderSubscription.InvokeAsync())" />
+                </MudTooltip>
+            }
+        </div>
+        @* The author identity card (ADR 0544) — opened from an author name in the
+           thread. One popover reused for whichever author was clicked, since only
+           one can be open at a time. *@
+        <MudPopover Open="@_authorCardOpen" Fixed="true" Class="wb-author-card pa-4"
+                    AnchorOrigin="Origin.CenterCenter" TransformOrigin="Origin.CenterCenter">
+            @if (_authorCard is { } card)
+            {
+                <div class="d-flex align-center gap-3">
+                    @if (_authorCardPhoto is not null)
+                    {
+                        <MudAvatar Size="Size.Large"><MudImage Src="@_authorCardPhoto" /></MudAvatar>
+                    }
+                    else
+                    {
+                        <MudAvatar Size="Size.Large" Color="Color.Primary">@Initials(card.DisplayName)</MudAvatar>
+                    }
+                    <div>
+                        <MudText Typo="Typo.subtitle1">@card.DisplayName</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@card.Email</MudText>
+                        @if (!card.IsActive)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">@Strings.Get("UserCardDeactivated")</MudChip>
+                        }
+                    </div>
+                </div>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2">@Strings.Get("UserCardLoadFailed")</MudText>
+            }
+        </MudPopover>
+        @if (_authorCardOpen)
+        {
+            <MudOverlay Visible="true" AutoClose="false" @onclick="CloseAuthorCard" />
+        }
+        <div class="wb-chat-thread">
+            @if (Messages.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("NoCommentsYet")</MudText>
+            }
+            @foreach (var c in Messages.Where(x => x.ParentMessageId is null).OrderBy(x => x.CreatedAt))
+            {
+                <div class="wb-comment">
+                    @if (c.Kind == ChatUserPost)
+                    {
+                        <div class="wb-comment-meta">@AuthorMarkup(c) · @c.CreatedAt.ToLocalTime().ToString("g")</div>
+                        <div class="wb-comment-body">@MentionMarkup(c)</div>
+                        <span class="wb-reply-link" @onclick="() => ToggleReplyTo.InvokeAsync(c.Id)">@Strings.Get("ReplyBtn")</span>
+                    }
+                    else
+                    {
+                        @* An automatic entry READS as a sentence with the author in
+                           it, so the author isn't repeated in the meta line — only
+                           the time is (ADR 0545). No reply affordance: there is no
+                           conversation to continue with an event. *@
+                        <div class="wb-comment-meta">@c.CreatedAt.ToLocalTime().ToString("g")</div>
+                        <div class="wb-comment-body wb-system-entry">@SystemSentence(c)</div>
+                        @if (c.VersionNumber is { } versionNumber)
+                        {
+                            <div class="wb-version-entry">
+                                <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" />
+                                <div>
+                                    <div>@string.Format(Strings.Get("ChatVersionLabel"), versionNumber)</div>
+                                    @if (VersionCommentText(c) is { } versionComment)
+                                    {
+                                        <div class="wb-version-comment">@versionComment</div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+                @foreach (var r in Messages.Where(x => x.ParentMessageId == c.Id).OrderBy(x => x.CreatedAt))
+                {
+                    <div class="wb-comment wb-comment-reply">
+                        <div class="wb-comment-meta">@AuthorMarkup(r) · @r.CreatedAt.ToLocalTime().ToString("g")</div>
+                        <div class="wb-comment-body">@MentionMarkup(r)</div>
+                    </div>
+                }
+                @if (ReplyingTo == c.Id)
+                {
+                    <div class="wb-comment-reply">
+                        <MudTextField T="string" Value="ReplyText" ValueChanged="@((string v) => ReplyChanged.InvokeAsync(v))" Immediate="true"
+                                      Placeholder="@Strings.Get("ReplyPlaceholder")" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+                        @if (MentionCandidates.Count > 0)
+                        {
+                            <MudPaper Class="wb-mention-picker" Elevation="4">
+                                <MudList T="string" Dense="true">
+                                    @foreach (var candidate in MentionCandidates)
+                                    {
+                                        <MudListItem T="string" OnClick="@(() => PickMention.InvokeAsync(candidate))">@candidate.DisplayName</MudListItem>
+                                    }
+                                </MudList>
+                            </MudPaper>
+                        }
+                        <div class="wb-compose-actions">
+                            <MudButton Size="Size.Small" OnClick="@(() => PostReply.InvokeAsync(c.Id))" Disabled="@string.IsNullOrWhiteSpace(ReplyText)">@Strings.Get("ReplyBtn")</MudButton>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+        <div class="wb-compose">
+            @* Immediate, so the @-picker can react as the name is typed (issue #383) —
+               the default commits on blur, which would only offer names after the box
+               lost focus. *@
+            <MudTextField T="string" Value="NewComment" ValueChanged="@((string v) => ComposeChanged.InvokeAsync(v))" Immediate="true"
+                          Placeholder="@Strings.Get("CommentPlaceholder")" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Lines="2" />
+            @if (MentionCandidates.Count > 0)
+            {
+                <MudPaper Class="wb-mention-picker" Elevation="4">
+                    <MudList T="string" Dense="true">
+                        @foreach (var candidate in MentionCandidates)
+                        {
+                            <MudListItem T="string" OnClick="@(() => PickMention.InvokeAsync(candidate))">@candidate.DisplayName</MudListItem>
+                        }
+                    </MudList>
+                </MudPaper>
+            }
+            <div class="wb-compose-actions">
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => PostComment.InvokeAsync())" Disabled="@string.IsNullOrWhiteSpace(NewComment)">@Strings.Get("CommentBtn")</MudButton>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>The object whose thread this is — <c>null</c> means nothing is selected.</summary>
+    [Parameter] public BrowseNode? Target { get; set; }
+
+    /// <summary>The thread, oldest first, as the shell loaded it.</summary>
+    [Parameter] public IReadOnlyList<ChatMessageResponse> Messages { get; set; } = [];
+
+    /// <summary>Whether the caller follows this FOLDER, for the header's follow toggle.</summary>
+    [Parameter] public bool FolderSubscribed { get; set; }
+
+    /// <summary>
+    /// The composer's text. Two-way, and held by the SHELL rather than here: a half-typed comment is unsaved
+    /// user input, and this component is disposed on every tab switch (ADR 0558's fourth rule — the same reason
+    /// DetailState exists).
+    /// </summary>
+    [Parameter] public string? NewComment { get; set; }
+    [Parameter] public EventCallback<string?> NewCommentChanged { get; set; }
+
+    /// <summary>The reply box's text — unsaved input too, so likewise the shell's.</summary>
+    [Parameter] public string? ReplyText { get; set; }
+    [Parameter] public EventCallback<string?> ReplyTextChanged { get; set; }
+
+    /// <summary>The message currently being replied to, if any.</summary>
+    [Parameter] public Guid? ReplyingTo { get; set; }
+
+    /// <summary>The @-mention autocomplete's current candidates.</summary>
+    [Parameter] public IReadOnlyList<MentionableUserResponse> MentionCandidates { get; set; } = [];
+
+    [Parameter] public EventCallback PostComment { get; set; }
+    /// <summary>Post the reply box's text against the message it is threaded under.</summary>
+    [Parameter] public EventCallback<Guid> PostReply { get; set; }
+    [Parameter] public EventCallback ToggleFolderSubscription { get; set; }
+    [Parameter] public EventCallback<Guid> ToggleReplyTo { get; set; }
+    [Parameter] public EventCallback<MentionableUserResponse> PickMention { get; set; }
+    [Parameter] public EventCallback<string?> ComposeChanged { get; set; }
+    [Parameter] public EventCallback<string?> ReplyChanged { get; set; }
+
+    private const int ChatUserPost = 0, ChatVersionFiled = 1, ChatVersionActivated = 2;
+
+    // Renders a system entry's sentence from a LOCALIZED TEMPLATE, splicing the author in as a live element so
+    // the name stays a clickable identity card. String.Format would flatten it to text and lose the card, which
+    // is why the wording is stored nowhere and composed here instead.
+    private RenderFragment SystemSentence(ChatMessageResponse message) => builder =>
+    {
+        var template = message.Kind switch
+        {
+            // One entry per version, two sentences: a first version IS the document arriving; every later one is
+            // a new working version of something already here. The version number the entry points at decides.
+            ChatVersionFiled => Strings.Get(
+                message.VersionNumber is null or <= 1 ? "ChatFiledNewDocument" : "ChatSavedNewVersion"),
+            ChatVersionActivated => Strings.Get("ChatActivatedVersion"),
+            _ => "{0}",
+        };
+
+        // {0} is the author element; {1}, where a template has one, is the version number.
+        var sequence = 0;
+        foreach (var part in SplitTemplate(template))
+        {
+            switch (part)
+            {
+                case "{0}":
+                    builder.AddContent(sequence++, AuthorMarkup(message));
+                    break;
+                case "{1}":
+                    builder.AddContent(sequence++, message.VersionNumber?.ToString() ?? "");
+                    break;
+                default:
+                    builder.AddContent(sequence++, part);
+                    break;
+            }
+        }
+    };
+
+    // The check-in comment shown beneath "Version N". A machine-generated one carries no stored text — its
+    // wording is a localized string for the kind (ADR 0545).
+    private string? VersionCommentText(ChatMessageResponse message) => message.VersionCommentKind switch
+    {
+        1 => Strings.Get("VersionCommentSearchablePdf"),
+        _ => string.IsNullOrWhiteSpace(message.VersionComment) ? null : message.VersionComment,
+    };
+
+    // The author label. A message that advertises an "author-card" rel renders a clickable name; one that does
+    // not (a ServiceAccount posted it) renders plain text. The ABSENCE of the rel is the signal — the client
+    // never decides for itself whether an author is a person (ADR 0543/0544).
+    private RenderFragment AuthorMarkup(ChatMessageResponse message) => builder =>
+    {
+        var cardHref = Links.Href(message.Links, "author-card");
+        if (cardHref is null)
+        {
+            builder.AddContent(0, message.AuthorName);
+            return;
+        }
+
+        builder.OpenElement(1, "span");
+        builder.AddAttribute(2, "class", "wb-author-link");
+        builder.AddAttribute(3, "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, () => OpenAuthorCardAsync(cardHref)));
+        builder.AddContent(4, message.AuthorName);
+        builder.CloseElement();
+    };
+
+    private UserCardResponse? _authorCard;
+
+    private string? _authorCardPhoto;
+
+    private bool _authorCardOpen;
+
+    private void CloseAuthorCard() => _authorCardOpen = false;
+
+    // Initials fallback when a colleague has no photo — the same treatment MainLayout gives the current user.
+    private static string Initials(string displayName) =>
+        string.Concat(displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => part[0])).ToUpperInvariant();
+
+    private async Task OpenAuthorCardAsync(string cardHref)
+    {
+        _authorCard = null;
+        _authorCardPhoto = null;
+        _authorCardOpen = true;
+
+        try
+        {
+            _authorCard = await Http.GetFromJsonAsync<UserCardResponse>(cardHref);
+        }
+        catch (HttpRequestException)
+        {
+            _authorCardOpen = true; // keep it open so the failure is visible rather than a dead click
+            return;
+        }
+
+        // The photo rel is present only when there is one, so this never probes for a 404 (ADR 0543). The bytes
+        // are bearer-protected, so a raw <img src> would 401 — fetch and render a data URL, as MainLayout does.
+        if (Links.Href(_authorCard?.Links, "photo") is { } photoHref)
+        {
+            try
+            {
+                _authorCardPhoto = "data:image/png;base64," + Convert.ToBase64String(await Http.GetByteArrayAsync(photoHref));
+            }
+            catch (HttpRequestException)
+            {
+                _authorCardPhoto = null;
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    // Renders a body with its "@[id]" tokens turned into the mentioned person's name. The names come from the
+    // message's own mentions list, so no extra lookup is needed; a token whose user is gone falls back to a
+    // tombstone rather than showing a raw id or silently dropping the fact that somebody was addressed.
+    private RenderFragment MentionMarkup(ChatMessageResponse message) => builder =>
+    {
+        var names = (message.Mentions ?? []).ToDictionary(m => m.UserId, m => m.DisplayName);
+        var sequence = 0;
+
+        foreach (var part in MentionParts(message.Body))
+        {
+            if (part.UserId is { } userId)
+            {
+                builder.OpenElement(sequence++, "span");
+                builder.AddAttribute(sequence++, "class", "wb-mention");
+                builder.AddContent(sequence++, $"@{names.GetValueOrDefault(userId, Strings.Get("ChatMentionUnknown"))}");
+                builder.CloseElement();
+            }
+            else
+            {
+                builder.AddContent(sequence++, part.Text);
+            }
+        }
+    };
+
+    // Splits "{0} made Version {1} current." into its literal and placeholder parts, preserving order.
+    private static IEnumerable<string> SplitTemplate(string template)
+    {
+        var buffer = new System.Text.StringBuilder();
+        for (var i = 0; i < template.Length; i++)
+        {
+            if (i + 2 < template.Length && template[i] == '{' && char.IsDigit(template[i + 1]) && template[i + 2] == '}')
+            {
+                if (buffer.Length > 0)
+                {
+                    yield return buffer.ToString();
+                    buffer.Clear();
+                }
+
+                yield return template.Substring(i, 3);
+                i += 2;
+                continue;
+            }
+
+            buffer.Append(template[i]);
+        }
+
+        if (buffer.Length > 0)
+        {
+            yield return buffer.ToString();
+        }
+    }
+
+    private static IEnumerable<(string Text, Guid? UserId)> MentionParts(string body)
+    {
+        var matches = MentionTokenPattern.Matches(body);
+        var position = 0;
+
+        foreach (System.Text.RegularExpressions.Match match in matches)
+        {
+            if (match.Index > position)
+            {
+                yield return (body[position..match.Index], null);
+            }
+
+            yield return ("", Guid.Parse(match.Groups[1].Value));
+            position = match.Index + match.Length;
+        }
+
+        if (position < body.Length)
+        {
+            yield return (body[position..], null);
+        }
+    }
+
+    // The stored form of a mention, matching Domain ChatMentions.Token. A static Regex rather than
+    // [GeneratedRegex]: a Razor @code block is not a partial class, so the source generator has nothing to
+    // extend. Strict 8-4-4-4-12 so ordinary prose containing "@[...]" cannot turn into a mention.
+    private static readonly System.Text.RegularExpressions.Regex MentionTokenPattern =
+        new(@"@\[([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+}

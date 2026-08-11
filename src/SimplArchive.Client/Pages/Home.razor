@@ -19,6 +19,7 @@
 @inject SimplArchive.Client.Services.DocumentActions Actions
 @inject SimplArchive.Client.Services.BrowseService Browse
 @inject SimplArchive.Client.Services.TreeState Tree
+@inject SimplArchive.Client.Services.DetailState Detail
 
 <PageTitle>SimplArchive</PageTitle>
 
@@ -637,294 +638,60 @@
                            Suppressing the browser's own Save dialog needs a document-level JS handler (the pattern
                            wbLayout.js uses); until that exists the web keeps Esc, which needs no preventDefault,
                            and ⌘S stays a desktop affordance where it works properly. *@
-                        <div class="wb-pane wb-index" data-pane="index" data-tour="pane-index" tabindex="-1"
-                             @onkeydown="OnDetailKeyDown">
-                            @if (_detailNode is null)
-                            {
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("SelectDocDetail")</MudText>
-                            }
-                            else
-                            {
-                                <div class="wb-detail-head @(_detailNode?.TreeGlyphClass) @(_isEditing ? "wb-editing" : "")" style="display:flex; align-items:center; gap:4px;">
-                                    @* The SAME glyph the tree draws for this object (ADR 0547): a folder looks like a
-                                       folder — and an empty one like an empty one — wherever it appears, rather than
-                                       changing style depending on which pane you are looking at. *@
-                                    @if (_detailNode is { } glyphNode)
+                        @* The index-data pane (ADR 0558). The pane owns the read/edit SWAP — ADR 0550 makes
+                           that a property of the transition — while the actions themselves stay the shell's. *@
+                        <IndexDataPane IsEditing="_isEditing" AvailableMasks="_availableMasks" OcrCatalog="_ocrCatalog"
+                                       SensitivityLabels="_sensitivityLabels" TagColors="_tagColors"
+                                       Save="SaveDetailAsync" Cancel="CancelEdit" OpenCompareVersions="OpenCompareVersionsAsync"
+                                       KeyDown="OnDetailKeyDown" EditMaskChanged="OnEditMaskChanged"
+                                       ToggleOcrCode="ToggleOcr" SearchByTag="SearchByTagAsync">
+                            <ReadActions>
+                                @* Follow / unfollow this document (ADR "Document subscriptions"). *@
+                                <MudTooltip Text="@(Detail.Subscribed ? Strings.Get("UnfollowDoc") : Strings.Get("FollowDoc"))">
+                                    <MudIconButton Size="Size.Small" aria-label="Follow"
+                                                   Icon="@(Detail.Subscribed ? Icons.Material.Filled.Notifications : Icons.Material.Outlined.NotificationsNone)"
+                                                   Color="@(Detail.Subscribed ? Color.Primary : Color.Default)"
+                                                   OnClick="ToggleSubscriptionAsync" />
+                                </MudTooltip>
+                                @* Set a reminder (Wiedervorlage) on this document (ADR "Document reminders"). *@
+                                <MudTooltip Text="@Strings.Get("RemindTooltip")">
+                                    <MudIconButton Size="Size.Small" aria-label="Remind" Icon="@Icons.Material.Filled.Alarm" OnClick="OpenReminderDialogAsync" />
+                                    @if (Detail.ExternalLinksHref is not null)
                                     {
-                                        <MudIcon Icon="@BrowseService.TreeIcon(glyphNode)" Size="Size.Small" Class="wb-detail-glyph" />
-                                    }
-                                    <MudText Typo="Typo.subtitle1" Style="flex:1 1 auto; min-width:0;">@_sysName</MudText>
-                                    @* While EDITING, the actions that can do nothing disappear and the commit controls
-                                       take their slots (ADR 0550) — the row does not reflow under the cursor that just
-                                       clicked the pencil, and Save/Cancel are where that pencil was. *@
-                                    @if (_isEditing)
-                                    {
-                                        <MudTooltip Text="@Strings.Get("Save")">
-                                            <MudIconButton data-tour="action-save-index" Size="Size.Small" aria-label="@Strings.Get("Save")" Color="Color.Primary"
-                                                           Icon="@Icons.Material.Filled.Save" OnClick="SaveDetailAsync" Disabled="_detailBusy" />
-                                        </MudTooltip>
-                                        <MudTooltip Text="@Strings.Get("Cancel")">
-                                            <MudIconButton Size="Size.Small" aria-label="@Strings.Get("Cancel")"
-                                                           Icon="@Icons.Material.Filled.Close" OnClick="CancelEdit" Disabled="_detailBusy" />
+                                        <MudTooltip Text="@Strings.Get("ExtLinkManage")">
+                                            <MudIconButton Size="Size.Small" aria-label="@Strings.Get("ExtLinkManage")"
+                                                           Icon="@Icons.Material.Filled.Link" OnClick="OpenExternalLinksDialogAsync" />
                                         </MudTooltip>
                                     }
-                                    else
-                                    {
-                                    @* Follow / unfollow this document (ADR "Document subscriptions"). *@
-                                    <MudTooltip Text="@(_detailSubscribed ? Strings.Get("UnfollowDoc") : Strings.Get("FollowDoc"))">
-                                        <MudIconButton Size="Size.Small" aria-label="Follow"
-                                                       Icon="@(_detailSubscribed ? Icons.Material.Filled.Notifications : Icons.Material.Outlined.NotificationsNone)"
-                                                       Color="@(_detailSubscribed ? Color.Primary : Color.Default)"
-                                                       OnClick="ToggleSubscriptionAsync" />
-                                    </MudTooltip>
-                                    @* Set a reminder (Wiedervorlage) on this document (ADR "Document reminders"). *@
-                                    <MudTooltip Text="@Strings.Get("RemindTooltip")">
-                                        <MudIconButton Size="Size.Small" aria-label="Remind" Icon="@Icons.Material.Filled.Alarm" OnClick="OpenReminderDialogAsync" />
-                                        @if (_detailExternalLinksHref is not null)
-                                        {
-                                            <MudTooltip Text="@Strings.Get("ExtLinkManage")">
-                                                <MudIconButton Size="Size.Small" aria-label="@Strings.Get("ExtLinkManage")"
-                                                               Icon="@Icons.Material.Filled.Link" OnClick="OpenExternalLinksDialogAsync" />
-                                            </MudTooltip>
-                                        }
-                                    </MudTooltip>
-                                    @* Manage access (ACL) — only when the caller can manage permissions (ADR "Manage-access UI"). *@
-                                    @if (_detailCanManagePermissions)
-                                    {
-                                        <MudTooltip Text="@Strings.Get("MaManageAccess")">
-                                            <MudIconButton data-tour="action-manage-access" Size="Size.Small" aria-label="Manage access" Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessForSelectedAsync()" />
-                                        </MudTooltip>
-                                    }
-                                    @* Edit the index data (issue #407). It belongs beside the thing it edits, in the row of
-                                       per-document actions, rather than at the far end of the pane where it began — and
-                                       icon-only like its neighbours, so the row stays one vocabulary. Always visible rather
-                                       than on hover: touch has no hover (ADR 0511). Save and Cancel stay down with the
-                                       FIELDS, because they act on the form rather than on the document. *@
-                                    @if (CanEditDetail)
-                                    {
-                                        <MudTooltip Text="@Strings.Get("Edit")">
-                                            <MudIconButton data-tour="action-edit-index" Size="Size.Small" aria-label="@Strings.Get("Edit")" Icon="@Icons.Material.Filled.Edit"
-                                                           OnClick="BeginEditAsync" Disabled="_detailBusy" />
-                                        </MudTooltip>
-                                    }
-                                    }
-                                </div>
-
-                                @* System fields (ADR 0273). Rendered for a FOLDER as well since issue #408 — the rows
-                                   that come from a VERSION stay conditional, because a folder has none, but Name and the
-                                   mask below are as real for a folder as for a document. *@
-                                <table class="wb-sysfields">
-                                        <tr>
-                                            <td>@Strings.Get("Name")</td>
-                                            <td>
-                                                @if (_isEditing)
-                                                {
-                                                    <MudTextField @bind-Value="_editName" Margin="Margin.Dense" Variant="Variant.Outlined" />
-                                                }
-                                                else
-                                                {
-                                                    @_sysName
-                                                }
-                                            </td>
-                                        </tr>
-                                        @if (_sysHasVersion)
-                                        {
-                                        <tr><td>@Strings.Get("SysFileExtension")</td><td class="wb-sys-muted">@_sysFileExtension</td></tr>
-                                        <tr>
-                                            <td>@Strings.Get("VerColDocDate")</td>
-                                            <td>
-                                                @if (_isEditing)
-                                                {
-                                                    <MudDatePicker @bind-Date="_editDocumentDate" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
-                                                }
-                                                else
-                                                {
-                                                    @(_sysDocumentDate?.ToString("yyyy-MM-dd"))
-                                                }
-                                            </td>
-                                        </tr>
-                                        @if (_sysHasTiff)
-                                        {
-                                            <tr>
-                                                <td>@Strings.Get("SysOcrLanguages")</td>
-                                                <td>
-                                                    @if (_isEditing)
-                                                    {
-                                                        <div class="wb-ocr-chips">
-                                                            @foreach (var lang in _ocrCatalog)
-                                                            {
-                                                                var idx = _editOcrCodes.IndexOf(lang.Code);
-                                                                <button type="button" class="wb-ocr-chip @(idx >= 0 ? "wb-ocr-chip-on" : "")" @onclick="() => ToggleOcr(lang.Code)">
-                                                                    @(idx >= 0 ? $"{idx + 1}. " : "")@lang.DisplayName
-                                                                </button>
-                                                            }
-                                                        </div>
-                                                    }
-                                                    else
-                                                    {
-                                                        @OcrDisplay(_sysOcrCodes)
-                                                    }
-                                                </td>
-                                            </tr>
-                                        }
-                                        <tr><td>@Strings.Get("SysCreated")</td><td class="wb-sys-muted">@_sysCreated</td></tr>
-                                        <tr><td>@Strings.Get("SysCreatedBy")</td><td class="wb-sys-muted">@_sysCreatedBy</td></tr>
-                                        }
-                                        @* The document's current (latest confirmed) version number, directly below Created by
-                                           (ADR "Mask-pane current-version line"). *@
-                                        @if (_sysCurrentVersion is { } curVer)
-                                        {
-                                            <tr><td>@Strings.Get("SysCurrentVersion")</td><td class="wb-current-version wb-sys-muted">@curVer</td></tr>
-                                        }
-                                        @if (_detailRetention is { } ret)
-                                        {
-                                            <tr>
-                                                <td>@Strings.Get("SysRetention")</td>
-                                                <td class="wb-sys-muted">
-                                                    @ret.RetentionYears years · disposition @ret.DispositionDate@(ret.SuspendedByHold ? " (suspended — legal hold)" : "")
-                                                </td>
-                                            </tr>
-                                        }
-                                        @* Folder-only: the order this folder lists its contents in (ADR "Per-folder
-                                           contents sort order"). It rides in the same pane and the same edit as the
-                                           mask now, rather than in a pane of its own with its own Edit button. *@
-                                        @if (_detailNode?.IsFolder == true)
-                                        {
-                                            <tr>
-                                                <td>@Strings.Get("FolderSortLabel")</td>
-                                                <td>
-                                                    @if (_isEditing)
-                                                    {
-                                                        <MudSelect T="FolderContentsSortOrder" @bind-Value="_editSortOrder" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
-                                                            <MudSelectItem Value="FolderContentsSortOrder.Name">@Strings.Get("FolderSortName")</MudSelectItem>
-                                                            <MudSelectItem Value="FolderContentsSortOrder.DocumentDate">@Strings.Get("FolderSortDocDate")</MudSelectItem>
-                                                            <MudSelectItem Value="FolderContentsSortOrder.Created">@Strings.Get("FolderSortCreated")</MudSelectItem>
-                                                        </MudSelect>
-                                                    }
-                                                    else
-                                                    {
-                                                        @FolderSortText(_detailSortOrder)
-                                                    }
-                                                </td>
-                                            </tr>
-                                        }
-                                    </table>
-
-                                @if (_isEditing)
+                                </MudTooltip>
+                                @* Manage access (ACL) — only when the caller can manage permissions (ADR "Manage-access UI"). *@
+                                @if (Detail.CanManagePermissions)
                                 {
-                                    @* Mask edit: pick the mask + type-aware field editors. *@
-                                    <div class="wb-mask-edit">
-                                        <div class="wb-mask-row">
-                                            <span class="wb-mask-label">@Strings.Get("MaskLabel")</span>
-                                            <MudSelect T="Guid?" Value="_editMaskId" ValueChanged="OnEditMaskChanged" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
-                                                <MudSelectItem T="Guid?" Value="@((Guid?)null)">@Strings.Get("NoMask")</MudSelectItem>
-                                                @foreach (var m in _availableMasks)
-                                                {
-                                                    <MudSelectItem T="Guid?" Value="@((Guid?)m.Id)">@m.Name</MudSelectItem>
-                                                }
-                                            </MudSelect>
-                                        </div>
-                                        @* Sensitivity label (ADR "Configurable sensitivity labels + upload defaults"). *@
-                                        <div class="wb-mask-row">
-                                            <span class="wb-mask-label">@Strings.Get("BulkSensLabel")</span>
-                                            <MudSelect T="Guid?" @bind-Value="_editSensitivityId" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Clearable="true">
-                                                <MudSelectItem T="Guid?" Value="@((Guid?)null)">(None)</MudSelectItem>
-                                                @foreach (var lbl in _sensitivityLabels.Where(l => !l.Retired || l.Id == _editSensitivityId))
-                                                {
-                                                    <MudSelectItem T="Guid?" Value="@((Guid?)lbl.Id)">@lbl.Name</MudSelectItem>
-                                                }
-                                            </MudSelect>
-                                        </div>
-                                        @foreach (var f in _editFields)
-                                        {
-                                            <div class="wb-mask-row">
-                                                <span class="wb-mask-label">@f.Label</span>
-                                                @if (f.IsDate)
-                                                {
-                                                    <MudDatePicker @bind-Date="f.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
-                                                }
-                                                else if (f.IsBoolean)
-                                                {
-                                                    <MudCheckBox T="bool" @bind-Value="f.BoolValue" />
-                                                }
-                                                else if (f.IsMultiSelect)
-                                                {
-                                                    <MudTextField @bind-Value="f.TextValue" Lines="3" Placeholder="@Strings.Get("OneValuePerLine")" Margin="Margin.Dense" Variant="Variant.Outlined" />
-                                                }
-                                                else
-                                                {
-                                                    <MudTextField @bind-Value="f.TextValue" Margin="Margin.Dense" Variant="Variant.Outlined" />
-                                                }
-                                            </div>
-                                        }
-                                        @* Free-form tags (ADR "Document tags") — chips + an autocomplete add box over the tenant catalog. *@
-                                        <div class="wb-mask-row">
-                                            <span class="wb-mask-label">@Strings.Get("TagsLabel")</span>
-                                            <div style="display:flex; flex-direction:column; gap:4px; min-width:0;">
-                                                @if (_editTags.Count > 0)
-                                                {
-                                                    <div style="display:flex; flex-wrap:wrap; gap:4px;">
-                                                        @foreach (var t in _editTags)
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Style="@Styling.ChipStyle(TagColor(t))" OnClose="@(() => _editTags.Remove(t))">@t</MudChip>
-                                                        }
-                                                    </div>
-                                                }
-                                                <div style="display:flex; align-items:center; gap:4px;">
-                                                    <MudAutocomplete T="string" @bind-Value="_newTag" SearchFunc="SearchTagCatalog" CoerceValue="true"
-                                                                     Placeholder="@Strings.Get("TagAddPlaceholder")" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:200px;"
-                                                                     OnKeyUp="OnTagKeyUp" Immediate="true" />
-                                                    @* Explicit Add — Enter also works, but a click is a deterministic commit path (MudAutocomplete's Enter binding can lag). *@
-                                                    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" aria-label="Add tag" OnClick="AddCurrentTag" />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <MudTooltip Text="@Strings.Get("MaManageAccess")">
+                                        <MudIconButton data-tour="action-manage-access" Size="Size.Small" aria-label="Manage access" Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessForSelectedAsync()" />
+                                    </MudTooltip>
                                 }
-                                else
+                                @* Edit the index data (issue #407). It belongs beside the thing it edits, in the row of
+                                   per-document actions, rather than at the far end of the pane where it began — and
+                                   icon-only like its neighbours, so the row stays one vocabulary. Always visible rather
+                                   than on hover: touch has no hover (ADR 0511). Save and Cancel stay down with the
+                                   FIELDS, because they act on the form rather than on the document. *@
+                                @if (CanEditDetail)
                                 {
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
-                                        Mask: @(_detailMaskName ?? "none")@(_detailVersionNumber is { } vn ? $" · version {vn}" : "")
-                                    </MudText>
-                                    @if (_detailSensitivityId is not null)
-                                    {
-                                        <MudChip T="string" Size="Size.Small" Style="@Styling.ChipStyle(_detailSensitivityColor)" Variant="Variant.Filled" Class="mt-1" Icon="@Icons.Material.Filled.Shield">@_detailSensitivityName</MudChip>
-                                    }
-                                    @if (_detailIndexData is { Count: > 0 })
-                                    {
-                                        <MudSimpleTable Dense="true" Bordered="false" Class="mt-2">
-                                            <tbody>
-                                                @foreach (var field in _detailIndexData)
-                                                {
-                                                    <tr><td>@field.FieldName</td><td>@string.Join(", ", field.Values)</td></tr>
-                                                }
-                                            </tbody>
-                                        </MudSimpleTable>
-                                    }
-                                    @if (_detailTags is { Count: > 0 })
-                                    {
-                                        <div style="display:flex; flex-wrap:wrap; gap:4px;" class="mt-2">
-                                            @foreach (var t in _detailTags)
-                                            {
-                                                <MudChip T="string" Size="Size.Small" Style="@Styling.ChipStyle(TagColor(t))" Icon="@Icons.Material.Filled.Label" OnClick="@(() => SearchByTagAsync(t))">@t</MudChip>
-                                            }
-                                        </div>
-                                    }
+                                    <MudTooltip Text="@Strings.Get("Edit")">
+                                        <MudIconButton data-tour="action-edit-index" Size="Size.Small" aria-label="@Strings.Get("Edit")" Icon="@Icons.Material.Filled.Edit"
+                                                       OnClick="BeginEditAsync" Disabled="Detail.Busy" />
+                                    </MudTooltip>
                                 }
-
-                                @* Save/Cancel are NOT here any more — they live in the header row, where the pencil
-                                   that started the edit is (ADR 0550). Compare versions stays: it is about the
-                                   document's history, not about editing it. *@
-                                <div class="wb-detail-actions">
-                                    @if (!_isEditing && _detailVersionCount >= 2)
-                                    {
-                                        @* Edit moved to the header (issue #407); Compare versions stays, being about the
-                                           document's history rather than about editing it. *@
-                                        <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Difference" OnClick="OpenCompareVersionsAsync">@Strings.Get("CompareVersionsBtn")</MudButton>
-                                    }
-                                </div>
-                            }
-                        </div>
+                            </ReadActions>
+                            <TagAdd>
+                                <MudAutocomplete T="string" @bind-Value="_newTag" SearchFunc="SearchTagCatalog" CoerceValue="true"
+                                                 Placeholder="@Strings.Get("TagAddPlaceholder")" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:200px;"
+                                                 OnKeyUp="OnTagKeyUp" Immediate="true" />
+                                @* Explicit Add — Enter also works, but a click is a deterministic commit path (MudAutocomplete's Enter binding can lag). *@
+                                <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" aria-label="Add tag" OnClick="AddCurrentTag" />
+                            </TagAdd>
+                        </IndexDataPane>
                         <div class="wb-gutter wb-gutter-h" data-gutter="index"><button type="button" class="wb-gutter-toggle"></button></div>
 
                         <div class="wb-detail-bottom">
@@ -981,7 +748,7 @@
                                             }
                                 </Toolbar>
                                 <Overlay>
-                                    @if (_detailSensitivityWatermark)
+                                    @if (Detail.SensitivityWatermark)
                                     {
                                         @* Sensitivity watermark (ADR "Document watermarking") — Confidential/Restricted only. *@
                                         <div class="wb-watermark" style="@WatermarkStyle()"></div>
@@ -990,155 +757,15 @@
                             </PreviewPane>
                             <div class="wb-gutter wb-gutter-v" data-gutter="chat"><button type="button" class="wb-gutter-toggle"></button></div>
 
-                            <div class="wb-chat" data-pane="chat" data-tour="pane-chat">
-                                @if (_commentTarget is null)
-                                {
-                                    <div class="wb-chat-empty">
-                                        <MudIcon Icon="@Icons.Material.Filled.Forum" Size="Size.Large" />
-                                        <MudText Typo="Typo.body2">@Strings.Get("SelectForComments")</MudText>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <div class="wb-chat-header" style="display:flex; align-items:center; gap:8px;">
-                                        <MudText Typo="Typo.subtitle2" style="flex:1 1 auto;">@Strings.Get("CommentsHeader")</MudText>
-                                        @* Follow a folder and its whole subtree (ADR "Folder / subtree subscriptions"). *@
-                                        @if (_commentTarget is { IsFolder: true })
-                                        {
-                                            <MudTooltip Text="@(_folderSubscribed ? Strings.Get("UnfollowFolder") : Strings.Get("FollowFolder"))">
-                                                <MudIconButton Size="Size.Small" aria-label="Follow folder"
-                                                               Icon="@(_folderSubscribed ? Icons.Material.Filled.Notifications : Icons.Material.Outlined.NotificationsNone)"
-                                                               Color="@(_folderSubscribed ? Color.Primary : Color.Default)"
-                                                               OnClick="ToggleFolderSubscriptionAsync" />
-                                            </MudTooltip>
-                                        }
-                                    </div>
-                                    @* The author identity card (ADR 0544) — opened from an author name in the
-                                       thread. One popover reused for whichever author was clicked, since only
-                                       one can be open at a time. *@
-                                    <MudPopover Open="@_authorCardOpen" Fixed="true" Class="wb-author-card pa-4"
-                                                AnchorOrigin="Origin.CenterCenter" TransformOrigin="Origin.CenterCenter">
-                                        @if (_authorCard is { } card)
-                                        {
-                                            <div class="d-flex align-center gap-3">
-                                                @if (_authorCardPhoto is not null)
-                                                {
-                                                    <MudAvatar Size="Size.Large"><MudImage Src="@_authorCardPhoto" /></MudAvatar>
-                                                }
-                                                else
-                                                {
-                                                    <MudAvatar Size="Size.Large" Color="Color.Primary">@Initials(card.DisplayName)</MudAvatar>
-                                                }
-                                                <div>
-                                                    <MudText Typo="Typo.subtitle1">@card.DisplayName</MudText>
-                                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@card.Email</MudText>
-                                                    @if (!card.IsActive)
-                                                    {
-                                                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">@Strings.Get("UserCardDeactivated")</MudChip>
-                                                    }
-                                                </div>
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <MudText Typo="Typo.body2">@Strings.Get("UserCardLoadFailed")</MudText>
-                                        }
-                                    </MudPopover>
-                                    @if (_authorCardOpen)
-                                    {
-                                        <MudOverlay Visible="true" AutoClose="false" @onclick="CloseAuthorCard" />
-                                    }
-                                    <div class="wb-chat-thread">
-                                        @if (_comments.Count == 0)
-                                        {
-                                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("NoCommentsYet")</MudText>
-                                        }
-                                        @foreach (var c in _comments.Where(x => x.ParentMessageId is null).OrderBy(x => x.CreatedAt))
-                                        {
-                                            <div class="wb-comment">
-                                                @if (c.Kind == ChatUserPost)
-                                                {
-                                                    <div class="wb-comment-meta">@AuthorMarkup(c) · @c.CreatedAt.ToLocalTime().ToString("g")</div>
-                                                    <div class="wb-comment-body">@MentionMarkup(c)</div>
-                                                    <span class="wb-reply-link" @onclick="() => ToggleReply(c.Id)">@Strings.Get("ReplyBtn")</span>
-                                                }
-                                                else
-                                                {
-                                                    @* An automatic entry READS as a sentence with the author in
-                                                       it, so the author isn't repeated in the meta line — only
-                                                       the time is (ADR 0545). No reply affordance: there is no
-                                                       conversation to continue with an event. *@
-                                                    <div class="wb-comment-meta">@c.CreatedAt.ToLocalTime().ToString("g")</div>
-                                                    <div class="wb-comment-body wb-system-entry">@SystemSentence(c)</div>
-                                                    @if (c.VersionNumber is { } versionNumber)
-                                                    {
-                                                        <div class="wb-version-entry">
-                                                            <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" />
-                                                            <div>
-                                                                <div>@string.Format(Strings.Get("ChatVersionLabel"), versionNumber)</div>
-                                                                @if (VersionCommentText(c) is { } versionComment)
-                                                                {
-                                                                    <div class="wb-version-comment">@versionComment</div>
-                                                                }
-                                                            </div>
-                                                        </div>
-                                                    }
-                                                }
-                                            </div>
-                                            @foreach (var r in _comments.Where(x => x.ParentMessageId == c.Id).OrderBy(x => x.CreatedAt))
-                                            {
-                                                <div class="wb-comment wb-comment-reply">
-                                                    <div class="wb-comment-meta">@AuthorMarkup(r) · @r.CreatedAt.ToLocalTime().ToString("g")</div>
-                                                    <div class="wb-comment-body">@MentionMarkup(r)</div>
-                                                </div>
-                                            }
-                                            @if (_replyingTo == c.Id)
-                                            {
-                                                <div class="wb-comment-reply">
-                                                    <MudTextField T="string" Value="_replyText" ValueChanged="OnReplyChangedAsync" Immediate="true"
-                                                                  Placeholder="@Strings.Get("ReplyPlaceholder")" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
-                                                    @if (_mentionCandidates.Count > 0)
-                                                    {
-                                                        <MudPaper Class="wb-mention-picker" Elevation="4">
-                                                            <MudList T="string" Dense="true">
-                                                                @foreach (var candidate in _mentionCandidates)
-                                                                {
-                                                                    <MudListItem T="string" OnClick="@(() => PickMention(candidate))">@candidate.DisplayName</MudListItem>
-                                                                }
-                                                            </MudList>
-                                                        </MudPaper>
-                                                    }
-                                                    <div class="wb-compose-actions">
-                                                        <MudButton Size="Size.Small" OnClick="@(() => PostReplyAsync(c.Id))" Disabled="@string.IsNullOrWhiteSpace(_replyText)">@Strings.Get("ReplyBtn")</MudButton>
-                                                    </div>
-                                                </div>
-                                            }
-                                        }
-                                    </div>
-                                    <div class="wb-compose">
-                                        @* Immediate, so the @-picker can react as the name is typed (issue #383) —
-                                           the default commits on blur, which would only offer names after the box
-                                           lost focus. *@
-                                        <MudTextField T="string" Value="_newComment" ValueChanged="OnComposeChangedAsync" Immediate="true"
-                                                      Placeholder="@Strings.Get("CommentPlaceholder")" Variant="Variant.Outlined"
-                                                      Margin="Margin.Dense" Lines="2" />
-                                        @if (_mentionCandidates.Count > 0)
-                                        {
-                                            <MudPaper Class="wb-mention-picker" Elevation="4">
-                                                <MudList T="string" Dense="true">
-                                                    @foreach (var candidate in _mentionCandidates)
-                                                    {
-                                                        <MudListItem T="string" OnClick="@(() => PickMention(candidate))">@candidate.DisplayName</MudListItem>
-                                                    }
-                                                </MudList>
-                                            </MudPaper>
-                                        }
-                                        <div class="wb-compose-actions">
-                                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="PostCommentAsync" Disabled="@string.IsNullOrWhiteSpace(_newComment)">@Strings.Get("CommentBtn")</MudButton>
-                                        </div>
-                                    </div>
-                                }
-                            </div>
+                            @* The chat pane (ADR 0558). The composer's text stays in the SHELL: a half-typed
+                               comment is unsaved input, and this pane is disposed on every tab switch. *@
+                            <ChatPane Target="_commentTarget" Messages="_comments" FolderSubscribed="_folderSubscribed"
+                                      @bind-NewComment="_newComment" @bind-ReplyText="_replyText"
+                                      ReplyingTo="_replyingTo" MentionCandidates="_mentionCandidates"
+                                      PostComment="@(() => PostCommentAsync())" PostReply="@((Guid id) => PostReplyAsync(id))"
+                                      ToggleFolderSubscription="@(() => ToggleFolderSubscriptionAsync())"
+                                      ToggleReplyTo="@((Guid id) => ToggleReply(id))" PickMention="@((MentionableUserResponse u) => PickMention(u))"
+                                      ComposeChanged="OnComposeChangedAsync" ReplyChanged="OnReplyChangedAsync" />
                         </div>
                     </div>
                 </div>
@@ -1352,10 +979,8 @@
     // so the pane always describes SOMETHING you can see, and a folder gets the same pane as a document rather
     // than a thinner one of its own. Distinct from _selectedItem, which still means "a highlighted LIST row" and
     // governs the ribbon's per-item actions.
-    private BrowseNode? _detailNode;
 
     // The subject's own contents-sort order (folders only), read from its detail resource.
-    private FolderContentsSortOrder _detailSortOrder = FolderContentsSortOrder.Name;
     // Folder detail-pane editing of the persisted contents sort order (ADR "Per-folder contents sort order").
     private string FolderSortText(FolderContentsSortOrder order) => order switch
     {
@@ -1389,18 +1014,11 @@
     private Guid _currentRepositoryId;
 
     private BrowseNode? _selectedItem;
-    private string? _detailMaskName;
-    private Guid? _detailMaskId;
-    private int? _detailVersionNumber;
     // The number of confirmed versions of the selected document — gates the "Compare versions…" action (≥2).
-    private int _detailVersionCount;
-    private List<FieldGroup>? _detailIndexData;
 
     // Free-form tags (ADR "Document tags"): the selected document's tags (read-only display), the edit working
     // copy + its original for change detection, the tenant tag catalog for add-box autocomplete, and the
     // pending new-tag value.
-    private List<string>? _detailTags;
-    private List<string> _editTags = [];
     private List<string> _origTags = [];
     // The tag catalogue as the SHELL uses it: names for the index pane's autocomplete, colours for the
     // list-row chips. The Tags tab manages the catalogue and raises CatalogChanged; this is the shell's own
@@ -1428,33 +1046,17 @@
     private string? _newTag;
 
     // System fields (read-only display) — derived from the latest confirmed version (ADR 0273).
-    private bool _sysHasVersion;
-    private Guid _sysCurrentVersionId;
     // The document's current (latest confirmed) version number — shown as the last line of the detail pane
     // (ADR "Mask-pane current-version line").
-    private int? _sysCurrentVersion;
-    private string _sysName = "";
-    private string _sysFileExtension = "";
-    private DateTime? _sysDocumentDate;
-    private string _sysCreated = "";
-    private string _sysCreatedBy = "";
-    private bool _sysHasTiff;
-    private List<string> _sysOcrCodes = [];
 
     // Single pane-level edit state (ADR 0278) — Name/date/OCR/mask/index-data all editable at once.
     private bool _isEditing;
-    private string _editName = "";
-    private DateTime? _editDocumentDate;
-    private Guid? _editMaskId;
-    private List<string> _editOcrCodes = [];
-    private readonly List<EditField> _editFields = [];
     private List<MaskSummary> _availableMasks = [];
     private IReadOnlyList<OcrLanguageOption> _ocrCatalog = [];
     private string _origName = "";
     private DateTime? _origDocumentDate;
     private Guid? _origMaskId;
     private List<string> _origOcrCodes = [];
-    private bool _detailBusy;
 
     private string OcrDisplay(List<string> codes) => codes.Count == 0
         ? "(tenant default)"
@@ -2011,13 +1613,6 @@
     private Guid? _replyingTo;
     private string _replyText = "";
 
-    // The stored form of a mention, matching Domain ChatMentions.Token. A static Regex rather than
-    // [GeneratedRegex]: a Razor @code block is not a partial class, so the source generator has nothing to
-    // extend. Strict 8-4-4-4-12 so ordinary prose containing "@[...]" cannot turn into a mention.
-    private static readonly System.Text.RegularExpressions.Regex MentionTokenPattern =
-        new(@"@\[([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]",
-            System.Text.RegularExpressions.RegexOptions.Compiled);
-
     // The @-mention picker (issue #383). The href comes from the thread's "mentionable-users" rel — the server
     // decides who may be addressed here, because offering somebody who cannot see the document would leak it.
     private string? _mentionableUsersHref;
@@ -2572,8 +2167,8 @@
     private Task OpenManageAccessForSelectedAsync() =>
         Actions.OpenManageAccessAsync(
             _selectedItem!.Id,
-            _sysName,
-            _detailLinks?.GetValueOrDefault("self") ?? DocumentActions.DocumentAddress(_selectedItem!));
+            Detail.SysName,
+            Detail.Links?.GetValueOrDefault("self") ?? DocumentActions.DocumentAddress(_selectedItem!));
 
 
     private async Task LoadTasksAsync()
@@ -2898,7 +2493,7 @@
     // so every endpoint below applies to it unchanged. It was the pane, not the data, that used to differ.
     private async Task LoadDetailForAsync(BrowseNode item)
     {
-        _detailNode = item;
+        Detail.Node = item;
 
         // A drag of the detail pane lasts only until the SELECTION changes (ADR 0550) — which is now, and is
         // exactly when the fitted height would move anyway. Wrapped like every other interop here: a stale
@@ -2912,7 +2507,7 @@
 
         // Set unconditionally, unlike the version-derived fields: a folder has a name to show but no version to
         // derive one from, which is exactly why it used to fall out of this pane entirely.
-        _sysName = _origName = item.Name;
+        Detail.SysName = _origName = item.Name;
 
         try
         {
@@ -2929,33 +2524,33 @@
             }
 
             var detail = await Http.GetFromJsonAsync<DocumentDetailResponse>(detailSelfHref);
-            _detailLinks = Links.RelMap(detail?.Links);
+            Detail.Links = Links.RelMap(detail?.Links);
 
-            _detailMaskId = null;
+            Detail.MaskId = null;
             // mask + index-data come from the ROW's own rels — the listing advertises them, so no second fetch.
             var mask = await Http.GetFromJsonAsync<MaskResponse>(RowOrDetailHref(item, "mask"));
-            _detailMaskName = mask?.Name;
-            _detailMaskId = mask?.MaskId;
-            _detailVersionNumber = mask?.VersionNumber;
+            Detail.MaskName = mask?.Name;
+            Detail.MaskId = mask?.MaskId;
+            Detail.VersionNumber = mask?.VersionNumber;
 
             var index = await Http.GetFromJsonAsync<IndexDataResponse>(RowOrDetailHref(item, "index-data"));
-            _detailIndexData = index?.Fields ?? [];
+            Detail.IndexData = index?.Fields ?? [];
 
             // Free-form tags (ADR "Document tags") — advertised on the resource, not on a listing row.
-            _detailTags = (await Http.GetFromJsonAsync<TagsResponse>(DetailHref("tags")))?.Tags ?? [];
-            _detailRetention = detail?.Retention;
-            _detailSensitivityId = detail?.SensitivityLabelId;
-            _detailSensitivityName = detail?.SensitivityLabelName ?? "";
-            _detailSensitivityColor = detail?.SensitivityLabelColor;
-            _detailSensitivityWatermark = detail?.SensitivityWatermark ?? false;
-            _detailCanManagePermissions = detail?.CanManagePermissions ?? false;
-            _detailBreaksInheritance = detail?.BreaksInheritance ?? false;
+            Detail.Tags = (await Http.GetFromJsonAsync<TagsResponse>(DetailHref("tags")))?.Tags ?? [];
+            Detail.Retention = detail?.Retention;
+            Detail.SensitivityId = detail?.SensitivityLabelId;
+            Detail.SensitivityName = detail?.SensitivityLabelName ?? "";
+            Detail.SensitivityColor = detail?.SensitivityLabelColor;
+            Detail.SensitivityWatermark = detail?.SensitivityWatermark ?? false;
+            Detail.CanManagePermissions = detail?.CanManagePermissions ?? false;
+            Detail.BreaksInheritance = detail?.BreaksInheritance ?? false;
             // A FOLDER's own contents order, which now travels with its details — the pane for a child folder is
             // opened from its parent's listing, where the child's setting was never fetched (issue #408).
-            _detailSortOrder = detail?.ContentsSortOrder ?? FolderContentsSortOrder.Name;
+            Detail.SortOrder = detail?.ContentsSortOrder ?? FolderContentsSortOrder.Name;
             // Captured from the resource's own rel (ADR 0543/0546) — the external-links dialog takes the href
             // rather than composing one, and its absence simply means the affordance isn't offered.
-            _detailExternalLinksHref = Links.Href(detail?.Links, "external-links");
+            Detail.ExternalLinksHref = Links.Href(detail?.Links, "external-links");
             if (_sensitivityLabels.Count == 0)
             {
                 await LoadSensitivityLabelsAsync();
@@ -2963,7 +2558,7 @@
 
             // Whether the current user follows this document (ADR "Document subscriptions").
             var sub = await Http.GetFromJsonAsync<SubscriptionResponse>(DetailHref("subscription"));
-            _detailSubscribed = sub?.Subscribed ?? false;
+            Detail.Subscribed = sub?.Subscribed ?? false;
 
             var versions = await Http.GetFromJsonAsync<VersionListResponse>(DetailHref("versions"));
             var confirmed = versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [];
@@ -2989,7 +2584,7 @@
         }
         catch (HttpRequestException)
         {
-            _detailIndexData ??= [];
+            Detail.IndexData ??= [];
         }
         catch (InvalidOperationException)
         {
@@ -2997,7 +2592,7 @@
             // a render path, so an unhandled exception blanks the whole workbench, list and tree included, not
             // just the part that could not load. That is exactly what happened when tree roots were built
             // without their links (#416): one missing rel took the entire page down.
-            _detailIndexData ??= [];
+            Detail.IndexData ??= [];
         }
 
         await LoadCommentsAsync(item);
@@ -3006,11 +2601,11 @@
     private void ClearDetail()
     {
         _selectedItem = null;
-        _detailNode = null;
-        _detailMaskName = null;
-        _detailVersionNumber = null;
-        _detailIndexData = null;
-        _detailTags = null;
+        Detail.Node = null;
+        Detail.MaskName = null;
+        Detail.VersionNumber = null;
+        Detail.IndexData = null;
+        Detail.Tags = null;
         _downloadUrl = null;
         ClearPreviewPane();
         _commentTarget = null;
@@ -3020,31 +2615,30 @@
         _replyText = "";
 
         _isEditing = false;
-        _sysHasVersion = false;
-        _sysCurrentVersionId = Guid.Empty;
-        _sysCurrentVersion = null;
-        _detailVersionCount = 0;
-        _sysName = "";
-        _sysFileExtension = "";
-        _sysDocumentDate = null;
-        _sysCreated = "";
-        _sysCreatedBy = "";
-        _sysHasTiff = false;
-        _sysOcrCodes = [];
-        _detailRetention = null;
-        _detailSubscribed = false;
-        _editFields.Clear();
+        Detail.SysHasVersion = false;
+        Detail.SysCurrentVersionId = Guid.Empty;
+        Detail.SysCurrentVersion = null;
+        Detail.VersionCount = 0;
+        Detail.SysName = "";
+        Detail.SysFileExtension = "";
+        Detail.SysDocumentDate = null;
+        Detail.SysCreated = "";
+        Detail.SysCreatedBy = "";
+        Detail.SysHasTiff = false;
+        Detail.SysOcrCodes = [];
+        Detail.Retention = null;
+        Detail.Subscribed = false;
+        Detail.EditFields.Clear();
         _availableMasks = [];
     }
 
     // Open the reminder (Wiedervorlage) dialog for the selected document (ADR "Document reminders").
-    private string? _detailExternalLinksHref;
 
     // External links (ADR 0546) — sharing this document with someone who has no account. Offered only when the
     // server advertised the rel; a document that cannot be shared simply has no link to follow.
     private async Task OpenExternalLinksDialogAsync()
     {
-        if (_selectedItem is not { } item || _detailExternalLinksHref is not { } href)
+        if (_selectedItem is not { } item || Detail.ExternalLinksHref is not { } href)
         {
             return;
         }
@@ -3052,7 +2646,7 @@
         var parameters = new DialogParameters
         {
             ["DocumentId"] = item.Id,
-            ["DocumentName"] = _sysName,
+            ["DocumentName"] = Detail.SysName,
             ["LinksHref"] = href,
         };
         await DialogService.ShowAsync<Dialogs.ExternalLinksDialog>(Strings.Get("ExtLinkTitle"), parameters);
@@ -3123,14 +2717,13 @@
         var parameters = new DialogParameters
         {
             ["DocumentId"] = item.Id,
-            ["DocumentName"] = _sysName,
-            ["RemindersHref"] = _detailLinks?.GetValueOrDefault("reminders"),
+            ["DocumentName"] = Detail.SysName,
+            ["RemindersHref"] = Detail.Links?.GetValueOrDefault("reminders"),
         };
         await DialogService.ShowAsync<Dialogs.ReminderDialog>(Strings.Get("RemTitle"), parameters);
     }
 
     // Whether the current user follows the selected document (ADR "Document subscriptions").
-    private bool _detailSubscribed;
 
     private async Task ToggleSubscriptionAsync()
     {
@@ -3141,13 +2734,13 @@
 
         try
         {
-            var target = _detailSubscribed;
+            var target = Detail.Subscribed;
             using var response = target
                 ? await Http.DeleteAsync(DetailHref("subscription"))
                 : await Http.PutAsync(DetailHref("subscription"), null);
             response.EnsureSuccessStatusCode();
-            _detailSubscribed = !target;
-            Snackbar.Add(_detailSubscribed ? "Following this document." : "Unfollowed.", Severity.Success);
+            Detail.Subscribed = !target;
+            Snackbar.Add(Detail.Subscribed ? "Following this document." : "Unfollowed.", Severity.Success);
         }
         catch (Exception)
         {
@@ -3198,19 +2791,11 @@
         }
     }
 
-    private DetailRetentionDto? _detailRetention;
     // Manage-access affordance (ADR "Manage-access UI for document/folder ACLs"): the caller's own
     // CanManagePermissions on the selected item gates the button; BreaksInheritance is shown in the dialog.
-    private bool _detailCanManagePermissions;
-    private bool _detailBreaksInheritance;
     // Sensitivity label (ADR "Data classification / sensitivity labels"): current value + the staged edit value.
     // The selected document's sensitivity (ADR "Configurable sensitivity labels + upload defaults") — the per-
-    // tenant label id/name/colour + whether it watermarks; _edit* is the pending picker value.
-    private Guid? _detailSensitivityId;
-    private string _detailSensitivityName = "";
-    private string? _detailSensitivityColor;
-    private bool _detailSensitivityWatermark;
-    private Guid? _editSensitivityId;
+    // tenant label id/name/colour + whether it watermarks; DetailState.Edit* is the pending picker value.
     private List<SensitivityLabel> _sensitivityLabels = [];
     private bool _canManageSensitivity;
 
@@ -3229,12 +2814,11 @@
     // classification reminder — bypassable, server-stamped downloads deferred).
     private string WatermarkStyle()
     {
-        var text = System.Net.WebUtility.HtmlEncode($"{_detailSensitivityName} · {_viewerName}");
+        var text = System.Net.WebUtility.HtmlEncode($"{Detail.SensitivityName} · {_viewerName}");
         var svg = $"<svg xmlns='http://www.w3.org/2000/svg' width='360' height='200'><text x='10' y='150' fill='rgba(130,130,130,0.20)' font-size='20' font-family='sans-serif' transform='rotate(-28 10 150)'>{text}</text></svg>";
         return $"background-image:url(\"data:image/svg+xml,{Uri.EscapeDataString(svg)}\");";
     }
     private record DocumentDetailResponse { public List<LinkResponse> Links { get; set; } = []; public DetailRetentionDto? Retention { get; set; } public Guid? SensitivityLabelId { get; set; } public string SensitivityLabelName { get; set; } = ""; public string? SensitivityLabelColor { get; set; } public bool SensitivityWatermark { get; set; } public bool CanManagePermissions { get; set; } public bool BreaksInheritance { get; set; } public FolderContentsSortOrder ContentsSortOrder { get; set; } }
-    private record DetailRetentionDto { public int RetentionYears { get; set; } public string DispositionDate { get; set; } = ""; public bool SuspendedByHold { get; set; } }
 
     // Derives the always-shown system fields from the confirmed versions (ADR 0273): the current version's
     // Created/Created-by/Document-date/File-extension, and the OCR override + TIFF-source from the latest TIFF.
@@ -3249,51 +2833,50 @@
         static bool IsTiff(string? key) => key is not null && (key.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) || key.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase));
         var tiff = confirmed.Where(v => IsTiff(v.ObjectKey)).OrderByDescending(v => v.VersionNumber ?? 0).FirstOrDefault();
 
-        _sysHasVersion = true;
-        _sysCurrentVersionId = current.Id;
-        _sysCurrentVersion = current.VersionNumber;
-        _detailVersionCount = confirmed.Count;
-        _sysName = item.Name;
-        _sysFileExtension = current.FileExtension ?? "";
-        _sysDocumentDate = DateTime.TryParse(current.DocumentDate, out var d) ? d.Date : null;
-        _sysCreated = current.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
-        _sysCreatedBy = current.CreatedByName ?? "";
-        _sysHasTiff = tiff is not null;
-        _sysOcrCodes = string.IsNullOrWhiteSpace(tiff?.OcrLanguages) ? [] : tiff!.OcrLanguages!.Split('+', StringSplitOptions.RemoveEmptyEntries).ToList();
+        Detail.SysHasVersion = true;
+        Detail.SysCurrentVersionId = current.Id;
+        Detail.SysCurrentVersion = current.VersionNumber;
+        Detail.VersionCount = confirmed.Count;
+        Detail.SysName = item.Name;
+        Detail.SysFileExtension = current.FileExtension ?? "";
+        Detail.SysDocumentDate = DateTime.TryParse(current.DocumentDate, out var d) ? d.Date : null;
+        Detail.SysCreated = current.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        Detail.SysCreatedBy = current.CreatedByName ?? "";
+        Detail.SysHasTiff = tiff is not null;
+        Detail.SysOcrCodes = string.IsNullOrWhiteSpace(tiff?.OcrLanguages) ? [] : tiff!.OcrLanguages!.Split('+', StringSplitOptions.RemoveEmptyEntries).ToList();
     }
 
     // ---- Single pane-level edit (ADR 0278): Name/date/OCR/mask/index-data all editable at once -----------
 
     // The SUBJECT is what gets edited — a selected row or the open folder — so a folder's metadata is editable
     // from wherever you reached it (issue #408).
-    private bool CanEditDetail => _detailNode is not null && !_isEditing;
+    private bool CanEditDetail => Detail.Node is not null && !_isEditing;
 
     // The edited contents order, staged like every other field so Cancel discards it.
-    private FolderContentsSortOrder _editSortOrder = FolderContentsSortOrder.Name;
 
     private async Task BeginEditAsync()
     {
-        if (_detailNode is null)
+        if (Detail.Node is null)
         {
             return;
         }
 
         // One pencil commits everything the pane shows, so a folder's contents order is staged alongside its mask
         // and index fields rather than hiding behind an Edit button of its own.
-        _editSortOrder = _detailSortOrder;
+        Detail.EditSortOrder = Detail.SortOrder;
 
-        _detailBusy = true;
+        Detail.Busy = true;
         try
         {
             // Snapshot originals for change detection + cancel.
-            _editName = _origName = _sysName;
-            _editDocumentDate = _origDocumentDate = _sysDocumentDate;
-            _editOcrCodes = [.. _sysOcrCodes];
-            _origOcrCodes = [.. _sysOcrCodes];
-            _editMaskId = _origMaskId = _detailMaskId;
-            _editSensitivityId = _detailSensitivityId;
-            _editTags = [.. (_detailTags ?? [])];
-            _origTags = [.. (_detailTags ?? [])];
+            Detail.EditName = _origName = Detail.SysName;
+            Detail.EditDocumentDate = _origDocumentDate = Detail.SysDocumentDate;
+            Detail.EditOcrCodes = [.. Detail.SysOcrCodes];
+            _origOcrCodes = [.. Detail.SysOcrCodes];
+            Detail.EditMaskId = _origMaskId = Detail.MaskId;
+            Detail.EditSensitivityId = Detail.SensitivityId;
+            Detail.EditTags = [.. (Detail.Tags ?? [])];
+            _origTags = [.. (Detail.Tags ?? [])];
             _newTag = null;
             if (_tagColors.Count == 0)
             {
@@ -3301,12 +2884,12 @@
             }
 
             _availableMasks = (await Http.GetFromJsonAsync<MaskListResponse>(await ApiRoot.RequireAsync("masks")))?.Masks ?? [];
-            if (_sysHasTiff && _ocrCatalog.Count == 0)
+            if (Detail.SysHasTiff && _ocrCatalog.Count == 0)
             {
                 _ocrCatalog = await OcrLanguages.GetAsync();
             }
 
-            await LoadEditFieldsAsync(_editMaskId, useCurrentValues: true);
+            await LoadEditFieldsAsync(Detail.EditMaskId, useCurrentValues: true);
             _isEditing = true;
         }
         catch (HttpRequestException e)
@@ -3315,7 +2898,7 @@
         }
         finally
         {
-            _detailBusy = false;
+            Detail.Busy = false;
         }
     }
 
@@ -3351,7 +2934,7 @@
 
     private async Task LoadEditFieldsAsync(Guid? maskId, bool useCurrentValues)
     {
-        _editFields.Clear();
+        Detail.EditFields.Clear();
         if (maskId is not { } id)
         {
             return;
@@ -3359,28 +2942,28 @@
 
         var fields = await Http.GetFromJsonAsync<MaskFieldsResponse>($"api/masks/{id}");
         var valuesByName = useCurrentValues
-            ? (_detailIndexData ?? []).ToDictionary(f => f.FieldName, f => f.Values)
+            ? (Detail.IndexData ?? []).ToDictionary(f => f.FieldName, f => f.Values)
             : new Dictionary<string, List<string>>();
 
         foreach (var f in fields?.Fields ?? [])
         {
             var values = valuesByName.TryGetValue(f.Name, out var v) ? v : [];
-            _editFields.Add(EditField.Create(f, values));
+            Detail.EditFields.Add(EditField.Create(f, values));
         }
     }
 
     private async Task OnEditMaskChanged(Guid? maskId)
     {
-        _editMaskId = maskId;
+        Detail.EditMaskId = maskId;
         await LoadEditFieldsAsync(maskId, useCurrentValues: false);
     }
 
     // OCR ordered picker: click a language to append it (numbered), click a selected one to remove + renumber.
     private void ToggleOcr(string code)
     {
-        if (!_editOcrCodes.Remove(code))
+        if (!Detail.EditOcrCodes.Remove(code))
         {
-            _editOcrCodes.Add(code);
+            Detail.EditOcrCodes.Add(code);
         }
     }
 
@@ -3400,17 +2983,17 @@
     // Persists only the fields that changed; a failure keeps the pane in edit mode and reports it (ADR 0278).
     private async Task SaveDetailAsync()
     {
-        if (_detailNode is not { } item)
+        if (Detail.Node is not { } item)
         {
             return;
         }
 
-        _detailBusy = true;
+        Detail.Busy = true;
         var failures = new List<string>();
         var nameChanged = false;
         try
         {
-            var newName = _editName.Trim();
+            var newName = Detail.EditName.Trim();
             if (newName.Length > 0 && newName != _origName)
             {
                 var etag = await Actions.GetETagAsync(DetailHref("self"));
@@ -3421,53 +3004,53 @@
                 }
 
                 var resp = await Http.SendAsync(req);
-                if (resp.IsSuccessStatusCode) { _sysName = _origName = newName; nameChanged = true; }
+                if (resp.IsSuccessStatusCode) { Detail.SysName = _origName = newName; nameChanged = true; }
                 else if (resp.StatusCode == HttpStatusCode.Conflict) { failures.Add("name (already exists here)"); }
                 else { failures.Add("name"); }
             }
 
-            if (_sysHasVersion && _sysCurrentVersionId != Guid.Empty && _editDocumentDate is { } dd && dd != _origDocumentDate)
+            if (Detail.SysHasVersion && Detail.SysCurrentVersionId != Guid.Empty && Detail.EditDocumentDate is { } dd && dd != _origDocumentDate)
             {
-                var resp = await Http.PutAsJsonAsync($"api/documents/{item.Id}/versions/{_sysCurrentVersionId}/document-date", new { documentDate = dd.ToString("yyyy-MM-dd") });
-                if (resp.IsSuccessStatusCode) { _sysDocumentDate = _origDocumentDate = dd; } else { failures.Add("document date"); }
+                var resp = await Http.PutAsJsonAsync($"api/documents/{item.Id}/versions/{Detail.SysCurrentVersionId}/document-date", new { documentDate = dd.ToString("yyyy-MM-dd") });
+                if (resp.IsSuccessStatusCode) { Detail.SysDocumentDate = _origDocumentDate = dd; } else { failures.Add("document date"); }
             }
 
-            if (_sysHasTiff && !_editOcrCodes.SequenceEqual(_origOcrCodes))
+            if (Detail.SysHasTiff && !Detail.EditOcrCodes.SequenceEqual(_origOcrCodes))
             {
-                var resp = await Http.PutAsJsonAsync(DetailHref("ocr-languages"), new { languages = _editOcrCodes });
-                if (resp.IsSuccessStatusCode) { _sysOcrCodes = [.. _editOcrCodes]; _origOcrCodes = [.. _editOcrCodes]; } else { failures.Add("OCR languages"); }
+                var resp = await Http.PutAsJsonAsync(DetailHref("ocr-languages"), new { languages = Detail.EditOcrCodes });
+                if (resp.IsSuccessStatusCode) { Detail.SysOcrCodes = [.. Detail.EditOcrCodes]; _origOcrCodes = [.. Detail.EditOcrCodes]; } else { failures.Add("OCR languages"); }
             }
 
-            if (_editSensitivityId != _detailSensitivityId)
+            if (Detail.EditSensitivityId != Detail.SensitivityId)
             {
-                var resp = await Http.PutAsJsonAsync(DetailHref("sensitivity"), new { labelId = _editSensitivityId });
+                var resp = await Http.PutAsJsonAsync(DetailHref("sensitivity"), new { labelId = Detail.EditSensitivityId });
                 if (resp.IsSuccessStatusCode)
                 {
-                    _detailSensitivityId = _editSensitivityId;
-                    var lbl = _sensitivityLabels.FirstOrDefault(l => l.Id == _editSensitivityId);
-                    _detailSensitivityName = lbl?.Name ?? "";
-                    _detailSensitivityColor = lbl?.Color;
-                    _detailSensitivityWatermark = lbl?.Watermark ?? false;
+                    Detail.SensitivityId = Detail.EditSensitivityId;
+                    var lbl = _sensitivityLabels.FirstOrDefault(l => l.Id == Detail.EditSensitivityId);
+                    Detail.SensitivityName = lbl?.Name ?? "";
+                    Detail.SensitivityColor = lbl?.Color;
+                    Detail.SensitivityWatermark = lbl?.Watermark ?? false;
                 }
                 else { failures.Add("sensitivity"); }
             }
 
             // Free-form tags (ADR "Document tags"): PUT-replaces the whole set; the server normalizes/dedupes.
-            var editTags = _editTags.Select(t => t.Trim().ToLowerInvariant()).Where(t => t.Length is > 0 and <= 100).Distinct().ToList();
+            var editTags = Detail.EditTags.Select(t => t.Trim().ToLowerInvariant()).Where(t => t.Length is > 0 and <= 100).Distinct().ToList();
             if (!editTags.OrderBy(t => t).SequenceEqual(_origTags.OrderBy(t => t)))
             {
                 var resp = await Http.PutAsJsonAsync(DetailHref("tags"), new { tags = editTags });
                 if (resp.IsSuccessStatusCode)
                 {
-                    _detailTags = (await resp.Content.ReadFromJsonAsync<TagsResponse>())?.Tags ?? [];
-                    _origTags = [.. _detailTags];
+                    Detail.Tags = (await resp.Content.ReadFromJsonAsync<TagsResponse>())?.Tags ?? [];
+                    _origTags = [.. Detail.Tags];
                 }
                 else { failures.Add("tags"); }
             }
 
             try
             {
-                if (_editMaskId is null)
+                if (Detail.EditMaskId is null)
                 {
                     if (_origMaskId is not null)
                     {
@@ -3477,11 +3060,11 @@
                 else
                 {
                     // Fill index data first, then (re)assign the mask (which re-checks required fields).
-                    var body = new { fields = _editFields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.ToValues() }) };
+                    var body = new { fields = Detail.EditFields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.ToValues() }) };
                     (await Http.PutAsJsonAsync(DetailHref("index-data"), body)).EnsureSuccessStatusCode();
-                    if (_editMaskId != _origMaskId)
+                    if (Detail.EditMaskId != _origMaskId)
                     {
-                        (await Http.PutAsJsonAsync(DetailHref("mask"), new { maskId = _editMaskId })).EnsureSuccessStatusCode();
+                        (await Http.PutAsJsonAsync(DetailHref("mask"), new { maskId = Detail.EditMaskId })).EnsureSuccessStatusCode();
                     }
                 }
             }
@@ -3492,16 +3075,16 @@
 
             // A folder's contents order commits with everything else, from the same pencil (issue #408). Skipped
             // for a document, which lists nothing, and when unchanged — so an ordinary edit sends no extra request.
-            if (item.IsFolder && _editSortOrder != _detailSortOrder)
+            if (item.IsFolder && Detail.EditSortOrder != Detail.SortOrder)
             {
-                var resp = await Http.PutAsJsonAsync(DetailHref("contents-sort-order"), new { sortOrder = (int)_editSortOrder });
+                var resp = await Http.PutAsJsonAsync(DetailHref("contents-sort-order"), new { sortOrder = (int)Detail.EditSortOrder });
                 if (resp.IsSuccessStatusCode)
                 {
-                    _detailSortOrder = _editSortOrder;
+                    Detail.SortOrder = Detail.EditSortOrder;
                     // The OPEN folder's own listing re-sorts only when it is the folder that changed.
                     if (_selectedFolder?.Id == item.Id)
                     {
-                        _folderSortOrder = _editSortOrder;
+                        _folderSortOrder = Detail.EditSortOrder;
                         _listPane?.ResetHeaderSort(); // re-apply the persisted default order to the current listing
                     }
                 }
@@ -3531,7 +3114,7 @@
                     _folderContents = await OpenFolderContentsAsync(folder);
                 }
 
-                var fresh = (_folderContents ?? []).FirstOrDefault(c => c.Id == item.Id) ?? item with { Name = _sysName };
+                var fresh = (_folderContents ?? []).FirstOrDefault(c => c.Id == item.Id) ?? item with { Name = Detail.SysName };
                 await SelectItemAsync(fresh);
             }
             else
@@ -3541,147 +3124,22 @@
         }
         finally
         {
-            _detailBusy = false;
+            Detail.Busy = false;
         }
     }
 
     // ---- Automatic chat entries (ADR 0545) -----------------------------------------------------------
 
-    private const int ChatUserPost = 0, ChatVersionFiled = 1, ChatVersionActivated = 2;
 
-    // Renders a system entry's sentence from a LOCALIZED TEMPLATE, splicing the author in as a live element so
-    // the name stays a clickable identity card. String.Format would flatten it to text and lose the card, which
-    // is why the wording is stored nowhere and composed here instead.
-    private RenderFragment SystemSentence(ChatMessageResponse message) => builder =>
-    {
-        var template = message.Kind switch
-        {
-            // One entry per version, two sentences: a first version IS the document arriving; every later one is
-            // a new working version of something already here. The version number the entry points at decides.
-            ChatVersionFiled => Strings.Get(
-                message.VersionNumber is null or <= 1 ? "ChatFiledNewDocument" : "ChatSavedNewVersion"),
-            ChatVersionActivated => Strings.Get("ChatActivatedVersion"),
-            _ => "{0}",
-        };
 
-        // {0} is the author element; {1}, where a template has one, is the version number.
-        var sequence = 0;
-        foreach (var part in SplitTemplate(template))
-        {
-            switch (part)
-            {
-                case "{0}":
-                    builder.AddContent(sequence++, AuthorMarkup(message));
-                    break;
-                case "{1}":
-                    builder.AddContent(sequence++, message.VersionNumber?.ToString() ?? "");
-                    break;
-                default:
-                    builder.AddContent(sequence++, part);
-                    break;
-            }
-        }
-    };
 
-    // Splits "{0} made Version {1} current." into its literal and placeholder parts, preserving order.
-    private static IEnumerable<string> SplitTemplate(string template)
-    {
-        var buffer = new System.Text.StringBuilder();
-        for (var i = 0; i < template.Length; i++)
-        {
-            if (i + 2 < template.Length && template[i] == '{' && char.IsDigit(template[i + 1]) && template[i + 2] == '}')
-            {
-                if (buffer.Length > 0)
-                {
-                    yield return buffer.ToString();
-                    buffer.Clear();
-                }
-
-                yield return template.Substring(i, 3);
-                i += 2;
-                continue;
-            }
-
-            buffer.Append(template[i]);
-        }
-
-        if (buffer.Length > 0)
-        {
-            yield return buffer.ToString();
-        }
-    }
-
-    // The check-in comment shown beneath "Version N". A machine-generated one carries no stored text — its
-    // wording is a localized string for the kind (ADR 0545).
-    private string? VersionCommentText(ChatMessageResponse message) => message.VersionCommentKind switch
-    {
-        1 => Strings.Get("VersionCommentSearchablePdf"),
-        _ => string.IsNullOrWhiteSpace(message.VersionComment) ? null : message.VersionComment,
-    };
 
     // ---- Author identity card (ADR 0544) -------------------------------------------------------------
 
-    // The author label. A message that advertises an "author-card" rel renders a clickable name; one that does
-    // not (a ServiceAccount posted it) renders plain text. The ABSENCE of the rel is the signal — the client
-    // never decides for itself whether an author is a person (ADR 0543/0544).
-    private RenderFragment AuthorMarkup(ChatMessageResponse message) => builder =>
-    {
-        var cardHref = Links.Href(message.Links, "author-card");
-        if (cardHref is null)
-        {
-            builder.AddContent(0, message.AuthorName);
-            return;
-        }
 
-        builder.OpenElement(1, "span");
-        builder.AddAttribute(2, "class", "wb-author-link");
-        builder.AddAttribute(3, "onclick", EventCallback.Factory.Create<MouseEventArgs>(this, () => OpenAuthorCardAsync(cardHref)));
-        builder.AddContent(4, message.AuthorName);
-        builder.CloseElement();
-    };
 
-    private UserCardResponse? _authorCard;
-    private string? _authorCardPhoto;
-    private bool _authorCardOpen;
 
-    private void CloseAuthorCard() => _authorCardOpen = false;
 
-    // Initials fallback when a colleague has no photo — the same treatment MainLayout gives the current user.
-    private static string Initials(string displayName) =>
-        string.Concat(displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => part[0])).ToUpperInvariant();
-
-    private async Task OpenAuthorCardAsync(string cardHref)
-    {
-        _authorCard = null;
-        _authorCardPhoto = null;
-        _authorCardOpen = true;
-
-        try
-        {
-            _authorCard = await Http.GetFromJsonAsync<UserCardResponse>(cardHref);
-        }
-        catch (HttpRequestException)
-        {
-            _authorCardOpen = true; // keep it open so the failure is visible rather than a dead click
-            return;
-        }
-
-        // The photo rel is present only when there is one, so this never probes for a 404 (ADR 0543). The bytes
-        // are bearer-protected, so a raw <img src> would 401 — fetch and render a data URL, as MainLayout does.
-        if (Links.Href(_authorCard?.Links, "photo") is { } photoHref)
-        {
-            try
-            {
-                _authorCardPhoto = "data:image/png;base64," + Convert.ToBase64String(await Http.GetByteArrayAsync(photoHref));
-            }
-            catch (HttpRequestException)
-            {
-                _authorCardPhoto = null;
-            }
-        }
-
-        StateHasChanged();
-    }
 
     // ---- Chat thread ---------------------------------------------------------------------------------
 
@@ -3804,51 +3262,7 @@
         _mentionCandidates = [];
     }
 
-    // Renders a body with its "@[id]" tokens turned into the mentioned person's name. The names come from the
-    // message's own mentions list, so no extra lookup is needed; a token whose user is gone falls back to a
-    // tombstone rather than showing a raw id or silently dropping the fact that somebody was addressed.
-    private RenderFragment MentionMarkup(ChatMessageResponse message) => builder =>
-    {
-        var names = (message.Mentions ?? []).ToDictionary(m => m.UserId, m => m.DisplayName);
-        var sequence = 0;
 
-        foreach (var part in MentionParts(message.Body))
-        {
-            if (part.UserId is { } userId)
-            {
-                builder.OpenElement(sequence++, "span");
-                builder.AddAttribute(sequence++, "class", "wb-mention");
-                builder.AddContent(sequence++, $"@{names.GetValueOrDefault(userId, Strings.Get("ChatMentionUnknown"))}");
-                builder.CloseElement();
-            }
-            else
-            {
-                builder.AddContent(sequence++, part.Text);
-            }
-        }
-    };
-
-    private static IEnumerable<(string Text, Guid? UserId)> MentionParts(string body)
-    {
-        var matches = MentionTokenPattern.Matches(body);
-        var position = 0;
-
-        foreach (System.Text.RegularExpressions.Match match in matches)
-        {
-            if (match.Index > position)
-            {
-                yield return (body[position..match.Index], null);
-            }
-
-            yield return ("", Guid.Parse(match.Groups[1].Value));
-            position = match.Index + match.Length;
-        }
-
-        if (position < body.Length)
-        {
-            yield return (body[position..], null);
-        }
-    }
 
     private async Task PostCommentAsync()
     {
@@ -4218,7 +3632,7 @@
     // tags; Enter commits the box (a coerced free-form value or the highlighted suggestion).
     private Task<IEnumerable<string>> SearchTagCatalog(string value, CancellationToken ct)
     {
-        var pool = _tagCatalog.Where(t => !_editTags.Contains(t));
+        var pool = _tagCatalog.Where(t => !Detail.EditTags.Contains(t));
         return Task.FromResult(string.IsNullOrWhiteSpace(value)
             ? pool
             : pool.Where(t => t.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase)));
@@ -4237,9 +3651,9 @@
     private void AddCurrentTag()
     {
         var t = (_newTag ?? "").Trim().ToLowerInvariant();
-        if (t.Length is > 0 and <= 100 && !_editTags.Contains(t))
+        if (t.Length is > 0 and <= 100 && !Detail.EditTags.Contains(t))
         {
-            _editTags.Add(t);
+            Detail.EditTags.Add(t);
         }
 
         _newTag = null;
@@ -4565,12 +3979,11 @@
 
 
     // The rels the OPEN document's resource advertised (set when the detail pane loads).
-    private IReadOnlyDictionary<string, string>? _detailLinks;
 
     // Collection-level rels, captured where each collection is read (ADR 0543, issue #416). Null until then,
     // which is what disables the action rather than the client composing a path for it.
 
-    private string DetailHref(string rel) => HrefOrThrow(_detailLinks, rel);
+    private string DetailHref(string rel) => HrefOrThrow(Detail.Links, rel);
 
     // For an action on a node whose resource is not open — "Follow folder" from the tree context menu — FETCH
     // the document and follow the rel. One request, at the moment the user acts.
@@ -4601,7 +4014,6 @@
 
     private record ArchiveEntriesResponse { public List<ArchiveEntryDto> Entries { get; set; } = []; }
     private record ArchiveEntryDto { public string Name { get; set; } = ""; public string Path { get; set; } = ""; public long Size { get; set; } public List<LinkResponse> Links { get; set; } = []; }
-    private record UserCardResponse { public Guid UserId { get; set; } public string DisplayName { get; set; } = ""; public string Email { get; set; } = ""; public bool IsActive { get; set; } public bool HasPhoto { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record DocNameResponse { public string Name { get; set; } = ""; }
     private record CreateVersionResponse { public Guid Id { get; set; } public string UploadUrl { get; set; } = ""; }
 
@@ -4610,7 +4022,6 @@
     // The names behind a body's "@[id]" tokens, resolved by the server so the thread renders without a lookup
     // per token (issue #383).
 
-    private record MentionableUserResponse { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; }
 
     private record MentionableUserListResponse { public List<MentionableUserResponse> Users { get; set; } = []; }
 }

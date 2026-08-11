@@ -1,0 +1,313 @@
+@using SimplArchive.Client.Models
+@using SimplArchive.Client.Services
+@inject DetailState Detail
+
+@* The workbench's index-data pane: what the selected object IS. (ADR 0558) *@
+<div class="wb-pane wb-index" data-pane="index" data-tour="pane-index" tabindex="-1"
+     @onkeydown="@((KeyboardEventArgs e) => KeyDown.InvokeAsync(e))">
+    @if (Detail.Node is null)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("SelectDocDetail")</MudText>
+    }
+    else
+    {
+        <div class="wb-detail-head @(Detail.Node?.TreeGlyphClass) @(IsEditing ? "wb-editing" : "")" style="display:flex; align-items:center; gap:4px;">
+            @* The SAME glyph the tree draws for this object (ADR 0547): a folder looks like a
+               folder — and an empty one like an empty one — wherever it appears, rather than
+               changing style depending on which pane you are looking at. *@
+            @if (Detail.Node is { } glyphNode)
+            {
+                <MudIcon Icon="@BrowseService.TreeIcon(glyphNode)" Size="Size.Small" Class="wb-detail-glyph" />
+            }
+            <MudText Typo="Typo.subtitle1" Style="flex:1 1 auto; min-width:0;">@Detail.SysName</MudText>
+            @* While EDITING, the actions that can do nothing disappear and the commit controls
+               take their slots (ADR 0550) — the row does not reflow under the cursor that just
+               clicked the pencil, and Save/Cancel are where that pencil was. *@
+            @if (IsEditing)
+            {
+                <MudTooltip Text="@Strings.Get("Save")">
+                    <MudIconButton data-tour="action-save-index" Size="Size.Small" aria-label="@Strings.Get("Save")" Color="Color.Primary"
+                                   Icon="@Icons.Material.Filled.Save" OnClick="@(() => Save.InvokeAsync())" Disabled="Detail.Busy" />
+                </MudTooltip>
+                <MudTooltip Text="@Strings.Get("Cancel")">
+                    <MudIconButton Size="Size.Small" aria-label="@Strings.Get("Cancel")"
+                                   Icon="@Icons.Material.Filled.Close" OnClick="@(() => Cancel.InvokeAsync())" Disabled="Detail.Busy" />
+                </MudTooltip>
+            }
+            else
+            {
+                @ReadActions
+            }
+        </div>
+
+        @* System fields (ADR 0273). Rendered for a FOLDER as well since issue #408 — the rows
+           that come from a VERSION stay conditional, because a folder has none, but Name and the
+           mask below are as real for a folder as for a document. *@
+        <table class="wb-sysfields">
+                <tr>
+                    <td>@Strings.Get("Name")</td>
+                    <td>
+                        @if (IsEditing)
+                        {
+                            <MudTextField @bind-Value="Detail.EditName" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                        }
+                        else
+                        {
+                            @Detail.SysName
+                        }
+                    </td>
+                </tr>
+                @if (Detail.SysHasVersion)
+                {
+                <tr><td>@Strings.Get("SysFileExtension")</td><td class="wb-sys-muted">@Detail.SysFileExtension</td></tr>
+                <tr>
+                    <td>@Strings.Get("VerColDocDate")</td>
+                    <td>
+                        @if (IsEditing)
+                        {
+                            <MudDatePicker @bind-Date="Detail.EditDocumentDate" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                        }
+                        else
+                        {
+                            @(Detail.SysDocumentDate?.ToString("yyyy-MM-dd"))
+                        }
+                    </td>
+                </tr>
+                @if (Detail.SysHasTiff)
+                {
+                    <tr>
+                        <td>@Strings.Get("SysOcrLanguages")</td>
+                        <td>
+                            @if (IsEditing)
+                            {
+                                <div class="wb-ocr-chips">
+                                    @foreach (var lang in OcrCatalog)
+                                    {
+                                        var idx = Detail.EditOcrCodes.IndexOf(lang.Code);
+                                        <button type="button" class="wb-ocr-chip @(idx >= 0 ? "wb-ocr-chip-on" : "")" @onclick="() => ToggleOcrCode.InvokeAsync(lang.Code)">
+                                            @(idx >= 0 ? $"{idx + 1}. " : "")@lang.DisplayName
+                                        </button>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                @OcrDisplay(Detail.SysOcrCodes)
+                            }
+                        </td>
+                    </tr>
+                }
+                <tr><td>@Strings.Get("SysCreated")</td><td class="wb-sys-muted">@Detail.SysCreated</td></tr>
+                <tr><td>@Strings.Get("SysCreatedBy")</td><td class="wb-sys-muted">@Detail.SysCreatedBy</td></tr>
+                }
+                @* The document's current (latest confirmed) version number, directly below Created by
+                   (ADR "Mask-pane current-version line"). *@
+                @if (Detail.SysCurrentVersion is { } curVer)
+                {
+                    <tr><td>@Strings.Get("SysCurrentVersion")</td><td class="wb-current-version wb-sys-muted">@curVer</td></tr>
+                }
+                @if (Detail.Retention is { } ret)
+                {
+                    <tr>
+                        <td>@Strings.Get("SysRetention")</td>
+                        <td class="wb-sys-muted">
+                            @ret.RetentionYears years · disposition @ret.DispositionDate@(ret.SuspendedByHold ? " (suspended — legal hold)" : "")
+                        </td>
+                    </tr>
+                }
+                @* Folder-only: the order this folder lists its contents in (ADR "Per-folder
+                   contents sort order"). It rides in the same pane and the same edit as the
+                   mask now, rather than in a pane of its own with its own Edit button. *@
+                @if (Detail.Node?.IsFolder == true)
+                {
+                    <tr>
+                        <td>@Strings.Get("FolderSortLabel")</td>
+                        <td>
+                            @if (IsEditing)
+                            {
+                                <MudSelect T="FolderContentsSortOrder" @bind-Value="Detail.EditSortOrder" Margin="Margin.Dense" Variant="Variant.Outlined" Dense="true">
+                                    <MudSelectItem Value="FolderContentsSortOrder.Name">@Strings.Get("FolderSortName")</MudSelectItem>
+                                    <MudSelectItem Value="FolderContentsSortOrder.DocumentDate">@Strings.Get("FolderSortDocDate")</MudSelectItem>
+                                    <MudSelectItem Value="FolderContentsSortOrder.Created">@Strings.Get("FolderSortCreated")</MudSelectItem>
+                                </MudSelect>
+                            }
+                            else
+                            {
+                                @FolderSortText(Detail.SortOrder)
+                            }
+                        </td>
+                    </tr>
+                }
+            </table>
+
+        @if (IsEditing)
+        {
+            @* Mask edit: pick the mask + type-aware field editors. *@
+            <div class="wb-mask-edit">
+                <div class="wb-mask-row">
+                    <span class="wb-mask-label">@Strings.Get("MaskLabel")</span>
+                    <MudSelect T="Guid?" Value="Detail.EditMaskId" ValueChanged="@((Guid? v) => EditMaskChanged.InvokeAsync(v))" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
+                        <MudSelectItem T="Guid?" Value="@((Guid?)null)">@Strings.Get("NoMask")</MudSelectItem>
+                        @foreach (var m in AvailableMasks)
+                        {
+                            <MudSelectItem T="Guid?" Value="@((Guid?)m.Id)">@m.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+                @* Sensitivity label (ADR "Configurable sensitivity labels + upload defaults"). *@
+                <div class="wb-mask-row">
+                    <span class="wb-mask-label">@Strings.Get("BulkSensLabel")</span>
+                    <MudSelect T="Guid?" @bind-Value="Detail.EditSensitivityId" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Clearable="true">
+                        <MudSelectItem T="Guid?" Value="@((Guid?)null)">(None)</MudSelectItem>
+                        @foreach (var lbl in SensitivityLabels.Where(l => !l.Retired || l.Id == Detail.EditSensitivityId))
+                        {
+                            <MudSelectItem T="Guid?" Value="@((Guid?)lbl.Id)">@lbl.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+                @foreach (var f in Detail.EditFields)
+                {
+                    <div class="wb-mask-row">
+                        <span class="wb-mask-label">@f.Label</span>
+                        @if (f.IsDate)
+                        {
+                            <MudDatePicker @bind-Date="f.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                        }
+                        else if (f.IsBoolean)
+                        {
+                            <MudCheckBox T="bool" @bind-Value="f.BoolValue" />
+                        }
+                        else if (f.IsMultiSelect)
+                        {
+                            <MudTextField @bind-Value="f.TextValue" Lines="3" Placeholder="@Strings.Get("OneValuePerLine")" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                        }
+                        else
+                        {
+                            <MudTextField @bind-Value="f.TextValue" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                        }
+                    </div>
+                }
+                @* Free-form tags (ADR "Document tags") — chips + an autocomplete add box over the tenant catalog. *@
+                <div class="wb-mask-row">
+                    <span class="wb-mask-label">@Strings.Get("TagsLabel")</span>
+                    <div style="display:flex; flex-direction:column; gap:4px; min-width:0;">
+                        @if (Detail.EditTags.Count > 0)
+                        {
+                            <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                                @foreach (var t in Detail.EditTags)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Style="@Styling.ChipStyle(TagColor(t))" OnClose="@(() => Detail.EditTags.Remove(t))">@t</MudChip>
+                                }
+                            </div>
+                        }
+                        <div style="display:flex; align-items:center; gap:4px;">
+                            @TagAdd
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                Mask: @(Detail.MaskName ?? "none")@(Detail.VersionNumber is { } vn ? $" · version {vn}" : "")
+            </MudText>
+            @if (Detail.SensitivityId is not null)
+            {
+                <MudChip T="string" Size="Size.Small" Style="@Styling.ChipStyle(Detail.SensitivityColor)" Variant="Variant.Filled" Class="mt-1" Icon="@Icons.Material.Filled.Shield">@Detail.SensitivityName</MudChip>
+            }
+            @if (Detail.IndexData is { Count: > 0 })
+            {
+                <MudSimpleTable Dense="true" Bordered="false" Class="mt-2">
+                    <tbody>
+                        @foreach (var field in Detail.IndexData)
+                        {
+                            <tr><td>@field.FieldName</td><td>@string.Join(", ", field.Values)</td></tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+            @if (Detail.Tags is { Count: > 0 })
+            {
+                <div style="display:flex; flex-wrap:wrap; gap:4px;" class="mt-2">
+                    @foreach (var t in Detail.Tags)
+                    {
+                        <MudChip T="string" Size="Size.Small" Style="@Styling.ChipStyle(TagColor(t))" Icon="@Icons.Material.Filled.Label" OnClick="@(() => SearchByTag.InvokeAsync(t))">@t</MudChip>
+                    }
+                </div>
+            }
+        }
+
+        @* Save/Cancel are NOT here any more — they live in the header row, where the pencil
+           that started the edit is (ADR 0550). Compare versions stays: it is about the
+           document's history, not about editing it. *@
+        <div class="wb-detail-actions">
+            @if (!IsEditing && Detail.VersionCount >= 2)
+            {
+                @* Edit moved to the header (issue #407); Compare versions stays, being about the
+                   document's history rather than about editing it. *@
+                <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Difference" OnClick="@(() => OpenCompareVersions.InvokeAsync())">@Strings.Get("CompareVersionsBtn")</MudButton>
+            }
+        </div>
+    }
+
+
+</div>
+
+@code {
+    /// <summary>Whether the pane is in edit mode — which swaps the header's actions (ADR 0550).</summary>
+    [Parameter] public bool IsEditing { get; set; }
+
+    /// <summary>
+    /// The per-document actions offered while READING — follow, remind, share, manage access, edit.
+    /// </summary>
+    /// <remarks>
+    /// Supplied by the shell because every one of them acts on the document rather than on this pane. What the
+    /// pane owns is the SWAP: while editing, the actions that can do nothing disappear and Save/Cancel take
+    /// their slots, so the row does not reflow under the cursor that just clicked the pencil (ADR 0550). That
+    /// rule is a property of the transition, so it lives here; the buttons are not.
+    /// </remarks>
+    [Parameter] public RenderFragment? ReadActions { get; set; }
+
+    /// <summary>The tag entry box and its Add button — a self-contained widget the shell owns.</summary>
+    [Parameter] public RenderFragment? TagAdd { get; set; }
+
+    /// <summary>The tenant's masks, for the mask picker.</summary>
+    [Parameter] public IReadOnlyList<MaskSummary> AvailableMasks { get; set; } = [];
+
+    /// <summary>The tenant's OCR languages (ADR 0272), for the per-version language chips.</summary>
+    [Parameter] public IReadOnlyList<OcrLanguageOption> OcrCatalog { get; set; } = [];
+
+    /// <summary>The tenant's sensitivity labels, for the classification picker.</summary>
+    [Parameter] public IReadOnlyList<SensitivityLabel> SensitivityLabels { get; set; } = [];
+
+    /// <summary>Tag name → colour, for the chips. Absent means the tag has no colour of its own.</summary>
+    [Parameter] public IReadOnlyDictionary<string, string?> TagColors { get; set; } = new Dictionary<string, string?>();
+
+    [Parameter] public EventCallback Save { get; set; }
+    [Parameter] public EventCallback Cancel { get; set; }
+    [Parameter] public EventCallback OpenCompareVersions { get; set; }
+    [Parameter] public EventCallback<KeyboardEventArgs> KeyDown { get; set; }
+    [Parameter] public EventCallback<Guid?> EditMaskChanged { get; set; }
+
+    /// <summary>Toggle one OCR language on the open edit — order matters, so the shell owns the list.</summary>
+    [Parameter] public EventCallback<string> ToggleOcrCode { get; set; }
+
+    /// <summary>Clicking a tag chip searches for it, which is a workbench-level navigation.</summary>
+    [Parameter] public EventCallback<string> SearchByTag { get; set; }
+
+    private string? TagColor(string name) => TagColors.TryGetValue(name, out var c) ? c : null;
+
+    // The stored OCR codes as the catalog's display names, in the order they will be applied.
+    private string OcrDisplay(List<string> codes) =>
+        codes.Count == 0
+            ? "—"
+            : string.Join(", ", codes.Select(c => OcrCatalog.FirstOrDefault(l => l.Code == c)?.DisplayName ?? c));
+
+    private string FolderSortText(FolderContentsSortOrder order) => order switch
+    {
+        FolderContentsSortOrder.DocumentDate => Strings.Get("FolderSortDocDate"),
+        FolderContentsSortOrder.Created => Strings.Get("FolderSortCreated"),
+        _ => Strings.Get("FolderSortName"),
+    };
+}

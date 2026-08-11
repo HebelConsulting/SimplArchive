@@ -49,3 +49,35 @@ public record ChatMentionResponse
 
     public string DisplayName { get; set; } = "";
 }
+
+/// <summary>
+/// The subject's retention position (ADR 0326): how long it must be kept, when it becomes disposable, and
+/// whether a legal hold is currently freezing that clock.
+/// </summary>
+public record DetailRetentionDto
+{
+    public int RetentionYears { get; set; }
+    public string DispositionDate { get; set; } = "";
+    public bool SuspendedByHold { get; set; }
+}
+
+/// <summary>A colleague's identity card, opened from their name in a chat thread.</summary>
+public record UserCardResponse
+{
+    public Guid UserId { get; set; }
+    public string DisplayName { get; set; } = "";
+    public string Email { get; set; } = "";
+    public bool IsActive { get; set; }
+    public bool HasPhoto { get; set; }
+    public List<LinkResponse> Links { get; set; } = [];
+}
+
+/// <summary>
+/// One candidate for an "@" mention. The names behind a body's "@[id]" tokens are resolved by the SERVER so a
+/// thread renders without a lookup per token (issue #383).
+/// </summary>
+public record MentionableUserResponse
+{
+    public Guid Id { get; set; }
+    public string DisplayName { get; set; } = "";
+}

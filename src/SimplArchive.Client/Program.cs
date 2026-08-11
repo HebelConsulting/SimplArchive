@@ -67,6 +67,11 @@ builder.Services.AddScoped<SimplArchive.Client.Services.BrowseService>();
 // collapsed — every time the user visits another tab (see TreeState).
 builder.Services.AddScoped<SimplArchive.Client.Services.TreeState>();
 
+// What the index-data pane is describing, including an OPEN EDIT's unsaved form. Outside the pane component
+// because that component is disposed on a tab switch, and losing a half-filled index form to a glance at
+// another tab is exactly the state a user is annoyed to lose (see DetailState).
+builder.Services.AddScoped<SimplArchive.Client.Services.DetailState>();
+
 builder.Services.AddHttpClient("SimplArchive.Api", client => client.BaseAddress = new Uri(builder.HostEnvironment.BaseAddress))
     .AddHttpMessageHandler(sp => sp.GetRequiredService<AuthorizationMessageHandler>()
         .ConfigureHandler(authorizedUrls: [builder.HostEnvironment.BaseAddress]))
