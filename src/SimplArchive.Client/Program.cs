@@ -42,6 +42,11 @@ builder.Services.AddSingleton<SimplArchive.Client.Services.AppNavigationState>()
 builder.Services.AddScoped<SimplArchive.Client.Services.ImpersonationHandler>();
 builder.Services.AddScoped<SimplArchive.Client.Services.ImpersonationService>();
 
+// The Search tab's on-screen state. Held outside the component because the workbench renders one tab at a time
+// and opening a hit switches to Repositories — so results kept in the component would vanish exactly when the
+// user comes back for the next hit (ADRs 0511/0558; see SearchState).
+builder.Services.AddScoped<SimplArchive.Client.Services.SearchState>();
+
 builder.Services.AddHttpClient("SimplArchive.Api", client => client.BaseAddress = new Uri(builder.HostEnvironment.BaseAddress))
     .AddHttpMessageHandler(sp => sp.GetRequiredService<AuthorizationMessageHandler>()
         .ConfigureHandler(authorizedUrls: [builder.HostEnvironment.BaseAddress]))

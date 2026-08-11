@@ -34,4 +34,40 @@ public class WebSearchTests
         await Expect(page.Locator(".wb-tab-active")).ToHaveAttributeAsync("aria-label", "Repositories");
         await Expect(page.Locator(".wb-sysfields")).ToContainTextAsync("Invoice 2026-003");
     }
+
+    // The results must survive leaving the tab and coming back.
+    //
+    // This is not a hypothetical: opening a hit switches to Repositories (the test above), so "search → open a
+    // hit → back for the next one" is the ordinary way search is used, and it crosses the tab boundary every
+    // time. When the workbench page was decomposed (ADR 0558) the Search tab became a component that is DISPOSED
+    // whenever another tab is shown, which would have emptied the results at exactly that moment — so the state
+    // lives in the injected SearchState instead, mirroring the desktop client, where it sits on the
+    // MainWindowViewModel and outlives every tab switch (ADR 0511). Nothing else asserts that, and the failure
+    // would look like ordinary forgetfulness rather than a bug.
+    [Fact]
+    public async Task Search_results_survive_switching_to_another_tab_and_back()
+    {
+        var page = await Ui.LoginAsync(_app);
+
+        await page.Locator(".wb-tab[aria-label=\"Search\"]").First.ClickAsync();
+
+        var input = page.Locator("input[placeholder*='Search by name']");
+        await input.FillAsync("Invoice");
+        await input.PressAsync("Enter");
+
+        var result = page.Locator(".wb-search-results .wb-list-row").Filter(new() { HasText = "Invoice 2026-003" });
+        await Expect(result).ToBeVisibleAsync();
+
+        await page.Locator(".wb-tab[aria-label=\"Repositories\"]").First.ClickAsync();
+        await Expect(page.Locator(".wb-tab-active")).ToHaveAttributeAsync("aria-label", "Repositories");
+
+        await page.Locator(".wb-tab[aria-label=\"Search\"]").First.ClickAsync();
+
+        // The whole tab comes back as it was left: the hit still in the list, the status line, and the query
+        // still in the box — not a blank tab the user has to search again from. Results are asserted FIRST
+        // because they are the point; the query box merely reflects them.
+        await Expect(result).ToBeVisibleAsync();
+        await Expect(page.Locator(".wb-search-status")).ToContainTextAsync("result(s)");
+        await Expect(input).ToHaveValueAsync("Invoice");
+    }
 }

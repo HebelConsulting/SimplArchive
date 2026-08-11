@@ -55,12 +55,15 @@ public partial class ClientHypermediaTests
         // RESOURCE rather than a listing row — checkout, move, set-primary-location — which cost a fetch per row
         // action, and by the version-compare pair. The desktop side solved the same problem by holding the row
         // (ADR 0555); the web client's equivalent migration has not been done.
-        // 51 = 48 + 3 after the workbench page was decomposed (ADR 0558). The budget is keyed by FILE, so
-        // moving code moves composed URLs — and the two numbers still summing to 51 is what proves the
-        // extraction was a pure move rather than a rewrite that quietly gained or lost a call.
-        // 51 = 44 + 4 + 3 as the page is decomposed (ADR 0558). The budget is keyed by FILE, so moving code
-        // moves composed URLs; the numbers still summing to 51 is what proves each extraction was a pure move.
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 44,
+        //
+        // The budget is keyed by FILE, so decomposing the workbench page (ADR 0558) MOVES composed URLs between
+        // entries rather than removing them — and the entries still summing to the same total is what proves an
+        // extraction was a pure move rather than a rewrite that quietly gained or lost a call. The running sum:
+        // 51 = 48 + 3, then 51 = 44 + 4 + 3, and now 50 = 43 + 4 + 3 — the Search extraction carried its region
+        // out AND converted the one URL in it (`api/search?…` → the root's `search` rel), so the total drops by
+        // exactly the one that was converted. A move and a conversion in one commit are only legible because
+        // both numbers are stated.
+        ["src/SimplArchive.Client/Pages/Home.razor"] = 43,
         // The check-out stash addresses — download, replace, check in, cancel. The rels exist server-side
         // (#441 renamed `checkin` to mean the POST that actually checks in); this is the client half.
         ["src/SimplArchive.Client/Components/Tabs/CheckoutTab.razor"] = 4,

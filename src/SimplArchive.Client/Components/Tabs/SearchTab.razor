@@ -1,0 +1,570 @@
+@using System.Net
+@inject HttpClient Http
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
+@inject SimplArchive.Client.Services.SearchState S
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+@* The Search tab of the workbench (ADRs "OpenSearch full-text", "Search-refinement UI", "Search facet
+   refinements", "Saved searches"), extracted from Home.razor per ADR 0558.
+
+   What it does NOT own is its state: that lives in the injected SearchState, because this component is
+   disposed whenever another tab is shown and opening a hit is itself a switch to the Repositories tab. See
+   SearchState for why. Everything below therefore reads and writes S.*, and the only things that cross the
+   component boundary are the two bridges the shell owns — a tag click coming IN, and a hit click going OUT. *@
+
+<div class="wb-search">
+    <div class="wb-search-bar">
+        <MudTextField @bind-Value="S.Query" Immediate="true" OnKeyDown="OnSearchKeyDown" Style="flex:1 1 auto;"
+                      Placeholder="@Strings.Get("SearchPlaceholder")" Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+        <MudSelect T="Guid?" @bind-Value="S.RepositoryId" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                   Style="max-width:180px;" Class="ml-2" Placeholder="@Strings.Get("SearchAllRepos")">
+            <MudSelectItem T="Guid?" Value="@((Guid?)null)">@Strings.Get("SearchAllRepos")</MudSelectItem>
+            @foreach (var repo in S.Repositories)
+            {
+                <MudSelectItem T="Guid?" Value="@((Guid?)repo.Id)">@repo.Name</MudSelectItem>
+            }
+        </MudSelect>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RunSearchAsync" Class="ml-2">@Strings.Get("SearchBtn")</MudButton>
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.BookmarkAdd" OnClick="SaveCurrentSearchAsync"
+                   Disabled="@string.IsNullOrEmpty(S.LastQueryString)" Class="ml-2">@Strings.Get("Save")</MudButton>
+        @if (_searching)
+        {
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="ml-2" />
+        }
+    </div>
+
+    @if (_savedSearches.Count > 0)
+    {
+        @* Saved searches (ADR "Saved searches"/"Scoped saved-search sharing") — click to restore +
+           re-run. Mine: ✕ removes, the share button opens the scope dialog. Others' shared searches
+           are run-only. *@
+        <div class="wb-saved-searches">
+            <span class="wb-filter-label">@Strings.Get("SearchSavedLabel")</span>
+            @foreach (var s in _savedSearches)
+            {
+                <span style="display:inline-flex; align-items:center; gap:2px;">
+                    @if (s.IsMine)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                 Icon="@ScopeIcon(s.ShareScope)"
+                                 OnClick="@(() => RunSavedSearchAsync(s))" OnClose="@(() => DeleteSavedSearchAsync(s))">@s.Name</MudChip>
+                        <MudTooltip Text="@ScopeTooltip(s.ShareScope)">
+                            <MudIconButton Icon="@Icons.Material.Filled.Share"
+                                           aria-label="@Strings.Get("SearchShareAria")" Size="Size.Small" OnClick="@(() => OpenShareDialogAsync(s))" />
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <MudTooltip Text="@string.Format(Strings.Get("SearchSharedBy"), s.OwnerName)">
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info"
+                                     Icon="@Icons.Material.Filled.Group"
+                                     OnClick="@(() => RunSavedSearchAsync(s))">@s.Name</MudChip>
+                        </MudTooltip>
+                    }
+                </span>
+            }
+        </div>
+    }
+
+    <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => S.FiltersExpanded = !S.FiltersExpanded)"
+               StartIcon="@(S.FiltersExpanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)">@Strings.Get("SearchFilters")</MudButton>
+
+    @if (S.FiltersExpanded)
+    {
+        <div class="wb-search-filters">
+            <div class="wb-filter-row">
+                <span class="wb-filter-label">@Strings.Get("FilterDocDate")</span>
+                <MudDatePicker @bind-Date="S.DocDateFrom" Placeholder="from" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
+                <MudDatePicker @bind-Date="S.DocDateTo" Placeholder="to" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
+            </div>
+            <div class="wb-filter-row">
+                <span class="wb-filter-label">@Strings.Get("FilterCreated")</span>
+                <MudDatePicker @bind-Date="S.CreatedFrom" Placeholder="from" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
+                <MudDatePicker @bind-Date="S.CreatedTo" Placeholder="to" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
+            </div>
+            <div class="wb-filter-row">
+                <span class="wb-filter-label">@Strings.Get("FilterCreatedBy")</span>
+                <MudTextField @bind-Value="S.CreatedBy" Placeholder="@Strings.Get("FilterNameContains")" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:240px;" />
+            </div>
+
+            @foreach (var row in S.FieldFilters)
+            {
+                <div class="wb-filter-row">
+                    <span class="wb-filter-label">@Strings.Get("FilterIndexField")</span>
+                    <MudSelect T="string" Value="row.FieldName" ValueChanged="@(v => OnFieldFilterFieldChanged(row, v))" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:180px;">
+                        @foreach (var field in S.AvailableFields)
+                        {
+                            <MudSelectItem T="string" Value="@field.Name">@field.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudSelect T="string" @bind-Value="row.Operator" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:120px;">
+                        @foreach (var op in OperatorsFor(row.DataType))
+                        {
+                            <MudSelectItem T="string" Value="@op.Value">@op.Label</MudSelectItem>
+                        }
+                    </MudSelect>
+                    @if (row.DataType == 2)
+                    {
+                        <MudDatePicker @bind-Date="row.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" Class="wb-filter-date" />
+                    }
+                    else if (row.DataType == 3)
+                    {
+                        <MudSelect T="string" @bind-Value="row.Value" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:120px;">
+                            <MudSelectItem T="string" Value="@("true")">@Strings.Get("FilterYes")</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("false")">@Strings.Get("FilterNo")</MudSelectItem>
+                        </MudSelect>
+                    }
+                    else
+                    {
+                        <MudTextField @bind-Value="row.Value" Placeholder="@Strings.Get("FilterValue")" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:200px;" />
+                    }
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="@(() => S.FieldFilters.Remove(row))" />
+                </div>
+            }
+
+            <div class="wb-filter-row">
+                <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add" OnClick="AddFieldFilter" Disabled="@(S.AvailableFields.Count == 0)">@Strings.Get("AddIndexFilter")</MudButton>
+                <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="ClearFilters">@Strings.Get("ClearFilters")</MudButton>
+            </div>
+        </div>
+    }
+
+    <div class="wb-search-status">@S.Status</div>
+    @if (S.Facets is { } fc && (fc.DocumentTypes.Count > 0 || fc.CreatedBy.Count > 0 || fc.Years.Count > 0 || fc.Tags.Count > 0 || fc.FileTypes.Count > 0 || fc.SensitivityLabels.Count > 0 || fc.Fields.Count > 0))
+    {
+        <div class="wb-search-facets">
+            @FacetGroup(Strings.Get("FacetType"), fc.DocumentTypes, S.FacetTypes, v => ToggleFacetAsync(S.FacetTypes, v))
+            @FacetGroup(Strings.Get("FacetFileType"), fc.FileTypes, S.FacetFileTypes, v => ToggleFacetAsync(S.FacetFileTypes, v))
+            @FacetGroup(Strings.Get("FilterCreatedBy"), fc.CreatedBy, S.FacetCreatedBy, v => ToggleFacetAsync(S.FacetCreatedBy, v))
+            @FacetGroup(Strings.Get("FacetYear"), fc.Years, S.FacetYears, v => ToggleFacetAsync(S.FacetYears, v))
+            @FacetGroup(Strings.Get("TagsLabel"), fc.Tags, S.FacetTags, v => ToggleFacetAsync(S.FacetTags, v))
+            @FacetGroup(Strings.Get("BulkSensLabel"), fc.SensitivityLabels, S.FacetSensitivity, v => ToggleFacetAsync(S.FacetSensitivity, v))
+            @foreach (var ff in fc.Fields)
+            {
+                @FacetGroup(ff.Name, ff.Buckets, FieldFacetSet(ff.Name), v => ToggleFieldFacetAsync(ff.Name, v))
+            }
+        </div>
+    }
+    <div class="wb-search-results">
+        @foreach (var hit in S.Results)
+        {
+            <div class="wb-list-row" @onclick="() => OnOpenHit.InvokeAsync(hit)">
+                <MudIcon Icon="@(hit.IsFolder ? Icons.Material.Filled.Folder : Icons.Material.Filled.Description)" Size="Size.Small" />
+                <div style="min-width:0;">
+                    <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@hit.Name</div>
+                    @if (!string.IsNullOrEmpty(hit.Highlight))
+                    {
+                        @* Highlight is HTML-escaped surrounding text with only <em> match tags (ADR "Search result highlighting") — safe to render as markup. *@
+                        <div class="wb-search-snippet">@((MarkupString)hit.Highlight)</div>
+                    }
+                    <div class="wb-search-path">@hit.Path</div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>
+    /// A tag the shell wants searched the moment this tab appears — set when a tag chip is clicked on a
+    /// document's index data, which switches to this tab. The tab runs the filter-only search itself rather
+    /// than the shell reaching in to do it (ADR 0558: a tab loads itself).
+    /// </summary>
+    [Parameter]
+    public string? InitialTagFilter { get; set; }
+
+    /// <summary>Raised once <see cref="InitialTagFilter"/> has been applied, so the shell can drop it.</summary>
+    [Parameter]
+    public EventCallback OnFilterApplied { get; set; }
+
+    /// <summary>
+    /// A result the user clicked. The shell owns it because opening a hit means navigating the Repositories
+    /// tab's contents pane to the hit's folder and selecting it — the one thing this tab cannot do itself.
+    /// </summary>
+    [Parameter]
+    public EventCallback<SearchHit> OnOpenHit { get; set; }
+
+    private bool _searching;
+    private List<SavedSearchDto> _savedSearches = [];
+    private string? _shareTargetsHref;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Saved searches are re-read on every visit: someone may have shared one since. The field + repository
+        // pickers are not — they are a paged walk, and MetadataLoaded outlives this component (ADR 0557).
+        if (!S.MetadataLoaded)
+        {
+            await LoadSearchMetadataAsync();
+        }
+
+        await LoadSavedSearchesAsync();
+    }
+
+    // The tag bridge is applied HERE rather than in OnInitializedAsync, which would work today and break
+    // quietly tomorrow: today the only tag chips that reach it are on the Repositories index pane, so arriving
+    // with a pending tag always means this component was just created. Put a clickable tag anywhere on THIS tab
+    // and that stops being true — the component is already mounted, initialisation never runs again, and the
+    // click does nothing at all. Reacting to the parameter covers both, and the callback below clears the tag so
+    // it applies exactly once either way.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (InitialTagFilter is not { } tag)
+        {
+            return;
+        }
+
+        S.Query = "";
+        S.ClearFacetSelections();
+        S.FacetTags.Add(tag);
+        await RunSearchAsync();
+        await OnFilterApplied.InvokeAsync();
+    }
+
+    // ---- Saved searches (ADR "Saved searches") ------------------------------------------------------
+    private async Task LoadSavedSearchesAsync()
+    {
+        try
+        {
+            var savedSearchPage = await Http.GetFromJsonAsync<SavedSearchesResponse>(await ApiRoot.RequireAsync("savedSearches"));
+            _savedSearches = savedSearchPage?.SavedSearches ?? [];
+            _shareTargetsHref = Links.Href(savedSearchPage?.Links, "share-targets");
+        }
+        catch (Exception) { _savedSearches = []; }
+    }
+
+    private async Task SaveCurrentSearchAsync()
+    {
+        if (string.IsNullOrEmpty(S.LastQueryString))
+        {
+            return;
+        }
+
+        var name = await JS.InvokeAsync<string?>("prompt", "Name this saved search:");
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        using var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("savedSearches"), new { name = name.Trim(), queryString = S.LastQueryString });
+        if (resp.IsSuccessStatusCode)
+        {
+            Snackbar.Add(Strings.Get("StSearchSaved"), Severity.Success);
+            await LoadSavedSearchesAsync();
+        }
+        else
+        {
+            Snackbar.Add(resp.StatusCode == HttpStatusCode.Conflict ? "You already have a saved search with that name." : "Could not save.", Severity.Warning);
+        }
+    }
+
+    // Restores + re-runs a saved search exactly (the free-text box reflects the saved query; refining further
+    // rebuilds from the current UI — a documented limitation).
+    private async Task RunSavedSearchAsync(SavedSearchDto s)
+    {
+        S.LastQueryString = s.QueryString;
+        S.Query = ExtractQ(s.QueryString);
+        S.ClearFacetSelections();
+        await ExecuteSearchAsync(s.QueryString);
+    }
+
+    private async Task DeleteSavedSearchAsync(SavedSearchDto s)
+    {
+        if (s.Href("delete") is not { } deleteHref) { return; }
+
+        using var resp = await Http.DeleteAsync(deleteHref);
+        if (resp.IsSuccessStatusCode)
+        {
+            await LoadSavedSearchesAsync();
+        }
+    }
+
+    private static string? ScopeIcon(int scope) => scope switch
+    {
+        1 => Icons.Material.Filled.Public,   // Everyone
+        2 => Icons.Material.Filled.Group,    // Specific
+        _ => null,                            // Private
+    };
+
+    private static string ScopeTooltip(int scope) => scope switch
+    {
+        1 => "Shared with everyone — click to change",
+        2 => "Shared with specific people — click to change",
+        _ => "Private — click to share",
+    };
+
+    // Open the scope dialog for my own saved search (ADR "Scoped saved-search sharing") — loads the picker
+    // targets + current grants, then owner-only PUTs the chosen scope + principals.
+    private async Task OpenShareDialogAsync(SavedSearchDto s)
+    {
+        var targets = new List<ShareSavedSearchDialog.TargetOption>();
+        try
+        {
+            var t = await Http.GetFromJsonAsync<ShareTargetsResponse>(_shareTargetsHref!);
+            targets.AddRange((t?.Users ?? []).Select(u => new ShareSavedSearchDialog.TargetOption("user", u.Id, u.DisplayName)));
+            targets.AddRange((t?.Groups ?? []).Select(g => new ShareSavedSearchDialog.TargetOption("group", g.Id, g.Name)));
+        }
+        catch (Exception) { /* empty picker */ }
+
+        var initialSelected = new List<string>();
+        if (s.ShareScope == 2)
+        {
+            try
+            {
+                var shares = await Http.GetFromJsonAsync<SharesResponse>(s.Href("shares")!);
+                initialSelected.AddRange((shares?.Shares ?? []).Select(g => $"{g.PrincipalType}:{g.PrincipalId}"));
+            }
+            catch (Exception) { /* none */ }
+        }
+
+        var parameters = new DialogParameters
+        {
+            ["Name"] = s.Name,
+            ["InitialScope"] = s.ShareScope,
+            ["Targets"] = targets,
+            ["InitialSelected"] = initialSelected,
+        };
+        var dialog = await DialogService.ShowAsync<ShareSavedSearchDialog>(Strings.Get("SssTitle"), parameters);
+        if ((await dialog.Result) is not { Canceled: false, Data: ShareSavedSearchDialog.Result result })
+        {
+            return;
+        }
+
+        var shareBody = result.Selected.Select(k => new { type = k.Split(':')[0], id = Guid.Parse(k.Split(':')[1]) }).ToList();
+        if (s.Href("self") is not { } selfHref) { return; }
+
+        using var resp = await Http.PutAsJsonAsync(selfHref, new { name = s.Name, queryString = s.QueryString, shareScope = result.Scope, shares = shareBody });
+        if (resp.IsSuccessStatusCode)
+        {
+            Snackbar.Add(result.Scope switch { 1 => $"Shared '{s.Name}' with everyone.", 2 => $"Shared '{s.Name}' with specific people.", _ => $"'{s.Name}' is now private." }, Severity.Success);
+            await LoadSavedSearchesAsync();
+        }
+        else
+        {
+            Snackbar.Add(Strings.Get("StErrChangeSharing"), Severity.Warning);
+        }
+    }
+
+    // The free-text term inside a saved query string (for showing in the search box on restore).
+    private static string ExtractQ(string queryString)
+    {
+        foreach (var part in queryString.Split('&'))
+        {
+            if (part.StartsWith("q=", StringComparison.Ordinal))
+            {
+                return Uri.UnescapeDataString(part[2..]);
+            }
+        }
+
+        return "";
+    }
+
+    // ---- Facets (ADR "Search facet refinements") ----------------------------------------------------
+
+    // Toggle a facet value in/out of its dimension's set, then re-search — the server keeps every dimension
+    // open, so the buckets stay browsable after a drill-down.
+    private Task ToggleFacetAsync(HashSet<string> set, string v) { if (!set.Remove(v)) set.Add(v); return RunSearchAsync(); }
+
+    private Task ToggleFieldFacetAsync(string field, string v)
+    {
+        if (!S.FacetFields.TryGetValue(field, out var set)) { set = S.FacetFields[field] = []; }
+        if (!set.Remove(v)) { set.Add(v); }
+        return RunSearchAsync();
+    }
+
+    private HashSet<string> FieldFacetSet(string name) => S.FacetFields.TryGetValue(name, out var s) ? s : [];
+
+    private RenderFragment FacetGroup(string label, List<FacetBucket> buckets, HashSet<string> selected, Func<string, Task> onToggle) =>
+        @<div class="wb-facet-group">
+            <span class="wb-facet-label">@label</span>
+            @foreach (var b in buckets)
+            {
+                var on = selected.Contains(b.Value);
+                <MudChip T="string" Size="Size.Small" Variant="@(on ? Variant.Filled : Variant.Outlined)"
+                         Color="@(on ? Color.Primary : Color.Default)" OnClick="@(() => onToggle(b.Value))">@b.Value (@b.Count)</MudChip>
+            }
+        </div>;
+
+    // ---- Refinement panel (ADR "Search-refinement UI") ----------------------------------------------
+
+    // FieldDataType: Text=0, Number=1, Date=2, Boolean=3, SingleSelect=4, MultiSelect=5.
+    private static IReadOnlyList<(string Value, string Label)> OperatorsFor(int dataType) => dataType switch
+    {
+        1 => [("eq", "="), ("gt", ">"), ("gte", "≥"), ("lt", "<"), ("lte", "≤")],
+        2 => [("eq", "on"), ("gte", "on/after"), ("lte", "on/before"), ("gt", "after"), ("lt", "before")],
+        3 => [("eq", "is")],
+        4 or 5 => [("eq", "is"), ("in", "is any of")],
+        _ => [("contains", "contains"), ("eq", "equals")],
+    };
+
+    private async Task LoadSearchMetadataAsync()
+    {
+        try
+        {
+            var fields = await Http.GetFromJsonAsync<SearchFieldsResponse>(await ApiRoot.RequireAsync("searchFields"));
+            S.AvailableFields = fields?.Fields ?? [];
+
+            var repos = new List<RepositorySummary>();
+            var url = await ApiRoot.RequireAsync("repositories");
+            while (url is not null)
+            {
+                var page = await Http.GetFromJsonAsync<RepositoryListResponse>(url);
+                repos.AddRange(page?.Repositories ?? []);
+                url = Links.Href(page?.Links, "next");
+            }
+            S.Repositories = repos;
+            S.MetadataLoaded = true;
+        }
+        catch (Exception)
+        {
+            // Non-fatal — the free-text/system filters still work without the field picker.
+        }
+    }
+
+    private void AddFieldFilter()
+    {
+        var first = S.AvailableFields.FirstOrDefault();
+        var row = new FieldFilterRow { FieldName = first?.Name ?? "", DataType = first?.DataType ?? 0 };
+        row.Operator = OperatorsFor(row.DataType)[0].Value;
+        S.FieldFilters.Add(row);
+    }
+
+    private void OnFieldFilterFieldChanged(FieldFilterRow row, string fieldName)
+    {
+        row.FieldName = fieldName;
+        row.DataType = S.AvailableFields.FirstOrDefault(f => f.Name == fieldName)?.DataType ?? 0;
+        row.Operator = OperatorsFor(row.DataType)[0].Value;
+        row.Value = "";
+        row.DateValue = null;
+    }
+
+    private void ClearFilters()
+    {
+        S.RepositoryId = null;
+        S.DocDateFrom = S.DocDateTo = S.CreatedFrom = S.CreatedTo = null;
+        S.CreatedBy = "";
+        S.FieldFilters = [];
+    }
+
+    // ---- Running a search ----------------------------------------------------------------------------
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await RunSearchAsync();
+        }
+    }
+
+    private async Task RunSearchAsync()
+    {
+        var query = S.Query.Trim();
+        var parameters = new List<string>();
+
+        if (query.Length > 0)
+        {
+            parameters.Add($"q={Uri.EscapeDataString(query)}");
+        }
+
+        if (S.RepositoryId is { } repositoryId)
+        {
+            parameters.Add($"repositoryId={repositoryId}");
+        }
+
+        AddDateParam(parameters, "documentDate", "gte", S.DocDateFrom);
+        AddDateParam(parameters, "documentDate", "lte", S.DocDateTo);
+        AddDateParam(parameters, "createdAt", "gte", S.CreatedFrom);
+        AddDateParam(parameters, "createdAt", "lte", S.CreatedTo);
+        if (!string.IsNullOrWhiteSpace(S.CreatedBy))
+        {
+            parameters.Add($"system[createdBy][contains]={Uri.EscapeDataString(S.CreatedBy.Trim())}");
+        }
+
+        foreach (var row in S.FieldFilters)
+        {
+            var value = row.DataType == 2 ? row.DateValue?.ToString("yyyy-MM-dd") ?? "" : row.Value.Trim();
+            if (string.IsNullOrEmpty(row.FieldName) || string.IsNullOrEmpty(value))
+            {
+                continue;
+            }
+
+            parameters.Add($"fields[{Uri.EscapeDataString(row.FieldName)}][{row.Operator}]={Uri.EscapeDataString(value)}");
+        }
+
+        // Active facet drill-downs (ADR "Search facet refinements"): each dimension's selected values become an
+        // `in` filter (OR within the dimension); the server keeps each dimension open (post-filter faceting).
+        AddFacetParam(parameters, "system[documentType][in]", S.FacetTypes);
+        AddFacetParam(parameters, "system[fileType][in]", S.FacetFileTypes);
+        AddFacetParam(parameters, "system[createdBy][in]", S.FacetCreatedBy);
+        AddFacetParam(parameters, "system[documentYear][in]", S.FacetYears);
+        AddFacetParam(parameters, "system[tag][in]", S.FacetTags);
+        AddFacetParam(parameters, "system[sensitivityLabel][in]", S.FacetSensitivity);
+        foreach (var (field, set) in S.FacetFields)
+        {
+            AddFacetParam(parameters, $"fields[{Uri.EscapeDataString(field)}][in]", set);
+        }
+
+        // Nothing to search on (no text and no filters) — clear.
+        if (parameters.Count == 0)
+        {
+            S.Results = [];
+            S.Facets = null;
+            S.Status = "";
+            return;
+        }
+
+        S.LastQueryString = string.Join("&", parameters); // for "Save search" (ADR "Saved searches")
+        await ExecuteSearchAsync(S.LastQueryString);
+    }
+
+    // Appends `key=v1,v2` (comma-joined, escaped) when the facet set is non-empty (ADR "Search facet refinements").
+    private static void AddFacetParam(List<string> parameters, string key, HashSet<string> values)
+    {
+        if (values.Count > 0)
+        {
+            parameters.Add($"{key}={string.Join(",", values.Select(Uri.EscapeDataString))}");
+        }
+    }
+
+    // Runs a pre-assembled query-params string (shared by the refinement search + a restored saved search).
+    // The query rides on the search collection's own advertised address — appending a query to an advertised
+    // href is following it, not composing a path (ADR 0557).
+    private async Task ExecuteSearchAsync(string queryParams)
+    {
+        _searching = true;
+        S.Status = "Searching…";
+        try
+        {
+            var results = new List<SearchHit>();
+            var url = $"{await ApiRoot.RequireAsync("search")}?{queryParams}";
+            var first = true;
+            while (url is not null)
+            {
+                var page = await Http.GetFromJsonAsync<SearchResponse>(url);
+                results.AddRange(page?.Results ?? []);
+                if (first) { S.Facets = page?.Facets; first = false; } // facets are the same across pages
+                url = Links.Href(page?.Links, "next");
+            }
+            S.Results = results;
+            S.Status = results.Count == 0 ? "No matches." : $"{results.Count} result(s).";
+        }
+        catch (Exception)
+        {
+            S.Status = "Search failed — check the filter values.";
+        }
+        finally
+        {
+            _searching = false;
+        }
+    }
+
+    private static void AddDateParam(List<string> parameters, string field, string op, DateTime? value)
+    {
+        if (value is { } date)
+        {
+            parameters.Add($"system[{field}][{op}]={date:yyyy-MM-dd}");
+        }
+    }
+}
