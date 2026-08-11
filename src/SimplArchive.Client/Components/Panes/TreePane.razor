@@ -1,0 +1,132 @@
+@using SimplArchive.Client.Models
+@using SimplArchive.Client.Services
+@inject TreeState Tree
+
+@* The workbench's left pane: the repository tree. It owns how a node is presented and when a menu opens on it;
+   WHAT that menu offers is the shell's business, supplied as NodeMenu (ADR 0558). The nodes themselves live in
+   the injected TreeState, because this component is disposed on every tab switch. *@
+<div class="wb-pane wb-tree" data-pane="tree" data-tour="pane-tree" data-tour-roots="@Tree.Roots.Count">
+    @if (Tree.Loading)
+    {
+        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+    }
+    else if (Tree.Roots.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="pa-2">@Strings.Get("NoRepositories")</MudText>
+    }
+    else
+    {
+        <MudTreeView T="BrowseNode" Items="Tree.Roots" ServerData="Tree.LoadChildrenAsync"
+                     SelectedValue="SelectedFolder" Hover="true" Dense="true">
+            <ItemTemplate Context="item">
+                @* Explicit OnClick per item: MudTreeView's SelectedValueChanged didn't
+                   reliably fire for nested nodes with a custom template, so a subfolder
+                   couldn't be selected. See ADR "Workbench pane content fixes".
+                   The wrapper carries the right-click handler for the tree context menu (ADR
+                   "Tree-pane context menu"): a MudTreeViewItem renders its children INSIDE
+                   itself, so stopPropagation is what makes a right-click on a subfolder open
+                   that subfolder's menu instead of also firing its ancestors' handlers. *@
+                <div class="wb-tree-node @(item.Value?.TreeGlyphClass)"
+                     @oncontextmenu="@(e => OnContextMenuAsync(item.Value, e))"
+                     @oncontextmenu:preventDefault="true" @oncontextmenu:stopPropagation="true">
+                    <MudTreeViewItem Value="@item.Value" Text="@item.Text" Icon="@item.Icon"
+                                     CanExpand="@item.Expandable" Items="@item.Children"
+                                     OnClick="@(() => FolderSelected.InvokeAsync(item.Value))"
+                                     @attributes="BrowseService.DropAttributes(item.Value)">
+                        @* Touch has no right-click (ADR 0491 / the ADR 0531 touch note), so the
+                           same menu is reachable from a per-row ⋮ button — the pattern the
+                           contents-list rows already use as THE touch fallback. It lives in
+                           BodyContent so it renders in the node's OWN row, not in its children;
+                           CSS shows it always on coarse pointers, on hover/focus otherwise.
+                           BodyContent REPLACES the item's Text rendering, so the label is
+                           reproduced here (same class, so existing styling/locators still hold). *@
+                        <BodyContent Context="rowCtx">
+                            <div class="wb-tree-row">
+                                <p class="mud-typography mud-typography-body1 mud-treeview-item-label">@item.Text</p>
+                                @if (IsMenuNode(item.Value))
+                                {
+                                    <MudIconButton Class="wb-tree-menu-btn" Icon="@Icons.Material.Filled.MoreVert"
+                                                   Size="Size.Small" aria-label="Folder actions"
+                                                   OnClick="@(e => OnMenuButtonAsync(item.Value, e))" />
+                                }
+                            </div>
+                        </BodyContent>
+                    </MudTreeViewItem>
+                </div>
+            </ItemTemplate>
+        </MudTreeView>
+
+        @* One shared cursor-positioned menu for the whole tree (rather than one per node):
+           opened programmatically from the right-click handler against _menuNode. *@
+        <MudMenu @ref="_menu" PositionAtCursor="true" Dense="true">
+            <ActivatorContent Context="menuCtx">
+                <span style="display:none;"></span>
+            </ActivatorContent>
+            <ChildContent>
+                @if (_menuNode is { } node && NodeMenu is not null)
+                {
+                    @NodeMenu(node)
+                }
+            </ChildContent>
+        </MudMenu>
+    }
+</div>
+
+@code {
+    /// <summary>The folder the workbench currently has open, so the tree shows it as selected.</summary>
+    [Parameter] public BrowseNode? SelectedFolder { get; set; }
+
+    /// <summary>Raised when a node is clicked, or right-clicked (which selects before opening the menu).</summary>
+    [Parameter] public EventCallback<BrowseNode?> FolderSelected { get; set; }
+
+    /// <summary>
+    /// The context-menu items for one node. The tree decides WHERE and WHETHER a menu opens; the actions in it
+    /// are the shell's — renaming, following, exporting — so they are supplied rather than reimplemented here.
+    /// </summary>
+    [Parameter] public RenderFragment<BrowseNode>? NodeMenu { get; set; }
+
+    // ---- Context menu (ADR "Tree-pane context menu with manage-access") ------------------------------
+    // Mirrors the desktop client's TreeView.ContextMenu. Like the desktop handler, the right-click first
+    // SELECTS the node, so the selection-scoped actions (new subfolder, follow, refresh) act on the folder
+    // under the cursor.
+    private MudMenu? _menu;
+    private BrowseNode? _menuNode;
+
+    // The synthetic Administration nodes and the Inbox / Check-out launchers aren't real folders — they have no
+    // ACL and nothing to rename/delete, so they get no menu and no ⋮ button (the desktop suppresses these the
+    // same way, in OnTreeContextRequested).
+    private static bool IsMenuNode(BrowseNode? node) =>
+        node is not (null or { AdminKind: not "" } or { PersonalKind: "inbox" } or { PersonalKind: "checkout" });
+
+    private async Task OnContextMenuAsync(BrowseNode? node, MouseEventArgs e)
+    {
+        if (!IsMenuNode(node))
+        {
+            return;
+        }
+
+        await OpenMenuAsync(node!, e);
+    }
+
+    // The ⋮ row button — the touch-reachable path to the same menu. Anchors at the tap point like the right-click
+    // does, so the menu appears next to the row rather than at the page origin.
+    private Task OnMenuButtonAsync(BrowseNode? node, MouseEventArgs e) =>
+        IsMenuNode(node) ? OpenMenuAsync(node!, e) : Task.CompletedTask;
+
+    private async Task OpenMenuAsync(BrowseNode node, MouseEventArgs e)
+    {
+        // Awaited: the menu's items act on the OPEN folder, so the selection must have landed before it shows.
+        await FolderSelected.InvokeAsync(node);
+        _menuNode = node;
+        if (_menu is not null)
+        {
+            await _menu.OpenMenuAsync(e);
+        }
+    }
+
+    /// <summary>
+    /// Re-renders from the current <see cref="TreeState"/>. The shell calls this after it reloads the roots —
+    /// the nodes live in the service, so a change there is invisible to this component until it is told.
+    /// </summary>
+    public void Refresh() => StateHasChanged();
+}

@@ -68,7 +68,17 @@ public partial class ClientHypermediaTests
         // detail addresses its pane reads; the listing envelope already carried the three bulk actions). It cost
         // no extra request either: both sets arrive with a listing that was already being read (ADR 0557). That
         // is what the server tranche was for, and it is why the client half was cheap.
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 23,
+        //
+        // Then 41 = 20 + 2 + 1 + 7 + 4 + 3 + 1 + 3 — pure moves again, of the three on the browse path.
+        ["src/SimplArchive.Client/Pages/Home.razor"] = 20,
+        // The two the shared browse plumbing carried out of the page (ADR 0558): a folder's references
+        // collection, and the ONE irreducible composition — fetching a document by id to follow its own
+        // `children` rel, for the caller that holds an id and no row (ADR 0543).
+        ["src/SimplArchive.Client/Services/BrowseService.cs"] = 2,
+        // The admin personal-repositories listing, which the tree's Administration branch carried out with it.
+        // Not reachable by rel today: it is the ONE listing the API root does not advertise, so converting it
+        // is a server change (a rel on the root, gated on tenant-admin) rather than part of this move.
+        ["src/SimplArchive.Client/Services/TreeState.cs"] = 1,
         // The three the shared row actions carried out of the page with them (ADR 0558) — the legal-hold
         // items collection and the reference endpoints, which belong to the web burn-down, not to the move.
         ["src/SimplArchive.Client/Services/DocumentActions.cs"] = 3,

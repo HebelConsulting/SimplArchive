@@ -58,6 +58,15 @@ builder.Services.AddScoped<SimplArchive.Client.Services.OcrLanguageCatalog>();
 // The actions a document row offers, shared by the tree pane and the contents list — see DocumentActions.
 builder.Services.AddScoped<SimplArchive.Client.Services.DocumentActions>();
 
+// Reading a folder's contents, and describing a node as a tree item / drag participant — shared by the tree
+// pane and the contents list, extracted before either of them so neither had to copy it (see BrowseService).
+builder.Services.AddScoped<SimplArchive.Client.Services.BrowseService>();
+
+// The repository tree's nodes. Outside the pane component for the same reason as SearchState: the workbench
+// renders one tab at a time, so roots kept in the component would be re-fetched — and every expanded folder
+// collapsed — every time the user visits another tab (see TreeState).
+builder.Services.AddScoped<SimplArchive.Client.Services.TreeState>();
+
 builder.Services.AddHttpClient("SimplArchive.Api", client => client.BaseAddress = new Uri(builder.HostEnvironment.BaseAddress))
     .AddHttpMessageHandler(sp => sp.GetRequiredService<AuthorizationMessageHandler>()
         .ConfigureHandler(authorizedUrls: [builder.HostEnvironment.BaseAddress]))

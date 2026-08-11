@@ -17,6 +17,8 @@
 @inject SimplArchive.Client.Services.SensitivityLabelCatalog SensitivityLabels
 @inject SimplArchive.Client.Services.OcrLanguageCatalog OcrLanguages
 @inject SimplArchive.Client.Services.DocumentActions Actions
+@inject SimplArchive.Client.Services.BrowseService Browse
+@inject SimplArchive.Client.Services.TreeState Tree
 
 <PageTitle>SimplArchive</PageTitle>
 
@@ -481,101 +483,43 @@
                     {
                         <div class="wb-phone-scrim @(_treeDrawerOpen ? "wb-phone-scrim-on" : "")" @onclick="() => _treeDrawerOpen = false"></div>
                     }
-                    <div class="wb-pane wb-tree" data-pane="tree" data-tour="pane-tree" data-tour-roots="@_roots.Count">
-                        @if (_loadingRoots)
-                        {
-                            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
-                        }
-                        else if (_roots.Count == 0)
-                        {
-                            <MudText Typo="Typo.body2" Class="pa-2">@Strings.Get("NoRepositories")</MudText>
-                        }
-                        else
-                        {
-                            <MudTreeView T="BrowseNode" Items="_roots" ServerData="LoadChildrenAsync"
-                                         SelectedValue="_selectedFolder" Hover="true" Dense="true">
-                                <ItemTemplate Context="item">
-                                    @* Explicit OnClick per item: MudTreeView's SelectedValueChanged didn't
-                                       reliably fire for nested nodes with a custom template, so a subfolder
-                                       couldn't be selected. See ADR "Workbench pane content fixes".
-                                       The wrapper carries the right-click handler for the tree context menu (ADR
-                                       "Tree-pane context menu"): a MudTreeViewItem renders its children INSIDE
-                                       itself, so stopPropagation is what makes a right-click on a subfolder open
-                                       that subfolder's menu instead of also firing its ancestors' handlers. *@
-                                    <div class="wb-tree-node @(item.Value?.TreeGlyphClass)"
-                                         @oncontextmenu="@(e => OnTreeContextMenuAsync(item.Value, e))"
-                                         @oncontextmenu:preventDefault="true" @oncontextmenu:stopPropagation="true">
-                                        <MudTreeViewItem Value="@item.Value" Text="@item.Text" Icon="@item.Icon"
-                                                         CanExpand="@item.Expandable" Items="@item.Children"
-                                                         OnClick="@(() => SelectFolderAsync(item.Value))"
-                                                         @attributes="DropAttributes(item.Value)">
-                                            @* Touch has no right-click (ADR 0491 / the ADR 0531 touch note), so the
-                                               same menu is reachable from a per-row ⋮ button — the pattern the
-                                               contents-list rows already use as THE touch fallback. It lives in
-                                               BodyContent so it renders in the node's OWN row, not in its children;
-                                               CSS shows it always on coarse pointers, on hover/focus otherwise.
-                                               BodyContent REPLACES the item's Text rendering, so the label is
-                                               reproduced here (same class, so existing styling/locators still hold). *@
-                                            <BodyContent Context="rowCtx">
-                                                <div class="wb-tree-row">
-                                                    <p class="mud-typography mud-typography-body1 mud-treeview-item-label">@item.Text</p>
-                                                    @if (IsTreeMenuNode(item.Value))
-                                                    {
-                                                        <MudIconButton Class="wb-tree-menu-btn" Icon="@Icons.Material.Filled.MoreVert"
-                                                                       Size="Size.Small" aria-label="Folder actions"
-                                                                       OnClick="@(e => OnTreeMenuButtonAsync(item.Value, e))" />
-                                                    }
-                                                </div>
-                                            </BodyContent>
-                                        </MudTreeViewItem>
-                                    </div>
-                                </ItemTemplate>
-                            </MudTreeView>
-
-                            @* One shared cursor-positioned menu for the whole tree (rather than one per node):
-                               opened programmatically from the right-click handler against _treeMenuNode. *@
-                            <MudMenu @ref="_treeMenu" PositionAtCursor="true" Dense="true">
-                                <ActivatorContent Context="menuCtx">
-                                    <span style="display:none;"></span>
-                                </ActivatorContent>
-                                <ChildContent>
-                                    @if (_treeMenuNode is { } tn)
-                                    {
-                                        <MudMenuItem Icon="@Icons.Material.Filled.CreateNewFolder" OnClick="NewFolderAsync">@Strings.Get("MwNewSubfolder")</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Upload" OnClick="UploadAsync">@Strings.Get("Upload")</MudMenuItem>
-                                        <MudDivider />
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => RunAndRefreshAsync(Actions.RenameAsync(tn))">@Strings.Get("CtxRename")</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => RunAndRefreshAsync(Actions.MoveAsync(tn))">@Strings.Get("CtxMoveTo")</MudMenuItem>
-                                        @* Opens the ONE detail edit on this folder (issue #408) — the contents order is a
-                                           field in that pane now, not a mode of its own. *@
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Sort" OnClick="@(() => BeginFolderSortEditAsync(tn))">@Strings.Get("FolderSortLabel")</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteRowAsync(tn)">@Strings.Get("UgDelete")</MudMenuItem>
-                                        <MudDivider />
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => Actions.OpenManageAccessAsync(tn)">@Strings.Get("MaManageAccess")</MudMenuItem>
-                                        @if (_canLegalHold)
-                                        {
-                                            <MudMenuItem Icon="@Icons.Material.Filled.Gavel" OnClick="() => RunAndRefreshAsync(Actions.PlaceLegalHoldAsync(tn))">@Strings.Get("CtxPlaceLegalHold")</MudMenuItem>
-                                        }
-                                        <MudDivider />
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Link" OnClick="() => RunAndRefreshAsync(Actions.PlaceReferenceAsync(tn))">@Strings.Get("CtxPlaceReference")</MudMenuItem>
-                                        @if (tn.HasReferences)
-                                        {
-                                            <MudMenuItem Icon="@Icons.Material.Filled.Share" OnClick="() => ShowReferencesForAsync(tn)">@Strings.Get("CtxReferences")</MudMenuItem>
-                                        }
-                                        <MudDivider />
-                                        <MudMenuItem Icon="@(_folderSubscribed ? Icons.Material.Filled.NotificationsOff : Icons.Material.Filled.Notifications)"
-                                                     OnClick="ToggleFolderSubscriptionAsync">@Strings.Get(_folderSubscribed ? "UnfollowFolder" : "MwFollowFolder")</MudMenuItem>
-                                        <MudDivider />
-                                        @if (_canExport)
-                                        {
-                                            <MudMenuItem Icon="@Icons.Material.Filled.Archive" OnClick="OpenExportDialogAsync">@Strings.Get("HomeExport")</MudMenuItem>
-                                        }
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="RefreshAsync">@Strings.Get("RibbonRefresh")</MudMenuItem>
-                                    }
-                                </ChildContent>
-                            </MudMenu>
-                        }
-                    </div>
+                    @* The tree pane (ADR 0558). Its nodes live in the injected TreeState, not in the
+                       component — this whole tab is torn down on a tab switch. The menu items are the
+                       SHELL's operations, so they are supplied here rather than owned by the pane. *@
+                    <TreePane @ref="_treePane" SelectedFolder="_selectedFolder" FolderSelected="SelectFolderAsync">
+                        <NodeMenu Context="tn">
+                            <MudMenuItem Icon="@Icons.Material.Filled.CreateNewFolder" OnClick="NewFolderAsync">@Strings.Get("MwNewSubfolder")</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Filled.Upload" OnClick="UploadAsync">@Strings.Get("Upload")</MudMenuItem>
+                            <MudDivider />
+                            <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => RunAndRefreshAsync(Actions.RenameAsync(tn))">@Strings.Get("CtxRename")</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => RunAndRefreshAsync(Actions.MoveAsync(tn))">@Strings.Get("CtxMoveTo")</MudMenuItem>
+                            @* Opens the ONE detail edit on this folder (issue #408) — the contents order is a
+                               field in that pane now, not a mode of its own. *@
+                            <MudMenuItem Icon="@Icons.Material.Filled.Sort" OnClick="@(() => BeginFolderSortEditAsync(tn))">@Strings.Get("FolderSortLabel")</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteRowAsync(tn)">@Strings.Get("UgDelete")</MudMenuItem>
+                            <MudDivider />
+                            <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => Actions.OpenManageAccessAsync(tn)">@Strings.Get("MaManageAccess")</MudMenuItem>
+                            @if (_canLegalHold)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Gavel" OnClick="() => RunAndRefreshAsync(Actions.PlaceLegalHoldAsync(tn))">@Strings.Get("CtxPlaceLegalHold")</MudMenuItem>
+                            }
+                            <MudDivider />
+                            <MudMenuItem Icon="@Icons.Material.Filled.Link" OnClick="() => RunAndRefreshAsync(Actions.PlaceReferenceAsync(tn))">@Strings.Get("CtxPlaceReference")</MudMenuItem>
+                            @if (tn.HasReferences)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Share" OnClick="() => ShowReferencesForAsync(tn)">@Strings.Get("CtxReferences")</MudMenuItem>
+                            }
+                            <MudDivider />
+                            <MudMenuItem Icon="@(_folderSubscribed ? Icons.Material.Filled.NotificationsOff : Icons.Material.Filled.Notifications)"
+                                         OnClick="ToggleFolderSubscriptionAsync">@Strings.Get(_folderSubscribed ? "UnfollowFolder" : "MwFollowFolder")</MudMenuItem>
+                            <MudDivider />
+                            @if (_canExport)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Archive" OnClick="OpenExportDialogAsync">@Strings.Get("HomeExport")</MudMenuItem>
+                            }
+                            <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="RefreshAsync">@Strings.Get("RibbonRefresh")</MudMenuItem>
+                        </NodeMenu>
+                    </TreePane>
 
                     <div class="wb-gutter wb-gutter-v" data-gutter="tree"><button type="button" class="wb-gutter-toggle"></button></div>
 
@@ -637,11 +581,11 @@
                             </div>
                             @foreach (var node in SortedContents())
                             {
-                                var attrs = DropAttributes(node);
+                                var attrs = BrowseService.DropAttributes(node);
                                 <div class="wb-list-row wb-cols @(_bulkIds.Contains(node.Id) || ReferenceEquals(node, _commentTarget) ? "wb-list-row-selected" : "")"
                                      @onclick="(e) => OnRowClickAsync(node, e)" @ondblclick="() => OnRowDoubleClickAsync(node)" @attributes="attrs">
                                     <span class="wb-ccell wb-cname" title="@node.DisplayName">
-                                        <MudIcon Icon="@TreeIcon(node)" Size="Size.Small"
+                                        <MudIcon Icon="@BrowseService.TreeIcon(node)" Size="Size.Small"
                                                  Class="@(node.IsFolder ? (node.IsEmptyFolder ? "wb-glyph-empty" : "wb-glyph-folder") : "")" />
                                         <span style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@node.DisplayName</span>
                                         @if (node.OnLegalHold)
@@ -754,7 +698,7 @@
                                        changing style depending on which pane you are looking at. *@
                                     @if (_detailNode is { } glyphNode)
                                     {
-                                        <MudIcon Icon="@TreeIcon(glyphNode)" Size="Size.Small" Class="wb-detail-glyph" />
+                                        <MudIcon Icon="@BrowseService.TreeIcon(glyphNode)" Size="Size.Small" Class="wb-detail-glyph" />
                                     }
                                     <MudText Typo="Typo.subtitle1" Style="flex:1 1 auto; min-width:0;">@_sysName</MudText>
                                     @* While EDITING, the actions that can do nothing disappear and the commit controls
@@ -1414,7 +1358,6 @@
 @code {
     private enum Tab { Repositories, Inbox, Checkout, Tasks, Search, RecycleBin, MyWork, UsersGroups, Audit, LegalHolds, Retention, Tenant, Tags }
 
-    private static readonly Dictionary<string, object> EmptyAttributes = new();
 
     // Reference (shortcut) metadata mirrors the desktop client: for a reference, Id is the TARGET's id (so
     // open/detail/drop act on the target), ReferenceId identifies the shortcut, RealParentId is the target's
@@ -1427,7 +1370,7 @@
     {
         if (_selectedFolder is { } sf)
         {
-            _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, childrenHref: ChildrenHrefOf(sf), trackAsCurrentFolder: true);
+            _folderContents = await OpenFolderContentsAsync(sf);
         }
     }
 
@@ -1437,8 +1380,8 @@
     // consumes it on activation and calls back so this is dropped, rather than being re-applied on every visit.
     private string? _pendingSearchTag;
 
-    private IReadOnlyCollection<TreeItemData<BrowseNode>> _roots = [];
-    private bool _loadingRoots = true;
+    // The tree pane component, so the shell can tell it to re-render after it reloads TreeState's roots.
+    private Components.Panes.TreePane? _treePane;
 
     private BrowseNode? _selectedFolder;
     private List<BrowseNode> _folderContents = [];
@@ -2270,8 +2213,7 @@
             _canImport = false;
         }
 
-        await ReloadRootsAsync();
-        _loadingRoots = false;
+        await ReloadTreeAsync();
 
         await LoadMyExternalLinksHrefAsync(); // gates the ribbon's "my external links" button (ADR 0546)
         await LoadTasksAsync(); // for the Tasks tab badge count
@@ -2376,7 +2318,7 @@
         if (resp.StatusCode == System.Net.HttpStatusCode.Forbidden) { Snackbar.Add(Strings.Get("StNoPermCreateRepo"), Severity.Error); return; }
         if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrCreateRepo"), Severity.Error); return; }
         Snackbar.Add(string.Format(Strings.Get("StCreatedRepo"), input.Trim()), Severity.Success);
-        await ReloadRootsAsync();
+        await ReloadTreeAsync();
     }
 
     // The tenant's users and groups as dialog options. Only the external-links dialog needs them, so this is
@@ -2588,7 +2530,7 @@
         // from the Inbox) shows. See the "refresh list pane on return" requirement.
         if (tab == Tab.Repositories && _selectedFolder is { } folder)
         {
-            _folderContents = await LoadContentsAsync(folder.Id, folder.RepositoryId, childrenHref: ChildrenHrefOf(folder), trackAsCurrentFolder: true);
+            _folderContents = await OpenFolderContentsAsync(folder);
             if (_selectedItem is { } sel && _folderContents.FirstOrDefault(n => n.Id == sel.Id) is { } fresh)
             {
                 await SelectItemAsync(fresh);
@@ -2821,7 +2763,7 @@
     {
         if (_selectedFolder is { } sf)
         {
-            _folderContents = await LoadContentsAsync(sf.Id, sf.RepositoryId, childrenHref: ChildrenHrefOf(sf), trackAsCurrentFolder: true);
+            _folderContents = await OpenFolderContentsAsync(sf);
         }
     }
 
@@ -2830,295 +2772,29 @@
 
     // ---- Tree + list navigation ----------------------------------------------------------------------
 
-    private async Task ReloadRootsAsync()
+    // Rebuilds the tree's roots and re-renders the pane. The nodes live in the injected TreeState (they must
+    // outlive the pane, which is disposed on every tab switch), so refreshing them is two steps: reload the
+    // service, then tell the component — a change in a service is invisible to a component until it is.
+    private async Task ReloadTreeAsync()
     {
-        try
-        {
-            var nodes = new List<TreeItemData<BrowseNode>>();
-
-            // The user's personal repository, pinned at the top of the tree (ADR "Per-user personal repository").
-            // POST is get-or-create; it's excluded from the shared GET /repositories list below.
-            var personal = await EnsurePersonalRepositoryAsync();
-            if (personal is not null)
-            {
-                nodes.Add(PersonalTreeItem(personal));
-            }
-
-            var shared = new List<TreeItemData<BrowseNode>>();
-            var url = await ApiRoot.RequireAsync("repositories");
-            while (url is not null)
-            {
-                var page = await Http.GetFromJsonAsync<RepositoryListResponse>(url);
-                foreach (var r in page?.Repositories ?? [])
-                {
-                    // A repository is its own repository scope.
-                    shared.Add(ToTreeItem(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, RepositoryId: r.Id, Links: Links.RelMap(r.Links))));
-                }
-                url = Links.Href(page?.Links, "next");
-            }
-
-            // Shared repositories sorted alphabetically (issue #339); Personal stays pinned above them.
-            nodes.AddRange(shared.OrderBy(n => n.Value!.DisplayName, StringComparer.OrdinalIgnoreCase));
-
-            // Tenant admins get a synthetic "Administration → Users" branch (ADR "Tenant-admin Administration →
-            // Users view") to browse every user's personal space; its children load from the admin endpoint.
-            if (_isTenantAdmin)
-            {
-                nodes.Add(new TreeItemData<BrowseNode>
-                {
-                    Value = new BrowseNode(Guid.Empty, "Administration", true, false, true, AdminKind: "admin-root"),
-                    Expandable = true,
-                    Text = "Administration",
-                    Icon = Icons.Material.Filled.AdminPanelSettings,
-                });
-            }
-
-            _roots = nodes;
-        }
-        catch (AccessTokenNotAvailableException) { }
-        catch (HttpRequestException) { }
+        await Tree.ReloadAsync(_isTenantAdmin);
+        _treePane?.Refresh();
     }
 
-    // Loads the synthetic Administration branch's children (ADR "Tenant-admin Administration → Users view").
-    private async Task<IReadOnlyCollection<TreeItemData<BrowseNode>>> LoadAdminChildrenAsync(BrowseNode node)
+    // Reads a folder's contents for the CONTENTS PANE: the rows, plus the folder's persisted order adopted as
+    // this listing's default (which also clears any ephemeral header sort — ADR "Per-folder contents sort
+    // order"). A tree-child load wants the rows only, and calls the service directly.
+    private async Task<List<BrowseNode>> OpenFolderContentsAsync(BrowseNode folder)
     {
-        if (node.AdminKind == "admin-root")
-        {
-            return
-            [
-                new TreeItemData<BrowseNode>
-                {
-                    Value = new BrowseNode(Guid.Empty, "Users", true, false, true, AdminKind: "admin-users"),
-                    Expandable = true,
-                    Text = "Users",
-                    Icon = Icons.Material.Filled.People,
-                },
-            ];
-        }
-
-        // admin-users → one node per user's personal repository (browsable via the admin's ACL bypass). A fetch
-        // error returns an empty branch rather than breaking the tree.
-        AdminPersonalReposResponse? page;
-        try { page = await Http.GetFromJsonAsync<AdminPersonalReposResponse>("api/admin/personal-repositories"); }
-        catch (Exception) { page = null; }
-        return (page?.Repositories ?? []).Select(r => new TreeItemData<BrowseNode>
-        {
-            Value = new BrowseNode(r.RepositoryId, r.DisplayName, r.HasChildren, false, r.HasSubfolders, RepositoryId: r.RepositoryId),
-            Expandable = r.HasSubfolders,
-            Text = r.UserIsActive ? r.DisplayName : $"{r.DisplayName} (inactive)",
-            Icon = Icons.Material.Filled.Person,
-        }).ToList();
-    }
-
-    private record AdminPersonalReposResponse { public List<AdminPersonalRepo> Repositories { get; set; } = []; }
-    private record AdminPersonalRepo { public Guid UserId { get; set; } public string DisplayName { get; set; } = ""; public string Email { get; set; } = ""; public bool UserIsActive { get; set; } public Guid RepositoryId { get; set; } public bool HasChildren { get; set; } public bool HasSubfolders { get; set; } }
-
-    // The tree contains folders only (no documents) — see ADR "Workbench pane content fixes".
-    private async Task<IReadOnlyCollection<TreeItemData<BrowseNode>>> LoadChildrenAsync(BrowseNode node)
-    {
-        if (node.AdminKind is not "")
-        {
-            return await LoadAdminChildrenAsync(node);
-        }
-
-        // Folders are always sorted alphabetically in the tree (issue #339); the contents load orders for its list
-        // default, so re-sort the folder nodes by name here.
-        var children = (await LoadContentsAsync(node.Id, node.RepositoryId, childrenHref: ChildrenHrefOf(node))).Where(c => !c.HasVersions)
-            .OrderBy(c => c.DisplayName, StringComparer.OrdinalIgnoreCase).Select(ToTreeItem).ToList();
-
-        // The Personal repository nests the Inbox + Check-out launcher nodes above its real subfolders,
-        // mirroring /webdav/Personal (ADR "GUI-tree Personal space grouping"). Clicking a launcher switches to
-        // the corresponding bottom tab (SelectFolderAsync), where the full staging / check-out UX lives.
-        if (node.PersonalKind == "personal-root")
-        {
-            children.Insert(0, PersonalLauncherItem("checkout", "Check-out", Icons.Material.Filled.LockOpen));
-            children.Insert(0, PersonalLauncherItem("inbox", "Inbox", Icons.Material.Filled.Inbox));
-        }
-
-        return children;
-    }
-
-    private static TreeItemData<BrowseNode> PersonalLauncherItem(string kind, string text, string icon) => new()
-    {
-        Value = new BrowseNode(Guid.Empty, text, false, false, false, PersonalKind: kind),
-        Expandable = false,
-        Text = text,
-        Icon = icon,
-    };
-
-    // Real children plus references (shortcuts) filed in the folder — the references appear as extra rows
-    // (with a shortcut icon); a folder-target reference also shows in the tree (ADR "Referenced folder in
-    // the tree"). Id on a reference is its target, so open/detail act on the target.
-    // trackAsCurrentFolder: this load is the contents pane for the open folder (not a tree-child load), so capture
-    // its persisted ContentsSortOrder as the default order + reset the ephemeral header sort (ADR "Per-folder
-    // contents sort order").
-    // childrenHref: the address the caller already holds, from the row it is acting on. When null — a
-    // synthetic node, or a caller that only knows an id — the resource is FETCHED and its own `children`
-    // rel followed: one round trip, never a composed sub-resource path (ADR 0543, issue #416).
-    private async Task<List<BrowseNode>> LoadContentsAsync(Guid folderId, Guid repositoryId, bool trackAsCurrentFolder = false, string? childrenHref = null)
-    {
-        var nodes = new List<BrowseNode>();
-        var url = childrenHref ?? await FetchChildrenHrefAsync(folderId);
-        var first = true;
-        while (url is not null)
-        {
-            var page = await Http.GetFromJsonAsync<DocumentChildrenResponse>(url);
-            if (first && trackAsCurrentFolder && page is not null)
-            {
-                _folderSortOrder = page.ContentsSortOrder;
-                _headerSortActive = false;
-            }
-            first = false;
-            foreach (var c in page?.Children ?? [])
-            {
-                nodes.Add(new BrowseNode(c.Id, c.Name, c.HasChildren, c.HasVersions, c.HasSubfolders, c.HasReferences, RepositoryId: repositoryId, FileExtension: c.FileExtension, OnLegalHold: c.OnLegalHold,
-                    CheckedOut: c.CheckedOut, CheckedOutByMe: c.CheckedOutByMe, CheckedOutByName: c.CheckedOutByName,
-                    DocumentType: c.DocumentType, DocumentDate: c.DocumentDate, SizeBytes: c.SizeBytes, Tags: c.Tags, SensitivityLabelName: c.SensitivityLabelName, SensitivityLabelColor: c.SensitivityLabelColor, VersionCount: c.VersionCount, VersionCreatedAt: c.VersionCreatedAt,
-                    ChatHref: Links.Href(c.Links, "chat"),
-                    Links: Links.RelMap(c.Links)));
-            }
-            url = Links.Href(page?.Links, "next");
-        }
-
-        var refUrl = $"api/documents/{folderId}/references";
-        while (refUrl is not null)
-        {
-            var page = await Http.GetFromJsonAsync<ReferenceListResponse>(refUrl);
-            foreach (var r in page?.References ?? [])
-            {
-                nodes.Add(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, r.HasReferences, true, r.ReferenceId, r.RealParentId, repositoryId,
-                    Links: Links.RelMap(r.Links)));
-            }
-            refUrl = Links.Href(page?.Links, "next");
-        }
-
-        return nodes;
-    }
-
-    // Get-or-create the current user's personal repository. Null on failure (e.g. a not-yet-ready session) so the
-    // tree still renders the shared repositories.
-    private async Task<PersonalRepositoryResponse?> EnsurePersonalRepositoryAsync()
-    {
-        try
-        {
-            var response = await Http.PostAsync(await ApiRoot.RequireMeAsync("personalRepository"), null);
-            if (!response.IsSuccessStatusCode) return null;
-            return await response.Content.ReadFromJsonAsync<PersonalRepositoryResponse>();
-        }
-        catch (AccessTokenNotAvailableException) { return null; }
-        catch (HttpRequestException) { return null; }
-    }
-
-    // The personal repository's tree node carries a distinct person icon; it browses like any repository (its own
-    // RepositoryId), so drill-in/upload/recycle-bin all flow through the existing paths.
-    private static TreeItemData<BrowseNode> PersonalTreeItem(PersonalRepositoryResponse personal) => new()
-    {
-        Value = new BrowseNode(personal.Id, personal.Name, personal.HasChildren, false, personal.HasSubfolders, RepositoryId: personal.Id, PersonalKind: "personal-root"),
-        // Always expandable — it holds at least the Inbox + Check-out launcher nodes (ADR "GUI-tree Personal
-        // space grouping"), even before any real subfolder exists.
-        Expandable = true,
-        Text = personal.Name,
-        Icon = Icons.Material.Filled.Person,
-    };
-
-    private static TreeItemData<BrowseNode> ToTreeItem(BrowseNode node) => new()
-    {
-        Value = node,
-        // The tree is folders-only, so the caret reflects sub-folders (not any child) — a folder holding
-        // only documents is a leaf in the tree. See ADR "Workbench pane content fixes".
-        Expandable = node.HasSubfolders,
-        Text = node.Name,
-        Icon = TreeIcon(node),
-    };
-
-    // Material icon per node — a shortcut variant for references, matching the desktop client's icons.
-    private static string NodeIcon(BrowseNode n) => (n.IsReference, n.IsFolder) switch
-    {
-        (true, true) => Icons.Material.Filled.FolderSpecial,
-        (true, false) => Icons.Material.Filled.Link,
-        (false, true) => Icons.Material.Filled.Folder,
-        (false, false) => Icons.Material.Filled.Description,
-    };
-
-    // The TREE's variant: an empty folder takes the OUTLINE glyph, so "nothing here" is carried by the shape and
-    // not by colour alone — readable to someone who can't tell the two golds apart, and at any contrast setting
-    // (ADR "Folder icon scheme"). A referenced folder keeps its shortcut glyph in outline form rather than
-    // flattening to a plain folder: being empty must not cost the node what it IS. The contents list keeps the
-    // filled glyph throughout — emptiness is a property of a folder you might drill INTO, which is the tree's job.
-    private static string TreeIcon(BrowseNode n) => (n.IsEmptyFolder, n.IsReference) switch
-    {
-        (false, _) => NodeIcon(n),
-        (true, true) => Icons.Material.Outlined.FolderSpecial,
-        (true, false) => Icons.Material.Outlined.Folder,
-    };
-
-    // A folder row is a drop target that files into itself; a document row is a drop target that opens the
-    // inbox-style filing dialog (ADR "List-pane drop filing"). For a reference, node.Id is the target's id.
-    private static Dictionary<string, object> DropAttributes(BrowseNode? node)
-    {
-        if (node is null)
-        {
-            return EmptyAttributes;
-        }
-
-        var attrs = node.HasVersions
-            ? new Dictionary<string, object> { ["data-drop-doc"] = node.Id.ToString() }
-            : new Dictionary<string, object> { ["data-drop-folder"] = node.Id.ToString() };
-
-        // A real document/folder is also an internal drag source — dragging it onto a folder moves or references
-        // it (mirrors the desktop client, ADR "Desktop drag-and-drop move and reference"). Synthetic admin /
-        // personal-space / launcher nodes aren't movable, so they're not drag sources.
-        if (node is { AdminKind: "", PersonalKind: "" })
-        {
-            attrs["draggable"] = "true";
-            attrs["data-node-id"] = node.Id.ToString();
-            attrs["data-node-ref"] = node.IsReference ? "true" : "false";
-        }
-
-        return attrs;
+        var contents = await Browse.LoadContentsAsync(folder.Id, folder.RepositoryId, BrowseService.ChildrenHrefOf(folder));
+        _folderSortOrder = contents.SortOrder ?? _folderSortOrder;
+        _headerSortActive = false;
+        return contents.Nodes;
     }
 
     // Makes the whole contents pane a drop target for the currently-selected folder.
     private Dictionary<string, object> ListDropAttributes()
-        => _selectedFolder is { } folder ? new() { ["data-drop-folder"] = folder.Id.ToString() } : EmptyAttributes;
-
-    // ---- Tree-pane context menu (ADR "Tree-pane context menu with manage-access") --------------------
-    // Mirrors the desktop client's TreeView.ContextMenu: New subfolder / Rename / Delete / Manage access… /
-    // Follow / Refresh on the right-clicked folder. Like the desktop handler, the right-click first SELECTS the
-    // node, so the selection-scoped actions (new subfolder, follow, refresh) act on the folder under the cursor.
-    private MudMenu? _treeMenu;
-    private BrowseNode? _treeMenuNode;
-
-    // The synthetic Administration nodes and the Inbox / Check-out launchers aren't real folders — they have no
-    // ACL and nothing to rename/delete, so they get no menu and no ⋮ button (the desktop suppresses these the
-    // same way, in OnTreeContextRequested).
-    private static bool IsTreeMenuNode(BrowseNode? node) =>
-        node is not (null or { AdminKind: not "" } or { PersonalKind: "inbox" } or { PersonalKind: "checkout" });
-
-    private async Task OnTreeContextMenuAsync(BrowseNode? node, Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
-    {
-        if (!IsTreeMenuNode(node))
-        {
-            return;
-        }
-
-        await OpenTreeMenuAsync(node!, e);
-    }
-
-    // The ⋮ row button — the touch-reachable path to the same menu. Anchors at the tap point like the right-click
-    // does, so the menu appears next to the row rather than at the page origin.
-    private Task OnTreeMenuButtonAsync(BrowseNode? node, Microsoft.AspNetCore.Components.Web.MouseEventArgs e) =>
-        IsTreeMenuNode(node) ? OpenTreeMenuAsync(node!, e) : Task.CompletedTask;
-
-    private async Task OpenTreeMenuAsync(BrowseNode node, Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
-    {
-        await SelectFolderAsync(node);
-        _treeMenuNode = node;
-        if (_treeMenu is not null)
-        {
-            await _treeMenu.OpenMenuAsync(e);
-        }
-    }
+        => _selectedFolder is { } folder ? new() { ["data-drop-folder"] = folder.Id.ToString() } : BrowseService.EmptyAttributes;
 
     // Selecting a folder (tree click or drilling into a folder row) lists its contents in the middle pane.
     private async Task SelectFolderAsync(BrowseNode? folder)
@@ -3149,7 +2825,7 @@
         _selectedFolder = folder;
         _currentRepositoryId = folder?.RepositoryId ?? Guid.Empty;
         ClearDetail();
-        _folderContents = folder is null ? [] : await LoadContentsAsync(folder.Id, folder.RepositoryId, childrenHref: ChildrenHrefOf(folder));
+        _folderContents = folder is null ? [] : (await Browse.LoadContentsAsync(folder.Id, folder.RepositoryId, BrowseService.ChildrenHrefOf(folder))).Nodes;
 
         // A folder has its own comment thread, and — since issue #408 — its own detail pane: the same one a
         // document gets, because a folder is a Document with a mask and index data of its own.
@@ -3953,10 +3629,10 @@
             {
                 // Rebuild the tree/list so rows show the new name, then reselect the *fresh* node (the old
                 // _selectedItem still carries the old name, which would otherwise reappear in the detail pane).
-                await ReloadRootsAsync();
+                await ReloadTreeAsync();
                 if (_selectedFolder is { } folder)
                 {
-                    _folderContents = await LoadContentsAsync(folder.Id, folder.RepositoryId, childrenHref: ChildrenHrefOf(folder), trackAsCurrentFolder: true);
+                    _folderContents = await OpenFolderContentsAsync(folder);
                 }
 
                 var fresh = (_folderContents ?? []).FirstOrDefault(c => c.Id == item.Id) ?? item with { Name = _sysName };
@@ -4366,10 +4042,10 @@
 
     private async Task RefreshAsync()
     {
-        await ReloadRootsAsync();
+        await ReloadTreeAsync();
         if (_selectedFolder is { } folder)
         {
-            _folderContents = await LoadContentsAsync(folder.Id, folder.RepositoryId, childrenHref: ChildrenHrefOf(folder), trackAsCurrentFolder: true);
+            _folderContents = await OpenFolderContentsAsync(folder);
         }
         if (_selectedItem is { } item)
         {
@@ -4991,24 +4667,6 @@
         public string Url { get; set; } = "";
     }
 
-    // The row's advertised children address, or null when the listing carried none.
-    private static string? ChildrenHrefOf(BrowseNode node) =>
-        node.Links is not null && node.Links.TryGetValue("children", out var href) ? href : null;
-
-    // Turns an id back into an address by FETCHING the resource and following its own `children` rel. The
-    // `api/documents/{id}` here is the one composition that cannot be avoided — it is the irreducible case of
-    // having an id and no resource — and it is deliberately the only one on this path.
-    private async Task<string> FetchChildrenHrefAsync(Guid folderId)
-    {
-        var doc = await Http.GetFromJsonAsync<DocumentLinksResponse>($"api/documents/{folderId}");
-        return Links.Href(doc?.Links, "children")
-            ?? throw new InvalidOperationException($"Document {folderId} advertised no 'children' rel (ADR 0543).");
-    }
-
-    private sealed class DocumentLinksResponse
-    {
-        public List<LinkResponse>? Links { get; set; }
-    }
 
     // The rels the OPEN document's resource advertised (set when the detail pane loads).
     private IReadOnlyDictionary<string, string>? _detailLinks;
@@ -5047,14 +4705,7 @@
 
     private record ArchiveEntriesResponse { public List<ArchiveEntryDto> Entries { get; set; } = []; }
     private record ArchiveEntryDto { public string Name { get; set; } = ""; public string Path { get; set; } = ""; public long Size { get; set; } public List<LinkResponse> Links { get; set; } = []; }
-    private record PersonalRepositoryResponse { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasSubfolders { get; set; } }
-    // Mirrors the server FolderContentsSortOrder enum (ADR "Per-folder contents sort order").
-    private enum FolderContentsSortOrder { Name = 0, DocumentDate = 1, Created = 2 }
-    private record DocumentChildrenResponse { public List<DocumentSummary> Children { get; set; } = []; public FolderContentsSortOrder ContentsSortOrder { get; set; } public List<LinkResponse> Links { get; set; } = []; }
-    private record DocumentSummary { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool HasReferences { get; set; } public bool OnLegalHold { get; set; } public bool CheckedOut { get; set; } public bool CheckedOutByMe { get; set; } public string CheckedOutByName { get; set; } = ""; public string FileExtension { get; set; } = ""; public string DocumentType { get; set; } = ""; public DateOnly? DocumentDate { get; set; } public long? SizeBytes { get; set; } public List<string> Tags { get; set; } = []; public Guid? SensitivityLabelId { get; set; } public string SensitivityLabelName { get; set; } = ""; public string? SensitivityLabelColor { get; set; } public int VersionCount { get; set; } public DateTimeOffset? VersionCreatedAt { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record UserCardResponse { public Guid UserId { get; set; } public string DisplayName { get; set; } = ""; public string Email { get; set; } = ""; public bool IsActive { get; set; } public bool HasPhoto { get; set; } public List<LinkResponse> Links { get; set; } = []; }
-    private record ReferenceListResponse { public List<ReferenceSummary> References { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-    private record ReferenceSummary { public Guid ReferenceId { get; set; } public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasChildren { get; set; } public bool HasVersions { get; set; } public bool HasSubfolders { get; set; } public bool HasReferences { get; set; } public Guid? RealParentId { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record DocNameResponse { public string Name { get; set; } = ""; }
     private record CreateVersionResponse { public Guid Id { get; set; } public string UploadUrl { get; set; } = ""; }
 
