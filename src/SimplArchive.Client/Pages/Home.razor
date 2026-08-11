@@ -1694,100 +1694,7 @@
             }
             else if (_activeTab == Tab.RecycleBin)
             {
-                <div class="wb-recyclebin" style="height:100%; display:flex; min-height:0;">
-                    @* Left: the list of deleted items. *@
-                    <div style="flex:1.5 1 0; min-width:0; display:flex; flex-direction:column; border-right:1px solid var(--mud-palette-lines-default);">
-                        <div class="pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default); display:flex; align-items:center; gap:8px;">
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("RbDeletedItems")</MudText>
-                            @if (_rbChecked.Count > 0)
-                            {
-                                <MudButton Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small" StartIcon="@Icons.Material.Filled.RestoreFromTrash" OnClick="RestoreSelectedAsync" Class="ml-auto">@string.Format(Strings.Get("RbRestoreSelected"), _rbChecked.Count)</MudButton>
-                                @if (_isTenantAdmin)
-                                {
-                                    <MudButton Color="Color.Error" Variant="Variant.Filled" Size="Size.Small" StartIcon="@Icons.Material.Filled.DeleteForever" OnClick="PurgeSelectedAsync">@string.Format(Strings.Get("RbPurgeSelected"), _rbChecked.Count)</MudButton>
-                                }
-                            }
-                            <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Text" Size="Size.Small" OnClick="LoadRecycleBinAsync" Class="@(_rbChecked.Count > 0 ? "" : "ml-auto")">@Strings.Get("RibbonRefresh")</MudButton>
-                            @if (_isTenantAdmin && _recycleBinItems.Count > 0)
-                            {
-                                <MudButton Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.DeleteSweep" OnClick="HardDeleteAllAsync">@Strings.Get("RbHardDeleteAll")</MudButton>
-                            }
-                        </div>
-                        <div style="flex:1 1 auto; overflow:auto;">
-                            <MudTable Items="_recycleBinItems" Dense="true" Hover="true" Bordered="false" Elevation="0" T="RecycleBinDto" OnRowClick="@((TableRowClickEventArgs<RecycleBinDto> e) => e.Item is { } item ? SelectRecycleBinItemAsync(item) : Task.CompletedTask)">
-                                <HeaderContent>
-                                    <MudTh Style="width:1px;"><MudCheckBox T="bool" Value="@AllRbChecked" ValueChanged="ToggleAllRbChecked" Dense="true" /></MudTh>
-                                    <MudTh>@Strings.Get("Name")</MudTh><MudTh>@Strings.Get("RbColPath")</MudTh><MudTh>@Strings.Get("RbColDeleted")</MudTh><MudTh>@Strings.Get("RbColDeletedBy")</MudTh><MudTh Style="text-align:right;">@Strings.Get("RbColActions")</MudTh>
-                                </HeaderContent>
-                                <RowTemplate Context="row">
-                                    <MudTd @onclick:stopPropagation="true"><MudCheckBox T="bool" Value="@_rbChecked.Contains(row.Id)" ValueChanged="@(v => ToggleRbChecked(row.Id, v))" Dense="true" /></MudTd>
-                                    <MudTd>@row.Name</MudTd>
-                                    <MudTd Class="mud-text-secondary">@row.Path</MudTd>
-                                    <MudTd>@row.DeletedAt.ToLocalTime().ToString("g")</MudTd>
-                                    <MudTd>@row.DeletedBy</MudTd>
-                                    <MudTd Style="text-align:right; white-space:nowrap;">
-                                        <MudIconButton Icon="@Icons.Material.Filled.RestoreFromTrash" Size="Size.Small" OnClick="@(() => RestoreRecycleBinItemAsync(row))" title="@Strings.Get("RbRestore")" />
-                                        @if (_isTenantAdmin)
-                                        {
-                                            <MudIconButton Icon="@Icons.Material.Filled.DeleteForever" Color="Color.Error" Size="Size.Small" OnClick="@(() => HardDeleteRecycleBinItemAsync(row))" title="@Strings.Get("RbHardDelete")" />
-                                        }
-                                    </MudTd>
-                                </RowTemplate>
-                            </MudTable>
-                            @if (_recycleBinItems.Count == 0)
-                            {
-                                <MudText Typo="Typo.body2" Class="pa-3 mud-text-secondary">@Strings.Get("RbEmpty")</MudText>
-                            }
-                        </div>
-                    </div>
-                    @* Right: read-only details + isolated preview + chat (mirrors the Repositories detail pane). *@
-                    <div style="flex:1 1 0; min-width:0; display:flex; flex-direction:column;">
-                        @if (_rbSelected is null)
-                        {
-                            <MudText Typo="Typo.body2" Class="pa-3 mud-text-secondary">@Strings.Get("RbSelectItem")</MudText>
-                        }
-                        else
-                        {
-                            <div style="padding:8px 12px; border-bottom:1px solid var(--mud-palette-lines-default); max-height:34%; overflow:auto;">
-                                <MudText Typo="Typo.subtitle1">@_rbSelected.Name</MudText>
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@string.Format(Strings.Get("RbDeletedByLine"), _rbSelected.DeletedAt.ToLocalTime().ToString("g"), _rbSelected.DeletedBy)</MudText>
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">@string.Format(Strings.Get("RbMaskLine"), _rbMaskName ?? Strings.Get("RbMaskNone"))</MudText>
-                                @if (_rbIndexData is { Count: > 0 })
-                                {
-                                    <MudSimpleTable Dense="true" Bordered="false" Class="mt-1"><tbody>
-                                        @foreach (var f in _rbIndexData)
-                                        {
-                                            <tr><td>@f.FieldName</td><td>@string.Join(", ", f.Values)</td></tr>
-                                        }
-                                    </tbody></MudSimpleTable>
-                                }
-                            </div>
-                            <div style="flex:1 1 auto; display:flex; min-height:0;">
-                                @* The recycle bin previews a DELETED document: nothing to annotate, and no
-                                   toolbar — it is a glance at what is about to be restored or purged. It used
-                                   to carry its own duplicate host purely to escape the shared one (ADR 0558). *@
-                                <PreviewPane @ref="_rbPreview" ShowToolbar="false"
-                                             Style="flex:1.6 1 0; min-width:0; display:flex; flex-direction:column; position:relative;"
-                                             EmptyText="@Strings.Get("NoPreview")"
-                                             ConvertedBadgeTooltip="@Strings.Get("RbConvertedPreview")" />
-                                <div style="flex:1 1 0; min-width:0; overflow:auto; border-left:1px solid var(--mud-palette-lines-default); padding:8px;">
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-1">@Strings.Get("RbCommentsHeader")</MudText>
-                                    @foreach (var c in _rbComments)
-                                    {
-                                        <div class="mb-2">
-                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@c.AuthorName · @c.CreatedAt.ToLocalTime().ToString("g")</MudText>
-                                            <MudText Typo="Typo.body2">@c.Body</MudText>
-                                        </div>
-                                    }
-                                    @if (_rbComments.Count == 0)
-                                    {
-                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("RbNoComments")</MudText>
-                                    }
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
+                <RecycleBinTab IsTenantAdmin="_isTenantAdmin" />
             }
             else
             {
@@ -2095,44 +2002,33 @@
         : string.Join(", ", codes.Select(c => _ocrCatalog.FirstOrDefault(o => o.Code == c)?.DisplayName ?? c));
     private string? _downloadUrl;
 
-    // The three preview panes (ADRs 0268/0269/0282/0294/0295), one INSTANCE each rather than the shared
-    // JS-owned host these tabs used to take turns with. Each owns its own host, state, preview.js module and
-    // DotNetObjectReference, so a stale preview cannot survive into another tab and there is nothing to reset
-    // on a tab switch. Null until its tab has rendered — the workbench renders one tab at a time.
+    // The Repositories preview (ADRs 0268/0269/0282/0294/0295) — one INSTANCE, owning its own host, state,
+    // preview.js module and DotNetObjectReference (ADR 0558). The Inbox and Recycle-bin tabs each own theirs,
+    // so the shell holds only this one. Null until the tab has rendered.
     private PreviewPane? _repoPreview;
 
-    // Which pane a preview was asked for. Only one tab is live at a time, so one pending slot is enough.
-    private enum PreviewSlot { Repositories, RecycleBin }
+    // A preview requested before the pane existed, replayed once it does (see ShowPreviewAsync).
+    private (string? Url, string? Layout, bool Converted, bool HasVersion)? _pendingPreview;
 
-    // A preview requested before its pane existed, replayed once it does (see ShowPreviewAsync).
-    private (PreviewSlot Slot, string? Url, string? Layout, bool Converted, bool HasVersion)? _pendingPreview;
-
-    // Renders into one of the three panes — or remembers the request when that pane is not in the DOM yet.
+    // Renders into the pane — or remembers the request when the pane is not in the DOM yet.
     //
-    // Two ways that happens, and BOTH are ordinary use rather than edge cases: a pane's @ref is only assigned
-    // after a render, so (a) opening a document from another tab — a search hit, a notification — switches tab
-    // and selects in one synchronous run, and (b) the Inbox and Recycle-bin panes live inside an "is something
-    // selected?" conditional, so the FIRST selection creates them. The page could previously get away with
-    // calling StateHasChanged() mid-method to materialise its own host div; a child component cannot do that on
-    // its own behalf, so the request waits for OnAfterRenderAsync instead. Rendering into a null ref would lose
-    // the preview silently, which is the worst possible failure for something this visible.
-    private async Task ShowPreviewAsync(PreviewSlot slot, string? url, string? layout, bool converted, bool hasVersion = false)
+    // That is ordinary use, not an edge case: a pane's @ref is only assigned after a render, and opening a
+    // document from another tab — a search hit, a notification — switches tab and selects in one synchronous
+    // run. The page could previously get away with calling StateHasChanged() mid-method to materialise its own
+    // host div; a child component cannot do that on its own behalf, so the request waits for
+    // OnAfterRenderAsync. Rendering into a null ref would lose the preview silently, which is the worst
+    // possible failure for something this visible.
+    private async Task ShowPreviewAsync(string? url, string? layout, bool converted, bool hasVersion = false)
     {
-        var pane = slot == PreviewSlot.Repositories ? _repoPreview : _rbPreview;
-
-        if (pane is null)
+        if (_repoPreview is null)
         {
-            _pendingPreview = (slot, url, layout, converted, hasVersion);
+            _pendingPreview = (url, layout, converted, hasVersion);
             return;
         }
 
-        await pane.RenderAsync(url, layout, converted);
-        if (slot == PreviewSlot.Repositories)
-        {
-            await ApplyAnnotatableAsync(hasVersion);
-        }
+        await _repoPreview.RenderAsync(url, layout, converted);
+        await ApplyAnnotatableAsync(hasVersion);
     }
-    private PreviewPane? _rbPreview;
 
 
     // Reached via the pane's WordCopied callback rather than from JS directly: the pane owns the
@@ -2944,12 +2840,10 @@
         // that can take real time (a JS preview load), and the wiring must not queue behind it.
         if (_pendingPreview is { } pending)
         {
-            var pane = pending.Slot == PreviewSlot.Repositories ? _repoPreview : _rbPreview;
-
-            if (pane is not null)
+            if (_repoPreview is not null)
             {
                 _pendingPreview = null;
-                await ShowPreviewAsync(pending.Slot, pending.Url, pending.Layout, pending.Converted, pending.HasVersion);
+                await ShowPreviewAsync(pending.Url, pending.Layout, pending.Converted, pending.HasVersion);
                 StateHasChanged();
             }
         }
@@ -2999,215 +2893,9 @@
             await LoadSensitivityLabelsAsync();
         }
 
-        if (tab == Tab.RecycleBin)
-        {
-            ClearRbPreview();
-            await LoadRecycleBinAsync();
-        }
-
         // Tab.Audit loads itself: the component exists only while its tab is shown, so the shell no longer has
         // to know what that tab needs or when (ADR 0558).
 
-    }
-
-    // ---- Recycle bin tab (ADR "Recycle bin tab") — tenant-wide list + isolated detail/preview/chat ----
-    private readonly List<RecycleBinDto> _recycleBinItems = new();
-    // Multi-select for bulk restore (ADR "Bulk restore from the recycle bin").
-    private readonly HashSet<Guid> _rbChecked = new();
-    private RecycleBinDto? _rbSelected;
-    private string? _rbMaskName;
-    private List<FieldGroup>? _rbIndexData;
-    private List<ChatMessageResponse> _rbComments = new();
-
-    private async Task LoadRecycleBinAsync()
-    {
-        try
-        {
-            var response = await Http.GetFromJsonAsync<RecycleBinResponse>(await ApiRoot.RequireAsync("recycleBin"));
-            _recycleBinItems.Clear();
-            if (response?.Items is { } items)
-            {
-                _recycleBinItems.AddRange(items);
-            }
-            // Drop the selection if the selected item is gone.
-            if (_rbSelected is { } sel && _recycleBinItems.All(i => i.Id != sel.Id))
-            {
-                _rbSelected = null;
-                ClearRbPreview();
-            }
-            // Prune checked ids that are no longer present (restored/purged).
-            _rbChecked.RemoveWhere(id => _recycleBinItems.All(i => i.Id != id));
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrLoadRecycleBin"), Severity.Error);
-        }
-        StateHasChanged();
-    }
-
-    private async Task SelectRecycleBinItemAsync(RecycleBinDto item)
-    {
-        _rbSelected = item;
-        _rbMaskName = null;
-        _rbIndexData = null;
-        _rbComments = new();
-        ClearRbPreview();
-        StateHasChanged();
-
-        try
-        {
-            _rbMaskName = (await Http.GetFromJsonAsync<MaskResponse>($"api/documents/{item.Id}/mask"))?.Name;
-            _rbIndexData = (await Http.GetFromJsonAsync<IndexDataResponse>($"api/documents/{item.Id}/index-data"))?.Fields ?? [];
-            _rbComments = (await Http.GetFromJsonAsync<ChatMessageListResponse>($"api/documents/{item.Id}/chat"))?.Messages ?? new();
-
-            var versions = await Http.GetFromJsonAsync<VersionListResponse>($"api/documents/{item.Id}/versions");
-            var latest = VersionListResponse.PickCurrent(versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [], versions?.CurrentVersionId);
-            var previewUrl = latest is null ? null : RelativeToAbsolute(Links.Href(latest.Links, "preview"));
-            var textLayoutUrl = latest is null ? null : Links.Href(latest.Links, "text-layout");
-            await ShowPreviewAsync(PreviewSlot.RecycleBin, previewUrl, textLayoutUrl, latest?.PreviewConverted ?? false);
-        }
-        catch (Exception)
-        {
-            // best-effort — a partial detail is fine
-        }
-        StateHasChanged();
-    }
-
-    // The recycle bin now renders through its own PreviewPane instance like every other tab, so there is no
-    // hand-rolled second host to keep in step (ADR 0558).
-    private void ClearRbPreview() => _rbPreview?.Clear();
-
-    private async Task RestoreRecycleBinItemAsync(RecycleBinDto item)
-    {
-        var response = await Http.PostAsync($"api/documents/{item.Id}/restore", null);
-        if (response.IsSuccessStatusCode)
-        {
-            Snackbar.Add(string.Format(Strings.Get("StRestored"), item.Name), Severity.Success);
-            if (_rbSelected?.Id == item.Id) { _rbSelected = null; ClearRbPreview(); }
-            await LoadRecycleBinAsync();
-        }
-        else
-        {
-            Snackbar.Add(Strings.Get("StErrRestoreItem"), Severity.Warning);
-        }
-    }
-
-    // ---- Bulk restore (ADR "Bulk restore from the recycle bin") ----
-    private bool AllRbChecked => _recycleBinItems.Count > 0 && _rbChecked.Count == _recycleBinItems.Count;
-
-    private void ToggleRbChecked(Guid id, bool value)
-    {
-        if (value) _rbChecked.Add(id); else _rbChecked.Remove(id);
-    }
-
-    private void ToggleAllRbChecked(bool value)
-    {
-        _rbChecked.Clear();
-        if (value) foreach (var i in _recycleBinItems) _rbChecked.Add(i.Id);
-    }
-
-    private async Task RestoreSelectedAsync()
-    {
-        var ids = _rbChecked.ToList();
-        var response = await Http.PostAsJsonAsync("api/recycle-bin/restore", new { ids });
-        if (response.IsSuccessStatusCode)
-        {
-            var result = await response.Content.ReadFromJsonAsync<RestoreManyResult>();
-            var restored = result?.Restored ?? 0;
-            var skipped = result?.Skipped ?? 0;
-            Snackbar.Add(skipped > 0 ? $"Restored {restored} item(s), skipped {skipped}." : $"Restored {restored} item(s).", Severity.Success);
-            _rbChecked.Clear();
-            if (_rbSelected is { } sel && ids.Contains(sel.Id)) { _rbSelected = null; ClearRbPreview(); }
-            await LoadRecycleBinAsync();
-        }
-        else
-        {
-            Snackbar.Add(Strings.Get("StErrRestoreSelected"), Severity.Warning);
-        }
-    }
-
-    private record RestoreManyResult { public int Restored { get; set; } public int Skipped { get; set; } }
-
-    // Per-row permanent purge — no extra confirmation (per spec).
-    private async Task HardDeleteRecycleBinItemAsync(RecycleBinDto item)
-    {
-        var response = await Http.PostAsync($"api/documents/{item.Id}/purge", null);
-        if (response.IsSuccessStatusCode)
-        {
-            Snackbar.Add(string.Format(Strings.Get("StPermanentlyDeleted"), item.Name), Severity.Success);
-            if (_rbSelected?.Id == item.Id) { _rbSelected = null; ClearRbPreview(); }
-            await LoadRecycleBinAsync();
-        }
-        else if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            Snackbar.Add(Strings.Get("StErrHardDeleteHold"), Severity.Warning);
-        }
-        else
-        {
-            Snackbar.Add(Strings.Get("StErrHardDelete"), Severity.Error);
-        }
-    }
-
-    // Bulk purge of the checked items (ADR "Bulk purge of selected recycle-bin items") — the same "I AGREE" gate
-    // as Hard-delete all; protected (legal-hold / WORM) items are skipped server-side and reported.
-    private async Task PurgeSelectedAsync()
-    {
-        var result = await (await DialogService.ShowAsync<HardDeleteAllDialog>(Strings.Get("RbHardDeleteSelected"))).Result;
-        if (result is not { Canceled: false })
-        {
-            return;
-        }
-
-        var ids = _rbChecked.ToList();
-        var response = await Http.PostAsJsonAsync("api/recycle-bin/purge-selected", new { ids });
-        if (response.IsSuccessStatusCode)
-        {
-            var r = await response.Content.ReadFromJsonAsync<PurgeManyResult>();
-            var purged = r?.Purged ?? 0;
-            var skipped = r?.Skipped ?? 0;
-            Snackbar.Add(skipped > 0 ? $"Permanently deleted {purged} item(s), skipped {skipped} (legal hold / locked)." : $"Permanently deleted {purged} item(s).", Severity.Success);
-            _rbChecked.Clear();
-            if (_rbSelected is { } sel && ids.Contains(sel.Id)) { _rbSelected = null; ClearRbPreview(); }
-            await LoadRecycleBinAsync();
-        }
-        else
-        {
-            Snackbar.Add(Strings.Get("StErrPurgeSelected"), Severity.Error);
-        }
-    }
-
-    private record PurgeManyResult { public int Purged { get; set; } public int Skipped { get; set; } }
-
-    private async Task HardDeleteAllAsync()
-    {
-        var result = await (await DialogService.ShowAsync<HardDeleteAllDialog>(Strings.Get("RbHardDeleteAll"))).Result;
-        if (result is not { Canceled: false })
-        {
-            return;
-        }
-
-        var response = await Http.PostAsync("api/recycle-bin/purge", null);
-        if (response.IsSuccessStatusCode)
-        {
-            Snackbar.Add(Strings.Get("StRecycleBinEmptied"), Severity.Success);
-            _rbSelected = null;
-            ClearRbPreview();
-            await LoadRecycleBinAsync();
-        }
-        else
-        {
-            Snackbar.Add(Strings.Get("StErrEmptyRecycleBin"), Severity.Error);
-        }
-    }
-
-    private record RecycleBinResponse { public List<RecycleBinDto> Items { get; set; } = new(); public bool Truncated { get; set; } }
-    private record RecycleBinDto
-    {
-        public Guid Id { get; set; }
-        public string Name { get; set; } = "";
-        public string Path { get; set; } = "";
-        public DateTimeOffset DeletedAt { get; set; }
-        public string DeletedBy { get; set; } = "";
     }
 
     // ---- Legal hold from a document row (ADR "Legal hold & retention enforcement") -------------------
@@ -4231,8 +3919,8 @@
             var converted = false;
             if (latest is not null)
             {
-                previewUrl = RelativeToAbsolute(Links.Href(latest.Links, "preview"));
-                _downloadUrl = RelativeToAbsolute(Links.Href(latest.Links, "download"));
+                previewUrl = Http.Absolute(Links.Href(latest.Links, "preview"));
+                _downloadUrl = Http.Absolute(Links.Href(latest.Links, "download"));
                 converted = latest.PreviewConverted;
                 textLayoutUrl = Links.Href(latest.Links, "text-layout");
                 _pvAnnotationsUrl = Links.Href(latest.Links, "annotations");
@@ -4243,7 +3931,7 @@
             // opened from elsewhere — a search hit, a notification — call SetTab(Repositories) and select in the
             // same synchronous run, with no render in between. Rendering straight into a null ref would lose the
             // preview silently on exactly those paths, so defer to OnAfterRenderAsync when it is not there yet.
-            await ShowPreviewAsync(PreviewSlot.Repositories, previewUrl, textLayoutUrl, converted, latest is not null);
+            await ShowPreviewAsync(previewUrl, textLayoutUrl, converted, latest is not null);
         }
         catch (HttpRequestException)
         {
@@ -6724,14 +6412,6 @@
         }
 
         return map.Count == 0 ? null : map;
-    }
-
-    // Also used by the Recycle bin's isolated detail pane (ADR 0558), which resolves the same preview and
-    // download addresses against the same base.
-    internal string? RelativeToAbsolute(string? href)
-    {
-        if (href is null) return null;
-        return href.StartsWith("http://") || href.StartsWith("https://") ? href : new Uri(Http.BaseAddress!, href).ToString();
     }
 
     private record ArchiveEntriesResponse { public List<ArchiveEntryDto> Entries { get; set; } = []; }
