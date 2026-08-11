@@ -142,6 +142,10 @@ jobs:
       github.event_name == 'push'
       || contains(github.event.pull_request.labels.*.name, 'e2e')
     runs-on: ubuntu-latest
+    # A leg that HANGS is worse than one that fails: it holds the whole run open, and GitHub refuses to serve any
+    # job's logs while the run is in progress — so a stuck leg makes a DIFFERENT leg's red undiagnosable. The
+    # slowest leg observed is ~11 min; 30 turns a hang into a bounded failure with its own log.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -171,7 +175,22 @@ jobs:
       # BOTH docs are indexed; the login helper waits on DOMContentLoaded + a 60s timeout for the slower hosted
       # CPU; WebSearchFilterTests polls until the row clears). A red suite is a real regression or a new flake.
       - name: Test ${{ matrix.project }} ${{ matrix.filter }}
-        run: dotnet test tests/SimplArchive.${{ matrix.project }} --no-build -c Debug ${{ matrix.filter }}
+        run: dotnet test tests/SimplArchive.${{ matrix.project }} --no-build -c Debug ${{ matrix.filter }} --logger "trx;LogFileName=results.trx" --results-directory "${{ github.workspace }}/trx"
+      # A red leg must leave EVIDENCE behind. Without this the only record of which tests failed is the job log,
+      # and a log is unreachable while ANY sibling job is still running — so one hung leg hides the diagnosis of
+      # a different one indefinitely (that is exactly what happened on run 31501708457: `gh` answered "run is
+      # still in progress; logs will be available when it is complete" for 45 minutes while the desktop leg
+      # hung, and cancel returned HTTP 500). The TRX is an artifact, so it is downloadable the moment THIS job
+      # ends, whatever the rest of the matrix is doing. CLAUDE.md asks for a TRX when a suspicious run recurs;
+      # this is what makes one exist.
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: trx-${{ matrix.project }}-${{ strategy.job-index }}
+          path: ${{ github.workspace }}/trx/*.trx
+          if-no-files-found: warn
+          retention-days: 14
 
   # Says out loud whether the heavy tier actually RAN. Gating the tier separated two statements that used to be
   # identical — "nothing failed" and "everything ran" — and nothing was updated to notice: a job skipped by its
