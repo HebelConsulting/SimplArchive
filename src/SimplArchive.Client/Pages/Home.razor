@@ -527,137 +527,90 @@
                        can be dropped anywhere in it (empty area or a document row), not only onto a
                        sub-folder row — see ADR "Content-pane drop target". A sub-folder row's own
                        data-drop-folder still wins (closest() finds the nearest one). *@
-                    <div class="wb-pane wb-list" data-pane="list" data-tour="pane-list" data-tour-rows="@_folderContents.Count" @attributes="ListDropAttributes()">
-                        @* Bulk-action bar (ADR "Bulk actions on selected documents") — shows when ≥2 rows are Ctrl/Shift-selected. *@
-                        @if (_bulkIds.Count >= 2 && _archiveDocument is null)
-                        {
-                            <div class="wb-bulk-bar">
-                                <span style="flex:1 1 auto; font-size:.8rem; font-weight:600;">@string.Format(Strings.Get("BulkSelected"), _bulkIds.Count)</span>
-                                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.DriveFileMove" OnClick="BulkMoveAsync">@Strings.Get("BulkMove")</MudButton>
-                                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Label" OnClick="BulkAddTagsAsync">@Strings.Get("BulkTag")</MudButton>
-                                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Shield" OnClick="BulkSensitivityAsync">@Strings.Get("BulkSensLabel")</MudButton>
-                                <MudButton Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="BulkDeleteAsync">@Strings.Get("UgDelete")</MudButton>
-                                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="() => { _bulkIds.Clear(); }" title="@Strings.Get("BulkClearSelection")" />
-                            </div>
-                        }
-                        @if (_archiveDocument is not null)
-                        {
-                            @* Browsing a .zip's entries virtually — read on demand, nothing unpacked (ADR "Zip file browsing"). *@
-                            <div class="wb-list-row" @onclick="ExitArchiveAsync" style="cursor:pointer;">
-                                <MudIcon Icon="@Icons.Material.Filled.ArrowBack" Size="Size.Small" />
-                                <span style="flex:1 1 auto;">@_archiveDocument.Name@Strings.Get("ArchiveBack")</span>
-                            </div>
-                            @if (_archiveEntries.Count == 0)
+                    @* The contents pane (ADR 0558). The ROWS stay in the shell: _folderContents is what the
+                       drag handler, the bulk operations and the post-rename refresh all read. What the pane
+                       owns is how a row is drawn and the ephemeral header ordering. *@
+                    <ContentsListPane @ref="_listPane" Rows="_folderContents" SelectedFolder="_selectedFolder"
+                                      FolderSortOrder="_folderSortOrder" BulkIds="_bulkIds" CommentTarget="_commentTarget"
+                                      RowClick="@(t => OnRowClickAsync(t.Node, t.Args))" RowDoubleClick="OnRowDoubleClickAsync" ShowArchive="@(_archiveDocument is not null)">
+                        <BulkBar>
+                            @* Bulk-action bar (ADR "Bulk actions on selected documents") — shows when ≥2 rows are Ctrl/Shift-selected. *@
+                            @if (_bulkIds.Count >= 2 && _archiveDocument is null)
                             {
-                                <MudText Typo="Typo.body2" Class="pa-3 mud-text-secondary">@Strings.Get("ArchiveEmpty")</MudText>
-                            }
-                            @foreach (var entry in _archiveEntries)
-                            {
-                                <div class="wb-list-row" @onclick="() => DownloadArchiveEntryAsync(entry)" style="cursor:pointer;" title="@Strings.Get("Download")">
-                                    <MudIcon Icon="@Icons.Material.Filled.InsertDriveFile" Size="Size.Small" />
-                                    <span style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@entry.Path</span>
-                                    <span class="mud-text-secondary" style="font-size:0.8em;">@ByteSize.Format(entry.Size)</span>
+                                <div class="wb-bulk-bar">
+                                    <span style="flex:1 1 auto; font-size:.8rem; font-weight:600;">@string.Format(Strings.Get("BulkSelected"), _bulkIds.Count)</span>
+                                    <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.DriveFileMove" OnClick="BulkMoveAsync">@Strings.Get("BulkMove")</MudButton>
+                                    <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Label" OnClick="BulkAddTagsAsync">@Strings.Get("BulkTag")</MudButton>
+                                    <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Shield" OnClick="BulkSensitivityAsync">@Strings.Get("BulkSensLabel")</MudButton>
+                                    <MudButton Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete" OnClick="BulkDeleteAsync">@Strings.Get("UgDelete")</MudButton>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="() => { _bulkIds.Clear(); }" title="@Strings.Get("BulkClearSelection")" />
                                 </div>
                             }
-                        }
-                        else if (_selectedFolder is null)
-                        {
-                            <MudText Typo="Typo.body2" Class="pa-3 mud-text-secondary">@Strings.Get("SelectFolderTree")</MudText>
-                        }
-                        else if (_folderContents.Count == 0)
-                        {
-                            <MudText Typo="Typo.body2" Class="pa-3 mud-text-secondary">@Strings.Get("EmptyFolderDrop")</MudText>
-                        }
-                        else
-                        {
-                            @* Sortable column header (ADR "List-row columns and sorting"). *@
-                            <div class="wb-chead">
-                                <span @onclick="() => SortBy(ContentSort.Name)">@Strings.Get("Name") @SortArrow(ContentSort.Name)</span>
-                                <span @onclick="() => SortBy(ContentSort.Type)">@Strings.Get("FacetType") @SortArrow(ContentSort.Type)</span>
-                                <span @onclick="() => SortBy(ContentSort.Date)">@Strings.Get("SortDocDate") @SortArrow(ContentSort.Date)</span>
-                                <span @onclick="() => SortBy(ContentSort.Size)">@Strings.Get("SortSize") @SortArrow(ContentSort.Size)</span>
-                                <span @onclick="() => SortBy(ContentSort.Tags)">@Strings.Get("TagsLabel") @SortArrow(ContentSort.Tags)</span>
-                                <span></span>
-                            </div>
-                            @foreach (var node in SortedContents())
+                        </BulkBar>
+                        <ArchiveView>
+                            @if (_archiveDocument is not null)
                             {
-                                var attrs = BrowseService.DropAttributes(node);
-                                <div class="wb-list-row wb-cols @(_bulkIds.Contains(node.Id) || ReferenceEquals(node, _commentTarget) ? "wb-list-row-selected" : "")"
-                                     @onclick="(e) => OnRowClickAsync(node, e)" @ondblclick="() => OnRowDoubleClickAsync(node)" @attributes="attrs">
-                                    <span class="wb-ccell wb-cname" title="@node.DisplayName">
-                                        <MudIcon Icon="@BrowseService.TreeIcon(node)" Size="Size.Small"
-                                                 Class="@(node.IsFolder ? (node.IsEmptyFolder ? "wb-glyph-empty" : "wb-glyph-folder") : "")" />
-                                        <span style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@node.DisplayName</span>
-                                        @if (node.OnLegalHold)
-                                        {
-                                            <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Warning" title="@Strings.Get("LhUnderHold")" />
-                                        }
-                                        @if (node.CheckedOutByMe)
-                                        {
-                                            <MudIcon Icon="@Icons.Material.Filled.LockOpen" Size="Size.Small" Color="Color.Success" title="@Strings.Get("CoLockedMine")" />
-                                        }
-                                        else if (node.CheckedOutByOther)
-                                        {
-                                            <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Error" title="@Strings.Get("CoLockedOther")" />
-                                        }
-                                        @if (!string.IsNullOrEmpty(node.SensitivityLabelName))
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Class="ma-0"
-                                                     Style="@($"{ChipStyle(node.SensitivityLabelColor)}height:16px; font-size:.62rem;")" title="@string.Format(Strings.Get("SensitivityTip"), node.SensitivityLabelName)">@node.SensitivityLabelName</MudChip>
-                                        }
-                                    </span>
-                                    <span class="wb-ccell" title="@node.DocumentType">@(node.IsFolder ? Strings.Get("FolderType") : node.DocumentType)</span>
-                                    <span class="wb-ccell" title="@(node.DocumentDate?.ToString("yyyy-MM-dd") ?? "")">@(node.DocumentDate?.ToString("yyyy-MM-dd") ?? "")</span>
-                                    <span class="wb-ccell" title="@ByteSize.Format(node.SizeBytes)">@ByteSize.Format(node.SizeBytes)</span>
-                                    <span class="wb-ccell" title="@string.Join(", ", node.TagList)">@string.Join(", ", node.TagList)</span>
-                                    <div @onclick:stopPropagation="true">
-                                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
-                                            @if (!node.IsReference)
-                                            {
-                                                <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => RunAndRefreshAsync(Actions.RenameAsync(node))">@Strings.Get("CtxRename")</MudMenuItem>
-                                                <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => RunAndRefreshAsync(Actions.MoveAsync(node))">@Strings.Get("CtxMoveTo")</MudMenuItem>
-                                            }
-                                            @if (!node.IsReference && _canLegalHold)
-                                            {
-                                                <MudMenuItem Icon="@Icons.Material.Filled.Gavel" OnClick="() => RunAndRefreshAsync(Actions.PlaceLegalHoldAsync(node))">@Strings.Get("CtxPlaceLegalHold")</MudMenuItem>
-                                            }
-                                            @if (!node.IsReference && !node.IsFolder && !node.CheckedOut)
-                                            {
-                                                <MudMenuItem Icon="@Icons.Material.Filled.Lock" OnClick="() => CheckOutAsync(node)">@Strings.Get("CtxCheckOut")</MudMenuItem>
-                                            }
-                                            @if (!node.IsReference && node.CheckedOutByOther && _canOverrideCheckout)
-                                            {
-                                                <MudMenuItem Icon="@Icons.Material.Filled.LockOpen" OnClick="() => OverrideCheckoutAsync(node)">@Strings.Get("CtxOverrideCheckout")</MudMenuItem>
-                                            }
-                                            <MudMenuItem Icon="@Icons.Material.Filled.Link" OnClick="() => RunAndRefreshAsync(Actions.PlaceReferenceAsync(node))">@Strings.Get("CtxPlaceReference")</MudMenuItem>
-                                            @if (node.IsReference)
-                                            {
-                                                <MudMenuItem Icon="@Icons.Material.Filled.ArrowForward" OnClick="() => GoToAsync(node)">@Strings.Get("CtxGoTo")</MudMenuItem>
-                                                <MudMenuItem Icon="@Icons.Material.Filled.LinkOff" OnClick="() => RemoveReferenceAsync(node)">@Strings.Get("CtxRemoveReference")</MudMenuItem>
-                                            }
-                                            @if (node.HasReferences)
-                                            {
-                                                <MudMenuItem Icon="@Icons.Material.Filled.Share" OnClick="() => ShowReferencesForAsync(node)">@Strings.Get("CtxReferences")</MudMenuItem>
-                                            }
-                                            @if (!node.IsFolder && node.VersionCount > 1)
-                                            {
-                                                <MudMenuItem Icon="@Icons.Material.Filled.History" OnClick="() => OpenVersionsAsync(node)">@Strings.Get("CtxVersions")</MudMenuItem>
-                                            }
-                                            @if (!node.IsFolder)
-                                            {
-                                                <MudMenuItem Icon="@Icons.Material.Filled.AccountTree" OnClick="() => OpenWorkflowAsync(node)">@Strings.Get("CtxStartWorkflow")</MudMenuItem>
-                                            }
-                                            @if (!node.IsReference)
-                                            {
-                                                <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => Actions.OpenManageAccessAsync(node)">@Strings.Get("MaManageAccess")</MudMenuItem>
-                                                <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteRowAsync(node)">@Strings.Get("UgDelete")</MudMenuItem>
-                                            }
-                                        </MudMenu>
+                                <div class="wb-list-row" @onclick="ExitArchiveAsync" style="cursor:pointer;">
+                                    <MudIcon Icon="@Icons.Material.Filled.ArrowBack" Size="Size.Small" />
+                                    <span style="flex:1 1 auto;">@_archiveDocument.Name@Strings.Get("ArchiveBack")</span>
+                                </div>
+                                @if (_archiveEntries.Count == 0)
+                                {
+                                    <MudText Typo="Typo.body2" Class="pa-3 mud-text-secondary">@Strings.Get("ArchiveEmpty")</MudText>
+                                }
+                                @foreach (var entry in _archiveEntries)
+                                {
+                                    <div class="wb-list-row" @onclick="() => DownloadArchiveEntryAsync(entry)" style="cursor:pointer;" title="@Strings.Get("Download")">
+                                        <MudIcon Icon="@Icons.Material.Filled.InsertDriveFile" Size="Size.Small" />
+                                        <span style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@entry.Path</span>
+                                        <span class="mud-text-secondary" style="font-size:0.8em;">@ByteSize.Format(entry.Size)</span>
                                     </div>
-                                </div>
+                                }
                             }
-                        }
-                    </div>
+                        </ArchiveView>
+                        <RowMenu Context="node">
+                            @if (!node.IsReference)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => RunAndRefreshAsync(Actions.RenameAsync(node))">@Strings.Get("CtxRename")</MudMenuItem>
+                                <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => RunAndRefreshAsync(Actions.MoveAsync(node))">@Strings.Get("CtxMoveTo")</MudMenuItem>
+                            }
+                            @if (!node.IsReference && _canLegalHold)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Gavel" OnClick="() => RunAndRefreshAsync(Actions.PlaceLegalHoldAsync(node))">@Strings.Get("CtxPlaceLegalHold")</MudMenuItem>
+                            }
+                            @if (!node.IsReference && !node.IsFolder && !node.CheckedOut)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Lock" OnClick="() => CheckOutAsync(node)">@Strings.Get("CtxCheckOut")</MudMenuItem>
+                            }
+                            @if (!node.IsReference && node.CheckedOutByOther && _canOverrideCheckout)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.LockOpen" OnClick="() => OverrideCheckoutAsync(node)">@Strings.Get("CtxOverrideCheckout")</MudMenuItem>
+                            }
+                            <MudMenuItem Icon="@Icons.Material.Filled.Link" OnClick="() => RunAndRefreshAsync(Actions.PlaceReferenceAsync(node))">@Strings.Get("CtxPlaceReference")</MudMenuItem>
+                            @if (node.IsReference)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.ArrowForward" OnClick="() => GoToAsync(node)">@Strings.Get("CtxGoTo")</MudMenuItem>
+                                <MudMenuItem Icon="@Icons.Material.Filled.LinkOff" OnClick="() => RemoveReferenceAsync(node)">@Strings.Get("CtxRemoveReference")</MudMenuItem>
+                            }
+                            @if (node.HasReferences)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Share" OnClick="() => ShowReferencesForAsync(node)">@Strings.Get("CtxReferences")</MudMenuItem>
+                            }
+                            @if (!node.IsFolder && node.VersionCount > 1)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.History" OnClick="() => OpenVersionsAsync(node)">@Strings.Get("CtxVersions")</MudMenuItem>
+                            }
+                            @if (!node.IsFolder)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.AccountTree" OnClick="() => OpenWorkflowAsync(node)">@Strings.Get("CtxStartWorkflow")</MudMenuItem>
+                            }
+                            @if (!node.IsReference)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => Actions.OpenManageAccessAsync(node)">@Strings.Get("MaManageAccess")</MudMenuItem>
+                                <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteRowAsync(node)">@Strings.Get("UgDelete")</MudMenuItem>
+                            }
+                        </RowMenu>
+                    </ContentsListPane>
 
                     <div class="wb-gutter wb-gutter-v" data-gutter="list"><button type="button" class="wb-gutter-toggle"></button></div>
 
@@ -913,7 +866,7 @@
                                                     <div style="display:flex; flex-wrap:wrap; gap:4px;">
                                                         @foreach (var t in _editTags)
                                                         {
-                                                            <MudChip T="string" Size="Size.Small" Style="@ChipStyle(TagColor(t))" OnClose="@(() => _editTags.Remove(t))">@t</MudChip>
+                                                            <MudChip T="string" Size="Size.Small" Style="@Styling.ChipStyle(TagColor(t))" OnClose="@(() => _editTags.Remove(t))">@t</MudChip>
                                                         }
                                                     </div>
                                                 }
@@ -935,7 +888,7 @@
                                     </MudText>
                                     @if (_detailSensitivityId is not null)
                                     {
-                                        <MudChip T="string" Size="Size.Small" Style="@ChipStyle(_detailSensitivityColor)" Variant="Variant.Filled" Class="mt-1" Icon="@Icons.Material.Filled.Shield">@_detailSensitivityName</MudChip>
+                                        <MudChip T="string" Size="Size.Small" Style="@Styling.ChipStyle(_detailSensitivityColor)" Variant="Variant.Filled" Class="mt-1" Icon="@Icons.Material.Filled.Shield">@_detailSensitivityName</MudChip>
                                     }
                                     @if (_detailIndexData is { Count: > 0 })
                                     {
@@ -953,7 +906,7 @@
                                         <div style="display:flex; flex-wrap:wrap; gap:4px;" class="mt-2">
                                             @foreach (var t in _detailTags)
                                             {
-                                                <MudChip T="string" Size="Size.Small" Style="@ChipStyle(TagColor(t))" Icon="@Icons.Material.Filled.Label" OnClick="@(() => SearchByTagAsync(t))">@t</MudChip>
+                                                <MudChip T="string" Size="Size.Small" Style="@Styling.ChipStyle(TagColor(t))" Icon="@Icons.Material.Filled.Label" OnClick="@(() => SearchByTagAsync(t))">@t</MudChip>
                                             }
                                         </div>
                                     }
@@ -1386,10 +1339,13 @@
     private BrowseNode? _selectedFolder;
     private List<BrowseNode> _folderContents = [];
 
-    // Contents ordering (ADR "Per-folder contents sort order"): folders are ALWAYS listed on top; within each
-    // group the default is the open folder's persisted ContentsSortOrder (_folderSortOrder, loaded from the
-    // ListChildren envelope). Clicking a column header is an EPHEMERAL override (_headerSortActive) that resets
-    // when another folder is opened. Client-side over the fully-loaded rows (the listing loads all pages).
+    // The contents pane component, so the shell can drop its ephemeral header ordering when the listing's
+    // default order changes underneath it.
+    private Components.Panes.ContentsListPane? _listPane;
+
+    // The open folder's PERSISTED contents order (ADR "Per-folder contents sort order"), read from the
+    // ListChildren envelope and handed to the pane as the default it lists by. The EPHEMERAL header override
+    // is the pane's own — it is presentation, and nothing here needs to know about it.
     private FolderContentsSortOrder _folderSortOrder = FolderContentsSortOrder.DocumentDate;
 
     // What the detail pane is describing (issue #408). A selected row wins; with none, it is the open folder —
@@ -1400,61 +1356,6 @@
 
     // The subject's own contents-sort order (folders only), read from its detail resource.
     private FolderContentsSortOrder _detailSortOrder = FolderContentsSortOrder.Name;
-    private bool _headerSortActive;
-
-    private enum ContentSort { Name, Type, Date, Size, Tags }
-    private ContentSort _contentSort = ContentSort.Name;
-    private bool _contentSortAsc = true;
-
-    private void SortBy(ContentSort col)
-    {
-        if (_headerSortActive && _contentSort == col)
-        {
-            _contentSortAsc = !_contentSortAsc;
-        }
-        else
-        {
-            _contentSort = col;
-            _contentSortAsc = true;
-            _headerSortActive = true; // an ephemeral override, until the next folder is opened
-        }
-    }
-
-    private string SortArrow(ContentSort col) => _headerSortActive && _contentSort == col ? (_contentSortAsc ? "▲" : "▼") : "";
-
-    private IEnumerable<BrowseNode> SortedContents()
-    {
-        // Folders on top (always alphabetical, issue #339), then documents ordered by the active criterion (default
-        // DocumentDate). A column-header click is an explicit ephemeral override of the whole list.
-        var folders = _folderContents.Where(n => n.IsFolder);
-        var docs = _folderContents.Where(n => !n.IsFolder);
-        if (_headerSortActive)
-        {
-            return ApplyHeaderSort(folders).Concat(ApplyHeaderSort(docs));
-        }
-        return folders.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase).Concat(ApplyFolderSort(docs));
-    }
-
-    private IEnumerable<BrowseNode> ApplyFolderSort(IEnumerable<BrowseNode> items) => _folderSortOrder switch
-    {
-        FolderContentsSortOrder.DocumentDate => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue).ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
-        FolderContentsSortOrder.Created => items.OrderBy(n => n.VersionCreatedAt ?? DateTimeOffset.MinValue).ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
-        _ => items.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
-    };
-
-    private IEnumerable<BrowseNode> ApplyHeaderSort(IEnumerable<BrowseNode> items)
-    {
-        IEnumerable<BrowseNode> ordered = _contentSort switch
-        {
-            ContentSort.Type => items.OrderBy(n => n.DocumentType, StringComparer.OrdinalIgnoreCase),
-            ContentSort.Date => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue),
-            ContentSort.Size => items.OrderBy(n => n.SizeBytes ?? -1),
-            ContentSort.Tags => items.OrderBy(n => string.Join(",", n.TagList), StringComparer.OrdinalIgnoreCase),
-            _ => items.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
-        };
-        return _contentSortAsc ? ordered : ordered.Reverse();
-    }
-
     // Folder detail-pane editing of the persisted contents sort order (ADR "Per-folder contents sort order").
     private string FolderSortText(FolderContentsSortOrder order) => order switch
     {
@@ -1507,7 +1408,6 @@
     private List<string> _tagCatalog = [];
     private Dictionary<string, string?> _tagColors = new();
 
-    private static string ChipStyle(string? color) => string.IsNullOrEmpty(color) ? "" : $"background:{color}; color:#fff;";
 
     private string? TagColor(string name) => _tagColors.TryGetValue(name, out var c) ? c : null;
 
@@ -2788,13 +2688,9 @@
     {
         var contents = await Browse.LoadContentsAsync(folder.Id, folder.RepositoryId, BrowseService.ChildrenHrefOf(folder));
         _folderSortOrder = contents.SortOrder ?? _folderSortOrder;
-        _headerSortActive = false;
+        _listPane?.ResetHeaderSort();
         return contents.Nodes;
     }
-
-    // Makes the whole contents pane a drop target for the currently-selected folder.
-    private Dictionary<string, object> ListDropAttributes()
-        => _selectedFolder is { } folder ? new() { ["data-drop-folder"] = folder.Id.ToString() } : BrowseService.EmptyAttributes;
 
     // Selecting a folder (tree click or drilling into a folder row) lists its contents in the middle pane.
     private async Task SelectFolderAsync(BrowseNode? folder)
@@ -3606,7 +3502,7 @@
                     if (_selectedFolder?.Id == item.Id)
                     {
                         _folderSortOrder = _editSortOrder;
-                        _headerSortActive = false; // re-apply the persisted default order to the current listing
+                        _listPane?.ResetHeaderSort(); // re-apply the persisted default order to the current listing
                     }
                 }
                 else

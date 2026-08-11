@@ -1,0 +1,179 @@
+@using SimplArchive.Client.Models
+@using SimplArchive.Client.Services
+
+@* The workbench's middle pane: what is in the open folder. It owns how a row is drawn and the ephemeral
+   column-header ordering; WHAT a row offers, and what the bulk bar does, are the shell's (ADR 0558). The rows
+   themselves stay in the shell — `_folderContents` answers "what is currently listed" for the drag handler, the
+   bulk operations and the post-rename refresh, so it is not this pane's state to hold. *@
+<div class="wb-pane wb-list" data-pane="list" data-tour="pane-list" data-tour-rows="@Rows.Count" @attributes="PaneDropAttributes()">
+    @BulkBar
+
+    @if (ShowArchive)
+    {
+        @* Browsing a .zip's entries virtually — read on demand, nothing unpacked (ADR "Zip file browsing").
+           Supplied by the shell, which owns the entries and the download; this pane owns only that the mode
+           REPLACES the listing. *@
+        @ArchiveView
+    }
+    else if (SelectedFolder is null)
+    {
+        <MudText Typo="Typo.body2" Class="pa-3 mud-text-secondary">@Strings.Get("SelectFolderTree")</MudText>
+    }
+    else if (Rows.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="pa-3 mud-text-secondary">@Strings.Get("EmptyFolderDrop")</MudText>
+    }
+    else
+    {
+        @* Sortable column header (ADR "List-row columns and sorting"). *@
+        <div class="wb-chead">
+            <span @onclick="() => SortBy(ContentSort.Name)">@Strings.Get("Name") @SortArrow(ContentSort.Name)</span>
+            <span @onclick="() => SortBy(ContentSort.Type)">@Strings.Get("FacetType") @SortArrow(ContentSort.Type)</span>
+            <span @onclick="() => SortBy(ContentSort.Date)">@Strings.Get("SortDocDate") @SortArrow(ContentSort.Date)</span>
+            <span @onclick="() => SortBy(ContentSort.Size)">@Strings.Get("SortSize") @SortArrow(ContentSort.Size)</span>
+            <span @onclick="() => SortBy(ContentSort.Tags)">@Strings.Get("TagsLabel") @SortArrow(ContentSort.Tags)</span>
+            <span></span>
+        </div>
+        @foreach (var node in SortedContents())
+        {
+            var attrs = BrowseService.DropAttributes(node);
+            <div class="wb-list-row wb-cols @(BulkIds.Contains(node.Id) || ReferenceEquals(node, CommentTarget) ? "wb-list-row-selected" : "")"
+                 @onclick="(e) => RowClick.InvokeAsync((node, e))" @ondblclick="() => RowDoubleClick.InvokeAsync(node)" @attributes="attrs">
+                <span class="wb-ccell wb-cname" title="@node.DisplayName">
+                    <MudIcon Icon="@BrowseService.TreeIcon(node)" Size="Size.Small"
+                             Class="@(node.IsFolder ? (node.IsEmptyFolder ? "wb-glyph-empty" : "wb-glyph-folder") : "")" />
+                    <span style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@node.DisplayName</span>
+                    @if (node.OnLegalHold)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Warning" title="@Strings.Get("LhUnderHold")" />
+                    }
+                    @if (node.CheckedOutByMe)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.LockOpen" Size="Size.Small" Color="Color.Success" title="@Strings.Get("CoLockedMine")" />
+                    }
+                    else if (node.CheckedOutByOther)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Error" title="@Strings.Get("CoLockedOther")" />
+                    }
+                    @if (!string.IsNullOrEmpty(node.SensitivityLabelName))
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Class="ma-0"
+                                 Style="@($"{Styling.ChipStyle(node.SensitivityLabelColor)}height:16px; font-size:.62rem;")" title="@string.Format(Strings.Get("SensitivityTip"), node.SensitivityLabelName)">@node.SensitivityLabelName</MudChip>
+                    }
+                </span>
+                <span class="wb-ccell" title="@node.DocumentType">@(node.IsFolder ? Strings.Get("FolderType") : node.DocumentType)</span>
+                <span class="wb-ccell" title="@(node.DocumentDate?.ToString("yyyy-MM-dd") ?? "")">@(node.DocumentDate?.ToString("yyyy-MM-dd") ?? "")</span>
+                <span class="wb-ccell" title="@ByteSize.Format(node.SizeBytes)">@ByteSize.Format(node.SizeBytes)</span>
+                <span class="wb-ccell" title="@string.Join(", ", node.TagList)">@string.Join(", ", node.TagList)</span>
+                <div @onclick:stopPropagation="true">
+                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
+                        @RowMenu?.Invoke(node)
+                    </MudMenu>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>The open folder's contents, as the shell holds them.</summary>
+    [Parameter] public IReadOnlyList<BrowseNode> Rows { get; set; } = [];
+
+    /// <summary>The open folder — <c>null</c> means nothing is selected, which is a different empty state.</summary>
+    [Parameter] public BrowseNode? SelectedFolder { get; set; }
+
+    /// <summary>The open folder's PERSISTED order, the default this listing sorts by until a header is clicked.</summary>
+    [Parameter] public FolderContentsSortOrder FolderSortOrder { get; set; } = FolderContentsSortOrder.DocumentDate;
+
+    /// <summary>The Ctrl/Shift-selected rows, which draw as selected.</summary>
+    [Parameter] public IReadOnlySet<Guid> BulkIds { get; set; } = new HashSet<Guid>();
+
+    /// <summary>The row whose chat thread is open — also drawn as selected.</summary>
+    [Parameter] public BrowseNode? CommentTarget { get; set; }
+
+    /// <summary>A row click, with its modifiers — the shell owns what selection means.</summary>
+    [Parameter] public EventCallback<(BrowseNode Node, MouseEventArgs Args)> RowClick { get; set; }
+
+    /// <summary>A row double-click: drill into a folder, open a document.</summary>
+    [Parameter] public EventCallback<BrowseNode> RowDoubleClick { get; set; }
+
+    /// <summary>The context-menu items for one row — shell operations, so supplied rather than owned here.</summary>
+    [Parameter] public RenderFragment<BrowseNode>? RowMenu { get; set; }
+
+    /// <summary>The bulk-action bar, shown by the shell when it decides enough rows are selected.</summary>
+    [Parameter] public RenderFragment? BulkBar { get; set; }
+
+    /// <summary>The zip-entry browser, shown INSTEAD of the listing while <see cref="ShowArchive"/> is set.</summary>
+    [Parameter] public RenderFragment? ArchiveView { get; set; }
+
+    /// <summary>Whether the pane is in archive-browsing mode. A separate flag, because the fragment is always
+    /// supplied — its presence says the shell CAN show it, not that it should.</summary>
+    [Parameter] public bool ShowArchive { get; set; }
+
+    // Makes the whole contents pane a drop target for the currently-selected folder, so files can be dropped
+    // anywhere in it (empty area or a document row), not only onto a sub-folder row — see ADR "Content-pane drop
+    // target". A sub-folder row's own data-drop-folder still wins (closest() finds the nearest one).
+    private Dictionary<string, object> PaneDropAttributes()
+        => SelectedFolder is { } folder ? new() { ["data-drop-folder"] = folder.Id.ToString() } : BrowseService.EmptyAttributes;
+
+    // ---- Ephemeral column-header ordering (ADR "List-row columns and sorting") -----------------------
+    // Folders are ALWAYS listed on top; within each group the default is the open folder's persisted order
+    // (FolderSortOrder). Clicking a column header is an EPHEMERAL override that lasts until another folder is
+    // opened — which the shell signals by calling ResetHeaderSort. Client-side over the fully-loaded rows.
+    private enum ContentSort { Name, Type, Date, Size, Tags }
+    private ContentSort _contentSort = ContentSort.Name;
+    private bool _contentSortAsc = true;
+    private bool _headerSortActive;
+
+    /// <summary>Drops the header override, so the listing returns to the folder's persisted order.</summary>
+    public void ResetHeaderSort() => _headerSortActive = false;
+
+    private void SortBy(ContentSort col)
+    {
+        if (_headerSortActive && _contentSort == col)
+        {
+            _contentSortAsc = !_contentSortAsc;
+        }
+        else
+        {
+            _contentSort = col;
+            _contentSortAsc = true;
+            _headerSortActive = true; // an ephemeral override, until the next folder is opened
+        }
+    }
+
+    private string SortArrow(ContentSort col) => _headerSortActive && _contentSort == col ? (_contentSortAsc ? "▲" : "▼") : "";
+
+    private IEnumerable<BrowseNode> SortedContents()
+    {
+        // Folders on top (always alphabetical, issue #339), then documents ordered by the active criterion (default
+        // DocumentDate). A column-header click is an explicit ephemeral override of the whole list.
+        var folders = Rows.Where(n => n.IsFolder);
+        var docs = Rows.Where(n => !n.IsFolder);
+        if (_headerSortActive)
+        {
+            return ApplyHeaderSort(folders).Concat(ApplyHeaderSort(docs));
+        }
+        return folders.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase).Concat(ApplyFolderSort(docs));
+    }
+
+    private IEnumerable<BrowseNode> ApplyFolderSort(IEnumerable<BrowseNode> items) => FolderSortOrder switch
+    {
+        FolderContentsSortOrder.DocumentDate => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue).ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
+        FolderContentsSortOrder.Created => items.OrderBy(n => n.VersionCreatedAt ?? DateTimeOffset.MinValue).ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
+        _ => items.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
+    };
+
+    private IEnumerable<BrowseNode> ApplyHeaderSort(IEnumerable<BrowseNode> items)
+    {
+        IEnumerable<BrowseNode> ordered = _contentSort switch
+        {
+            ContentSort.Type => items.OrderBy(n => n.DocumentType, StringComparer.OrdinalIgnoreCase),
+            ContentSort.Date => items.OrderBy(n => n.DocumentDate ?? DateOnly.MinValue),
+            ContentSort.Size => items.OrderBy(n => n.SizeBytes ?? -1),
+            ContentSort.Tags => items.OrderBy(n => string.Join(",", n.TagList), StringComparer.OrdinalIgnoreCase),
+            _ => items.OrderBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase),
+        };
+        return _contentSortAsc ? ordered : ordered.Reverse();
+    }
+}
