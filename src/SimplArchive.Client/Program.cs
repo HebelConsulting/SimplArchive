@@ -58,6 +58,10 @@ builder.Services.AddScoped<SimplArchive.Client.Services.OcrLanguageCatalog>();
 // The actions a document row offers, shared by the tree pane and the contents list — see DocumentActions.
 builder.Services.AddScoped<SimplArchive.Client.Services.DocumentActions>();
 
+// The actions that operate on the multi-selection, plus the runner the drag-drop handler posts through — the
+// bulk-bar sibling of DocumentActions (see BulkActions).
+builder.Services.AddScoped<SimplArchive.Client.Services.BulkActions>();
+
 // Reading a folder's contents, and describing a node as a tree item / drag participant — shared by the tree
 // pane and the contents list, extracted before either of them so neither had to copy it (see BrowseService).
 builder.Services.AddScoped<SimplArchive.Client.Services.BrowseService>();

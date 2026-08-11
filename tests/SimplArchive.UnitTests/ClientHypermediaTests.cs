@@ -22,9 +22,15 @@ namespace SimplArchive.UnitTests;
 // and flip the assertion to "no client composes an api/ URL" — that is the finish line.
 public partial class ClientHypermediaTests
 {
-    // Matches a string literal that starts an API path: "api/…" or $"api/…". Deliberately narrow — it catches the
-    // way both clients actually build these, without flagging prose in a comment.
-    private static readonly Regex ComposedApiUrl = new("\\$?\"api/", RegexOptions.Compiled);
+    // Matches a string literal that starts an API path: "api/…", $"api/…", or the leading-slash forms "/api/…".
+    // Deliberately narrow — it catches the way both clients actually build these, without flagging prose in a
+    // comment.
+    //
+    // The optional slash was MISSING until 2026-08-11, and seven composed URLs sat in the clients unseen because
+    // of it — a bulk-endpoint family that happened to be written "/api/documents/bulk/move" rather than
+    // "api/documents/bulk/move". A ledger that cannot see a whole spelling is not a ledger; the burn-down had
+    // been reporting 41 when the real figure was 48.
+    private static readonly Regex ComposedApiUrl = new("\\$?\"/?api/", RegexOptions.Compiled);
 
     // Two different states, deliberately, because the two clients are at two different points.
     //
@@ -70,7 +76,21 @@ public partial class ClientHypermediaTests
         // is what the server tranche was for, and it is why the client half was cheap.
         //
         // Then 41 = 20 + 2 + 1 + 7 + 4 + 3 + 1 + 3 — pure moves again, of the three on the browse path.
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 20,
+        //
+        // Now 48 = 23 + 4 + 1 + 2 + 1 + 7 + 4 + 3 + 1 + 3. The jump is NOT new debt: it is the seven the ledger
+        // could not see until the regex learned the leading-slash spelling, plus the API root's own entry point,
+        // which is now counted rather than invisible. The burn-down's real figure was 48 all along.
+        // 48, not 41: widening the regex to see the leading-slash spelling exposed seven that had never been
+        // counted (see ComposedApiUrl). Three are the drag-drop handler's bulk posts, four the bulk bar's.
+        ["src/SimplArchive.Client/Pages/Home.razor"] = 23,
+        // The bulk endpoints, carried out of the page with the actions that post them (ADR 0558). They belong to
+        // the web burn-down: /documents/bulk/* is a collection the API does not advertise a rel for yet, so
+        // converting them is a server change first.
+        ["src/SimplArchive.Client/Services/BulkActions.cs"] = 4,
+        // THE ENTRY POINT, not a debt. ADR 0543 says the only URL a client may know is the API root, and this is
+        // the one line that knows it — every other address in both clients is followed from a rel reached from
+        // here. It is counted rather than exempted so that a SECOND URL appearing in this file fails the build.
+        ["src/SimplArchive.Client/Services/ApiRoot.cs"] = 1,
         // The two the shared browse plumbing carried out of the page (ADR 0558): a folder's references
         // collection, and the ONE irreducible composition — fetching a document by id to follow its own
         // `children` rel, for the caller that holds an id and no row (ADR 0543).

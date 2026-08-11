@@ -17,6 +17,7 @@
 @inject SimplArchive.Client.Services.SensitivityLabelCatalog SensitivityLabels
 @inject SimplArchive.Client.Services.OcrLanguageCatalog OcrLanguages
 @inject SimplArchive.Client.Services.DocumentActions Actions
+@inject SimplArchive.Client.Services.BulkActions Bulk
 @inject SimplArchive.Client.Services.BrowseService Browse
 @inject SimplArchive.Client.Services.TreeState Tree
 @inject SimplArchive.Client.Services.DetailState Detail
@@ -2164,11 +2165,17 @@
     // resource with different rels — the document view is the one that carries the grants. A repository is a
     // document (ADR 0200), but only the server can say at which address, which is why it advertises both.
 
+    // Addressed from the ROW, not from the detail pane's state (ADR 0555). Detail.* describes whatever the pane
+    // last FINISHED loading, and this action can be taken while the load for a freshly-clicked row is still in
+    // flight — in which case Detail.Links still points at the PREVIOUS subject and the dialog opens on the wrong
+    // document. That is not theoretical: clicking a row and then Manage access opened the repository root's
+    // grants often enough to make WebManageAccessTests fail 2 runs in 5. The row is what the user clicked and it
+    // carries its own address, so there is nothing to race.
     private Task OpenManageAccessForSelectedAsync() =>
         Actions.OpenManageAccessAsync(
             _selectedItem!.Id,
-            Detail.SysName,
-            Detail.Links?.GetValueOrDefault("self") ?? DocumentActions.DocumentAddress(_selectedItem!));
+            _selectedItem!.Name,
+            DocumentActions.DocumentAddress(_selectedItem!) ?? Detail.Links?.GetValueOrDefault("self"));
 
 
     private async Task LoadTasksAsync()
@@ -2630,6 +2637,16 @@
         Detail.Subscribed = false;
         Detail.EditFields.Clear();
         _availableMasks = [];
+
+        // The addresses and the rights the PREVIOUS subject advertised. Clearing them is what stops an action
+        // being offered — and worse, taken — against the wrong document while the new subject is still loading:
+        // a rel that has not arrived means "not available to you, here, now" (ADR 0543), which is exactly true
+        // during a load. Leaving them set kept the Manage access button rendered from the last subject's rights
+        // and opened the dialog on the last subject's grants.
+        Detail.Links = null;
+        Detail.CanManagePermissions = false;
+        Detail.BreaksInheritance = false;
+        Detail.ExternalLinksHref = null;
     }
 
     // Open the reminder (Wiedervorlage) dialog for the selected document (ADR "Document reminders").
@@ -2734,10 +2751,17 @@
 
         try
         {
+            // Resolved for the ROW the user clicked, not from the pane's state: this button is clickable while
+            // that row's detail load is still in flight, and Detail.Links is null until it lands. Falling back to
+            // a fetch costs one request in that window and is always the right document, where reading the pane
+            // would be either stale or absent (ADR 0543/0555 — hold the row).
+            var href = Detail.Links?.GetValueOrDefault("subscription")
+                ?? await FetchDocumentRelAsync(item.Id, "subscription");
+
             var target = Detail.Subscribed;
             using var response = target
-                ? await Http.DeleteAsync(DetailHref("subscription"))
-                : await Http.PutAsync(DetailHref("subscription"), null);
+                ? await Http.DeleteAsync(href)
+                : await Http.PutAsync(href, null);
             response.EnsureSuccessStatusCode();
             Detail.Subscribed = !target;
             Snackbar.Add(Detail.Subscribed ? "Following this document." : "Unfollowed.", Severity.Success);
@@ -3367,70 +3391,23 @@
 
 
     // ---- Bulk actions on the multi-selection (ADR "Bulk actions on selected documents") ------------------
+    // The selection is the PAGE's — it is drawn by the list and read by the drag handler — so the page holds it
+    // and hands the ids to the shared service, then decides what "refresh" means (see BulkActions).
 
-    private async Task BulkMoveAsync()
+    private Task BulkMoveAsync() => RunBulkAsync(Bulk.MoveAsync(_bulkIds));
+
+    private Task BulkDeleteAsync() => RunBulkAsync(Bulk.DeleteAsync(_bulkIds));
+
+    private Task BulkAddTagsAsync() => RunBulkAsync(Bulk.AddTagsAsync(_bulkIds));
+
+    private Task BulkSensitivityAsync() => RunBulkAsync(Bulk.SetSensitivityAsync(_bulkIds));
+
+    // Clearing the selection is part of "the bulk action happened", not part of posting it: the rows it named
+    // may no longer be there to stay selected.
+    private async Task RunBulkAsync(Task<bool> action)
     {
-        if (await Actions.PickFolderAsync("Move selected items to folder") is not { } folderId)
+        if (!await action)
         {
-            return;
-        }
-
-        await RunBulkAsync("/api/documents/bulk/move", new { ids = _bulkIds.ToList(), parentId = folderId }, "moved");
-    }
-
-    private async Task BulkDeleteAsync()
-    {
-        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
-        {
-            Title = "Delete selected items",
-            Message = $"Move {_bulkIds.Count} item(s) to the recycle bin?",
-            YesText = "Delete",
-            CancelText = "Cancel",
-        });
-        if (confirmed != true)
-        {
-            return;
-        }
-
-        await RunBulkAsync("/api/documents/bulk/delete", new { ids = _bulkIds.ToList() }, "deleted");
-    }
-
-    private async Task BulkAddTagsAsync()
-    {
-        var dialog = await DialogService.ShowAsync<Dialogs.BulkTagsDialog>(Strings.Get("BulkTagsConfirm"));
-        if ((await dialog.Result) is { Canceled: false, Data: List<string> tags } && tags.Count > 0)
-        {
-            await RunBulkAsync("/api/documents/bulk/tags", new { ids = _bulkIds.ToList(), tags }, "tagged");
-        }
-    }
-
-    private async Task BulkSensitivityAsync()
-    {
-        var dialog = await DialogService.ShowAsync<Dialogs.BulkSensitivityDialog>(Strings.Get("BulkSensTitle"));
-        if ((await dialog.Result) is { Canceled: false, Data: int label })
-        {
-            await RunBulkAsync("/api/documents/bulk/sensitivity", new { ids = _bulkIds.ToList(), label }, "classified");
-        }
-    }
-
-    private async Task RunBulkAsync(string url, object body, string verb)
-    {
-        try
-        {
-            var response = await Http.PostAsJsonAsync(url, body);
-            if (!response.IsSuccessStatusCode)
-            {
-                Snackbar.Add(string.Format(Strings.Get("StBulkFailedStatus"), (int)response.StatusCode), Severity.Error);
-                return;
-            }
-
-            var result = await response.Content.ReadFromJsonAsync<BulkResultDto>();
-            var msg = $"{result?.Succeeded ?? 0} item(s) {verb}" + (result?.Skipped > 0 ? $", {result.Skipped} skipped" : ".");
-            Snackbar.Add(msg, result?.Skipped > 0 ? Severity.Warning : Severity.Success);
-        }
-        catch (Exception e)
-        {
-            Snackbar.Add(string.Format(Strings.Get("StBulkFailed"), e.Message), Severity.Error);
             return;
         }
 
@@ -3439,7 +3416,6 @@
         await RefreshAsync();
     }
 
-    private record BulkResultDto { public int Succeeded { get; set; } public int Skipped { get; set; } }
 
     // An internal node drag (a list row or a tree folder) was dropped on a folder — move or reference the dragged
     // set into it (ADR "Desktop drag-and-drop move and reference", web parity). Called from dropUpload.js. The set
@@ -3467,7 +3443,7 @@
         var allRefs = draggedInBulk ? ids.All(IsRef) : draggedIsRef;
         if (allRefs)
         {
-            await RunBulkAsync("/api/documents/bulk/reference", new { ids, parentId = targetId }, "referenced");
+            await RunBulkAsync(Bulk.RunAsync("/api/documents/bulk/reference", new { ids, parentId = targetId }, "referenced"));
             return;
         }
 
@@ -3486,10 +3462,10 @@
         switch (choice)
         {
             case true:
-                await RunBulkAsync("/api/documents/bulk/move", new { ids, parentId = targetId }, "moved");
+                await RunBulkAsync(Bulk.RunAsync("/api/documents/bulk/move", new { ids, parentId = targetId }, "moved"));
                 break;
             case false:
-                await RunBulkAsync("/api/documents/bulk/reference", new { ids, parentId = targetId }, "referenced");
+                await RunBulkAsync(Bulk.RunAsync("/api/documents/bulk/reference", new { ids, parentId = targetId }, "referenced"));
                 break;
         }
 

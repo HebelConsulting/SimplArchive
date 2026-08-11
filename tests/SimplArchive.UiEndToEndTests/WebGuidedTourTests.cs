@@ -59,8 +59,17 @@ public partial class WebGuidedTourTests
         // Step 3 of the tour selects a folder before the list has rows; do the same, so the anchors that only
         // exist once something is selected are genuinely present when checked.
         await page.GetByText("Demo Repository").First.ClickAsync();
-        await page.Locator("[data-tour='pane-list'] .wb-list-row").First.WaitForAsync(new() { Timeout = 30000 });
-        await page.Locator("[data-tour='pane-list'] .wb-list-row").First.ClickAsync();
+        var firstRow = page.Locator("[data-tour='pane-list'] .wb-list-row").First;
+        await firstRow.WaitForAsync(new() { Timeout = 30000 });
+        var rowName = await firstRow.Locator(".wb-cname").First.GetAttributeAsync("title");
+        await firstRow.ClickAsync();
+
+        // Wait until the pane actually DESCRIBES the row that was clicked. Several anchors sit on actions gated
+        // by the selected subject's rights, and those arrive with its detail load (ADR 0559) — checking before it
+        // lands used to succeed only because the pane was still showing the PREVIOUS subject's affordances, which
+        // is the defect ADR 0559 removed. Without this wait the test asserts against a half-loaded pane and
+        // reports `action-manage-access` missing.
+        await page.Locator("[data-pane='index']").GetByText(rowName!).First.WaitForAsync(new() { Timeout = 30000 });
 
         var missing = new List<string>();
         foreach (var anchor in anchors)
