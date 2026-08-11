@@ -14,6 +14,8 @@
 @inject SimplArchive.Client.Services.ImpersonationService ImpersonationSvc
 @inject SimplArchive.Client.Services.AppNavigationState AppNav
 @inject SimplArchive.Client.Services.ApiRoot ApiRoot
+@inject SimplArchive.Client.Services.SensitivityLabelCatalog SensitivityLabels
+@inject SimplArchive.Client.Services.OcrLanguageCatalog OcrLanguages
 
 <PageTitle>SimplArchive</PageTitle>
 
@@ -1269,211 +1271,9 @@
             }
             else if (_activeTab == Tab.Tenant)
             {
-                @* Tenant-admin self-service settings (ADR "Tenant-admin settings tab"): read-only until Edit,
-                   then Save/Cancel. Plus a New repository button. Gated on isTenantAdmin. *@
-                <div class="wb-tenant pa-4" style="overflow:auto; max-width:720px;">
-                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
-                        <MudText Typo="Typo.h6">@Strings.Get("TenantHeader")</MudText>
-                        @if (!_tenantEditing)
-                        {
-                            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Edit" OnClick="BeginTenantEdit" Disabled="@(_tenant is null)">@Strings.Get("Edit")</MudButton>
-                        }
-                        else
-                        {
-                            <MudButton Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveTenantSettingsAsync">@Strings.Get("Save")</MudButton>
-                            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Close" OnClick="CancelTenantEdit">@Strings.Get("Cancel")</MudButton>
-                        }
-                        <MudSpacer />
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Shield" OnClick="OpenSensitivityLabelsAsync">@Strings.Get("TenantSensitivityLabels")</MudButton>
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.CreateNewFolder" OnClick="NewRepositoryAsync">@Strings.Get("TenantNewRepository")</MudButton>
-                    </div>
-                    @if (_tenant is not null)
-                    {
-                        <div class="wb-setting-row mb-3">
-                            <MudTextField T="string" Label="@Strings.Get("TenantNameLabel")" @bind-Value="_tenantEdit.Name" Disabled="@(!_tenantEditing)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
-                            @InfoButton(Strings.Get("TenantNameInfo"))
-                        </div>
-
-                        <div class="wb-setting-row mb-3">
-                            <MudSelect T="string" Label="@Strings.Get("TenantOcrLabel")" MultiSelection="true" @bind-SelectedValues="_tenantEditOcr"
-                                       Disabled="@(!_tenantEditing)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1"
-                                       MultiSelectionTextFunc="@(v => string.Join(", ", v))">
-                                @foreach (var lang in _ocrCatalog)
-                                {
-                                    <MudSelectItem T="string" Value="@lang.Code">@lang.DisplayName (@lang.Code)</MudSelectItem>
-                                }
-                            </MudSelect>
-                            @InfoButton(Strings.Get("TenantOcrInfo"))
-                        </div>
-
-                        <div class="wb-setting-row mb-3">
-                            <MudNumericField T="int" Label="@Strings.Get("TenantAuditRetLabel")" @bind-Value="_tenantEdit.AuditRetentionDays"
-                                             Disabled="@(!_tenantEditing)" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
-                            @InfoButton(Strings.Get("TenantAuditRetInfo"))
-                        </div>
-
-                        <div class="wb-setting-row mb-3">
-                            <MudNumericField T="int" Label="@Strings.Get("TenantCoTtlLabel")" @bind-Value="_tenantEdit.CheckoutTtlDays"
-                                             Disabled="@(!_tenantEditing)" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
-                            @InfoButton(Strings.Get("TenantCoTtlInfo"))
-                        </div>
-
-                        <div class="wb-setting-row mb-3">
-                            <MudNumericField T="int" Label="@Strings.Get("TenantCoWarnLabel")" @bind-Value="_tenantEdit.CheckoutWarningDays"
-                                             Disabled="@(!_tenantEditing)" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
-                            @InfoButton(Strings.Get("TenantCoWarnInfo"))
-                        </div>
-
-                        <div class="wb-setting-row mb-4">
-                            <MudSelect T="int" Label="@Strings.Get("TenantWormLabel")" @bind-Value="_tenantEdit.WormLockMode"
-                                       Disabled="@(!_tenantEditing)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1">
-                                <MudSelectItem T="int" Value="0">@Strings.Get("TenantWormGovernance")</MudSelectItem>
-                                <MudSelectItem T="int" Value="1">@Strings.Get("TenantWormCompliance")</MudSelectItem>
-                            </MudSelect>
-                            @InfoButton(Strings.Get("TenantWormInfo"))
-                        </div>
-
-                        <div class="wb-setting-row mb-1">
-                            <MudNumericField T="int?" Label="@Strings.Get("TenantQuotaLabel")" @bind-Value="_tenantEdit.StorageQuotaMb"
-                                             Disabled="@(!_tenantEditing)" Min="0" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
-                            @InfoButton(Strings.Get("TenantQuotaInfo"))
-                        </div>
-                        <div class="wb-setting-row mb-4" style="align-items:center; gap:8px;">
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary flex-grow-1">
-                                @string.Format(Strings.Get("TenantUsed"), FormatBytes(_tenant.StorageUsedBytes))@(_tenant.StorageQuotaBytes is { } q ? string.Format(Strings.Get("TenantUsedOf"), FormatBytes(q), StoragePercent()) : Strings.Get("TenantNoLimit"))
-                                @if (StorageLevel() == 1)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-2">@Strings.Get("TenantApproachingQuota")</MudChip>
-                                }
-                                else if (StorageLevel() == 2)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="ml-2">@Strings.Get("TenantAlmostFull")</MudChip>
-                                }
-                            </MudText>
-                            <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Refresh" OnClick="RecomputeStorageAsync">@Strings.Get("TenantRecompute")</MudButton>
-                            @InfoButton(Strings.Get("TenantRecomputeInfo"))
-                        </div>
-
-                        <div class="wb-setting-row mb-4">
-                            <MudNumericField T="int" Label="@Strings.Get("TenantUploadCleanupLabel")" @bind-Value="_tenantEdit.IncompleteUploadCleanupDays"
-                                             Disabled="@(!_tenantEditing)" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
-                            @InfoButton(Strings.Get("TenantUploadCleanupInfo"))
-                        </div>
-
-                        <div class="wb-setting-row mb-4">
-                            <MudSwitch T="bool" @bind-Value="_tenantEdit.RequireMfa" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
-                                       Label="@Strings.Get("TenantRequireMfa")" />
-                            @InfoButton(Strings.Get("TenantRequireMfaInfo"))
-                        </div>
-
-                        <div class="wb-setting-row mb-4">
-                            <MudSwitch T="bool" @bind-Value="_tenantEdit.AllowPasskeyLogin" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
-                                       Label="@Strings.Get("TenantAllowPasskey")" />
-                            @InfoButton(Strings.Get("TenantAllowPasskeyInfo"))
-                        </div>
-
-                        <div class="wb-setting-row mb-4">
-                            <MudSwitch T="bool" @bind-Value="_tenantEdit.RequireDispositionReview" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
-                                       Label="@Strings.Get("TenantRequireDisposition")" />
-                            @InfoButton(Strings.Get("TenantRequireDispositionInfo"))
-                        </div>
-
-                        <div class="wb-setting-row mb-4">
-                            <MudSwitch T="bool" @bind-Value="_tenantEdit.RestrictTagsToCatalog" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
-                                       Label="@Strings.Get("TenantRestrictTags")" />
-                            @InfoButton(Strings.Get("TenantRestrictTagsInfo"))
-                        </div>
-
-                        <div class="wb-setting-row mb-4">
-                            <MudSwitch T="bool" @bind-Value="_tenantEdit.EnforceClearance" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
-                                       Label="@Strings.Get("TenantEnforceClearance")" />
-                            @InfoButton(Strings.Get("TenantEnforceClearanceInfo"))
-                        </div>
-
-                        @* External links (ADR 0546). Off by default: this is the switch that opens an
-                           unauthenticated way for documents to leave the tenant, so it is opted into rather than
-                           inherited. The caps only matter once it is on, hence the nesting. *@
-                        <div class="wb-setting-row mb-2">
-                            <MudSwitch T="bool" @bind-Value="_tenantEdit.AllowExternalLinks" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
-                                       Label="@Strings.Get("TenantAllowExternalLinks")" />
-                            @InfoButton(Strings.Get("TenantAllowExternalLinksInfo"))
-                        </div>
-                        @if (_tenantEdit.AllowExternalLinks)
-                        {
-                            <div class="wb-setting-row mb-2">
-                                <MudNumericField T="int" @bind-Value="_tenantEdit.ExternalLinkMaxDays" Min="1" Max="3650"
-                                                 Label="@Strings.Get("TenantExtLinkMaxDays")" Disabled="@(!_tenantEditing)"
-                                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
-                            </div>
-                            <div class="wb-setting-row mb-2">
-                                <MudNumericField T="int" @bind-Value="_tenantEdit.ExternalLinkDefaultAccesses" Min="1" Max="1000"
-                                                 Label="@Strings.Get("TenantExtLinkDefaultAccesses")" Disabled="@(!_tenantEditing)"
-                                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
-                            </div>
-                            <div class="wb-setting-row mb-4">
-                                <MudSwitch T="bool" @bind-Value="_tenantEdit.ShowExternalLinkUrl" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
-                                           Label="@Strings.Get("TenantShowExternalLinkUrl")" />
-                                @InfoButton(Strings.Get("TenantShowExternalLinkUrlInfo"))
-                            </div>
-                        }
-
-                        <div class="wb-setting-row mb-2">
-                            <MudTextField T="string" Label="@Strings.Get("TenantWebhookUrlLabel")" @bind-Value="_tenantEdit.AuditWebhookUrl"
-                                          Disabled="@(!_tenantEditing)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1"
-                                          Placeholder="https://siem.example.com/ingest" />
-                            @InfoButton(Strings.Get("TenantWebhookUrlInfo"))
-                        </div>
-                        @if (_tenantEditing)
-                        {
-                            <div class="wb-setting-row mb-2">
-                                <MudTextField T="string" Label="@(_tenant.AuditWebhookConfigured ? Strings.Get("TenantSecretLabelKeep") : Strings.Get("TenantSecretLabel"))"
-                                              @bind-Value="_tenantEdit.AuditWebhookSecret" InputType="InputType.Password"
-                                              Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
-                                @InfoButton(Strings.Get("TenantSecretInfo"))
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="wb-setting-row mb-1" style="align-items:center; gap:8px;">
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary flex-grow-1">
-                                    @(_tenant.AuditWebhookConfigured ? Strings.Get("TenantSecretConfigured") : Strings.Get("TenantSecretNotSet"))
-                                </MudText>
-                                @if (_tenant.AuditWebhookUrl is not null && _tenant.AuditWebhookConfigured)
-                                {
-                                    <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Send" OnClick="TestWebhookAsync">@Strings.Get("TenantSendTest")</MudButton>
-                                }
-                            </div>
-                            @if (_tenant.AuditWebhookUrl is not null)
-                            {
-                                <div class="wb-setting-row mb-4">
-                                    @if (_tenant.AuditWebhookConsecutiveFailures == 0)
-                                    {
-                                        <MudText Typo="Typo.body2" Color="Color.Success" Class="flex-grow-1">
-                                            @Strings.Get("TenantDeliveryHealthy")@(_tenant.AuditWebhookLastSuccessAt is { } s ? string.Format(Strings.Get("TenantLastSuccess"), s.ToLocalTime().ToString("g")) : "")
-                                        </MudText>
-                                    }
-                                    else
-                                    {
-                                        <MudText Typo="Typo.body2" Color="Color.Warning" Class="flex-grow-1">
-                                            @Strings.Get("TenantDeliveryFailing") @string.Format(_tenant.AuditWebhookConsecutiveFailures == 1 ? Strings.Get("TenantConsecFailure") : Strings.Get("TenantConsecFailures"), _tenant.AuditWebhookConsecutiveFailures)@(_tenant.AuditWebhookLastError is { } e ? $" ({e})" : "")@(_tenant.AuditWebhookNextAttemptAt is { } n ? string.Format(Strings.Get("TenantNextRetry"), n.ToLocalTime().ToString("g")) : "")@(_tenant.AuditWebhookLastSuccessAt is { } s2 ? string.Format(Strings.Get("TenantLastSuccessSemi"), s2.ToLocalTime().ToString("g")) : Strings.Get("TenantNeverDelivered"))
-                                        </MudText>
-                                    }
-                                    @InfoButton(Strings.Get("TenantDeliveryInfo"))
-                                </div>
-                            }
-                        }
-
-                        <MudDivider Class="mb-3" />
-                        <MudText Typo="Typo.subtitle2" Class="mb-1 mud-text-secondary">@Strings.Get("TenantReference")</MudText>
-                        <MudSimpleTable Dense="true" Bordered="false" Elevation="0">
-                            <tbody>
-                                <tr><td class="mud-text-secondary" style="width:140px;">@Strings.Get("TenantIdLabel")</td><td>@_tenant.Id</td></tr>
-                                <tr><td class="mud-text-secondary">@Strings.Get("TenantStatusLabel")</td><td>@_tenant.Status</td></tr>
-                                <tr><td class="mud-text-secondary">@Strings.Get("TenantCreatedLabel")</td><td>@_tenant.CreatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td></tr>
-                            </tbody>
-                        </MudSimpleTable>
-                    }
-                </div>
+                @* Both actions reach state this tab does not own — the tree, and the detail pane's
+                   sensitivity picker — so they stay with the shell (ADR 0558). *@
+                <TenantTab NewRepository="NewRepositoryAsync" ManageSensitivityLabels="OpenSensitivityLabelsAsync" />
             }
             else if (_activeTab == Tab.Tags)
             {
@@ -1481,51 +1281,8 @@
             }
             else if (_activeTab == Tab.Tasks)
             {
-                @* Pending workflow review tasks assigned to me (ADR "Workflow / document state model"). *@
-                <div class="wb-tasks pa-4" style="overflow:auto;">
-                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                        <MudText Typo="Typo.h6">@Strings.Get("TasksHeader")</MudText>
-                        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadTasksAsync" title="Refresh" />
-                    </div>
-                    @if (_tasks.Count == 0)
-                    {
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("TasksEmpty")</MudText>
-                    }
-                    else
-                    {
-                        <MudSimpleTable Dense="true" Hover="true" Bordered="false" Style="max-width:860px;">
-                            <thead><tr><th>@Strings.Get("ColDocument")</th><th>@Strings.Get("VerColVersion")</th><th>@Strings.Get("ColAssigned")</th><th>@Strings.Get("ColDue")</th><th></th></tr></thead>
-                            <tbody>
-                                @foreach (var t in _tasks)
-                                {
-                                    <tr>
-                                        <td>@t.DocumentName</td>
-                                        <td>@(t.VersionNumber is { } n ? $"v{n}" : "—")</td>
-                                        <td>@t.AssignedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
-                                        <td>
-                                            @if (t.DueAt is { } due)
-                                            {
-                                                @if (t.IsOverdue)
-                                                {
-                                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">@string.Format(Strings.Get("WorkflowOverdue"), due.LocalDateTime.ToString("yyyy-MM-dd"))</MudChip>
-                                                }
-                                                else
-                                                {
-                                                    <span>@due.LocalDateTime.ToString("yyyy-MM-dd")</span>
-                                                }
-                                            }
-                                            else
-                                            {
-                                                <span class="mud-text-secondary">—</span>
-                                            }
-                                        </td>
-                                        <td><MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => OpenTaskAsync(t)">@Strings.Get("RibbonOpen")</MudButton></td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </MudSimpleTable>
-                    }
-                </div>
+                @* The list stays in the shell: this tab, My work and the tab-bar badge all read it. *@
+                <TasksTab Tasks="_tasks" Refresh="LoadTasksAsync" OpenRequested="OpenTaskAsync" />
             }
             else if (_activeTab == Tab.MyWork)
             {
@@ -1533,152 +1290,10 @@
             }
             else if (_activeTab == Tab.UsersGroups)
             {
-                @* Users & groups administration (ADR "Users & groups administration tab"): a combined
-                   principal list on the left, the assignable system-rights matrix on the right. *@
-                <div class="wb-ug">
-                    <div class="wb-ug-list">
-                        <div class="wb-ug-toolbar">
-                            <MudMenu Icon="@Icons.Material.Filled.Add" Size="Size.Small" Dense="true" title="@Strings.Get("UgNew")">
-                                <MudMenuItem Icon="@Icons.Material.Filled.Person" OnClick="() => NewPrincipalAsync(false)">@Strings.Get("UgNewUser")</MudMenuItem>
-                                <MudMenuItem Icon="@Icons.Material.Filled.Group" OnClick="() => NewPrincipalAsync(true)">@Strings.Get("UgNewGroup")</MudMenuItem>
-                            </MudMenu>
-                            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Disabled="@(_selectedPrincipal is null)" OnClick="CopyPrincipalAsync" title="@Strings.Get("UgCopy")" />
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Disabled="@(_selectedPrincipal is null)" OnClick="DeletePrincipalAsync" title="@Strings.Get("UgDelete")" />
-                            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadPrincipalsAsync" title="@Strings.Get("RibbonRefresh")" />
-                            @* Service accounts (machine-to-machine) management — ADR 0534, gated on CanManageServiceAccounts. *@
-                            @if (_canManageServiceAccounts)
-                            {
-                                <MudIconButton Icon="@Icons.Material.Filled.Api" Size="Size.Small" OnClick="OpenServiceAccountsAsync" title="@Strings.Get("SaManage")" />
-                            }
-                        </div>
-                        <div class="wb-ug-rows">
-                            @foreach (var p in _principals)
-                            {
-                                <div class="wb-list-row @(ReferenceEquals(p, _selectedPrincipal) ? "wb-list-row-selected" : "")" @onclick="() => SelectPrincipalAsync(p)">
-                                    <MudIcon Icon="@(p.IsGroup ? Icons.Material.Filled.Group : Icons.Material.Filled.Person)" Size="Size.Small" />
-                                    <span style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@p.Name</span>
-                                    @if (!p.IsGroup && !p.IsActive)
-                                    {
-                                        <span class="mud-text-secondary" style="font-size:.75em;">@Strings.Get("UgInactive")</span>
-                                    }
-                                </div>
-                            }
-                        </div>
-                    </div>
-                    <div class="wb-ug-rights">
-                        @if (_selectedPrincipal is { } sel)
-                        {
-                            <div class="wb-ug-rights-head">
-                                <MudIcon Icon="@(sel.IsGroup ? Icons.Material.Filled.Group : Icons.Material.Filled.Person)" Size="Size.Small" />
-                                <MudText Typo="Typo.subtitle1">@sel.Name</MudText>
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@string.Format(Strings.Get("UgRights"), sel.IsGroup ? Strings.Get("UgGroup") : Strings.Get("UgUser"))</MudText>
-                            </div>
-                            @* Profile photo (users only — groups have none). ADR "User profile photo". *@
-                            @if (!sel.IsGroup)
-                            {
-                                <div class="wb-ug-photo">
-                                    @if (_principalPhotoUrl is not null)
-                                    {
-                                        <MudAvatar Size="Size.Large"><MudImage Src="@_principalPhotoUrl" /></MudAvatar>
-                                    }
-                                    else
-                                    {
-                                        <MudAvatar Size="Size.Large" Color="Color.Secondary">@PrincipalInitials(sel.Name)</MudAvatar>
-                                    }
-                                    <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.PhotoCamera" OnClick="ChangePrincipalPhotoAsync">@Strings.Get("UgChangePhoto")</MudButton>
-                                    @if (_principalPhotoUrl is not null)
-                                    {
-                                        <MudButton Size="Size.Small" Color="Color.Error" OnClick="RemovePrincipalPhotoAsync">@Strings.Get("UgRemove")</MudButton>
-                                    }
-                                </div>
-                                @* Admin password reset (ADR "User password management"). *@
-                                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Password" OnClick="ResetPrincipalPasswordAsync" Class="mb-2">@Strings.Get("UgResetPassword")</MudButton>
-                                @* Two-factor status + admin reset (ADR "MFA (interactive login, TOTP)"). *@
-                                <div class="mb-2">
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                        <MudIcon Icon="@(sel.MfaEnabled ? Icons.Material.Filled.Security : Icons.Material.Filled.NoEncryption)" Size="Size.Small" />
-                                        @string.Format(Strings.Get("UgTwoFactor"), sel.MfaEnabled ? Strings.Get("UgMfaEnabled") : Strings.Get("UgMfaOff"))
-                                    </MudText>
-                                    @if (sel.MfaEnabled && _canResetMfa)
-                                    {
-                                        <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.LockReset" Color="Color.Error" OnClick="ResetPrincipalMfaAsync">@Strings.Get("UgResetMfa")</MudButton>
-                                    }
-                                </div>
-                                @* Impersonate a non-admin user (ADR "User impersonation"). *@
-                                @if (_canImpersonate && !sel.Rights.IsTenantAdmin && !sel.Rights.CanImpersonate)
-                                {
-                                    <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.SupervisorAccount" OnClick="() => ImpersonatePrincipalAsync(sel)" Class="mb-2">@Strings.Get("UgImpersonate")</MudButton>
-                                }
-                            }
-                            @if (sel.IsGroup)
-                            {
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
-                                    <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" /> @Strings.Get("UgGroupRightsNote")
-                                </MudText>
-                            }
-                            <div class="wb-ug-rights-grid">
-                                @foreach (var r in _rightsFields)
-                                {
-                                    <MudCheckBox T="bool" Value="@r.Get(_editRights)" ValueChanged="@(v => r.Set(_editRights, v))" Dense="true" Label="@r.Label" Class="wb-ug-right" Disabled="@(!_ugEditing)" />
-                                }
-                            </div>
-                            @* Sensitivity clearance (ADR "Sensitivity clearance enforcement") — the highest label rank this principal may access. *@
-                            <div class="d-flex align-center gap-1 mt-2" style="max-width:340px;">
-                                <MudSelect T="int" Label="@Strings.Get("UgClearanceLabel")" @bind-Value="_editRights.ClearanceRank" Dense="true"
-                                           Disabled="@(!_ugEditing)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1">
-                                    <MudSelectItem T="int" Value="0">@Strings.Get("UgClearanceNone")</MudSelectItem>
-                                    @foreach (var lbl in _sensitivityLabels.Where(l => !l.Retired).OrderBy(l => l.Rank))
-                                    {
-                                        <MudSelectItem T="int" Value="@lbl.Rank">@lbl.Rank — @lbl.Name</MudSelectItem>
-                                    }
-                                </MudSelect>
-                                @InfoButton(Strings.Get("UgClearanceInfo"))
-                            </div>
-                            <div class="wb-detail-actions">
-                                @if (_ugEditing)
-                                {
-                                    <MudButton Size="Size.Small" OnClick="CancelRightsEdit" Disabled="_ugBusy">@Strings.Get("Cancel")</MudButton>
-                                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveRightsAsync" Disabled="_ugBusy">@Strings.Get("Save")</MudButton>
-                                }
-                                else
-                                {
-                                    <MudButton Size="Size.Small" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Edit" OnClick="BeginRightsEdit">@Strings.Get("Edit")</MudButton>
-                                }
-                            </div>
-                            @* Group membership (ADR "Group membership editing") — direct members with a
-                               searchable add-picker. *@
-                            @if (sel.IsGroup)
-                            {
-                                <MudDivider Class="my-3" />
-                                <MudText Typo="Typo.subtitle2" Class="mb-1">@Strings.Get("UgMembers")</MudText>
-                                <MudAutocomplete T="MemberOption" Label="@Strings.Get("UgAddMember")" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
-                                                 SearchFunc="SearchNonMembers" ToStringFunc="@(o => o?.Name ?? "")" ValueChanged="AddMemberAsync"
-                                                 ResetValueOnEmptyText="true" CoerceText="true" Clearable="true" Class="wb-ug-add-member" Style="max-width:360px;" />
-                                @if (_groupMembers.Count == 0)
-                                {
-                                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">@Strings.Get("UgNoMembers")</MudText>
-                                }
-                                else
-                                {
-                                    <div class="wb-ug-members">
-                                        @foreach (var m in _groupMembers)
-                                        {
-                                            <div class="wb-ug-member">
-                                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
-                                                <span style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@m.Name</span>
-                                                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" OnClick="() => RemoveMemberAsync(m)" title="@Strings.Get("UgRemoveMember")" />
-                                            </div>
-                                        }
-                                    </div>
-                                }
-                            }
-                        }
-                        else
-                        {
-                            <div class="wb-preview-empty"><MudText Typo="Typo.body2">@Strings.Get("UgSelectPrincipal")</MudText></div>
-                        }
-                    </div>
-                </div>
+                @* All three capability flags come from /diagnostics/whoami, which the shell already read —
+                   the tab is told rather than asking again (ADR 0557). *@
+                <UsersGroupsTab CanManageServiceAccounts="_canManageServiceAccounts"
+                                CanResetMfa="_canResetMfa" CanImpersonate="_canImpersonate" />
             }
             else if (_activeTab == Tab.Audit)
             {
@@ -1990,7 +1605,7 @@
     private List<string> _editOcrCodes = [];
     private readonly List<EditField> _editFields = [];
     private List<MaskSummary> _availableMasks = [];
-    private List<OcrLanguageOption> _ocrCatalog = [];
+    private IReadOnlyList<OcrLanguageOption> _ocrCatalog = [];
     private string _origName = "";
     private DateTime? _origDocumentDate;
     private Guid? _origMaskId;
@@ -2693,15 +2308,71 @@
     private bool _canManageInboxes;
     private Guid? _myUserId;
 
-    // Impersonate the selected non-admin user (ADR "User impersonation"). On success ImpersonationService
-    // force-reloads the app as that user; the server enforces the actual rules.
-    private async Task ImpersonatePrincipalAsync(PrincipalRow p)
+    // Offered by the Tenant tab's header, but they act on state the SHELL owns — the repository tree, and
+    // the detail pane's sensitivity picker — so they stay here and reach the tab as callbacks (ADR 0558).
+    // Manage the tenant's configurable sensitivity labels (ADR "Configurable sensitivity labels + upload
+    // defaults"); reload the picker list on close so a detail-pane edit sees any changes.
+    private async Task OpenSensitivityLabelsAsync()
     {
-        if (!await ImpersonationSvc.StartAsync(p.Id))
-        {
-            Snackbar.Add(Strings.Get("StErrImpersonate"), Severity.Error);
-        }
+        var dialog = await DialogService.ShowAsync<SensitivityLabelsDialog>(Strings.Get("SlTitle"), new DialogOptions { MaxWidth = MaxWidth.Medium });
+        await dialog.Result;
+        await LoadSensitivityLabelsAsync();
     }
+
+    private async Task NewRepositoryAsync()
+    {
+        var input = await JS.InvokeAsync<string?>("prompt", "New repository name:");
+        if (string.IsNullOrWhiteSpace(input)) return;
+        var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("repositories"), new { name = input.Trim() });
+        if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add(Strings.Get("StRepoNameTaken"), Severity.Warning); return; }
+        if (resp.StatusCode == System.Net.HttpStatusCode.Forbidden) { Snackbar.Add(Strings.Get("StNoPermCreateRepo"), Severity.Error); return; }
+        if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrCreateRepo"), Severity.Error); return; }
+        Snackbar.Add(string.Format(Strings.Get("StCreatedRepo"), input.Trim()), Severity.Success);
+        await ReloadRootsAsync();
+    }
+
+    // The tenant's users and groups as dialog options. Only the external-links dialog needs them, so this is
+    // deliberately a fetch-on-open rather than page state — nothing else here would keep it fresh.
+    private async Task<(List<Dialogs.MyExternalLinksDialog.PrincipalOption> Users, List<Dialogs.MyExternalLinksDialog.PrincipalOption> Groups)> LoadPrincipalDirectoryAsync()
+    {
+        var users = new List<Dialogs.MyExternalLinksDialog.PrincipalOption>();
+        var groups = new List<Dialogs.MyExternalLinksDialog.PrincipalOption>();
+
+        try
+        {
+            var url = await ApiRoot.RequireAsync("users");
+            while (url is not null)
+            {
+                var page = await Http.GetFromJsonAsync<UsersDirectoryResponse>(url);
+                users.AddRange((page?.Users ?? []).Select(u => new Dialogs.MyExternalLinksDialog.PrincipalOption(u.Id, u.DisplayName, u.DisplayName)));
+                url = Links.Href(page?.Links, "next");
+            }
+
+            url = await ApiRoot.RequireAsync("groups");
+            while (url is not null)
+            {
+                var page = await Http.GetFromJsonAsync<GroupsDirectoryResponse>(url);
+                groups.AddRange((page?.Groups ?? []).Select(g => new Dialogs.MyExternalLinksDialog.PrincipalOption(g.Id, g.Name, g.Name)));
+                url = Links.Href(page?.Links, "next");
+            }
+        }
+        catch (Exception)
+        {
+            // Non-fatal: a caller who cannot read the directory simply gets no filters, which is what a
+            // non-admin sees anyway.
+        }
+
+        return (users, groups);
+    }
+
+    private record UsersDirectoryResponse { public List<UserDirectoryRow> Users { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
+
+    private record UserDirectoryRow { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; }
+
+    private record GroupsDirectoryResponse { public List<GroupDirectoryRow> Groups { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
+
+    private record GroupDirectoryRow { public Guid Id { get; set; } public string Name { get; set; } = ""; }
+
     private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanManageServiceAccounts { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public bool CanManageInboxes { get; set; } public Guid? UserId { get; set; } public string UserName { get; set; } = ""; }
     // The logged-in user's display name — used in the sensitivity watermark (ADR "Document watermarking").
     private string _viewerName = "";
@@ -2876,21 +2547,9 @@
             }
         }
 
-        if (tab == Tab.Tenant)
-        {
-            await LoadTenantSettingsAsync();
-        }
-
         if (tab == Tab.Tasks)
         {
             await LoadTasksAsync();
-        }
-
-        if (tab == Tab.UsersGroups)
-        {
-            await LoadPrincipalsAsync();
-            // The clearance dropdown maps ranks to sensitivity-label names (ADR "Sensitivity clearance enforcement").
-            await LoadSensitivityLabelsAsync();
         }
 
         // Tab.Audit loads itself: the component exists only while its tab is shown, so the shell no longer has
@@ -3153,199 +2812,6 @@
     private async Task<bool> Confirm(string message, string yes) =>
         await DialogService.ShowMessageBoxAsync(new MessageBoxOptions { Title = yes, Message = message, YesText = yes, CancelText = "Cancel" }) == true;
 
-    // ---- Tenant-admin settings (ADR "Tenant-admin settings tab") --------------------------------------
-
-    // A small info "button" (hover tooltip) shown next to a setting that needs explanation.
-    private RenderFragment InfoButton(string text) =>@<MudTooltip Text="@text" Arrow="true" Placement="Placement.Top">
-        <MudIconButton Icon="@Icons.Material.Outlined.Info" Size="Size.Small" Color="Color.Default" aria-label="Explanation" />
-    </MudTooltip>;
-
-    private TenantSettingsDto? _tenant;
-    private TenantSettingsEdit _tenantEdit = new();
-    private IReadOnlyCollection<string> _tenantEditOcr = new HashSet<string>();
-    private bool _tenantEditing;
-
-    private async Task LoadTenantSettingsAsync()
-    {
-        _tenantEditing = false;
-        try
-        {
-            _tenant = await Http.GetFromJsonAsync<TenantSettingsDto>(await ApiRoot.RequireAsync("tenantSettings"));
-            _tenantLinks = RelMap(_tenant?.Links);
-            if (_ocrCatalog.Count == 0)
-            {
-                _ocrCatalog = (await Http.GetFromJsonAsync<OcrCatalogResponse>(await ApiRoot.RequireAsync("ocrLanguages")))?.Languages ?? [];
-            }
-            SyncTenantEditFromTenant(); // the read-only fields bind to _tenantEdit too, so keep it in sync
-        }
-        catch (Exception)
-        {
-            _tenant = null;
-        }
-    }
-
-    // The read-only view and the edit form share the _tenantEdit binding, so it mirrors _tenant except while
-    // the user is actively editing (BeginTenantEdit → Save/Cancel).
-    private void SyncTenantEditFromTenant()
-    {
-        if (_tenant is null) return;
-        _tenantEdit = new TenantSettingsEdit { Name = _tenant.Name, AuditRetentionDays = _tenant.AuditRetentionDays, CheckoutTtlDays = _tenant.CheckoutTtlDays, CheckoutWarningDays = _tenant.CheckoutWarningDays, WormLockMode = _tenant.WormLockMode, RequireMfa = _tenant.RequireMfa, AllowPasskeyLogin = _tenant.AllowPasskeyLogin, RequireDispositionReview = _tenant.RequireDispositionReview, RestrictTagsToCatalog = _tenant.RestrictTagsToCatalog, EnforceClearance = _tenant.EnforceClearance, AllowExternalLinks = _tenant.AllowExternalLinks, ShowExternalLinkUrl = _tenant.ShowExternalLinkUrl, ExternalLinkMaxDays = _tenant.ExternalLinkMaxDays, ExternalLinkDefaultAccesses = _tenant.ExternalLinkDefaultAccesses, StorageQuotaMb = _tenant.StorageQuotaBytes is { } b ? (int)(b / (1024 * 1024)) : null, IncompleteUploadCleanupDays = _tenant.IncompleteUploadCleanupDays, AuditWebhookUrl = _tenant.AuditWebhookUrl, AuditWebhookSecret = null };
-        _tenantEditOcr = new HashSet<string>(_tenant.DefaultOcrLanguages.Split('+', StringSplitOptions.RemoveEmptyEntries));
-    }
-
-    private void BeginTenantEdit()
-    {
-        if (_tenant is null) return;
-        SyncTenantEditFromTenant();
-        _tenantEditing = true;
-    }
-
-    private void CancelTenantEdit()
-    {
-        SyncTenantEditFromTenant(); // discard in-flight edits back to the persisted values
-        _tenantEditing = false;
-    }
-
-    private async Task SaveTenantSettingsAsync()
-    {
-        // Preserve the catalog order for the "+"-joined default (a stable priority).
-        var ocr = string.Join('+', _ocrCatalog.Select(l => l.Code).Where(c => _tenantEditOcr.Contains(c)));
-        var webhookUrl = string.IsNullOrWhiteSpace(_tenantEdit.AuditWebhookUrl) ? null : _tenantEdit.AuditWebhookUrl.Trim();
-        var webhookSecret = string.IsNullOrWhiteSpace(_tenantEdit.AuditWebhookSecret) ? null : _tenantEdit.AuditWebhookSecret;
-        long? storageQuotaBytes = _tenantEdit.StorageQuotaMb is { } mb ? (long)mb * 1024 * 1024 : null;
-        var body = new { name = _tenantEdit.Name, defaultOcrLanguages = ocr, auditRetentionDays = _tenantEdit.AuditRetentionDays, checkoutTtlDays = _tenantEdit.CheckoutTtlDays, checkoutWarningDays = _tenantEdit.CheckoutWarningDays, wormLockMode = _tenantEdit.WormLockMode, requireMfa = _tenantEdit.RequireMfa, allowPasskeyLogin = _tenantEdit.AllowPasskeyLogin, requireDispositionReview = _tenantEdit.RequireDispositionReview, restrictTagsToCatalog = _tenantEdit.RestrictTagsToCatalog, enforceClearance = _tenantEdit.EnforceClearance, allowExternalLinks = _tenantEdit.AllowExternalLinks, showExternalLinkUrl = _tenantEdit.ShowExternalLinkUrl, externalLinkMaxDays = _tenantEdit.ExternalLinkMaxDays, externalLinkDefaultAccesses = _tenantEdit.ExternalLinkDefaultAccesses, storageQuotaBytes, incompleteUploadCleanupDays = _tenantEdit.IncompleteUploadCleanupDays, auditWebhookUrl = webhookUrl, auditWebhookSecret = webhookSecret };
-        var resp = await Http.PutAsJsonAsync(await ApiRoot.RequireAsync("tenantSettings"), body);
-        if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add(Strings.Get("StTenantNameTaken"), Severity.Warning); return; }
-        if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add(Strings.Get("StTenantCheckFields"), Severity.Warning); return; }
-        if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrSaveSettings"), Severity.Error); return; }
-        _tenant = await resp.Content.ReadFromJsonAsync<TenantSettingsDto>();
-        SyncTenantEditFromTenant();
-        _tenantEditing = false;
-        Snackbar.Add(Strings.Get("StTenantSaved"), Severity.Success);
-    }
-
-    private async Task TestWebhookAsync()
-    {
-        if (_tenantLinks?.GetValueOrDefault("audit-webhook-test") is not { } webhookTestHref) { return; }
-
-        var resp = await Http.PostAsync(webhookTestHref, null);
-        if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add(Strings.Get("StSaveWebhookFirst"), Severity.Warning); return; }
-        if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrTestEvent"), Severity.Error); return; }
-        var result = await resp.Content.ReadFromJsonAsync<TestWebhookResult>();
-        if (result?.Success == true) Snackbar.Add(Strings.Get("StTestEventDelivered"), Severity.Success);
-        else Snackbar.Add(string.Format(Strings.Get("StTestDeliveryFailed"), result?.Error ?? "unknown error"), Severity.Warning);
-    }
-
-    private record TestWebhookResult { public bool Success { get; set; } public string? Error { get; set; } }
-
-    private async Task RecomputeStorageAsync()
-    {
-        if (_tenantLinks?.GetValueOrDefault("recompute-storage") is not { } recomputeHref) { return; }
-
-        var resp = await Http.PostAsync(recomputeHref, null);
-        if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrRecompute"), Severity.Error); return; }
-        _tenant = await resp.Content.ReadFromJsonAsync<TenantSettingsDto>();
-        if (!_tenantEditing) SyncTenantEditFromTenant();
-        Snackbar.Add(Strings.Get("StStorageRecomputed"), Severity.Success);
-    }
-
-    // Manage the tenant's configurable sensitivity labels (ADR "Configurable sensitivity labels + upload
-    // defaults"); reload the picker list on close so a detail-pane edit sees any changes.
-    private async Task OpenSensitivityLabelsAsync()
-    {
-        var dialog = await DialogService.ShowAsync<SensitivityLabelsDialog>(Strings.Get("SlTitle"), new DialogOptions { MaxWidth = MaxWidth.Medium });
-        await dialog.Result;
-        await LoadSensitivityLabelsAsync();
-    }
-
-    private async Task NewRepositoryAsync()
-    {
-        var input = await JS.InvokeAsync<string?>("prompt", "New repository name:");
-        if (string.IsNullOrWhiteSpace(input)) return;
-        var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("repositories"), new { name = input.Trim() });
-        if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add(Strings.Get("StRepoNameTaken"), Severity.Warning); return; }
-        if (resp.StatusCode == System.Net.HttpStatusCode.Forbidden) { Snackbar.Add(Strings.Get("StNoPermCreateRepo"), Severity.Error); return; }
-        if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrCreateRepo"), Severity.Error); return; }
-        Snackbar.Add(string.Format(Strings.Get("StCreatedRepo"), input.Trim()), Severity.Success);
-        await ReloadRootsAsync();
-    }
-
-    private record TenantSettingsDto
-    {
-        // The settings resource advertises its own maintenance actions (issue #416).
-        public List<LinkResponse> Links { get; set; } = [];
-
-        // External links (ADR 0546) — the tenant master switch plus its two caps.
-        public bool AllowExternalLinks { get; set; }
-
-        public bool ShowExternalLinkUrl { get; set; }
-        public int ExternalLinkMaxDays { get; set; } = 180;
-        public int ExternalLinkDefaultAccesses { get; set; } = 5;
-
-        public Guid Id { get; set; }
-        public string Name { get; set; } = "";
-        public string Status { get; set; } = "";
-        public DateTimeOffset CreatedAt { get; set; }
-        public string DefaultOcrLanguages { get; set; } = "";
-        public int AuditRetentionDays { get; set; }
-        public int CheckoutTtlDays { get; set; }
-        public int CheckoutWarningDays { get; set; } = 1;
-        public int WormLockMode { get; set; }
-        public bool RequireMfa { get; set; }
-        public bool AllowPasskeyLogin { get; set; }
-        public bool RequireDispositionReview { get; set; }
-        public bool RestrictTagsToCatalog { get; set; }
-        public bool EnforceClearance { get; set; }
-        public long? StorageQuotaBytes { get; set; }
-        public long StorageUsedBytes { get; set; }
-
-        // (Storage-warning indicator is computed by StoragePercent/StorageLevel below.)
-        public int IncompleteUploadCleanupDays { get; set; }
-        public string? AuditWebhookUrl { get; set; }
-        public bool AuditWebhookConfigured { get; set; }
-        public int AuditWebhookConsecutiveFailures { get; set; }
-        public DateTimeOffset? AuditWebhookLastSuccessAt { get; set; }
-        public DateTimeOffset? AuditWebhookLastFailureAt { get; set; }
-        public DateTimeOffset? AuditWebhookNextAttemptAt { get; set; }
-        public string? AuditWebhookLastError { get; set; }
-    }
-
-    private class TenantSettingsEdit
-    {
-        public string Name { get; set; } = "";
-        // External links (ADR 0546).
-        public bool AllowExternalLinks { get; set; }
-
-        public bool ShowExternalLinkUrl { get; set; }
-        public int ExternalLinkMaxDays { get; set; } = 180;
-        public int ExternalLinkDefaultAccesses { get; set; } = 5;
-        public int AuditRetentionDays { get; set; }
-        public int CheckoutTtlDays { get; set; }
-        public int CheckoutWarningDays { get; set; } = 1;
-        public int WormLockMode { get; set; }
-        public bool RequireMfa { get; set; }
-        public bool AllowPasskeyLogin { get; set; }
-        public bool RequireDispositionReview { get; set; }
-        public bool RestrictTagsToCatalog { get; set; }
-        public bool EnforceClearance { get; set; }
-        public int? StorageQuotaMb { get; set; }
-        public int IncompleteUploadCleanupDays { get; set; }
-        public string? AuditWebhookUrl { get; set; }
-        public string? AuditWebhookSecret { get; set; }
-    }
-
-    // Bytes → a human "N.N MB" / "N.N GB" for the storage-usage line (ADR "Per-tenant storage quota").
-    private static string FormatBytes(long bytes) => bytes switch
-    {
-        >= 1L << 30 => $"{bytes / (double)(1L << 30):0.##} GB",
-        _ => $"{bytes / (double)(1L << 20):0.##} MB",
-    };
-
-    // Storage soft-quota indicator (ADR "Storage soft-quota warnings") — percent used + a level matching the
-    // server's 80%/95% warning thresholds (0 = below, 1 = approaching, 2 = almost full).
-    private int StoragePercent() => _tenant?.StorageQuotaBytes is { } q && q > 0 ? (int)(_tenant.StorageUsedBytes * 100 / q) : 0;
-    private int StorageLevel() { var p = StoragePercent(); return p >= 95 ? 2 : p >= 80 ? 1 : 0; }
-
     // ---- Tree + list navigation ----------------------------------------------------------------------
 
     private async Task ReloadRootsAsync()
@@ -3370,7 +2836,7 @@
                 foreach (var r in page?.Repositories ?? [])
                 {
                     // A repository is its own repository scope.
-                    shared.Add(ToTreeItem(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, RepositoryId: r.Id, Links: RelMap(r.Links))));
+                    shared.Add(ToTreeItem(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, RepositoryId: r.Id, Links: Links.RelMap(r.Links))));
                 }
                 url = Links.Href(page?.Links, "next");
             }
@@ -3493,7 +2959,7 @@
                     CheckedOut: c.CheckedOut, CheckedOutByMe: c.CheckedOutByMe, CheckedOutByName: c.CheckedOutByName,
                     DocumentType: c.DocumentType, DocumentDate: c.DocumentDate, SizeBytes: c.SizeBytes, Tags: c.Tags, SensitivityLabelName: c.SensitivityLabelName, SensitivityLabelColor: c.SensitivityLabelColor, VersionCount: c.VersionCount, VersionCreatedAt: c.VersionCreatedAt,
                     ChatHref: Links.Href(c.Links, "chat"),
-                    Links: RelMap(c.Links)));
+                    Links: Links.RelMap(c.Links)));
             }
             url = Links.Href(page?.Links, "next");
         }
@@ -3505,7 +2971,7 @@
             foreach (var r in page?.References ?? [])
             {
                 nodes.Add(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, r.HasReferences, true, r.ReferenceId, r.RealParentId, repositoryId,
-                    Links: RelMap(r.Links)));
+                    Links: Links.RelMap(r.Links)));
             }
             refUrl = Links.Href(page?.Links, "next");
         }
@@ -3875,7 +3341,7 @@
             }
 
             var detail = await Http.GetFromJsonAsync<DocumentDetailResponse>(detailSelfHref);
-            _detailLinks = RelMap(detail?.Links);
+            _detailLinks = Links.RelMap(detail?.Links);
 
             _detailMaskId = null;
             // mask + index-data come from the ROW's own rels — the listing advertises them, so no second fetch.
@@ -4032,13 +3498,12 @@
             return;
         }
 
-        // The directory the dialog's admin filters need. Taken from the Users & groups tab's own list when it has
-        // been loaded, rather than fetched again — and empty is fine: a non-admin gets no filters anyway, and the
-        // server refuses the cross-user query regardless of what this list happens to contain.
-        var users = _principals.Where(p => !p.IsGroup)
-            .Select(p => new Dialogs.MyExternalLinksDialog.PrincipalOption(p.Id, p.Name, p.Name)).ToList();
-        var groups = _principals.Where(p => p.IsGroup)
-            .Select(p => new Dialogs.MyExternalLinksDialog.PrincipalOption(p.Id, p.Name, p.Name)).ToList();
+        // The directory the dialog's admin filters need. Read here, when the dialog is opened, rather than
+        // borrowed from the Users & groups tab's cache: that tab owns its own state now (ADR 0558), and the
+        // old arrangement meant the filters appeared only if the admin happened to have visited it first —
+        // order dependence dressed up as a saved request. Two reads on a deliberate user action; empty is
+        // still fine, because the server refuses the cross-user query regardless of what this list contains.
+        var (users, groups) = await LoadPrincipalDirectoryAsync();
 
         var parameters = new DialogParameters
         {
@@ -4158,22 +3623,17 @@
     private string? _detailSensitivityColor;
     private bool _detailSensitivityWatermark;
     private Guid? _editSensitivityId;
-    private List<SensitivityLabelDto> _sensitivityLabels = [];
+    private List<SensitivityLabel> _sensitivityLabels = [];
     private bool _canManageSensitivity;
 
-    private record SensitivityLabelDto { public Guid Id { get; set; } public string Name { get; set; } = ""; public int Rank { get; set; } public string? Color { get; set; } public bool Watermark { get; set; } public bool Retired { get; set; } }
-    private record SensitivityLabelsResponse { public List<SensitivityLabelDto> Labels { get; set; } = []; public bool CanManage { get; set; } }
 
     // The tenant's sensitivity labels for the picker + admin (loaded once, refreshable). Best-effort.
+    // Delegates to the shared catalogue so the Users & groups tab reads the same list through the same loader
+    // (ADR 0558) — the page keeps local copies only because its markup binds to them.
     private async Task LoadSensitivityLabelsAsync()
     {
-        try
-        {
-            var resp = await Http.GetFromJsonAsync<SensitivityLabelsResponse>(await ApiRoot.RequireAsync("sensitivityLabels"));
-            _sensitivityLabels = resp?.Labels ?? [];
-            _canManageSensitivity = resp?.CanManage ?? false;
-        }
-        catch (Exception) { }
+        _sensitivityLabels = [.. await SensitivityLabels.GetAsync()];
+        _canManageSensitivity = SensitivityLabels.CanManage;
     }
 
     // A repeating diagonal SVG-background watermark of "<LABEL> · <viewer>" (ADR "Document watermarking"),
@@ -4255,7 +3715,7 @@
             _availableMasks = (await Http.GetFromJsonAsync<MaskListResponse>(await ApiRoot.RequireAsync("masks")))?.Masks ?? [];
             if (_sysHasTiff && _ocrCatalog.Count == 0)
             {
-                _ocrCatalog = (await Http.GetFromJsonAsync<OcrCatalogResponse>(await ApiRoot.RequireAsync("ocrLanguages")))?.Languages ?? [];
+                _ocrCatalog = await OcrLanguages.GetAsync();
             }
 
             await LoadEditFieldsAsync(_editMaskId, useCurrentValues: true);
@@ -5229,614 +4689,6 @@
         return true;
     }
 
-    // ---- Users & groups administration (ADR "Users & groups administration tab") ---------------------
-
-    private List<PrincipalRow> _principals = [];
-    private PrincipalRow? _selectedPrincipal;
-    private SystemRightsDto _editRights = new();
-    private bool _ugBusy;
-    // The rights matrix is read-only until Edit is clicked, then Save/Cancel (like the Repositories detail pane).
-    private bool _ugEditing;
-
-    private void BeginRightsEdit() => _ugEditing = true;
-
-    private void CancelRightsEdit()
-    {
-        _ugEditing = false;
-        _editRights = _selectedPrincipal is { } sel ? sel.Rights with { } : new();
-    }
-
-    // The rights matrix, in display order (management rights first, then the not-yet-enforced ones).
-    private static readonly RightField[] _rightsFields =
-    [
-        new("Tenant administrator", r => r.IsTenantAdmin, (r, v) => r.IsTenantAdmin = v),
-        new("Manage users & groups", r => r.CanManageUsers, (r, v) => r.CanManageUsers = v),
-        new("Manage repositories", r => r.CanManageRepositories, (r, v) => r.CanManageRepositories = v),
-        new("Manage masks", r => r.CanManageMasks, (r, v) => r.CanManageMasks = v),
-        new("Manage service accounts", r => r.CanManageServiceAccounts, (r, v) => r.CanManageServiceAccounts = v),
-        new("Impersonate", r => r.CanImpersonate, (r, v) => r.CanImpersonate = v),
-        new("Override checkout", r => r.CanOverrideCheckout, (r, v) => r.CanOverrideCheckout = v),
-        new("Legal hold", r => r.CanLegalHold, (r, v) => r.CanLegalHold = v),
-        new("Manage classification", r => r.CanManageClassification, (r, v) => r.CanManageClassification = v),
-        new("Reset MFA", r => r.CanResetMfa, (r, v) => r.CanResetMfa = v),
-        new("View audit log", r => r.CanViewAuditLog, (r, v) => r.CanViewAuditLog = v),
-        new("Export", r => r.CanExport, (r, v) => r.CanExport = v),
-        new("Import", r => r.CanImport, (r, v) => r.CanImport = v),
-        new("Manage inboxes", r => r.CanManageInboxes, (r, v) => r.CanManageInboxes = v),
-        new("Create external links", r => r.CanCreateExternalLink, (r, v) => r.CanCreateExternalLink = v),
-    ];
-
-    private async Task LoadPrincipalsAsync()
-    {
-        var previousId = _selectedPrincipal?.Id;
-        var previousIsGroup = _selectedPrincipal?.IsGroup;
-        var rows = new List<PrincipalRow>();
-
-        try
-        {
-            var gurl = await ApiRoot.RequireAsync("groups");
-            while (gurl is not null)
-            {
-                var page = await Http.GetFromJsonAsync<GroupsAdminResponse>(gurl);
-                foreach (var g in page?.Groups ?? [])
-                {
-                    rows.Add(new PrincipalRow { IsGroup = true, Id = g.Id, Name = g.Name, Rights = g.Rights ?? new(), Links = RelMap(g.Links) });
-                }
-                gurl = Links.Href(page?.Links, "next");
-            }
-
-            var uurl = await ApiRoot.RequireAsync("users");
-            while (uurl is not null)
-            {
-                var page = await Http.GetFromJsonAsync<UsersAdminResponse>(uurl);
-                foreach (var u in page?.Users ?? [])
-                {
-                    rows.Add(new PrincipalRow { IsGroup = false, Id = u.Id, Name = u.DisplayName, IsActive = u.IsActive, MfaEnabled = u.MfaEnabled, Rights = u.Rights ?? new(), PhotoHref = Links.Href(u.Links, "photo"), Links = RelMap(u.Links) });
-                }
-                uurl = Links.Href(page?.Links, "next");
-            }
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrLoadUsers"), Severity.Error);
-            return;
-        }
-
-        // Groups first (two-person icon), then users (one-person icon), each alphabetical.
-        _principals = rows.OrderByDescending(p => p.IsGroup).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
-        _selectedPrincipal = _principals.FirstOrDefault(p => p.Id == previousId && p.IsGroup == previousIsGroup);
-        _editRights = _selectedPrincipal is { } sel ? sel.Rights with { } : new();
-        await LoadPrincipalPhotoAsync(_selectedPrincipal);
-        await LoadGroupMembersAsync(_selectedPrincipal);
-    }
-
-    private string? _principalPhotoUrl;
-
-    private async Task SelectPrincipalAsync(PrincipalRow p)
-    {
-        _selectedPrincipal = p;
-        _ugEditing = false; // a fresh selection starts read-only
-        _editRights = p.Rights with { }; // an independent copy so the matrix edits don't mutate the row until Save
-        await LoadPrincipalPhotoAsync(p);
-        await LoadGroupMembersAsync(p);
-    }
-
-    // ---- Group membership (ADR "Group membership editing") -------------------------------------------
-
-    private readonly List<MemberOption> _groupMembers = [];
-
-    // The members collection's `add-member` address, captured when the list loads.
-    private string? _groupMembersAddHref;
-    // RemoveHref is the member row's own `remove` rel — the only resource that knows both ends of the
-    // (group, user) pair a membership is addressed by (issue #416).
-    private record MemberOption(Guid Id, string Name, string? RemoveHref = null);
-
-    private async Task LoadGroupMembersAsync(PrincipalRow? p)
-    {
-        _groupMembers.Clear();
-        _groupMembersAddHref = null;
-        if (p is null || !p.IsGroup)
-        {
-            return;
-        }
-
-        try
-        {
-            var url = p.Href("members");
-            while (url is not null)
-            {
-                var page = await Http.GetFromJsonAsync<MembersResponse>(url);
-                foreach (var m in page?.Members ?? [])
-                {
-                    _groupMembers.Add(new MemberOption(m.Id, m.DisplayName, Links.Href(m.Links, "remove")));
-                }
-                _groupMembersAddHref ??= Links.Href(page?.Links, "add-member");
-                url = Links.Href(page?.Links, "next");
-            }
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrLoadMembers"), Severity.Error);
-        }
-    }
-
-    // Non-member tenant users matching the typed text — the add-picker's candidates.
-    private Task<IEnumerable<MemberOption>> SearchNonMembers(string? text, CancellationToken _)
-    {
-        var memberIds = _groupMembers.Select(m => m.Id).ToHashSet();
-        var candidates = _principals
-            .Where(p => !p.IsGroup && !memberIds.Contains(p.Id))
-            .Where(p => string.IsNullOrWhiteSpace(text) || p.Name.Contains(text, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(p => new MemberOption(p.Id, p.Name));
-        return Task.FromResult<IEnumerable<MemberOption>>(candidates);
-    }
-
-    private async Task AddMemberAsync(MemberOption? option)
-    {
-        if (option is null || _selectedPrincipal is not { IsGroup: true } group)
-        {
-            return;
-        }
-
-        // The API now takes the member in the BODY of a POST to the collection, so this follows a rel like
-        // everything else — the chosen user travels as data rather than as a path segment (issue #416).
-        if (_groupMembersAddHref is null) { return; }
-
-        using var resp = await Http.PostAsJsonAsync(_groupMembersAddHref, new { userId = option.Id });
-        if (resp.IsSuccessStatusCode)
-        {
-            await LoadGroupMembersAsync(group);
-            Snackbar.Add(string.Format(Strings.Get("StAdded"), option.Name), Severity.Success);
-        }
-        else
-        {
-            Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to do that." : "Could not add the member.", Severity.Warning);
-        }
-    }
-
-    private async Task RemoveMemberAsync(MemberOption member)
-    {
-        if (_selectedPrincipal is not { IsGroup: true } group)
-        {
-            return;
-        }
-
-        if (member.RemoveHref is not { } removeHref) { return; }
-
-        using var resp = await Http.DeleteAsync(removeHref);
-        if (resp.IsSuccessStatusCode)
-        {
-            _groupMembers.Remove(member);
-            Snackbar.Add(string.Format(Strings.Get("StRemovedName"), member.Name), Severity.Success);
-        }
-        else
-        {
-            Snackbar.Add(Strings.Get("StErrRemoveMember"), Severity.Warning);
-        }
-    }
-
-    private record MembersResponse { public List<MemberDto> Members { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-    private record MemberDto { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; public List<LinkResponse> Links { get; set; } = []; }
-
-    // The photo endpoint is bearer-protected, so fetch the bytes with the authenticated client and render a
-    // data URL (a raw <img src> sends no token) — ADR "User profile photo". 404 → no photo.
-    private async Task LoadPrincipalPhotoAsync(PrincipalRow? p)
-    {
-        _principalPhotoUrl = null;
-        if (p is null || p.IsGroup)
-        {
-            return;
-        }
-
-        try
-        {
-            if (p.PhotoHref is not { } photoHref) { return; }
-
-            var bytes = await Http.GetByteArrayAsync(photoHref);
-            _principalPhotoUrl = "data:image/png;base64," + Convert.ToBase64String(bytes);
-        }
-        catch (Exception)
-        {
-            _principalPhotoUrl = null;
-        }
-    }
-
-    private async Task ChangePrincipalPhotoAsync()
-    {
-        if (_selectedPrincipal is not { IsGroup: false } p)
-        {
-            return;
-        }
-
-        var parameters = new DialogParameters<ProfilePhotoDialog> { { x => x.PhotoHref, p.PhotoHref } };
-        var dialog = await DialogService.ShowAsync<ProfilePhotoDialog>(Strings.Get("PpTitle"), parameters);
-        if (await dialog.Result is { Canceled: false })
-        {
-            await LoadPrincipalPhotoAsync(p);
-        }
-    }
-
-    private async Task RemovePrincipalPhotoAsync()
-    {
-        if (_selectedPrincipal is not { IsGroup: false } p)
-        {
-            return;
-        }
-
-        if (p.PhotoHref is not { } photoHref) { return; }
-
-        using var resp = await Http.DeleteAsync(photoHref);
-        if (resp.IsSuccessStatusCode)
-        {
-            _principalPhotoUrl = null;
-            Snackbar.Add(Strings.Get("StPhotoRemoved"), Severity.Success);
-        }
-    }
-
-    private static string PrincipalInitials(string name) => string.IsNullOrWhiteSpace(name)
-        ? "?"
-        : string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
-
-    // Admin password reset (ADR "User password management") — generates a random password shown once.
-    private async Task ResetPrincipalPasswordAsync()
-    {
-        if (_selectedPrincipal is not { IsGroup: false } p)
-        {
-            return;
-        }
-
-        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
-        {
-            Title = "Reset password",
-            Message = $"Reset the password for '{p.Name}'? A new random password will be generated and shown once.",
-            YesText = "Reset",
-            CancelText = "Cancel",
-        });
-        if (confirmed != true)
-        {
-            return;
-        }
-
-        try
-        {
-            if (p.Href("reset-password") is not { } resetPasswordHref) { return; }
-
-            using var resp = await Http.PostAsync(resetPasswordHref, null);
-            if (resp.IsSuccessStatusCode)
-            {
-                var result = await resp.Content.ReadFromJsonAsync<ResetPasswordResult>();
-                var parameters = new DialogParameters<GeneratedPasswordDialog>
-                {
-                    { x => x.Password, result?.Password ?? "" },
-                    { x => x.UserName, p.Name },
-                };
-                await (await DialogService.ShowAsync<GeneratedPasswordDialog>(Strings.Get("GenPwTitle"), parameters)).Result;
-            }
-            else
-            {
-                Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to do that." : "Could not reset the password.", Severity.Warning);
-            }
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrResetPw"), Severity.Error);
-        }
-    }
-
-    private record ResetPasswordResult { public string Password { get; set; } = ""; }
-
-    // Admin MFA reset (ADR "MFA (interactive login, TOTP)") — disables a locked-out user's two-factor so they
-    // can sign in with just their password and re-enroll.
-    private async Task ResetPrincipalMfaAsync()
-    {
-        if (_selectedPrincipal is not { IsGroup: false } p)
-        {
-            return;
-        }
-
-        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
-        {
-            Title = "Reset two-factor authentication",
-            Message = $"Disable two-factor authentication for '{p.Name}'? They'll be able to sign in with just their password until they re-enroll.",
-            YesText = "Reset",
-            CancelText = "Cancel",
-        });
-        if (confirmed != true)
-        {
-            return;
-        }
-
-        try
-        {
-            if (p.Href("reset-mfa") is not { } resetMfaHref) { return; }
-
-            using var resp = await Http.PostAsync(resetMfaHref, null);
-            if (resp.IsSuccessStatusCode)
-            {
-                p.MfaEnabled = false;
-                Snackbar.Add(string.Format(Strings.Get("StMfaResetFor"), p.Name), Severity.Success);
-                StateHasChanged();
-            }
-            else
-            {
-                Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to do that." : "Could not reset two-factor authentication.", Severity.Warning);
-            }
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrResetMfa"), Severity.Error);
-        }
-    }
-
-    private async Task NewPrincipalAsync(bool isGroup)
-    {
-        if (await ShowPrincipalDialogAsync(isGroup, isGroup ? "New group" : "New user", "", "") is { } result)
-        {
-            await CreatePrincipalAsync(isGroup, result.Name, result.Email, null);
-        }
-    }
-
-    // Open the service-accounts manager (ADR 0534) — list / create / edit-rights / rotate-secret / revoke. The
-    // dialog talks to /api/service-accounts directly; the API enforces CanManageServiceAccounts on every call.
-    private async Task OpenServiceAccountsAsync()
-    {
-        await DialogService.ShowAsync<Dialogs.ServiceAccountsDialog>(Strings.Get("SaManage"),
-            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
-    }
-
-    // Copy = the New dialog pre-filled from the selection; the created principal then gets the copied rights.
-    private async Task CopyPrincipalAsync()
-    {
-        if (_selectedPrincipal is not { } p)
-        {
-            return;
-        }
-
-        var initialName = p.IsGroup ? $"{p.Name} (copy)" : p.Name;
-        if (await ShowPrincipalDialogAsync(p.IsGroup, p.IsGroup ? "Copy group" : "Copy user", initialName, "") is { } result)
-        {
-            await CreatePrincipalAsync(p.IsGroup, result.Name, result.Email, p.Rights with { });
-        }
-    }
-
-    private async Task<PrincipalDialog.Result?> ShowPrincipalDialogAsync(bool isGroup, string title, string initialName, string initialEmail)
-    {
-        var parameters = new DialogParameters<PrincipalDialog>
-        {
-            { x => x.IsGroup, isGroup },
-            { x => x.InitialName, initialName },
-            { x => x.InitialEmail, initialEmail },
-        };
-        var dialog = await DialogService.ShowAsync<PrincipalDialog>(title, parameters);
-        var result = await dialog.Result;
-        return result is { Canceled: false, Data: PrincipalDialog.Result data } ? data : null;
-    }
-
-    private async Task CreatePrincipalAsync(bool isGroup, string name, string email, SystemRightsDto? copyRights)
-    {
-        try
-        {
-            Guid newId;
-            using (var resp = isGroup
-                ? await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("groups"), new { name })
-                : await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("users"), new { email, displayName = name }))
-            {
-                if (!resp.IsSuccessStatusCode)
-                {
-                    Snackbar.Add(resp.StatusCode == HttpStatusCode.Conflict
-                        ? (isGroup ? "A group with this name already exists." : "A user with this email already exists.")
-                        : "Could not create.", Severity.Warning);
-                    return;
-                }
-
-                newId = isGroup
-                    ? (await resp.Content.ReadFromJsonAsync<GroupAdminDto>())!.Id
-                    : (await resp.Content.ReadFromJsonAsync<UserAdminDto>())!.Id;
-            }
-
-            if (copyRights is not null)
-            {
-                await Http.PutAsJsonAsync($"api/{(isGroup ? "groups" : "users")}/{newId}/rights", copyRights);
-            }
-
-            await LoadPrincipalsAsync();
-            if (_principals.FirstOrDefault(p => p.IsGroup == isGroup && p.Id == newId) is { } created)
-            {
-                await SelectPrincipalAsync(created);
-            }
-
-            Snackbar.Add(isGroup ? "Group created." : "User created.", Severity.Success);
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrCreate"), Severity.Error);
-        }
-    }
-
-    private async Task DeletePrincipalAsync()
-    {
-        if (_selectedPrincipal is not { } p)
-        {
-            return;
-        }
-
-        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
-        {
-            Title = p.IsGroup ? "Delete group" : "Deactivate user",
-            Message = p.IsGroup ? $"Delete the group '{p.Name}'?" : $"Deactivate the user '{p.Name}'?",
-            YesText = p.IsGroup ? "Delete" : "Deactivate",
-            CancelText = "Cancel",
-        });
-        if (confirmed != true)
-        {
-            return;
-        }
-
-        try
-        {
-            // One rel per kind — the server names the address for removing this principal, so the client no
-            // longer branches on IsGroup to build two different paths.
-            if ((p.IsGroup ? p.Href("delete") : p.Href("deactivate")) is not { } removeHref) { return; }
-
-            using var resp = await Http.DeleteAsync(removeHref);
-            if (resp.IsSuccessStatusCode)
-            {
-                Snackbar.Add(p.IsGroup ? "Group deleted." : "User deactivated.", Severity.Success);
-                _selectedPrincipal = null;
-                await LoadPrincipalsAsync();
-                return;
-            }
-
-            // A user with pending review tasks can't be deactivated without handing them over — prompt for a
-            // replacement reviewer, then retry with ?reassignReviewsTo= (ADR "Workflow review reassignment").
-            if (!p.IsGroup && resp.StatusCode == HttpStatusCode.Conflict)
-            {
-                var problem = await resp.Content.ReadFromJsonAsync<DeleteProblem>();
-                if (problem?.ErrorCode == "REVIEWER_HAS_PENDING_REVIEWS")
-                {
-                    await ReassignThenDeactivateAsync(p);
-                    return;
-                }
-            }
-
-            Snackbar.Add(resp.StatusCode switch
-            {
-                HttpStatusCode.Conflict => "The group still has child groups or members.",
-                HttpStatusCode.Forbidden => "You don't have permission to do that.",
-                _ => "Could not delete.",
-            }, Severity.Warning);
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrDelete"), Severity.Error);
-        }
-    }
-
-    private async Task ReassignThenDeactivateAsync(PrincipalRow user)
-    {
-        var candidates = _principals
-            .Where(x => !x.IsGroup && x.IsActive && x.Id != user.Id)
-            .Select(x => new ReplacementReviewerDialog.ReviewerCandidate(x.Id, x.Name))
-            .ToList();
-        if (candidates.Count == 0)
-        {
-            Snackbar.Add(Strings.Get("StNoReplacementReviewer"), Severity.Warning);
-            return;
-        }
-
-        var parameters = new DialogParameters
-        {
-            [nameof(ReplacementReviewerDialog.UserName)] = user.Name,
-            [nameof(ReplacementReviewerDialog.Candidates)] = candidates,
-        };
-        var dialog = await DialogService.ShowAsync<ReplacementReviewerDialog>(Strings.Get("RrTitle"), parameters);
-        var result = await dialog.Result;
-        if (result is null || result.Canceled || result.Data is not Guid replacementId)
-        {
-            return;
-        }
-
-        // The reassignment is a QUERY on the advertised address, not a path this client invents.
-        if (user.Href("deactivate") is not { } deactivateHref) { return; }
-
-        using var retry = await Http.DeleteAsync($"{deactivateHref}?reassignReviewsTo={replacementId}");
-        if (retry.IsSuccessStatusCode)
-        {
-            Snackbar.Add(Strings.Get("StReviewsReassigned"), Severity.Success);
-            _selectedPrincipal = null;
-            await LoadPrincipalsAsync();
-        }
-        else
-        {
-            Snackbar.Add(Strings.Get("StErrReassign"), Severity.Warning);
-        }
-    }
-
-    private record DeleteProblem { public string? ErrorCode { get; set; } public string? Detail { get; set; } }
-
-    private async Task SaveRightsAsync()
-    {
-        if (_selectedPrincipal is not { } p)
-        {
-            return;
-        }
-
-        _ugBusy = true;
-        try
-        {
-            if (p.Href("rights") is not { } path) { return; }
-            using var resp = await Http.PutAsJsonAsync(path, _editRights);
-            if (resp.IsSuccessStatusCode)
-            {
-                p.Rights = _editRights with { };
-                _ugEditing = false;
-                Snackbar.Add(Strings.Get("StRightsSaved"), Severity.Success);
-            }
-            else if (resp.StatusCode == HttpStatusCode.Forbidden)
-            {
-                Snackbar.Add(Strings.Get("StCannotGrantMoreRights"), Severity.Warning);
-            }
-            else
-            {
-                Snackbar.Add(Strings.Get("StErrSaveRights"), Severity.Warning);
-            }
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrSaveRights"), Severity.Error);
-        }
-        finally
-        {
-            _ugBusy = false;
-        }
-    }
-
-    private sealed class PrincipalRow
-    {
-        public bool IsGroup { get; set; }
-        public Guid Id { get; set; }
-        public string Name { get; set; } = "";
-        public bool IsActive { get; set; } = true;
-        public bool MfaEnabled { get; set; }
-        public SystemRightsDto Rights { get; set; } = new();
-
-        // The addresses the listing advertised for this row (issue #416): a user carries photo /
-        // reset-password / reset-mfa / deactivate, a group carries members / delete, and both carry rights.
-        // A group has no photo, which is also why that affordance is hidden for one.
-        public string? PhotoHref { get; set; }
-        public IReadOnlyDictionary<string, string>? Links { get; set; }
-
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
-    }
-
-    private sealed record RightField(string Label, Func<SystemRightsDto, bool> Get, Action<SystemRightsDto, bool> Set);
-
-    private record SystemRightsDto
-    {
-        public bool IsTenantAdmin { get; set; }
-        public bool CanImpersonate { get; set; }
-        public bool CanOverrideCheckout { get; set; }
-        public bool CanLegalHold { get; set; }
-        public bool CanManageClassification { get; set; }
-        public bool CanResetMfa { get; set; }
-        public bool CanManageRepositories { get; set; }
-        public bool CanManageMasks { get; set; }
-        public bool CanManageServiceAccounts { get; set; }
-        public bool CanManageUsers { get; set; }
-        public bool CanViewAuditLog { get; set; }
-        public bool CanExport { get; set; }
-        public bool CanImport { get; set; }
-        public bool CanManageInboxes { get; set; }
-        public bool CanCreateExternalLink { get; set; }
-        public int ClearanceRank { get; set; }
-    }
-
-    private record UserAdminDto { public Guid Id { get; set; } public string Email { get; set; } = ""; public string DisplayName { get; set; } = ""; public bool IsActive { get; set; } public bool MfaEnabled { get; set; } public SystemRightsDto? Rights { get; set; } public List<LinkResponse> Links { get; set; } = []; }
-    private record GroupAdminDto { public Guid Id { get; set; } public string Name { get; set; } = ""; public SystemRightsDto? Rights { get; set; } public List<LinkResponse> Links { get; set; } = []; }
-    private record UsersAdminResponse { public List<UserAdminDto> Users { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-    private record GroupsAdminResponse { public List<GroupAdminDto> Groups { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-
     // ---- Rename / delete / recycle bin ---------------------------------------------------------------
 
     private async Task RenameAsync(BrowseNode node)
@@ -6363,7 +5215,6 @@
 
     // Collection-level rels, captured where each collection is read (ADR 0543, issue #416). Null until then,
     // which is what disables the action rather than the client composing a path for it.
-    private IReadOnlyDictionary<string, string>? _tenantLinks;
 
     private string DetailHref(string rel) => HrefOrThrow(_detailLinks, rel);
 
@@ -6393,26 +5244,6 @@
         links is not null && links.TryGetValue(rel, out var href)
             ? href
             : throw new InvalidOperationException($"The '{rel}' rel was not advertised (ADR 0543).");
-
-    // rel -> href for a resource's advertised links, so a row carries its addresses rather than its id alone.
-    private static IReadOnlyDictionary<string, string>? RelMap(List<LinkResponse>? links)
-    {
-        if (links is null || links.Count == 0)
-        {
-            return null;
-        }
-
-        var map = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var l in links)
-        {
-            if (!string.IsNullOrEmpty(l.Rel) && Links.Href(links, l.Rel) is { } href)
-            {
-                map[l.Rel] = href;
-            }
-        }
-
-        return map.Count == 0 ? null : map;
-    }
 
     private record ArchiveEntriesResponse { public List<ArchiveEntryDto> Entries { get; set; } = []; }
     private record ArchiveEntryDto { public string Name { get; set; } = ""; public string Path { get; set; } = ""; public long Size { get; set; } public List<LinkResponse> Links { get; set; } = []; }

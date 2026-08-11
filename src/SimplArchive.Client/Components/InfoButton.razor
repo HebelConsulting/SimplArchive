@@ -1,0 +1,15 @@
+@* A small "why is this here?" tooltip, used beside settings and admin controls across the workbench.
+
+   Shared rather than copied: it was a RenderFragment helper on Home.razor used twenty times, and every tab
+   extracted out of that page needs it (ADR 0558). One implementation, so the icon, size and placement cannot
+   drift between tabs. *@
+
+<MudTooltip Text="@Text" Arrow="true" Placement="Placement.Top">
+    <MudIconButton Icon="@Icons.Material.Outlined.Info" Size="Size.Small" Color="Color.Default" aria-label="Explanation" />
+</MudTooltip>
+
+@code {
+    /// <summary>The explanation shown on hover.</summary>
+    [Parameter]
+    public string Text { get; set; } = "";
+}

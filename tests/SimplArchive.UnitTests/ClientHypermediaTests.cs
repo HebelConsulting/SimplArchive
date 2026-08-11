@@ -63,13 +63,16 @@ public partial class ClientHypermediaTests
         // move provable: 51 = 48 + 3, then 51 = 44 + 4 + 3 (pure moves), then 50 = 43 + 4 + 3 (Search moved its
         // region AND converted the one URL in it), then 50 = 36 + 7 + 4 + 3 (Inbox, a pure move).
         //
-        // Now 41 = 27 + 7 + 4 + 3. The Recycle bin moved AND converted all NINE of its URLs — the biggest single
+        // Now 41 = 26 + 7 + 4 + 3 + 1. The Recycle bin moved AND converted all NINE of its URLs — the biggest single
         // drop since the desktop burn-down — because the server half landed first (#450 gave each row the four
         // detail addresses its pane reads; the listing envelope already carried the three bulk actions). It cost
         // no extra request either: both sets arrive with a listing that was already being read (ADR 0557). That
         // is what the server tranche was for, and it is why the client half was cheap.
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 27,
+        ["src/SimplArchive.Client/Pages/Home.razor"] = 26,
         ["src/SimplArchive.Client/Components/Tabs/InboxTab.razor"] = 7,
+        // The one the Users & groups tab carried out with it — a principal's own address, which belongs to the
+        // web burn-down rather than to the extraction that moved it.
+        ["src/SimplArchive.Client/Components/Tabs/UsersGroupsTab.razor"] = 1,
         // The check-out stash addresses — download, replace, check in, cancel. The rels exist server-side
         // (#441 renamed `checkin` to mean the POST that actually checks in); this is the client half.
         ["src/SimplArchive.Client/Components/Tabs/CheckoutTab.razor"] = 4,

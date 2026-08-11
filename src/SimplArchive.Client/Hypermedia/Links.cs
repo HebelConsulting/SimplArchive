@@ -27,4 +27,28 @@ public static class Links
             ? href
             : href.TrimStart('/');
     }
+
+    /// <summary>
+    /// A rel → href map for a resource's advertised links, so a caller can carry a row's ADDRESSES rather than
+    /// its id alone (ADR 0555). Returns <c>null</c> when the resource advertised nothing, which is meaningful:
+    /// it means no action is available here, not that the map is empty by accident.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string>? RelMap(List<LinkResponse>? links)
+    {
+        if (links is null || links.Count == 0)
+        {
+            return null;
+        }
+
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var l in links)
+        {
+            if (!string.IsNullOrEmpty(l.Rel) && Href(links, l.Rel) is { } href)
+            {
+                map[l.Rel] = href;
+            }
+        }
+
+        return map.Count == 0 ? null : map;
+    }
 }

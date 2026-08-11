@@ -1,0 +1,66 @@
+@* The Tasks tab (ADR "Workflow task inbox"), extracted from Home.razor per ADR 0558.
+
+   The workflow reviews assigned to me. Deliberately thin: the task LIST stays in the shell because three
+   surfaces read it — this tab, the My work dashboard, and the tab-bar badge count — so re-fetching it here
+   would be a request spent learning something already in memory (ADR 0557). Opening one navigates the
+   Repositories tab, which only the shell can do. *@
+
+@* Pending workflow review tasks assigned to me (ADR "Workflow / document state model"). *@
+<div class="wb-tasks pa-4" style="overflow:auto;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+        <MudText Typo="Typo.h6">@Strings.Get("TasksHeader")</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="@(() => Refresh.InvokeAsync())" title="Refresh" />
+    </div>
+    @if (Tasks.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("TasksEmpty")</MudText>
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Hover="true" Bordered="false" Style="max-width:860px;">
+            <thead><tr><th>@Strings.Get("ColDocument")</th><th>@Strings.Get("VerColVersion")</th><th>@Strings.Get("ColAssigned")</th><th>@Strings.Get("ColDue")</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var t in Tasks)
+                {
+                    <tr>
+                        <td>@t.DocumentName</td>
+                        <td>@(t.VersionNumber is { } n ? $"v{n}" : "—")</td>
+                        <td>@t.AssignedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td>
+                            @if (t.DueAt is { } due)
+                            {
+                                @if (t.IsOverdue)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">@string.Format(Strings.Get("WorkflowOverdue"), due.LocalDateTime.ToString("yyyy-MM-dd"))</MudChip>
+                                }
+                                else
+                                {
+                                    <span>@due.LocalDateTime.ToString("yyyy-MM-dd")</span>
+                                }
+                            }
+                            else
+                            {
+                                <span class="mud-text-secondary">—</span>
+                            }
+                        </td>
+                        <td><MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => OpenRequested.InvokeAsync(t)">@Strings.Get("RibbonOpen")</MudButton></td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</div>
+
+@code {
+    /// <summary>The caller's open review tasks, owned by the shell and read by three surfaces.</summary>
+    [Parameter]
+    public List<TaskItem> Tasks { get; set; } = [];
+
+    /// <summary>Ask the shell to re-read the list (it owns it, and the badge count follows).</summary>
+    [Parameter]
+    public EventCallback Refresh { get; set; }
+
+    /// <summary>Open the task's document — a switch to the Repositories tab, so the shell performs it.</summary>
+    [Parameter]
+    public EventCallback<TaskItem> OpenRequested { get; set; }
+}

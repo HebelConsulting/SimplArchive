@@ -47,6 +47,14 @@ builder.Services.AddScoped<SimplArchive.Client.Services.ImpersonationService>();
 // user comes back for the next hit (ADRs 0511/0558; see SearchState).
 builder.Services.AddScoped<SimplArchive.Client.Services.SearchState>();
 
+// The tenant's sensitivity labels, shared by the Repositories detail pane (as a picker) and the Users & groups
+// tab (rank → name). One loader rather than one per surface — see SensitivityLabelCatalog.
+builder.Services.AddScoped<SimplArchive.Client.Services.SensitivityLabelCatalog>();
+
+// The tenant's OCR languages, needed by the Repositories detail pane, the Inbox staging form and the Tenant
+// tab's default. One loader rather than three — see OcrLanguageCatalog.
+builder.Services.AddScoped<SimplArchive.Client.Services.OcrLanguageCatalog>();
+
 builder.Services.AddHttpClient("SimplArchive.Api", client => client.BaseAddress = new Uri(builder.HostEnvironment.BaseAddress))
     .AddHttpMessageHandler(sp => sp.GetRequiredService<AuthorizationMessageHandler>()
         .ConfigureHandler(authorizedUrls: [builder.HostEnvironment.BaseAddress]))

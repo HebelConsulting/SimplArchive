@@ -5,6 +5,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject SimplArchive.Client.Services.ApiRoot ApiRoot
+@inject SimplArchive.Client.Services.OcrLanguageCatalog OcrLanguages
 @implements IAsyncDisposable
 
 @* The Inbox tab of the workbench (ADR "S3-backed inbox"), extracted from Home.razor per ADR 0558.
@@ -216,7 +217,7 @@
     // The tenant's OCR languages, fetched on demand the first time a scannable item is selected. The tab keeps
     // its own copy rather than sharing the shell's: it is a small catalogue, read at most once per session here,
     // and a cache shared across tabs is the coupling this decomposition is unwinding.
-    private List<OcrLanguageOption> _ocrCatalog = [];
+    private IReadOnlyList<OcrLanguageOption> _ocrCatalog = [];
 
     private ElementReference _dropZone;
     private bool _dropWired;
@@ -491,7 +492,7 @@
             _inboxStgOcrCodes = draft?.OcrLanguages ?? [];
             if (_inboxStgScannable && _ocrCatalog.Count == 0)
             {
-                _ocrCatalog = (await Http.GetFromJsonAsync<OcrCatalogResponse>(await ApiRoot.RequireAsync("ocrLanguages")))?.Languages ?? [];
+                _ocrCatalog = await OcrLanguages.GetAsync();
             }
 
             // Preselect the staged mask, or default to "Basic Entry" for an un-classified item (ADR 0284).

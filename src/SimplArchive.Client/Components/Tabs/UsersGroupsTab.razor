@@ -1,0 +1,808 @@
+@using System.Net
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
+@inject SimplArchive.Client.Services.SensitivityLabelCatalog SensitivityLabels
+@inject SimplArchive.Client.Services.ImpersonationService ImpersonationSvc
+
+@* The Users & groups tab (ADRs "Users & groups administration", "Group membership editing"), extracted from
+   Home.razor per ADR 0558.
+
+   Tenant administration: the principal directory, group membership, system rights, passwords/MFA/photos, and
+   service accounts. Entirely self-contained — the only thing it is told is whether the caller may manage
+   service accounts, which gates one button. *@
+
+@* Users & groups administration (ADR "Users & groups administration tab"): a combined
+   principal list on the left, the assignable system-rights matrix on the right. *@
+<div class="wb-ug">
+    <div class="wb-ug-list">
+        <div class="wb-ug-toolbar">
+            <MudMenu Icon="@Icons.Material.Filled.Add" Size="Size.Small" Dense="true" title="@Strings.Get("UgNew")">
+                <MudMenuItem Icon="@Icons.Material.Filled.Person" OnClick="() => NewPrincipalAsync(false)">@Strings.Get("UgNewUser")</MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Filled.Group" OnClick="() => NewPrincipalAsync(true)">@Strings.Get("UgNewGroup")</MudMenuItem>
+            </MudMenu>
+            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Disabled="@(_selectedPrincipal is null)" OnClick="CopyPrincipalAsync" title="@Strings.Get("UgCopy")" />
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Disabled="@(_selectedPrincipal is null)" OnClick="DeletePrincipalAsync" title="@Strings.Get("UgDelete")" />
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadPrincipalsAsync" title="@Strings.Get("RibbonRefresh")" />
+            @* Service accounts (machine-to-machine) management — ADR 0534, gated on CanManageServiceAccounts. *@
+            @if (CanManageServiceAccounts)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Api" Size="Size.Small" OnClick="OpenServiceAccountsAsync" title="@Strings.Get("SaManage")" />
+            }
+        </div>
+        <div class="wb-ug-rows">
+            @foreach (var p in _principals)
+            {
+                <div class="wb-list-row @(ReferenceEquals(p, _selectedPrincipal) ? "wb-list-row-selected" : "")" @onclick="() => SelectPrincipalAsync(p)">
+                    <MudIcon Icon="@(p.IsGroup ? Icons.Material.Filled.Group : Icons.Material.Filled.Person)" Size="Size.Small" />
+                    <span style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@p.Name</span>
+                    @if (!p.IsGroup && !p.IsActive)
+                    {
+                        <span class="mud-text-secondary" style="font-size:.75em;">@Strings.Get("UgInactive")</span>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+    <div class="wb-ug-rights">
+        @if (_selectedPrincipal is { } sel)
+        {
+            <div class="wb-ug-rights-head">
+                <MudIcon Icon="@(sel.IsGroup ? Icons.Material.Filled.Group : Icons.Material.Filled.Person)" Size="Size.Small" />
+                <MudText Typo="Typo.subtitle1">@sel.Name</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@string.Format(Strings.Get("UgRights"), sel.IsGroup ? Strings.Get("UgGroup") : Strings.Get("UgUser"))</MudText>
+            </div>
+            @* Profile photo (users only — groups have none). ADR "User profile photo". *@
+            @if (!sel.IsGroup)
+            {
+                <div class="wb-ug-photo">
+                    @if (_principalPhotoUrl is not null)
+                    {
+                        <MudAvatar Size="Size.Large"><MudImage Src="@_principalPhotoUrl" /></MudAvatar>
+                    }
+                    else
+                    {
+                        <MudAvatar Size="Size.Large" Color="Color.Secondary">@PrincipalInitials(sel.Name)</MudAvatar>
+                    }
+                    <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.PhotoCamera" OnClick="ChangePrincipalPhotoAsync">@Strings.Get("UgChangePhoto")</MudButton>
+                    @if (_principalPhotoUrl is not null)
+                    {
+                        <MudButton Size="Size.Small" Color="Color.Error" OnClick="RemovePrincipalPhotoAsync">@Strings.Get("UgRemove")</MudButton>
+                    }
+                </div>
+                @* Admin password reset (ADR "User password management"). *@
+                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Password" OnClick="ResetPrincipalPasswordAsync" Class="mb-2">@Strings.Get("UgResetPassword")</MudButton>
+                @* Two-factor status + admin reset (ADR "MFA (interactive login, TOTP)"). *@
+                <div class="mb-2">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        <MudIcon Icon="@(sel.MfaEnabled ? Icons.Material.Filled.Security : Icons.Material.Filled.NoEncryption)" Size="Size.Small" />
+                        @string.Format(Strings.Get("UgTwoFactor"), sel.MfaEnabled ? Strings.Get("UgMfaEnabled") : Strings.Get("UgMfaOff"))
+                    </MudText>
+                    @if (sel.MfaEnabled && CanResetMfa)
+                    {
+                        <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.LockReset" Color="Color.Error" OnClick="ResetPrincipalMfaAsync">@Strings.Get("UgResetMfa")</MudButton>
+                    }
+                </div>
+                @* Impersonate a non-admin user (ADR "User impersonation"). *@
+                @if (CanImpersonate && !sel.Rights.IsTenantAdmin && !sel.Rights.CanImpersonate)
+                {
+                    <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.SupervisorAccount" OnClick="() => ImpersonatePrincipalAsync(sel)" Class="mb-2">@Strings.Get("UgImpersonate")</MudButton>
+                }
+            }
+            @if (sel.IsGroup)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" /> @Strings.Get("UgGroupRightsNote")
+                </MudText>
+            }
+            <div class="wb-ug-rights-grid">
+                @foreach (var r in _rightsFields)
+                {
+                    <MudCheckBox T="bool" Value="@r.Get(_editRights)" ValueChanged="@(v => r.Set(_editRights, v))" Dense="true" Label="@r.Label" Class="wb-ug-right" Disabled="@(!_ugEditing)" />
+                }
+            </div>
+            @* Sensitivity clearance (ADR "Sensitivity clearance enforcement") — the highest label rank this principal may access. *@
+            <div class="d-flex align-center gap-1 mt-2" style="max-width:340px;">
+                <MudSelect T="int" Label="@Strings.Get("UgClearanceLabel")" @bind-Value="_editRights.ClearanceRank" Dense="true"
+                           Disabled="@(!_ugEditing)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1">
+                    <MudSelectItem T="int" Value="0">@Strings.Get("UgClearanceNone")</MudSelectItem>
+                    @foreach (var lbl in _sensitivityLabels.Where(l => !l.Retired).OrderBy(l => l.Rank))
+                    {
+                        <MudSelectItem T="int" Value="@lbl.Rank">@lbl.Rank — @lbl.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <InfoButton Text="@(Strings.Get("UgClearanceInfo"))" />
+            </div>
+            <div class="wb-detail-actions">
+                @if (_ugEditing)
+                {
+                    <MudButton Size="Size.Small" OnClick="CancelRightsEdit" Disabled="_ugBusy">@Strings.Get("Cancel")</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveRightsAsync" Disabled="_ugBusy">@Strings.Get("Save")</MudButton>
+                }
+                else
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Edit" OnClick="BeginRightsEdit">@Strings.Get("Edit")</MudButton>
+                }
+            </div>
+            @* Group membership (ADR "Group membership editing") — direct members with a
+               searchable add-picker. *@
+            @if (sel.IsGroup)
+            {
+                <MudDivider Class="my-3" />
+                <MudText Typo="Typo.subtitle2" Class="mb-1">@Strings.Get("UgMembers")</MudText>
+                <MudAutocomplete T="MemberOption" Label="@Strings.Get("UgAddMember")" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
+                                 SearchFunc="SearchNonMembers" ToStringFunc="@(o => o?.Name ?? "")" ValueChanged="AddMemberAsync"
+                                 ResetValueOnEmptyText="true" CoerceText="true" Clearable="true" Class="wb-ug-add-member" Style="max-width:360px;" />
+                @if (_groupMembers.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">@Strings.Get("UgNoMembers")</MudText>
+                }
+                else
+                {
+                    <div class="wb-ug-members">
+                        @foreach (var m in _groupMembers)
+                        {
+                            <div class="wb-ug-member">
+                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                                <span style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@m.Name</span>
+                                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" OnClick="() => RemoveMemberAsync(m)" title="@Strings.Get("UgRemoveMember")" />
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        }
+        else
+        {
+            <div class="wb-preview-empty"><MudText Typo="Typo.body2">@Strings.Get("UgSelectPrincipal")</MudText></div>
+        }
+    </div>
+</div>
+
+@code {
+
+    /// <summary>Gates the service-accounts button; the server enforces the right regardless.</summary>
+    [Parameter]
+    public bool CanManageServiceAccounts { get; set; }
+
+    /// <summary>Gates the reset-MFA action on a selected user.</summary>
+    [Parameter]
+    public bool CanResetMfa { get; set; }
+
+    /// <summary>Gates the impersonate action.</summary>
+    [Parameter]
+    public bool CanImpersonate { get; set; }
+
+    // Both loaders the shell's activation branch used to call. Carried TOGETHER on purpose: extracting the
+    // Audit tab moved its event page and silently dropped the second call in its SetTab branch, which compiled
+    // and failed only in the browser (ADR 0558).
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPrincipalsAsync();
+
+        // The clearance dropdown maps ranks to sensitivity-label names (ADR "Sensitivity clearance"). Read
+        // through the shared catalogue, so this tab and the Repositories picker cannot drift apart.
+        _sensitivityLabels = await SensitivityLabels.GetAsync();
+    }
+
+    private IReadOnlyList<SensitivityLabel> _sensitivityLabels = [];
+
+    // Four lines over the impersonation service, and reachable only from this tab's own button.
+    private async Task ImpersonatePrincipalAsync(PrincipalRow p)
+    {
+        if (!await ImpersonationSvc.StartAsync(p.Id))
+        {
+            Snackbar.Add(Strings.Get("StErrImpersonate"), Severity.Error);
+        }
+    }
+
+
+    private List<PrincipalRow> _principals = [];
+    private PrincipalRow? _selectedPrincipal;
+    private SystemRightsDto _editRights = new();
+    private bool _ugBusy;
+    // The rights matrix is read-only until Edit is clicked, then Save/Cancel (like the Repositories detail pane).
+    private bool _ugEditing;
+
+    private void BeginRightsEdit() => _ugEditing = true;
+
+    private void CancelRightsEdit()
+    {
+        _ugEditing = false;
+        _editRights = _selectedPrincipal is { } sel ? sel.Rights with { } : new();
+    }
+
+    // The rights matrix, in display order (management rights first, then the not-yet-enforced ones).
+    private static readonly RightField[] _rightsFields =
+    [
+        new("Tenant administrator", r => r.IsTenantAdmin, (r, v) => r.IsTenantAdmin = v),
+        new("Manage users & groups", r => r.CanManageUsers, (r, v) => r.CanManageUsers = v),
+        new("Manage repositories", r => r.CanManageRepositories, (r, v) => r.CanManageRepositories = v),
+        new("Manage masks", r => r.CanManageMasks, (r, v) => r.CanManageMasks = v),
+        new("Manage service accounts", r => r.CanManageServiceAccounts, (r, v) => r.CanManageServiceAccounts = v),
+        new("Impersonate", r => r.CanImpersonate, (r, v) => r.CanImpersonate = v),
+        new("Override checkout", r => r.CanOverrideCheckout, (r, v) => r.CanOverrideCheckout = v),
+        new("Legal hold", r => r.CanLegalHold, (r, v) => r.CanLegalHold = v),
+        new("Manage classification", r => r.CanManageClassification, (r, v) => r.CanManageClassification = v),
+        new("Reset MFA", r => r.CanResetMfa, (r, v) => r.CanResetMfa = v),
+        new("View audit log", r => r.CanViewAuditLog, (r, v) => r.CanViewAuditLog = v),
+        new("Export", r => r.CanExport, (r, v) => r.CanExport = v),
+        new("Import", r => r.CanImport, (r, v) => r.CanImport = v),
+        new("Manage inboxes", r => r.CanManageInboxes, (r, v) => r.CanManageInboxes = v),
+        new("Create external links", r => r.CanCreateExternalLink, (r, v) => r.CanCreateExternalLink = v),
+    ];
+
+    private async Task LoadPrincipalsAsync()
+    {
+        var previousId = _selectedPrincipal?.Id;
+        var previousIsGroup = _selectedPrincipal?.IsGroup;
+        var rows = new List<PrincipalRow>();
+
+        try
+        {
+            var gurl = await ApiRoot.RequireAsync("groups");
+            while (gurl is not null)
+            {
+                var page = await Http.GetFromJsonAsync<GroupsAdminResponse>(gurl);
+                foreach (var g in page?.Groups ?? [])
+                {
+                    rows.Add(new PrincipalRow { IsGroup = true, Id = g.Id, Name = g.Name, Rights = g.Rights ?? new(), Links = Links.RelMap(g.Links) });
+                }
+                gurl = Links.Href(page?.Links, "next");
+            }
+
+            var uurl = await ApiRoot.RequireAsync("users");
+            while (uurl is not null)
+            {
+                var page = await Http.GetFromJsonAsync<UsersAdminResponse>(uurl);
+                foreach (var u in page?.Users ?? [])
+                {
+                    rows.Add(new PrincipalRow { IsGroup = false, Id = u.Id, Name = u.DisplayName, IsActive = u.IsActive, MfaEnabled = u.MfaEnabled, Rights = u.Rights ?? new(), PhotoHref = Links.Href(u.Links, "photo"), Links = Links.RelMap(u.Links) });
+                }
+                uurl = Links.Href(page?.Links, "next");
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrLoadUsers"), Severity.Error);
+            return;
+        }
+
+        // Groups first (two-person icon), then users (one-person icon), each alphabetical.
+        _principals = rows.OrderByDescending(p => p.IsGroup).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        _selectedPrincipal = _principals.FirstOrDefault(p => p.Id == previousId && p.IsGroup == previousIsGroup);
+        _editRights = _selectedPrincipal is { } sel ? sel.Rights with { } : new();
+        await LoadPrincipalPhotoAsync(_selectedPrincipal);
+        await LoadGroupMembersAsync(_selectedPrincipal);
+    }
+
+    private string? _principalPhotoUrl;
+
+    private async Task SelectPrincipalAsync(PrincipalRow p)
+    {
+        _selectedPrincipal = p;
+        _ugEditing = false; // a fresh selection starts read-only
+        _editRights = p.Rights with { }; // an independent copy so the matrix edits don't mutate the row until Save
+        await LoadPrincipalPhotoAsync(p);
+        await LoadGroupMembersAsync(p);
+    }
+
+    // ---- Group membership (ADR "Group membership editing") -------------------------------------------
+
+    private readonly List<MemberOption> _groupMembers = [];
+
+    // The members collection's `add-member` address, captured when the list loads.
+    private string? _groupMembersAddHref;
+    // RemoveHref is the member row's own `remove` rel — the only resource that knows both ends of the
+    // (group, user) pair a membership is addressed by (issue #416).
+    private record MemberOption(Guid Id, string Name, string? RemoveHref = null);
+
+    private async Task LoadGroupMembersAsync(PrincipalRow? p)
+    {
+        _groupMembers.Clear();
+        _groupMembersAddHref = null;
+        if (p is null || !p.IsGroup)
+        {
+            return;
+        }
+
+        try
+        {
+            var url = p.Href("members");
+            while (url is not null)
+            {
+                var page = await Http.GetFromJsonAsync<MembersResponse>(url);
+                foreach (var m in page?.Members ?? [])
+                {
+                    _groupMembers.Add(new MemberOption(m.Id, m.DisplayName, Links.Href(m.Links, "remove")));
+                }
+                _groupMembersAddHref ??= Links.Href(page?.Links, "add-member");
+                url = Links.Href(page?.Links, "next");
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrLoadMembers"), Severity.Error);
+        }
+    }
+
+    // Non-member tenant users matching the typed text — the add-picker's candidates.
+    private Task<IEnumerable<MemberOption>> SearchNonMembers(string? text, CancellationToken _)
+    {
+        var memberIds = _groupMembers.Select(m => m.Id).ToHashSet();
+        var candidates = _principals
+            .Where(p => !p.IsGroup && !memberIds.Contains(p.Id))
+            .Where(p => string.IsNullOrWhiteSpace(text) || p.Name.Contains(text, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(p => new MemberOption(p.Id, p.Name));
+        return Task.FromResult<IEnumerable<MemberOption>>(candidates);
+    }
+
+    private async Task AddMemberAsync(MemberOption? option)
+    {
+        if (option is null || _selectedPrincipal is not { IsGroup: true } group)
+        {
+            return;
+        }
+
+        // The API now takes the member in the BODY of a POST to the collection, so this follows a rel like
+        // everything else — the chosen user travels as data rather than as a path segment (issue #416).
+        if (_groupMembersAddHref is null) { return; }
+
+        using var resp = await Http.PostAsJsonAsync(_groupMembersAddHref, new { userId = option.Id });
+        if (resp.IsSuccessStatusCode)
+        {
+            await LoadGroupMembersAsync(group);
+            Snackbar.Add(string.Format(Strings.Get("StAdded"), option.Name), Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to do that." : "Could not add the member.", Severity.Warning);
+        }
+    }
+
+    private async Task RemoveMemberAsync(MemberOption member)
+    {
+        if (_selectedPrincipal is not { IsGroup: true } group)
+        {
+            return;
+        }
+
+        if (member.RemoveHref is not { } removeHref) { return; }
+
+        using var resp = await Http.DeleteAsync(removeHref);
+        if (resp.IsSuccessStatusCode)
+        {
+            _groupMembers.Remove(member);
+            Snackbar.Add(string.Format(Strings.Get("StRemovedName"), member.Name), Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add(Strings.Get("StErrRemoveMember"), Severity.Warning);
+        }
+    }
+
+    private record MembersResponse { public List<MemberDto> Members { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
+    private record MemberDto { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; public List<LinkResponse> Links { get; set; } = []; }
+
+    // The photo endpoint is bearer-protected, so fetch the bytes with the authenticated client and render a
+    // data URL (a raw <img src> sends no token) — ADR "User profile photo". 404 → no photo.
+    private async Task LoadPrincipalPhotoAsync(PrincipalRow? p)
+    {
+        _principalPhotoUrl = null;
+        if (p is null || p.IsGroup)
+        {
+            return;
+        }
+
+        try
+        {
+            if (p.PhotoHref is not { } photoHref) { return; }
+
+            var bytes = await Http.GetByteArrayAsync(photoHref);
+            _principalPhotoUrl = "data:image/png;base64," + Convert.ToBase64String(bytes);
+        }
+        catch (Exception)
+        {
+            _principalPhotoUrl = null;
+        }
+    }
+
+    private async Task ChangePrincipalPhotoAsync()
+    {
+        if (_selectedPrincipal is not { IsGroup: false } p)
+        {
+            return;
+        }
+
+        var parameters = new DialogParameters<ProfilePhotoDialog> { { x => x.PhotoHref, p.PhotoHref } };
+        var dialog = await DialogService.ShowAsync<ProfilePhotoDialog>(Strings.Get("PpTitle"), parameters);
+        if (await dialog.Result is { Canceled: false })
+        {
+            await LoadPrincipalPhotoAsync(p);
+        }
+    }
+
+    private async Task RemovePrincipalPhotoAsync()
+    {
+        if (_selectedPrincipal is not { IsGroup: false } p)
+        {
+            return;
+        }
+
+        if (p.PhotoHref is not { } photoHref) { return; }
+
+        using var resp = await Http.DeleteAsync(photoHref);
+        if (resp.IsSuccessStatusCode)
+        {
+            _principalPhotoUrl = null;
+            Snackbar.Add(Strings.Get("StPhotoRemoved"), Severity.Success);
+        }
+    }
+
+    private static string PrincipalInitials(string name) => string.IsNullOrWhiteSpace(name)
+        ? "?"
+        : string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
+
+    // Admin password reset (ADR "User password management") — generates a random password shown once.
+    private async Task ResetPrincipalPasswordAsync()
+    {
+        if (_selectedPrincipal is not { IsGroup: false } p)
+        {
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = "Reset password",
+            Message = $"Reset the password for '{p.Name}'? A new random password will be generated and shown once.",
+            YesText = "Reset",
+            CancelText = "Cancel",
+        });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            if (p.Href("reset-password") is not { } resetPasswordHref) { return; }
+
+            using var resp = await Http.PostAsync(resetPasswordHref, null);
+            if (resp.IsSuccessStatusCode)
+            {
+                var result = await resp.Content.ReadFromJsonAsync<ResetPasswordResult>();
+                var parameters = new DialogParameters<GeneratedPasswordDialog>
+                {
+                    { x => x.Password, result?.Password ?? "" },
+                    { x => x.UserName, p.Name },
+                };
+                await (await DialogService.ShowAsync<GeneratedPasswordDialog>(Strings.Get("GenPwTitle"), parameters)).Result;
+            }
+            else
+            {
+                Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to do that." : "Could not reset the password.", Severity.Warning);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrResetPw"), Severity.Error);
+        }
+    }
+
+    private record ResetPasswordResult { public string Password { get; set; } = ""; }
+
+    // Admin MFA reset (ADR "MFA (interactive login, TOTP)") — disables a locked-out user's two-factor so they
+    // can sign in with just their password and re-enroll.
+    private async Task ResetPrincipalMfaAsync()
+    {
+        if (_selectedPrincipal is not { IsGroup: false } p)
+        {
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = "Reset two-factor authentication",
+            Message = $"Disable two-factor authentication for '{p.Name}'? They'll be able to sign in with just their password until they re-enroll.",
+            YesText = "Reset",
+            CancelText = "Cancel",
+        });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            if (p.Href("reset-mfa") is not { } resetMfaHref) { return; }
+
+            using var resp = await Http.PostAsync(resetMfaHref, null);
+            if (resp.IsSuccessStatusCode)
+            {
+                p.MfaEnabled = false;
+                Snackbar.Add(string.Format(Strings.Get("StMfaResetFor"), p.Name), Severity.Success);
+                StateHasChanged();
+            }
+            else
+            {
+                Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to do that." : "Could not reset two-factor authentication.", Severity.Warning);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrResetMfa"), Severity.Error);
+        }
+    }
+
+    private async Task NewPrincipalAsync(bool isGroup)
+    {
+        if (await ShowPrincipalDialogAsync(isGroup, isGroup ? "New group" : "New user", "", "") is { } result)
+        {
+            await CreatePrincipalAsync(isGroup, result.Name, result.Email, null);
+        }
+    }
+
+    // Open the service-accounts manager (ADR 0534) — list / create / edit-rights / rotate-secret / revoke. The
+    // dialog talks to /api/service-accounts directly; the API enforces CanManageServiceAccounts on every call.
+    private async Task OpenServiceAccountsAsync()
+    {
+        await DialogService.ShowAsync<Dialogs.ServiceAccountsDialog>(Strings.Get("SaManage"),
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+    }
+
+    // Copy = the New dialog pre-filled from the selection; the created principal then gets the copied rights.
+    private async Task CopyPrincipalAsync()
+    {
+        if (_selectedPrincipal is not { } p)
+        {
+            return;
+        }
+
+        var initialName = p.IsGroup ? $"{p.Name} (copy)" : p.Name;
+        if (await ShowPrincipalDialogAsync(p.IsGroup, p.IsGroup ? "Copy group" : "Copy user", initialName, "") is { } result)
+        {
+            await CreatePrincipalAsync(p.IsGroup, result.Name, result.Email, p.Rights with { });
+        }
+    }
+
+    private async Task<PrincipalDialog.Result?> ShowPrincipalDialogAsync(bool isGroup, string title, string initialName, string initialEmail)
+    {
+        var parameters = new DialogParameters<PrincipalDialog>
+        {
+            { x => x.IsGroup, isGroup },
+            { x => x.InitialName, initialName },
+            { x => x.InitialEmail, initialEmail },
+        };
+        var dialog = await DialogService.ShowAsync<PrincipalDialog>(title, parameters);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: PrincipalDialog.Result data } ? data : null;
+    }
+
+    private async Task CreatePrincipalAsync(bool isGroup, string name, string email, SystemRightsDto? copyRights)
+    {
+        try
+        {
+            Guid newId;
+            using (var resp = isGroup
+                ? await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("groups"), new { name })
+                : await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("users"), new { email, displayName = name }))
+            {
+                if (!resp.IsSuccessStatusCode)
+                {
+                    Snackbar.Add(resp.StatusCode == HttpStatusCode.Conflict
+                        ? (isGroup ? "A group with this name already exists." : "A user with this email already exists.")
+                        : "Could not create.", Severity.Warning);
+                    return;
+                }
+
+                newId = isGroup
+                    ? (await resp.Content.ReadFromJsonAsync<GroupAdminDto>())!.Id
+                    : (await resp.Content.ReadFromJsonAsync<UserAdminDto>())!.Id;
+            }
+
+            if (copyRights is not null)
+            {
+                await Http.PutAsJsonAsync($"api/{(isGroup ? "groups" : "users")}/{newId}/rights", copyRights);
+            }
+
+            await LoadPrincipalsAsync();
+            if (_principals.FirstOrDefault(p => p.IsGroup == isGroup && p.Id == newId) is { } created)
+            {
+                await SelectPrincipalAsync(created);
+            }
+
+            Snackbar.Add(isGroup ? "Group created." : "User created.", Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrCreate"), Severity.Error);
+        }
+    }
+
+    private async Task DeletePrincipalAsync()
+    {
+        if (_selectedPrincipal is not { } p)
+        {
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = p.IsGroup ? "Delete group" : "Deactivate user",
+            Message = p.IsGroup ? $"Delete the group '{p.Name}'?" : $"Deactivate the user '{p.Name}'?",
+            YesText = p.IsGroup ? "Delete" : "Deactivate",
+            CancelText = "Cancel",
+        });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            // One rel per kind — the server names the address for removing this principal, so the client no
+            // longer branches on IsGroup to build two different paths.
+            if ((p.IsGroup ? p.Href("delete") : p.Href("deactivate")) is not { } removeHref) { return; }
+
+            using var resp = await Http.DeleteAsync(removeHref);
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add(p.IsGroup ? "Group deleted." : "User deactivated.", Severity.Success);
+                _selectedPrincipal = null;
+                await LoadPrincipalsAsync();
+                return;
+            }
+
+            // A user with pending review tasks can't be deactivated without handing them over — prompt for a
+            // replacement reviewer, then retry with ?reassignReviewsTo= (ADR "Workflow review reassignment").
+            if (!p.IsGroup && resp.StatusCode == HttpStatusCode.Conflict)
+            {
+                var problem = await resp.Content.ReadFromJsonAsync<DeleteProblem>();
+                if (problem?.ErrorCode == "REVIEWER_HAS_PENDING_REVIEWS")
+                {
+                    await ReassignThenDeactivateAsync(p);
+                    return;
+                }
+            }
+
+            Snackbar.Add(resp.StatusCode switch
+            {
+                HttpStatusCode.Conflict => "The group still has child groups or members.",
+                HttpStatusCode.Forbidden => "You don't have permission to do that.",
+                _ => "Could not delete.",
+            }, Severity.Warning);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrDelete"), Severity.Error);
+        }
+    }
+
+    private async Task ReassignThenDeactivateAsync(PrincipalRow user)
+    {
+        var candidates = _principals
+            .Where(x => !x.IsGroup && x.IsActive && x.Id != user.Id)
+            .Select(x => new ReplacementReviewerDialog.ReviewerCandidate(x.Id, x.Name))
+            .ToList();
+        if (candidates.Count == 0)
+        {
+            Snackbar.Add(Strings.Get("StNoReplacementReviewer"), Severity.Warning);
+            return;
+        }
+
+        var parameters = new DialogParameters
+        {
+            [nameof(ReplacementReviewerDialog.UserName)] = user.Name,
+            [nameof(ReplacementReviewerDialog.Candidates)] = candidates,
+        };
+        var dialog = await DialogService.ShowAsync<ReplacementReviewerDialog>(Strings.Get("RrTitle"), parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not Guid replacementId)
+        {
+            return;
+        }
+
+        // The reassignment is a QUERY on the advertised address, not a path this client invents.
+        if (user.Href("deactivate") is not { } deactivateHref) { return; }
+
+        using var retry = await Http.DeleteAsync($"{deactivateHref}?reassignReviewsTo={replacementId}");
+        if (retry.IsSuccessStatusCode)
+        {
+            Snackbar.Add(Strings.Get("StReviewsReassigned"), Severity.Success);
+            _selectedPrincipal = null;
+            await LoadPrincipalsAsync();
+        }
+        else
+        {
+            Snackbar.Add(Strings.Get("StErrReassign"), Severity.Warning);
+        }
+    }
+
+    private record DeleteProblem { public string? ErrorCode { get; set; } public string? Detail { get; set; } }
+
+    private async Task SaveRightsAsync()
+    {
+        if (_selectedPrincipal is not { } p)
+        {
+            return;
+        }
+
+        _ugBusy = true;
+        try
+        {
+            if (p.Href("rights") is not { } path) { return; }
+            using var resp = await Http.PutAsJsonAsync(path, _editRights);
+            if (resp.IsSuccessStatusCode)
+            {
+                p.Rights = _editRights with { };
+                _ugEditing = false;
+                Snackbar.Add(Strings.Get("StRightsSaved"), Severity.Success);
+            }
+            else if (resp.StatusCode == HttpStatusCode.Forbidden)
+            {
+                Snackbar.Add(Strings.Get("StCannotGrantMoreRights"), Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add(Strings.Get("StErrSaveRights"), Severity.Warning);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrSaveRights"), Severity.Error);
+        }
+        finally
+        {
+            _ugBusy = false;
+        }
+    }
+
+    private sealed class PrincipalRow
+    {
+        public bool IsGroup { get; set; }
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public bool IsActive { get; set; } = true;
+        public bool MfaEnabled { get; set; }
+        public SystemRightsDto Rights { get; set; } = new();
+
+        // The addresses the listing advertised for this row (issue #416): a user carries photo /
+        // reset-password / reset-mfa / deactivate, a group carries members / delete, and both carry rights.
+        // A group has no photo, which is also why that affordance is hidden for one.
+        public string? PhotoHref { get; set; }
+        public IReadOnlyDictionary<string, string>? Links { get; set; }
+
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
+
+    private sealed record RightField(string Label, Func<SystemRightsDto, bool> Get, Action<SystemRightsDto, bool> Set);
+
+    private record SystemRightsDto
+    {
+        public bool IsTenantAdmin { get; set; }
+        public bool CanImpersonate { get; set; }
+        public bool CanOverrideCheckout { get; set; }
+        public bool CanLegalHold { get; set; }
+        public bool CanManageClassification { get; set; }
+        public bool CanResetMfa { get; set; }
+        public bool CanManageRepositories { get; set; }
+        public bool CanManageMasks { get; set; }
+        public bool CanManageServiceAccounts { get; set; }
+        public bool CanManageUsers { get; set; }
+        public bool CanViewAuditLog { get; set; }
+        public bool CanExport { get; set; }
+        public bool CanImport { get; set; }
+        public bool CanManageInboxes { get; set; }
+        public bool CanCreateExternalLink { get; set; }
+        public int ClearanceRank { get; set; }
+    }
+
+    private record UserAdminDto { public Guid Id { get; set; } public string Email { get; set; } = ""; public string DisplayName { get; set; } = ""; public bool IsActive { get; set; } public bool MfaEnabled { get; set; } public SystemRightsDto? Rights { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record GroupAdminDto { public Guid Id { get; set; } public string Name { get; set; } = ""; public SystemRightsDto? Rights { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record UsersAdminResponse { public List<UserAdminDto> Users { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
+    private record GroupsAdminResponse { public List<GroupAdminDto> Groups { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
+
+}
