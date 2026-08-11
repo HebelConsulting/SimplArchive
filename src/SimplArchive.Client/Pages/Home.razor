@@ -16,6 +16,7 @@
 @inject SimplArchive.Client.Services.ApiRoot ApiRoot
 @inject SimplArchive.Client.Services.SensitivityLabelCatalog SensitivityLabels
 @inject SimplArchive.Client.Services.OcrLanguageCatalog OcrLanguages
+@inject SimplArchive.Client.Services.DocumentActions Actions
 
 <PageTitle>SimplArchive</PageTitle>
 
@@ -543,23 +544,23 @@
                                         <MudMenuItem Icon="@Icons.Material.Filled.CreateNewFolder" OnClick="NewFolderAsync">@Strings.Get("MwNewSubfolder")</MudMenuItem>
                                         <MudMenuItem Icon="@Icons.Material.Filled.Upload" OnClick="UploadAsync">@Strings.Get("Upload")</MudMenuItem>
                                         <MudDivider />
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => RenameAsync(tn)">@Strings.Get("CtxRename")</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => MoveAsync(tn)">@Strings.Get("CtxMoveTo")</MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => RunAndRefreshAsync(Actions.RenameAsync(tn))">@Strings.Get("CtxRename")</MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => RunAndRefreshAsync(Actions.MoveAsync(tn))">@Strings.Get("CtxMoveTo")</MudMenuItem>
                                         @* Opens the ONE detail edit on this folder (issue #408) — the contents order is a
                                            field in that pane now, not a mode of its own. *@
                                         <MudMenuItem Icon="@Icons.Material.Filled.Sort" OnClick="@(() => BeginFolderSortEditAsync(tn))">@Strings.Get("FolderSortLabel")</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteAsync(tn)">@Strings.Get("UgDelete")</MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteRowAsync(tn)">@Strings.Get("UgDelete")</MudMenuItem>
                                         <MudDivider />
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessAsync(tn)">@Strings.Get("MaManageAccess")</MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => Actions.OpenManageAccessAsync(tn)">@Strings.Get("MaManageAccess")</MudMenuItem>
                                         @if (_canLegalHold)
                                         {
-                                            <MudMenuItem Icon="@Icons.Material.Filled.Gavel" OnClick="() => PlaceLegalHoldAsync(tn)">@Strings.Get("CtxPlaceLegalHold")</MudMenuItem>
+                                            <MudMenuItem Icon="@Icons.Material.Filled.Gavel" OnClick="() => RunAndRefreshAsync(Actions.PlaceLegalHoldAsync(tn))">@Strings.Get("CtxPlaceLegalHold")</MudMenuItem>
                                         }
                                         <MudDivider />
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Link" OnClick="() => PlaceReferenceAsync(tn)">@Strings.Get("CtxPlaceReference")</MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Filled.Link" OnClick="() => RunAndRefreshAsync(Actions.PlaceReferenceAsync(tn))">@Strings.Get("CtxPlaceReference")</MudMenuItem>
                                         @if (tn.HasReferences)
                                         {
-                                            <MudMenuItem Icon="@Icons.Material.Filled.Share" OnClick="() => ShowReferencesAsync(tn)">@Strings.Get("CtxReferences")</MudMenuItem>
+                                            <MudMenuItem Icon="@Icons.Material.Filled.Share" OnClick="() => ShowReferencesForAsync(tn)">@Strings.Get("CtxReferences")</MudMenuItem>
                                         }
                                         <MudDivider />
                                         <MudMenuItem Icon="@(_folderSubscribed ? Icons.Material.Filled.NotificationsOff : Icons.Material.Filled.Notifications)"
@@ -669,12 +670,12 @@
                                         <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
                                             @if (!node.IsReference)
                                             {
-                                                <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => RenameAsync(node)">@Strings.Get("CtxRename")</MudMenuItem>
-                                                <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => MoveAsync(node)">@Strings.Get("CtxMoveTo")</MudMenuItem>
+                                                <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => RunAndRefreshAsync(Actions.RenameAsync(node))">@Strings.Get("CtxRename")</MudMenuItem>
+                                                <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => RunAndRefreshAsync(Actions.MoveAsync(node))">@Strings.Get("CtxMoveTo")</MudMenuItem>
                                             }
                                             @if (!node.IsReference && _canLegalHold)
                                             {
-                                                <MudMenuItem Icon="@Icons.Material.Filled.Gavel" OnClick="() => PlaceLegalHoldAsync(node)">@Strings.Get("CtxPlaceLegalHold")</MudMenuItem>
+                                                <MudMenuItem Icon="@Icons.Material.Filled.Gavel" OnClick="() => RunAndRefreshAsync(Actions.PlaceLegalHoldAsync(node))">@Strings.Get("CtxPlaceLegalHold")</MudMenuItem>
                                             }
                                             @if (!node.IsReference && !node.IsFolder && !node.CheckedOut)
                                             {
@@ -684,7 +685,7 @@
                                             {
                                                 <MudMenuItem Icon="@Icons.Material.Filled.LockOpen" OnClick="() => OverrideCheckoutAsync(node)">@Strings.Get("CtxOverrideCheckout")</MudMenuItem>
                                             }
-                                            <MudMenuItem Icon="@Icons.Material.Filled.Link" OnClick="() => PlaceReferenceAsync(node)">@Strings.Get("CtxPlaceReference")</MudMenuItem>
+                                            <MudMenuItem Icon="@Icons.Material.Filled.Link" OnClick="() => RunAndRefreshAsync(Actions.PlaceReferenceAsync(node))">@Strings.Get("CtxPlaceReference")</MudMenuItem>
                                             @if (node.IsReference)
                                             {
                                                 <MudMenuItem Icon="@Icons.Material.Filled.ArrowForward" OnClick="() => GoToAsync(node)">@Strings.Get("CtxGoTo")</MudMenuItem>
@@ -692,7 +693,7 @@
                                             }
                                             @if (node.HasReferences)
                                             {
-                                                <MudMenuItem Icon="@Icons.Material.Filled.Share" OnClick="() => ShowReferencesAsync(node)">@Strings.Get("CtxReferences")</MudMenuItem>
+                                                <MudMenuItem Icon="@Icons.Material.Filled.Share" OnClick="() => ShowReferencesForAsync(node)">@Strings.Get("CtxReferences")</MudMenuItem>
                                             }
                                             @if (!node.IsFolder && node.VersionCount > 1)
                                             {
@@ -704,8 +705,8 @@
                                             }
                                             @if (!node.IsReference)
                                             {
-                                                <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessAsync(node)">@Strings.Get("MaManageAccess")</MudMenuItem>
-                                                <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteAsync(node)">@Strings.Get("UgDelete")</MudMenuItem>
+                                                <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="() => Actions.OpenManageAccessAsync(node)">@Strings.Get("MaManageAccess")</MudMenuItem>
+                                                <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteRowAsync(node)">@Strings.Get("UgDelete")</MudMenuItem>
                                             }
                                         </MudMenu>
                                     </div>
@@ -2308,6 +2309,53 @@
     private bool _canManageInboxes;
     private Guid? _myUserId;
 
+    // The shell's half of the shared row actions (ADR 0558): each reports whether anything changed, and the
+    // shell decides what to refresh — which is precisely what differs between the tree and the contents list.
+    private async Task RunAndRefreshAsync(Task<bool> action)
+    {
+        if (await action)
+        {
+            await RefreshAsync();
+        }
+    }
+
+    // Deleting the row the detail pane is showing must also empty that pane — the pane is the shell's.
+    private async Task DeleteRowAsync(BrowseNode node)
+    {
+        if (!await Actions.DeleteAsync(node))
+        {
+            return;
+        }
+
+        if (_selectedItem?.Id == node.Id)
+        {
+            ClearDetail();
+        }
+
+        await RefreshAsync();
+    }
+
+    // The references dialog ends in navigation or a primary-location change; both are the shell's to perform,
+    // so the service reports the choice and this acts on it.
+    private async Task ShowReferencesForAsync(BrowseNode node)
+    {
+        if (await Actions.ShowReferencesAsync(node) is not { } r)
+        {
+            return;
+        }
+
+        if (r.Promote)
+        {
+            await PromotePrimaryLocationAsync(node, r.FolderId);
+        }
+        else
+        {
+            // Open the chosen folder AND select the item — its real row in the primary location, or its
+            // reference (shortcut) row in a referencing folder.
+            await NavigateToFolderAsync(r.FolderId, node.Id);
+        }
+    }
+
     // Offered by the Tenant tab's header, but they act on state the SHELL owns — the repository tree, and
     // the detail pane's sensitivity picker — so they stay here and reach the tab as callbacks (ADR 0558).
     // Manage the tenant's configurable sensitivity labels (ADR "Configurable sensitivity labels + upload
@@ -2562,28 +2610,6 @@
     // cursor. It stays in the shell for the same reason export/import do — what it belongs to is the thing it
     // acts on, not the tab that happens to list the results (ADR 0558).
     // Places a legal hold on a specific document from the contents-pane ⋮ menu: creates a new matter covering it.
-    private async Task PlaceLegalHoldAsync(BrowseNode node)
-    {
-        if (await LegalHoldPrompt.ShowAsync(DialogService, node.Name) is not { } result)
-        {
-            return;
-        }
-
-        try
-        {
-            using var created = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("legalHolds"), new { name = result.Name, reason = result.Reason });
-            created.EnsureSuccessStatusCode();
-            var hold = await created.Content.ReadFromJsonAsync<LegalHoldDto>();
-            using var added = await Http.PostAsJsonAsync($"api/legal-holds/{hold!.Id}/items", new { documentId = node.Id });
-            added.EnsureSuccessStatusCode();
-            Snackbar.Add(string.Format(Strings.Get("StPlacedUnderHold"), node.Name), Severity.Success);
-            await RefreshOpenFolderAsync();
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrPlaceHold"), Severity.Error);
-        }
-    }
 
     // ---- Repository export / import (ADRs "Repository export" / "Repository import") -----------------
     // Acts on the SELECTED FOLDER, so it belongs to the Repositories surface and stays in the shell — it had
@@ -2686,7 +2712,7 @@
     // afterwards, since submitting/approving/etc. changes the caller's (or the reviewer's) task set.
     private async Task OpenWorkflowAsync(BrowseNode node)
     {
-        var parameters = new DialogParameters { ["DocumentId"] = node.Id, ["DocumentHref"] = DocumentAddress(node) };
+        var parameters = new DialogParameters { ["DocumentId"] = node.Id, ["DocumentHref"] = DocumentActions.DocumentAddress(node) };
         var dialog = await DialogService.ShowAsync<WorkflowDialog>(Strings.Get("WfTitle"), parameters, new DialogOptions { CloseButton = true });
         await dialog.Result;
         await LoadTasksAsync();
@@ -2700,23 +2726,13 @@
     // `document` before `self` because a REPOSITORY row's `self` is the repository view, which is a different
     // resource with different rels — the document view is the one that carries the grants. A repository is a
     // document (ADR 0200), but only the server can say at which address, which is why it advertises both.
-    private Task OpenManageAccessAsync(BrowseNode node) =>
-        OpenManageAccessAsync(node.Id, node.Name, DocumentAddress(node));
-
-    private static string? DocumentAddress(BrowseNode node) =>
-        node.Links?.GetValueOrDefault("document") ?? node.Links?.GetValueOrDefault("self");
 
     private Task OpenManageAccessForSelectedAsync() =>
-        OpenManageAccessAsync(
+        Actions.OpenManageAccessAsync(
             _selectedItem!.Id,
             _sysName,
-            _detailLinks?.GetValueOrDefault("self") ?? DocumentAddress(_selectedItem!));
+            _detailLinks?.GetValueOrDefault("self") ?? DocumentActions.DocumentAddress(_selectedItem!));
 
-    private async Task OpenManageAccessAsync(Guid documentId, string name, string? documentHref)
-    {
-        var parameters = new DialogParameters { ["DocumentId"] = documentId, ["DocumentName"] = name, ["DocumentHref"] = documentHref };
-        await DialogService.ShowAsync<ManageAccessDialog>(Strings.Get("MaManageAccess"), parameters, new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
-    }
 
     private async Task LoadTasksAsync()
     {
@@ -3335,7 +3351,7 @@
             // DocumentAddress, not `self`: on a REPOSITORY row `self` is the repository view, whose rels are a
             // different set — reading it here silently cost the pane its document rels (contents-sort-order
             // among them). ADR 0200 says a repository IS a document; only the server can say at which address.
-            if (DocumentAddress(item) is not { } detailSelfHref)
+            if (DocumentActions.DocumentAddress(item) is not { } detailSelfHref)
             {
                 return;
             }
@@ -3825,7 +3841,7 @@
             var newName = _editName.Trim();
             if (newName.Length > 0 && newName != _origName)
             {
-                var etag = await GetETagAsync(DetailHref("self"));
+                var etag = await Actions.GetETagAsync(DetailHref("self"));
                 using var req = new HttpRequestMessage(HttpMethod.Put, DetailHref("self")) { Content = JsonContent.Create(new { name = newName }) };
                 if (etag is not null)
                 {
@@ -4363,46 +4379,12 @@
 
     // ---- Move / reference (row action menu) ----------------------------------------------------------
 
-    private async Task MoveAsync(BrowseNode node)
-    {
-        if (await PickFolderAsync("Move to folder") is not { } folderId)
-        {
-            return;
-        }
-
-        if (DocumentAddress(node) is not { } selfHref)
-        {
-            return;
-        }
-
-        // The ETag probe follows the row's address; the `move` rel that would replace the path below lives on
-        // the full document resource, not on a listing row, so converting it needs a fetch first (issue #416).
-        var etag = await GetETagAsync(selfHref);
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"api/documents/{node.Id}/parent")
-        {
-            Content = JsonContent.Create(new { parentId = folderId }),
-        };
-        if (etag is not null)
-        {
-            request.Headers.TryAddWithoutValidation("If-Match", etag);
-        }
-
-        var response = await Http.SendAsync(request);
-        if (!await HandleMutationAsync(response, $"Moved '{node.Name}'.", node.IsFolder
-            ? "Can't move a folder into itself or one of its own sub-folders."
-            : "Can't move the item there.", "An item with that name already exists in the target folder."))
-        {
-            return;
-        }
-
-        await RefreshAsync();
-    }
 
     // ---- Bulk actions on the multi-selection (ADR "Bulk actions on selected documents") ------------------
 
     private async Task BulkMoveAsync()
     {
-        if (await PickFolderAsync("Move selected items to folder") is not { } folderId)
+        if (await Actions.PickFolderAsync("Move selected items to folder") is not { } folderId)
         {
             return;
         }
@@ -4530,22 +4512,6 @@
         StateHasChanged();
     }
 
-    private async Task PlaceReferenceAsync(BrowseNode node)
-    {
-        if (await PickFolderAsync("Place reference in folder") is not { } folderId)
-        {
-            return;
-        }
-
-        var response = await Http.PostAsJsonAsync($"api/documents/{folderId}/references", new { targetId = node.Id });
-        if (!await HandleMutationAsync(response, $"Placed a reference to '{node.Name}'.",
-            "Can't reference an item into itself or one of its own sub-folders.", "This item is already referenced in that folder."))
-        {
-            return;
-        }
-
-        await RefreshAsync();
-    }
 
     private async Task GoToAsync(BrowseNode node)
     {
@@ -4596,42 +4562,18 @@
         await RefreshAsync();
     }
 
-    private async Task ShowReferencesAsync(BrowseNode node)
-    {
-        var parameters = new DialogParameters<ReferencesDialog>
-        {
-            { x => x.ItemId, node.Id },
-            { x => x.ItemName, node.Name },
-            { x => x.ReferencingFoldersHref, node.Links?.GetValueOrDefault("referencing-folders") },
-        };
-        var dialog = await DialogService.ShowAsync<ReferencesDialog>(Strings.Get("RefDlgTitle"), parameters);
-        var result = await dialog.Result;
-        if (result is { Canceled: false, Data: ReferencesDialog.ReferencesResult r })
-        {
-            if (r.Promote)
-            {
-                await PromotePrimaryLocationAsync(node, r.FolderId);
-            }
-            else
-            {
-                // Open the chosen folder AND select the item for viewing — its real row in the primary location,
-                // or its reference (shortcut) row in a referencing folder.
-                await NavigateToFolderAsync(r.FolderId, node.Id);
-            }
-        }
-    }
 
     // Promote a referenced folder to be the document's primary location (ADR 0506): one atomic server call
     // (move + leave a reference at the old home). Same If-Match contract as MoveAsync.
     private async Task PromotePrimaryLocationAsync(BrowseNode node, Guid folderId)
     {
-        if (DocumentAddress(node) is not { } selfHref)
+        if (DocumentActions.DocumentAddress(node) is not { } selfHref)
         {
             return;
         }
 
         // As in MoveAsync: `set-primary-location` is a rel on the document resource, not on the row.
-        var etag = await GetETagAsync(selfHref);
+        var etag = await Actions.GetETagAsync(selfHref);
         using var request = new HttpRequestMessage(HttpMethod.Put, $"api/documents/{node.Id}/primary-location")
         {
             Content = JsonContent.Create(new { folderId }),
@@ -4642,7 +4584,7 @@
         }
 
         var response = await Http.SendAsync(request);
-        if (!await HandleMutationAsync(response, $"'{node.Name}' now lives in the chosen folder.",
+        if (!await Actions.HandleMutationAsync(response, $"'{node.Name}' now lives in the chosen folder.",
             "Can't set that folder as the primary location.",
             "An item with that name already exists in the target folder."))
         {
@@ -4653,148 +4595,12 @@
         await NavigateToFolderAsync(folderId, node.Id);
     }
 
-    private async Task<Guid?> PickFolderAsync(string title)
-    {
-        var dialog = await DialogService.ShowAsync<FolderPickerDialog>(title);
-        var result = await dialog.Result;
-        return result is { Canceled: false, Data: Guid folderId } ? folderId : null;
-    }
 
     // Common result handling for the move/reference mutations. Returns true on success.
-    private async Task<bool> HandleMutationAsync(HttpResponseMessage response, string success, string badRequest, string conflict)
-    {
-        switch (response.StatusCode)
-        {
-            case HttpStatusCode.BadRequest:
-                Snackbar.Add(badRequest, Severity.Warning);
-                return false;
-            case HttpStatusCode.Forbidden:
-                Snackbar.Add(Strings.Get("StNoPermHere"), Severity.Warning);
-                return false;
-            case HttpStatusCode.Conflict:
-                Snackbar.Add(conflict, Severity.Warning);
-                return false;
-            case HttpStatusCode.PreconditionFailed:
-                Snackbar.Add(Strings.Get("StStaleReload"), Severity.Warning);
-                return false;
-        }
-
-        if (!response.IsSuccessStatusCode)
-        {
-            Snackbar.Add(Strings.Get("StOperationFailed"), Severity.Error);
-            return false;
-        }
-
-        Snackbar.Add(success, Severity.Success);
-        return true;
-    }
 
     // ---- Rename / delete / recycle bin ---------------------------------------------------------------
 
-    private async Task RenameAsync(BrowseNode node)
-    {
-        var parameters = new DialogParameters<RenameDialog> { { x => x.CurrentName, node.Name } };
-        var dialog = await DialogService.ShowAsync<RenameDialog>(Strings.Get("RibbonRename"), parameters);
-        var result = await dialog.Result;
-        if (result is not { Canceled: false, Data: string newName } || newName == node.Name)
-        {
-            return;
-        }
 
-        if (DocumentAddress(node) is not { } selfHref)
-        {
-            return;
-        }
-
-        var etag = await GetETagAsync(selfHref);
-        using var request = new HttpRequestMessage(HttpMethod.Put, selfHref)
-        {
-            Content = JsonContent.Create(new { name = newName }),
-        };
-        if (etag is not null)
-        {
-            request.Headers.TryAddWithoutValidation("If-Match", etag);
-        }
-
-        var response = await Http.SendAsync(request);
-        if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            Snackbar.Add(string.Format(Strings.Get("StNameTaken"), newName), Severity.Warning);
-            return;
-        }
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            Snackbar.Add(Strings.Get("StNoPermRename"), Severity.Warning);
-            return;
-        }
-        if (response.StatusCode == HttpStatusCode.PreconditionFailed)
-        {
-            Snackbar.Add(Strings.Get("StStaleReload"), Severity.Warning);
-            return;
-        }
-        if (!response.IsSuccessStatusCode)
-        {
-            Snackbar.Add(Strings.Get("StErrRenameItem"), Severity.Error);
-            return;
-        }
-
-        Snackbar.Add(string.Format(Strings.Get("StRenamedTo"), newName), Severity.Success);
-        await RefreshAsync();
-    }
-
-    private async Task DeleteAsync(BrowseNode node)
-    {
-        var message = node.IsFolder
-            ? $"Delete the folder '{node.Name}' and everything inside it? It will be moved to the recycle bin."
-            : $"Delete '{node.Name}'? It will be moved to the recycle bin.";
-        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
-        {
-            Title = "Delete",
-            Message = message,
-            YesText = "Delete",
-            CancelText = "Cancel",
-        });
-        if (confirmed != true)
-        {
-            return;
-        }
-
-        if (DocumentAddress(node) is not { } selfHref)
-        {
-            return;
-        }
-
-        var etag = await GetETagAsync(selfHref);
-        using var request = new HttpRequestMessage(HttpMethod.Delete, selfHref);
-        if (etag is not null)
-        {
-            request.Headers.TryAddWithoutValidation("If-Match", etag);
-        }
-
-        var response = await Http.SendAsync(request);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            Snackbar.Add(Strings.Get("StNoPermDelete"), Severity.Warning);
-            return;
-        }
-        if (response.StatusCode == HttpStatusCode.PreconditionFailed)
-        {
-            Snackbar.Add(Strings.Get("StStaleReload"), Severity.Warning);
-            return;
-        }
-        if (!response.IsSuccessStatusCode)
-        {
-            Snackbar.Add(Strings.Get("StErrDeleteItem"), Severity.Error);
-            return;
-        }
-
-        Snackbar.Add(string.Format(Strings.Get("StDeleted"), node.Name), Severity.Success);
-        if (_selectedItem?.Id == node.Id)
-        {
-            ClearDetail();
-        }
-        await RefreshAsync();
-    }
 
 
     // Navigate the contents pane to a folder (from Go to / References / Search), optionally selecting an item.
@@ -4835,12 +4641,6 @@
 
     // Takes the document's advertised address (its `self` rel), so the concurrency probe hits the same resource
     // the mutation below will — rather than a path rebuilt from an id (ADR 0543, issue #416).
-    private async Task<string?> GetETagAsync(string selfHref)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Head, selfHref);
-        var response = await Http.SendAsync(request);
-        return response.Headers.ETag?.Tag;
-    }
 
     // Tag chip editor + catalog autocomplete (ADR "Document tags"). SearchFunc suggests not-yet-added catalog
     // tags; Enter commits the box (a coerced free-form value or the highlighted suggestion).

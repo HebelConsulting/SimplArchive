@@ -63,12 +63,15 @@ public partial class ClientHypermediaTests
         // move provable: 51 = 48 + 3, then 51 = 44 + 4 + 3 (pure moves), then 50 = 43 + 4 + 3 (Search moved its
         // region AND converted the one URL in it), then 50 = 36 + 7 + 4 + 3 (Inbox, a pure move).
         //
-        // Now 41 = 26 + 7 + 4 + 3 + 1. The Recycle bin moved AND converted all NINE of its URLs — the biggest single
+        // Now 41 = 23 + 7 + 4 + 3 + 1 + 3. The Recycle bin moved AND converted all NINE of its URLs — the biggest single
         // drop since the desktop burn-down — because the server half landed first (#450 gave each row the four
         // detail addresses its pane reads; the listing envelope already carried the three bulk actions). It cost
         // no extra request either: both sets arrive with a listing that was already being read (ADR 0557). That
         // is what the server tranche was for, and it is why the client half was cheap.
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 26,
+        ["src/SimplArchive.Client/Pages/Home.razor"] = 23,
+        // The three the shared row actions carried out of the page with them (ADR 0558) — the legal-hold
+        // items collection and the reference endpoints, which belong to the web burn-down, not to the move.
+        ["src/SimplArchive.Client/Services/DocumentActions.cs"] = 3,
         ["src/SimplArchive.Client/Components/Tabs/InboxTab.razor"] = 7,
         // The one the Users & groups tab carried out with it — a principal's own address, which belongs to the
         // web burn-down rather than to the extraction that moved it.

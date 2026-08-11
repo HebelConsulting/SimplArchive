@@ -55,6 +55,9 @@ builder.Services.AddScoped<SimplArchive.Client.Services.SensitivityLabelCatalog>
 // tab's default. One loader rather than three — see OcrLanguageCatalog.
 builder.Services.AddScoped<SimplArchive.Client.Services.OcrLanguageCatalog>();
 
+// The actions a document row offers, shared by the tree pane and the contents list — see DocumentActions.
+builder.Services.AddScoped<SimplArchive.Client.Services.DocumentActions>();
+
 builder.Services.AddHttpClient("SimplArchive.Api", client => client.BaseAddress = new Uri(builder.HostEnvironment.BaseAddress))
     .AddHttpMessageHandler(sp => sp.GetRequiredService<AuthorizationMessageHandler>()
         .ConfigureHandler(authorizedUrls: [builder.HostEnvironment.BaseAddress]))
