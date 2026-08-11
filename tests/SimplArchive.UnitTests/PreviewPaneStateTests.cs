@@ -2,9 +2,13 @@ using SimplArchive.Client.Pages;
 
 namespace SimplArchive.UnitTests;
 
-// Task 3 (deterministic guard): the shared preview state (used by both the Repositories and Inbox tabs, ADR
-// 0294) must fully reset on a tab switch so one tab's preview can't leak into the other's shared host. This
-// tests the extracted PreviewPaneState.Clear() that Home.ClearPreviewPane() delegates to.
+// A deterministic guard on PreviewPaneState.Clear() (ADR 0294), which PreviewPane.ClearAsync() delegates to.
+//
+// Written when the state was SHARED by the Repositories and Inbox tabs, where a missed field meant one tab's
+// preview leaking into the other's host. Each tab now owns a PreviewPane and therefore its own state (ADR
+// 0558), so that particular leak is gone — but the reset still has to be complete, because a pane is cleared
+// whenever its selection goes away and a half-reset one would render a stale document's text or find results
+// against the next selection.
 public class PreviewPaneStateTests
 {
     [Fact]

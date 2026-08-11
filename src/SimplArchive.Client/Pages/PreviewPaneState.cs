@@ -1,8 +1,12 @@
 namespace SimplArchive.Client.Pages;
 
-// The preview pane's display state (ADR "Preview pdf.js hit-overlay", 0294). The Repositories and Inbox tabs
-// reuse one JS-owned preview host + this shared state, so switching tabs must reset it or one tab's preview
-// would leak into the other. Extracted from Home.razor so that clear-on-switch reset is unit-testable.
+// The preview pane's display state (ADR "Preview pdf.js hit-overlay", 0294) — one instance per PreviewPane.
+//
+// It used to be a single SHARED object: the Repositories and Inbox tabs took turns with one JS-owned host, so
+// switching tabs had to reset this or one tab's preview leaked into the other's. Extracting PreviewPane gave
+// each tab its own host and its own state (ADR 0558), which is what actually removed that hazard — Clear() now
+// exists for the ordinary case of "the selection went away", not to stop a leak between tabs. It stays a
+// separate type so that reset remains unit-testable without a renderer.
 public sealed class PreviewPaneState
 {
     // image / pdf / text / unsupported / error.

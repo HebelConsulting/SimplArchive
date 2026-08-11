@@ -4,9 +4,15 @@ using static Microsoft.Playwright.Assertions;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// Task 3: the Repositories preview pane and the Inbox preview pane share one JS-owned host + _pv* state
-// (ADR 0294), cleared on tab switch (ClearPreviewPane). This proves they don't entangle — neither pane ever
-// renders the other tab's document content.
+// Neither preview pane ever renders the other tab's document content.
+//
+// Written when the Repositories and Inbox tabs SHARED one JS-owned host and one state object (ADR 0294), where
+// only a reset on tab switch kept them apart. Each tab now owns a PreviewPane instance (ADR 0558), so there is
+// no shared host left to leak through — but this stayed, because it is the only test that reads what the pane
+// actually DISPLAYS rather than that it was asked to render. It earned that during the extraction twice over:
+// once when a fire-and-forget clear raced the render that followed it and blanked the pane, and once when the
+// component loaded a preview correctly and never re-rendered to show it. Both looked like "no preview
+// available" and nothing else caught either.
 [Collection(UiCollection.Name)]
 [Trait("Area", "ui-3")]
 public class WebPreviewIsolationTests

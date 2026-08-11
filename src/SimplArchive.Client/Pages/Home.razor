@@ -5,6 +5,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Forms
 @implements IAsyncDisposable
+@implements SimplArchive.Client.Components.Panes.IPreviewAnnotationHost
 @using SimplArchive.Client.Dialogs
 @inject HttpClient Http
 @inject IJSRuntime JS
@@ -1027,104 +1028,66 @@
                         <div class="wb-gutter wb-gutter-h" data-gutter="index"><button type="button" class="wb-gutter-toggle"></button></div>
 
                         <div class="wb-detail-bottom">
-                            <div class="wb-preview @(_pvFullscreen ? "wb-pv-fullscreen" : "")" data-pane="preview" data-tour="pane-preview">
-                                @* Images/PDFs render via pdf.js into a JS-owned host with a search hit-overlay + click-to-copy
-                                   (ADRs 0268/0269/0282); text formats show as text; otherwise a placeholder. *@
-                                <div style="display:flex; flex-direction:column; flex:1 1 auto; min-width:0;">
-                                    @* The toolbar shows for a page preview (find + full-screen) or a text preview (full-screen only). *@
-                                    <div class="wb-pv-findbar" style="@((_pv.HasPages || _pv.Kind == "text") ? "" : "display:none;")">
-                                        @if (_pv.HasPages)
-                                        {
-                                            <span class="wb-pv-findgrp">
-                                                <MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Small" />
-                                                <MudTextField T="string" Value="_pv.FindQuery" ValueChanged="ApplyFindAsync" Immediate="true" Placeholder="@Strings.Get("FindInDocument")"
-                                                              Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:220px;" />
-                                                <span class="mud-text-secondary" style="font-size:.8em; min-width:46px;">@_pv.Index / @_pv.Count</span>
-                                                <MudIconButton Class="wb-pv-find-prev" Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Disabled="@(_pv.Count == 0)" OnClick="FindPrevAsync" />
-                                                <MudIconButton Class="wb-pv-find-next" Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Disabled="@(_pv.Count == 0)" OnClick="FindNextAsync" />
-                                            </span>
-                                        }
-                                        @if (_pvAnnotatable)
-                                        {
-                                            @* Sticky notes (ADR "Document annotations"): add a note (only with CanAnnotate,
-                                               ADR "CanAnnotate right"), and show/hide the markers (viewing needs only read). *@
-                                            @if (_annotationsCanCreate && !_isTouchOnly)
+                            @* One PreviewPane instance per tab (ADR 0558). Before the extraction this tab and
+                               the Inbox SHARED one JS-owned host and one state object, kept apart only by a
+                               reset on tab switch; an instance each removes that question entirely. The
+                               annotation tools ride in as Toolbar, and the gestures come back through
+                               IPreviewAnnotationHost, because acting on one writes to the version's
+                               annotation collection — document state this pane deliberately does not hold. *@
+                            <PreviewPane @ref="_repoPreview" DataPane="preview" DataTour="pane-preview"
+                                         EmptyText="@(_selectedItem is null ? Strings.Get("NoDocSelected") : Strings.Get("NoPreview"))"
+                                         ConvertedBadgeTooltip="@Strings.Get("ConvertedPreviewTooltip")"
+                                         AnnotationHost="this" WordCopied="OnPreviewWordCopiedAsync">
+                                <Toolbar>
+                                            @if (_pvAnnotatable)
                                             {
-                                                <MudIconButton Class="wb-pv-note-add" Icon="@Icons.Material.Filled.AddComment" Size="Size.Small" Color="@(_annotationAddMode ? Color.Primary : Color.Default)"
-                                                               OnClick="StartAddNoteAsync" title="@Strings.Get("AddStickyNote")" />
-                                                @* Markup tools (ADR "Annotation markup"): drag on the page to draw a highlight / rectangle / arrow. *@
-                                                <MudIconButton Class="wb-pv-tool-highlight" Icon="@Icons.Material.Filled.BorderColor" Size="Size.Small" Color="@(_annotationTool == 1 ? Color.Primary : Color.Default)"
-                                                               OnClick="@(() => SelectShapeToolAsync(1))" title="@Strings.Get("PvHighlight")" />
-                                                <MudIconButton Class="wb-pv-tool-rect" Icon="@Icons.Material.Filled.CropSquare" Size="Size.Small" Color="@(_annotationTool == 2 ? Color.Primary : Color.Default)"
-                                                               OnClick="@(() => SelectShapeToolAsync(2))" title="@Strings.Get("PvRectangle")" />
-                                                <MudIconButton Class="wb-pv-tool-arrow" Icon="@Icons.Material.Filled.NorthEast" Size="Size.Small" Color="@(_annotationTool == 3 ? Color.Primary : Color.Default)"
-                                                               OnClick="@(() => SelectShapeToolAsync(3))" title="@Strings.Get("PvArrow")" />
-                                                @* Colour palette (ADR "Highlighting redesign"): sets the draw colour for new shapes AND recolours the selected annotations. Shown while drawing or with a selection. *@
-                                                @if (_annotationTool > 0 || _hasAnnotationSelection)
+                                                @* Sticky notes (ADR "Document annotations"): add a note (only with CanAnnotate,
+                                                   ADR "CanAnnotate right"), and show/hide the markers (viewing needs only read). *@
+                                                @if (_annotationsCanCreate && !_isTouchOnly)
                                                 {
-                                                    <span class="wb-pv-palette">
-                                                        @foreach (var c in AnnotationPalette)
-                                                        {
-                                                            <span class="wb-pv-swatch @(_annotationColor == c ? "wb-pv-swatch-on" : "")" style="@($"background:{c}")"
-                                                                  @onclick="@(() => SetAnnotationColorAsync(c))" title="Set colour"></span>
-                                                        }
-                                                    </span>
+                                                    <MudIconButton Class="wb-pv-note-add" Icon="@Icons.Material.Filled.AddComment" Size="Size.Small" Color="@(_annotationAddMode ? Color.Primary : Color.Default)"
+                                                                   OnClick="StartAddNoteAsync" title="@Strings.Get("AddStickyNote")" />
+                                                    @* Markup tools (ADR "Annotation markup"): drag on the page to draw a highlight / rectangle / arrow. *@
+                                                    <MudIconButton Class="wb-pv-tool-highlight" Icon="@Icons.Material.Filled.BorderColor" Size="Size.Small" Color="@(_annotationTool == 1 ? Color.Primary : Color.Default)"
+                                                                   OnClick="@(() => SelectShapeToolAsync(1))" title="@Strings.Get("PvHighlight")" />
+                                                    <MudIconButton Class="wb-pv-tool-rect" Icon="@Icons.Material.Filled.CropSquare" Size="Size.Small" Color="@(_annotationTool == 2 ? Color.Primary : Color.Default)"
+                                                                   OnClick="@(() => SelectShapeToolAsync(2))" title="@Strings.Get("PvRectangle")" />
+                                                    <MudIconButton Class="wb-pv-tool-arrow" Icon="@Icons.Material.Filled.NorthEast" Size="Size.Small" Color="@(_annotationTool == 3 ? Color.Primary : Color.Default)"
+                                                                   OnClick="@(() => SelectShapeToolAsync(3))" title="@Strings.Get("PvArrow")" />
+                                                    @* Colour palette (ADR "Highlighting redesign"): sets the draw colour for new shapes AND recolours the selected annotations. Shown while drawing or with a selection. *@
+                                                    @if (_annotationTool > 0 || _hasAnnotationSelection)
+                                                    {
+                                                        <span class="wb-pv-palette">
+                                                            @foreach (var c in AnnotationPalette)
+                                                            {
+                                                                <span class="wb-pv-swatch @(_annotationColor == c ? "wb-pv-swatch-on" : "")" style="@($"background:{c}")"
+                                                                      @onclick="@(() => SetAnnotationColorAsync(c))" title="Set colour"></span>
+                                                            }
+                                                        </span>
+                                                    }
+                                                }
+                                                <MudIconButton Class="wb-pv-note-toggle" Icon="@(_annotationsVisible ? Icons.Material.Filled.StickyNote2 : Icons.Material.Outlined.StickyNote2)" Size="Size.Small"
+                                                               OnClick="ToggleAnnotationsAsync" title="@(_annotationsVisible ? Strings.Get("PvHideNotes") : Strings.Get("PvShowNotes"))" />
+                                                @* Multi-select actions (ADR "Annotation multi-select" web parity): Ctrl-click / marquee to select, then copy / paste / delete. *@
+                                                @if (_annotationsCanCreate && !_isTouchOnly)
+                                                {
+                                                    <MudIconButton Class="wb-pv-anno-copy" Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Disabled="@(!_hasAnnotationSelection)"
+                                                                   OnClick="CopySelectedAnnotations" title="@Strings.Get("CopyAnnotationsTip")" />
+                                                    <MudIconButton Class="wb-pv-anno-paste" Icon="@Icons.Material.Filled.ContentPaste" Size="Size.Small" Disabled="@(!_hasAnnotationClipboard)"
+                                                                   OnClick="PasteAnnotationsAsync" title="@Strings.Get("PasteAnnotationsTip")" />
+                                                    <MudIconButton Class="wb-pv-anno-delete" Icon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small" Disabled="@(!_hasAnnotationSelection)"
+                                                                   OnClick="DeleteSelectedAnnotationsAsync" title="@Strings.Get("DeleteAnnotationsTip")" />
                                                 }
                                             }
-                                            <MudIconButton Class="wb-pv-note-toggle" Icon="@(_annotationsVisible ? Icons.Material.Filled.StickyNote2 : Icons.Material.Outlined.StickyNote2)" Size="Size.Small"
-                                                           OnClick="ToggleAnnotationsAsync" title="@(_annotationsVisible ? Strings.Get("PvHideNotes") : Strings.Get("PvShowNotes"))" />
-                                            @* Multi-select actions (ADR "Annotation multi-select" web parity): Ctrl-click / marquee to select, then copy / paste / delete. *@
-                                            @if (_annotationsCanCreate && !_isTouchOnly)
-                                            {
-                                                <MudIconButton Class="wb-pv-anno-copy" Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Disabled="@(!_hasAnnotationSelection)"
-                                                               OnClick="CopySelectedAnnotations" title="@Strings.Get("CopyAnnotationsTip")" />
-                                                <MudIconButton Class="wb-pv-anno-paste" Icon="@Icons.Material.Filled.ContentPaste" Size="Size.Small" Disabled="@(!_hasAnnotationClipboard)"
-                                                               OnClick="PasteAnnotationsAsync" title="@Strings.Get("PasteAnnotationsTip")" />
-                                                <MudIconButton Class="wb-pv-anno-delete" Icon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small" Disabled="@(!_hasAnnotationSelection)"
-                                                               OnClick="DeleteSelectedAnnotationsAsync" title="@Strings.Get("DeleteAnnotationsTip")" />
-                                            }
-                                        }
-                                        <span class="wb-pv-rightgrp">
-                                            @if (_pv.HasPages)
-                                            {
-                                                @* Preview zoom (#357): fit ↔ 4×; pinch + ⌘/Ctrl-wheel also zoom (preview.js). *@
-                                                <MudIconButton Class="wb-pv-zoom-out" Icon="@Icons.Material.Filled.Remove" Size="Size.Small" OnClick="@(() => PvZoomAsync(1d / 1.25))" title="@Strings.Get("PvZoomOut")" />
-                                                <MudIconButton Class="wb-pv-zoom-reset" Icon="@Icons.Material.Filled.FilterCenterFocus" Size="Size.Small" OnClick="PvZoomResetAsync" title="@Strings.Get("PvZoomReset")" />
-                                                <MudIconButton Class="wb-pv-zoom-in" Icon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => PvZoomAsync(1.25))" title="@Strings.Get("PvZoomIn")" />
-                                            }
-                                            <MudIconButton Class="wb-pv-fs-btn" Icon="@(_pvFullscreen ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)" Size="Size.Small" OnClick="TogglePreviewFullscreenAsync" title="@(_pvFullscreen ? Strings.Get("PvExitFullscreen") : Strings.Get("PvFullscreen"))" />
-                                        </span>
-                                    </div>
-                                    <div class="wb-pv-host" @ref="_pvHost" style="@(_pv.HasPages ? "" : "display:none;")"></div>
-                                    @if (_detailSensitivityWatermark && (_pv.HasPages || _pv.Kind == "text"))
+                                </Toolbar>
+                                <Overlay>
+                                    @if (_detailSensitivityWatermark)
                                     {
                                         @* Sensitivity watermark (ADR "Document watermarking") — Confidential/Restricted only. *@
                                         <div class="wb-watermark" style="@WatermarkStyle()"></div>
                                     }
-                                    @if (!_pv.HasPages)
-                                    {
-                                        @if (_pv.Kind == "text")
-                                        {
-                                            <div style="flex:1 1 auto; min-height:0; overflow:auto; padding:12px;"><pre style="white-space:pre-wrap; margin:0; font-family:Menlo,Consolas,monospace; font-size:.82em;">@_pv.Text</pre></div>
-                                        }
-                                        else
-                                        {
-                                            <div class="wb-preview-empty">
-                                                <MudText Typo="Typo.body2">@(_selectedItem is null ? Strings.Get("NoDocSelected") : Strings.Get("NoPreview"))</MudText>
-                                            </div>
-                                        }
-                                    }
-                                </div>
-                                @if (_pv.Url is not null && _pv.Converted)
-                                {
-                                    @* Badge on renditions (converted from the original) — not shown for a PDF/image/text
-                                       displayed as-is. See ADR "Converted-preview overlay badge". *@
-                                    <div class="wb-preview-badge" title="@Strings.Get("ConvertedPreviewTooltip")">
-                                        <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Size="Size.Small" />
-                                        <span>@Strings.Get("ConvertedPreview")</span>
-                                    </div>
-                                }
-                            </div>
+                                </Overlay>
+                            </PreviewPane>
                             <div class="wb-gutter wb-gutter-v" data-gutter="chat"><button type="button" class="wb-gutter-toggle"></button></div>
 
                             <div class="wb-chat" data-pane="chat" data-tour="pane-chat">
@@ -1439,55 +1402,12 @@
                                         </div>
                                     }
                                 </div>
-                                @* Preview with the same pdf.js hit-overlay / find / click-to-copy as the Repositories
-                                   pane (ADRs 0268/0269/0282), reusing the shared _pvHost + _pv* state (the two tabs
-                                   are mutually exclusive in the DOM). *@
-                                <div class="wb-preview @(_pvFullscreen ? "wb-pv-fullscreen" : "")" style="flex:1 1 auto; min-height:0; position:relative; display:flex; flex-direction:column;">
-                                    <div style="display:flex; flex-direction:column; flex:1 1 auto; min-width:0;">
-                                        @* The toolbar shows for a page preview (find + full-screen) or a text preview (full-screen only). *@
-                                        <div class="wb-pv-findbar" style="@((_pv.HasPages || _pv.Kind == "text") ? "" : "display:none;")">
-                                            @if (_pv.HasPages)
-                                            {
-                                                <MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Small" />
-                                                <MudTextField T="string" Value="_pv.FindQuery" ValueChanged="ApplyFindAsync" Immediate="true" Placeholder="@Strings.Get("FindInDocument")"
-                                                              Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:220px;" />
-                                                <span class="mud-text-secondary" style="font-size:.8em; min-width:46px;">@_pv.Index / @_pv.Count</span>
-                                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Disabled="@(_pv.Count == 0)" OnClick="FindPrevAsync" />
-                                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Disabled="@(_pv.Count == 0)" OnClick="FindNextAsync" />
-                                            }
-                                            <span class="wb-pv-rightgrp">
-                                                @if (_pv.HasPages)
-                                                {
-                                                    <MudIconButton Class="wb-pv-zoom-out" Icon="@Icons.Material.Filled.Remove" Size="Size.Small" OnClick="@(() => PvZoomAsync(1d / 1.25))" title="@Strings.Get("PvZoomOut")" />
-                                                    <MudIconButton Class="wb-pv-zoom-reset" Icon="@Icons.Material.Filled.FilterCenterFocus" Size="Size.Small" OnClick="PvZoomResetAsync" title="@Strings.Get("PvZoomReset")" />
-                                                    <MudIconButton Class="wb-pv-zoom-in" Icon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => PvZoomAsync(1.25))" title="@Strings.Get("PvZoomIn")" />
-                                                }
-                                                <MudIconButton Class="wb-pv-fs-btn" Icon="@(_pvFullscreen ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)" Size="Size.Small" OnClick="TogglePreviewFullscreenAsync" title="@(_pvFullscreen ? Strings.Get("PvExitFullscreen") : Strings.Get("PvFullscreen"))" />
-                                            </span>
-                                        </div>
-                                        <div class="wb-pv-host" @ref="_pvHost" style="@(_pv.HasPages ? "" : "display:none;")"></div>
-                                        @if (!_pv.HasPages)
-                                        {
-                                            @if (_pv.Kind == "text")
-                                            {
-                                                <div style="flex:1 1 auto; min-height:0; overflow:auto; padding:12px;"><pre style="white-space:pre-wrap; margin:0; font-family:Menlo,Consolas,monospace; font-size:.82em;">@_pv.Text</pre></div>
-                                            }
-                                            else
-                                            {
-                                                <div class="wb-preview-empty">
-                                                    <MudText Typo="Typo.body2">@(_selectedInboxItem is null ? Strings.Get("NoItemSelected") : Strings.Get("NoPreview"))</MudText>
-                                                </div>
-                                            }
-                                        }
-                                    </div>
-                                    @if (_pv.Converted && _pv.HasPages)
-                                    {
-                                        <div class="wb-preview-badge" title="This is a generated preview, not the original file.">
-                                            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Size="Size.Small" />
-                                            <span>@Strings.Get("ConvertedPreview")</span>
-                                        </div>
-                                    }
-                                </div>
+                                @* The inbox previews a STAGED file — nothing to annotate, so no Toolbar and no
+                                   annotation host; the gestures become no-ops rather than missing features. *@
+                                <PreviewPane @ref="_inboxPreview"
+                                             Style="flex:1 1 auto; min-height:0; position:relative; display:flex; flex-direction:column;"
+                                             EmptyText="@(_selectedInboxItem is null ? Strings.Get("NoItemSelected") : Strings.Get("NoPreview"))"
+                                             ConvertedBadgeTooltip="This is a generated preview, not the original file." />
                             </div>
                         }
                     </div>
@@ -1993,24 +1913,13 @@
                                 }
                             </div>
                             <div style="flex:1 1 auto; display:flex; min-height:0;">
-                                <div class="wb-preview" style="flex:1.6 1 0; min-width:0; display:flex; flex-direction:column; position:relative;">
-                                    <div class="wb-pv-host" @ref="_rbPvHost" style="@(_rbPv.HasPages ? "flex:1 1 auto; min-height:0; overflow:auto;" : "display:none;")"></div>
-                                    @if (!_rbPv.HasPages)
-                                    {
-                                        @if (_rbPv.Kind == "text")
-                                        {
-                                            <div style="flex:1 1 auto; min-height:0; overflow:auto; padding:12px;"><pre style="white-space:pre-wrap; margin:0; font-family:Menlo,Consolas,monospace; font-size:.82em;">@_rbPv.Text</pre></div>
-                                        }
-                                        else
-                                        {
-                                            <div class="wb-pv-placeholder mud-text-secondary" style="flex:1 1 auto; display:flex; align-items:center; justify-content:center;">@Strings.Get("NoPreview")</div>
-                                        }
-                                    }
-                                    @if (_rbPv.Converted && _rbPv.HasPages)
-                                    {
-                                        <div class="wb-pv-badge">@Strings.Get("RbConvertedPreview")</div>
-                                    }
-                                </div>
+                                @* The recycle bin previews a DELETED document: nothing to annotate, and no
+                                   toolbar — it is a glance at what is about to be restored or purged. It used
+                                   to carry its own duplicate host purely to escape the shared one (ADR 0558). *@
+                                <PreviewPane @ref="_rbPreview" ShowToolbar="false"
+                                             Style="flex:1.6 1 0; min-width:0; display:flex; flex-direction:column; position:relative;"
+                                             EmptyText="@Strings.Get("NoPreview")"
+                                             ConvertedBadgeTooltip="@Strings.Get("RbConvertedPreview")" />
                                 <div style="flex:1 1 0; min-width:0; overflow:auto; border-left:1px solid var(--mud-palette-lines-default); padding:8px;">
                                     <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-1">@Strings.Get("RbCommentsHeader")</MudText>
                                     @foreach (var c in _rbComments)
@@ -2345,101 +2254,58 @@
         : string.Join(", ", codes.Select(c => _ocrCatalog.FirstOrDefault(o => o.Code == c)?.DisplayName ?? c));
     private string? _downloadUrl;
 
-    // pdf.js / image preview with hit-overlay (ADRs 0268/0269/0282). The host div is JS-owned (preview.js).
-    // The display state (kind/text/find/converted/url) lives in _pv so the clear-on-tab-switch reset — which
-    // stops one tab's preview leaking into the other's shared host — is unit-testable (PreviewPaneState).
-    private readonly PreviewPaneState _pv = new();
-    private ElementReference _pvHost;
-    private IJSObjectReference? _previewModule;
-    private DotNetObjectReference<Home>? _pvSelfRef;
-    private bool _pvFullscreen;                // in-app maximize of the preview pane (ADR 0295)
+    // The three preview panes (ADRs 0268/0269/0282/0294/0295), one INSTANCE each rather than the shared
+    // JS-owned host these tabs used to take turns with. Each owns its own host, state, preview.js module and
+    // DotNetObjectReference, so a stale preview cannot survive into another tab and there is nothing to reset
+    // on a tab switch. Null until its tab has rendered — the workbench renders one tab at a time.
+    private PreviewPane? _repoPreview;
 
-    private record PvResult { public string Kind { get; set; } = ""; public string Text { get; set; } = ""; }
+    // Which pane a preview was asked for. Only one tab is live at a time, so one pending slot is enough.
+    private enum PreviewSlot { Repositories, Inbox, RecycleBin }
 
-    // Renders a preview (image/pdf/text) with its hit-overlay into the JS host (preview.js). `previewUrl` is the
-    // presigned rendition URL; `textLayoutUrl` is the version's text-layout link (may be null / 204).
-    private async Task RenderPreviewAsync(string? previewUrl, string? textLayoutUrl, string? seedQuery)
+    // A preview requested before its pane existed, replayed once it does (see ShowPreviewAsync).
+    private (PreviewSlot Slot, string? Url, string? Layout, bool Converted, bool HasVersion)? _pendingPreview;
+
+    // Renders into one of the three panes — or remembers the request when that pane is not in the DOM yet.
+    //
+    // Two ways that happens, and BOTH are ordinary use rather than edge cases: a pane's @ref is only assigned
+    // after a render, so (a) opening a document from another tab — a search hit, a notification — switches tab
+    // and selects in one synchronous run, and (b) the Inbox and Recycle-bin panes live inside an "is something
+    // selected?" conditional, so the FIRST selection creates them. The page could previously get away with
+    // calling StateHasChanged() mid-method to materialise its own host div; a child component cannot do that on
+    // its own behalf, so the request waits for OnAfterRenderAsync instead. Rendering into a null ref would lose
+    // the preview silently, which is the worst possible failure for something this visible.
+    private async Task ShowPreviewAsync(PreviewSlot slot, string? url, string? layout, bool converted, bool hasVersion = false)
     {
-        _pv.Kind = "";
-        _pv.Text = null;
-        _pv.Count = 0;
-        _pv.Index = 0;
-        _pv.FindQuery = seedQuery ?? "";
-
-        if (previewUrl is null)
+        var pane = slot switch
         {
-            _pv.Kind = "unsupported";
+            PreviewSlot.Repositories => _repoPreview,
+            PreviewSlot.Inbox => _inboxPreview,
+            _ => _rbPreview,
+        };
+
+        if (pane is null)
+        {
+            _pendingPreview = (slot, url, layout, converted, hasVersion);
             return;
         }
 
-        // Fetch the per-page word boxes (may be 204 = no overlay).
-        List<TextLayoutPage>? layout = null;
-        if (textLayoutUrl is not null)
+        await pane.RenderAsync(url, layout, converted);
+        if (slot == PreviewSlot.Repositories)
         {
-            try
-            {
-                using var r = await Http.GetAsync(textLayoutUrl.TrimStart('/'));
-                if (r.IsSuccessStatusCode && r.StatusCode != HttpStatusCode.NoContent)
-                {
-                    layout = (await r.Content.ReadFromJsonAsync<TextLayoutResponse>())?.Pages;
-                }
-            }
-            catch (Exception) { /* no overlay */ }
-        }
-
-        _previewModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./preview.js");
-        _pvSelfRef ??= DotNetObjectReference.Create(this);
-        StateHasChanged(); // make sure the host div is in the DOM before JS fills it
-
-        try
-        {
-            var result = await _previewModule.InvokeAsync<PvResult>("load", _pvHost, previewUrl, layout, _pvSelfRef);
-            _pv.Kind = result.Kind;
-            _pv.Text = result.Text;
-            if (_pv.HasPages && !string.IsNullOrWhiteSpace(_pv.FindQuery))
-            {
-                _pv.Count = await _previewModule.InvokeAsync<int>("setFind", _pv.FindQuery);
-                _pv.Index = _pv.Count > 0 ? 1 : 0;
-            }
-        }
-        catch (Exception)
-        {
-            _pv.Kind = "error";
+            await ApplyAnnotatableAsync(hasVersion);
         }
     }
+    private PreviewPane? _inboxPreview;
+    private PreviewPane? _rbPreview;
 
-    private async Task ApplyFindAsync(string query)
+
+    // Reached via the pane's WordCopied callback rather than from JS directly: the pane owns the
+    // DotNetObjectReference that preview.js calls into (ADR 0558).
+    private Task OnPreviewWordCopiedAsync((string Word, bool Append) e)
     {
-        _pv.FindQuery = query;
-        if (_previewModule is null || !_pv.HasPages)
-        {
-            return;
-        }
-
-        _pv.Count = await _previewModule.InvokeAsync<int>("setFind", query);
-        _pv.Index = _pv.Count > 0 ? 1 : 0;
-    }
-
-    private async Task FindNextAsync()
-    {
-        if (_previewModule is not null && _pv.Count > 0)
-        {
-            _pv.Index = await _previewModule.InvokeAsync<int>("next");
-        }
-    }
-
-    private async Task FindPrevAsync()
-    {
-        if (_previewModule is not null && _pv.Count > 0)
-        {
-            _pv.Index = await _previewModule.InvokeAsync<int>("prev");
-        }
-    }
-
-    [JSInvokable]
-    public void OnPreviewWordCopied(string word, bool append)
-    {
-        Snackbar.Add(append ? $"Appended '{word}' to the clipboard." : $"Copied '{word}' to the clipboard.", Severity.Info);
+        Snackbar.Add(e.Append ? $"Appended '{e.Word}' to the clipboard." : $"Copied '{e.Word}' to the clipboard.", Severity.Success);
+        return Task.CompletedTask;
     }
 
     // --- Sticky notes / positional annotations (ADR "Document annotations") --------------------------------
@@ -2513,7 +2379,7 @@
     // Pushes the current (visible) note set to preview.js to draw the markers.
     private async Task PushAnnotationsAsync()
     {
-        if (_previewModule is null || !_pv.HasPages)
+        if (_repoPreview is null || !_repoPreview.State.HasPages)
         {
             return;
         }
@@ -2523,7 +2389,7 @@
             : [];
         // Cast to object: InvokeVoidAsync's last parameter is `params object?[]`, so passing the array directly
         // would spread its elements as separate JS arguments instead of passing the whole array as `annos`.
-        await _previewModule.InvokeVoidAsync("setAnnotations", (object)markers);
+        await _repoPreview.SetAnnotationsAsync(markers);
     }
 
     private async Task ToggleAnnotationsAsync()
@@ -2547,9 +2413,9 @@
 
         await SetShapeToolAsync(0); // notes and shape-drawing are mutually exclusive
         _annotationAddMode = true;
-        if (_previewModule is not null)
+        if (_repoPreview is not null)
         {
-            await _previewModule.InvokeVoidAsync("setAddMode", true);
+            await _repoPreview.SetAddModeAsync(true);
         }
 
         Snackbar.Add(Strings.Get("StAnnClickToPlace"), Severity.Info);
@@ -2558,9 +2424,9 @@
     private async Task StopAddNoteAsync()
     {
         _annotationAddMode = false;
-        if (_previewModule is not null)
+        if (_repoPreview is not null)
         {
-            await _previewModule.InvokeVoidAsync("setAddMode", false);
+            await _repoPreview.SetAddModeAsync(false);
         }
     }
 
@@ -2585,17 +2451,16 @@
     private async Task SetShapeToolAsync(int kind)
     {
         _annotationTool = kind;
-        if (_previewModule is not null)
+        if (_repoPreview is not null)
         {
-            await _previewModule.InvokeVoidAsync("setDrawMode", kind);
+            await _repoPreview.SetDrawModeAsync(kind);
         }
     }
 
     // A shape was drawn by dragging (ADR "Annotation markup") — create it immediately with the tool's default
     // colour. The tool deactivates after one draw (ADR "Draw-tool behaviour") — draw exactly one shape, then the
     // button returns to inactive.
-    [JSInvokable]
-    public async Task OnShapeDrawn(int pageIndex, int kind, double x, double y, double width, double height)
+    public async Task OnShapeDrawnAsync(int pageIndex, int kind, double x, double y, double width, double height)
     {
         if (_pvAnnotationsUrl is null || kind <= 0)
         {
@@ -2615,8 +2480,7 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    [JSInvokable]
-    public async Task OnAnnotationPlaced(int pageIndex, double x, double y)
+    public async Task OnAnnotationPlacedAsync(int pageIndex, double x, double y)
     {
         await StopAddNoteAsync(); // one note per Add-note activation (ADR "Draw-tool behaviour")
         if (_pvAnnotationsUrl is null)
@@ -2650,8 +2514,7 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    [JSInvokable]
-    public async Task OnAnnotationClicked(Guid id)
+    public async Task OnAnnotationClickedAsync(Guid id)
     {
         var note = _annotations.FirstOrDefault(a => a.Id == id);
         if (note is null || _pvAnnotationsUrl is null)
@@ -2706,8 +2569,7 @@
     // Drag-to-reposition (ADR "Document annotations"): the author dragged a note to a new spot; persist the new
     // position via the same PUT (keeping text/colour), using the etag the list already embeds. On failure/412 a
     // reload snaps it back to the persisted position and refreshes the etag.
-    [JSInvokable]
-    public async Task OnAnnotationMoved(Guid id, int pageIndex, double x, double y)
+    public async Task OnAnnotationMovedAsync(Guid id, int pageIndex, double x, double y)
     {
         var note = _annotations.FirstOrDefault(a => a.Id == id);
         if (note is null || _pvAnnotationsUrl is null || !note.CanEdit)
@@ -2745,8 +2607,7 @@
 
     // Resize (ADR "Post-it note boxes" web parity): the author dragged a note box's corner grip; persist the new
     // size (keeping position/text/colour), updating in place from the response etag like the move.
-    [JSInvokable]
-    public async Task OnAnnotationResized(Guid id, int pageIndex, double width, double height)
+    public async Task OnAnnotationResizedAsync(Guid id, int pageIndex, double width, double height)
     {
         var note = _annotations.FirstOrDefault(a => a.Id == id);
         if (note is null || _pvAnnotationsUrl is null || !note.CanEdit)
@@ -2782,8 +2643,7 @@
     // --- Multi-select: select / marquee / group-move / delete / copy-paste (ADR "Annotation multi-select" web parity) ---
 
     // A click / Ctrl-click on an annotation: a plain click selects just it; a Ctrl-click toggles it in the set.
-    [JSInvokable]
-    public async Task OnAnnotationSelect(Guid id, bool toggle)
+    public async Task OnAnnotationSelectAsync(Guid id, bool toggle)
     {
         if (toggle)
         {
@@ -2799,16 +2659,14 @@
     }
 
     // A marquee drag over empty page area selected the enclosed annotations (Ctrl adds to the current selection).
-    [JSInvokable]
-    public async Task OnAnnotationMarquee(Guid[] ids, bool additive)
+    public async Task OnAnnotationMarqueeAsync(Guid[] ids, bool additive)
     {
         if (!additive) _selectedAnnotationIds.Clear();
         foreach (var id in ids) _selectedAnnotationIds.Add(id);
         await UpdateAnnotationSelectionAsync();
     }
 
-    [JSInvokable]
-    public async Task OnAnnotationClearSelection()
+    public async Task OnAnnotationClearSelectionAsync()
     {
         if (_selectedAnnotationIds.Count == 0) return;
         _selectedAnnotationIds.Clear();
@@ -2819,17 +2677,16 @@
     {
         _hasAnnotationSelection = _selectedAnnotationIds.Count > 0;
         // Toggle the outline on the existing elements (a full rebuild would break double-click-to-edit).
-        if (_previewModule is not null)
+        if (_repoPreview is not null)
         {
-            await _previewModule.InvokeVoidAsync("setSelection", (object)_selectedAnnotationIds.Select(g => g.ToString()).ToArray());
+            await _repoPreview.SetSelectionAsync(_selectedAnnotationIds.Select(g => g.ToString()).ToArray());
         }
         await InvokeAsync(StateHasChanged);
     }
 
     // A group drag moved the whole selection by a normalized delta — shift every selected editable annotation on
     // the page, persist each, then reload.
-    [JSInvokable]
-    public async Task OnAnnotationGroupMove(int pageIndex, double dx, double dy)
+    public async Task OnAnnotationGroupMoveAsync(int pageIndex, double dx, double dy)
     {
         if (_pvAnnotationsUrl is null) return;
         var targets = _annotations.Where(a => a.PageIndex == pageIndex && a.CanEdit && _selectedAnnotationIds.Contains(a.Id)).ToList();
@@ -2930,60 +2787,20 @@
         public string? Points { get; set; }
     }
 
-    // Toggles the preview pane's in-app full-screen (a fixed overlay stopping above the tab bar, ADR 0295).
-    // preview.js measures the tab bar (so the overlay leaves it clickable) and manages a document-level Esc
-    // listener that calls OnPreviewEscape to exit — kept in JS since the JS-owned host steals focus from any
-    // Blazor parent, so a component @onkeydown wouldn't reliably receive Escape.
-    private async Task TogglePreviewFullscreenAsync()
+    // Sticky notes are available whenever a real version preview actually rendered (ADR "Document annotations").
+    private async Task ApplyAnnotatableAsync(bool hasVersion)
     {
-        _pvFullscreen = !_pvFullscreen;
-        if (_previewModule is not null && _pvSelfRef is not null)
+        _pvAnnotatable = hasVersion && (_repoPreview?.State.HasPages ?? false) && _pvAnnotationsUrl is not null;
+        if (_pvAnnotatable)
         {
-            await _previewModule.InvokeVoidAsync("setFullscreen", _pvSelfRef, _pvFullscreen);
+            await LoadAnnotationsAsync();
         }
     }
 
-    // Preview zoom (#357): multiply the current zoom (clamped 1..4 in preview.js), or reset to fit. The zoom state
-    // lives on the host in JS, so this just nudges it — pinch / ⌘-wheel drive the same applyZoom.
-    private async Task PvZoomAsync(double multiplier)
-    {
-        if (_previewModule is not null)
-        {
-            await _previewModule.InvokeVoidAsync("zoomBy", _pvHost, multiplier);
-        }
-    }
-
-    private async Task PvZoomResetAsync()
-    {
-        if (_previewModule is not null)
-        {
-            await _previewModule.InvokeVoidAsync("zoomReset", _pvHost);
-        }
-    }
-
-    [JSInvokable]
-    public void OnPreviewEscape()
-    {
-        if (_pvFullscreen)
-        {
-            _pvFullscreen = false;
-            _ = ExitFullscreenAsync();
-            StateHasChanged();
-        }
-    }
-
-    private async Task ExitFullscreenAsync()
-    {
-        if (_previewModule is not null && _pvSelfRef is not null)
-        {
-            await _previewModule.InvokeVoidAsync("setFullscreen", _pvSelfRef, false);
-        }
-    }
-
-    // Resets the shared pdf.js preview state (used by both the Repositories and Inbox panes, which reuse _pvHost).
+    // Drops what the Repositories/Inbox previews show, plus the annotation state that belongs to THIS page
+    // (the markers, the selection, the clipboard). Each pane clears its own display + full-screen.
     private void ClearPreviewPane()
     {
-        _pv.Clear();
         _pvAnnotatable = false;
         _annotationAddMode = false;
         _annotationTool = 0;
@@ -2993,11 +2810,8 @@
         _annotationClipboard.Clear();
         _hasAnnotationSelection = false;
         _hasAnnotationClipboard = false;
-        if (_pvFullscreen)
-        {
-            _pvFullscreen = false;
-            _ = ExitFullscreenAsync();
-        }
+        _repoPreview?.Clear();
+        _inboxPreview?.Clear();
     }
 
     // The node whose comment thread is shown — a selected folder OR document (comments work on any Document,
@@ -3298,6 +3112,27 @@
         {
             _inboxDropWired = await _module.InvokeAsync<bool>("initInboxDrop", _inboxDropZone, _selfRef);
         }
+
+        // Replay a preview requested before its pane existed (see ShowPreviewAsync). In the always-executed
+        // part, because a pane appears on whichever render first carries its markup — not necessarily the
+        // page's first render — and LAST, after the drop/pane wiring above: this is the only await in here
+        // that can take real time (a JS preview load), and the wiring must not queue behind it.
+        if (_pendingPreview is { } pending)
+        {
+            var pane = pending.Slot switch
+            {
+                PreviewSlot.Repositories => _repoPreview,
+                PreviewSlot.Inbox => _inboxPreview,
+                _ => _rbPreview,
+            };
+
+            if (pane is not null)
+            {
+                _pendingPreview = null;
+                await ShowPreviewAsync(pending.Slot, pending.Url, pending.Layout, pending.Converted, pending.HasVersion);
+                StateHasChanged();
+            }
+        }
     }
 
     private async Task SetTab(Tab tab)
@@ -3314,8 +3149,9 @@
         {
             _inboxDropWired = false;
         }
-        // The Repositories and Inbox preview panes share _pvHost/_pv* (mutually exclusive in the DOM); reset so a
-        // stale kind from the previous tab doesn't render the fresh, empty host as if it had pages.
+        // Each tab owns its PreviewPane now, so this is no longer about stopping a leak between two tabs through
+        // one shared host (ADR 0558) — it drops the outgoing tab's annotation state and blanks the panes, so
+        // returning to a tab does not show the previous document until the new selection has loaded.
         ClearPreviewPane();
         _activeTab = tab;
 
@@ -3372,10 +3208,6 @@
     private string? _rbMaskName;
     private List<FieldGroup>? _rbIndexData;
     private List<ChatMessageResponse> _rbComments = new();
-    // A dedicated preview host + state, completely separate from the Repositories/Inbox _pv/_pvHost so the
-    // recycle-bin preview is never entangled with the others.
-    private readonly PreviewPaneState _rbPv = new();
-    private ElementReference _rbPvHost;
 
     private async Task LoadRecycleBinAsync()
     {
@@ -3422,8 +3254,7 @@
             var latest = VersionListResponse.PickCurrent(versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [], versions?.CurrentVersionId);
             var previewUrl = latest is null ? null : RelativeToAbsolute(Links.Href(latest.Links, "preview"));
             var textLayoutUrl = latest is null ? null : Links.Href(latest.Links, "text-layout");
-            _rbPv.Converted = latest?.PreviewConverted ?? false;
-            await RenderRbPreviewAsync(previewUrl, textLayoutUrl);
+            await ShowPreviewAsync(PreviewSlot.RecycleBin, previewUrl, textLayoutUrl, latest?.PreviewConverted ?? false);
         }
         catch (Exception)
         {
@@ -3432,51 +3263,9 @@
         StateHasChanged();
     }
 
-    // Renders into the recycle bin's OWN host (_rbPvHost) with its own state (_rbPv), sharing only the stateless
-    // preview.js module. Only one tab is ever active, so the module's single active preview is this one.
-    private async Task RenderRbPreviewAsync(string? previewUrl, string? textLayoutUrl)
-    {
-        _rbPv.Kind = "";
-        _rbPv.Text = null;
-        if (previewUrl is null)
-        {
-            _rbPv.Kind = "unsupported";
-            return;
-        }
-
-        List<TextLayoutPage>? layout = null;
-        if (textLayoutUrl is not null)
-        {
-            try
-            {
-                using var r = await Http.GetAsync(textLayoutUrl.TrimStart('/'));
-                if (r.IsSuccessStatusCode && r.StatusCode != HttpStatusCode.NoContent)
-                {
-                    layout = (await r.Content.ReadFromJsonAsync<TextLayoutResponse>())?.Pages;
-                }
-            }
-            catch (Exception) { }
-        }
-
-        _previewModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./preview.js");
-        _pvSelfRef ??= DotNetObjectReference.Create(this);
-        StateHasChanged();
-        try
-        {
-            var result = await _previewModule.InvokeAsync<PvResult>("load", _rbPvHost, previewUrl, layout, _pvSelfRef);
-            _rbPv.Kind = result.Kind;
-            _rbPv.Text = result.Text;
-        }
-        catch (Exception)
-        {
-            _rbPv.Kind = "error";
-        }
-    }
-
-    private void ClearRbPreview()
-    {
-        _rbPv.Clear();
-    }
+    // The recycle bin now renders through its own PreviewPane instance like every other tab, so there is no
+    // hand-rolled second host to keep in step (ADR 0558).
+    private void ClearRbPreview() => _rbPreview?.Clear();
 
     private async Task RestoreRecycleBinItemAsync(RecycleBinDto item)
     {
@@ -4635,24 +4424,23 @@
             var confirmed = versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [];
             var latest = VersionListResponse.PickCurrent(confirmed, versions?.CurrentVersionId);
             string? textLayoutUrl = null;
+            string? previewUrl = null;
+            var converted = false;
             if (latest is not null)
             {
-                _pv.Url = RelativeToAbsolute(Links.Href(latest.Links, "preview"));
+                previewUrl = RelativeToAbsolute(Links.Href(latest.Links, "preview"));
                 _downloadUrl = RelativeToAbsolute(Links.Href(latest.Links, "download"));
-                _pv.Converted = latest.PreviewConverted;
+                converted = latest.PreviewConverted;
                 textLayoutUrl = Links.Href(latest.Links, "text-layout");
                 _pvAnnotationsUrl = Links.Href(latest.Links, "annotations");
             }
 
             DeriveSystemFields(item, confirmed, versions?.CurrentVersionId);
-            await RenderPreviewAsync(_pv.Url, textLayoutUrl, seedQuery: null);
-
-            // Sticky notes are available whenever a real version preview loaded (ADR "Document annotations").
-            _pvAnnotatable = latest is not null && _pv.HasPages && _pvAnnotationsUrl is not null;
-            if (_pvAnnotatable)
-            {
-                await LoadAnnotationsAsync();
-            }
+            // The pane may not EXIST yet: @ref is assigned after a render, and the two ways a document is
+            // opened from elsewhere — a search hit, a notification — call SetTab(Repositories) and select in the
+            // same synchronous run, with no render in between. Rendering straight into a null ref would lose the
+            // preview silently on exactly those paths, so defer to OnAfterRenderAsync when it is not there yet.
+            await ShowPreviewAsync(PreviewSlot.Repositories, previewUrl, textLayoutUrl, converted, latest is not null);
         }
         catch (HttpRequestException)
         {
@@ -4678,7 +4466,6 @@
         _detailVersionNumber = null;
         _detailIndexData = null;
         _detailTags = null;
-        _pv.Url = null;
         _downloadUrl = null;
         ClearPreviewPane();
         _commentTarget = null;
@@ -7227,7 +7014,7 @@
     private async Task SelectInboxItemAsync(InboxItem item)
     {
         _selectedInboxItem = item;
-        _pv.Converted = false;
+        _inboxPreview?.Clear();
         _inboxStgFields.Clear();
         _inboxStgMasks = [];
         ClearPreviewPane();
@@ -7241,9 +7028,9 @@
             if (r.IsSuccessStatusCode && r.StatusCode != HttpStatusCode.NoContent)
             {
                 var preview = await r.Content.ReadFromJsonAsync<InboxPreviewResponse>();
-                _pv.Converted = preview?.PreviewConverted ?? false;
+
                 var textLayoutUrl = Links.Href(preview?.Links, "text-layout");
-                await RenderPreviewAsync(preview?.PreviewUrl, textLayoutUrl, seedQuery: null);
+                await ShowPreviewAsync(PreviewSlot.Inbox, preview?.PreviewUrl, textLayoutUrl, preview?.PreviewConverted ?? false);
             }
         }
         catch (Exception)
