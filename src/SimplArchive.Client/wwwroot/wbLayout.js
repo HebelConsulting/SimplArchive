@@ -58,6 +58,19 @@ export function watchViewport(dotNetRef) {
 
 // A touch-ONLY device: no hover + coarse pointer. True on phones/tablets, FALSE on a hybrid with a mouse. Used to
 // gate annotation authoring (#349) — a device capability, so read once (it doesn't change with viewport resize).
+// The visitor's desktop OS, for showing the right mount instructions (#461). The browser cannot mount a drive
+// itself, so the one useful thing it can do is tell the user how — and that differs per platform.
+//
+// userAgentData is the modern, un-deprecated source; navigator.platform is the fallback for browsers that lack
+// it. Returns "mac" | "windows" | "linux" | "other" — deliberately coarse, because the instructions are.
+export function desktopOs() {
+    const p = (navigator.userAgentData?.platform || navigator.platform || '').toLowerCase();
+    if (p.includes('mac')) return 'mac';
+    if (p.includes('win')) return 'windows';
+    if (p.includes('linux') || p.includes('x11')) return 'linux';
+    return 'other';
+}
+
 export function isTouchOnly() {
     return !!(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
 }

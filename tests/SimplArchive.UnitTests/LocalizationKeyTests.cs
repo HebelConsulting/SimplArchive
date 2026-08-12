@@ -13,7 +13,28 @@ namespace SimplArchive.UnitTests;
 // missing from German is a silently-untranslated string, which is the same failure one step later.
 public class LocalizationKeyTests
 {
-    private static readonly Regex GetCall = new(@"Strings\.Get\(""([^""]+)""\)", RegexOptions.Compiled);
+    // Every string literal inside a Strings.Get(...) call, not just the whole-argument form.
+    //
+    // This required the literal to be the ENTIRE argument — `Strings.Get("Key")` — so it was blind to the shape
+    // this codebase now uses everywhere after #423's ternary fix:
+    //
+    //     Strings.Get(enabled ? "WdRegenerate" : "WdGenerate")
+    //     Strings.Get(resp.StatusCode switch { Conflict => "StTagExists", _ => "StErrAddTag" })
+    //
+    // Roughly twenty such call sites were introduced on 2026-08-12 alone, so twenty keys were referenced with
+    // NOTHING checking they exist — and `Strings.Get` returns the key itself when one is missing, so the user
+    // reads "WdRegenerate" on a button. That is precisely the failure this test exists to prevent, and it was
+    // invisible for the same reason the literal scan was: a guard sees the shape its author had in front of them.
+    // Every KEY-SHAPED literal inside a Strings.Get(...) call — PascalCase, no spaces. Every key in Strings.resx
+    // starts with a capital, which is what makes that test decidable.
+    //
+    // The shape matters because a switch expression puts a literal in the MATCH position too:
+    //
+    //     Strings.Get(os switch { "mac" => "WebDavStepsMac", _ => "WebDavStepsOther" })
+    //
+    // A pattern that simply took the first literal in the call read "mac" as a missing key. Requiring the
+    // key shape skips the operands and keeps the results, with no need to understand the expression.
+    private static readonly Regex GetCall = new(@"Strings\.Get\((?:[^()]|\([^()]*\))*?""([A-Z][A-Za-z0-9_]*)""", RegexOptions.Compiled);
     private static readonly Regex TrMarkup = new(@"\{loc:Tr\s+([A-Za-z0-9_]+)\s*\}", RegexOptions.Compiled);
     private static readonly Regex ResxKey = new(@"<data name=""([^""]+)""", RegexOptions.Compiled);
 

@@ -27,13 +27,16 @@ public class WorkbenchShellSizeTests
 
     // 9,479 at the start of ADR 0558. Lower this as tranches land.
     //
-    // RAISED ONCE, deliberately and on the record, for the reminder fix (#420, ADR 0559). A
+    // RAISED TWICE, deliberately and on the record. The reminder fix (#420, ADR 0559), and the WebDAV ribbon
+    // button (#461) — a ribbon affordance genuinely belongs to the shell, since the ribbon IS the shell. Both
+    // times the guard forced the growth to be argued for and both times it shrank first: commentary that
+    // belonged in a commit message came out, and only the code stayed. A
     // one-line expression-bodied handler became a real method with a fetch fallback, because taking the address
     // from pane state was a bug that made "Set reminder" silently do nothing. The guard did its job here — it
     // caught +16, most of which was commentary that belonged in the commit message, and only the 11 lines that
     // are actually code survived the trim. That is the intended interaction: growth has to be argued for, not
     // noticed later.
-    private const int Ceiling = 3_089;
+    private const int Ceiling = 3_101;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

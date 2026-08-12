@@ -7,20 +7,37 @@
     <StackPanel Margin="18" Spacing="10">
         <TextBlock TextWrapping="Wrap" Text="{loc:Tr WdBody}" />
 
+        <!-- Each value gets its own Copy button (#461). A read-only TextBox can be selected and copied by hand,
+             but these are exactly the values a user must paste into an OS dialog, and "select the text first"
+             is the manual step the issue set out to remove. -->
         <TextBlock Text="{loc:Tr WdMountUrl}" FontWeight="SemiBold" FontSize="12" />
-        <TextBox x:Name="UrlBox" IsReadOnly="True" />
+        <DockPanel LastChildFill="True">
+            <Button DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnCopyUrl"
+                    Content="{loc:Tr WdCopy}" ToolTip.Tip="{loc:Tr WdCopyUrlTip}" />
+            <TextBox x:Name="UrlBox" IsReadOnly="True" />
+        </DockPanel>
         <TextBlock Text="{loc:Tr WdUsername}" FontWeight="SemiBold" FontSize="12" />
-        <TextBox x:Name="UsernameBox" IsReadOnly="True" />
+        <DockPanel LastChildFill="True">
+            <Button DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnCopyUsername"
+                    Content="{loc:Tr WdCopy}" ToolTip.Tip="{loc:Tr WdCopyUserTip}" />
+            <TextBox x:Name="UsernameBox" IsReadOnly="True" />
+        </DockPanel>
 
         <Border x:Name="PasswordPanel" IsVisible="False" Background="#2e7d32" CornerRadius="3" Padding="8" >
             <StackPanel Spacing="4">
                 <TextBlock Foreground="White" FontSize="12" Text="{loc:Tr WdCopyPw}" />
-                <TextBox x:Name="PasswordBox" IsReadOnly="True" />
+                <DockPanel LastChildFill="True">
+                    <Button DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnCopyPassword"
+                            Content="{loc:Tr WdCopy}" ToolTip.Tip="{loc:Tr WdCopyPwTip}" />
+                    <TextBox x:Name="PasswordBox" IsReadOnly="True" />
+                </DockPanel>
             </StackPanel>
         </Border>
         <TextBlock x:Name="StatusText" Foreground="{DynamicResource WbMuted}" FontSize="12" TextWrapping="Wrap" />
 
         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <!-- Straight from "I have credentials" to a mounted drive, without closing the dialog first (#461). -->
+            <Button x:Name="OpenFolderButton" Content="{loc:Tr WdOpenFolder}" IsVisible="False" Click="OnOpenFolder" />
             <Button x:Name="RevokeButton" Content="{loc:Tr WdRevoke}" IsVisible="False" Click="OnRevoke" />
             <Button x:Name="GenerateButton" Content="{loc:Tr WdGenerate}" Click="OnGenerate" />
             <Button Content="{loc:Tr Close}" Click="OnClose" IsCancel="True" />

@@ -427,6 +427,12 @@
                     <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="RefreshAsync" title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
                         <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
                     </MudButton>
+                    @* WebDAV (#461). ONE state here against the desktop's three — a browser cannot mount, probe
+                       or open a file manager. A platform constraint, not a parity gap (ADRs 0511/0560). *@
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="OpenWebDavAsync" data-tour="action-webdav"
+                               title="@Strings.Get("RibbonWebDav")" aria-label="@Strings.Get("RibbonWebDav")">
+                        <MudIcon Icon="@Icons.Material.Filled.DriveFolderUpload" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonWebDav")</span>
+                    </MudButton>
                     @* "My external links" — everything the caller has shared, across documents (ADR 0546). A
                        cross-document review surface, so it belongs to the general group rather than to the selected
                        document, matching where the desktop puts it (ADR 0511). Hidden until the API root
@@ -2062,6 +2068,11 @@
     // still in flight, and reading Detail.Links there handed the dialog a null href it then silently did
     // nothing with — 8 failures in 10 isolation runs, mis-filed as flakiness for months (#420). The
     // external-links button beside it is safe because it is GATED on its href, so a load hides it entirely.
+    // The account menu opens the same dialog; the ribbon is the discoverable place for it — next to the other
+    // things a user does with their documents rather than buried under their name (#461).
+    private async Task OpenWebDavAsync() =>
+        await (await DialogService.ShowAsync<Dialogs.WebDavDialog>(Strings.Get("DlgWebDav"))).Result;
+
     private async Task OpenReminderDialogAsync()
     {
         if (_selectedItem is not { } item)

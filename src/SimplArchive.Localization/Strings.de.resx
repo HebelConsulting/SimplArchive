@@ -81,6 +81,9 @@
   <data name="RibbonStartWorkflow" xml:space="preserve">
     <value>Workflow starten</value>
   </data>
+  <data name="RibbonWebDav" xml:space="preserve">
+    <value>WebDAV</value>
+  </data>
   <data name="RibbonRefresh" xml:space="preserve">
     <value>Aktualisieren</value>
   </data>
@@ -350,6 +353,21 @@
   </data>
   <data name="WebDavInfo" xml:space="preserve">
     <value>Binden Sie das Archiv als Netzlaufwerk mit einem WebDAV-Client ein (Finder / Explorer / Nautilus). Verwenden Sie Ihre E-Mail als Benutzernamen und ein app-spezifisches Passwort unten — nicht Ihr Anmeldepasswort.</value>
+  </data>
+  <data name="WebDavHowToMount" xml:space="preserve">
+    <value>So binden Sie es ein</value>
+  </data>
+  <data name="WebDavStepsMac" xml:space="preserve">
+    <value>Wählen Sie im Finder „Gehe zu“ ▸ „Mit Server verbinden“ (⌘K), fügen Sie die obige URL ein und melden Sie sich mit Benutzername und Passwort an.</value>
+  </data>
+  <data name="WebDavStepsWindows" xml:space="preserve">
+    <value>Klicken Sie im Explorer mit der rechten Maustaste auf „Dieser PC“ ▸ „Netzlaufwerk verbinden“, fügen Sie die obige URL ein, aktivieren Sie „Verbindung bei Anmeldung wiederherstellen“ und melden Sie sich an.</value>
+  </data>
+  <data name="WebDavStepsLinux" xml:space="preserve">
+    <value>Wählen Sie in Ihrem Dateimanager „Mit Server verbinden“ (oder Strg+L) und fügen Sie die obige URL ein, wobei Sie https:// durch davs:// ersetzen.</value>
+  </data>
+  <data name="WebDavStepsOther" xml:space="preserve">
+    <value>Verwenden Sie URL, Benutzername und Passwort oben mit einem beliebigen WebDAV-Client.</value>
   </data>
   <data name="WebDavMountUrl" xml:space="preserve">
     <value>Mount-URL (alle Archive)</value>
@@ -2417,6 +2435,57 @@
   </data>
   <data name="MwMerge" xml:space="preserve">
     <value>Zusammenführen</value>
+  </data>
+  <data name="MwWebDavSetUpTip" xml:space="preserve">
+    <value>WebDAV einrichten, um Ihre Dokumente als Laufwerk einzubinden</value>
+  </data>
+  <data name="MwWebDavMountTip" xml:space="preserve">
+    <value>Ihre Dokumente als Laufwerk einbinden</value>
+  </data>
+  <data name="MwWebDavOpenTip" xml:space="preserve">
+    <value>Ihre eingebundenen Dokumente öffnen</value>
+  </data>
+  <data name="MwWebDavMounting" xml:space="preserve">
+    <value>SimplArchive wird eingebunden…</value>
+  </data>
+  <data name="MwWebDavOpening" xml:space="preserve">
+    <value>SimplArchive wird geöffnet…</value>
+  </data>
+  <data name="MwWebDavMounted" xml:space="preserve">
+    <value>SimplArchive ist eingebunden.</value>
+  </data>
+  <data name="MwWebDavMountFailed" xml:space="preserve">
+    <value>SimplArchive konnte nicht eingebunden werden: {0}</value>
+  </data>
+  <data name="WdRegenerate" xml:space="preserve">
+    <value>Passwort neu generieren</value>
+  </data>
+  <data name="WdCopy" xml:space="preserve">
+    <value>Kopieren</value>
+  </data>
+  <data name="WdCopyUrlTip" xml:space="preserve">
+    <value>Mount-URL kopieren</value>
+  </data>
+  <data name="WdCopyUserTip" xml:space="preserve">
+    <value>Benutzernamen kopieren</value>
+  </data>
+  <data name="WdCopyPwTip" xml:space="preserve">
+    <value>Passwort kopieren</value>
+  </data>
+  <data name="WdCopied" xml:space="preserve">
+    <value>In die Zwischenablage kopiert.</value>
+  </data>
+  <data name="WdOpenFolder" xml:space="preserve">
+    <value>Ordner öffnen</value>
+  </data>
+  <data name="WdLoadError" xml:space="preserve">
+    <value>Der WebDAV-Status konnte nicht geladen werden.</value>
+  </data>
+  <data name="WdStatusEnabled" xml:space="preserve">
+    <value>Der WebDAV-Zugriff ist aktiviert. Neu generieren für ein neues Passwort oder widerrufen zum Deaktivieren.</value>
+  </data>
+  <data name="WdStatusNotSetUp" xml:space="preserve">
+    <value>Der WebDAV-Zugriff ist noch nicht eingerichtet.</value>
   </data>
   <data name="MwOpenWebDavTip" xml:space="preserve">
     <value>Binden Sie Ihren persönlichen WebDAV-Ordner (Eingang / Check-out / Archiv) ein und öffnen Sie ihn in Ihrem Dateimanager</value>

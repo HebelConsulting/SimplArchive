@@ -34,6 +34,44 @@ public class WebWebDavTests
     }
 
     [Fact]
+    public async Task The_ribbon_button_opens_webdav_and_says_how_to_mount_it()
+    {
+        var page = await Ui.LoginAsync(_app);
+
+        // The ribbon is the discoverable entry point (#461) — the account menu keeps working, but a user looking
+        // for their documents looks where the document actions are.
+        await page.Locator("[data-tour='action-webdav']").ClickAsync();
+
+        var dialog = page.Locator(".mud-dialog");
+        await Expect(dialog).ToBeVisibleAsync();
+
+        // Every value the user must paste into an OS dialog has its own copy button. The username's was missing
+        // while the URL and password had one — the shape of gap nobody notices until they need it. Counted
+        // rather than located per field: MudBlazor renders an adornment as an icon button inside the input, and
+        // pinning that internal structure would make this test fail on a MudBlazor upgrade rather than on a
+        // regression.
+        await Expect(dialog.GetByRole(AriaRole.Textbox, new() { Name = "Mount URL (all repositories)" })).ToBeVisibleAsync();
+        await Expect(dialog.GetByRole(AriaRole.Textbox, new() { Name = "Username" })).ToBeVisibleAsync();
+        Assert.Equal(2, await dialog.Locator(".mud-input-adornment button").CountAsync());
+
+        // A browser cannot mount, so the substitute is telling the visitor how (ADR 0560). Asserted as the
+        // HEADING plus non-empty guidance rather than a specific OS's wording: the instructions are chosen from
+        // the visitor's platform, and this suite runs on macOS locally and Linux in CI.
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Generate password" }).ClickAsync();
+        await Expect(dialog.GetByText("Copy this password now")).ToBeVisibleAsync();
+
+        await Expect(dialog.GetByText("How to mount it")).ToBeVisibleAsync();
+
+        // The generated password is the third copyable value.
+        Assert.Equal(3, await dialog.Locator(".mud-input-adornment button").CountAsync());
+        var steps = await dialog.Locator(".mud-typography-body2").AllTextContentsAsync();
+        Assert.Contains(steps, s => s.Contains("Connect to Server", StringComparison.OrdinalIgnoreCase)
+            || s.Contains("Map network drive", StringComparison.OrdinalIgnoreCase)
+            || s.Contains("davs://", StringComparison.OrdinalIgnoreCase)
+            || s.Contains("WebDAV client", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task Inbox_tab_copies_the_personal_webdav_url()
     {
         var page = await Ui.LoginAsync(_app, new[] { "clipboard-read", "clipboard-write" });

@@ -86,6 +86,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// What the single WebDAV ribbon button would do next (#461). Its own type rather than four more members
+    /// here — this class is already the largest entry on the 1000-line debt list (#466), and the button's state
+    /// is genuinely a separate concern.
+    /// </summary>
+    public WebDavRibbonState WebDav { get; } = new();
+
+    /// <summary>Re-reads the WebDAV button's state; safe to call whenever the session or the mount may have changed.</summary>
+    public Task RefreshWebDavStateAsync() =>
+        WebDav.RefreshAsync(Api is { } api ? async () => (await api.GetWebDavStatusAsync()).Enabled : null);
+
     // ---- Resizable / collapsible panes (persisted, like the web client — ADR 0224/"Desktop collapsible
     // panes") ------------------------------------------------------------------------------------------
 

@@ -16,7 +16,8 @@
                shared repositories) — one resource, ADR 0509. *@
             <MudTextField T="string" Label="@Strings.Get("WebDavMountUrl")" Value="@_url" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
                           Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy" OnAdornmentClick="() => CopyAsync(_url)" />
-            <MudTextField T="string" Label="@Strings.Get("WebDavUsername")" Value="@_username" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2" />
+            <MudTextField T="string" Label="@Strings.Get("WebDavUsername")" Value="@_username" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2"
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy" OnAdornmentClick="() => CopyAsync(_username)" />
 
             @if (_generatedPassword is not null)
             {
@@ -27,6 +28,17 @@
             else if (_enabled)
             {
                 <MudText Typo="Typo.body2" Class="mt-3 mud-text-secondary">@Strings.Get("WebDavEnabled")</MudText>
+            }
+
+            @* A browser cannot mount a drive, enumerate letters, probe a mount or open a file manager — the
+               desktop client's three-state button is a genuine PLATFORM CONSTRAINT here, not a parity gap
+               (ADRs 0511/0560). So the web client does the nearest web-native thing: hands over the values with
+               one-click copy, and says exactly what to do with them on the OS the visitor is actually using. *@
+            @if (_enabled && _mountSteps is not null)
+            {
+                <MudDivider Class="my-3" />
+                <MudText Typo="Typo.subtitle2">@Strings.Get("WebDavHowToMount")</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_mountSteps</MudText>
             }
             else
             {
@@ -54,6 +66,10 @@
     private string? _generatedPassword;
     private bool _busy;
 
+    // The mount steps for the OS the visitor is on. Null until probed, and on a platform with no desktop file
+    // manager to speak of — in which case the URL and the copy buttons are still the useful part.
+    private string? _mountSteps;
+
     protected override async Task OnInitializedAsync()
     {
         try
@@ -64,6 +80,28 @@
             _url = status?.Url ?? "";
         }
         catch (Exception) { /* leave defaults */ }
+
+        await LoadMountStepsAsync();
+    }
+
+    // Best-effort: a failed probe leaves the credentials and copy buttons, which are the part that matters.
+    private async Task LoadMountStepsAsync()
+    {
+        try
+        {
+            await using var module = await JS.InvokeAsync<IJSObjectReference>("import", "./wbLayout.js");
+            _mountSteps = Strings.Get(await module.InvokeAsync<string>("desktopOs") switch
+            {
+                "mac" => "WebDavStepsMac",
+                "windows" => "WebDavStepsWindows",
+                "linux" => "WebDavStepsLinux",
+                _ => "WebDavStepsOther",
+            });
+        }
+        catch (Exception)
+        {
+            _mountSteps = null;
+        }
     }
 
     private async Task GenerateAsync()

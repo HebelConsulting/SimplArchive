@@ -341,6 +341,42 @@ public partial class MainWindow : Window
         }
     });
 
+    // ONE ribbon button, three states (#461): set up credentials, mount, or open what is already mounted.
+    //
+    // The order matters and is not arbitrary. Already-mounted is checked FIRST and answered locally, so the
+    // common case — "show me my documents" — costs no request at all. Only then does it ask the server whether
+    // credentials exist, because that is the only question the client cannot answer itself.
+    private void OnWebDavRibbon(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel { Api: { } api } vm)
+        {
+            return;
+        }
+
+        if (OsFileManager.MountedPath() is { } mounted)
+        {
+            vm.Status = Strings.Get("MwWebDavOpening");
+            await OsFileManager.OpenWebDavAsync(mounted);
+            return;
+        }
+
+        var status = await api.GetWebDavStatusAsync();
+        if (!status.Enabled)
+        {
+            // No credentials yet: the dialog IS the next useful thing, not an error about the missing ones.
+            await new WebDavDialog(api).ShowDialog(this);
+            await vm.RefreshWebDavStateAsync();
+            return;
+        }
+
+        vm.Status = Strings.Get("MwWebDavMounting");
+        var result = await OsFileManager.OpenWebDavAsync(status.Url.TrimEnd('/'));
+        vm.Status = result.Success
+            ? Strings.Get("MwWebDavMounted")
+            : string.Format(Strings.Get("MwWebDavMountFailed"), result.Error);
+        await vm.RefreshWebDavStateAsync();
+    });
+
     private void OnManageWebDav(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel { Api: { } api })

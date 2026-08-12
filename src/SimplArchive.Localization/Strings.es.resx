@@ -81,6 +81,9 @@
   <data name="RibbonStartWorkflow" xml:space="preserve">
     <value>Iniciar flujo de trabajo</value>
   </data>
+  <data name="RibbonWebDav" xml:space="preserve">
+    <value>WebDAV</value>
+  </data>
   <data name="RibbonRefresh" xml:space="preserve">
     <value>Actualizar</value>
   </data>
@@ -350,6 +353,21 @@
   </data>
   <data name="WebDavInfo" xml:space="preserve">
     <value>Monta el archivo como unidad de red con un cliente WebDAV (Finder / Explorer / Nautilus). Usa tu correo como nombre de usuario y una contraseña específica de la app abajo — no tu contraseña de inicio de sesión.</value>
+  </data>
+  <data name="WebDavHowToMount" xml:space="preserve">
+    <value>Cómo montarlo</value>
+  </data>
+  <data name="WebDavStepsMac" xml:space="preserve">
+    <value>En el Finder, elija Ir ▸ Conectarse al servidor (⌘K), pegue la URL de arriba e inicie sesión con el nombre de usuario y la contraseña.</value>
+  </data>
+  <data name="WebDavStepsWindows" xml:space="preserve">
+    <value>En el Explorador de archivos, haga clic con el botón derecho en Este equipo ▸ Conectar a unidad de red, pegue la URL de arriba, marque «Conectar de nuevo al iniciar sesión» e inicie sesión.</value>
+  </data>
+  <data name="WebDavStepsLinux" xml:space="preserve">
+    <value>En su gestor de archivos, elija «Conectar al servidor» (o pulse Ctrl+L) y pegue la URL de arriba, sustituyendo https:// por davs://.</value>
+  </data>
+  <data name="WebDavStepsOther" xml:space="preserve">
+    <value>Use la URL, el nombre de usuario y la contraseña de arriba con cualquier cliente WebDAV.</value>
   </data>
   <data name="WebDavMountUrl" xml:space="preserve">
     <value>URL de montaje (todos los repositorios)</value>
@@ -2417,6 +2435,57 @@
   </data>
   <data name="MwMerge" xml:space="preserve">
     <value>Combinar</value>
+  </data>
+  <data name="MwWebDavSetUpTip" xml:space="preserve">
+    <value>Configure WebDAV para montar sus documentos como una unidad</value>
+  </data>
+  <data name="MwWebDavMountTip" xml:space="preserve">
+    <value>Monte sus documentos como una unidad</value>
+  </data>
+  <data name="MwWebDavOpenTip" xml:space="preserve">
+    <value>Abrir sus documentos montados</value>
+  </data>
+  <data name="MwWebDavMounting" xml:space="preserve">
+    <value>Montando SimplArchive…</value>
+  </data>
+  <data name="MwWebDavOpening" xml:space="preserve">
+    <value>Abriendo SimplArchive…</value>
+  </data>
+  <data name="MwWebDavMounted" xml:space="preserve">
+    <value>SimplArchive está montado.</value>
+  </data>
+  <data name="MwWebDavMountFailed" xml:space="preserve">
+    <value>No se pudo montar SimplArchive: {0}</value>
+  </data>
+  <data name="WdRegenerate" xml:space="preserve">
+    <value>Regenerar contraseña</value>
+  </data>
+  <data name="WdCopy" xml:space="preserve">
+    <value>Copiar</value>
+  </data>
+  <data name="WdCopyUrlTip" xml:space="preserve">
+    <value>Copiar la URL de montaje</value>
+  </data>
+  <data name="WdCopyUserTip" xml:space="preserve">
+    <value>Copiar el nombre de usuario</value>
+  </data>
+  <data name="WdCopyPwTip" xml:space="preserve">
+    <value>Copiar la contraseña</value>
+  </data>
+  <data name="WdCopied" xml:space="preserve">
+    <value>Copiado al portapapeles.</value>
+  </data>
+  <data name="WdOpenFolder" xml:space="preserve">
+    <value>Abrir carpeta</value>
+  </data>
+  <data name="WdLoadError" xml:space="preserve">
+    <value>No se pudo cargar el estado de WebDAV.</value>
+  </data>
+  <data name="WdStatusEnabled" xml:space="preserve">
+    <value>El acceso WebDAV está activado. Regenere para obtener una contraseña nueva o revóquelo para desactivarlo.</value>
+  </data>
+  <data name="WdStatusNotSetUp" xml:space="preserve">
+    <value>El acceso WebDAV aún no está configurado.</value>
   </data>
   <data name="MwOpenWebDavTip" xml:space="preserve">
     <value>Monta tu carpeta WebDAV personal (Bandeja de entrada / Desprotección / archivo) y ábrela en tu gestor de archivos</value>

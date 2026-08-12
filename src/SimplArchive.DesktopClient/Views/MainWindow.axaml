@@ -192,6 +192,11 @@
                             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
                                 <Button Command="{Binding RefreshCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
                                 <Button Command="{Binding ResetLayoutCommand}" ToolTip.Tip="{loc:Tr RibbonResetLayout}"><i:Icon Value="mdi-view-grid-outline" FontSize="18" /></Button>
+                                <!-- WebDAV (#461): ONE button that does the next useful thing — set up credentials,
+                                     mount, or open what is already mounted. The tooltip says which, because an icon
+                                     that changes meaning silently is worse than three buttons. -->
+                                <Button Click="OnWebDavRibbon" AutomationProperties.AutomationId="ribbon-webdav"
+                                        ToolTip.Tip="{Binding WebDav.Tooltip}"><i:Icon Value="mdi-folder-network-outline" FontSize="18" /></Button>
                                 <!-- "My external links" — everything the caller has shared, across documents (ADR 0546).
                                      A cross-document review surface, so it belongs to the general group rather than to the
                                      selected document. Hidden until the API root advertises the rel. -->

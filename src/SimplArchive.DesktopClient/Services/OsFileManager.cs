@@ -142,6 +142,82 @@ public static class OsFileManager
         OpenWebDavFileAsync(httpBaseUrl, relativeFolder);
 
     // https://host:443/webdav/Inbox → davs://host:443/webdav/Inbox ; http → dav.
+
+    // ---- Already mounted? and mapping a persistent drive letter (issue #461) ---------------------------
+
+    /// <summary>The volume name the OS shows, fixed by serving the single resource at /SimplArchive (ADR 0509).</summary>
+    public const string VolumeName = "SimplArchive";
+
+    /// <summary>
+    /// Where the volume is already mounted, or <c>null</c>. This is what lets ONE button do the next useful
+    /// thing rather than always the same thing (#461).
+    /// </summary>
+    /// <remarks>
+    /// A filesystem/DriveInfo check, not a network probe: the question is "does the user already have this on
+    /// their desktop", and asking the server would answer a different one. Cheap enough to call per render.
+    /// </remarks>
+    public static string? MountedPath() =>
+        Current switch
+        {
+            Platform.MacOs => System.IO.Directory.Exists($"/Volumes/{VolumeName}") ? $"/Volumes/{VolumeName}" : null,
+            Platform.Windows => System.IO.DriveInfo.GetDrives()
+                .FirstOrDefault(d => d.DriveType == System.IO.DriveType.Network && VolumeLabelOf(d) == VolumeName)?.Name,
+            // gvfs mounts land under a per-user runtime dir and carry the scheme in the directory name.
+            _ => GvfsDavMount(),
+        };
+
+    private static string? VolumeLabelOf(System.IO.DriveInfo drive)
+    {
+        try
+        {
+            return drive.VolumeLabel;
+        }
+        catch (System.IO.IOException)
+        {
+            return null; // a disconnected mapping still enumerates
+        }
+    }
+
+    private static string? GvfsDavMount()
+    {
+        var gvfs = $"/run/user/{Environment.GetEnvironmentVariable("UID") ?? "1000"}/gvfs";
+        return System.IO.Directory.Exists(gvfs)
+            ? System.IO.Directory.EnumerateDirectories(gvfs).FirstOrDefault(d => d.Contains("dav", StringComparison.OrdinalIgnoreCase))
+            : null;
+    }
+
+    /// <summary>
+    /// A free drive letter, preferring S: — then up through Z:, and only then back down from R:. <c>null</c>
+    /// when the machine has none left, which is a fallback reason rather than a crash.
+    /// </summary>
+    /// <remarks>
+    /// Searching UP before DOWN matters: the low letters are where a machine's own devices live, so walking
+    /// down first would put the volume somewhere surprising on a lightly-used machine. Stops at D: — A:/B: are
+    /// floppy-reserved and C: is the system drive, and a network share must never land on either.
+    /// </remarks>
+    public static char? FirstFreeDriveLetter()
+    {
+        var taken = System.IO.DriveInfo.GetDrives().Select(d => char.ToUpperInvariant(d.Name[0])).ToHashSet();
+        return "STUVWXYZ".Concat("RQPONMLKJIHGFED").Cast<char?>().FirstOrDefault(c => !taken.Contains(c!.Value));
+    }
+
+    /// <summary>
+    /// Maps the volume to a PERSISTENT drive letter on Windows, so it survives a reboot (#461).
+    /// </summary>
+    /// <remarks>
+    /// <see cref="BuildOpenCommand"/>'s Windows path opens the DavWWWRoot UNC directly, which mounts and opens
+    /// in one step but leaves no drive letter and nothing persistent. That is right for "just show me the
+    /// files" and wrong for "put my documents on this machine", which is what the ribbon button means — hence a
+    /// second command rather than a change to the first.
+    ///
+    /// Windows only: macOS and Linux have no drive letters, and their mount is already persistent enough
+    /// (Finder remembers the server, gvfs remounts on demand).
+    /// </remarks>
+    public static (string FileName, string[] Arguments)? BuildMapDriveCommand(string httpUrl, string username, string password) =>
+        Current is Platform.Windows && FirstFreeDriveLetter() is { } letter
+            ? ("net", new[] { "use", $"{letter}:", ToWindowsUnc(new Uri(httpUrl)), $"/user:{username}", password, "/persistent:yes" })
+            : null;
+
     private static string ToDavScheme(Uri uri) =>
         (uri.Scheme == "https" ? "davs://" : "dav://") + uri.Authority + uri.AbsolutePath;
 
