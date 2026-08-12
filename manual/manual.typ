@@ -1,4 +1,4 @@
-#import "template.typ": conf, shot, pair, note, accent
+#import "template.typ": conf, shot, pair, note, accent, idx, index-page
 
 #show: doc => conf(doc)
 
@@ -40,14 +40,14 @@
 = Introduction
 
 SimplArchive is a multi-tenant *document management system* (DMS): a secure archive where an organisation
-files, versions, classifies, searches, and governs its documents. It is a showcase of how a senior, AI-driven
+files, versions, classifies, searches, and governs its documents#idx("Document management system"). It is a showcase of how a senior, AI-driven
 software developer can produce a complex, enterprise-grade system in a relatively short period — every feature in
 this manual is really implemented and really tested.
 
 You reach the same archive through *two clients*, which mirror each other feature for feature:
 
-- the *web workbench* — a browser application, nothing to install;
-- the *desktop client* — a native Windows / macOS / Linux application that can additionally open a document in its
+- the *web workbench*#idx("Web client") — a browser application, nothing to install;
+- the *desktop client*#idx("Desktop client") — a native Windows / macOS / Linux application that can additionally open a document in its
   real desktop program and drag documents in and out of the operating-system file manager.
 
 #pair("screenshots/web-login.png", "screenshots/desktop-logon.png",
@@ -56,22 +56,22 @@ You reach the same archive through *two clients*, which mirror each other featur
 == Core concepts
 
 #note[
-  *Repository* — a top-level archive; it is simply a folder with no parent. *Folder* / *document* — the tree
-  inside a repository. *Version* — every change to a document's file is kept as a new version; nothing is
-  overwritten. *Mask (document type)* — a template of *index fields* (metadata) attached to a document. *ACL* —
+  *Repository*#idx("Repository") — a top-level archive; it is simply a folder with no parent. *Folder* / *document* — the tree
+  inside a repository. *Version*#idx("Version") — every change to a document's file is kept as a new version; nothing is
+  overwritten. *Mask (document type)*#idx("Mask (document type)")#idx("Index fields") — a template of *index fields* (metadata) attached to a document. *ACL*#idx("ACL")#idx("Rights") —
   a per-document access-control list of *rights* (see, read, edit, …) granted to users and groups.
 ]
 
 = Getting started
 
 *Signing in.* Open the web client and choose *Log in*, or start the desktop client and use its logon window; enter
-your e-mail and password. Your organisation may additionally require a second factor (a one-time code or a
+your e-mail and password. Your organisation may additionally require a second factor#idx("Multi-factor authentication") (a one-time code or a
 passkey). You can pick the interface *language* (English, German, Italian, Spanish) and switch between a *light*
 and *dark* appearance at any time.
 
 *The workbench.* After signing in you land on the *Repositories* workbench, laid out as: the *tree* of
 repositories and folders, the *contents* list of the selected folder, the *detail* pane (index data) over the
-*preview*, and — along the bottom — the *tab bar* that switches between Repositories, Inbox, Search, Tasks and the
+*preview*#idx("Preview"), and — along the bottom — the *tab bar* that switches between Repositories, Inbox, Search, Tasks and the
 rest.
 
 #pair("screenshots/web-repositories.png", "screenshots/desktop-workbench.png",
@@ -82,7 +82,7 @@ rest.
 
 Expand the *tree* to a folder and its documents appear in the *contents* list, which you can sort by any column.
 Selecting a document shows its *index data* in the detail pane and renders a *preview* below — PDFs, images, and
-converted Office/e-mail/Markdown documents alike. Full-text search hits are highlighted directly on the preview,
+converted Office/e-mail/Markdown documents alike. Full-text search hits are highlighted directly on the preview#idx("Hit highlighting"),
 and you can click a word to copy it. In the desktop client you can also *open* the document in its native
 application.
 
@@ -101,25 +101,30 @@ belongs to something already filed, and how many you have. They all end in the s
   stroke: 0.5pt + luma(80%),
   inset: 6pt,
   [*Route*], [*Use it when*],
-  [*Upload* on the ribbon], [You are already looking at the folder it belongs in. Picks files and files them
+  [*Upload*#idx("Upload") on the ribbon], [You are already looking at the folder it belongs in. Picks files and files them
    straight into the open folder.],
   [*Drag onto a folder* — a row in the list, or a node in the tree], [You can see the destination. The document
    is filed there; the view follows to that folder so you can see it arrive.],
   [*Drag onto empty space* in the contents list], [Same as above for the folder you are already in.],
   [*Drag onto a document*], [The file is a newer copy of that document — it is added as a *version*, not as a
    second document, and the history is kept.],
-  [*Drag onto Personal ▸ Inbox*], [It is not ready to file, or you do not yet know where it belongs. It waits in
+  [*Drag onto Personal ▸ Inbox*#idx("Inbox")], [It is not ready to file, or you do not yet know where it belongs. It waits in
    the Inbox until you classify and file it.],
   [*Drag a document onto Personal ▸ Inbox*], [You want to start from an existing document as a *template*. A
    copy lands in your Inbox carrying that document's document type and index data, so you edit what differs.
    Nothing is created in the archive until you file it.],
-  [*Drag onto Personal ▸ Check-out*], [You checked a document out, edited it on your computer, and are bringing
+  [*Drag onto Personal ▸ Check-out*#idx("Check-out")], [You checked a document out, edited it on your computer, and are bringing
    it back. The file must still carry the document's name — that is what says which document it belongs to.],
   [*WebDAV*], [You would rather work in Finder, Explorer or Files. Mount the archive as a drive and copy
    documents in like any other folder.],
-  [*Import*], [You are bringing in a whole folder tree at once, exported from SimplArchive or elsewhere.],
+  [*Import*#idx("Import / export")], [You are bringing in a whole folder tree at once, exported from SimplArchive or elsewhere.],
   [*Email attachment*], [You filed an email and want one of its attachments as a document of its own.],
 )
+
+#shot("screenshots/web-personal-launchers.png",
+  [The *Personal* space expanded: *Inbox* and *Check-out* sit above your own folders. Drop files on *Inbox* to
+   stage them, or drop an edited working copy on *Check-out* to bring it back — and drag a document onto *Inbox*
+   to start new work from it as a template.])
 
 #note[
   *Two of these do not create a document.* A drop onto the *Inbox* stages an item — it becomes a document only
@@ -131,9 +136,17 @@ belongs to something already filed, and how many you have. They all end in the s
 proxies them). *The Inbox* is a staging area: drop scans or files there, then classify each one (name, document
 type, index data) and *file* it into the archive.
 
-*Versions.* Uploading a new file to an existing document adds a *version* — the history is preserved. The
+*Versions.*#idx("Version comment") Uploading a new file to an existing document adds a *version* — the history is preserved. The
 *Versions* dialog lists every version; you can compare two of them or *make current* an older one. When you upload
 a file that already exists, SimplArchive warns you of the *duplicate*.
+
+Give each version a *comment* saying what changed. It is the difference between a history someone can read and a
+list of timestamps: "Price corrected after the framework-agreement review" answers the question a reader of the
+list actually has, and no date can.
+
+#shot("screenshots/web-versions.png",
+  [The *Versions* dialog: every version of the document with who saved it, when, and — the part that makes the
+   list worth reading — the comment describing what changed.])
 
 #pair("screenshots/web-inbox.png", "screenshots/desktop-inbox.png",
   [The Inbox: staged items waiting to be classified and filed, in the web (left) and desktop (right) clients.])
@@ -144,17 +157,35 @@ a file that already exists, SimplArchive warns you of the *duplicate*.
 
 = Organizing
 
-Create *folders*, and *move* documents between them by drag-and-drop. A *reference* (shortcut) lets one document
-appear in several places without copying it. *Tags* label documents for quick grouping — your tenant can maintain a
-curated tag catalogue with colours. *Sensitivity labels* mark how confidential a document is. Every user also has a
-*personal repository* for private documents.
+Create *folders*, and *move* documents between them by drag-and-drop. A *reference*#idx("Reference (shortcut)") (shortcut) lets one document
+appear in several places without copying it. *Tags*#idx("Tags") label documents for quick grouping — your tenant can maintain a
+curated tag catalogue with colours. *Sensitivity labels*#idx("Sensitivity label") mark how confidential a document is. Every user also has a
+*personal repository*#idx("Personal repository") for private documents.
 
-The whole archive is reachable over *WebDAV* as a network drive — not just your personal space but the shared
-repositories you have permission to access, with your rights enforced on every operation. To connect, open the
-account menu's *WebDAV* item: it shows the *mount URL* and your *username* (your e-mail), and a *Generate* button
-that issues an app-specific *WebDAV password* — separate from your login password and shown only once, so copy it
-right away. Mount that URL with those credentials to browse and edit documents from your operating system's file
-manager.
+The whole archive is reachable over *WebDAV*#idx("WebDAV") as a network drive — not just your personal space but the shared
+repositories you have permission to access, with your rights enforced on every operation. The mounted drive is
+called *SimplArchive* and mirrors the Repositories tree exactly: your Personal space, then the repositories you
+can see, and nothing else.
+
+The *WebDAV* button on the Repositories ribbon does the next useful thing rather than always the same thing, and
+its tooltip says which. In the *desktop client*: if the drive is already mounted it opens the folder; if you have
+credentials it mounts the drive and then opens it (on Windows as a persistent drive letter, S: or the next one
+free); and if you have no credentials yet it opens the setup dialog. So "show me my documents in Finder" is one
+click once you are set up.
+
+The setup dialog shows the *mount URL* and your *username* (your e-mail), each with a *Copy* button, and a
+*Generate* button that issues an app-specific *WebDAV password* — separate from your login password and shown
+only once, so copy it right away. The desktop dialog also has *Open folder*, so you can go from generating
+credentials to a mounted drive without closing it.
+
+The *web client* cannot mount a drive: a browser is not allowed to. Instead of leaving you with a URL and no idea
+what to do with it, its dialog shows the mount steps for the operating system you are on — Finder's
+#emph[Go ▸ Connect to Server] on macOS, *Map network drive* on Windows, a `davs://` address on Linux — next to
+the values to paste into them.
+
+#shot("screenshots/web-webdav.png",
+  [The web client's WebDAV dialog: the mount URL, your username and the one-shot password, each with a copy
+   button, and the mount steps for the operating system you are using.])
 
 #shot("screenshots/web-tags.png",
   [The tag catalogue: curated, colour-coded tags an administrator maintains for the whole tenant.])
@@ -163,7 +194,7 @@ manager.
 
 Each document has a *mask* (document type) that defines its *index fields* — typed metadata such as an invoice
 number or a date. Open the *detail* pane's edit toggle to fill them in. A document also carries a *document date*
-and one or more *OCR languages* used to make scans searchable.
+and one or more *OCR languages*#idx("OCR") used to make scans searchable.
 
 #note[
   Index fields are validated by the mask — a field marked required must be filled, and format/range rules are
@@ -173,9 +204,9 @@ and one or more *OCR languages* used to make scans searchable.
 
 = Search
 
-The *Search* tab runs a full-text search across document *content*, *names*, and *index-field* values, ranked by
+The *Search* tab#idx("Search") runs a full-text search across document *content*, *names*, and *index-field* values, ranked by
 relevance, with hits highlighted on the preview — so a distinctive word buried in a document's text (a product name
-on an invoice, say) finds exactly that document. *Refinement filters* and *facets* narrow the results — by document
+on an invoice, say) finds exactly that document. *Refinement filters* and *facets*#idx("Facets") narrow the results — by document
 type, date, sensitivity, and more — and you can *save* a search to re-run or share it later.
 
 #pair("screenshots/web-search.png", "screenshots/desktop-search.png",
@@ -183,10 +214,20 @@ type, date, sensitivity, and more — and you can *save* a search to re-run or s
 
 = Collaboration
 
-Documents are collaborative: post *comments* in a feed, attach *annotations* (sticky notes, highlights, and shapes)
-onto the preview, and *follow* a document or folder to be *notified* of activity. Set yourself a *reminder*, and
-track everything assigned to you on the *My work* dashboard. To edit a document exclusively, *check it out* — others
+Documents are collaborative: post *comments*#idx("Chat / comments") in a feed, attach *annotations*#idx("Annotations") (sticky notes, highlights, and shapes)
+onto the preview, and *follow*#idx("Follow / subscribe") a document or folder to be *notified*#idx("Notifications") of activity. Set yourself a *reminder*#idx("Reminder"), and
+track everything assigned to you on the *My work* dashboard#idx("My work"). To edit a document exclusively, *check it out* — others
 see it is locked — then *check in* your changes as a new version.
+
+*The chat thread.* Every document has its own thread, shown beside the preview. Use it for the conversation about
+the document — a question about a figure, a note that a revision is on its way — so that discussion stays with the
+document instead of in someone's mailbox. Replies nest under the message they answer, and the thread also records
+what happened to the document: a new version, a filing, and other activity appear in the same timeline, so reading
+it tells you both what people said and what changed.
+
+#shot("screenshots/web-chat.png",
+  [The chat pane on a document: a threaded conversation interleaved with the document's own activity — here a
+   question and its reply, followed by the two versions as they were saved.])
 
 #pair("screenshots/web-my-work.png", "screenshots/desktop-checkout.png",
   [Left: the *My work* dashboard. Right: the *Check-out* tab listing documents locked for exclusive editing —
@@ -194,7 +235,7 @@ see it is locked — then *check in* your changes as a new version.
 
 = Sharing outside SimplArchive
 
-Everything above assumes the other person has an account. An *external link* is for when they do not: a plain URL
+Everything above assumes the other person has an account. An *external link*#idx("External link") is for when they do not: a plain URL
 that opens one document, for anyone who has it, with no sign-in. Use it for the customer who needs the signed
 contract or the auditor who needs one invoice — not as a general-purpose way to move documents around.
 
@@ -252,13 +293,13 @@ Sharing outward is the one action that leaves the system, so it is gated twice a
 
 = Workflow & records
 
-*Approval workflow.* Submit a document for review and it moves through a fixed state machine —
-Draft → In Review → Approved / Rejected → Released. Reviewers act on their *Tasks* tab; reviews can be reassigned,
+*Approval workflow.*#idx("Approval workflow") Submit a document for review and it moves through a fixed state machine —
+Draft → In Review → Approved / Rejected → Released. Reviewers act on their *Tasks* tab#idx("Tasks"); reviews can be reassigned,
 and overdue reviews escalate.
 
-*Records management.* A *legal hold* freezes documents so they cannot be changed or deleted. *Retention* policies
+*Records management.* A *legal hold*#idx("Legal hold") freezes documents so they cannot be changed or deleted. *Retention*#idx("Retention") policies
 dispose of documents once their retention period ends (with review before disposition, if required). Deleted
-documents rest in the *Recycle bin*, from which an administrator can restore them or purge them permanently.
+documents rest in the *Recycle bin*#idx("Recycle bin"), from which an administrator can restore them or purge them permanently.
 
 #pair("screenshots/web-tasks.png", "screenshots/desktop-tasks.png",
   [The Tasks tab — a reviewer's approval queue — in the web (left) and desktop (right) clients.])
@@ -268,12 +309,12 @@ documents rest in the *Recycle bin*, from which an administrator can restore the
 
 = Administration & account
 
-Administrators manage *users & groups* and the *rights* granted to them, configure *tenant* settings, and review
-the tamper-evident *audit trail* of every security-relevant action. They also curate catalogues (sensitivity
-labels, tags), set the *storage quota*, and run *import / export*. Every user manages their own *account security* —
+Administrators manage *users & groups*#idx("Users & groups") and the *rights* granted to them, configure *tenant* settings#idx("Tenant"), and review
+the tamper-evident *audit trail*#idx("Audit trail") of every security-relevant action. They also curate catalogues (sensitivity
+labels, tags), set the *storage quota*#idx("Storage quota"), and run *import / export*. Every user manages their own *account security* —
 password, multi-factor authentication (authenticator app or passkeys), and profile photo.
 
-Your own account lives behind *Edit profile…* in the avatar menu (top right in both clients). It shows which
+Your own account lives behind *Edit profile…*#idx("Edit profile") in the avatar menu (top right in both clients). It shows which
 account you are signed in as, the photo you currently have with a crop to replace it, and a button through to
 changing your password. Two-factor authentication, passkeys and the WebDAV password stay as their own entries in
 that menu, since each is a separate credential rather than part of your profile.
@@ -287,7 +328,7 @@ that menu, since each is a separate credential rather than part of your profile.
 #pair("screenshots/web-tenant.png", "screenshots/desktop-tenant.png",
   [Tenant settings in the web (left) and desktop (right) clients.])
 
-The desktop client can connect to *several servers*; its server manager stores a profile (name + address) for
+The desktop client can connect to *several servers*#idx("Server manager"); its server manager stores a profile (name + address) for
 each. A server is not a tenant: one SimplArchive installation hosts many tenants, and which tenant you belong to
 follows from the account you sign in with.
 
@@ -314,3 +355,12 @@ Further reading:
   This manual's screenshots are regenerated from the running application on every release, so they never fall out
   of date.
 ]]
+
+// ─────────────────────────────────────────────────────────────────────────────
+#pagebreak()
+= Index
+
+Terms are indexed where the manual explains them, not at every mention — the page listed is the one worth
+turning to.
+
+#index-page()

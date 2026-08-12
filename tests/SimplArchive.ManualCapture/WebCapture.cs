@@ -70,8 +70,153 @@ public static partial class WebCapture
             await ShotAsync(page, outDir, screen.Name);
         }
 
+        await CapturePersonalLaunchersAsync(page, outDir);
+        await CaptureVersionsAsync(page, outDir);
+        await CaptureChatAsync(page, outDir);
         await CaptureVersionCompareAsync(page, outDir);
+        await CaptureWebDavAsync(page, outDir);
         await CaptureExternalLinksAsync(context, page, outDir);
+    }
+
+    // The Personal space expanded, showing the Inbox and Check-out launchers — the figure for the manual's
+    // "How documents get in" section (#467).
+    //
+    // Worth a bespoke capture rather than reusing the repositories shot: those two nodes are what a reader has to
+    // find in order to use half the ingestion routes, and they are only visible once Personal is EXPANDED. A
+    // screenshot of the collapsed tree would illustrate the section by omitting its subject.
+    private static async Task CapturePersonalLaunchersAsync(IPage page, string outDir)
+    {
+        try
+        {
+            await page.Locator(".wb-tab[aria-label='Repositories']").First.ClickAsync();
+            var personal = page.Locator("[data-pane='tree'] .mud-treeview-item-content")
+                .Filter(new() { HasText = "Personal" }).First;
+            await personal.WaitForAsync(new() { Timeout = 10000 });
+
+            // Expanding is the arrow, not the node — clicking the node SELECTS it (and a launcher click would
+            // switch tabs, which is the opposite of what this figure shows).
+            await personal.Locator(".mud-treeview-item-arrow").ClickAsync();
+            await page.Locator("[data-drop-inbox]").First.WaitForAsync(new() { Timeout = 10000 });
+            await page.WaitForTimeoutAsync(500);
+
+            await ShotAsync(page, outDir, "personal-launchers");
+        }
+        catch (Exception e)
+        {
+            // A missing figure is better than a failed regeneration: the script also refreshes 30 other shots.
+            Console.WriteLine($"[web] personal-launchers skipped: {e.Message}");
+        }
+    }
+
+    // Opens the WebDAV dialog from the Repositories ribbon and generates a password, so the shot shows the state a
+    // user actually mounts from: the URL, the username, the one-shot password, and the per-OS mount steps.
+    //
+    // This figure is load-bearing, not decorative. ADR 0560 accepts that those steps will go stale — they name OS
+    // UI paths ("Go ▸ Connect to Server") that vendors rename, in four languages, with no test that can detect it —
+    // and names *a screenshot in the manual* as the only realistic check. Without this capture that check does not
+    // exist, and the ADR's accepted cost is one nobody is positioned to notice.
+    //
+    // Generating is safe here: the demo stack is a throwaway container, and the password is app-specific — it is
+    // not the login password, and revoking it is a button in the same dialog.
+    private static async Task CaptureWebDavAsync(IPage page, string outDir)
+    {
+        try
+        {
+            await page.Locator(".wb-tab[aria-label='Repositories']").First.ClickAsync();
+            await page.Locator("[data-tour='action-webdav']").First.ClickAsync();
+            var dialog = page.Locator(".mud-dialog").First;
+            await dialog.WaitForAsync(new() { Timeout = 10000 });
+
+            // Generate, so the mount steps and the one-shot password are on screen. Before this the dialog says
+            // only "not set up", which is the least informative of its states and the one a reader needs least.
+            await dialog.GetByRole(AriaRole.Button, new() { Name = "Generate password" }).ClickAsync();
+
+            // Wait for the reveal itself rather than a fixed pause — shooting early would produce a figure of the
+            // pre-generation dialog with nothing in the filename to say so.
+            await dialog.GetByText("won't be shown again").WaitForAsync(new() { Timeout = 15000 });
+            await page.WaitForTimeoutAsync(600);
+
+            await ShotAsync(page, outDir, "webdav");
+            await DismissAnyDialogAsync(page);
+        }
+        catch (Exception e)
+        {
+            // A missing figure is better than a failed regeneration: the script also refreshes 30 other shots.
+            Console.WriteLine($"[web] webdav skipped: {e.Message.Split('\n')[0]}");
+        }
+    }
+
+    // Selects the demo offer — Demo Repository → Contracts → Acme Corp → "Offer 2026-014" (ADR 0502).
+    //
+    // Three captures need this exact document rather than any document: it is the only seeded one with TWO
+    // versions, per-version comments, and a chat thread, which is what makes the versions, compare and chat
+    // figures show the feature rather than an empty shell (#469).
+    private static async Task SelectDemoOfferAsync(IPage page)
+    {
+        await page.Locator(".wb-tab[aria-label='Repositories']").First.ClickAsync();
+        await page.GetByText("Demo Repository").First.ClickAsync();
+        var contracts = page.Locator(".wb-list-row").Filter(new() { HasText = "Contracts" });
+        await contracts.First.WaitForAsync(new() { Timeout = 15000 });
+        await contracts.First.DblClickAsync();
+        var acme = page.Locator(".wb-list-row").Filter(new() { HasText = "Acme Corp" });
+        await acme.First.WaitForAsync(new() { Timeout = 15000 });
+        await acme.First.DblClickAsync();
+        var row = page.Locator(".wb-list-row").Filter(new() { HasText = "Offer 2026-014" });
+        await row.First.WaitForAsync(new() { Timeout = 15000 });
+        await row.First.ClickAsync();
+    }
+
+    // The "Versions" dialog on the demo offer: both revisions with their COMMENTS, which is the point of the
+    // figure — a version list without comments is a list of timestamps, and the comment is what makes it a
+    // history someone can read (#469).
+    private static async Task CaptureVersionsAsync(IPage page, string outDir)
+    {
+        try
+        {
+            await SelectDemoOfferAsync(page);
+            await page.GetByRole(AriaRole.Button, new() { Name = "Versions", Exact = true }).First.ClickAsync();
+            var dialog = page.Locator(".mud-dialog").First;
+            await dialog.WaitForAsync(new() { Timeout = 10000 });
+
+            // Wait for the rows themselves: shooting on dialog-open alone can catch it before the version list
+            // has loaded, producing a figure of an empty dialog.
+            await dialog.Locator("tbody tr").First.WaitForAsync(new() { Timeout = 15000 });
+            await page.WaitForTimeoutAsync(600);
+            await ShotAsync(page, outDir, "versions");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[web] versions skipped: {ex.Message.Split('\n')[0]}");
+        }
+        finally
+        {
+            try { await DismissAnyDialogAsync(page); }
+            catch (Exception ex) { Console.WriteLine($"[web] warning — could not close the versions dialog: {ex.Message.Split('\n')[0]}"); }
+        }
+    }
+
+    // The per-document chat thread. Shot as the PANE rather than the whole window: at 1680px the chat is a 340px
+    // column against a full workbench, so a page-wide figure would be a picture of everything else with the
+    // subject in the corner (#469).
+    private static async Task CaptureChatAsync(IPage page, string outDir)
+    {
+        try
+        {
+            await SelectDemoOfferAsync(page);
+            var chat = page.Locator("[data-pane='chat']").First;
+            await chat.WaitForAsync(new() { Timeout = 15000 });
+
+            // The seeded thread — wait for a real message, not just the pane, so an empty thread cannot pass for
+            // a captured one.
+            await chat.Locator(".wb-chat-thread").First.WaitForAsync(new() { Timeout = 15000 });
+            await page.WaitForTimeoutAsync(800);
+            await chat.ScreenshotAsync(new LocatorScreenshotOptions { Path = Path.Combine(outDir, "web-chat.png") });
+            Console.WriteLine("[web] chat → web-chat.png");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[web] chat skipped: {ex.Message.Split('\n')[0]}");
+        }
     }
 
     // Opens the "Compare versions" dialog on the two-revision demo document ("Offer 2026-014", ADR 0502) and shots
@@ -80,18 +225,7 @@ public static partial class WebCapture
     {
         try
         {
-            await page.Locator(".wb-tab[aria-label='Repositories']").First.ClickAsync();
-            await page.GetByText("Demo Repository").First.ClickAsync();
-            // The offer lives in Contracts → Acme Corp (ADR 0502); drill into it before selecting the document.
-            var contracts = page.Locator(".wb-list-row").Filter(new() { HasText = "Contracts" });
-            await contracts.First.WaitForAsync(new() { Timeout = 15000 });
-            await contracts.First.DblClickAsync();
-            var acme = page.Locator(".wb-list-row").Filter(new() { HasText = "Acme Corp" });
-            await acme.First.WaitForAsync(new() { Timeout = 15000 });
-            await acme.First.DblClickAsync();
-            var row = page.Locator(".wb-list-row").Filter(new() { HasText = "Offer 2026-014" });
-            await row.First.WaitForAsync(new() { Timeout = 15000 });
-            await row.First.ClickAsync();
+            await SelectDemoOfferAsync(page);
             await page.GetByRole(AriaRole.Button, new() { Name = "Compare versions" }).ClickAsync();
             var dialog = page.Locator(".mud-dialog");
             await dialog.First.WaitForAsync(new() { Timeout = 10000 });

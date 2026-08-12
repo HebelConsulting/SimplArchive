@@ -42,6 +42,53 @@
   doc
 }
 
+// ── Keyword index (#469) ─────────────────────────────────────────────────────
+//
+// Hand-rolled rather than pulled from a Typst package: a package import fetches from the Typst universe at
+// compile time, which puts a network dependency (and a licence to vet) into the one build step that has to work
+// offline and reproducibly in CI. `metadata` + `query` are native and do the whole job in a dozen lines.
+//
+// `#idx("Term")` places an INVISIBLE marker at the point of use — put it right after the word in the prose, so
+// the sentence still reads normally and the term appears exactly where a reader would look it up. Marking is
+// deliberately manual: an index is a curated list of what someone would search for, and auto-collecting every
+// bolded phrase produces a concordance instead.
+#let idx(term) = [#metadata(term)#label("idx")]
+
+// The index itself. Groups the markers by term, collapses repeats on one page, and prints "Term  3, 7, 12".
+#let index-page() = context {
+  let found = (:)
+  for entry in query(<idx>) {
+    let term = entry.value
+    let page-no = counter(page).at(entry.location()).first()
+    let pages = found.at(term, default: ())
+    // A term marked twice on the same page must not print "7, 7".
+    if page-no not in pages {
+      found.insert(term, pages + (page-no,))
+    }
+  }
+
+  // Case-insensitive sort, so "WebDAV" files under W rather than ahead of every lowercase term.
+  let terms = found.keys().sorted(key: t => lower(t))
+
+  // Split into two balanced halves BY HAND rather than using `columns`, which fills the first column to the full
+  // page height before wrapping — with a short index that leaves one column full and the other empty, which reads
+  // as a layout accident rather than an index.
+  let entry(term) = {
+    set par(justify: false)
+    block(below: 0.35em)[#term#h(0.4em)#text(fill: luma(90))[#found.at(term).map(str).join(", ")]]
+  }
+
+  if terms.len() > 0 {
+    let half = int(calc.ceil(terms.len() / 2))
+    grid(
+      columns: (1fr, 1fr),
+      gutter: 18pt,
+      terms.slice(0, half).map(entry).join(),
+      terms.slice(half).map(entry).join(),
+    )
+  }
+}
+
 // A single captioned screenshot, framed with a thin border.
 #let shot(path, caption) = figure(
   block(
