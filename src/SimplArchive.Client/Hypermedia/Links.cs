@@ -51,4 +51,15 @@ public static class Links
 
         return map.Count == 0 ? null : map;
     }
+
+    /// <summary>
+    /// The address advertised for <paramref name="rel"/> in an already-read rel map, for a caller that cannot
+    /// proceed without it. Throws rather than composing a fallback: a rel that was not advertised means the
+    /// action is not available here (ADR 0543), and rebuilding the path would paper over exactly what this
+    /// replaces.
+    /// </summary>
+    public static string Required(IReadOnlyDictionary<string, string>? links, string rel) =>
+        links is not null && links.TryGetValue(rel, out var href)
+            ? href
+            : throw new InvalidOperationException($"The '{rel}' rel was not advertised (ADR 0543).");
 }

@@ -1,6 +1,7 @@
 @using SimplArchive.Client.Models
 @using SimplArchive.Client.Services
 @inject DetailState Detail
+@inject DetailCatalogs Catalogs
 
 @* The workbench's index-data pane: what the selected object IS. (ADR 0558) *@
 <div class="wb-pane wb-index" data-pane="index" data-tour="pane-index" tabindex="-1"
@@ -256,7 +257,12 @@
 
 @code {
     /// <summary>Whether the pane is in edit mode — which swaps the header's actions (ADR 0550).</summary>
-    [Parameter] public bool IsEditing { get; set; }
+    /// <remarks>
+    /// Read from <see cref="DetailState"/> rather than taken as a parameter: the pane is disposed on a tab
+    /// switch, so an edit flag it owned (or received from a page field) would quietly revert an open form to
+    /// read mode and drop the input under it.
+    /// </remarks>
+    private bool IsEditing => Detail.IsEditing;
 
     /// <summary>
     /// The per-document actions offered while READING — follow, remind, share, manage access, edit.
@@ -272,17 +278,13 @@
     /// <summary>The tag entry box and its Add button — a self-contained widget the shell owns.</summary>
     [Parameter] public RenderFragment? TagAdd { get; set; }
 
-    /// <summary>The tenant's masks, for the mask picker.</summary>
-    [Parameter] public IReadOnlyList<MaskSummary> AvailableMasks { get; set; } = [];
-
-    /// <summary>The tenant's OCR languages (ADR 0272), for the per-version language chips.</summary>
-    [Parameter] public IReadOnlyList<OcrLanguageOption> OcrCatalog { get; set; } = [];
-
-    /// <summary>The tenant's sensitivity labels, for the classification picker.</summary>
-    [Parameter] public IReadOnlyList<SensitivityLabel> SensitivityLabels { get; set; } = [];
-
-    /// <summary>Tag name → colour, for the chips. Absent means the tag has no colour of its own.</summary>
-    [Parameter] public IReadOnlyDictionary<string, string?> TagColors { get; set; } = new Dictionary<string, string?>();
+    // The masks, OCR languages, sensitivity labels and tag colours the form offers all come from the shared
+    // catalogue service. They were four parameters, which made the shell hold four copies of tenant-wide lists
+    // it does not otherwise care about — and made a pane that merely DISPLAYS a label depend on someone having
+    // remembered to pass it.
+    private IReadOnlyList<MaskSummary> AvailableMasks => Catalogs.Masks;
+    private IReadOnlyList<OcrLanguageOption> OcrCatalog => Catalogs.Ocr;
+    private IReadOnlyList<SensitivityLabel> SensitivityLabels => Catalogs.Sensitivity;
 
     [Parameter] public EventCallback Save { get; set; }
     [Parameter] public EventCallback Cancel { get; set; }
@@ -296,7 +298,7 @@
     /// <summary>Clicking a tag chip searches for it, which is a workbench-level navigation.</summary>
     [Parameter] public EventCallback<string> SearchByTag { get; set; }
 
-    private string? TagColor(string name) => TagColors.TryGetValue(name, out var c) ? c : null;
+    private string? TagColor(string name) => Catalogs.TagColor(name);
 
     // The stored OCR codes as the catalog's display names, in the order they will be applied.
     private string OcrDisplay(List<string> codes) =>

@@ -28,11 +28,82 @@ namespace SimplArchive.UnitTests;
 // real and uncounted. Lowering this to zero is necessary, not sufficient.
 public partial class LocalizationLiteralTests
 {
-    // Snackbar.Add("…") and Snackbar.Add($"…") — the runtime feedback a user meets while ACTING, which is where
-    // the gap was found. The interpolated form matters: it is how every "Checked out '{name}'" message is
-    // written, and an earlier version of this regex missed all of them, understating the ledger.
-    [GeneratedRegex(@"Snackbar\.Add\(\s*\$?""")]
-    private static partial Regex SnackbarLiteral();
+    // Snackbar.Add(…) — the runtime feedback a user meets while ACTING, which is where the gap was found.
+    //
+    // NOT a regex, and the reason is worth keeping. The original was @"Snackbar\.Add\(\s*\$?""" — the quote had
+    // to follow the paren — so it saw only the simplest shape and reported ZERO while nineteen literals sat in
+    // the clients, every one of them the first arm of a ternary:
+    //
+    //     Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden
+    //         ? "You don't have permission to do that." : "Could not add the member.", Severity.Warning);
+    //
+    // That is the same failure as the hypermedia ledger's missing leading-slash spelling: a guard that cannot
+    // see a whole shape is not a guard, and this one was worse for reporting zero — "finished" is a much more
+    // convincing lie than "41 remaining".
+    //
+    // Widening the regex does not work, and the attempts are instructive. Allowing the literal to float away
+    // from the paren means the CONTENT class must exclude ';' and newlines or a "literal" spans two statements.
+    // Even then, quote parity defeats it: in `Get(x ? "KeyA" : "KeyB")` the text BETWEEN the two literals is
+    // `" : "`, which any floating pattern happily reads as a literal containing a space. The scan has to know
+    // which quotes open a literal and which close one, and that is tokenization, not matching.
+    //
+    // The prose test is what makes this decidable without also parsing Strings.Get: a resource key is a single
+    // PascalCase token, so it never contains a space and never ends in a full stop. User-facing text does one or
+    // the other. `Strings.Get(isGroup ? "StGroupCreated" : "StUserCreated")` is therefore silent, while
+    // `isGroup ? "Group created." : "User created."` is not — with no special-casing of the call at all.
+    private static int SnackbarLiteralCount(string text) => StatementsOf(text, "Snackbar.Add(").Count(HasProseLiteral);
+
+    /// <summary>Each <paramref name="call"/> occurrence's text up to the end of its statement.</summary>
+    private static IEnumerable<string> StatementsOf(string text, string call)
+    {
+        for (var i = text.IndexOf(call, StringComparison.Ordinal); i >= 0; i = text.IndexOf(call, i + 1, StringComparison.Ordinal))
+        {
+            var end = text.IndexOf(';', i);
+            yield return end < 0 ? text[i..] : text[i..end];
+        }
+    }
+
+    /// <summary>
+    /// Whether a statement carries a literal that reads as PROSE — a space in it, or a closing full stop. Walks
+    /// the text tracking quote parity so the gap between two adjacent literals is never mistaken for one.
+    /// </summary>
+    private static bool HasProseLiteral(string statement)
+    {
+        for (var i = 0; i < statement.Length; i++)
+        {
+            if (statement[i] == '\\')
+            {
+                i++; // an escaped character is never a delimiter
+                continue;
+            }
+
+            if (statement[i] != '"')
+            {
+                continue;
+            }
+
+            var close = i + 1;
+            while (close < statement.Length && statement[close] != '"')
+            {
+                close += statement[close] == '\\' ? 2 : 1;
+            }
+
+            if (close >= statement.Length)
+            {
+                return false; // unterminated: a multi-line literal, which this scan does not judge
+            }
+
+            var literal = statement[(i + 1)..close];
+            if (literal.Contains(' ') || literal.EndsWith('.'))
+            {
+                return true;
+            }
+
+            i = close; // resume AFTER the closing quote — this is the parity that a regex cannot keep
+        }
+
+        return false;
+    }
 
     // DialogService.ShowAsync<T>("…") — a dialog title passed positionally rather than via Strings.Get.
     [GeneratedRegex(@"ShowAsync<[^>]+>\(\s*\$?""")]
@@ -115,8 +186,14 @@ public partial class LocalizationLiteralTests
     [Fact]
     public void The_scanner_still_recognises_what_it_is_looking_for()
     {
-        Assert.Single(SnackbarLiteral().Matches("""Snackbar.Add("Could not save.", Severity.Error);"""));
-        Assert.Single(SnackbarLiteral().Matches("""Snackbar.Add($"Saved '{name}'.", Severity.Success);"""));
+        Assert.Equal(1, SnackbarLiteralCount("""Snackbar.Add("Could not save.", Severity.Error);"""));
+        Assert.Equal(1, SnackbarLiteralCount("""Snackbar.Add($"Saved '{name}'.", Severity.Success);"""));
+
+        // The ternary shape the old regex could not see — nineteen of these were live when it reported zero.
+        Assert.Equal(1, SnackbarLiteralCount(
+            """Snackbar.Add(forbidden ? "You don't have permission." : "Could not add the member.", Severity.Warning);"""));
+        // A single word with a full stop still counts: "Unfollowed." is text, not a key.
+        Assert.Equal(1, SnackbarLiteralCount("""Snackbar.Add(on ? "Following." : "Unfollowed.", Severity.Success);"""));
         Assert.Single(DialogTitleLiteral().Matches("""ShowAsync<RenameDialog>("Rename", parameters)"""));
         Assert.Single(AxamlTextLiteral().Matches("""<Button Content="Set reminder" />"""));
         Assert.Single(AxamlTextLiteral().Matches("""<TextBox PlaceholderText="Reviewer…" />"""));
@@ -127,7 +204,14 @@ public partial class LocalizationLiteralTests
         Assert.Empty(AxamlTextLiteral().Matches("""<Button Content="{loc:Tr ReminderSet}" />"""));
         Assert.Empty(AxamlTextLiteral().Matches("""<Window SizeToContent="Height" CanResize="False" />"""));
         Assert.Empty(AxamlTextLiteral().Matches("""<TextBlock TextWrapping="Wrap" />"""));
-        Assert.Empty(SnackbarLiteral().Matches("""Snackbar.Add(Strings.Get("StSaved"), Severity.Success);"""));
+        Assert.Equal(0, SnackbarLiteralCount("""Snackbar.Add(Strings.Get("StSaved"), Severity.Success);"""));
+
+        // The keyed ternary — the CORRECT form, and the one a floating regex reads as a literal because the
+        // text between the two keys is `" : "`. Quote parity is the whole difference.
+        Assert.Equal(0, SnackbarLiteralCount(
+            """Snackbar.Add(Strings.Get(isGroup ? "StGroupCreated" : "StUserCreated"), Severity.Success);"""));
+        Assert.Equal(0, SnackbarLiteralCount(
+            """Snackbar.Add(string.Format(Strings.Get("StFiledItem"), item.Name), Severity.Success);"""));
     }
 
     private static Dictionary<string, int> CountByFile(string root)
@@ -157,7 +241,7 @@ public partial class LocalizationLiteralTests
                 }
 
                 var text = File.ReadAllText(file);
-                var n = SnackbarLiteral().Matches(text).Count
+                var n = SnackbarLiteralCount(text)
                     + DialogTitleLiteral().Matches(text).Count
                     + AxamlTextLiteral().Matches(text).Count(m => !NotTranslatable.Any(m.Value.Contains));
                 if (n > 0)

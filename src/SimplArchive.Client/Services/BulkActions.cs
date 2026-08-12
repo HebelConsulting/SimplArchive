@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using MudBlazor;
+using SimplArchive.Client.Hypermedia;
 using SimplArchive.Client.Dialogs;
 using SimplArchive.Localization;
 
@@ -14,8 +15,31 @@ namespace SimplArchive.Client.Services;
 /// row and are offered by its context menu; these act on the set and are offered by the bulk bar. Each returns
 /// whether the caller should refresh, so the page keeps ownership of the selection and of what "refresh" means.
 /// </remarks>
-public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackbar snackbar, DocumentActions actions)
+public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackbar snackbar, DocumentActions actions, ApiRoot apiRoot)
 {
+    private IReadOnlyDictionary<string, string>? _rels;
+
+    /// <summary>
+    /// The bulk collection's own actions, read once from the address the API root advertises.
+    /// </summary>
+    /// <remarks>
+    /// Cached deliberately, and ADR 0557 says when that is allowed: a rel set that is STRUCTURALLY FIXED may be
+    /// held, content never may. These five are the collection's operations, not its contents — they do not vary
+    /// by document, by user or by page — so one read serves the session and every bulk action is a follow.
+    ///
+    /// The alternative shapes are both wrong. Appending `/move` to the collection's href is composing in
+    /// disguise (the client would be asserting the API's path structure, ADR 0557); re-reading the collection
+    /// per action is a request spent re-learning something fixed.
+    /// </remarks>
+    private async Task<string> HrefAsync(string rel)
+    {
+        _rels ??= (await http.GetFromJsonAsync<BulkCollectionDto>(await apiRoot.RequireAsync("documentsBulk")))?.RelMap()
+            ?? throw new InvalidOperationException("The bulk collection advertised no actions (ADR 0543).");
+        return _rels.TryGetValue(rel, out var href)
+            ? href
+            : throw new InvalidOperationException($"The bulk collection advertised no '{rel}' rel (ADR 0543).");
+    }
+
     /// <summary>Move the selected items into a folder the user picks. False if they cancelled.</summary>
     public async Task<bool> MoveAsync(IReadOnlyCollection<Guid> ids)
     {
@@ -24,7 +48,7 @@ public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackb
             return false;
         }
 
-        return await RunAsync("/api/documents/bulk/move", new { ids = ids.ToList(), parentId = folderId }, "moved");
+        return await RunAsync(await HrefAsync("move"), new { ids = ids.ToList(), parentId = folderId }, "moved");
     }
 
     /// <summary>Send the selected items to the recycle bin, after confirmation.</summary>
@@ -42,7 +66,7 @@ public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackb
             return false;
         }
 
-        return await RunAsync("/api/documents/bulk/delete", new { ids = ids.ToList() }, "deleted");
+        return await RunAsync(await HrefAsync("delete"), new { ids = ids.ToList() }, "deleted");
     }
 
     /// <summary>Add tags, chosen in a dialog, to every selected item.</summary>
@@ -50,7 +74,7 @@ public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackb
     {
         var dialog = await dialogs.ShowAsync<BulkTagsDialog>(Strings.Get("BulkTagsConfirm"));
         return (await dialog.Result) is { Canceled: false, Data: List<string> tags } && tags.Count > 0
-            && await RunAsync("/api/documents/bulk/tags", new { ids = ids.ToList(), tags }, "tagged");
+            && await RunAsync(await HrefAsync("tags"), new { ids = ids.ToList(), tags }, "tagged");
     }
 
     /// <summary>Apply one sensitivity label to every selected item.</summary>
@@ -58,7 +82,7 @@ public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackb
     {
         var dialog = await dialogs.ShowAsync<BulkSensitivityDialog>(Strings.Get("BulkSensTitle"));
         return (await dialog.Result) is { Canceled: false, Data: int label }
-            && await RunAsync("/api/documents/bulk/sensitivity", new { ids = ids.ToList(), label }, "classified");
+            && await RunAsync(await HrefAsync("sensitivity"), new { ids = ids.ToList(), label }, "classified");
     }
 
     /// <summary>
@@ -91,6 +115,20 @@ public sealed class BulkActions(HttpClient http, IDialogService dialogs, ISnackb
             snackbar.Add(string.Format(Strings.Get("StBulkFailed"), e.Message), Severity.Error);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Follows one of the collection's advertised actions by NAME — for the drag-drop handler, which posts a
+    /// move or a reference without going through the bulk bar.
+    /// </summary>
+    public async Task<bool> RunRelAsync(string rel, object body, string verb) =>
+        await RunAsync(await HrefAsync(rel), body, verb);
+
+    private sealed record BulkCollectionDto
+    {
+        public List<LinkResponse> Links { get; set; } = [];
+
+        public IReadOnlyDictionary<string, string>? RelMap() => Hypermedia.Links.RelMap(Links);
     }
 
     private record BulkResultDto

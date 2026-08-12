@@ -213,7 +213,7 @@
             }
             else
             {
-                Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to change retention." : "Could not update retention.", Severity.Warning);
+                Snackbar.Add(Strings.Get(resp.StatusCode == HttpStatusCode.Forbidden ? "StNoPermRetention" : "StErrUpdateRetentionPlain"), Severity.Warning);
             }
         }
         catch (Exception ex) { Snackbar.Add(string.Format(Strings.Get("StErrUpdateRetention"), ex.Message), Severity.Error); }
@@ -248,7 +248,7 @@
             }
             else
             {
-                Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to purge." : "Could not purge.", Severity.Warning);
+                Snackbar.Add(Strings.Get(resp.StatusCode == HttpStatusCode.Forbidden ? "StNoPermPurge" : "StErrPurgePlain"), Severity.Warning);
             }
         }
         catch (Exception ex) { Snackbar.Add(string.Format(Strings.Get("StErrPurge"), ex.Message), Severity.Error); }

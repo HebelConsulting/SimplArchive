@@ -285,4 +285,172 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
         snackbar.Add(success, Severity.Success);
         return true;
     }
+
+    // ---- Sharing, reminders and following (ADRs 0546 / "Document reminders" / "Document subscriptions") ----
+    //
+    // These arrived here from the workbench page (ADR 0558). They are the same kind of thing as the seven above
+    // — something the user does to a document they picked — and they keep the same contract: no state is held,
+    // every result is returned, and refreshing is the caller's business. That is what lets a stateless service
+    // serve a chat-header bell, a ribbon button and a detail-pane icon without knowing any of them exist.
+
+    /// <summary>
+    /// Shares this document with someone who has no account (ADR 0546). The href is the document's own rel, so
+    /// its absence means the document cannot be shared and the affordance is simply not offered.
+    /// </summary>
+    public Task OpenExternalLinksAsync(Guid documentId, string name, string linksHref) =>
+        dialogs.ShowAsync<ExternalLinksDialog>(Strings.Get("ExtLinkTitle"), new DialogParameters
+        {
+            ["DocumentId"] = documentId,
+            ["DocumentName"] = name,
+            ["LinksHref"] = linksHref,
+        });
+
+    /// <summary>
+    /// The cross-document "everything I have shared" list. Its address comes from the API ROOT rather than from
+    /// a document, because it is not a property of whatever happens to be selected — and the rel's ABSENCE is
+    /// meaningful: the feature is not available here, so the ribbon button is not drawn (ADR 0543/0546).
+    /// </summary>
+    public Task<string?> MyExternalLinksHrefAsync() => apiRoot.HrefAsync("externalLinks");
+
+    /// <summary>
+    /// Opens that list, returning the document the user asked to go to, if any. Navigating belongs to the
+    /// workbench, which owns the tree and list panes; a dialog cannot see them.
+    /// </summary>
+    public async Task<(Guid DocumentId, Guid? ParentId)?> OpenMyExternalLinksAsync(string href)
+    {
+        // The directory the dialog's admin filters need, read HERE on a deliberate user action rather than
+        // borrowed from the Users & groups tab's cache: that tab owns its own state (ADR 0558), and borrowing
+        // meant the filters appeared only if the admin happened to have visited it first — order dependence
+        // dressed up as a saved request. Empty is still fine; the server refuses the cross-user query regardless.
+        var (users, groups) = await LoadPrincipalDirectoryAsync();
+
+        // Wide enough for four data columns plus three row actions (issue #410). Without this the DIALOG is the
+        // clipping box — the content can be as wide as it likes and Revoke still falls off its right edge.
+        var dialog = await dialogs.ShowAsync<MyExternalLinksDialog>(
+            Strings.Get("ExtLinkMyLinks"),
+            new DialogParameters { ["LinksHref"] = href, ["Users"] = users, ["Groups"] = groups },
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+
+        return (await dialog.Result)?.Data is MyExternalLinksDialog.GoToDocument target
+            ? (target.DocumentId, target.ParentId)
+            : null;
+    }
+
+    /// <summary>Sets a reminder (Wiedervorlage) on this document (ADR "Document reminders").</summary>
+    public Task OpenReminderAsync(Guid documentId, string name, string? remindersHref) =>
+        dialogs.ShowAsync<ReminderDialog>(Strings.Get("RemTitle"), new DialogParameters
+        {
+            ["DocumentId"] = documentId,
+            ["DocumentName"] = name,
+            ["RemindersHref"] = remindersHref,
+        });
+
+    /// <summary>Whether the caller follows this document or folder. False when it cannot be determined.</summary>
+    public async Task<bool> IsSubscribedAsync(string subscriptionHref)
+    {
+        try
+        {
+            return (await http.GetFromJsonAsync<SubscriptionResponse>(subscriptionHref))?.Subscribed ?? false;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Follows or unfollows, returning the new state — or <c>null</c> when it failed, so the caller leaves its
+    /// own flag alone rather than showing a state the server never reached (ADRs "Document subscriptions" /
+    /// "Folder / subtree subscriptions"; following a folder covers its whole subtree).
+    /// </summary>
+    public async Task<bool?> ToggleSubscriptionAsync(string subscriptionHref, bool subscribed, bool isFolder)
+    {
+        try
+        {
+            using var response = subscribed
+                ? await http.DeleteAsync(subscriptionHref)
+                : await http.PutAsync(subscriptionHref, null);
+            response.EnsureSuccessStatusCode();
+
+            var now = !subscribed;
+            snackbar.Add(Strings.Get((isFolder, now) switch
+            {
+                (true, true) => "StFollowingFolder",
+                (true, false) => "StUnfollowedFolder",
+                (false, true) => "StFollowingDocument",
+                (false, false) => "StUnfollowedDocument",
+            }), Severity.Success);
+            return now;
+        }
+        catch (Exception)
+        {
+            snackbar.Add(Strings.Get("StErrSubscription"), Severity.Error);
+            return null;
+        }
+    }
+
+    private async Task<(List<MyExternalLinksDialog.PrincipalOption> Users, List<MyExternalLinksDialog.PrincipalOption> Groups)> LoadPrincipalDirectoryAsync()
+    {
+        var users = new List<MyExternalLinksDialog.PrincipalOption>();
+        var groups = new List<MyExternalLinksDialog.PrincipalOption>();
+
+        try
+        {
+            var url = await apiRoot.RequireAsync("users");
+            while (url is not null)
+            {
+                var page = await http.GetFromJsonAsync<UsersDirectoryResponse>(url);
+                users.AddRange((page?.Users ?? []).Select(u => new MyExternalLinksDialog.PrincipalOption(u.Id, u.DisplayName, u.DisplayName)));
+                url = Hypermedia.Links.Href(page?.Links, "next");
+            }
+
+            url = await apiRoot.RequireAsync("groups");
+            while (url is not null)
+            {
+                var page = await http.GetFromJsonAsync<GroupsDirectoryResponse>(url);
+                groups.AddRange((page?.Groups ?? []).Select(g => new MyExternalLinksDialog.PrincipalOption(g.Id, g.Name, g.Name)));
+                url = Hypermedia.Links.Href(page?.Links, "next");
+            }
+        }
+        catch (Exception)
+        {
+            // Non-fatal: a caller who cannot read the directory simply gets no filters, which is what a
+            // non-admin sees anyway.
+        }
+
+        return (users, groups);
+    }
+
+    private sealed record SubscriptionResponse
+    {
+        public bool Subscribed { get; set; }
+    }
+
+    private sealed record UsersDirectoryResponse
+    {
+        public List<UserDirectoryRow> Users { get; set; } = [];
+
+        public List<Hypermedia.LinkResponse> Links { get; set; } = [];
+    }
+
+    private sealed record UserDirectoryRow
+    {
+        public Guid Id { get; set; }
+
+        public string DisplayName { get; set; } = "";
+    }
+
+    private sealed record GroupsDirectoryResponse
+    {
+        public List<GroupDirectoryRow> Groups { get; set; } = [];
+
+        public List<Hypermedia.LinkResponse> Links { get; set; } = [];
+    }
+
+    private sealed record GroupDirectoryRow
+    {
+        public Guid Id { get; set; }
+
+        public string Name { get; set; } = "";
+    }
 }

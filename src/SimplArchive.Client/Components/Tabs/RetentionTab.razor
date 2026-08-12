@@ -127,7 +127,7 @@
         }
         else
         {
-            Snackbar.Add(resp.StatusCode == HttpStatusCode.Conflict ? "Under a legal hold — can't dispose." : "Could not dispose.", Severity.Warning);
+            Snackbar.Add(Strings.Get(resp.StatusCode == HttpStatusCode.Conflict ? "StErrDisposeLegalHold" : "StErrDispose"), Severity.Warning);
         }
     }
 

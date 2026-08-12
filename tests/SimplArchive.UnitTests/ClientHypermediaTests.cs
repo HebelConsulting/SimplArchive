@@ -77,16 +77,60 @@ public partial class ClientHypermediaTests
         //
         // Then 41 = 20 + 2 + 1 + 7 + 4 + 3 + 1 + 3 — pure moves again, of the three on the browse path.
         //
-        // Now 48 = 23 + 4 + 1 + 2 + 1 + 7 + 4 + 3 + 1 + 3. The jump is NOT new debt: it is the seven the ledger
+        // Now 49 = 23 + 4 + 1 + 2 + 1 + 7 + 4 + 3 + 1 + 3. The jump is NOT new debt: it is the seven the ledger
         // could not see until the regex learned the leading-slash spelling, plus the API root's own entry point,
-        // which is now counted rather than invisible. The burn-down's real figure was 48 all along.
-        // 48, not 41: widening the regex to see the leading-slash spelling exposed seven that had never been
-        // counted (see ComposedApiUrl). Three are the drag-drop handler's bulk posts, four the bulk bar's.
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 23,
-        // The bulk endpoints, carried out of the page with the actions that post them (ADR 0558). They belong to
-        // the web burn-down: /documents/bulk/* is a collection the API does not advertise a rel for yet, so
-        // converting them is a server change first.
-        ["src/SimplArchive.Client/Services/BulkActions.cs"] = 4,
+        // which is now counted rather than invisible. The burn-down's real figure was 49 all along.
+        //
+        // That line said "48" for three commits while the entries beside it summed to 49 — a hand-arithmetic
+        // slip in prose, repeated into three commit messages and a PR description. The deltas were all right and
+        // the base was wrong, which is the least detectable way for a ledger to lie. Hence ExpectedTotal below:
+        // the headline number is now asserted against the entries rather than typed next to them.
+        //
+        // Still 48 = 21 + 2 + 4 + 1 + 2 + 1 + 7 + 4 + 3 + 1 + 3 — the edit lifecycle moved out (ADR 0558) and took
+        // its two with it. A pure move: same total, and neither was converted, because both are the same shape as
+        // the rest of the remaining debt — a caller holding an id (a mask, a version) that no row advertises an
+        // address for.
+        //
+        // Now 48 = 20 + …, and the missing one was neither moved nor converted — it was DEDUPLICATED. The page
+        // and BrowseService each had their own `api/documents/{id}` fetch-then-follow: the same line, and not any
+        // line, but the single address the client is permitted to build. Two copies of the one sanctioned
+        // exception is how a rule with one exception quietly acquires a second, so BrowseService.FetchRelAsync is
+        // now the only place it is written and the page's copy is gone. Worth stating separately from the other
+        // two outcomes: a total that drops because a duplicate died is not the same result as a conversion, and
+        // reading it as one would overstate the burn-down.
+        // 48 → 41. Check-out and legal holds are DONE — their entries are deleted rather than lowered, which is
+        // what finishing a file looks like here. Both were pure client-side conversions: #441 had already put the
+        // rels on the server (`checkin`, `cancel-checkout`, `working-copy`, `extend`; `release`, `remove`), and
+        // the checkout listing was already deserialising Links while composing the paths anyway. The legal-hold
+        // DTO's doc comment had promised a `RemoveHref` "advertised address" for months next to a record that had
+        // no such property — the comment described the intent and the code did the opposite.
+        //
+        // One behaviour change came with it, and it is the point of the rule rather than a side effect: the
+        // remove-from-hold button was gated on a client-side `IsActive` flag, and is now gated on whether the
+        // item advertises `remove`. The server already withholds that rel for a released hold, so the flag was a
+        // second copy of the rule — and two copies of a permission rule can disagree.
+        // 36 → 26, and the two justifications this ledger carried for that work were BOTH WRONG — which is the
+        // lesson worth more than the ten.
+        //
+        // "documents/bulk/* is a collection the API does not advertise a rel for yet" — the root has advertised
+        // `documentsBulk` all along, and the collection itself advertises move/reference/delete/tags/sensitivity.
+        // The entry is now deleted: BulkActions reads that collection once and follows its actions. Cached on
+        // purpose — ADR 0557 permits holding a rel set that is STRUCTURALLY FIXED, and these five are the
+        // collection's operations rather than its contents.
+        //
+        // "the inbox listing advertises only `self`, so the user-picker has no rel to follow" — written by me
+        // one commit earlier, after checking the LISTING and not the ROOT, which advertises `inboxUsers`
+        // pointing at exactly the URL being composed. A wrong justification is worse than none: it reads as a
+        // finished investigation and stops the next person looking.
+        //
+        // Both were checkable in one grep of RootController. Before recording that something needs a server
+        // change, grep the root's rels AND the resource's — the entry point is where a cross-document
+        // collection lives, and a per-row listing is the wrong place to look for it.
+        ["src/SimplArchive.Client/Pages/Home.razor"] = 15,
+        // The mask's field definitions and a version's document-date, carried out of the page with the edit
+        // lifecycle. Converting either is a server change first: the mask picker offers ids from a catalogue that
+        // advertises no per-mask address, and a version row does not carry a `document-date` rel.
+        ["src/SimplArchive.Client/Services/DetailEditor.cs"] = 2,
         // THE ENTRY POINT, not a debt. ADR 0543 says the only URL a client may know is the API root, and this is
         // the one line that knows it — every other address in both clients is followed from a rel reached from
         // here. It is counted rather than exempted so that a SECOND URL appearing in this file fails the build.
@@ -102,18 +146,39 @@ public partial class ClientHypermediaTests
         // The three the shared row actions carried out of the page with them (ADR 0558) — the legal-hold
         // items collection and the reference endpoints, which belong to the web burn-down, not to the move.
         ["src/SimplArchive.Client/Services/DocumentActions.cs"] = 3,
-        ["src/SimplArchive.Client/Components/Tabs/InboxTab.razor"] = 7,
+        // 41 → 36. Five of the inbox's seven converted with no server change: the item rows had been carrying
+        // `preview` and `mask` all along while the tab rebuilt those paths from Name plus a hand-written
+        // `?group=`/`?user=` query — and the server's own hrefs already carry that source query, so the
+        // SourceQuery property that existed to re-append it is deleted rather than moved.
+        //
+        // The two listing variants converted as FOLLOWS, not compositions: `{inboxHref}?user=…` appends a QUERY
+        // to an advertised href, which ADR 0557 puts on the following side of the line — the server owns the
+        // path, the caller owns the filter. Appending a SEGMENT would have been composing in disguise.
+        //
+        // What remains needs the SERVER first: `api/masks/{id}` — a mask catalogue entry advertises no address
+        // of its own, the same gap DetailEditor's two sit in.
+        ["src/SimplArchive.Client/Components/Tabs/InboxTab.razor"] = 1,
         // The one the Users & groups tab carried out with it — a principal's own address, which belongs to the
         // web burn-down rather than to the extraction that moved it.
         ["src/SimplArchive.Client/Components/Tabs/UsersGroupsTab.razor"] = 1,
-        // The check-out stash addresses — download, replace, check in, cancel. The rels exist server-side
-        // (#441 renamed `checkin` to mean the POST that actually checks in); this is the client half.
-        ["src/SimplArchive.Client/Components/Tabs/CheckoutTab.razor"] = 4,
-        // The three legal-hold addresses: creating a matter for one document, adding an item, and removing
-        // one. The rels exist server-side (#441 added the item's own `remove`); this is the client half,
-        // which belongs to the web burn-down rather than to the extraction that carried them here.
-        ["src/SimplArchive.Client/Components/Tabs/LegalHoldsTab.razor"] = 3,
     };
+
+    // The burn-down's headline figure, asserted against the entries rather than written beside them.
+    //
+    // It was prose until 2026-08-12, and prose drifts: the comment above read "48" for three commits while the
+    // dictionary summed to 49, so every "48 → 47" that followed was off by one in the base while being exactly
+    // right in the delta. A wrong base is the least visible way for a ledger to mislead — the arithmetic all
+    // checks out locally, and only a fresh sum exposes it. Lower this with the entries, in the same commit.
+    private const int ExpectedTotal = 26;
+
+    [Fact]
+    public void The_ledgers_headline_total_matches_its_entries()
+    {
+        var sum = Budget.Values.Sum();
+        Assert.True(sum == ExpectedTotal,
+            $"The budget entries sum to {sum} but ExpectedTotal says {ExpectedTotal}. Update both in the same "
+            + "commit — the point of the number is that it can be read off and trusted.");
+    }
 
     [Fact]
     public void No_client_composes_an_api_url_except_the_one_named_exception()
@@ -198,6 +263,16 @@ public partial class ClientHypermediaTests
                 demanded.Add(m.Groups["rel"].Value);
             }
 
+            foreach (Match m in RelFollowedByHref().Matches(text))
+            {
+                demanded.Add(m.Groups["rel"].Value);
+            }
+
+            foreach (Match m in RelFromRelMap().Matches(text))
+            {
+                demanded.Add(m.Groups["rel"].Value);
+            }
+
             foreach (Match m in RelCompared().Matches(text))
             {
                 demanded.Add(m.Groups["rel"].Value);
@@ -243,6 +318,20 @@ public partial class ClientHypermediaTests
         Assert.Single(RelCompared().Matches("""Links.FirstOrDefault(l => l.Rel == "acl-inheritance")"""));
         Assert.Single(RelCompared().Matches("l.Rel is \"submit\""));
 
+        // The two forms that were invisible until 2026-08-11 — between them, 32 of the client's rels.
+        Assert.Single(RelFollowedByHref().Matches("""Links.Href(c.Links, "working-copy")"""));
+        Assert.Single(RelFollowedByHref().Matches("""Links.Required(detail.Links, "index-data")"""));
+        Assert.Single(RelFollowedByHref().Matches("""Links.Href(Links.RelMap(d.Links), "checkin")"""));
+        Assert.Single(RelFromRelMap().Matches("""Detail.Links?.GetValueOrDefault("reminders")"""));
+
+        // …and HrefAsync must NOT also match as the plain Href form, or every root rel is counted twice.
+        Assert.Empty(RelFollowedByHref().Matches("""await ApiRoot.HrefAsync("externalLinks")"""));
+
+        // The advertised side reads BOTH constructions. The target-typed one is what the controllers use inside
+        // a List<Link> initialiser, and requiring the space after `new` hid every one of them.
+        Assert.Single(AdvertisedRel().Matches("""new Link("self", url, "GET")"""));
+        Assert.Single(AdvertisedRel().Matches("""new("subscription", $"/api/documents/{id}/subscription", "GET")"""));
+
         // Hyphenated rels must be seen: the earlier pattern was [A-Za-z]+, which silently could not match one.
         Assert.Equal("external-links", RelFollowed().Match("""RequireAsync("external-links")""").Groups["rel"].Value);
     }
@@ -253,6 +342,22 @@ public partial class ClientHypermediaTests
     private static partial Regex RelFollowed();
 
     // The comparison form: scanning a resource's links for a rel rather than asking ApiRoot for it.
+    // Links.Href(links, "x") and Links.Required(links, "x") — the web client's COMMONEST form, and it was
+    // unmatched until 2026-08-11. The alternation above deliberately lists HrefAsync, which reads as though the
+    // plain Href were covered too; it is not, and the (?<!Async) is what keeps the two apart.
+    //
+    // 32 of the client's rels were reachable only this way, so roughly two in five were invisible to the guard
+    // whose entire job is checking rel names — the third blind spot of this exact shape found in one day, after
+    // the composed-URL regex missing the leading-slash spelling and the localization scan missing a ternary. The
+    // pattern is always the same: the guard covers the shape its author had in front of them, the comment then
+    // claims completeness, and the claim is what stops anyone re-measuring.
+    [GeneratedRegex(@"(?<!Async)\b(?:Href|Required)\((?:[^()""]|\([^()]*\))*,\s*""(?<rel>[A-Za-z0-9_-]+)""")]
+    private static partial Regex RelFollowedByHref();
+
+    // Detail.Links?.GetValueOrDefault("x") — a rel read straight out of an already-fetched rel map (ADR 0555).
+    [GeneratedRegex(@"GetValueOrDefault\(""(?<rel>[A-Za-z0-9_-]+)""\)")]
+    private static partial Regex RelFromRelMap();
+
     [GeneratedRegex(@"\.Rel\s*(?:==|is)\s*""(?<rel>[A-Za-z0-9_-]+)""")]
     private static partial Regex RelCompared();
 
@@ -260,7 +365,13 @@ public partial class ClientHypermediaTests
     // argument is deliberately unconstrained — it is a literal, an interpolation, or a Url.Action(...) call
     // (that last one is how every paginated `next` is built), and pinning its shape only narrows what counts as
     // "advertised" for no gain.
-    [GeneratedRegex(@"new (?:Link)?\(\s*""(?<rel>[A-Za-z0-9_-]+)"",")]
+    // Both spellings of the construction: `new Link("x", …)` and the target-typed `new("x", …)`. The literal
+    // space after `new` was required until 2026-08-11, so every target-typed advertisement was invisible — and
+    // the controllers use that form freely inside a `List<Link>` initialiser. Seven rels (subscription, export,
+    // retention, verify, worm-verify, add-member, referencing-folders) read as "advertised nowhere" the moment
+    // the client side of this guard was widened enough to look for them. Both halves had the same blind spot,
+    // which is why neither exposed the other.
+    [GeneratedRegex(@"new\s*(?:Link)?\s*\(\s*""(?<rel>[A-Za-z0-9_-]+)"",")]
     private static partial Regex AdvertisedRel();
 
     // One definition of "a client source file", shared by both tests — so the rel guard and the ledger can never

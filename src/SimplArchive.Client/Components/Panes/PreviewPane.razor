@@ -3,6 +3,7 @@
 @inject HttpClient Http
 @inject IJSRuntime JS
 @implements IAsyncDisposable
+@implements IAnnotationSurface
 
 @* The workbench's document preview (ADRs 0268/0269/0282/0294/0295), extracted from Home.razor per ADR 0558.
 
@@ -233,6 +234,9 @@
     }
 
     // ---- The annotation overlay, driven by whoever owns the annotations --------------------------------
+
+    /// <summary>Whether pages have rendered — there is nothing to draw markers on otherwise (IAnnotationSurface).</summary>
+    public bool HasPages => State.HasPages;
 
     /// <summary>Hands preview.js the markers to draw over the pages.</summary>
     public async Task SetAnnotationsAsync(object markers)

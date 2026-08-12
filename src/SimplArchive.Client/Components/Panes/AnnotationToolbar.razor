@@ -1,0 +1,78 @@
+@using SimplArchive.Client.Services
+@inject AnnotationEditor Annotations
+@implements IDisposable
+
+@* The preview's annotation tools (ADRs "Document annotations", "Annotation markup", "Annotation multi-select",
+   "Highlighting redesign"), extracted from Home.razor per ADR 0558.
+
+   Every button here is a command on AnnotationEditor, and every enabled/active state is a property of it. That
+   is the whole reason this is a component rather than markup in the page: the gestures that change those states
+   arrive from preview.js, and a JS-invoked path does not re-render anything by itself. The component subscribes
+   to the editor's Changed event and calls StateHasChanged, so a shape drawn on the page disarms its tool button
+   and a marquee selection lights up copy/delete — without the page having to know that annotations exist. *@
+
+@if (Annotations.Annotatable)
+{
+    @* Authoring needs CanAnnotate (ADR "CanAnnotate right") AND a pointer: touch has no hover, and these tools
+       are hover-and-drag affordances, so a touch-only device gets viewing but not authoring (#349). *@
+    @if (Annotations.CanCreate && !TouchOnly)
+    {
+        <MudIconButton Class="wb-pv-note-add" Icon="@Icons.Material.Filled.AddComment" Size="Size.Small"
+                       Color="@(Annotations.AddMode ? Color.Primary : Color.Default)"
+                       OnClick="@(() => Annotations.StartAddNoteAsync())" title="@Strings.Get("AddStickyNote")" />
+        @* Markup tools: drag on the page to draw a highlight / rectangle / arrow. *@
+        <MudIconButton Class="wb-pv-tool-highlight" Icon="@Icons.Material.Filled.BorderColor" Size="Size.Small"
+                       Color="@(Annotations.Tool == 1 ? Color.Primary : Color.Default)"
+                       OnClick="@(() => Annotations.SelectToolAsync(1))" title="@Strings.Get("PvHighlight")" />
+        <MudIconButton Class="wb-pv-tool-rect" Icon="@Icons.Material.Filled.CropSquare" Size="Size.Small"
+                       Color="@(Annotations.Tool == 2 ? Color.Primary : Color.Default)"
+                       OnClick="@(() => Annotations.SelectToolAsync(2))" title="@Strings.Get("PvRectangle")" />
+        <MudIconButton Class="wb-pv-tool-arrow" Icon="@Icons.Material.Filled.NorthEast" Size="Size.Small"
+                       Color="@(Annotations.Tool == 3 ? Color.Primary : Color.Default)"
+                       OnClick="@(() => Annotations.SelectToolAsync(3))" title="@Strings.Get("PvArrow")" />
+        @* The palette sets the draw colour for new shapes AND recolours the selection, so it appears exactly
+           when one of those is meaningful — while a tool is armed, or with something selected. *@
+        @if (Annotations.Tool > 0 || Annotations.HasSelection)
+        {
+            <span class="wb-pv-palette">
+                @foreach (var c in AnnotationEditor.Palette)
+                {
+                    <span class="wb-pv-swatch @(Annotations.Color == c ? "wb-pv-swatch-on" : "")" style="@($"background:{c}")"
+                          @onclick="@(() => Annotations.SetColorAsync(c))" title="Set colour"></span>
+                }
+            </span>
+        }
+    }
+    @* Show/hide needs only read, so it sits outside the authoring gate. *@
+    <MudIconButton Class="wb-pv-note-toggle" Size="Size.Small"
+                   Icon="@(Annotations.Visible ? Icons.Material.Filled.StickyNote2 : Icons.Material.Outlined.StickyNote2)"
+                   OnClick="@(() => Annotations.ToggleVisibilityAsync())"
+                   title="@(Annotations.Visible ? Strings.Get("PvHideNotes") : Strings.Get("PvShowNotes"))" />
+    @if (Annotations.CanCreate && !TouchOnly)
+    {
+        <MudIconButton Class="wb-pv-anno-copy" Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                       Disabled="@(!Annotations.HasSelection)"
+                       OnClick="@(() => Annotations.CopySelection())" title="@Strings.Get("CopyAnnotationsTip")" />
+        <MudIconButton Class="wb-pv-anno-paste" Icon="@Icons.Material.Filled.ContentPaste" Size="Size.Small"
+                       Disabled="@(!Annotations.HasClipboard)"
+                       OnClick="@(() => Annotations.PasteAsync())" title="@Strings.Get("PasteAnnotationsTip")" />
+        <MudIconButton Class="wb-pv-anno-delete" Icon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small"
+                       Disabled="@(!Annotations.HasSelection)"
+                       OnClick="@(() => Annotations.DeleteSelectionAsync())" title="@Strings.Get("DeleteAnnotationsTip")" />
+    }
+}
+
+@code {
+    /// <summary>
+    /// A touch-only device (coarse pointer, no hover), reported once by wbLayout.js. A parameter rather than
+    /// something read here, because it is a property of the viewport the shell already watches — not of
+    /// annotations.
+    /// </summary>
+    [Parameter] public bool TouchOnly { get; set; }
+
+    protected override void OnInitialized() => Annotations.Changed += OnAnnotationsChanged;
+
+    public void Dispose() => Annotations.Changed -= OnAnnotationsChanged;
+
+    private void OnAnnotationsChanged() => InvokeAsync(StateHasChanged);
+}

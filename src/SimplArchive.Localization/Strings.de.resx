@@ -2595,6 +2595,126 @@
   <data name="StErrUpdatePhoto" xml:space="preserve">
     <value>Foto konnte nicht aktualisiert werden.</value>
   </data>
+  <data name="StFollowingDocument" xml:space="preserve">
+    <value>Sie folgen diesem Dokument.</value>
+  </data>
+  <data name="StUnfollowedDocument" xml:space="preserve">
+    <value>Nicht mehr gefolgt.</value>
+  </data>
+  <data name="StFollowingFolder" xml:space="preserve">
+    <value>Sie folgen diesem Ordner und allen Inhalten.</value>
+  </data>
+  <data name="StUnfollowedFolder" xml:space="preserve">
+    <value>Ordner nicht mehr gefolgt.</value>
+  </data>
+  <data name="StNoPermRetention" xml:space="preserve">
+    <value>Sie sind nicht berechtigt, die Aufbewahrung zu ändern.</value>
+  </data>
+  <data name="StNoPermPurge" xml:space="preserve">
+    <value>Sie sind nicht berechtigt, endgültig zu löschen.</value>
+  </data>
+  <data name="StNoPermFileThere" xml:space="preserve">
+    <value>Sie sind nicht berechtigt, '{0}' dort abzulegen.</value>
+  </data>
+  <data name="StErrFileItem" xml:space="preserve">
+    <value>'{0}' konnte nicht abgelegt werden.</value>
+  </data>
+  <data name="StFiledAsVersion" xml:space="preserve">
+    <value>'{0}' als neue Version abgelegt.</value>
+  </data>
+  <data name="StFiledItem" xml:space="preserve">
+    <value>'{0}' abgelegt.</value>
+  </data>
+  <data name="StRestoredSkipped" xml:space="preserve">
+    <value>{0} Element(e) wiederhergestellt, {1} übersprungen.</value>
+  </data>
+  <data name="StRestoredItems" xml:space="preserve">
+    <value>{0} Element(e) wiederhergestellt.</value>
+  </data>
+  <data name="StPurgedSkipped" xml:space="preserve">
+    <value>{0} Element(e) endgültig gelöscht, {1} übersprungen (Rechtssperre / gesperrt).</value>
+  </data>
+  <data name="StPurgedItems" xml:space="preserve">
+    <value>{0} Element(e) endgültig gelöscht.</value>
+  </data>
+  <data name="StErrDisposeLegalHold" xml:space="preserve">
+    <value>Unter Rechtssperre — Aussonderung nicht möglich.</value>
+  </data>
+  <data name="StErrDispose" xml:space="preserve">
+    <value>Die Aussonderung ist fehlgeschlagen.</value>
+  </data>
+  <data name="StSavedSearchExists" xml:space="preserve">
+    <value>Sie haben bereits eine gespeicherte Suche mit diesem Namen.</value>
+  </data>
+  <data name="StErrSaveGeneric" xml:space="preserve">
+    <value>Speichern fehlgeschlagen.</value>
+  </data>
+  <data name="StTagExists" xml:space="preserve">
+    <value>Dieses Schlagwort existiert bereits.</value>
+  </data>
+  <data name="StErrAddTag" xml:space="preserve">
+    <value>Das Schlagwort konnte nicht hinzugefügt werden (Farbe muss #RRGGBB sein).</value>
+  </data>
+  <data name="StErrResetPassword" xml:space="preserve">
+    <value>Das Passwort konnte nicht zurückgesetzt werden.</value>
+  </data>
+  <data name="StGroupNameExists" xml:space="preserve">
+    <value>Eine Gruppe mit diesem Namen existiert bereits.</value>
+  </data>
+  <data name="StUserEmailExists" xml:space="preserve">
+    <value>Ein Benutzer mit dieser E-Mail existiert bereits.</value>
+  </data>
+  <data name="StGroupCreated" xml:space="preserve">
+    <value>Gruppe angelegt.</value>
+  </data>
+  <data name="StUserCreated" xml:space="preserve">
+    <value>Benutzer angelegt.</value>
+  </data>
+  <data name="StGroupDeleted" xml:space="preserve">
+    <value>Gruppe gelöscht.</value>
+  </data>
+  <data name="StUserDeactivated" xml:space="preserve">
+    <value>Benutzer deaktiviert.</value>
+  </data>
+  <data name="StLabelNameExists" xml:space="preserve">
+    <value>Ein Label mit diesem Namen existiert bereits.</value>
+  </data>
+  <data name="StErrAddLabel" xml:space="preserve">
+    <value>Das Label konnte nicht hinzugefügt werden.</value>
+  </data>
+  <data name="StErrUpdateLabel" xml:space="preserve">
+    <value>Das Label konnte nicht aktualisiert werden.</value>
+  </data>
+  <data name="StAppendedWord" xml:space="preserve">
+    <value>'{0}' an die Zwischenablage angehängt.</value>
+  </data>
+  <data name="StCopiedWord" xml:space="preserve">
+    <value>'{0}' in die Zwischenablage kopiert.</value>
+  </data>
+  <data name="StUnknownError" xml:space="preserve">
+    <value>unbekannter Fehler</value>
+  </data>
+  <data name="StErrUpdateRetentionPlain" xml:space="preserve">
+    <value>Die Aufbewahrung konnte nicht aktualisiert werden.</value>
+  </data>
+  <data name="StErrPurgePlain" xml:space="preserve">
+    <value>Das endgültige Löschen ist fehlgeschlagen.</value>
+  </data>
+  <data name="StErrStartConversionPlain" xml:space="preserve">
+    <value>Die Konvertierung konnte nicht gestartet werden.</value>
+  </data>
+  <data name="StSharedWithEveryone" xml:space="preserve">
+    <value>'{0}' für alle freigegeben.</value>
+  </data>
+  <data name="StSharedWithPeople" xml:space="preserve">
+    <value>'{0}' für bestimmte Personen freigegeben.</value>
+  </data>
+  <data name="StNowPrivate" xml:space="preserve">
+    <value>'{0}' ist jetzt privat.</value>
+  </data>
+  <data name="StGroupHasChildren" xml:space="preserve">
+    <value>Die Gruppe hat noch Untergruppen oder Mitglieder.</value>
+  </data>
   <data name="StErrSubscription" xml:space="preserve">
     <value>Ihr Abonnement konnte nicht aktualisiert werden.</value>
   </data>
@@ -3054,6 +3174,27 @@
   <data name="FolderSortNoPermission" xml:space="preserve">
     <value>Sie sind nicht berechtigt, die Sortierung dieses Ordners zu ändern.</value>
   </data>
+  <data name="SaveFailName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="SaveFailNameConflict" xml:space="preserve">
+    <value>Name (existiert hier bereits)</value>
+  </data>
+  <data name="SaveFailDocumentDate" xml:space="preserve">
+    <value>Dokumentdatum</value>
+  </data>
+  <data name="SaveFailOcrLanguages" xml:space="preserve">
+    <value>OCR-Sprachen</value>
+  </data>
+  <data name="SaveFailSensitivity" xml:space="preserve">
+    <value>Vertraulichkeit</value>
+  </data>
+  <data name="SaveFailTags" xml:space="preserve">
+    <value>Schlagwörter</value>
+  </data>
+  <data name="SaveFailMaskIndexData" xml:space="preserve">
+    <value>Maske / Indexdaten (Pflicht- und Formatfelder prüfen)</value>
+  </data>
   <data name="FolderSortSaveFailed" xml:space="preserve">
     <value>Sortierung konnte nicht gespeichert werden.</value>
   </data>
@@ -3257,6 +3398,12 @@
   </data>
   <data name="ApiErrCannotChangeRootInheritance" xml:space="preserve">
     <value>Die Vererbung kann an einem Archiv nicht geändert werden — es gibt keinen übergeordneten Ordner, von dem geerbt werden könnte.</value>
+  </data>
+  <data name="StErrDeleteNote" xml:space="preserve">
+    <value>Die Notiz konnte nicht gelöscht werden.</value>
+  </data>
+  <data name="StErrSaveNote" xml:space="preserve">
+    <value>Die Notiz konnte nicht gespeichert werden.</value>
   </data>
   <data name="StErrRecolour" xml:space="preserve">
     <value>Die Auswahl konnte nicht umgefärbt werden.</value>

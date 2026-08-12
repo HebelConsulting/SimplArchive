@@ -315,7 +315,7 @@
         if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrTestEvent"), Severity.Error); return; }
         var result = await resp.Content.ReadFromJsonAsync<TestWebhookResult>();
         if (result?.Success == true) Snackbar.Add(Strings.Get("StTestEventDelivered"), Severity.Success);
-        else Snackbar.Add(string.Format(Strings.Get("StTestDeliveryFailed"), result?.Error ?? "unknown error"), Severity.Warning);
+        else Snackbar.Add(string.Format(Strings.Get("StTestDeliveryFailed"), result?.Error ?? Strings.Get("StUnknownError")), Severity.Warning);
     }
 
     private record TestWebhookResult { public bool Success { get; set; } public string? Error { get; set; } }

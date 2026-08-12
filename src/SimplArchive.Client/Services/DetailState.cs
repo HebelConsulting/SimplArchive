@@ -80,6 +80,13 @@ public sealed class DetailState
 
     // ---- The open edit's working copy -----------------------------------------------------------------
 
+    /// <summary>
+    /// Whether the pane is in edit mode. Here rather than in the pane or the editor for the same reason the
+    /// working copy is: a tab switch disposes the pane, and coming back to a form that had silently reverted to
+    /// read mode would discard the input below without saying so.
+    /// </summary>
+    public bool IsEditing { get; set; }
+
     public string EditName { get; set; } = "";
     public DateTime? EditDocumentDate { get; set; }
     public Guid? EditMaskId { get; set; }
@@ -88,9 +95,25 @@ public sealed class DetailState
     public Guid? EditSensitivityId { get; set; }
     public FolderContentsSortOrder EditSortOrder { get; set; } = FolderContentsSortOrder.Name;
 
+    /// <summary>The half-typed value in the tag add-box — unsaved input, so it survives a tab switch too.</summary>
+    public string? EditNewTag { get; set; }
+
     /// <summary>
     /// The mask's fields as an editable form. Readonly-collection on purpose: entering an edit REPLACES the
     /// contents rather than the list, so a component holding a reference keeps seeing the live form.
     /// </summary>
     public List<EditField> EditFields { get; } = [];
+
+    // ---- What the working copy started from ------------------------------------------------------------
+
+    // Snapshotted when the edit opens, so a save sends only what actually changed and each successful field
+    // advances its own original — a partial save leaves the rest still marked dirty, which is the point. They
+    // live beside the working copy rather than in DetailEditor because they are half of the same answer: without
+    // them a form restored after a tab switch would think every field had changed.
+
+    public string OrigName { get; set; } = "";
+    public DateTime? OrigDocumentDate { get; set; }
+    public Guid? OrigMaskId { get; set; }
+    public List<string> OrigOcrCodes { get; set; } = [];
+    public List<string> OrigTags { get; set; } = [];
 }

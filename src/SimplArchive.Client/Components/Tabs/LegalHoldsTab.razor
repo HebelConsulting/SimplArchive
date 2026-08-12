@@ -52,9 +52,12 @@
                                 <div class="wb-list-row">
                                     <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" />
                                     <span style="flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@it.DocumentName</span>
-                                    @if (sel.IsActive)
+                                    @* Gated on the REL, not on a client-side IsActive flag: the server already
+                                       withholds `remove` for a released hold, and re-deriving that here is a second
+                                       copy of the rule that can disagree with the first (ADR 0543). *@
+                                    @if (Links.Href(it.Links, "remove") is not null)
                                     {
-                                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="() => RemoveHoldItemAsync(it.DocumentId)" title="@Strings.Get("LhRemoveFromHold")" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="() => RemoveHoldItemAsync(it)" title="@Strings.Get("LhRemoveFromHold")" />
                                     }
                                 </div>
                             }
@@ -113,7 +116,7 @@
         // Fetch the full hold (with its items).
         try
         {
-            _selectedHold = await Http.GetFromJsonAsync<LegalHoldDto>($"api/legal-holds/{hold.Id}") ?? hold;
+            _selectedHold = await Http.GetFromJsonAsync<LegalHoldDto>(Href(hold.Links, "self")) ?? hold;
         }
         catch (Exception)
         {
@@ -162,7 +165,7 @@
 
         try
         {
-            using var response = await Http.PostAsync($"api/legal-holds/{sel.Id}/release", null);
+            using var response = await Http.PostAsync(Href(sel.Links, "release"), null);
             response.EnsureSuccessStatusCode();
             Snackbar.Add(Strings.Get("StHoldReleased"), Severity.Success);
             await LoadLegalHoldsAsync();
@@ -175,7 +178,7 @@
         }
     }
 
-    private async Task RemoveHoldItemAsync(Guid documentId)
+    private async Task RemoveHoldItemAsync(LegalHoldItemDto item)
     {
         if (_selectedHold is not { } sel)
         {
@@ -184,7 +187,7 @@
 
         try
         {
-            using var response = await Http.DeleteAsync($"api/legal-holds/{sel.Id}/items/{documentId}");
+            using var response = await Http.DeleteAsync(Href(item.Links, "remove"));
             response.EnsureSuccessStatusCode();
             await SelectHoldAsync(sel);
             await LoadLegalHoldsAsync();
@@ -195,6 +198,12 @@
             Snackbar.Add(Strings.Get("StErrRemoveFromHold"), Severity.Error);
         }
     }
+
+    // Addressed from the resource that advertised it, never composed (ADR 0543). A released hold advertises no
+    // `release` and its items no `remove`, so reaching for one is a bug in the caller rather than a refusal to
+    // handle — hence the throw.
+    private static string Href(List<LinkResponse> links, string rel) =>
+        Links.Href(links, rel) ?? throw new InvalidOperationException($"Legal hold advertised no '{rel}' rel (ADR 0543).");
 
     private record LegalHoldsListDto { public List<LegalHoldDto> Holds { get; set; } = new(); }
 

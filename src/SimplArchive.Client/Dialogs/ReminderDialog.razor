@@ -82,7 +82,12 @@
     {
         try
         {
-            if (RemindersHref is null) { return; }
+            // Never silently: an absent address used to leave the dialog open, fully interactive, and unable
+            // to save anything (#420). The caller resolves it now, so this is a bug guard rather than a state.
+            if (RemindersHref is null)
+            {
+                throw new InvalidOperationException("The reminder dialog was opened without a reminders address (ADR 0543).");
+            }
 
             var list = await Http.GetFromJsonAsync<ReminderListResponse>(RemindersHref);
             _reminders = list?.Reminders ?? [];

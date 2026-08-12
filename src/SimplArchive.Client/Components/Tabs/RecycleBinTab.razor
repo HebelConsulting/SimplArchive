@@ -263,7 +263,7 @@
             var result = await response.Content.ReadFromJsonAsync<RestoreManyResult>();
             var restored = result?.Restored ?? 0;
             var skipped = result?.Skipped ?? 0;
-            Snackbar.Add(skipped > 0 ? $"Restored {restored} item(s), skipped {skipped}." : $"Restored {restored} item(s).", Severity.Success);
+            Snackbar.Add(skipped > 0 ? string.Format(Strings.Get("StRestoredSkipped"), restored, skipped) : string.Format(Strings.Get("StRestoredItems"), restored), Severity.Success);
             _rbChecked.Clear();
             if (_rbSelected is { } sel && ids.Contains(sel.Id)) { _rbSelected = null; ClearRbPreview(); }
             await LoadRecycleBinAsync();
@@ -317,7 +317,7 @@
             var r = await response.Content.ReadFromJsonAsync<PurgeManyResult>();
             var purged = r?.Purged ?? 0;
             var skipped = r?.Skipped ?? 0;
-            Snackbar.Add(skipped > 0 ? $"Permanently deleted {purged} item(s), skipped {skipped} (legal hold / locked)." : $"Permanently deleted {purged} item(s).", Severity.Success);
+            Snackbar.Add(skipped > 0 ? string.Format(Strings.Get("StPurgedSkipped"), purged, skipped) : string.Format(Strings.Get("StPurgedItems"), purged), Severity.Success);
             _rbChecked.Clear();
             if (_rbSelected is { } sel && ids.Contains(sel.Id)) { _rbSelected = null; ClearRbPreview(); }
             await LoadRecycleBinAsync();

@@ -2595,6 +2595,126 @@
   <data name="StErrUpdatePhoto" xml:space="preserve">
     <value>Could not update the photo.</value>
   </data>
+  <data name="StFollowingDocument" xml:space="preserve">
+    <value>Following this document.</value>
+  </data>
+  <data name="StUnfollowedDocument" xml:space="preserve">
+    <value>Unfollowed.</value>
+  </data>
+  <data name="StFollowingFolder" xml:space="preserve">
+    <value>Following this folder and everything in it.</value>
+  </data>
+  <data name="StUnfollowedFolder" xml:space="preserve">
+    <value>Unfollowed folder.</value>
+  </data>
+  <data name="StNoPermRetention" xml:space="preserve">
+    <value>You don't have permission to change retention.</value>
+  </data>
+  <data name="StNoPermPurge" xml:space="preserve">
+    <value>You don't have permission to purge.</value>
+  </data>
+  <data name="StNoPermFileThere" xml:space="preserve">
+    <value>You don't have permission to file '{0}' there.</value>
+  </data>
+  <data name="StErrFileItem" xml:space="preserve">
+    <value>Could not file '{0}'.</value>
+  </data>
+  <data name="StFiledAsVersion" xml:space="preserve">
+    <value>Filed '{0}' as a new version.</value>
+  </data>
+  <data name="StFiledItem" xml:space="preserve">
+    <value>Filed '{0}'.</value>
+  </data>
+  <data name="StRestoredSkipped" xml:space="preserve">
+    <value>Restored {0} item(s), skipped {1}.</value>
+  </data>
+  <data name="StRestoredItems" xml:space="preserve">
+    <value>Restored {0} item(s).</value>
+  </data>
+  <data name="StPurgedSkipped" xml:space="preserve">
+    <value>Permanently deleted {0} item(s), skipped {1} (legal hold / locked).</value>
+  </data>
+  <data name="StPurgedItems" xml:space="preserve">
+    <value>Permanently deleted {0} item(s).</value>
+  </data>
+  <data name="StErrDisposeLegalHold" xml:space="preserve">
+    <value>Under a legal hold — can't dispose.</value>
+  </data>
+  <data name="StErrDispose" xml:space="preserve">
+    <value>Could not dispose.</value>
+  </data>
+  <data name="StSavedSearchExists" xml:space="preserve">
+    <value>You already have a saved search with that name.</value>
+  </data>
+  <data name="StErrSaveGeneric" xml:space="preserve">
+    <value>Could not save.</value>
+  </data>
+  <data name="StTagExists" xml:space="preserve">
+    <value>That tag already exists.</value>
+  </data>
+  <data name="StErrAddTag" xml:space="preserve">
+    <value>Could not add the tag (check the colour is #RRGGBB).</value>
+  </data>
+  <data name="StErrResetPassword" xml:space="preserve">
+    <value>Could not reset the password.</value>
+  </data>
+  <data name="StGroupNameExists" xml:space="preserve">
+    <value>A group with this name already exists.</value>
+  </data>
+  <data name="StUserEmailExists" xml:space="preserve">
+    <value>A user with this email already exists.</value>
+  </data>
+  <data name="StGroupCreated" xml:space="preserve">
+    <value>Group created.</value>
+  </data>
+  <data name="StUserCreated" xml:space="preserve">
+    <value>User created.</value>
+  </data>
+  <data name="StGroupDeleted" xml:space="preserve">
+    <value>Group deleted.</value>
+  </data>
+  <data name="StUserDeactivated" xml:space="preserve">
+    <value>User deactivated.</value>
+  </data>
+  <data name="StLabelNameExists" xml:space="preserve">
+    <value>A label with that name exists.</value>
+  </data>
+  <data name="StErrAddLabel" xml:space="preserve">
+    <value>Could not add the label.</value>
+  </data>
+  <data name="StErrUpdateLabel" xml:space="preserve">
+    <value>Could not update the label.</value>
+  </data>
+  <data name="StAppendedWord" xml:space="preserve">
+    <value>Appended '{0}' to the clipboard.</value>
+  </data>
+  <data name="StCopiedWord" xml:space="preserve">
+    <value>Copied '{0}' to the clipboard.</value>
+  </data>
+  <data name="StUnknownError" xml:space="preserve">
+    <value>unknown error</value>
+  </data>
+  <data name="StErrUpdateRetentionPlain" xml:space="preserve">
+    <value>Could not update retention.</value>
+  </data>
+  <data name="StErrPurgePlain" xml:space="preserve">
+    <value>Could not purge.</value>
+  </data>
+  <data name="StErrStartConversionPlain" xml:space="preserve">
+    <value>Could not start the conversion.</value>
+  </data>
+  <data name="StSharedWithEveryone" xml:space="preserve">
+    <value>Shared '{0}' with everyone.</value>
+  </data>
+  <data name="StSharedWithPeople" xml:space="preserve">
+    <value>Shared '{0}' with specific people.</value>
+  </data>
+  <data name="StNowPrivate" xml:space="preserve">
+    <value>'{0}' is now private.</value>
+  </data>
+  <data name="StGroupHasChildren" xml:space="preserve">
+    <value>The group still has child groups or members.</value>
+  </data>
   <data name="StErrSubscription" xml:space="preserve">
     <value>Could not update your subscription.</value>
   </data>
@@ -3054,6 +3174,27 @@
   <data name="FolderSortNoPermission" xml:space="preserve">
     <value>You don't have permission to change this folder's sort order.</value>
   </data>
+  <data name="SaveFailName" xml:space="preserve">
+    <value>name</value>
+  </data>
+  <data name="SaveFailNameConflict" xml:space="preserve">
+    <value>name (already exists here)</value>
+  </data>
+  <data name="SaveFailDocumentDate" xml:space="preserve">
+    <value>document date</value>
+  </data>
+  <data name="SaveFailOcrLanguages" xml:space="preserve">
+    <value>OCR languages</value>
+  </data>
+  <data name="SaveFailSensitivity" xml:space="preserve">
+    <value>sensitivity</value>
+  </data>
+  <data name="SaveFailTags" xml:space="preserve">
+    <value>tags</value>
+  </data>
+  <data name="SaveFailMaskIndexData" xml:space="preserve">
+    <value>mask / index data (check required and formatted fields)</value>
+  </data>
   <data name="FolderSortSaveFailed" xml:space="preserve">
     <value>Couldn't save the sort order.</value>
   </data>
@@ -3257,6 +3398,12 @@
   </data>
   <data name="ApiErrCannotChangeRootInheritance" xml:space="preserve">
     <value>Inheritance can't be changed on a repository root — it has no parent folder to inherit from.</value>
+  </data>
+  <data name="StErrDeleteNote" xml:space="preserve">
+    <value>Could not delete the note.</value>
+  </data>
+  <data name="StErrSaveNote" xml:space="preserve">
+    <value>Could not save the note.</value>
   </data>
   <data name="StErrRecolour" xml:space="preserve">
     <value>Could not recolour the selection.</value>

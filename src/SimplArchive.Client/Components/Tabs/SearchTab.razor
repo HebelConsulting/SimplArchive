@@ -256,7 +256,7 @@
         }
         else
         {
-            Snackbar.Add(resp.StatusCode == HttpStatusCode.Conflict ? "You already have a saved search with that name." : "Could not save.", Severity.Warning);
+            Snackbar.Add(Strings.Get(resp.StatusCode == HttpStatusCode.Conflict ? "StSavedSearchExists" : "StErrSaveGeneric"), Severity.Warning);
         }
     }
 
@@ -338,7 +338,12 @@
         using var resp = await Http.PutAsJsonAsync(selfHref, new { name = s.Name, queryString = s.QueryString, shareScope = result.Scope, shares = shareBody });
         if (resp.IsSuccessStatusCode)
         {
-            Snackbar.Add(result.Scope switch { 1 => $"Shared '{s.Name}' with everyone.", 2 => $"Shared '{s.Name}' with specific people.", _ => $"'{s.Name}' is now private." }, Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get(result.Scope switch
+            {
+                1 => "StSharedWithEveryone",
+                2 => "StSharedWithPeople",
+                _ => "StNowPrivate",
+            }), s.Name), Severity.Success);
             await LoadSavedSearchesAsync();
         }
         else

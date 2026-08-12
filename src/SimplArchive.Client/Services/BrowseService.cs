@@ -25,16 +25,29 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
         node.Links is not null && node.Links.TryGetValue("children", out var href) ? href : null;
 
     /// <summary>
-    /// Turns an id back into an address by FETCHING the resource and following its own <c>children</c> rel. The
-    /// <c>api/documents/{id}</c> here is the one composition that cannot be avoided — it is the irreducible case
-    /// of having an id and no resource — and it is deliberately the only one on this path.
+    /// Turns an id back into an address by FETCHING the resource and following its own <paramref name="rel"/>.
+    /// The <c>api/documents/{id}</c> here is the one composition that cannot be avoided — the irreducible case
+    /// of holding an id and no resource — and it is deliberately the ONLY place the client writes it.
     /// </summary>
-    public async Task<string> FetchChildrenHrefAsync(Guid folderId)
+    /// <remarks>
+    /// One implementation for every rel, not one per rel. It was written twice — here for <c>children</c> when
+    /// opening a folder, and again in the workbench page for <c>subscription</c> and <c>archive-entries</c> —
+    /// which is two copies of the client's single most sensitive line: the one address it is allowed to build.
+    /// A second copy is how a rule with one exception quietly acquires a second.
+    ///
+    /// Deliberately not solved by advertising these rels on the listings. A listing advertises what BROWSING
+    /// needs; following a folder or opening a zip is an action taken on ONE row, occasionally. Carrying them on
+    /// every row of every page to serve that would invert the cost (ADR 0557, #416).
+    /// </remarks>
+    public async Task<string> FetchRelAsync(Guid documentId, string rel)
     {
-        var doc = await http.GetFromJsonAsync<DocumentLinksResponse>($"api/documents/{folderId}");
-        return Links.Href(doc?.Links, "children")
-            ?? throw new InvalidOperationException($"Document {folderId} advertised no 'children' rel (ADR 0543).");
+        var doc = await http.GetFromJsonAsync<DocumentLinksResponse>($"api/documents/{documentId}");
+        return Links.Href(doc?.Links, rel)
+            ?? throw new InvalidOperationException($"Document {documentId} advertised no '{rel}' rel (ADR 0543).");
     }
+
+    /// <summary>A folder's children address, resolved from its id — see <see cref="FetchRelAsync"/>.</summary>
+    public Task<string> FetchChildrenHrefAsync(Guid folderId) => FetchRelAsync(folderId, "children");
 
     /// <summary>
     /// A folder's real children plus the references (shortcuts) filed in it, and the order the folder wants them

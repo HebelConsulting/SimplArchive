@@ -2595,6 +2595,126 @@
   <data name="StErrUpdatePhoto" xml:space="preserve">
     <value>No se pudo actualizar la foto.</value>
   </data>
+  <data name="StFollowingDocument" xml:space="preserve">
+    <value>Siguiendo este documento.</value>
+  </data>
+  <data name="StUnfollowedDocument" xml:space="preserve">
+    <value>Ya no lo sigues.</value>
+  </data>
+  <data name="StFollowingFolder" xml:space="preserve">
+    <value>Siguiendo esta carpeta y todo su contenido.</value>
+  </data>
+  <data name="StUnfollowedFolder" xml:space="preserve">
+    <value>Ya no sigues la carpeta.</value>
+  </data>
+  <data name="StNoPermRetention" xml:space="preserve">
+    <value>No tiene permiso para cambiar la retención.</value>
+  </data>
+  <data name="StNoPermPurge" xml:space="preserve">
+    <value>No tiene permiso para purgar.</value>
+  </data>
+  <data name="StNoPermFileThere" xml:space="preserve">
+    <value>No tiene permiso para archivar '{0}' ahí.</value>
+  </data>
+  <data name="StErrFileItem" xml:space="preserve">
+    <value>No se pudo archivar '{0}'.</value>
+  </data>
+  <data name="StFiledAsVersion" xml:space="preserve">
+    <value>'{0}' archivado como nueva versión.</value>
+  </data>
+  <data name="StFiledItem" xml:space="preserve">
+    <value>'{0}' archivado.</value>
+  </data>
+  <data name="StRestoredSkipped" xml:space="preserve">
+    <value>Restaurados {0} elemento(s), {1} omitidos.</value>
+  </data>
+  <data name="StRestoredItems" xml:space="preserve">
+    <value>Restaurados {0} elemento(s).</value>
+  </data>
+  <data name="StPurgedSkipped" xml:space="preserve">
+    <value>Eliminados permanentemente {0} elemento(s), {1} omitidos (retención legal / bloqueados).</value>
+  </data>
+  <data name="StPurgedItems" xml:space="preserve">
+    <value>Eliminados permanentemente {0} elemento(s).</value>
+  </data>
+  <data name="StErrDisposeLegalHold" xml:space="preserve">
+    <value>Bajo retención legal: no se puede eliminar.</value>
+  </data>
+  <data name="StErrDispose" xml:space="preserve">
+    <value>No se pudo eliminar.</value>
+  </data>
+  <data name="StSavedSearchExists" xml:space="preserve">
+    <value>Ya tiene una búsqueda guardada con ese nombre.</value>
+  </data>
+  <data name="StErrSaveGeneric" xml:space="preserve">
+    <value>No se pudo guardar.</value>
+  </data>
+  <data name="StTagExists" xml:space="preserve">
+    <value>Esa etiqueta ya existe.</value>
+  </data>
+  <data name="StErrAddTag" xml:space="preserve">
+    <value>No se pudo añadir la etiqueta (el color debe ser #RRGGBB).</value>
+  </data>
+  <data name="StErrResetPassword" xml:space="preserve">
+    <value>No se pudo restablecer la contraseña.</value>
+  </data>
+  <data name="StGroupNameExists" xml:space="preserve">
+    <value>Ya existe un grupo con este nombre.</value>
+  </data>
+  <data name="StUserEmailExists" xml:space="preserve">
+    <value>Ya existe un usuario con este correo.</value>
+  </data>
+  <data name="StGroupCreated" xml:space="preserve">
+    <value>Grupo creado.</value>
+  </data>
+  <data name="StUserCreated" xml:space="preserve">
+    <value>Usuario creado.</value>
+  </data>
+  <data name="StGroupDeleted" xml:space="preserve">
+    <value>Grupo eliminado.</value>
+  </data>
+  <data name="StUserDeactivated" xml:space="preserve">
+    <value>Usuario desactivado.</value>
+  </data>
+  <data name="StLabelNameExists" xml:space="preserve">
+    <value>Ya existe una etiqueta con ese nombre.</value>
+  </data>
+  <data name="StErrAddLabel" xml:space="preserve">
+    <value>No se pudo añadir la etiqueta.</value>
+  </data>
+  <data name="StErrUpdateLabel" xml:space="preserve">
+    <value>No se pudo actualizar la etiqueta.</value>
+  </data>
+  <data name="StAppendedWord" xml:space="preserve">
+    <value>'{0}' añadido al portapapeles.</value>
+  </data>
+  <data name="StCopiedWord" xml:space="preserve">
+    <value>'{0}' copiado al portapapeles.</value>
+  </data>
+  <data name="StUnknownError" xml:space="preserve">
+    <value>error desconocido</value>
+  </data>
+  <data name="StErrUpdateRetentionPlain" xml:space="preserve">
+    <value>No se pudo actualizar la retención.</value>
+  </data>
+  <data name="StErrPurgePlain" xml:space="preserve">
+    <value>No se pudo purgar.</value>
+  </data>
+  <data name="StErrStartConversionPlain" xml:space="preserve">
+    <value>No se pudo iniciar la conversión.</value>
+  </data>
+  <data name="StSharedWithEveryone" xml:space="preserve">
+    <value>'{0}' compartido con todos.</value>
+  </data>
+  <data name="StSharedWithPeople" xml:space="preserve">
+    <value>'{0}' compartido con personas concretas.</value>
+  </data>
+  <data name="StNowPrivate" xml:space="preserve">
+    <value>'{0}' ahora es privado.</value>
+  </data>
+  <data name="StGroupHasChildren" xml:space="preserve">
+    <value>El grupo todavía tiene subgrupos o miembros.</value>
+  </data>
   <data name="StErrSubscription" xml:space="preserve">
     <value>No se pudo actualizar tu suscripción.</value>
   </data>
@@ -3054,6 +3174,27 @@
   <data name="FolderSortNoPermission" xml:space="preserve">
     <value>No tienes permiso para cambiar el orden de esta carpeta.</value>
   </data>
+  <data name="SaveFailName" xml:space="preserve">
+    <value>nombre</value>
+  </data>
+  <data name="SaveFailNameConflict" xml:space="preserve">
+    <value>nombre (ya existe aquí)</value>
+  </data>
+  <data name="SaveFailDocumentDate" xml:space="preserve">
+    <value>fecha del documento</value>
+  </data>
+  <data name="SaveFailOcrLanguages" xml:space="preserve">
+    <value>idiomas de OCR</value>
+  </data>
+  <data name="SaveFailSensitivity" xml:space="preserve">
+    <value>confidencialidad</value>
+  </data>
+  <data name="SaveFailTags" xml:space="preserve">
+    <value>etiquetas</value>
+  </data>
+  <data name="SaveFailMaskIndexData" xml:space="preserve">
+    <value>máscara / datos de índice (revise los campos obligatorios y con formato)</value>
+  </data>
   <data name="FolderSortSaveFailed" xml:space="preserve">
     <value>No se pudo guardar el orden.</value>
   </data>
@@ -3257,6 +3398,12 @@
   </data>
   <data name="ApiErrCannotChangeRootInheritance" xml:space="preserve">
     <value>La herencia no se puede cambiar en la raíz de un repositorio: no hay ninguna carpeta principal de la que heredar.</value>
+  </data>
+  <data name="StErrDeleteNote" xml:space="preserve">
+    <value>No se pudo eliminar la nota.</value>
+  </data>
+  <data name="StErrSaveNote" xml:space="preserve">
+    <value>No se pudo guardar la nota.</value>
   </data>
   <data name="StErrRecolour" xml:space="preserve">
     <value>No se pudo cambiar el color de la selección.</value>

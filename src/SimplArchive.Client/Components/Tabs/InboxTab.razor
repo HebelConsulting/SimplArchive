@@ -291,14 +291,14 @@
     private Guid? _inboxViewUserId;
     private List<InboxUserOption> _inboxUsers = []; // the admin user-picker's choices (CanManageInboxes only)
     private sealed record InboxUserOption(Guid Id, string Name);
-    private record InboxItem(string Name, long Size, bool HasMask, string DownloadHref, string PreviewHref, string FileHref, string DeleteHref, string MoveHref, Guid? GroupId, string? GroupName, Guid? UserId, string? UserName)
+    // Every address this row acts on comes from the listing that drew it (ADR 0555) — including `mask` and
+    // `preview`, which the row had been carrying all along while the tab rebuilt them from Name plus a
+    // hand-written `?group=`/`?user=` query. The server's own hrefs already carry that source query, so the
+    // SourceQuery property that existed to re-append it is gone (ADR 0532/0543, #416).
+    private record InboxItem(string Name, long Size, bool HasMask, string DownloadHref, string PreviewHref, string FileHref, string DeleteHref, string MoveHref, string MaskHref, Guid? GroupId, string? GroupName, Guid? UserId, string? UserName)
     {
         // Un-classified items (no staged mask sidecar) show in square brackets (ADRs 0279/0281).
         public string DisplayName => HasMask ? Name : $"[{Name}]";
-
-        // A non-own item's source (ADR 0532): its `?group=`/`?user=` query is appended to the item endpoints the
-        // client builds from Name (preview / mask); the group/user name labels the row.
-        public string SourceQuery => GroupId is { } g ? $"?group={g}" : UserId is { } u ? $"?user={u}" : "";
 
         // True for the caller's own items (no group/user source) — they get the "Send to…" action; non-own items
         // get "Move to my inbox".
@@ -318,19 +318,22 @@
             // A CanManageInboxes holder gets a user-picker; load the tenant's users once for it.
             if (CanManageInboxes && _inboxUsers.Count == 0)
             {
-                var users = await Http.GetFromJsonAsync<InboxUsersResponse>("api/inbox/users");
+                var users = await Http.GetFromJsonAsync<InboxUsersResponse>(await ApiRoot.RequireAsync("inboxUsers"));
                 _inboxUsers = users?.Users ?? [];
             }
 
-            var url = _inboxViewUserId is { } viewUser
-                ? $"api/inbox?user={viewUser}"
-                : _inboxIncludeGroups ? "api/inbox?includeGroups=true" : await ApiRoot.RequireAsync("inbox");
+            // The server owns the path, the caller owns the filter: appending a QUERY to the advertised href is
+            // FOLLOWING it, where appending a path segment would be composing in disguise (ADR 0557).
+            var inbox = await ApiRoot.RequireAsync("inbox");
+            var url = _inboxViewUserId is { } viewUser ? $"{inbox}?user={viewUser}"
+                : _inboxIncludeGroups ? $"{inbox}?includeGroups=true"
+                : inbox;
             var response = await Http.GetFromJsonAsync<InboxResponse>(url);
             _inboxItems = (response?.Items ?? []).Select(i => new InboxItem(
                 i.Name, i.Size, i.HasMask,
                 Links.Href(i.Links, "download") ?? "", Links.Href(i.Links, "preview") ?? "",
                 Links.Href(i.Links, "file") ?? "", Links.Href(i.Links, "self") ?? "",
-                Links.Href(i.Links, "move") ?? "",
+                Links.Href(i.Links, "move") ?? "", Links.Href(i.Links, "mask") ?? "",
                 i.GroupId, i.GroupName, i.UserId, i.UserName)).ToList();
             _inboxStatus = _inboxItems.Count == 0 ? "Your inbox is empty. Upload files to file them into a repository." : $"{_inboxItems.Count} item(s).";
         }
@@ -457,7 +460,7 @@
         // the shared pdf.js host with the hit-overlay. 204 = no preview available.
         try
         {
-            using var r = await Http.GetAsync($"api/inbox/{Uri.EscapeDataString(item.Name)}/preview{item.SourceQuery}");
+            using var r = await Http.GetAsync(item.PreviewHref);
             if (r.IsSuccessStatusCode && r.StatusCode != HttpStatusCode.NoContent)
             {
                 var preview = await r.Content.ReadFromJsonAsync<InboxPreviewResponse>();
@@ -481,7 +484,7 @@
         try
         {
             _inboxStgMasks = (await Http.GetFromJsonAsync<MaskListResponse>(await ApiRoot.RequireAsync("masks")))?.Masks ?? [];
-            var draft = await Http.GetFromJsonAsync<InboxMaskDraft>($"api/inbox/{Uri.EscapeDataString(item.Name)}/mask{item.SourceQuery}");
+            var draft = await Http.GetFromJsonAsync<InboxMaskDraft>(item.MaskHref);
             _inboxStgName = string.IsNullOrEmpty(draft?.Name) ? System.IO.Path.GetFileNameWithoutExtension(item.Name) : draft.Name;
             _inboxStgDate = DateTime.TryParse(draft?.DocumentDate, out var d) ? d.Date : null;
             _inboxDraftValues = (draft?.Fields ?? []).ToDictionary(f => f.FieldDefinitionId, f => f.Values);
@@ -560,7 +563,7 @@
                 ocrLanguages = _inboxStgScannable && _inboxStgOcrCodes.Count > 0 ? _inboxStgOcrCodes : null,
             };
 
-            var resp = await Http.PutAsJsonAsync($"api/inbox/{Uri.EscapeDataString(item.Name)}/mask{item.SourceQuery}", body);
+            var resp = await Http.PutAsJsonAsync(item.MaskHref, body);
             if (resp.IsSuccessStatusCode)
             {
                 Snackbar.Add(Strings.Get("StMaskSaved"), Severity.Success);
@@ -619,9 +622,9 @@
             return true;
         }
 
-        Snackbar.Add(response.StatusCode == HttpStatusCode.Forbidden
-            ? $"You don't have permission to file '{item.Name}' there."
-            : $"Could not file '{item.Name}'.", Severity.Warning);
+        Snackbar.Add(string.Format(
+            Strings.Get(response.StatusCode == HttpStatusCode.Forbidden ? "StNoPermFileThere" : "StErrFileItem"),
+            item.Name), Severity.Warning);
         return false;
     }
 
@@ -635,7 +638,9 @@
 
         if (await PostFileAsync(item, choice))
         {
-            Snackbar.Add(choice.Mode == FilingDialog.FilingMode.AsVersion ? $"Filed '{item.Name}' as a new version." : $"Filed '{item.Name}'.", Severity.Success);
+            Snackbar.Add(string.Format(
+                Strings.Get(choice.Mode == FilingDialog.FilingMode.AsVersion ? "StFiledAsVersion" : "StFiledItem"),
+                item.Name), Severity.Success);
             ClearInboxSelection(item);
             await LoadInboxAsync();
         }

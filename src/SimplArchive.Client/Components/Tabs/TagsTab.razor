@@ -92,7 +92,7 @@
         var color = string.IsNullOrWhiteSpace(_newTagColor) ? null : _newTagColor.Trim();
         var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("tags"), new { name, color });
         if (resp.IsSuccessStatusCode) { _newTagName = ""; _newTagColor = ""; await LoadTagCatalogAsync(); }
-        else Snackbar.Add(resp.StatusCode == HttpStatusCode.Conflict ? "That tag already exists." : "Could not add the tag (check the colour is #RRGGBB).", Severity.Warning);
+        else Snackbar.Add(Strings.Get(resp.StatusCode == HttpStatusCode.Conflict ? "StTagExists" : "StErrAddTag"), Severity.Warning);
     }
 
     private async Task RenameTagAsync(TagCatalogEntry t)

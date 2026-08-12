@@ -359,7 +359,7 @@
         }
         else
         {
-            Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to do that." : "Could not add the member.", Severity.Warning);
+            Snackbar.Add(Strings.Get(resp.StatusCode == HttpStatusCode.Forbidden ? "NoPermission" : "StErrAddMember"), Severity.Warning);
         }
     }
 
@@ -483,7 +483,7 @@
             }
             else
             {
-                Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to do that." : "Could not reset the password.", Severity.Warning);
+                Snackbar.Add(Strings.Get(resp.StatusCode == HttpStatusCode.Forbidden ? "NoPermission" : "StErrResetPassword"), Severity.Warning);
             }
         }
         catch (Exception)
@@ -528,7 +528,7 @@
             }
             else
             {
-                Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to do that." : "Could not reset two-factor authentication.", Severity.Warning);
+                Snackbar.Add(Strings.Get(resp.StatusCode == HttpStatusCode.Forbidden ? "NoPermission" : "StErrResetMfa"), Severity.Warning);
             }
         }
         catch (Exception)
@@ -592,9 +592,12 @@
             {
                 if (!resp.IsSuccessStatusCode)
                 {
-                    Snackbar.Add(resp.StatusCode == HttpStatusCode.Conflict
-                        ? (isGroup ? "A group with this name already exists." : "A user with this email already exists.")
-                        : "Could not create.", Severity.Warning);
+                    Snackbar.Add(Strings.Get(resp.StatusCode switch
+                    {
+                        HttpStatusCode.Conflict when isGroup => "StGroupNameExists",
+                        HttpStatusCode.Conflict => "StUserEmailExists",
+                        _ => "StErrCreate",
+                    }), Severity.Warning);
                     return;
                 }
 
@@ -614,7 +617,7 @@
                 await SelectPrincipalAsync(created);
             }
 
-            Snackbar.Add(isGroup ? "Group created." : "User created.", Severity.Success);
+            Snackbar.Add(Strings.Get(isGroup ? "StGroupCreated" : "StUserCreated"), Severity.Success);
         }
         catch (Exception)
         {
@@ -650,7 +653,7 @@
             using var resp = await Http.DeleteAsync(removeHref);
             if (resp.IsSuccessStatusCode)
             {
-                Snackbar.Add(p.IsGroup ? "Group deleted." : "User deactivated.", Severity.Success);
+                Snackbar.Add(Strings.Get(p.IsGroup ? "StGroupDeleted" : "StUserDeactivated"), Severity.Success);
                 _selectedPrincipal = null;
                 await LoadPrincipalsAsync();
                 return;
@@ -668,12 +671,12 @@
                 }
             }
 
-            Snackbar.Add(resp.StatusCode switch
+            Snackbar.Add(Strings.Get(resp.StatusCode switch
             {
-                HttpStatusCode.Conflict => "The group still has child groups or members.",
-                HttpStatusCode.Forbidden => "You don't have permission to do that.",
-                _ => "Could not delete.",
-            }, Severity.Warning);
+                HttpStatusCode.Conflict => "StGroupHasChildren",
+                HttpStatusCode.Forbidden => "NoPermission",
+                _ => "StErrDelete",
+            }), Severity.Warning);
         }
         catch (Exception)
         {

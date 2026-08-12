@@ -93,7 +93,7 @@
         if (string.IsNullOrWhiteSpace(_newName)) return;
         var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("sensitivityLabels"), new { name = _newName.Trim(), rank = _newRank, color = string.IsNullOrWhiteSpace(_newColor) ? null : _newColor.Trim(), watermark = _newWatermark });
         if (resp.IsSuccessStatusCode) { _newName = ""; _newColor = ""; _newWatermark = false; await LoadAsync(); }
-        else { Snackbar.Add(resp.StatusCode == System.Net.HttpStatusCode.Conflict ? "A label with that name exists." : "Could not add the label.", Severity.Warning); }
+        else { Snackbar.Add(Strings.Get(resp.StatusCode == System.Net.HttpStatusCode.Conflict ? "StLabelNameExists" : "StErrAddLabel"), Severity.Warning); }
     }
 
     private async Task EditAsync(LabelDto l)
@@ -106,7 +106,7 @@
         var rank = int.TryParse(rankStr, out var r) ? r : l.Rank;
         var resp = await Http.PutAsJsonAsync(l.Href("self")!, new { name = name.Trim(), rank, color = string.IsNullOrWhiteSpace(color) ? null : color!.Trim(), watermark = wm });
         if (resp.IsSuccessStatusCode) { await LoadAsync(); }
-        else { Snackbar.Add(resp.StatusCode == System.Net.HttpStatusCode.Conflict ? "A label with that name exists." : "Could not update the label.", Severity.Warning); }
+        else { Snackbar.Add(Strings.Get(resp.StatusCode == System.Net.HttpStatusCode.Conflict ? "StLabelNameExists" : "StErrUpdateLabel"), Severity.Warning); }
     }
 
     private async Task RetireAsync(LabelDto l)

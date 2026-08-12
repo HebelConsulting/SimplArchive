@@ -113,13 +113,20 @@
         catch (Exception) { Snackbar.Add(Strings.Get("CoErrDownload"), Severity.Error); }
     }
 
+    // Every action below is addressed from the ROW (ADR 0555): the listing already advertised checkin,
+    // cancel-checkout, working-copy and extend, so following them costs nothing beyond the read that drew the
+    // table. Throwing on a missing rel rather than composing a fallback is the point — an action the server did
+    // not offer for this row is one the caller must not invent (ADR 0543).
+    private static string Href(CheckoutDto c, string rel) =>
+        Links.Href(c.Links, rel) ?? throw new InvalidOperationException($"Check-out row advertised no '{rel}' rel (ADR 0543).");
+
     // Upload to stash: put the edited file back into the cloud working copy (a presigned PUT).
     private async Task UploadToStashAsync(CheckoutDto c, IBrowserFile? file)
     {
         if (file is null) return;
         try
         {
-            var target = await (await Http.PostAsJsonAsync($"api/checkouts/{c.Id}/working-copy", new { })).Content.ReadFromJsonAsync<WorkingCopyUploadResponse>();
+            var target = await (await Http.PostAsJsonAsync(Href(c, "working-copy"), new { })).Content.ReadFromJsonAsync<WorkingCopyUploadResponse>();
             using var buffer = new MemoryStream();
             await file.OpenReadStream(maxAllowedSize: 500L * 1024 * 1024).CopyToAsync(buffer);
             using var content = new ByteArrayContent(buffer.ToArray());
@@ -135,7 +142,7 @@
     {
         try
         {
-            var resp = await Http.PostAsync($"api/checkouts/{c.Id}/checkin", null);
+            var resp = await Http.PostAsync(Href(c, "checkin"), null);
             if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add(Strings.Get("CoErrUploadFirst"), Severity.Warning); return; }
             resp.EnsureSuccessStatusCode();
             Snackbar.Add(string.Format(Strings.Get("CoOkCheckedIn"), c.Name), Severity.Success);
@@ -157,7 +164,7 @@
     {
         try
         {
-            (await Http.PostAsync($"api/checkouts/{c.Id}/extend", null)).EnsureSuccessStatusCode();
+            (await Http.PostAsync(Href(c, "extend"), null)).EnsureSuccessStatusCode();
             Snackbar.Add(string.Format(Strings.Get("CoOkExtended"), c.Name), Severity.Success);
             await Refresh.InvokeAsync();
         }
@@ -170,7 +177,7 @@
         if (!await Confirm(string.Format(Strings.Get("CoConfirmCancel"), c.Name), Strings.Get("CoCancelTitle"))) return;
         try
         {
-            (await Http.DeleteAsync($"api/documents/{c.Id}/checkout")).EnsureSuccessStatusCode();
+            (await Http.DeleteAsync(Href(c, "cancel-checkout"))).EnsureSuccessStatusCode();
             Snackbar.Add(string.Format(Strings.Get("CoOkReleased"), c.Name), Severity.Success);
             await Refresh.InvokeAsync();
             await Refresh.InvokeAsync();

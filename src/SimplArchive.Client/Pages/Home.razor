@@ -5,7 +5,6 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Forms
 @implements IAsyncDisposable
-@implements SimplArchive.Client.Components.Panes.IPreviewAnnotationHost
 @using SimplArchive.Client.Dialogs
 @inject HttpClient Http
 @inject IJSRuntime JS
@@ -14,13 +13,14 @@
 @inject SimplArchive.Client.Services.ImpersonationService ImpersonationSvc
 @inject SimplArchive.Client.Services.AppNavigationState AppNav
 @inject SimplArchive.Client.Services.ApiRoot ApiRoot
-@inject SimplArchive.Client.Services.SensitivityLabelCatalog SensitivityLabels
-@inject SimplArchive.Client.Services.OcrLanguageCatalog OcrLanguages
 @inject SimplArchive.Client.Services.DocumentActions Actions
 @inject SimplArchive.Client.Services.BulkActions Bulk
 @inject SimplArchive.Client.Services.BrowseService Browse
 @inject SimplArchive.Client.Services.TreeState Tree
 @inject SimplArchive.Client.Services.DetailState Detail
+@inject SimplArchive.Client.Services.DetailCatalogs Catalogs
+@inject SimplArchive.Client.Services.DetailEditor Editor
+@inject SimplArchive.Client.Services.AnnotationEditor Annotations
 
 <PageTitle>SimplArchive</PageTitle>
 
@@ -633,7 +633,7 @@
                            key at all.
 
                            NO preventDefault, and therefore NO Ctrl/Cmd+S on the web. The attribute is evaluated per
-                           RENDER for every key, not per keystroke — so binding it to _isEditing prevented the
+                           RENDER for every key, not per keystroke — so binding it to the edit flag prevented the
                            default on EVERY key while editing, and typing into any field in this pane produced
                            nothing at all. It broke tag entry outright, which the UI suite caught.
                            Suppressing the browser's own Save dialog needs a document-level JS handler (the pattern
@@ -641,11 +641,9 @@
                            and ⌘S stays a desktop affordance where it works properly. *@
                         @* The index-data pane (ADR 0558). The pane owns the read/edit SWAP — ADR 0550 makes
                            that a property of the transition — while the actions themselves stay the shell's. *@
-                        <IndexDataPane IsEditing="_isEditing" AvailableMasks="_availableMasks" OcrCatalog="_ocrCatalog"
-                                       SensitivityLabels="_sensitivityLabels" TagColors="_tagColors"
-                                       Save="SaveDetailAsync" Cancel="CancelEdit" OpenCompareVersions="OpenCompareVersionsAsync"
-                                       KeyDown="OnDetailKeyDown" EditMaskChanged="OnEditMaskChanged"
-                                       ToggleOcrCode="ToggleOcr" SearchByTag="SearchByTagAsync">
+                        <IndexDataPane Save="SaveDetailAsync" Cancel="@(() => Editor.Cancel())" OpenCompareVersions="OpenCompareVersionsAsync"
+                                       KeyDown="OnDetailKeyDown" EditMaskChanged="@((Guid? m) => Editor.ChangeMaskAsync(m))"
+                                       ToggleOcrCode="@((string c) => Editor.ToggleOcr(c))" SearchByTag="SearchByTagAsync">
                             <ReadActions>
                                 @* Follow / unfollow this document (ADR "Document subscriptions"). *@
                                 <MudTooltip Text="@(Detail.Subscribed ? Strings.Get("UnfollowDoc") : Strings.Get("FollowDoc"))">
@@ -677,7 +675,7 @@
                                    icon-only like its neighbours, so the row stays one vocabulary. Always visible rather
                                    than on hover: touch has no hover (ADR 0511). Save and Cancel stay down with the
                                    FIELDS, because they act on the form rather than on the document. *@
-                                @if (CanEditDetail)
+                                @if (Editor.CanEdit)
                                 {
                                     <MudTooltip Text="@Strings.Get("Edit")">
                                         <MudIconButton data-tour="action-edit-index" Size="Size.Small" aria-label="@Strings.Get("Edit")" Icon="@Icons.Material.Filled.Edit"
@@ -686,11 +684,11 @@
                                 }
                             </ReadActions>
                             <TagAdd>
-                                <MudAutocomplete T="string" @bind-Value="_newTag" SearchFunc="SearchTagCatalog" CoerceValue="true"
+                                <MudAutocomplete T="string" @bind-Value="Detail.EditNewTag" SearchFunc="SearchTagCatalog" CoerceValue="true"
                                                  Placeholder="@Strings.Get("TagAddPlaceholder")" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:200px;"
                                                  OnKeyUp="OnTagKeyUp" Immediate="true" />
                                 @* Explicit Add — Enter also works, but a click is a deterministic commit path (MudAutocomplete's Enter binding can lag). *@
-                                <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" aria-label="Add tag" OnClick="AddCurrentTag" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" aria-label="Add tag" OnClick="@(() => Editor.AddTypedTag())" />
                             </TagAdd>
                         </IndexDataPane>
                         <div class="wb-gutter wb-gutter-h" data-gutter="index"><button type="button" class="wb-gutter-toggle"></button></div>
@@ -705,48 +703,9 @@
                             <PreviewPane @ref="_repoPreview" DataPane="preview" DataTour="pane-preview"
                                          EmptyText="@(_selectedItem is null ? Strings.Get("NoDocSelected") : Strings.Get("NoPreview"))"
                                          ConvertedBadgeTooltip="@Strings.Get("ConvertedPreviewTooltip")"
-                                         AnnotationHost="this" WordCopied="OnPreviewWordCopiedAsync">
+                                         AnnotationHost="Annotations" WordCopied="OnPreviewWordCopiedAsync">
                                 <Toolbar>
-                                            @if (_pvAnnotatable)
-                                            {
-                                                @* Sticky notes (ADR "Document annotations"): add a note (only with CanAnnotate,
-                                                   ADR "CanAnnotate right"), and show/hide the markers (viewing needs only read). *@
-                                                @if (_annotationsCanCreate && !_isTouchOnly)
-                                                {
-                                                    <MudIconButton Class="wb-pv-note-add" Icon="@Icons.Material.Filled.AddComment" Size="Size.Small" Color="@(_annotationAddMode ? Color.Primary : Color.Default)"
-                                                                   OnClick="StartAddNoteAsync" title="@Strings.Get("AddStickyNote")" />
-                                                    @* Markup tools (ADR "Annotation markup"): drag on the page to draw a highlight / rectangle / arrow. *@
-                                                    <MudIconButton Class="wb-pv-tool-highlight" Icon="@Icons.Material.Filled.BorderColor" Size="Size.Small" Color="@(_annotationTool == 1 ? Color.Primary : Color.Default)"
-                                                                   OnClick="@(() => SelectShapeToolAsync(1))" title="@Strings.Get("PvHighlight")" />
-                                                    <MudIconButton Class="wb-pv-tool-rect" Icon="@Icons.Material.Filled.CropSquare" Size="Size.Small" Color="@(_annotationTool == 2 ? Color.Primary : Color.Default)"
-                                                                   OnClick="@(() => SelectShapeToolAsync(2))" title="@Strings.Get("PvRectangle")" />
-                                                    <MudIconButton Class="wb-pv-tool-arrow" Icon="@Icons.Material.Filled.NorthEast" Size="Size.Small" Color="@(_annotationTool == 3 ? Color.Primary : Color.Default)"
-                                                                   OnClick="@(() => SelectShapeToolAsync(3))" title="@Strings.Get("PvArrow")" />
-                                                    @* Colour palette (ADR "Highlighting redesign"): sets the draw colour for new shapes AND recolours the selected annotations. Shown while drawing or with a selection. *@
-                                                    @if (_annotationTool > 0 || _hasAnnotationSelection)
-                                                    {
-                                                        <span class="wb-pv-palette">
-                                                            @foreach (var c in AnnotationPalette)
-                                                            {
-                                                                <span class="wb-pv-swatch @(_annotationColor == c ? "wb-pv-swatch-on" : "")" style="@($"background:{c}")"
-                                                                      @onclick="@(() => SetAnnotationColorAsync(c))" title="Set colour"></span>
-                                                            }
-                                                        </span>
-                                                    }
-                                                }
-                                                <MudIconButton Class="wb-pv-note-toggle" Icon="@(_annotationsVisible ? Icons.Material.Filled.StickyNote2 : Icons.Material.Outlined.StickyNote2)" Size="Size.Small"
-                                                               OnClick="ToggleAnnotationsAsync" title="@(_annotationsVisible ? Strings.Get("PvHideNotes") : Strings.Get("PvShowNotes"))" />
-                                                @* Multi-select actions (ADR "Annotation multi-select" web parity): Ctrl-click / marquee to select, then copy / paste / delete. *@
-                                                @if (_annotationsCanCreate && !_isTouchOnly)
-                                                {
-                                                    <MudIconButton Class="wb-pv-anno-copy" Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Disabled="@(!_hasAnnotationSelection)"
-                                                                   OnClick="CopySelectedAnnotations" title="@Strings.Get("CopyAnnotationsTip")" />
-                                                    <MudIconButton Class="wb-pv-anno-paste" Icon="@Icons.Material.Filled.ContentPaste" Size="Size.Small" Disabled="@(!_hasAnnotationClipboard)"
-                                                                   OnClick="PasteAnnotationsAsync" title="@Strings.Get("PasteAnnotationsTip")" />
-                                                    <MudIconButton Class="wb-pv-anno-delete" Icon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small" Disabled="@(!_hasAnnotationSelection)"
-                                                                   OnClick="DeleteSelectedAnnotationsAsync" title="@Strings.Get("DeleteAnnotationsTip")" />
-                                                }
-                                            }
+                                    <AnnotationToolbar TouchOnly="_isTouchOnly" />
                                 </Toolbar>
                                 <Overlay>
                                     @if (Detail.SensitivityWatermark)
@@ -803,7 +762,7 @@
             }
             else if (_activeTab == Tab.Tags)
             {
-                <TagsTab CatalogChanged="LoadTagCatalogAsync" />
+                <TagsTab CatalogChanged="@(() => Catalogs.ReloadTagsAsync())" />
             }
             else if (_activeTab == Tab.Tasks)
             {
@@ -1020,48 +979,9 @@
     // Free-form tags (ADR "Document tags"): the selected document's tags (read-only display), the edit working
     // copy + its original for change detection, the tenant tag catalog for add-box autocomplete, and the
     // pending new-tag value.
-    private List<string> _origTags = [];
-    // The tag catalogue as the SHELL uses it: names for the index pane's autocomplete, colours for the
-    // list-row chips. The Tags tab manages the catalogue and raises CatalogChanged; this is the shell's own
-    // read of it, not a second owner of the tab's state (ADR 0558).
-    private List<string> _tagCatalog = [];
-    private Dictionary<string, string?> _tagColors = new();
-
-
-    private string? TagColor(string name) => _tagColors.TryGetValue(name, out var c) ? c : null;
-
-    private async Task LoadTagCatalogAsync()
-    {
-        try
-        {
-            var resp = await Http.GetFromJsonAsync<TagsResponse>(await ApiRoot.RequireAsync("tags"));
-            var catalog = resp?.Catalog ?? [];
-            _tagCatalog = catalog.Select(t => t.Name).ToList();
-            _tagColors = catalog.ToDictionary(t => t.Name, t => t.Color);
-        }
-        catch (Exception)
-        {
-            // Best-effort: autocomplete falls back to free text and chips render uncoloured.
-        }
-    }
-    private string? _newTag;
-
     // System fields (read-only display) — derived from the latest confirmed version (ADR 0273).
     // The document's current (latest confirmed) version number — shown as the last line of the detail pane
     // (ADR "Mask-pane current-version line").
-
-    // Single pane-level edit state (ADR 0278) — Name/date/OCR/mask/index-data all editable at once.
-    private bool _isEditing;
-    private List<MaskSummary> _availableMasks = [];
-    private IReadOnlyList<OcrLanguageOption> _ocrCatalog = [];
-    private string _origName = "";
-    private DateTime? _origDocumentDate;
-    private Guid? _origMaskId;
-    private List<string> _origOcrCodes = [];
-
-    private string OcrDisplay(List<string> codes) => codes.Count == 0
-        ? "(tenant default)"
-        : string.Join(", ", codes.Select(c => _ocrCatalog.FirstOrDefault(o => o.Code == c)?.DisplayName ?? c));
     private string? _downloadUrl;
 
     // The Repositories preview (ADRs 0268/0269/0282/0294/0295) — one INSTANCE, owning its own host, state,
@@ -1089,7 +1009,8 @@
         }
 
         await _repoPreview.RenderAsync(url, layout, converted);
-        await ApplyAnnotatableAsync(hasVersion);
+        Annotations.Attach(_repoPreview);
+        await Annotations.ApplyAnnotatableAsync(hasVersion);
     }
 
 
@@ -1097,512 +1018,20 @@
     // DotNetObjectReference that preview.js calls into (ADR 0558).
     private Task OnPreviewWordCopiedAsync((string Word, bool Append) e)
     {
-        Snackbar.Add(e.Append ? $"Appended '{e.Word}' to the clipboard." : $"Copied '{e.Word}' to the clipboard.", Severity.Success);
+        Snackbar.Add(string.Format(Strings.Get(e.Append ? "StAppendedWord" : "StCopiedWord"), e.Word), Severity.Success);
         return Task.CompletedTask;
     }
 
-    // --- Sticky notes / positional annotations (ADR "Document annotations") --------------------------------
-    // Only the Repositories preview (a real document version) can carry notes; the Inbox preview cannot (no
-    // version yet). _pvAnnotatable gates the toolbar buttons; the markers themselves live in preview.js.
-    private bool _pvAnnotatable;
-    private bool _annotationsVisible = true;
-    private bool _annotationAddMode;
-    private int _annotationTool;                    // active markup tool: 0 none, 1 highlight, 2 rectangle, 3 arrow (ADR "Annotation markup")
-    private bool _annotationsCanCreate;             // whether the caller has CanAnnotate (ADR "CanAnnotate right")
+    // --- Annotations -------------------------------------------------------------------------------------
+    // The whole lifecycle — the authoring mode, the selection, the clipboard and every write — belongs to
+    // AnnotationEditor (ADR 0558). What stays here is the wiring: pointing the editor at the pane it draws on,
+    // and handing it the version's annotations collection when the subject changes.
 
-    // The active colour for newly-drawn shapes + the toolbar palette (ADR "Highlighting redesign"). Picking a
-    // swatch sets this AND recolours the current selection.
-    private string _annotationColor = "#FFEB3B";
-    private static readonly string[] AnnotationPalette = ["#FFEB3B", "#8BC34A", "#4FC3F7", "#FF8A80", "#FFB74D", "#CE93D8"];
-
-    private async Task SetAnnotationColorAsync(string color)
-    {
-        _annotationColor = color;
-        // Recolour every selected annotation the caller may edit (notes + shapes), then reload.
-        if (_pvAnnotationsUrl is not null && _selectedAnnotationIds.Count > 0)
-        {
-            var targets = _annotations.Where(a => a.CanEdit && _selectedAnnotationIds.Contains(a.Id)).ToList();
-            foreach (var a in targets)
-            {
-                var request = new HttpRequestMessage(HttpMethod.Put, $"{_pvAnnotationsUrl.TrimStart('/')}/{a.Id}")
-                {
-                    Content = JsonContent.Create(new { pageIndex = a.PageIndex, positionX = a.PositionX, positionY = a.PositionY, width = a.Width, height = a.Height, text = a.Text, color }),
-                };
-                request.Headers.TryAddWithoutValidation("If-Match", $"\"{a.Etag}\"");
-                var resp = await Http.SendAsync(request);
-                if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrRecolour"), Severity.Error); break; }
-            }
-
-            await LoadAnnotationsAsync();
-        }
-
-        await InvokeAsync(StateHasChanged);
-    }
-    private string? _pvAnnotationsUrl;              // the version's `annotations` link (base URL)
-    private List<AnnotationDto> _annotations = [];
-
-    // Multi-select (ADR "Annotation multi-select" web parity): the selected annotation ids (notes + shapes) on
-    // the current version + an in-app clipboard of copied annotations (pasted as offset duplicates).
-    private readonly HashSet<Guid> _selectedAnnotationIds = [];
-    private readonly List<AnnotationDto> _annotationClipboard = [];
-    private bool _hasAnnotationSelection;
-    private bool _hasAnnotationClipboard;
-
-    private async Task LoadAnnotationsAsync()
-    {
-        _annotations = [];
-        _annotationsCanCreate = false;
-        if (_pvAnnotationsUrl is not null)
-        {
-            try
-            {
-                var list = await Http.GetFromJsonAsync<AnnotationListDto>(_pvAnnotationsUrl.TrimStart('/'));
-                _annotations = list?.Annotations ?? [];
-                _annotationsCanCreate = list?.CanCreate ?? false;
-            }
-            catch (Exception) { /* no notes / not readable */ }
-        }
-
-        // Drop selection ids that no longer resolve to a loaded annotation (deleted elsewhere).
-        _selectedAnnotationIds.RemoveWhere(id => _annotations.All(a => a.Id != id));
-        _hasAnnotationSelection = _selectedAnnotationIds.Count > 0;
-        await PushAnnotationsAsync();
-    }
-
-    // Pushes the current (visible) note set to preview.js to draw the markers.
-    private async Task PushAnnotationsAsync()
-    {
-        if (_repoPreview is null || !_repoPreview.State.HasPages)
-        {
-            return;
-        }
-
-        var markers = _annotationsVisible
-            ? _annotations.Select(a => new { id = a.Id, pageIndex = a.PageIndex, kind = a.Kind, x = a.PositionX, y = a.PositionY, w = a.Width, h = a.Height, text = a.Text, color = a.Color, canEdit = a.CanEdit, points = a.Points, selected = _selectedAnnotationIds.Contains(a.Id) }).ToArray()
-            : [];
-        // Cast to object: InvokeVoidAsync's last parameter is `params object?[]`, so passing the array directly
-        // would spread its elements as separate JS arguments instead of passing the whole array as `annos`.
-        await _repoPreview.SetAnnotationsAsync(markers);
-    }
-
-    private async Task ToggleAnnotationsAsync()
-    {
-        _annotationsVisible = !_annotationsVisible;
-        if (!_annotationsVisible && _annotationAddMode)
-        {
-            await StopAddNoteAsync();
-        }
-
-        await PushAnnotationsAsync();
-    }
-
-    private async Task StartAddNoteAsync()
-    {
-        if (!_annotationsVisible)
-        {
-            _annotationsVisible = true;
-            await PushAnnotationsAsync();
-        }
-
-        await SetShapeToolAsync(0); // notes and shape-drawing are mutually exclusive
-        _annotationAddMode = true;
-        if (_repoPreview is not null)
-        {
-            await _repoPreview.SetAddModeAsync(true);
-        }
-
-        Snackbar.Add(Strings.Get("StAnnClickToPlace"), Severity.Info);
-    }
-
-    private async Task StopAddNoteAsync()
-    {
-        _annotationAddMode = false;
-        if (_repoPreview is not null)
-        {
-            await _repoPreview.SetAddModeAsync(false);
-        }
-    }
-
-    // Toggles a markup tool (highlight/rectangle/arrow): clicking the active one turns it off. Drag on the page
-    // to draw (ADR "Annotation markup").
-    private async Task SelectShapeToolAsync(int kind)
-    {
-        if (!_annotationsVisible)
-        {
-            _annotationsVisible = true;
-            await PushAnnotationsAsync();
-        }
-
-        await StopAddNoteAsync();
-        await SetShapeToolAsync(_annotationTool == kind ? 0 : kind);
-        if (_annotationTool > 0)
-        {
-            Snackbar.Add(Strings.Get("StAnnDragToDraw"), Severity.Info);
-        }
-    }
-
-    private async Task SetShapeToolAsync(int kind)
-    {
-        _annotationTool = kind;
-        if (_repoPreview is not null)
-        {
-            await _repoPreview.SetDrawModeAsync(kind);
-        }
-    }
-
-    // A shape was drawn by dragging (ADR "Annotation markup") — create it immediately with the tool's default
-    // colour. The tool deactivates after one draw (ADR "Draw-tool behaviour") — draw exactly one shape, then the
-    // button returns to inactive.
-    public async Task OnShapeDrawnAsync(int pageIndex, int kind, double x, double y, double width, double height)
-    {
-        if (_pvAnnotationsUrl is null || kind <= 0)
-        {
-            return;
-        }
-
-        await SetShapeToolAsync(0); // one shape per tool activation
-        var resp = await Http.PostAsJsonAsync(_pvAnnotationsUrl.TrimStart('/'),
-            new { pageIndex, kind, positionX = x, positionY = y, width, height, text = "", color = _annotationColor });
-        if (!resp.IsSuccessStatusCode)
-        {
-            Snackbar.Add(Strings.Get("StErrAddMarkup"), Severity.Error);
-            return;
-        }
-
-        await LoadAnnotationsAsync();
-        await InvokeAsync(StateHasChanged);
-    }
-
-    public async Task OnAnnotationPlacedAsync(int pageIndex, double x, double y)
-    {
-        await StopAddNoteAsync(); // one note per Add-note activation (ADR "Draw-tool behaviour")
-        if (_pvAnnotationsUrl is null)
-        {
-            return;
-        }
-
-        var dialog = await DialogService.ShowAsync<AnnotationDialog>(Strings.Get("AnnNewNoteTitle"), new DialogParameters
-        {
-            ["Text"] = "",
-            ["NoteColor"] = "#FFEB3B",
-            ["CanEdit"] = true,
-            ["CanDelete"] = false,
-        });
-        var result = await dialog.Result;
-        if (result is null || result.Canceled || result.Data is not AnnotationDialog.AnnotationEditResult edit || edit.Action != "save")
-        {
-            return;
-        }
-
-        // Create the note with a default size (kind 0 + width/height) so it renders as an always-visible box
-        // (ADR "Post-it note boxes" web parity); the box shows its text and the author can resize it.
-        var resp = await Http.PostAsJsonAsync(_pvAnnotationsUrl.TrimStart('/'), new { pageIndex, kind = 0, positionX = x, positionY = y, width = 0.22, height = 0.06, text = edit.Text, color = edit.Color });
-        if (!resp.IsSuccessStatusCode)
-        {
-            Snackbar.Add(Strings.Get("StErrAddNote"), Severity.Error);
-            return;
-        }
-
-        await LoadAnnotationsAsync();
-        await InvokeAsync(StateHasChanged);
-    }
-
-    public async Task OnAnnotationClickedAsync(Guid id)
-    {
-        var note = _annotations.FirstOrDefault(a => a.Id == id);
-        if (note is null || _pvAnnotationsUrl is null)
-        {
-            return;
-        }
-
-        var isShape = note.Kind > 0;
-        var dialog = await DialogService.ShowAsync<AnnotationDialog>(isShape ? "Markup" : "Note", new DialogParameters
-        {
-            ["Text"] = note.Text,
-            ["NoteColor"] = note.Color,
-            ["AuthorName"] = note.AuthorName,
-            ["CanEdit"] = note.CanEdit,
-            ["CanDelete"] = note.CanDelete,
-            ["IsShape"] = isShape,
-        });
-        var result = await dialog.Result;
-        if (result is null || result.Canceled || result.Data is not AnnotationDialog.AnnotationEditResult edit)
-        {
-            return;
-        }
-
-        var noteUrl = $"{_pvAnnotationsUrl.TrimStart('/')}/{note.Id}";
-        HttpResponseMessage resp;
-        if (edit.Action == "delete")
-        {
-            var request = new HttpRequestMessage(HttpMethod.Delete, noteUrl);
-            request.Headers.TryAddWithoutValidation("If-Match", $"\"{note.Etag}\"");
-            resp = await Http.SendAsync(request);
-        }
-        else
-        {
-            var request = new HttpRequestMessage(HttpMethod.Put, noteUrl)
-            {
-                Content = JsonContent.Create(new { pageIndex = note.PageIndex, positionX = note.PositionX, positionY = note.PositionY, width = note.Width, height = note.Height, text = edit.Text, color = edit.Color }),
-            };
-            request.Headers.TryAddWithoutValidation("If-Match", $"\"{note.Etag}\"");
-            resp = await Http.SendAsync(request);
-        }
-
-        if (!resp.IsSuccessStatusCode)
-        {
-            Snackbar.Add(edit.Action == "delete" ? "Could not delete the note." : "Could not save the note.", Severity.Error);
-            return;
-        }
-
-        await LoadAnnotationsAsync();
-        await InvokeAsync(StateHasChanged);
-    }
-
-    // Drag-to-reposition (ADR "Document annotations"): the author dragged a note to a new spot; persist the new
-    // position via the same PUT (keeping text/colour), using the etag the list already embeds. On failure/412 a
-    // reload snaps it back to the persisted position and refreshes the etag.
-    public async Task OnAnnotationMovedAsync(Guid id, int pageIndex, double x, double y)
-    {
-        var note = _annotations.FirstOrDefault(a => a.Id == id);
-        if (note is null || _pvAnnotationsUrl is null || !note.CanEdit)
-        {
-            return;
-        }
-
-        var request = new HttpRequestMessage(HttpMethod.Put, $"{_pvAnnotationsUrl.TrimStart('/')}/{note.Id}")
-        {
-            Content = JsonContent.Create(new { pageIndex = note.PageIndex, positionX = x, positionY = y, width = note.Width, height = note.Height, text = note.Text, color = note.Color }),
-        };
-        request.Headers.TryAddWithoutValidation("If-Match", $"\"{note.Etag}\"");
-        var resp = await Http.SendAsync(request);
-        if (resp.IsSuccessStatusCode)
-        {
-            // Update in place (position + the rotated etag from the response) rather than a full reload — no
-            // flicker, and the note stays available for an immediate follow-up click/drag (a reload transiently
-            // empties the list).
-            note.PositionX = x;
-            note.PositionY = y;
-            if (resp.Headers.ETag?.Tag is { } tag)
-            {
-                note.Etag = tag.Trim('"');
-            }
-            await PushAnnotationsAsync();
-        }
-        else
-        {
-            Snackbar.Add(Strings.Get("StErrMoveNote"), Severity.Error);
-            await LoadAnnotationsAsync(); // snap back to the persisted position + refresh the etag
-        }
-
-        await InvokeAsync(StateHasChanged);
-    }
-
-    // Resize (ADR "Post-it note boxes" web parity): the author dragged a note box's corner grip; persist the new
-    // size (keeping position/text/colour), updating in place from the response etag like the move.
-    public async Task OnAnnotationResizedAsync(Guid id, int pageIndex, double width, double height)
-    {
-        var note = _annotations.FirstOrDefault(a => a.Id == id);
-        if (note is null || _pvAnnotationsUrl is null || !note.CanEdit)
-        {
-            return;
-        }
-
-        var request = new HttpRequestMessage(HttpMethod.Put, $"{_pvAnnotationsUrl.TrimStart('/')}/{note.Id}")
-        {
-            Content = JsonContent.Create(new { pageIndex = note.PageIndex, positionX = note.PositionX, positionY = note.PositionY, width, height, text = note.Text, color = note.Color }),
-        };
-        request.Headers.TryAddWithoutValidation("If-Match", $"\"{note.Etag}\"");
-        var resp = await Http.SendAsync(request);
-        if (resp.IsSuccessStatusCode)
-        {
-            note.Width = width;
-            note.Height = height;
-            if (resp.Headers.ETag?.Tag is { } tag)
-            {
-                note.Etag = tag.Trim('"');
-            }
-            await PushAnnotationsAsync();
-        }
-        else
-        {
-            Snackbar.Add(Strings.Get("StErrResizeNote"), Severity.Error);
-            await LoadAnnotationsAsync();
-        }
-
-        await InvokeAsync(StateHasChanged);
-    }
-
-    // --- Multi-select: select / marquee / group-move / delete / copy-paste (ADR "Annotation multi-select" web parity) ---
-
-    // A click / Ctrl-click on an annotation: a plain click selects just it; a Ctrl-click toggles it in the set.
-    public async Task OnAnnotationSelectAsync(Guid id, bool toggle)
-    {
-        if (toggle)
-        {
-            if (!_selectedAnnotationIds.Remove(id)) _selectedAnnotationIds.Add(id);
-        }
-        else
-        {
-            _selectedAnnotationIds.Clear();
-            _selectedAnnotationIds.Add(id);
-        }
-
-        await UpdateAnnotationSelectionAsync();
-    }
-
-    // A marquee drag over empty page area selected the enclosed annotations (Ctrl adds to the current selection).
-    public async Task OnAnnotationMarqueeAsync(Guid[] ids, bool additive)
-    {
-        if (!additive) _selectedAnnotationIds.Clear();
-        foreach (var id in ids) _selectedAnnotationIds.Add(id);
-        await UpdateAnnotationSelectionAsync();
-    }
-
-    public async Task OnAnnotationClearSelectionAsync()
-    {
-        if (_selectedAnnotationIds.Count == 0) return;
-        _selectedAnnotationIds.Clear();
-        await UpdateAnnotationSelectionAsync();
-    }
-
-    private async Task UpdateAnnotationSelectionAsync()
-    {
-        _hasAnnotationSelection = _selectedAnnotationIds.Count > 0;
-        // Toggle the outline on the existing elements (a full rebuild would break double-click-to-edit).
-        if (_repoPreview is not null)
-        {
-            await _repoPreview.SetSelectionAsync(_selectedAnnotationIds.Select(g => g.ToString()).ToArray());
-        }
-        await InvokeAsync(StateHasChanged);
-    }
-
-    // A group drag moved the whole selection by a normalized delta — shift every selected editable annotation on
-    // the page, persist each, then reload.
-    public async Task OnAnnotationGroupMoveAsync(int pageIndex, double dx, double dy)
-    {
-        if (_pvAnnotationsUrl is null) return;
-        var targets = _annotations.Where(a => a.PageIndex == pageIndex && a.CanEdit && _selectedAnnotationIds.Contains(a.Id)).ToList();
-        if (targets.Count == 0) return;
-
-        foreach (var a in targets)
-        {
-            var nx = Math.Clamp(a.PositionX + dx, 0, 1);
-            var ny = Math.Clamp(a.PositionY + dy, 0, 1);
-            var request = new HttpRequestMessage(HttpMethod.Put, $"{_pvAnnotationsUrl.TrimStart('/')}/{a.Id}")
-            {
-                Content = JsonContent.Create(new { pageIndex = a.PageIndex, positionX = nx, positionY = ny, width = a.Width, height = a.Height, text = a.Text, color = a.Color }),
-            };
-            request.Headers.TryAddWithoutValidation("If-Match", $"\"{a.Etag}\"");
-            var resp = await Http.SendAsync(request);
-            if (!resp.IsSuccessStatusCode)
-            {
-                Snackbar.Add(Strings.Get("StErrMoveSelection"), Severity.Error);
-                break;
-            }
-        }
-
-        await LoadAnnotationsAsync();
-        await InvokeAsync(StateHasChanged);
-    }
-
-    // Delete every selected annotation the caller may delete; reload + clear the selection.
-    private async Task DeleteSelectedAnnotationsAsync()
-    {
-        if (_pvAnnotationsUrl is null || _selectedAnnotationIds.Count == 0) return;
-        var targets = _annotations.Where(a => a.CanDelete && _selectedAnnotationIds.Contains(a.Id)).ToList();
-        foreach (var a in targets)
-        {
-            var request = new HttpRequestMessage(HttpMethod.Delete, $"{_pvAnnotationsUrl.TrimStart('/')}/{a.Id}");
-            request.Headers.TryAddWithoutValidation("If-Match", $"\"{a.Etag}\"");
-            var resp = await Http.SendAsync(request);
-            if (!resp.IsSuccessStatusCode)
-            {
-                Snackbar.Add(Strings.Get("StErrDeleteSelection"), Severity.Error);
-                break;
-            }
-        }
-
-        _selectedAnnotationIds.Clear();
-        await LoadAnnotationsAsync();
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private void CopySelectedAnnotations()
-    {
-        _annotationClipboard.Clear();
-        _annotationClipboard.AddRange(_annotations.Where(a => _selectedAnnotationIds.Contains(a.Id)));
-        _hasAnnotationClipboard = _annotationClipboard.Count > 0;
-        if (_hasAnnotationClipboard) Snackbar.Add(string.Format(Strings.Get("StCopiedAnnotations"), _annotationClipboard.Count), Severity.Info);
-    }
-
-    // Paste the clipboard as offset duplicates on their original page/version; then reload.
-    private async Task PasteAnnotationsAsync()
-    {
-        if (_pvAnnotationsUrl is null || _annotationClipboard.Count == 0 || !_annotationsCanCreate) return;
-        const double offset = 0.03;
-        foreach (var a in _annotationClipboard)
-        {
-            var nx = Math.Clamp(a.PositionX + offset, 0, 1);
-            var ny = Math.Clamp(a.PositionY + offset, 0, 1);
-            var w = a.Width ?? (a.Kind == 0 ? 0.22 : 0.1);
-            var h = a.Height ?? (a.Kind == 0 ? 0.06 : 0.05);
-            var resp = await Http.PostAsJsonAsync(_pvAnnotationsUrl.TrimStart('/'),
-                new { pageIndex = a.PageIndex, kind = a.Kind, positionX = nx, positionY = ny, width = w, height = h, text = a.Text, color = a.Color });
-            if (!resp.IsSuccessStatusCode)
-            {
-                Snackbar.Add(Strings.Get("StErrPasteAnnotations"), Severity.Error);
-                break;
-            }
-        }
-
-        await LoadAnnotationsAsync();
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private class AnnotationListDto { public List<AnnotationDto> Annotations { get; set; } = []; public bool CanCreate { get; set; } }
-
-    private class AnnotationDto
-    {
-        public Guid Id { get; set; }
-        public int PageIndex { get; set; }
-        public int Kind { get; set; }
-        public double PositionX { get; set; }
-        public double PositionY { get; set; }
-        public double? Width { get; set; }
-        public double? Height { get; set; }
-        public string Text { get; set; } = "";
-        public string Color { get; set; } = "";
-        public string AuthorName { get; set; } = "";
-        public string Etag { get; set; } = "";
-        public bool CanEdit { get; set; }
-        public bool CanDelete { get; set; }
-        public string? Points { get; set; }
-    }
-
-    // Sticky notes are available whenever a real version preview actually rendered (ADR "Document annotations").
-    private async Task ApplyAnnotatableAsync(bool hasVersion)
-    {
-        _pvAnnotatable = hasVersion && (_repoPreview?.State.HasPages ?? false) && _pvAnnotationsUrl is not null;
-        if (_pvAnnotatable)
-        {
-            await LoadAnnotationsAsync();
-        }
-    }
-
-    // Drops what the Repositories/Inbox previews show, plus the annotation state that belongs to THIS page
-    // (the markers, the selection, the clipboard). Each pane clears its own display + full-screen.
+    // Drops what the Repositories/Inbox previews show. Each pane clears its own display + full-screen, and the
+    // annotation editor clears its own markers, selection, clipboard and authoring mode.
     private void ClearPreviewPane()
     {
-        _pvAnnotatable = false;
-        _annotationAddMode = false;
-        _annotationTool = 0;
-        _pvAnnotationsUrl = null;
-        _annotations = [];
-        _selectedAnnotationIds.Clear();
-        _annotationClipboard.Clear();
-        _hasAnnotationSelection = false;
-        _hasAnnotationClipboard = false;
+        Annotations.Clear();
         _repoPreview?.Clear();
     }
 
@@ -1680,7 +1109,7 @@
         // the Users & groups tab (ADR "Users & groups administration tab").
         try
         {
-            var me = await Http.GetFromJsonAsync<WhoAmIResponse>("api/diagnostics/whoami");
+            var me = await Http.GetFromJsonAsync<WhoAmIResponse>(await ApiRoot.RequireAsync("whoami"));
             _isTenantAdmin = me?.IsTenantAdmin ?? false;
             _canManageUsers = me?.CanManageUsers ?? false;
             _canManageServiceAccounts = me?.CanManageServiceAccounts ?? false;
@@ -1711,7 +1140,7 @@
 
         await ReloadTreeAsync();
 
-        await LoadMyExternalLinksHrefAsync(); // gates the ribbon's "my external links" button (ADR 0546)
+        _myExternalLinksHref = await Actions.MyExternalLinksHrefAsync(); // gates the ribbon's "my external links" button (ADR 0546)
         await LoadTasksAsync(); // for the Tasks tab badge count
 
         AppNav.OpenDocumentRequested += OpenDocumentFromNotificationAsync; // ADR "Notification viewer + click-through"
@@ -1802,7 +1231,7 @@
     {
         var dialog = await DialogService.ShowAsync<SensitivityLabelsDialog>(Strings.Get("SlTitle"), new DialogOptions { MaxWidth = MaxWidth.Medium });
         await dialog.Result;
-        await LoadSensitivityLabelsAsync();
+        await Catalogs.ReloadSensitivityAsync();
     }
 
     private async Task NewRepositoryAsync()
@@ -1819,46 +1248,6 @@
 
     // The tenant's users and groups as dialog options. Only the external-links dialog needs them, so this is
     // deliberately a fetch-on-open rather than page state — nothing else here would keep it fresh.
-    private async Task<(List<Dialogs.MyExternalLinksDialog.PrincipalOption> Users, List<Dialogs.MyExternalLinksDialog.PrincipalOption> Groups)> LoadPrincipalDirectoryAsync()
-    {
-        var users = new List<Dialogs.MyExternalLinksDialog.PrincipalOption>();
-        var groups = new List<Dialogs.MyExternalLinksDialog.PrincipalOption>();
-
-        try
-        {
-            var url = await ApiRoot.RequireAsync("users");
-            while (url is not null)
-            {
-                var page = await Http.GetFromJsonAsync<UsersDirectoryResponse>(url);
-                users.AddRange((page?.Users ?? []).Select(u => new Dialogs.MyExternalLinksDialog.PrincipalOption(u.Id, u.DisplayName, u.DisplayName)));
-                url = Links.Href(page?.Links, "next");
-            }
-
-            url = await ApiRoot.RequireAsync("groups");
-            while (url is not null)
-            {
-                var page = await Http.GetFromJsonAsync<GroupsDirectoryResponse>(url);
-                groups.AddRange((page?.Groups ?? []).Select(g => new Dialogs.MyExternalLinksDialog.PrincipalOption(g.Id, g.Name, g.Name)));
-                url = Links.Href(page?.Links, "next");
-            }
-        }
-        catch (Exception)
-        {
-            // Non-fatal: a caller who cannot read the directory simply gets no filters, which is what a
-            // non-admin sees anyway.
-        }
-
-        return (users, groups);
-    }
-
-    private record UsersDirectoryResponse { public List<UserDirectoryRow> Users { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-
-    private record UserDirectoryRow { public Guid Id { get; set; } public string DisplayName { get; set; } = ""; }
-
-    private record GroupsDirectoryResponse { public List<GroupDirectoryRow> Groups { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-
-    private record GroupDirectoryRow { public Guid Id { get; set; } public string Name { get; set; } = ""; }
-
     private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanManageServiceAccounts { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public bool CanManageInboxes { get; set; } public Guid? UserId { get; set; } public string UserName { get; set; } = ""; }
     // The logged-in user's display name — used in the sensitivity watermark (ADR "Document watermarking").
     private string _viewerName = "";
@@ -1907,7 +1296,7 @@
             }
             else
             {
-                Snackbar.Add(resp.StatusCode == HttpStatusCode.Forbidden ? "You don't have permission to do that." : "Could not start the conversion.", Severity.Warning);
+                Snackbar.Add(Strings.Get(resp.StatusCode == HttpStatusCode.Forbidden ? "NoPermission" : "StErrStartConversionPlain"), Severity.Warning);
             }
         }
         catch (Exception)
@@ -2019,6 +1408,10 @@
         // one shared host (ADR 0558) — it drops the outgoing tab's annotation state and blanks the panes, so
         // returning to a tab does not show the previous document until the new selection has loaded.
         ClearPreviewPane();
+        // The pane this tab owns is about to be disposed, so the editor must stop holding it: a surface call
+        // against a torn-down PreviewPane would reach a JS module that is no longer there. ShowPreviewAsync
+        // re-attaches the fresh instance when the tab comes back.
+        Annotations.Attach(null);
         _activeTab = tab;
 
         // Returning to Repositories: refresh the folder-contents list pane so newly-filed documents appear, and
@@ -2437,7 +1830,7 @@
         try
         {
             // The resource advertises archive-entries only for a zip (#416) — follow it rather than compose.
-            var response = await Http.GetFromJsonAsync<ArchiveEntriesResponse>(await FetchDocumentRelAsync(zip.Id, "archive-entries"));
+            var response = await Http.GetFromJsonAsync<ArchiveEntriesResponse>(await Browse.FetchRelAsync(zip.Id, "archive-entries"));
             _archiveEntries = (response?.Entries ?? [])
                 .Select(e => new ArchiveEntryRow(e.Name, e.Path, e.Size,
                     e.Links?.FirstOrDefault(l => l.Rel == "download")?.Href?.TrimStart('/') ?? ""))
@@ -2514,7 +1907,7 @@
 
         // Set unconditionally, unlike the version-derived fields: a folder has a name to show but no version to
         // derive one from, which is exactly why it used to fall out of this pane entirely.
-        Detail.SysName = _origName = item.Name;
+        Detail.SysName = Detail.OrigName = item.Name;
 
         try
         {
@@ -2558,14 +1951,10 @@
             // Captured from the resource's own rel (ADR 0543/0546) — the external-links dialog takes the href
             // rather than composing one, and its absence simply means the affordance isn't offered.
             Detail.ExternalLinksHref = Links.Href(detail?.Links, "external-links");
-            if (_sensitivityLabels.Count == 0)
-            {
-                await LoadSensitivityLabelsAsync();
-            }
+            await Catalogs.EnsureSensitivityAsync();
 
             // Whether the current user follows this document (ADR "Document subscriptions").
-            var sub = await Http.GetFromJsonAsync<SubscriptionResponse>(DetailHref("subscription"));
-            Detail.Subscribed = sub?.Subscribed ?? false;
+            Detail.Subscribed = await Actions.IsSubscribedAsync(DetailHref("subscription"));
 
             var versions = await Http.GetFromJsonAsync<VersionListResponse>(DetailHref("versions"));
             var confirmed = versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [];
@@ -2579,7 +1968,7 @@
                 _downloadUrl = Http.Absolute(Links.Href(latest.Links, "download"));
                 converted = latest.PreviewConverted;
                 textLayoutUrl = Links.Href(latest.Links, "text-layout");
-                _pvAnnotationsUrl = Links.Href(latest.Links, "annotations");
+                Annotations.UseCollection(Links.Href(latest.Links, "annotations"));
             }
 
             DeriveSystemFields(item, confirmed, versions?.CurrentVersionId);
@@ -2621,7 +2010,7 @@
         _newComment = "";
         _replyText = "";
 
-        _isEditing = false;
+        Detail.IsEditing = false;
         Detail.SysHasVersion = false;
         Detail.SysCurrentVersionId = Guid.Empty;
         Detail.SysCurrentVersion = null;
@@ -2636,7 +2025,6 @@
         Detail.Retention = null;
         Detail.Subscribed = false;
         Detail.EditFields.Clear();
-        _availableMasks = [];
 
         // The addresses and the rights the PREVIOUS subject advertised. Clearing them is what stops an action
         // being offered — and worse, taken — against the wrong document while the new subject is still loading:
@@ -2651,79 +2039,29 @@
 
     // Open the reminder (Wiedervorlage) dialog for the selected document (ADR "Document reminders").
 
-    // External links (ADR 0546) — sharing this document with someone who has no account. Offered only when the
-    // server advertised the rel; a document that cannot be shared simply has no link to follow.
-    private async Task OpenExternalLinksDialogAsync()
-    {
-        if (_selectedItem is not { } item || Detail.ExternalLinksHref is not { } href)
-        {
-            return;
-        }
-
-        var parameters = new DialogParameters
-        {
-            ["DocumentId"] = item.Id,
-            ["DocumentName"] = Detail.SysName,
-            ["LinksHref"] = href,
-        };
-        await DialogService.ShowAsync<Dialogs.ExternalLinksDialog>(Strings.Get("ExtLinkTitle"), parameters);
-    }
-
-    // The cross-document list, reached from the ribbon. Its href comes from the API ROOT rather than a document —
-    // "everything I have shared" is not a property of whatever happens to be selected (ADR 0543/0546). The rel's
-    // ABSENCE is meaningful: it means the feature is not available here, so the ribbon button is not drawn.
-    private async Task LoadMyExternalLinksHrefAsync()
-    {
-        try
-        {
-            var root = await Http.GetFromJsonAsync<RootResponse>("api");
-            _myExternalLinksHref = Links.Href(root?.Links, "externalLinks");
-        }
-        catch (Exception)
-        {
-            _myExternalLinksHref = null;
-        }
-    }
-
-    private sealed record RootResponse { public List<LinkResponse> Links { get; set; } = []; }
-    // The cross-document list, reached from the ribbon. Its href comes from the API ROOT rather than a document —
-    // "everything I have shared" is not a property of whatever happens to be selected (ADR 0543/0546).
+    // These actions belong to DocumentActions now (ADR 0558) — sharing, reminders and following are things the
+    // user does to a document they picked, like rename and move beside them. What stays here is the state the
+    // SHELL renders from: whether the ribbon draws the my-links button, and whether the chat header's bell is lit.
     private string? _myExternalLinksHref;
+    private bool _folderSubscribed;
+
+    private Task OpenExternalLinksDialogAsync() =>
+        _selectedItem is { } item && Detail.ExternalLinksHref is { } href
+            ? Actions.OpenExternalLinksAsync(item.Id, Detail.SysName, href)
+            : Task.CompletedTask;
 
     private async Task OpenMyExternalLinksAsync()
     {
-        if (_myExternalLinksHref is not { } href)
-        {
-            return;
-        }
-
-        // The directory the dialog's admin filters need. Read here, when the dialog is opened, rather than
-        // borrowed from the Users & groups tab's cache: that tab owns its own state now (ADR 0558), and the
-        // old arrangement meant the filters appeared only if the admin happened to have visited it first —
-        // order dependence dressed up as a saved request. Two reads on a deliberate user action; empty is
-        // still fine, because the server refuses the cross-user query regardless of what this list contains.
-        var (users, groups) = await LoadPrincipalDirectoryAsync();
-
-        var parameters = new DialogParameters
-        {
-            ["LinksHref"] = href,
-            ["Users"] = users,
-            ["Groups"] = groups,
-        };
-
-        // Wide enough for four data columns plus three row actions (issue #410). Without this the DIALOG is the
-        // clipping box — the content can be as wide as it likes and Revoke still falls off its right edge.
-        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<Dialogs.MyExternalLinksDialog>(Strings.Get("ExtLinkMyLinks"), parameters, options);
-
-        // "Go to" closes the dialog and hands back a document: navigating belongs to the workbench, which owns the
-        // tree and list panes, not to a dialog that cannot see them.
-        if ((await dialog.Result)?.Data is Dialogs.MyExternalLinksDialog.GoToDocument target)
+        if (_myExternalLinksHref is { } href && await Actions.OpenMyExternalLinksAsync(href) is { } target)
         {
             await NavigateToDocumentAsync(target.DocumentId, target.ParentId);
         }
     }
 
+    // Addressed from the ROW (ADR 0559): this button is ungated, so it is clickable while the detail load is
+    // still in flight, and reading Detail.Links there handed the dialog a null href it then silently did
+    // nothing with — 8 failures in 10 isolation runs, mis-filed as flakiness for months (#420). The
+    // external-links button beside it is safe because it is GATED on its href, so a load hides it entirely.
     private async Task OpenReminderDialogAsync()
     {
         if (_selectedItem is not { } item)
@@ -2731,16 +2069,10 @@
             return;
         }
 
-        var parameters = new DialogParameters
-        {
-            ["DocumentId"] = item.Id,
-            ["DocumentName"] = Detail.SysName,
-            ["RemindersHref"] = Detail.Links?.GetValueOrDefault("reminders"),
-        };
-        await DialogService.ShowAsync<Dialogs.ReminderDialog>(Strings.Get("RemTitle"), parameters);
+        var href = Detail.Links?.GetValueOrDefault("reminders")
+            ?? await Browse.FetchRelAsync(item.Id, "reminders");
+        await Actions.OpenReminderAsync(item.Id, item.Name, href);
     }
-
-    // Whether the current user follows the selected document (ADR "Document subscriptions").
 
     private async Task ToggleSubscriptionAsync()
     {
@@ -2749,47 +2081,20 @@
             return;
         }
 
-        try
+        // Resolved for the ROW the user clicked, not from the pane's state: this button is clickable while that
+        // row's detail load is still in flight, and Detail.Links is null until it lands. Falling back to a fetch
+        // costs one request in that window and is always the right document, where reading the pane would be
+        // either stale or absent (ADRs 0543/0555/0559 — hold the row).
+        var href = Detail.Links?.GetValueOrDefault("subscription")
+            ?? await Browse.FetchRelAsync(item.Id, "subscription");
+        if (await Actions.ToggleSubscriptionAsync(href, Detail.Subscribed, isFolder: false) is { } now)
         {
-            // Resolved for the ROW the user clicked, not from the pane's state: this button is clickable while
-            // that row's detail load is still in flight, and Detail.Links is null until it lands. Falling back to
-            // a fetch costs one request in that window and is always the right document, where reading the pane
-            // would be either stale or absent (ADR 0543/0555 — hold the row).
-            var href = Detail.Links?.GetValueOrDefault("subscription")
-                ?? await FetchDocumentRelAsync(item.Id, "subscription");
-
-            var target = Detail.Subscribed;
-            using var response = target
-                ? await Http.DeleteAsync(href)
-                : await Http.PutAsync(href, null);
-            response.EnsureSuccessStatusCode();
-            Detail.Subscribed = !target;
-            Snackbar.Add(Detail.Subscribed ? "Following this document." : "Unfollowed.", Severity.Success);
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrSubscription"), Severity.Error);
+            Detail.Subscribed = now;
         }
     }
 
-    private record SubscriptionResponse { public bool Subscribed { get; set; } }
-
-    // Folder / subtree subscriptions (ADR "Folder / subtree subscriptions"): following a folder notifies of any
-    // change within its subtree. State for the currently-selected folder (the chat-header bell).
-    private bool _folderSubscribed;
-
-    private async Task LoadFolderSubscriptionAsync(BrowseNode folder)
-    {
-        try
-        {
-            var sub = await Http.GetFromJsonAsync<SubscriptionResponse>(await FetchDocumentRelAsync(folder.Id, "subscription"));
-            _folderSubscribed = sub?.Subscribed ?? false;
-        }
-        catch (Exception)
-        {
-            _folderSubscribed = false;
-        }
-    }
+    private async Task LoadFolderSubscriptionAsync(BrowseNode folder) =>
+        _folderSubscribed = await Actions.IsSubscribedAsync(await Browse.FetchRelAsync(folder.Id, "subscription"));
 
     private async Task ToggleFolderSubscriptionAsync()
     {
@@ -2798,20 +2103,10 @@
             return;
         }
 
-        try
+        var href = await Browse.FetchRelAsync(folder.Id, "subscription");
+        if (await Actions.ToggleSubscriptionAsync(href, _folderSubscribed, isFolder: true) is { } now)
         {
-            var target = _folderSubscribed;
-            var href = await FetchDocumentRelAsync(folder.Id, "subscription");
-            using var response = target
-                ? await Http.DeleteAsync(href)
-                : await Http.PutAsync(href, null);
-            response.EnsureSuccessStatusCode();
-            _folderSubscribed = !target;
-            Snackbar.Add(_folderSubscribed ? "Following this folder and everything in it." : "Unfollowed folder.", Severity.Success);
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrSubscription"), Severity.Error);
+            _folderSubscribed = now;
         }
     }
 
@@ -2820,19 +2115,6 @@
     // Sensitivity label (ADR "Data classification / sensitivity labels"): current value + the staged edit value.
     // The selected document's sensitivity (ADR "Configurable sensitivity labels + upload defaults") — the per-
     // tenant label id/name/colour + whether it watermarks; DetailState.Edit* is the pending picker value.
-    private List<SensitivityLabel> _sensitivityLabels = [];
-    private bool _canManageSensitivity;
-
-
-    // The tenant's sensitivity labels for the picker + admin (loaded once, refreshable). Best-effort.
-    // Delegates to the shared catalogue so the Users & groups tab reads the same list through the same loader
-    // (ADR 0558) — the page keeps local copies only because its markup binds to them.
-    private async Task LoadSensitivityLabelsAsync()
-    {
-        _sensitivityLabels = [.. await SensitivityLabels.GetAsync()];
-        _canManageSensitivity = SensitivityLabels.CanManage;
-    }
-
     // A repeating diagonal SVG-background watermark of "<LABEL> · <viewer>" (ADR "Document watermarking"),
     // shown over the preview when the label's watermark flag is set. Client-side only (a screenshot deterrent /
     // classification reminder — bypassable, server-stamped downloads deferred).
@@ -2872,57 +2154,17 @@
 
     // ---- Single pane-level edit (ADR 0278): Name/date/OCR/mask/index-data all editable at once -----------
 
-    // The SUBJECT is what gets edited — a selected row or the open folder — so a folder's metadata is editable
-    // from wherever you reached it (issue #408).
-    private bool CanEditDetail => Detail.Node is not null && !_isEditing;
-
-    // The edited contents order, staged like every other field so Cancel discards it.
-
+    // The lifecycle itself is DetailEditor's (ADR 0558); what stays here is the reporting and the shell work a
+    // save implies — a renamed document changes rows in the tree and the listing, which the editor cannot reach.
     private async Task BeginEditAsync()
     {
-        if (Detail.Node is null)
-        {
-            return;
-        }
-
-        // One pencil commits everything the pane shows, so a folder's contents order is staged alongside its mask
-        // and index fields rather than hiding behind an Edit button of its own.
-        Detail.EditSortOrder = Detail.SortOrder;
-
-        Detail.Busy = true;
         try
         {
-            // Snapshot originals for change detection + cancel.
-            Detail.EditName = _origName = Detail.SysName;
-            Detail.EditDocumentDate = _origDocumentDate = Detail.SysDocumentDate;
-            Detail.EditOcrCodes = [.. Detail.SysOcrCodes];
-            _origOcrCodes = [.. Detail.SysOcrCodes];
-            Detail.EditMaskId = _origMaskId = Detail.MaskId;
-            Detail.EditSensitivityId = Detail.SensitivityId;
-            Detail.EditTags = [.. (Detail.Tags ?? [])];
-            _origTags = [.. (Detail.Tags ?? [])];
-            _newTag = null;
-            if (_tagColors.Count == 0)
-            {
-                await LoadTagCatalogAsync(); // names for autocomplete + colours for the chips
-            }
-
-            _availableMasks = (await Http.GetFromJsonAsync<MaskListResponse>(await ApiRoot.RequireAsync("masks")))?.Masks ?? [];
-            if (Detail.SysHasTiff && _ocrCatalog.Count == 0)
-            {
-                _ocrCatalog = await OcrLanguages.GetAsync();
-            }
-
-            await LoadEditFieldsAsync(Detail.EditMaskId, useCurrentValues: true);
-            _isEditing = true;
+            await Editor.BeginAsync();
         }
         catch (HttpRequestException e)
         {
             Snackbar.Add(string.Format(Strings.Get("StErrStartEdit"), e.Message), Severity.Error);
-        }
-        finally
-        {
-            Detail.Busy = false;
         }
     }
 
@@ -2956,55 +2198,19 @@
         }
     }
 
-    private async Task LoadEditFieldsAsync(Guid? maskId, bool useCurrentValues)
-    {
-        Detail.EditFields.Clear();
-        if (maskId is not { } id)
-        {
-            return;
-        }
-
-        var fields = await Http.GetFromJsonAsync<MaskFieldsResponse>($"api/masks/{id}");
-        var valuesByName = useCurrentValues
-            ? (Detail.IndexData ?? []).ToDictionary(f => f.FieldName, f => f.Values)
-            : new Dictionary<string, List<string>>();
-
-        foreach (var f in fields?.Fields ?? [])
-        {
-            var values = valuesByName.TryGetValue(f.Name, out var v) ? v : [];
-            Detail.EditFields.Add(EditField.Create(f, values));
-        }
-    }
-
-    private async Task OnEditMaskChanged(Guid? maskId)
-    {
-        Detail.EditMaskId = maskId;
-        await LoadEditFieldsAsync(maskId, useCurrentValues: false);
-    }
-
-    // OCR ordered picker: click a language to append it (numbered), click a selected one to remove + renumber.
-    private void ToggleOcr(string code)
-    {
-        if (!Detail.EditOcrCodes.Remove(code))
-        {
-            Detail.EditOcrCodes.Add(code);
-        }
-    }
-
-    private void CancelEdit() => _isEditing = false;
-
     // Esc while editing (ADR 0550); ignored otherwise, so the pane keeps its ordinary behaviour. Synchronous and
     // WITHOUT preventDefault: Escape has no default worth suppressing, and suppressing keys wholesale is what
     // broke text entry in this pane.
     private void OnDetailKeyDown(KeyboardEventArgs e)
     {
-        if (_isEditing && e.Key == "Escape")
+        if (Detail.IsEditing && e.Key == "Escape")
         {
-            CancelEdit();
+            Editor.Cancel();
         }
     }
 
-    // Persists only the fields that changed; a failure keeps the pane in edit mode and reports it (ADR 0278).
+    // The editor persists the fields; the page reports the outcome and does the work a save implies elsewhere —
+    // a renamed document changes rows in the tree and the open listing, which the editor cannot reach (ADR 0558).
     private async Task SaveDetailAsync()
     {
         if (Detail.Node is not { } item)
@@ -3012,145 +2218,58 @@
             return;
         }
 
-        Detail.Busy = true;
-        var failures = new List<string>();
-        var nameChanged = false;
-        try
+        var outcome = await Editor.SaveAsync();
+        if (!outcome.Saved)
         {
-            var newName = Detail.EditName.Trim();
-            if (newName.Length > 0 && newName != _origName)
-            {
-                var etag = await Actions.GetETagAsync(DetailHref("self"));
-                using var req = new HttpRequestMessage(HttpMethod.Put, DetailHref("self")) { Content = JsonContent.Create(new { name = newName }) };
-                if (etag is not null)
-                {
-                    req.Headers.TryAddWithoutValidation("If-Match", etag);
-                }
-
-                var resp = await Http.SendAsync(req);
-                if (resp.IsSuccessStatusCode) { Detail.SysName = _origName = newName; nameChanged = true; }
-                else if (resp.StatusCode == HttpStatusCode.Conflict) { failures.Add("name (already exists here)"); }
-                else { failures.Add("name"); }
-            }
-
-            if (Detail.SysHasVersion && Detail.SysCurrentVersionId != Guid.Empty && Detail.EditDocumentDate is { } dd && dd != _origDocumentDate)
-            {
-                var resp = await Http.PutAsJsonAsync($"api/documents/{item.Id}/versions/{Detail.SysCurrentVersionId}/document-date", new { documentDate = dd.ToString("yyyy-MM-dd") });
-                if (resp.IsSuccessStatusCode) { Detail.SysDocumentDate = _origDocumentDate = dd; } else { failures.Add("document date"); }
-            }
-
-            if (Detail.SysHasTiff && !Detail.EditOcrCodes.SequenceEqual(_origOcrCodes))
-            {
-                var resp = await Http.PutAsJsonAsync(DetailHref("ocr-languages"), new { languages = Detail.EditOcrCodes });
-                if (resp.IsSuccessStatusCode) { Detail.SysOcrCodes = [.. Detail.EditOcrCodes]; _origOcrCodes = [.. Detail.EditOcrCodes]; } else { failures.Add("OCR languages"); }
-            }
-
-            if (Detail.EditSensitivityId != Detail.SensitivityId)
-            {
-                var resp = await Http.PutAsJsonAsync(DetailHref("sensitivity"), new { labelId = Detail.EditSensitivityId });
-                if (resp.IsSuccessStatusCode)
-                {
-                    Detail.SensitivityId = Detail.EditSensitivityId;
-                    var lbl = _sensitivityLabels.FirstOrDefault(l => l.Id == Detail.EditSensitivityId);
-                    Detail.SensitivityName = lbl?.Name ?? "";
-                    Detail.SensitivityColor = lbl?.Color;
-                    Detail.SensitivityWatermark = lbl?.Watermark ?? false;
-                }
-                else { failures.Add("sensitivity"); }
-            }
-
-            // Free-form tags (ADR "Document tags"): PUT-replaces the whole set; the server normalizes/dedupes.
-            var editTags = Detail.EditTags.Select(t => t.Trim().ToLowerInvariant()).Where(t => t.Length is > 0 and <= 100).Distinct().ToList();
-            if (!editTags.OrderBy(t => t).SequenceEqual(_origTags.OrderBy(t => t)))
-            {
-                var resp = await Http.PutAsJsonAsync(DetailHref("tags"), new { tags = editTags });
-                if (resp.IsSuccessStatusCode)
-                {
-                    Detail.Tags = (await resp.Content.ReadFromJsonAsync<TagsResponse>())?.Tags ?? [];
-                    _origTags = [.. Detail.Tags];
-                }
-                else { failures.Add("tags"); }
-            }
-
-            try
-            {
-                if (Detail.EditMaskId is null)
-                {
-                    if (_origMaskId is not null)
-                    {
-                        (await Http.DeleteAsync(DetailHref("mask"))).EnsureSuccessStatusCode();
-                    }
-                }
-                else
-                {
-                    // Fill index data first, then (re)assign the mask (which re-checks required fields).
-                    var body = new { fields = Detail.EditFields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.ToValues() }) };
-                    (await Http.PutAsJsonAsync(DetailHref("index-data"), body)).EnsureSuccessStatusCode();
-                    if (Detail.EditMaskId != _origMaskId)
-                    {
-                        (await Http.PutAsJsonAsync(DetailHref("mask"), new { maskId = Detail.EditMaskId })).EnsureSuccessStatusCode();
-                    }
-                }
-            }
-            catch (HttpRequestException)
-            {
-                failures.Add("mask / index data (check required and formatted fields)");
-            }
-
-            // A folder's contents order commits with everything else, from the same pencil (issue #408). Skipped
-            // for a document, which lists nothing, and when unchanged — so an ordinary edit sends no extra request.
-            if (item.IsFolder && Detail.EditSortOrder != Detail.SortOrder)
-            {
-                var resp = await Http.PutAsJsonAsync(DetailHref("contents-sort-order"), new { sortOrder = (int)Detail.EditSortOrder });
-                if (resp.IsSuccessStatusCode)
-                {
-                    Detail.SortOrder = Detail.EditSortOrder;
-                    // The OPEN folder's own listing re-sorts only when it is the folder that changed.
-                    if (_selectedFolder?.Id == item.Id)
-                    {
-                        _folderSortOrder = Detail.EditSortOrder;
-                        _listPane?.ResetHeaderSort(); // re-apply the persisted default order to the current listing
-                    }
-                }
-                else
-                {
-                    failures.Add(resp.StatusCode == System.Net.HttpStatusCode.Forbidden
-                        ? Strings.Get("FolderSortNoPermission")
-                        : "contents sort order");
-                }
-            }
-
-            if (failures.Count > 0)
-            {
-                Snackbar.Add(string.Format(Strings.Get("StErrSaveJoin"), string.Join("; ", failures)), Severity.Warning);
-                return; // stay in edit mode so the rejected field can be fixed
-            }
-
-            _isEditing = false;
-            Snackbar.Add(Strings.Get("StSaved"), Severity.Success);
-            if (nameChanged)
-            {
-                // Rebuild the tree/list so rows show the new name, then reselect the *fresh* node (the old
-                // _selectedItem still carries the old name, which would otherwise reappear in the detail pane).
-                await ReloadTreeAsync();
-                if (_selectedFolder is { } folder)
-                {
-                    _folderContents = await OpenFolderContentsAsync(folder);
-                }
-
-                var fresh = (_folderContents ?? []).FirstOrDefault(c => c.Id == item.Id) ?? item with { Name = Detail.SysName };
-                await SelectItemAsync(fresh);
-            }
-            else
-            {
-                await SelectItemAsync(item);
-            }
+            // Named, not spelled: the editor says WHICH fields were refused and the page says it in the reader's
+            // language — the labels used to be English literals inside a localized sentence.
+            var named = outcome.Failures.Select(f => Strings.Get(SaveFailureKey(f)));
+            Snackbar.Add(string.Format(Strings.Get("StErrSaveJoin"), string.Join("; ", named)), Severity.Warning);
+            return; // the edit stays open so the rejected field can be fixed
         }
-        finally
+
+        Snackbar.Add(Strings.Get("StSaved"), Severity.Success);
+
+        // The OPEN folder's own listing re-sorts only when it is the folder whose order changed.
+        if (outcome.ContentsSortOrderChanged && _selectedFolder?.Id == item.Id)
         {
-            Detail.Busy = false;
+            _folderSortOrder = Detail.SortOrder;
+            _listPane?.ResetHeaderSort(); // re-apply the persisted default order to the current listing
+        }
+
+        if (outcome.NameChanged)
+        {
+            // Rebuild the tree/list so rows show the new name, then reselect the *fresh* node (the old
+            // _selectedItem still carries the old name, which would otherwise reappear in the detail pane).
+            await ReloadTreeAsync();
+            if (_selectedFolder is { } folder)
+            {
+                _folderContents = await OpenFolderContentsAsync(folder);
+            }
+
+            var fresh = (_folderContents ?? []).FirstOrDefault(c => c.Id == item.Id) ?? item with { Name = Detail.SysName };
+            await SelectItemAsync(fresh);
+        }
+        else
+        {
+            await SelectItemAsync(item);
         }
     }
+
+    // The two sort-order refusals reuse the keys the folder-order picker already had; the rest are new, because
+    // until now they were not translated at all.
+    private static string SaveFailureKey(DetailSaveFailure failure) => failure switch
+    {
+        DetailSaveFailure.NameConflict => "SaveFailNameConflict",
+        DetailSaveFailure.DocumentDate => "SaveFailDocumentDate",
+        DetailSaveFailure.OcrLanguages => "SaveFailOcrLanguages",
+        DetailSaveFailure.Sensitivity => "SaveFailSensitivity",
+        DetailSaveFailure.Tags => "SaveFailTags",
+        DetailSaveFailure.MaskAndIndexData => "SaveFailMaskIndexData",
+        DetailSaveFailure.ContentsSortOrder => "FolderSortSaveFailed",
+        DetailSaveFailure.ContentsSortOrderForbidden => "FolderSortNoPermission",
+        _ => "SaveFailName",
+    };
 
     // ---- Automatic chat entries (ADR 0545) -----------------------------------------------------------
 
@@ -3443,7 +2562,7 @@
         var allRefs = draggedInBulk ? ids.All(IsRef) : draggedIsRef;
         if (allRefs)
         {
-            await RunBulkAsync(Bulk.RunAsync("/api/documents/bulk/reference", new { ids, parentId = targetId }, "referenced"));
+            await RunBulkAsync(Bulk.RunRelAsync("reference", new { ids, parentId = targetId }, "referenced"));
             return;
         }
 
@@ -3462,10 +2581,10 @@
         switch (choice)
         {
             case true:
-                await RunBulkAsync(Bulk.RunAsync("/api/documents/bulk/move", new { ids, parentId = targetId }, "moved"));
+                await RunBulkAsync(Bulk.RunRelAsync("move", new { ids, parentId = targetId }, "moved"));
                 break;
             case false:
-                await RunBulkAsync(Bulk.RunAsync("/api/documents/bulk/reference", new { ids, parentId = targetId }, "referenced"));
+                await RunBulkAsync(Bulk.RunRelAsync("reference", new { ids, parentId = targetId }, "referenced"));
                 break;
         }
 
@@ -3606,33 +2725,17 @@
 
     // Tag chip editor + catalog autocomplete (ADR "Document tags"). SearchFunc suggests not-yet-added catalog
     // tags; Enter commits the box (a coerced free-form value or the highlighted suggestion).
-    private Task<IEnumerable<string>> SearchTagCatalog(string value, CancellationToken ct)
-    {
-        var pool = _tagCatalog.Where(t => !Detail.EditTags.Contains(t));
-        return Task.FromResult(string.IsNullOrWhiteSpace(value)
-            ? pool
-            : pool.Where(t => t.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase)));
-    }
+    // Tag entry forwards to the editor, which owns the working set: it suggests catalogue tags not already on
+    // the document, and Enter commits the box exactly as the explicit Add button does.
+    private Task<IEnumerable<string>> SearchTagCatalog(string value, CancellationToken ct) =>
+        Task.FromResult(Editor.SuggestTags(value));
 
     private void OnTagKeyUp(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
     {
         if (e.Key is "Enter" or "NumpadEnter")
         {
-            AddCurrentTag();
+            Editor.AddTypedTag();
         }
-    }
-
-    // Adds the typed tag as an editable chip (shared by the Enter key + the explicit Add button). A no-op for a
-    // blank / too-long / duplicate value.
-    private void AddCurrentTag()
-    {
-        var t = (_newTag ?? "").Trim().ToLowerInvariant();
-        if (t.Length is > 0 and <= 100 && !Detail.EditTags.Contains(t))
-        {
-            Detail.EditTags.Add(t);
-        }
-
-        _newTag = null;
     }
 
     // A read-only tag chip click → a filter-only search by that tag on the Search tab. The shell only
@@ -3679,7 +2782,9 @@
     {
         try
         {
-            var resp = await Http.GetFromJsonAsync<DuplicatesResponse>($"api/duplicates?hash={hash}");
+            // A query on an advertised href is following it (ADR 0557) — the root owns the path, the caller
+            // owns the filter.
+            var resp = await Http.GetFromJsonAsync<DuplicatesResponse>($"{await ApiRoot.RequireAsync("duplicates")}?hash={hash}");
             var dups = resp?.Duplicates ?? [];
             if (dups.Count == 0)
             {
@@ -3959,20 +3064,7 @@
     // Collection-level rels, captured where each collection is read (ADR 0543, issue #416). Null until then,
     // which is what disables the action rather than the client composing a path for it.
 
-    private string DetailHref(string rel) => HrefOrThrow(Detail.Links, rel);
-
-    // For an action on a node whose resource is not open — "Follow folder" from the tree context menu — FETCH
-    // the document and follow the rel. One request, at the moment the user acts.
-    //
-    // Deliberately not solved by advertising `subscription` on the listings: a listing advertises what BROWSING
-    // needs, and this is an action taken on ONE row, occasionally. Carrying it on every row of every page to
-    // serve that would invert the cost (#416).
-    private async Task<string> FetchDocumentRelAsync(Guid documentId, string rel)
-    {
-        var doc = await Http.GetFromJsonAsync<DocumentLinksResponse>($"api/documents/{documentId}");
-        return Links.Href(doc?.Links, rel)
-            ?? throw new InvalidOperationException($"Document {documentId} advertised no '{rel}' rel (ADR 0543).");
-    }
+    private string DetailHref(string rel) => Links.Required(Detail.Links, rel);
 
     // The row's own advertised rel when it has one — no extra call — else the OPEN RESOURCE's, which this pane
     // has already fetched. Not every BrowseNode comes from a listing: a reference row, or a node built from an
@@ -3981,12 +3073,6 @@
     private string RowOrDetailHref(BrowseNode item, string rel) =>
         item.Links is not null && item.Links.TryGetValue(rel, out var href) ? href : DetailHref(rel);
 
-    // Throws rather than composing a fallback: a rel that was not advertised means the action is not available
-    // here (ADR 0543), and rebuilding the path would paper over exactly what this is replacing.
-    private static string HrefOrThrow(IReadOnlyDictionary<string, string>? links, string rel) =>
-        links is not null && links.TryGetValue(rel, out var href)
-            ? href
-            : throw new InvalidOperationException($"The '{rel}' rel was not advertised (ADR 0543).");
 
     private record ArchiveEntriesResponse { public List<ArchiveEntryDto> Entries { get; set; } = []; }
     private record ArchiveEntryDto { public string Name { get; set; } = ""; public string Path { get; set; } = ""; public long Size { get; set; } public List<LinkResponse> Links { get; set; } = []; }
