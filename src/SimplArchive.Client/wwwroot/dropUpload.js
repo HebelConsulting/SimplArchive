@@ -45,6 +45,15 @@ export function initDropRoot(root, dotNetRef) {
     root.addEventListener('dragover', (e) => {
         // Internal drag: only a folder (data-drop-folder) accepts it — never a document row.
         if (isInternalDrag(e)) {
+            // Personal ▸ Inbox takes a document as a TEMPLATE — a copy, not a move, so the effect says 'copy'.
+            const template = e.target.closest('[data-drop-inbox]');
+            if (template) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                setActive(template);
+                return;
+            }
+
             const folder = e.target.closest('[data-drop-folder]');
             if (folder) {
                 e.preventDefault();
@@ -53,6 +62,16 @@ export function initDropRoot(root, dotNetRef) {
             }
             return;
         }
+        // The Personal launchers accept an OS-file drag; the work itself happens on `drop`, never here —
+        // dragover fires continuously while the pointer moves (#467).
+        const launcher = e.target.closest('[data-drop-inbox]') || e.target.closest('[data-drop-checkout]');
+        if (launcher) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            setActive(launcher);
+            return;
+        }
+
         // OS-file drag: a document row (data-drop-doc) offers the filing dialog; a folder row files into it.
         const target = e.target.closest('[data-drop-doc]') || e.target.closest('[data-drop-folder]');
         if (target) {
@@ -72,6 +91,19 @@ export function initDropRoot(root, dotNetRef) {
     root.addEventListener('drop', async (e) => {
         // Internal move/reference drag: hand the dragged node + target folder to .NET, which prompts + bulk-moves.
         if (isInternalDrag(e)) {
+            const [draggedId] = (e.dataTransfer.getData(NODE_MIME) || '').split('|');
+
+            // Copy an existing document into the inbox as a template, carrying its mask + index values (#467).
+            const template = e.target.closest('[data-drop-inbox]');
+            if (template) {
+                e.preventDefault();
+                setActive(null);
+                if (draggedId) {
+                    await dotNetRef.invokeMethodAsync('CopyDocumentToInboxAsync', draggedId);
+                }
+                return;
+            }
+
             const folder = e.target.closest('[data-drop-folder]');
             setActive(null);
             if (!folder) {
@@ -82,6 +114,18 @@ export function initDropRoot(root, dotNetRef) {
             if (nodeId) {
                 await dotNetRef.invokeMethodAsync('PerformNodeDropAsync', folder.getAttribute('data-drop-folder'), nodeId, isRef === 'true');
             }
+            return;
+        }
+
+        // Personal ▸ Check-out takes an edited working copy back, matched to a checked-out document BY NAME;
+        // Personal ▸ Inbox takes the files as inbox items (#467).
+        const checkout = e.target.closest('[data-drop-checkout]');
+        const inbox = e.target.closest('[data-drop-inbox]');
+        if (checkout || inbox) {
+            e.preventDefault();
+            setActive(null);
+            const dropped = [...(e.dataTransfer?.files ?? [])];
+            await (checkout ? uploadFilesToStash(dotNetRef, dropped) : uploadFilesToInbox(dotNetRef, dropped));
             return;
         }
 
@@ -184,6 +228,35 @@ async function uploadFilesToInbox(dotNetRef, files) {
     }
 
     await dotNetRef.invokeMethodAsync('OnInboxUploadsCompleteAsync', uploaded);
+}
+
+// Each file is matched to a checked-out document BY NAME; one that matches nothing is reported rather than
+// silently ignored, because "nothing happened" is indistinguishable from a broken feature.
+async function uploadFilesToStash(dotNetRef, files) {
+    if (files.length === 0) {
+        return;
+    }
+
+    await dotNetRef.invokeMethodAsync('OnUploadsStartingAsync', files.length);
+    let stashed = 0;
+    for (const file of files) {
+        try {
+            const url = await dotNetRef.invokeMethodAsync('CreateStashTargetForNameAsync', file.name);
+            if (!url) {
+                continue;   // .NET has already said why: no checked-out document of that name
+            }
+            const response = await fetch(url, { method: 'PUT', body: file });
+            if (!response.ok) {
+                await dotNetRef.invokeMethodAsync('ReportUploadFailureAsync', file.name, `storage upload failed (${response.status})`);
+                continue;
+            }
+            stashed++;
+        } catch (err) {
+            await dotNetRef.invokeMethodAsync('ReportUploadFailureAsync', file.name, String(err));
+        }
+    }
+
+    await dotNetRef.invokeMethodAsync('OnStashUploadsCompleteAsync', stashed);
 }
 
 function pickFiles(dotNetRef, folderId) {

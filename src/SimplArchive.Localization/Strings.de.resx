@@ -3744,6 +3744,36 @@
   <data name="StErrCopyWebDavUrl" xml:space="preserve">
     <value>Die WebDAV-URL konnte nicht kopiert werden.</value>
   </data>
+  <data name="StStashOneFileOnly" xml:space="preserve">
+    <value>Eine Arbeitskopie enthält eine Datei — {0} weitere Datei(en) wurden ignoriert.</value>
+  </data>
+  <data name="StStashUploaded" xml:space="preserve">
+    <value>{0} Arbeitskopie(n) hochgeladen. Einchecken im Tab „Check-out“.</value>
+  </data>
+  <data name="StStashNotCheckedOut" xml:space="preserve">
+    <value>„{0}“ entspricht keinem von Ihnen ausgecheckten Dokument.</value>
+  </data>
+  <data name="StStashNotAllowed" xml:space="preserve">
+    <value>Für „{0}“ kann derzeit keine neue Arbeitskopie abgelegt werden.</value>
+  </data>
+  <data name="StTemplateCopied" xml:space="preserve">
+    <value>Als Vorlage mit den Indexdaten in Ihren Eingang kopiert.</value>
+  </data>
+  <data name="StTemplateFailed" xml:space="preserve">
+    <value>Das Dokument konnte nicht in Ihren Eingang kopiert werden.</value>
+  </data>
+  <data name="StTemplateNameTaken" xml:space="preserve">
+    <value>Ihr Eingang enthält bereits ein Element mit diesem Namen.</value>
+  </data>
+  <data name="StTemplateCopiedN" xml:space="preserve">
+    <value>{0} Dokument(e) als Vorlage in Ihren Eingang kopiert.</value>
+  </data>
+  <data name="StTemplateFailedOne" xml:space="preserve">
+    <value>Ein Dokument konnte nicht in Ihren Eingang kopiert werden ({0}).</value>
+  </data>
+  <data name="StTemplateNoneCopied" xml:space="preserve">
+    <value>Es wurde nichts in Ihren Eingang kopiert.</value>
+  </data>
   <data name="StUploadedToInbox" xml:space="preserve">
     <value>{0} Datei(en) in Ihren Posteingang hochgeladen.</value>
   </data>

@@ -304,6 +304,15 @@ public class InboxController : ControllerBase
 
     private static string SidecarName(string name) => name + MaskSidecarSuffix;
 
+    // The collection's own actions, advertised where the collection is read (ADR 0557). `from-document` is how a
+    // repository document is copied in as a template — an action no resource links to is unreachable by a
+    // conforming client, and therefore incomplete (ADR 0543).
+    private static List<Link> InboxCollectionLinks() =>
+    [
+        new Link("self", "/api/inbox", "GET"),
+        new Link("from-document", "/api/inbox/from-document", "POST"),
+    ];
+
     // Preview renditions + the text-layout sidecar are cached next to the item (`<stem>.preview.*`,
     // `<stem>.textlayout.json` — ADR "Server-side preview renditions"/"Search hit overlay"). They must never
     // appear as inbox items, and are swept when the item leaves the inbox (ADR "Avoid inbox preview litter").
@@ -337,7 +346,7 @@ public class InboxController : ControllerBase
             }
 
             var userItems = await ListPrefixItemsAsync(Prefix(tenantId, targetUserId), group: null, groupName: null, user: targetUserId, userName: targetName, cancellationToken);
-            return Ok(new InboxResource { Items = userItems, Links = [new Link("self", "/api/inbox", "GET")] });
+            return Ok(new InboxResource { Items = userItems, Links = InboxCollectionLinks() });
         }
 
         // The caller's own inbox, plus — opt-in via the filter — their group inboxes (alphabetical, stable order).
@@ -359,7 +368,7 @@ public class InboxController : ControllerBase
             }
         }
 
-        return Ok(new InboxResource { Items = items, Links = [new Link("self", "/api/inbox", "GET")] });
+        return Ok(new InboxResource { Items = items, Links = InboxCollectionLinks() });
     }
 
     // Lists the (non-sidecar, non-derived) items under one inbox prefix — the caller's own (both null), a group's
@@ -491,6 +500,99 @@ public class InboxController : ControllerBase
             UploadUrl = uploadUrl,
             Links = [new Link("self", "/api/inbox", "GET")],
         });
+    }
+
+    /// <summary>
+    /// Copies an existing document into the caller's inbox as a STAGED item, carrying its mask and index values
+    /// across as the staged draft (#467).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The workflow this serves: base new work on an existing document as a TEMPLATE, without committing to a
+    /// new document or a new version until it is filed. The inbox is where work that is not yet a document
+    /// belongs, so a template lands there with its mask already staged and the user edits what differs.
+    /// </para>
+    /// <para>
+    /// Server-side on purpose. The alternative — the browser downloading the version and re-uploading it — sends
+    /// the bytes twice over the user's connection and can leave a file with no sidecar if it fails midway. Here
+    /// the object copy and the sidecar write are one request, and the caller needs no more rights than reading
+    /// the source document.
+    /// </para>
+    /// </remarks>
+    [HttpPost("from-document")]
+    public async Task<IActionResult> CopyFromDocument([FromBody] InboxFromDocumentRequest request, CancellationToken cancellationToken)
+    {
+        if (Scope() is not var (_, userId))
+        {
+            return Forbid();
+        }
+
+        var document = await _dbContext.Documents.FirstOrDefaultAsync(d => d.Id == request.DocumentId, cancellationToken);
+        if (document is null)
+        {
+            return NotFound();
+        }
+
+        // Reading the source is the only right required: nothing is created in the repository, and what lands in
+        // the inbox is the caller's own staged copy.
+        if (!(await _effectiveRightsCalculator.GetEffectiveRightsAsync(userId, document.Id, cancellationToken)).CanReadContent)
+        {
+            return Forbid();
+        }
+
+        var version = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, document.Id, document.CurrentVersionId, cancellationToken);
+        if (version is null)
+        {
+            throw new InboxSourceHasNoVersionException(document.Name);
+        }
+
+        // The inbox is addressed by NAME, so the copy keeps the document's name plus the version's extension —
+        // which is also what lets a later drop onto Check-out match it back by filename.
+        var name = Path.GetFileName(document.Name + Path.GetExtension(version.ObjectKey));
+        if (await ResolveScopeAsync(group: null, user: null, name, cancellationToken) is not { } scope)
+        {
+            return Forbid();
+        }
+
+        var itemKey = scope.Prefix + name;
+        if (await _objectStorageClient.ExistsAsync(itemKey, cancellationToken))
+        {
+            throw new InboxItemNameConflictException(name);
+        }
+
+        await _objectStorageClient.CopyObjectAsync(version.ObjectKey, itemKey, cancellationToken);
+
+        // The staged draft: the source's mask and every index value it holds, so the template arrives filled in.
+        var values = await _dbContext.FieldValues
+            .Where(v => v.DocumentId == document.Id)
+            .GroupBy(v => v.FieldDefinitionId)
+            .Select(g => new { FieldDefinitionId = g.Key, Values = g.Select(v => v.Value).ToList() })
+            .ToListAsync(cancellationToken);
+
+        var draft = new InboxMaskResource
+        {
+            Name = document.Name,
+            MaskId = await _dbContext.MaskVersions.Where(mv => mv.Id == document.MaskVersionId)
+                .Select(mv => (Guid?)mv.MaskId).FirstOrDefaultAsync(cancellationToken),
+            DocumentDate = version.DocumentDate.ToString("yyyy-MM-dd"),
+            Fields = values.Select(v => new InboxMaskFieldResource { FieldDefinitionId = v.FieldDefinitionId, Values = v.Values }).ToList(),
+        };
+
+        await using var payload = new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(draft));
+        await _objectStorageClient.PutObjectAsync(scope.Prefix + SidecarName(name), payload, "application/json", cancellationToken);
+
+        return Ok(new UploadInboxResource
+        {
+            Name = name,
+            // Nothing for the client to upload — the copy already happened server-side, which is the point.
+            UploadUrl = new Uri("about:blank"),
+            Links = [new Link("self", "/api/inbox", "GET")],
+        });
+    }
+
+    public class InboxFromDocumentRequest
+    {
+        public Guid DocumentId { get; set; }
     }
 
     // Inline preview for the item, via the rendition service on the inbox object key (renditions for TIFF/

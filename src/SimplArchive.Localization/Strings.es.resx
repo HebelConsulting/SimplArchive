@@ -3744,6 +3744,36 @@
   <data name="StErrCopyWebDavUrl" xml:space="preserve">
     <value>No se pudo copiar la URL de WebDAV.</value>
   </data>
+  <data name="StStashOneFileOnly" xml:space="preserve">
+    <value>Una copia de trabajo contiene un archivo: se ignoraron {0} archivo(s) más.</value>
+  </data>
+  <data name="StStashUploaded" xml:space="preserve">
+    <value>{0} copia(s) de trabajo subida(s). Regístrelas desde la pestaña Check-out.</value>
+  </data>
+  <data name="StStashNotCheckedOut" xml:space="preserve">
+    <value>'{0}' no coincide con ningún documento que tenga desprotegido.</value>
+  </data>
+  <data name="StStashNotAllowed" xml:space="preserve">
+    <value>'{0}' no puede recibir una nueva copia de trabajo en este momento.</value>
+  </data>
+  <data name="StTemplateCopied" xml:space="preserve">
+    <value>Copiado a su bandeja como plantilla, con sus datos de índice.</value>
+  </data>
+  <data name="StTemplateFailed" xml:space="preserve">
+    <value>No se pudo copiar ese documento a su bandeja.</value>
+  </data>
+  <data name="StTemplateNameTaken" xml:space="preserve">
+    <value>Su bandeja ya contiene un elemento con ese nombre.</value>
+  </data>
+  <data name="StTemplateCopiedN" xml:space="preserve">
+    <value>{0} documento(s) copiado(s) a su bandeja como plantilla.</value>
+  </data>
+  <data name="StTemplateFailedOne" xml:space="preserve">
+    <value>No se pudo copiar un documento a su bandeja ({0}).</value>
+  </data>
+  <data name="StTemplateNoneCopied" xml:space="preserve">
+    <value>No se copió nada a su bandeja.</value>
+  </data>
   <data name="StUploadedToInbox" xml:space="preserve">
     <value>{0} archivo(s) subido(s) a su bandeja de entrada.</value>
   </data>

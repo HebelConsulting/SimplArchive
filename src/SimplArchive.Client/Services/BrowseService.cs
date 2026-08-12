@@ -162,9 +162,28 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
             return EmptyAttributes;
         }
 
-        var attrs = node.HasVersions
-            ? new Dictionary<string, object> { ["data-drop-doc"] = node.Id.ToString() }
-            : new Dictionary<string, object> { ["data-drop-folder"] = node.Id.ToString() };
+        // The Personal ▸ Inbox / Check-out launcher nodes are SYNTHETIC — Guid.Empty, no folder behind them — so
+        // the folder branch below was handing them data-drop-folder="00000000-…", a target whose every drop
+        // 404s. An inert drop zone is worse than none: the user concludes the feature is broken rather than
+        // absent (ADR 0543 applied to the affordance itself, #467).
+        //
+        // Inbox gets its own attribute and a real path. Check-out advertises NOTHING until its semantics are
+        // settled — a drop there means "add a stash", which is only meaningful for a document this user already
+        // has checked out, and the launcher node carries no document.
+        var attrs = node.PersonalKind switch
+        {
+            // The launcher nodes ARE the drop targets, and each names the tab its result lives in — a drop
+            // files the documents and then opens that tab, so the user sees what happened (#467). The tree
+            // itself shows folders, so neither launcher lists documents underneath it.
+            "inbox" => new Dictionary<string, object> { ["data-drop-inbox"] = "true" },
+            // Check-out takes a file from the COMPUTER only, and only when a document of that very name is
+            // already checked out by this user: the round trip is download → edit offline → drag back, and the
+            // filename is what says which document the working copy belongs to. Dragging a document from the
+            // LIST here is a no-op — it is not an internal drag target (see below).
+            "checkout" => new Dictionary<string, object> { ["data-drop-checkout"] = "true" },
+            _ when node.HasVersions => new Dictionary<string, object> { ["data-drop-doc"] = node.Id.ToString() },
+            _ => new Dictionary<string, object> { ["data-drop-folder"] = node.Id.ToString() },
+        };
 
         // A real document/folder is also an internal drag source — dragging it onto a folder moves or references
         // it (mirrors the desktop client, ADR "Desktop drag-and-drop move and reference"). Synthetic admin /

@@ -3744,6 +3744,36 @@
   <data name="StErrCopyWebDavUrl" xml:space="preserve">
     <value>Could not copy the WebDAV URL.</value>
   </data>
+  <data name="StStashOneFileOnly" xml:space="preserve">
+    <value>A working copy holds one file — {0} other file(s) were ignored.</value>
+  </data>
+  <data name="StStashUploaded" xml:space="preserve">
+    <value>{0} working copy/copies uploaded. Check in from the Check-out tab.</value>
+  </data>
+  <data name="StStashNotCheckedOut" xml:space="preserve">
+    <value>'{0}' does not match a document you have checked out.</value>
+  </data>
+  <data name="StStashNotAllowed" xml:space="preserve">
+    <value>'{0}' cannot take a new working copy right now.</value>
+  </data>
+  <data name="StTemplateCopied" xml:space="preserve">
+    <value>Copied into your inbox as a template, with its index data.</value>
+  </data>
+  <data name="StTemplateFailed" xml:space="preserve">
+    <value>Could not copy that document into your inbox.</value>
+  </data>
+  <data name="StTemplateNameTaken" xml:space="preserve">
+    <value>Your inbox already holds an item with that name.</value>
+  </data>
+  <data name="StTemplateCopiedN" xml:space="preserve">
+    <value>{0} document(s) copied into your inbox as templates.</value>
+  </data>
+  <data name="StTemplateFailedOne" xml:space="preserve">
+    <value>A document could not be copied into your inbox ({0}).</value>
+  </data>
+  <data name="StTemplateNoneCopied" xml:space="preserve">
+    <value>Nothing was copied into your inbox.</value>
+  </data>
   <data name="StUploadedToInbox" xml:space="preserve">
     <value>Uploaded {0} file(s) to your inbox.</value>
   </data>

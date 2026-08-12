@@ -845,6 +845,31 @@ public sealed class SimplArchiveApiClient
         (await Anonymous.PutAsync(uploadUrl, content, cancellationToken)).EnsureSuccessStatusCode();
     }
 
+    /// <summary>
+    /// Copies a repository document into the caller's inbox as a template, carrying its mask and index values
+    /// (#467). The copy happens server-side, so no bytes travel through the client.
+    /// </summary>
+    /// <remarks>
+    /// Reached by FOLLOWING the inbox listing's <c>from-document</c> rel rather than composing the path — the
+    /// desktop client's burn-down is finished and its one named exception is elsewhere (ADR 0543, #443).
+    /// </remarks>
+    public async Task CopyDocumentToInboxAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var inbox = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("inbox", cancellationToken), cancellationToken);
+        var href = inbox.GetProperty("links").EnumerateArray()
+            .FirstOrDefault(l => l.GetProperty("rel").GetString() == "from-document")
+            .GetProperty("href").GetString()
+            ?? throw new ApiActionException("The inbox did not offer a template copy here.");
+
+        using var response = await _http.PostAsJsonAsync(href, new { documentId }, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ApiActionException("Your inbox already holds an item with that name, or the document has no version to copy.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task FileInboxItemAsync(InboxItemInfo item, Guid folderId, string? comment = null, CancellationToken cancellationToken = default)
     {
         using var response = await _http.PostAsJsonAsync(RequireHref(item, "file"), new { folderId, comment }, cancellationToken);

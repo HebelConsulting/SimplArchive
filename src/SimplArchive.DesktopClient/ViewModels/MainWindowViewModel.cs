@@ -2300,6 +2300,41 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // Upload OS files dropped onto the inbox file-list straight into the S3-backed inbox (ADR "Inbox file-list
     // drop-zone"). The view reads each dropped file into (name, bytes); this uploads them, then refreshes.
+    // Drops onto the Personal ▸ Inbox / Check-out tree launchers (#467). The work is in DropFiling — this class
+    // is already the largest entry on the 1000-line debt list (#466) — and what stays here is what only the
+    // view-model can do: own the status line and know what to refresh.
+    private DropFiling? _dropFiling;
+
+    public async Task CopyDocumentsToInboxAsync(IReadOnlyList<Guid> documentIds)
+    {
+        if (_api is not { } api)
+        {
+            return;
+        }
+
+        _dropFiling ??= new DropFiling(api);
+        if (await _dropFiling.CopyToInboxAsync(documentIds, message => Status = message) > 0)
+        {
+            await RefreshInboxAsync();
+            SelectedTab = 1;   // the Inbox tab: the tree lists FOLDERS and can never show what just landed
+        }
+    }
+
+    public async Task StashDroppedFilesAsync(IReadOnlyList<(string Name, byte[] Bytes)> files)
+    {
+        if (_api is not { } api)
+        {
+            return;
+        }
+
+        _dropFiling ??= new DropFiling(api);
+        var items = Checkout.Items.Select(r => r.Item).OfType<SimplArchiveApiClient.CheckoutItem>().ToList();
+        if (await _dropFiling.StashAsync(files, items, message => Status = message) > 0)
+        {
+            await Checkout.LoadAsync();
+        }
+    }
+
     public async Task UploadFilesToInboxAsync(IReadOnlyList<(string Name, byte[] Bytes)> files)
     {
         if (_api is null || files.Count == 0)

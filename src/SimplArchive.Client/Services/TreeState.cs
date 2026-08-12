@@ -87,6 +87,7 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
             return await LoadAdminChildrenAsync(node);
         }
 
+
         // Folders are always sorted alphabetically in the tree (issue #339); the contents load orders for its list
         // default, so re-sort the folder nodes by name here.
         var children = (await browse.LoadContentsAsync(node.Id, node.RepositoryId, BrowseService.ChildrenHrefOf(node))).Nodes
@@ -155,6 +156,7 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
         Text = text,
         Icon = icon,
     };
+
 
     private record AdminPersonalReposResponse { public List<AdminPersonalRepo> Repositories { get; set; } = []; }
 

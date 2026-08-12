@@ -91,6 +91,42 @@ application.
 
 = Adding & versioning documents
 
+== How documents get in
+
+There is more than one way in, and which you want depends on whether the document is finished, whether it
+belongs to something already filed, and how many you have. They all end in the same place.
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt + luma(80%),
+  inset: 6pt,
+  [*Route*], [*Use it when*],
+  [*Upload* on the ribbon], [You are already looking at the folder it belongs in. Picks files and files them
+   straight into the open folder.],
+  [*Drag onto a folder* — a row in the list, or a node in the tree], [You can see the destination. The document
+   is filed there; the view follows to that folder so you can see it arrive.],
+  [*Drag onto empty space* in the contents list], [Same as above for the folder you are already in.],
+  [*Drag onto a document*], [The file is a newer copy of that document — it is added as a *version*, not as a
+   second document, and the history is kept.],
+  [*Drag onto Personal ▸ Inbox*], [It is not ready to file, or you do not yet know where it belongs. It waits in
+   the Inbox until you classify and file it.],
+  [*Drag a document onto Personal ▸ Inbox*], [You want to start from an existing document as a *template*. A
+   copy lands in your Inbox carrying that document's document type and index data, so you edit what differs.
+   Nothing is created in the archive until you file it.],
+  [*Drag onto Personal ▸ Check-out*], [You checked a document out, edited it on your computer, and are bringing
+   it back. The file must still carry the document's name — that is what says which document it belongs to.],
+  [*WebDAV*], [You would rather work in Finder, Explorer or Files. Mount the archive as a drive and copy
+   documents in like any other folder.],
+  [*Import*], [You are bringing in a whole folder tree at once, exported from SimplArchive or elsewhere.],
+  [*Email attachment*], [You filed an email and want one of its attachments as a document of its own.],
+)
+
+#note[
+  *Two of these do not create a document.* A drop onto the *Inbox* stages an item — it becomes a document only
+  when you file it. A drop onto *Check-out* replaces your working copy — the document gets a new version only
+  when you check it in. Everything else files immediately.
+]
+
 *Uploading.* Drag a file straight onto a folder (the bytes go directly to object storage — the server never
 proxies them). *The Inbox* is a staging area: drop scans or files there, then classify each one (name, document
 type, index data) and *file* it into the archive.

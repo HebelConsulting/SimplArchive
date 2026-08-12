@@ -79,6 +79,7 @@ builder.Services.AddScoped<SimplArchive.Client.Services.DetailState>();
 // The four tenant-wide lists the index-data pane offers, and the edit lifecycle that reads them. Scoped for the
 // same reason DetailState is: a catalogue fetched once should outlive the pane that asked for it, and the edit
 // flag has to survive the tab switch that disposes it.
+builder.Services.AddScoped<SimplArchive.Client.Services.InboxUploads>();
 builder.Services.AddScoped<SimplArchive.Client.Services.DetailCatalogs>();
 builder.Services.AddScoped<SimplArchive.Client.Services.DetailEditor>();
 

@@ -5,6 +5,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject SimplArchive.Client.Services.ApiRoot ApiRoot
+@inject SimplArchive.Client.Services.InboxUploads InboxUploads
 @inject SimplArchive.Client.Services.OcrLanguageCatalog OcrLanguages
 @implements IAsyncDisposable
 
@@ -408,18 +409,7 @@
     }
 
     [JSInvokable]
-    public async Task<string?> CreateInboxUploadTargetAsync(string fileName)
-    {
-        try
-        {
-            var target = await (await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("inbox"), new { fileName })).Content.ReadFromJsonAsync<UploadInboxResponse>();
-            return target?.UploadUrl;
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
+    public Task<string?> CreateInboxUploadTargetAsync(string fileName) => InboxUploads.CreateTargetAsync(fileName);
 
     [JSInvokable]
     public async Task OnInboxUploadsCompleteAsync(int count)

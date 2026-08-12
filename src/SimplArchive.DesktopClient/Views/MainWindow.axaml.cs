@@ -787,16 +787,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var files = new List<(string Name, byte[] Bytes)>();
-        foreach (var file in storageFiles)
-        {
-            await using var stream = await file.OpenReadAsync();
-            using var buffer = new MemoryStream();
-            await stream.CopyToAsync(buffer);
-            files.Add((file.Name, buffer.ToArray()));
-        }
-
-        await vm.UploadFilesToInboxAsync(files);
+        await vm.UploadFilesToInboxAsync(await ReadStorageFilesAsync(storageFiles));
     });
 #pragma warning restore CS0618
 
@@ -1773,21 +1764,106 @@ public partial class MainWindow : Window
 
     private void OnTreeDragOver(object? sender, DragEventArgs e)
     {
-        // The tree accepts an internal move/reference drag (the _internalDrag field) — never an OS-file drop.
-        e.DragEffects = _internalDrag is not null || e.Data.Contains(NodeDragFormat)
-            ? DragDropEffects.Copy | DragDropEffects.Move
-            : DragDropEffects.None;
+        // The tree accepts an internal move/reference drag, and — since #467 — an OS-file drop, matching the web
+        // client. What it accepts depends on the node under the pointer, so that a target which cannot honour a
+        // drop does not advertise one (ADR 0543 applied to the affordance).
+        if (_internalDrag is not null || e.Data.Contains(NodeDragFormat))
+        {
+            var node = FindDataContext<TreeNodeViewModel>(e.Source);
+
+            // Personal ▸ Inbox takes a document as a TEMPLATE (a copy, hence Copy); a real folder takes a move
+            // or a reference; Check-out takes neither — a document already in the archive is not a working copy.
+            e.DragEffects = node switch
+            {
+                { PersonalKind: "inbox" } => DragDropEffects.Copy,
+                { PersonalKind: "checkout" } => DragDropEffects.None,
+                _ => DragDropEffects.Copy | DragDropEffects.Move,
+            };
+            return;
+        }
+
+        if (e.Data.Contains(DataFormats.Files))
+        {
+            // Every folder takes files; so do both launchers, each meaning something different (see OnTreeDrop).
+            var node = FindDataContext<TreeNodeViewModel>(e.Source);
+            e.DragEffects = node is null ? DragDropEffects.None : DragDropEffects.Copy;
+            return;
+        }
+
+        e.DragEffects = DragDropEffects.None;
     }
 
     private void OnTreeDrop(object? sender, DragEventArgs e) => Safe.Fire(async () =>
     {
-        if (DataContext is MainWindowViewModel vm
-            && _internalDrag is { } dragged
-            && FindDataContext<TreeNodeViewModel>(e.Source) is { } treeNode)
+        if (DataContext is not MainWindowViewModel vm || FindDataContext<TreeNodeViewModel>(e.Source) is not { } treeNode)
         {
-            await PerformDropAsync(vm, dragged, treeNode.Id);
+            return;
         }
+
+        // An internal drag: onto Personal ▸ Inbox it copies the document in as a TEMPLATE, carrying its mask and
+        // index values, so new work can start from an existing document without creating one (#467). Onto a real
+        // folder it moves or references, as before.
+        if (_internalDrag is { } dragged)
+        {
+            if (treeNode.PersonalKind == "inbox")
+            {
+                await vm.CopyDocumentsToInboxAsync(dragged.Select(d => d.Id).ToList());
+                return;
+            }
+
+            if (!treeNode.IsLauncher)
+            {
+                await PerformDropAsync(vm, dragged, treeNode.Id);
+            }
+
+            return;
+        }
+
+        var storageFiles = e.Data.GetFiles()?.OfType<IStorageFile>().ToList();
+        if (storageFiles is not { Count: > 0 })
+        {
+            return;
+        }
+
+        // The launchers each mean something specific, and neither can show its own result — the tree lists
+        // FOLDERS — so each opens the tab that can (#467).
+        if (treeNode.IsLauncher)
+        {
+            var files = await ReadStorageFilesAsync(storageFiles);
+            if (treeNode.PersonalKind == "inbox")
+            {
+                await vm.UploadFilesToInboxAsync(files);
+            }
+            else
+            {
+                await vm.StashDroppedFilesAsync(files);
+            }
+
+            vm.SelectedTab = treeNode.LauncherTab;
+            return;
+        }
+
+        // A plain folder node: file into THAT folder, then follow to it, so the user sees what they filed
+        // rather than being left looking at whatever folder was open.
+        await vm.UploadDroppedFilesAsync(storageFiles, treeNode.Id);
+        await vm.OpenFolderAsync(treeNode.Id);
     });
+
+    // Reading the bytes is shared with the inbox pane's own drop handler; a copy would be a second place to get
+    // stream disposal wrong.
+    private static async Task<List<(string Name, byte[] Bytes)>> ReadStorageFilesAsync(IReadOnlyList<IStorageFile> storageFiles)
+    {
+        var files = new List<(string Name, byte[] Bytes)>();
+        foreach (var file in storageFiles)
+        {
+            await using var stream = await file.OpenReadAsync();
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            files.Add((file.Name, buffer.ToArray()));
+        }
+
+        return files;
+    }
 #pragma warning restore CS0618
 
     // Dragged real items offer Move or Reference; a drag of only shortcuts only ever places more shortcuts (moving

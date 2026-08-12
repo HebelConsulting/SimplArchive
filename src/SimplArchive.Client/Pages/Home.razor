@@ -21,6 +21,7 @@
 @inject SimplArchive.Client.Services.DetailCatalogs Catalogs
 @inject SimplArchive.Client.Services.DetailEditor Editor
 @inject SimplArchive.Client.Services.AnnotationEditor Annotations
+@inject SimplArchive.Client.Services.InboxUploads InboxUploads
 
 <PageTitle>SimplArchive</PageTitle>
 
@@ -2902,6 +2903,125 @@
         }
     }
 
+    // ---- Personal ▸ Inbox: a repository document as a TEMPLATE (#467) ----------------------------------
+    //
+    // Dragging a document onto Inbox copies it in WITH its mask and index values, so new work can start from an
+    // existing document without committing to a new document or version until it is filed. The copy happens
+    // server-side (one request, no bytes through the browser, and no half-copied item if it fails).
+    [JSInvokable]
+    public async Task CopyDocumentToInboxAsync(string documentId)
+    {
+        if (!Guid.TryParse(documentId, out var id))
+        {
+            return;
+        }
+
+        try
+        {
+            var inbox = await Http.GetFromJsonAsync<InboxLinksResponse>(await ApiRoot.RequireAsync("inbox"));
+            var href = Links.Href(inbox?.Links, "from-document")
+                ?? throw new InvalidOperationException("The inbox advertised no 'from-document' rel (ADR 0543).");
+
+            var response = await Http.PostAsJsonAsync(href, new { documentId = id });
+            if (!await Actions.HandleMutationAsync(response,
+                    Strings.Get("StTemplateCopied"), Strings.Get("StTemplateFailed"), Strings.Get("StTemplateNameTaken")))
+            {
+                return;
+            }
+
+            await SetTab(Tab.Inbox);
+            StateHasChanged();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StTemplateFailed"), Severity.Error);
+        }
+    }
+
+    private sealed record InboxLinksResponse { public List<LinkResponse> Links { get; set; } = []; }
+
+    // ---- Personal ▸ Check-out drop: an edited working copy comes back (#467) ----------------------------
+    //
+    // The round trip is download → edit offline → drag back, so the FILENAME is what says which document the
+    // working copy belongs to; the launcher node carries none. A file naming nothing checked out is refused
+    // with that reason rather than ignored — "nothing happened" is how a feature gets reported as broken.
+
+    [JSInvokable]
+    public async Task<string?> CreateStashTargetForNameAsync(string fileName)
+    {
+        await LoadCheckoutsAsync();   // the list may be stale, and a wrong match would stash onto another document
+
+        var match = _checkouts.FirstOrDefault(c =>
+            string.Equals(c.Name + c.FileExtension, fileName, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+        {
+            Snackbar.Add(string.Format(Strings.Get("StStashNotCheckedOut"), fileName), Severity.Warning);
+            return null;
+        }
+
+        // Followed from the row's own rel, never composed (ADR 0543) — the same address the Check-out tab's
+        // upload button uses.
+        if (Links.Href(match.Links, "working-copy") is not { } workingCopy)
+        {
+            Snackbar.Add(string.Format(Strings.Get("StStashNotAllowed"), fileName), Severity.Warning);
+            return null;
+        }
+
+        try
+        {
+            return (await (await Http.PostAsJsonAsync(workingCopy, new { })).Content.ReadFromJsonAsync<WorkingCopyUploadResponse>())?.UploadUrl;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnStashUploadsCompleteAsync(int stashed)
+    {
+        _uploading = false;
+        if (stashed > 0)
+        {
+            Snackbar.Add(string.Format(Strings.Get("StStashUploaded"), stashed), Severity.Success);
+        }
+
+        // The stash lives on the Check-out tab, and the tree shows folders — so open the tab that can show it.
+        await SetTab(Tab.Checkout);
+        StateHasChanged();
+    }
+
+    // ---- Personal ▸ Inbox drop (#467) --------------------------------------------------------------------
+    // These live HERE because dropUpload.js holds the shell's DotNetObjectReference; the Inbox tab has its own
+    // pair for its own reference. Both go through InboxUploads, so the POST exists once.
+
+    [JSInvokable]
+    public Task OnInboxUploadsStartingAsync(int count)
+    {
+        _uploading = true;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task<string?> CreateInboxUploadTargetAsync(string fileName) => InboxUploads.CreateTargetAsync(fileName);
+
+    [JSInvokable]
+    public async Task OnInboxUploadsCompleteAsync(int count)
+    {
+        _uploading = false;
+        if (count > 0)
+        {
+            Snackbar.Add(string.Format(Strings.Get("StUploadedToInbox"), count), Severity.Success);
+        }
+
+        // The files landed in the inbox, which the tree does not show — the tree lists FOLDERS, and Inbox is a
+        // launcher for the tab where staging and filing actually happen. So the drop opens that tab: without it
+        // the user is left looking at a tree node that cannot show what they just added (#467).
+        await SetTab(Tab.Inbox);
+        StateHasChanged();
+    }
+
     // ---- List-pane drop filing (ADR "List-pane drop filing") ---------------------------------------------
     // Dropping OS files onto a document row (data-drop-doc) shows the inbox-style filing dialog and, per the
     // choice, files as a new version of that document or as new documents in a folder (with an optional comment).
@@ -3012,9 +3132,21 @@
     }
 
     [JSInvokable]
+    // Files landed in `folderId`, NOT necessarily the folder on screen (#467). This ignored its own parameter
+    // and re-listed whatever was selected, so a drop onto any other tree node uploaded and showed nothing —
+    // indistinguishable from a drop that did nothing. Navigating to the target is the confirmation.
     public async Task OnUploadsCompleteAsync(string folderId)
     {
         _uploading = false;
+
+        if (Guid.TryParse(folderId, out var target) && target != Guid.Empty && target != _selectedFolder?.Id)
+        {
+            await ReloadTreeAsync();       // the target gains a child, so its expander must reflect that
+            await NavigateToFolderAsync(target);
+            StateHasChanged();
+            return;
+        }
+
         await RefreshAsync();
         StateHasChanged();
     }
