@@ -3064,7 +3064,22 @@ public sealed class SimplArchiveApiClient
     // it every one of those was a composed /api/users/me/… path, which is thirteen private routes copied into a
     // second codebase.
     private IReadOnlyDictionary<string, string>? _meLinks;
+    private string? _myEmail;
     private readonly SemaphoreSlim _meGate = new(1, 1);
+
+    /// <summary>
+    /// The caller's own email address, or <c>null</c> for a principal with no personal account.
+    /// </summary>
+    /// <remarks>
+    /// Comes from the same "me" read the rels do, so a profile screen showing who you are signed in as costs no
+    /// request of its own (#464).
+    /// </remarks>
+    public async Task<string?> MyEmailAsync(CancellationToken cancellationToken = default)
+    {
+        // Any rel will do: resolving one populates the whole document, email included.
+        await MeHrefAsync("self", cancellationToken);
+        return _myEmail;
+    }
 
     /// <summary>
     /// The href for a rel on the caller's own "me" resource. Throws when it is not advertised.
@@ -3085,6 +3100,13 @@ public sealed class SimplArchiveApiClient
                 {
                     var me = await _http.GetFromJsonAsync<JsonElement>(meHref, cancellationToken);
                     _meLinks = ParseLinks(me) ?? new Dictionary<string, string>();
+
+                    // The email rides in the SAME response as the links (#464) — reading it here rather than
+                    // adding a second call is ADR 0557's rule applied to a value, not an address: one read,
+                    // everything it carried.
+                    _myEmail = me.TryGetProperty("email", out var email) && email.ValueKind is JsonValueKind.String
+                        ? email.GetString()
+                        : null;
                 }
             }
             finally

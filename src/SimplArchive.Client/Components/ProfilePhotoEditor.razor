@@ -1,0 +1,79 @@
+@using Microsoft.AspNetCore.Components.Forms
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@implements IAsyncDisposable
+
+@* Pick an image and choose a square crop of it (ADR "User profile photo").
+
+   Extracted from ProfilePhotoDialog so the "Edit profile" dialog can host the crop INLINE rather than opening a
+   second modal on top of itself (#464) — which would also have meant refreshing the photo shown underneath once
+   that modal closed. Mirrors the desktop client's ProfilePhotoEditor UserControl, which is the canonical shape
+   (ADR 0511).
+
+   The component owns the picture and the crop and nothing else: it does not save, upload, or know whose photo
+   this is. The host asks for CroppedPngAsync() when its own Save is pressed. *@
+<div style="min-width: 380px;">
+    <MudButton HtmlTag="label" for="@_inputId" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PhotoCamera">@Strings.Get("PhotoChoose")</MudButton>
+    @* The id is unique so the label's `for` reaches THIS instance; the class is the stable handle tests use,
+       since a generated id cannot be selected on. *@
+    <InputFile id="@_inputId" class="pp-file" OnChange="OnFileAsync" accept="image/*" style="display:none" />
+    <div @ref="_host" style="margin-top: 12px;"></div>
+    @if (!_hasImage)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">@Strings.Get("PhotoHint")</MudText>
+    }
+</div>
+
+@code {
+    // Unique per instance: the label's `for` has to reach THIS component's input, and two editors on one page
+    // (or a dialog reopened before the old one is torn down) would otherwise share an id and the first would win.
+    private readonly string _inputId = $"pp-file-{Guid.NewGuid():N}";
+
+    /// <summary>Raised when an image is loaded, so a host can enable its own Save.</summary>
+    [Parameter] public EventCallback OnImageChanged { get; set; }
+
+    private ElementReference _host;
+    private IJSObjectReference? _module;
+    private bool _hasImage;
+
+    /// <summary>Whether there is a picture to crop — false until one is chosen.</summary>
+    public bool HasImage => _hasImage;
+
+    /// <summary>
+    /// The chosen square as a 256×256 PNG (base64), or null when no image has been picked. Rasterized on
+    /// demand rather than kept, because the crop can move right up until the host saves.
+    /// </summary>
+    public async Task<string?> CroppedPngAsync() =>
+        _module is null ? null : await _module.InvokeAsync<string?>("crop", _host, 256);
+
+    private async Task OnFileAsync(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            // Downscale client-side first (cheap, bounds the crop source); the crop then produces 256×256.
+            var resized = await e.File.RequestImageFileAsync("image/png", 1024, 1024);
+            await using var stream = resized.OpenReadStream(maxAllowedSize: 16 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var dataUrl = "data:image/png;base64," + Convert.ToBase64String(ms.ToArray());
+
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./photoCrop.js");
+            await _module.InvokeVoidAsync("load", _host, dataUrl);
+            _hasImage = true;
+            await OnImageChanged.InvokeAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("PhotoLoadError"), Severity.Error);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            try { await _module.InvokeVoidAsync("dispose", _host); await _module.DisposeAsync(); }
+            catch (Exception) { /* circuit already gone */ }
+        }
+    }
+}

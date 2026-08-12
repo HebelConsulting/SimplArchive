@@ -21,11 +21,20 @@ public class WebProfilePhotoSelfServiceTests
     {
         var page = await Ui.LoginAsync(_app);
 
-        // Self-service: click the corner avatar → account menu → Change photo → the photo dialog.
+        // Self-service: click the corner avatar → account menu → Edit profile… → the profile dialog, which hosts
+        // the crop inline (#464). The menu no longer has separate photo and password entries.
         await page.Locator(".wb-userbox").ClickAsync();
-        await page.GetByText("Change photo…").ClickAsync();
+        await page.GetByText("Edit profile…").ClickAsync();
         var dialog = page.Locator(".mud-dialog");
-        await page.SetInputFilesAsync("#pp-file", new FilePayload
+
+        // It says which account you are signed in as — the reason the two entries were consolidated (#464).
+        await Expect(dialog.GetByText(SelfHostedAppFixture.AdminEmail)).ToBeVisibleAsync();
+
+        // And the password route is here too, since it is no longer in the menu — a consolidation that dropped
+        // one of the two things it consolidated would leave the user with no way to change their password.
+        await Expect(dialog.GetByRole(AriaRole.Button, new() { Name = "Change password…" })).ToBeVisibleAsync();
+
+        await page.SetInputFilesAsync("input.pp-file", new FilePayload
         {
             Name = "me.png",
             MimeType = "image/png",

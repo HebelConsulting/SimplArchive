@@ -381,6 +381,35 @@ internal static class Program
         }
 
         // Headless render of the startup logon window (ADR "Desktop logon window") — catches XAML/binding load
+        // Render the "Edit profile" dialog headlessly (#464): `--profile-screenshot <out.png>`.
+        //
+        // It is a Window, so no full-app screenshot can show it, and it is the one surface where the photo
+        // crop is hosted INLINE rather than as its own dialog — a layout worth a check that does not need a
+        // display. Rendered without an api client: the email and current photo stay empty, which is exactly
+        // the not-yet-loaded state and still proves the window builds and lays out.
+        var profileShotIndex = Array.IndexOf(args, "--profile-screenshot");
+        if (profileShotIndex >= 0 && profileShotIndex + 1 < args.Length)
+        {
+            var langIndex = Array.IndexOf(args, "--lang");
+            if (langIndex >= 0 && langIndex + 1 < args.Length)
+            {
+                SimplArchive.Localization.Culture.Apply(args[langIndex + 1]);
+            }
+
+            AppBuilder.Configure<App>()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia()
+                .WithInterFont()
+                .SetupWithoutStarting();
+
+            var profileWin = new Views.EditProfileDialog();
+            profileWin.Show();
+            Dispatcher.UIThread.RunJobs();
+            Dispatcher.UIThread.RunJobs();
+            profileWin.CaptureRenderedFrame()?.Save(args[profileShotIndex + 1]);
+            return;
+        }
+
         // crashes: `--logon-screenshot <out.png>`.
         var logonShotIndex = Array.IndexOf(args, "--logon-screenshot");
         if (logonShotIndex >= 0 && logonShotIndex + 1 < args.Length)

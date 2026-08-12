@@ -257,9 +257,12 @@ public partial class MainWindow : Window
     });
 
     // Profile photo (ADR "User profile photo") — the crop dialog lives in the view; the VM uploads.
-    private void OnChangeMyPhoto(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    // "Edit profile…" (#464) — replaces the separate photo and password entries. The dialog applies a password
+    // change itself; a new photo comes back as bytes and is uploaded here, exactly as ProfilePhotoDialog's did.
+    private void OnEditProfile(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
-        if (DataContext is MainWindowViewModel vm && await new ProfilePhotoDialog().ShowDialog<byte[]?>(this) is { } png)
+        if (DataContext is MainWindowViewModel { Api: { } api } vm
+            && await new EditProfileDialog(api).ShowDialog<byte[]?>(this) is { } png)
         {
             await vm.SetMyPhotoAsync(png);
         }
@@ -282,14 +285,6 @@ public partial class MainWindow : Window
     });
 
     // Passwords (ADR "User password management") — the dialogs live in the view; the VM does the API call.
-    private void OnChangeMyPassword(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel vm && await new ChangePasswordDialog().ShowDialog<ChangePasswordDialog.Result?>(this) is { } result)
-        {
-            await vm.ChangeMyPasswordAsync(result.Current, result.New);
-        }
-    });
-
     private void OnResetPrincipalPassword(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.SelectedPrincipal is not { IsGroup: false } p)

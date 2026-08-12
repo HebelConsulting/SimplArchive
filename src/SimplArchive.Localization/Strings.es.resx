@@ -159,6 +159,21 @@
   <data name="AccountChangePhoto" xml:space="preserve">
     <value>Cambiar foto…</value>
   </data>
+  <data name="AccountEditProfile" xml:space="preserve">
+    <value>Editar perfil…</value>
+  </data>
+  <data name="EpTitle" xml:space="preserve">
+    <value>Editar perfil</value>
+  </data>
+  <data name="EpSignedInAs" xml:space="preserve">
+    <value>Sesión iniciada como</value>
+  </data>
+  <data name="EpPhoto" xml:space="preserve">
+    <value>Foto de perfil</value>
+  </data>
+  <data name="EpNoPhoto" xml:space="preserve">
+    <value>Aún no hay foto: elija una abajo.</value>
+  </data>
   <data name="AccountChangePassword" xml:space="preserve">
     <value>Cambiar contraseña…</value>
   </data>
@@ -2204,6 +2219,12 @@
   </data>
   <data name="PpChoose" xml:space="preserve">
     <value>Elegir imagen…</value>
+  </data>
+  <data name="PpLoadFailed" xml:space="preserve">
+    <value>No se pudo cargar esa imagen.</value>
+  </data>
+  <data name="PpDragHint" xml:space="preserve">
+    <value>Arrastre para mover, o arrastre el punto blanco para cambiar el tamaño.</value>
   </data>
   <data name="PpHint" xml:space="preserve">
     <value>Elige una imagen, luego arrastra o cambia el tamaño del cuadrado para elegir el área visible.</value>

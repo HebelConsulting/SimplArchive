@@ -273,6 +273,11 @@ the tamper-evident *audit trail* of every security-relevant action. They also cu
 labels, tags), set the *storage quota*, and run *import / export*. Every user manages their own *account security* —
 password, multi-factor authentication (authenticator app or passkeys), and profile photo.
 
+Your own account lives behind *Edit profile…* in the avatar menu (top right in both clients). It shows which
+account you are signed in as, the photo you currently have with a crop to replace it, and a button through to
+changing your password. Two-factor authentication, passkeys and the WebDAV password stay as their own entries in
+that menu, since each is a separate credential rather than part of your profile.
+
 #pair("screenshots/web-users.png", "screenshots/desktop-users.png",
   [Users & groups administration in the web (left) and desktop (right) clients.])
 

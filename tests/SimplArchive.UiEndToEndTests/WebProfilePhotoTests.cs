@@ -34,7 +34,7 @@ public class WebProfilePhotoTests
 
         // Change photo… → the dialog; pick an image, then Save (default centered crop).
         await page.GetByRole(AriaRole.Button, new() { Name = "Change photo…" }).ClickAsync();
-        await page.SetInputFilesAsync("#pp-file", new FilePayload
+        await page.SetInputFilesAsync("input.pp-file", new FilePayload
         {
             Name = "avatar.png",
             MimeType = "image/png",

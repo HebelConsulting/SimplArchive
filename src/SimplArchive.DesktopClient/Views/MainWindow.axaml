@@ -103,8 +103,10 @@
                         <!-- Open under the account button's right edge (the button sits in the top-right corner)
                              rather than the default centred placement, which drifted the menu to the left. -->
                         <MenuFlyout Placement="BottomEdgeAlignedRight">
-                            <MenuItem Header="{loc:Tr AccountChangePhoto}" Click="OnChangeMyPhoto" />
-                            <MenuItem Header="{loc:Tr AccountChangePassword}" Click="OnChangeMyPassword" />
+                            <!-- One way into your own account (#464): the photo and password entries were two
+                                 peers that showed you nothing about yourself, not even which account you are
+                                 signed in as. -->
+                            <MenuItem Header="{loc:Tr AccountEditProfile}" Click="OnEditProfile" />
                             <MenuItem Header="{loc:Tr AccountEnableTwoFactor}" Click="OnSetUpMfa" IsVisible="{Binding !MfaEnabled}" />
                             <MenuItem Header="{loc:Tr AccountDisableTwoFactor}" Click="OnDisableMfa" IsVisible="{Binding MfaEnabled}" />
                             <MenuItem Header="{loc:Tr AccountPasskeys}" Click="OnManagePasskeys" />

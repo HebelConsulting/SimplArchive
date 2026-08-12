@@ -1,0 +1,128 @@
+@using SimplArchive.Client.Components
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
+
+@* "Edit profile…" (#464) — the single way into your own account, replacing the avatar menu's separate photo and
+   password entries. It shows which account you are signed in as, the photo you currently have, an inline crop to
+   replace it, and a button through to the existing password dialog.
+
+   Mirrors the desktop client's EditProfileDialog, which is the canonical shape (ADR 0511): same order, same
+   sections, same immediate-apply password behaviour. The crop is hosted INLINE rather than as a second modal —
+   stacking one would also mean refreshing the photo shown here after it closed. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 400px;">
+            <MudText Typo="Typo.caption"><b>@Strings.Get("EpSignedInAs")</b></MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">@_email</MudText>
+
+            <MudDivider Class="mb-3" />
+
+            <MudText Typo="Typo.caption"><b>@Strings.Get("EpPhoto")</b></MudText>
+            <div class="d-flex align-center gap-3 mt-2 mb-3">
+                @* The photo as it stands today, so "change it" has something to change FROM. *@
+                @if (CurrentPhotoDataUrl is not null)
+                {
+                    <MudAvatar Size="Size.Large"><MudImage Src="@CurrentPhotoDataUrl" /></MudAvatar>
+                }
+                else
+                {
+                    <MudAvatar Size="Size.Large" Color="Color.Default"><MudIcon Icon="@Icons.Material.Filled.Person" /></MudAvatar>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("EpNoPhoto")</MudText>
+                }
+            </div>
+            <ProfilePhotoEditor @ref="_editor" OnImageChanged="StateHasChanged" />
+
+            <MudDivider Class="my-3" />
+
+            <div class="d-flex align-center gap-3">
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Password" OnClick="ChangePasswordAsync">@Strings.Get("AccountChangePassword")</MudButton>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_passwordStatus</MudText>
+            </div>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">@Strings.Get("Close")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="@(_editor?.HasImage != true || _busy)">@Strings.Get("Save")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    /// <summary>
+    /// The photo the avatar is already showing, as a data URL — null when there is none.
+    /// </summary>
+    /// <remarks>
+    /// Handed in rather than fetched: the layout has it in hand (it renders the avatar from it), so re-fetching
+    /// would be a round trip spent re-learning something already held (ADR 0557). It is also the only GET-able
+    /// address for it — the me resource's <c>photo</c> rel is the PUT target, and whoami advertises the readable
+    /// one exactly when there is a photo to read.
+    /// </remarks>
+    [Parameter] public string? CurrentPhotoDataUrl { get; set; }
+
+    private ProfilePhotoEditor? _editor;
+    private string? _email;
+    private string? _passwordStatus;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Which account this is. Costs no request of its own — it rides in the same "me" read the rels use
+        // (ADR 0557), which the layout has already performed by the time this dialog opens.
+        _email = await ApiRoot.MyEmailAsync();
+    }
+
+    // The existing password dialog, opened from here and applied IMMEDIATELY on its OK — not deferred to this
+    // dialog's Save. A password change the user confirmed once and then lost by closing the profile dialog would
+    // be the worst kind of surprise. (Same rule as the desktop, ADR 0511.)
+    private async Task ChangePasswordAsync()
+    {
+        var result = await (await DialogService.ShowAsync<ChangePasswordDialog>(Strings.Get("DlgChangePassword"))).Result;
+        if (result is { Canceled: false })
+        {
+            _passwordStatus = Strings.Get("PwdChanged");
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_editor is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var base64 = await _editor.CroppedPngAsync();
+            if (string.IsNullOrEmpty(base64))
+            {
+                return;
+            }
+
+            using var response = await SimplArchive.Client.Services.ProfilePhotoUpload.PutAsync(Http, await ApiRoot.RequireMeAsync("photo"), base64);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add(Strings.Get("PhotoUpdated"), Severity.Success);
+                Dialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                Snackbar.Add(Strings.Get("PhotoSaveError"), Severity.Warning);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("PhotoSaveError"), Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Close() => Dialog.Cancel();
+}

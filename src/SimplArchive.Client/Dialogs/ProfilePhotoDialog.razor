@@ -1,28 +1,22 @@
-@using Microsoft.AspNetCore.Components.Forms
+@using SimplArchive.Client.Components
 @inject HttpClient Http
-@inject IJSRuntime JS
 @inject ISnackbar Snackbar
 @inject SimplArchive.Client.Services.ApiRoot ApiRoot
-@implements IAsyncDisposable
 
-@* Profile-photo picker with a draggable/resizable square crop (ADR "User profile photo"). Pick an image,
-   position the square, Save — the crop is rasterized to a 256×256 PNG (photoCrop.js) and PUT to the target
-   (self = /users/me/photo, or a specific user for an admin). *@
+@* Profile-photo picker: a dialog around the ProfilePhotoEditor component (which owns the picture and the crop),
+   adding Save — the crop is rasterized to a 256×256 PNG and PUT to the target (self = the me resource's `photo`
+   rel, or a specific user for an admin).
+
+   Since #464 the caller's OWN photo is normally changed inside the "Edit profile" dialog, which hosts the same
+   editor inline. This dialog stays for the admin path — setting another principal's photo from their row in
+   Users & groups — where a standalone modal is the right shape. *@
 <MudDialog>
     <DialogContent>
-        <div style="min-width: 380px;">
-            <MudButton HtmlTag="label" for="pp-file" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PhotoCamera">@Strings.Get("PhotoChoose")</MudButton>
-            <InputFile id="pp-file" OnChange="OnFileAsync" accept="image/*" style="display:none" />
-            <div @ref="_host" style="margin-top: 12px;"></div>
-            @if (!_hasImage)
-            {
-                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">@Strings.Get("PhotoHint")</MudText>
-            }
-        </div>
+        <ProfilePhotoEditor @ref="_editor" OnImageChanged="StateHasChanged" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="@(!_hasImage || _busy)">@Strings.Get("Save")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="@(_editor?.HasImage != true || _busy)">@Strings.Get("Save")</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -30,46 +24,22 @@
     [CascadingParameter]
     private IMudDialogInstance Dialog { get; set; } = null!;
 
-    // null = the current user (PUT /users/me/photo); set = that user (admin, PUT /users/{id}/photo).
-    // The address to PUT/DELETE this avatar at, followed from the user row's `photo` rel when an admin edits
-    // someone else's. Null means "my own", which the me resource answers for (issue #416).
+    // null = the current user (the me resource's `photo` rel); set = that user (admin, followed from that
+    // user's row — issue #416).
     [Parameter] public string? PhotoHref { get; set; }
 
-    private ElementReference _host;
-    private IJSObjectReference? _module;
-    private bool _hasImage;
+    private ProfilePhotoEditor? _editor;
     private bool _busy;
 
     // A method, not a property: following the "photo" rel is a lookup that may have to fetch the me
-    // resource first, and a property cannot await. Both sides are now rels — the caller's own from the me
+    // resource first, and a property cannot await. Both sides are rels — the caller's own from the me
     // resource, another user's handed in from that user's row (issue #416).
     private async Task<string> PutUrlAsync() =>
         PhotoHref ?? await ApiRoot.RequireMeAsync("photo");
 
-    private async Task OnFileAsync(InputFileChangeEventArgs e)
-    {
-        try
-        {
-            // Downscale client-side first (cheap, bounds the crop source); the crop then produces 256×256.
-            var resized = await e.File.RequestImageFileAsync("image/png", 1024, 1024);
-            await using var stream = resized.OpenReadStream(maxAllowedSize: 16 * 1024 * 1024);
-            using var ms = new MemoryStream();
-            await stream.CopyToAsync(ms);
-            var dataUrl = "data:image/png;base64," + Convert.ToBase64String(ms.ToArray());
-
-            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./photoCrop.js");
-            await _module.InvokeVoidAsync("load", _host, dataUrl);
-            _hasImage = true;
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("PhotoLoadError"), Severity.Error);
-        }
-    }
-
     private async Task SaveAsync()
     {
-        if (_module is null)
+        if (_editor is null)
         {
             return;
         }
@@ -77,15 +47,13 @@
         _busy = true;
         try
         {
-            var base64 = await _module.InvokeAsync<string?>("crop", _host, 256);
+            var base64 = await _editor.CroppedPngAsync();
             if (string.IsNullOrEmpty(base64))
             {
                 return;
             }
 
-            var content = new ByteArrayContent(Convert.FromBase64String(base64));
-            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
-            using var response = await Http.PutAsync(await PutUrlAsync(), content);
+            using var response = await ProfilePhotoUpload.PutAsync(Http, await PutUrlAsync(), base64);
             if (response.IsSuccessStatusCode)
             {
                 Snackbar.Add(Strings.Get("PhotoUpdated"), Severity.Success);
@@ -107,13 +75,4 @@
     }
 
     private void Cancel() => Dialog.Cancel();
-
-    public async ValueTask DisposeAsync()
-    {
-        if (_module is not null)
-        {
-            try { await _module.InvokeVoidAsync("dispose", _host); await _module.DisposeAsync(); }
-            catch (Exception) { /* circuit already gone */ }
-        }
-    }
 }

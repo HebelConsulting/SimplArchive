@@ -1,0 +1,41 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:views="using:SimplArchive.DesktopClient.Views"
+        x:Class="SimplArchive.DesktopClient.Views.EditProfileDialog"
+        Title="{loc:Tr EpTitle}" Width="440" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <!-- One way into your own account (#464), replacing the menu's separate "Change photo…" and "Change
+         password…" entries. The crop is hosted INLINE rather than as a second modal: stacking one would also
+         mean refreshing the photo shown here after it closed. -->
+    <StackPanel Margin="16" Spacing="14">
+        <StackPanel Spacing="2">
+            <TextBlock Text="{loc:Tr EpSignedInAs}" FontWeight="SemiBold" FontSize="12" />
+            <TextBlock x:Name="EmailText" Foreground="{DynamicResource WbMuted}" />
+        </StackPanel>
+
+        <Separator />
+
+        <TextBlock Text="{loc:Tr EpPhoto}" FontWeight="SemiBold" FontSize="12" />
+        <StackPanel Orientation="Horizontal" Spacing="12">
+            <!-- The photo as it stands today, so "change it" has something to change FROM. -->
+            <Border Width="64" Height="64" CornerRadius="32" ClipToBounds="True" Background="#22808080">
+                <Image x:Name="CurrentPhoto" Stretch="UniformToFill" />
+            </Border>
+            <TextBlock x:Name="NoPhotoText" Text="{loc:Tr EpNoPhoto}" Foreground="Gray" VerticalAlignment="Center" />
+        </StackPanel>
+        <views:ProfilePhotoEditor x:Name="Editor" />
+
+        <Separator />
+
+        <StackPanel Orientation="Horizontal" Spacing="12">
+            <Button Content="{loc:Tr AccountChangePassword}" Click="OnChangePassword" />
+            <TextBlock x:Name="PasswordStatus" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Close}" Click="OnClose" IsCancel="True" />
+            <Button x:Name="SaveButton" Content="{loc:Tr Save}" Click="OnSave" IsDefault="True" IsEnabled="False" />
+        </StackPanel>
+    </StackPanel>
+</Window>

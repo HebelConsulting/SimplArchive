@@ -76,6 +76,7 @@ public sealed class ApiRoot
                 if (_meRels is null)
                 {
                     var me = meHref is null ? null : await _http.GetFromJsonAsync<RootResponse>(meHref, cancellationToken);
+                    _meEmail = me?.Email;
                     _meRels = me?.Links
                         .Where(l => !string.IsNullOrEmpty(l.Rel) && !string.IsNullOrEmpty(l.Href))
                         .ToDictionary(l => l.Rel, l => Relative(l.Href)) ?? [];
@@ -95,8 +96,23 @@ public sealed class ApiRoot
         await MeHrefAsync(rel, cancellationToken)
         ?? throw new InvalidOperationException($"The 'me' resource does not advertise the '{rel}' rel.");
 
+    /// <summary>
+    /// The signed-in account's email address, or null for a principal with no personal account.
+    /// </summary>
+    /// <remarks>
+    /// It rides in the same "me" read the rels come from, so asking for it costs nothing once that read has
+    /// happened — a value already inside a response is taken from there rather than re-fetched (ADR 0557).
+    /// Routed through <see cref="MeHrefAsync"/> so the first caller, whichever it is, performs that one read.
+    /// </remarks>
+    public async Task<string?> MyEmailAsync(CancellationToken cancellationToken = default)
+    {
+        await MeHrefAsync("self", cancellationToken);
+        return _meEmail;
+    }
+
     private readonly SemaphoreSlim _meGate = new(1, 1);
     private Dictionary<string, string>? _meRels;
+    private string? _meEmail;
 
     private async Task<Dictionary<string, string>> LoadAsync(CancellationToken cancellationToken)
     {
@@ -135,6 +151,10 @@ public sealed class ApiRoot
     private sealed record RootResponse
     {
         public List<LinkResponse> Links { get; set; } = [];
+
+        // Only the "me" resource carries this; the API root leaves it null, which is exactly what a principal
+        // with no personal account gets too (#464).
+        public string? Email { get; set; }
     }
 
     private sealed record LinkResponse

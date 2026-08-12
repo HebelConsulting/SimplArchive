@@ -2,7 +2,9 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SimplArchive.Api.Hypermedia;
+using Microsoft.EntityFrameworkCore;
 using SimplArchive.Application.Abstractions;
+using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Controllers;
 
@@ -32,16 +34,31 @@ namespace SimplArchive.Api.Controllers;
 public class MeController : ControllerBase
 {
     private readonly ICurrentUserAccessor _currentUser;
+    private readonly SimplArchiveDbContext _dbContext;
 
-    public MeController(ICurrentUserAccessor currentUser) => _currentUser = currentUser;
+    public MeController(ICurrentUserAccessor currentUser, SimplArchiveDbContext dbContext)
+    {
+        _currentUser = currentUser;
+        _dbContext = dbContext;
+    }
 
     public class MeResource : HypermediaResource
     {
         public Guid? UserId { get; set; }
+
+        /// <summary>
+        /// The caller's own email address — <c>null</c> for a principal that has no personal account.
+        /// </summary>
+        /// <remarks>
+        /// Here rather than on <c>whoami</c> for the reason in the class remarks: this resource answers "my own
+        /// account", and a profile screen that shows which account you are signed in as needs it (#464). The
+        /// overlap with whoami's identity fields is the price of two clear questions, not an accident.
+        /// </remarks>
+        public string? Email { get; set; }
     }
 
     [HttpGet]
-    public IActionResult Get()
+    public async Task<IActionResult> Get(CancellationToken cancellationToken)
     {
         // A service account or platform administrator has no personal account, so none of these apply. The
         // resource still resolves — with no rels — rather than 404ing, so a client can ask without special-casing
@@ -51,9 +68,17 @@ public class MeController : ControllerBase
             return Ok(new MeResource { Links = [new Link("self", "/api/me", "GET")] });
         }
 
+        // One projection rather than loading the user: this action is otherwise pure links, and a profile
+        // screen asking "who am I" should not cost a full entity load.
+        var email = await _dbContext.Users
+            .Where(u => u.Id == userId)
+            .Select(u => u.Email)
+            .FirstOrDefaultAsync(cancellationToken);
+
         return Ok(new MeResource
         {
             UserId = userId,
+            Email = email,
             Links =
             [
                 new Link("self", "/api/me", "GET"),

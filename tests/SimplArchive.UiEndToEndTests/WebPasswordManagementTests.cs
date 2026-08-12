@@ -21,13 +21,21 @@ public class WebPasswordManagementTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var user = "PW User " + suffix;
 
-        // Self-service: corner avatar → account menu → Change password → the dialog opens (then cancel, so
-        // the demo admin's password is untouched).
+        // Self-service: corner avatar → account menu → Edit profile… → Change password… → the dialog opens
+        // (then cancel, so the demo admin's password is untouched). Since #464 the password route is inside
+        // the profile dialog rather than being its own menu entry; this is the route a user actually takes.
         await page.Locator(".wb-userbox").ClickAsync();
-        await page.GetByText("Change password…").ClickAsync();
-        var changeDialog = page.Locator(".mud-dialog");
+        await page.GetByText("Edit profile…").ClickAsync();
+        var profileDialog = page.Locator(".mud-dialog");
+        await profileDialog.GetByRole(AriaRole.Button, new() { Name = "Change password…" }).ClickAsync();
+
+        // The password dialog stacks ON TOP of the profile dialog, so ".mud-dialog" now matches both — take the
+        // last, which is the one on top. (The photo crop is inline precisely so this stacking is the exception
+        // rather than the rule; ADR 0561.)
+        var changeDialog = page.Locator(".mud-dialog").Last;
         await Expect(changeDialog.Locator("input[type=password]").First).ToBeVisibleAsync();
         await changeDialog.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
+        await profileDialog.First.GetByRole(AriaRole.Button, new() { Name = "Close" }).ClickAsync();
 
         // Admin reset: create a throwaway user, select it, Reset password → the generated password shows once.
         await page.Locator(".wb-tab[aria-label=\"Users & groups\"]").First.ClickAsync();

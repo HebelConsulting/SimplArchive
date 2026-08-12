@@ -1,0 +1,32 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             xmlns:primitives="clr-namespace:Avalonia.Controls.Primitives;assembly=Avalonia.Controls"
+             x:Class="SimplArchive.DesktopClient.Views.ProfilePhotoEditor">
+    <!-- The pick-and-crop surface, extracted from ProfilePhotoDialog so it can be hosted INLINE by the
+         "Edit profile" dialog (#464) as well as standing alone. The dialog keeps its own Save/Cancel; this
+         control owns only the picture and the crop, and hands back the cropped PNG on request. -->
+    <StackPanel Spacing="12">
+        <Button Content="{loc:Tr PpChoose}" Click="OnChoose" HorizontalAlignment="Left" />
+        <Border Background="#22808080" HorizontalAlignment="Center" Padding="0">
+            <Canvas x:Name="Host" ClipToBounds="True" Width="1" Height="1">
+                <Image x:Name="Preview" />
+                <primitives:Thumb x:Name="MoveThumb" DragDelta="OnMove" IsVisible="False" Cursor="SizeAll">
+                    <primitives:Thumb.Template>
+                        <ControlTemplate>
+                            <Border BorderBrush="White" BorderThickness="2" Background="#22000000" />
+                        </ControlTemplate>
+                    </primitives:Thumb.Template>
+                </primitives:Thumb>
+                <primitives:Thumb x:Name="ResizeThumb" DragDelta="OnResize" Width="16" Height="16" IsVisible="False" Cursor="BottomRightCorner">
+                    <primitives:Thumb.Template>
+                        <ControlTemplate>
+                            <Ellipse Fill="White" Stroke="#5b4ee5" StrokeThickness="1" />
+                        </ControlTemplate>
+                    </primitives:Thumb.Template>
+                </primitives:Thumb>
+            </Canvas>
+        </Border>
+        <TextBlock x:Name="Hint" Text="{loc:Tr PpHint}" Foreground="Gray" TextWrapping="Wrap" />
+    </StackPanel>
+</UserControl>

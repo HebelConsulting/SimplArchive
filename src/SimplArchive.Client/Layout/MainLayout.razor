@@ -150,8 +150,9 @@
                    window origin (top-left). Positioning at the click point keeps it under the avatar, and
                    TransformOrigin=TopRight makes it open down-and-left so it stays on the right edge. *@
                 <MudMenu @ref="_accountMenu" PositionAtCursor="true" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Style="display:none;">
-                    <MudMenuItem Icon="@Icons.Material.Filled.PhotoCamera" OnClick="ChangeMyPhotoAsync">@Strings.Get("AccountChangePhoto")</MudMenuItem>
-                    <MudMenuItem Icon="@Icons.Material.Filled.Password" OnClick="ChangeMyPasswordAsync">@Strings.Get("AccountChangePassword")</MudMenuItem>
+                    @* One entry for your own account (#464): photo and password were two names for one idea, and
+                       neither said which account you were signed in as. *@
+                    <MudMenuItem Icon="@Icons.Material.Filled.ManageAccounts" OnClick="EditProfileAsync">@Strings.Get("AccountEditProfile")</MudMenuItem>
                     @if (_mfaEnabled)
                     {
                         <MudMenuItem Icon="@Icons.Material.Filled.LockReset" OnClick="DisableMfaAsync">@Strings.Get("AccountDisableTwoFactor")</MudMenuItem>
@@ -432,9 +433,12 @@
         }
     }
 
-    private async Task ChangeMyPhotoAsync()
+    private async Task EditProfileAsync()
     {
-        var dialog = await DialogService.ShowAsync<ProfilePhotoDialog>(Strings.Get("PpTitle"));
+        // The avatar's photo is handed in rather than re-fetched by the dialog: it is already loaded here, and it
+        // is the readable copy (whoami's `photo` rel; the me resource's is the PUT target). ADR 0557.
+        var parameters = new DialogParameters<EditProfileDialog> { { x => x.CurrentPhotoDataUrl, _photoDataUrl } };
+        var dialog = await DialogService.ShowAsync<EditProfileDialog>(Strings.Get("EpTitle"), parameters);
         var result = await dialog.Result;
         if (result is { Canceled: false })
         {
@@ -456,11 +460,6 @@
                 : null;
         }
         catch (Exception) { }
-    }
-
-    private async Task ChangeMyPasswordAsync()
-    {
-        await (await DialogService.ShowAsync<ChangePasswordDialog>(Strings.Get("DlgChangePassword"))).Result;
     }
 
     private async Task SetUpMfaAsync()
