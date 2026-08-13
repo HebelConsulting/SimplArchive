@@ -168,6 +168,9 @@ builder.Services.AddScoped<SimplArchive.Api.Documents.ChatSystemEntryRecorder>()
 // Permanent purge of recycle-bin documents (blobs + rows + search index) — shared by DocumentsController
 // (per-item) and RepositoriesController (empty recycle bin). See ADR "Manual hard-delete / purge".
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentPurger>();
+// The caller-facing access questions every Document-scope controller asks (issue #466) — one implementation
+// where each controller used to carry its own copy of GetCallerRightsAsync.
+builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentAccessService>();
 // Restore of recycle-bin documents — shared by DocumentsController (per-item) and RecycleBinController (bulk).
 // See ADR "Bulk restore from the recycle bin".
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentRestorer>();
