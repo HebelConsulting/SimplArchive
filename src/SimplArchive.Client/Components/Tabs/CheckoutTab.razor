@@ -5,6 +5,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
+@inject SimplArchive.Client.Services.WebDavMountLink WebDavLink
 
 @* The Check-out tab of the workbench (ADRs "Check-out working-copy stash + exit guard", "Web check-out"),
    extracted from Home.razor per ADR 0558: what this user holds locked, and what can be done with each —
@@ -16,76 +17,111 @@
             @* The caller's checked-out documents + their cloud working copy (ADR "Check-out working-copy stash").
                The browser has no local folder, so the flow is manual: Download from stash (edit externally),
                Upload to stash (put the edited file back), then Check in (promote the stash to a new version). *@
-            <div class="wb-checkout pa-4" style="overflow:auto;">
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                    <MudText Typo="Typo.h6">@Strings.Get("CoHeader")</MudText>
-                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="() => Refresh.InvokeAsync()" title="@Strings.Get("RibbonRefresh")" />
-                    @* Copy the SimplArchive WebDAV mount URL — parity with the Inbox tab (ADR 0509); the Check-out folder lives under the mounted resource. *@
-                    <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="() => CopyWebDavUrl.InvokeAsync()" StartIcon="@Icons.Material.Filled.ContentCopy">@Strings.Get("InboxCopyDav")</MudButton>
-                </div>
-                @if (Checkouts.Count == 0)
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("CoEmpty")</MudText>
-                }
-                else
-                {
-                    <MudSimpleTable Dense="true" Hover="true" Bordered="false">
-                        <thead><tr><th>@Strings.Get("ColDocument")</th><th>@Strings.Get("CoColRepoPath")</th><th>@Strings.Get("CoColWorkingCopy")</th><th>@Strings.Get("CoColAutoRelease")</th><th></th></tr></thead>
-                        <tbody>
-                            @foreach (var c in Checkouts)
+@* Only this tab uses .wb-checkout as a container, so its layout rule lives here rather than in the shell,
+   which may only shrink (ADR 0558). The shared `flex: 1 1 auto; min-height: 0` stays in the shell with the
+   other tab roots — that one is what keeps the bottom tab bar pinned, and it is asserted per tab. *@
+<style>
+    /* Two-pane shape like the Inbox: without a column axis the inner panes have nothing to grow along. */
+    .wb-checkout { display: flex; flex-direction: column; padding: 12px 16px; }
+</style>
+
+<div class="wb-checkout">
+    <div class="wb-search-bar">
+        <MudText Typo="Typo.h6">@Strings.Get("CoHeader")</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="() => Refresh.InvokeAsync()" title="@Strings.Get("RibbonRefresh")" />
+        <div style="flex:1 1 auto;"></div>
+        @* One WebDAV control, deep-linked to the Check-out folder — the desktop's button mounts and opens; a
+           browser is not allowed to mount a drive, so the nearest web-native equivalent is to hand over the
+           address of that same folder (ADR 0560: a capability the browser lacks is a divergence, not a gap). *@
+        <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.ContentCopy"
+                   OnClick="() => WebDavLink.CopyAsync(WebDavFolder)">@Strings.Get("InboxCopyDav")</MudButton>
+    </div>
+    <div class="wb-search-status">@(Checkouts.Count == 0 ? Strings.Get("CoEmpty") : string.Format(Strings.Get("CoHeldN"), Checkouts.Count))</div>
+
+    <div style="display:flex; flex:1 1 auto; min-height:0;">
+        <div class="wb-search-results" style="flex:1 1 40%; min-width:0;">
+            @foreach (var c in Checkouts)
+            {
+                @* The row is the SUBJECT of the detail panes, so selecting it is what drives them. Same shape as
+                   the Inbox list: name over path, the state that matters as a chip, actions in a menu. *@
+                <div class="wb-list-row @(c.Id == _selected?.Id ? "wb-list-row-selected" : "")" @onclick="() => SelectAsync(c)">
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" />
+                    <span style="flex:1 1 auto; min-width:0; overflow:hidden;">
+                        <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@c.Name@c.FileExtension</div>
+                        <div class="mud-text-secondary" style="font-size:.75em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@c.Path</div>
+                    </span>
+                    @* A check-out nobody asked for needs saying so, or it reads as a bug: the user edited a file
+                       on the mounted drive and the document silently became theirs (ADR 0562). The tooltip names
+                       the client that did it. Carried into the new row layout — the restructure must not quietly
+                       drop it. *@
+                    @if (!string.IsNullOrEmpty(c.ImplicitAgent))
+                    {
+                        <MudTooltip Text="@string.Format(Strings.Get("CoAutoByTip"), c.ImplicitAgent)">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Class="ma-0">@Strings.Get("CoAuto")</MudChip>
+                        </MudTooltip>
+                    }
+                    @if (c.IsModified)
+                    {
+                        @* Modified is the whole reason to look at this list — it should be what the eye finds. *@
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled" Class="ma-0">@Strings.Get("CoModified")</MudChip>
+                    }
+                    <div @onclick:stopPropagation="true">
+                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
+                            <MudMenuItem Icon="@Icons.Material.Filled.CloudDownload" OnClick="() => DownloadFromStashAsync(c)">@Strings.Get("CoDownloadStash")</MudMenuItem>
+                            @if (c.IsModified)
                             {
-                                <tr>
-                                    <td>
-                                        @c.Name@c.FileExtension
-                                        @* A check-out nobody asked for needs saying so, or it reads as a bug: the
-                                           user edited a file on a mounted drive and the document silently became
-                                           theirs (ADR 0562). The tooltip names the client that did it. *@
-                                        @if (!string.IsNullOrEmpty(c.ImplicitAgent))
-                                        {
-                                            <MudTooltip Text="@string.Format(Strings.Get("CoAutoByTip"), c.ImplicitAgent)">
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Class="ml-2">@Strings.Get("CoAuto")</MudChip>
-                                            </MudTooltip>
-                                        }
-                                    </td>
-                                    <td class="mud-text-secondary">@c.Path</td>
-                                    <td>@(c.IsModified ? Strings.Get("CoModified") : "—")</td>
-                                    <td>
-                                        @if (c.ExpiresAt is { } exp)
-                                        {
-                                            <MudText Typo="Typo.body2" Color="@((exp - DateTimeOffset.UtcNow).TotalDays <= 1 ? Color.Warning : Color.Default)">
-                                                @exp.ToLocalTime().ToString("g")@((exp - DateTimeOffset.UtcNow).TotalDays <= 1 ? Strings.Get("CoSoon") : "")
-                                            </MudText>
-                                        }
-                                        else
-                                        {
-                                            <span class="mud-text-secondary">@Strings.Get("CoNever")</span>
-                                        }
-                                    </td>
-                                    <td style="text-align:right; white-space:nowrap;">
-                                        <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.CloudDownload" OnClick="() => DownloadFromStashAsync(c)">@Strings.Get("CoDownloadStash")</MudButton>
-                                        <MudFileUpload T="IBrowserFile" FilesChanged="@(f => UploadToStashAsync(c, f))" Class="d-inline" Style="display:inline-block; margin:0;">
-                                            <CustomContent Context="upload">
-                                                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.CloudUpload" OnClick="@(() => upload.OpenFilePickerAsync())">@Strings.Get("CoUploadStash")</MudButton>
-                                            </CustomContent>
-                                        </MudFileUpload>
-                                        @if (c.ExpiresAt is not null)
-                                        {
-                                            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.MoreTime" OnClick="() => ExtendCheckoutAsync(c)">@Strings.Get("CoExtend")</MudButton>
-                                        }
-                                        @if (c.IsModified)
-                                        {
-                                            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Difference" OnClick="() => OpenCompareCheckoutAsync(c)">@Strings.Get("CoCompare")</MudButton>
-                                        }
-                                        <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Check" Disabled="@(!c.IsModified)" OnClick="() => CheckInFromStashAsync(c)">@Strings.Get("CoCheckIn")</MudButton>
-                                        <MudButton Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Filled.LockOpen" OnClick="() => CancelCheckoutAsync(c)">@Strings.Get("CoCancel")</MudButton>
-                                    </td>
-                                </tr>
+                                <MudMenuItem Icon="@Icons.Material.Filled.Difference" OnClick="() => OpenCompareCheckoutAsync(c)">@Strings.Get("CoCompare")</MudMenuItem>
+                                <MudMenuItem Icon="@Icons.Material.Filled.Check" OnClick="() => CheckInFromStashAsync(c)">@Strings.Get("CoCheckIn")</MudMenuItem>
                             }
-                        </tbody>
-                    </MudSimpleTable>
+                            @if (c.ExpiresAt is not null)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.MoreTime" OnClick="() => ExtendCheckoutAsync(c)">@Strings.Get("CoExtend")</MudMenuItem>
+                            }
+                            <MudMenuItem Icon="@Icons.Material.Filled.LockOpen" IconColor="Color.Error" OnClick="() => CancelCheckoutAsync(c)">@Strings.Get("CoCancel")</MudMenuItem>
+                        </MudMenu>
+                    </div>
+                </div>
+                @if (c.Id == _selected?.Id)
+                {
+                    @* Upload lives outside the menu: MudFileUpload needs its own trigger, and a file picker
+                       inside a menu closes the menu before the dialog opens. *@
+                    <div style="padding:2px 12px 8px 34px;">
+                        <MudFileUpload T="IBrowserFile" FilesChanged="@(f => UploadToStashAsync(c, f))" Class="d-inline">
+                            <CustomContent Context="upload">
+                                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.CloudUpload" OnClick="@(() => upload.OpenFilePickerAsync())">@Strings.Get("CoUploadStash")</MudButton>
+                            </CustomContent>
+                        </MudFileUpload>
+                    </div>
                 }
+            }
+        </div>
+
+        @if (_selected is not null)
+        {
+            <div style="flex:1 1 60%; min-width:0; border-left:1px solid var(--mud-palette-lines-default); display:flex; flex-direction:column;">
+                @* Index data is READ-ONLY here: it belongs to the archived document and is the same either side
+                   of an edit. Editing it is the Repositories tab's job. *@
+                <div style="flex:0 0 auto; max-height:46%; overflow:auto; padding:10px 14px; border-bottom:1px solid var(--mud-palette-lines-default);">
+                    <MudText Typo="Typo.subtitle2">@_selected.Name@_selected.FileExtension</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@_selected.Path</MudText>
+                    <table class="wb-sysfields">
+                        @foreach (var f in _indexFields)
+                        {
+                            <tr><td>@f.FieldName</td><td>@string.Join(", ", f.Values)</td></tr>
+                        }
+                    </table>
+                </div>
+                @* The WORKING COPY, not the archived version — the question this tab answers is "what am I
+                   about to check in?", and previewing the archived side answers the opposite one. *@
+                <MudText Typo="Typo.subtitle2" Class="px-4 pt-2">@Strings.Get("CoWorkingCopyPreview")</MudText>
+                <PreviewPane @ref="_preview"
+                             Style="flex:1 1 auto; min-height:0; position:relative; display:flex; flex-direction:column;"
+                             EmptyText="@Strings.Get("NoPreview")"
+                             ConvertedBadgeTooltip="This is a generated preview, not the original file." />
             </div>
-        
+        }
+    </div>
+</div>
 
 @code {
     /// <summary>The caller's held check-outs. Owned by the shell, which also badges the tab bar with the count.</summary>
@@ -100,12 +136,94 @@
     [Parameter]
     public EventCallback<(Guid DocumentId, Guid? ParentId)> OpenRequested { get; set; }
 
-    /// <summary>
-    /// Copies the caller's WebDAV URL. Owned by the shell because the Inbox tab offers it too — one
-    /// implementation with two callers, rather than the same clipboard flow written twice (ADR 0558).
-    /// </summary>
-    [Parameter]
-    public EventCallback CopyWebDavUrl { get; set; }
+    /// <summary>This tab's folder inside the WebDAV mount — the desktop's button opens it; the web copies it.</summary>
+    private const string WebDavFolder = "Personal/Check-out";
+
+    private CheckoutDto? _selected;
+    private List<FieldGroup> _indexFields = [];
+    private PreviewPane? _preview;
+    private (string? Url, bool Converted)? _pendingPreview;
+
+    // A row's own detail: index data from the DOCUMENT (identical either side of an edit — a working copy
+    // carries no metadata of its own) and a preview of the WORKING COPY.
+    private async Task SelectAsync(CheckoutDto c)
+    {
+        _selected = c;
+        _indexFields = [];
+        await ShowPreviewAsync(null, false);
+
+        // The row advertises `self`; the document it resolves to advertises `index-data`. One read, then a rel
+        // — never a composed sub-resource path (ADRs 0543/0557).
+        try
+        {
+            var document = await Http.GetFromJsonAsync<DocumentSummary>(Href(c, "self"));
+            if (Links.Href(document?.Links, "index-data") is { } indexHref)
+            {
+                var data = await Http.GetFromJsonAsync<IndexDataResponse>(indexHref);
+                _indexFields = data?.Fields ?? [];
+            }
+        }
+        catch (Exception)
+        {
+            // Index data is context, not the point of this pane; losing it must not cost the preview.
+        }
+
+        // No `preview` rel means no working copy has been saved yet — an ordinary state, not an error, and
+        // NOT a reason to fall back to the archived version (ADR 0543).
+        if (Links.Href(c.Links, "preview") is not { } previewHref)
+        {
+            return;
+        }
+
+        try
+        {
+            var response = await Http.GetAsync(previewHref);
+            if (response.StatusCode == System.Net.HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
+            {
+                return;
+            }
+
+            var preview = await response.Content.ReadFromJsonAsync<CheckoutPreviewResponse>();
+            if (preview is not null)
+            {
+                await ShowPreviewAsync(preview.PreviewUrl, preview.PreviewConverted);
+            }
+        }
+        catch (Exception)
+        {
+            // Leaves the pane on its empty text rather than a half-rendered document.
+        }
+    }
+
+    // The @ref is null until the pane has rendered, which it has not on the first selection — so remember the
+    // request and replay it in OnAfterRenderAsync (the same shape the Inbox tab uses, for the same reason).
+    private async Task ShowPreviewAsync(string? url, bool converted)
+    {
+        if (_preview is null)
+        {
+            _pendingPreview = (url, converted);
+            return;
+        }
+
+        await _preview.RenderAsync(url, null, converted);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_pendingPreview is { } pending && _preview is not null)
+        {
+            _pendingPreview = null;
+            await ShowPreviewAsync(pending.Url, pending.Converted);
+            StateHasChanged();
+        }
+    }
+
+    private sealed class CheckoutPreviewResponse
+    {
+        public string PreviewUrl { get; set; } = string.Empty;
+
+        public bool PreviewConverted { get; set; }
+    }
 
     private async Task<bool> Confirm(string message, string yes) =>
         await DialogService.ShowMessageBoxAsync(new MessageBoxOptions { Title = yes, Message = message, YesText = yes, CancelText = "Cancel" }) == true;

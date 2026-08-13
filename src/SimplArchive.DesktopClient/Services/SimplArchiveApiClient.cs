@@ -25,6 +25,16 @@ public sealed class SetPrimaryLocationForbiddenException()
 public sealed class PrimaryLocationConcurrencyException()
     : PrimaryLocationException("This item changed since you loaded it — refresh and try again.");
 
+// A dropped file whose name is already used in the target folder. Its own type rather than the string-message
+// ApiActionException it replaces, because this one condition is RECOVERABLE — the caller asks the user what they
+// meant (a new version of what is there, or a new document under another name) instead of only reporting it.
+// Carries the name so the prompt can name the file without re-deriving it.
+public sealed class DocumentNameTakenException(string fileName)
+    : ApiActionException($"'{fileName}': a document with that name already exists here.")
+{
+    public string FileName { get; } = fileName;
+}
+
 // Raised by DeleteUserAsync when the user still holds pending review tasks and no replacement reviewer was
 // supplied (ADR "Workflow review reassignment") — the caller (Users & groups tab) prompts for a replacement
 // and retries with reassignReviewsTo.
@@ -2570,17 +2580,27 @@ public sealed class SimplArchiveApiClient
     // for .eml/.msg, else Basic Entry — ADR "Email auto-classification"), so the client doesn't classify.
     // Returns the created document's id. An optional feed comment is posted on it after finalize (ADR "Filing
     // posts a feed comment") — used by list-pane drop filing into a folder (ADR "List-pane drop filing").
-    public async Task<Guid> UploadFileAsync(Guid folderId, string fileName, byte[] bytes, string? comment = null, CancellationToken cancellationToken = default)
+    public async Task<Guid> UploadFileAsync(Guid folderId, string fileName, byte[] bytes, string? comment = null, CancellationToken cancellationToken = default) =>
+        await UploadFileAsync(await DocumentRelAsync(folderId, "children", cancellationToken), fileName, bytes, comment, cancellationToken);
+
+    /// <summary>The same upload, posted to a children address the caller already holds.</summary>
+    /// <remarks>
+    /// The href overload is the real one. A drop of several files into one folder resolves that folder's
+    /// <c>children</c> rel ONCE and files every file through it, rather than fetching the folder again per file —
+    /// following a rel must not cost a request per use (ADR 0557). The id overload above is what the view model,
+    /// whose "where am I" state is still a <see cref="Guid"/>, calls.
+    /// </remarks>
+    public async Task<Guid> UploadFileAsync(string childrenHref, string fileName, byte[] bytes, string? comment = null, CancellationToken cancellationToken = default)
     {
         // Document.Name is the stem (no extension); the extension rides on the version's object key (ADR
         // "Extension off Document.Name, derived from the object key").
         var name = Path.GetFileNameWithoutExtension(fileName);
         var extension = Path.GetExtension(fileName);
 
-        using var createResponse = await _http.PostAsJsonAsync(await DocumentRelAsync(folderId, "children", cancellationToken), new { name }, cancellationToken);
+        using var createResponse = await _http.PostAsJsonAsync(childrenHref, new { name }, cancellationToken);
         if (createResponse.StatusCode == HttpStatusCode.Conflict)
         {
-            throw new ApiActionException($"'{fileName}': a document with that name already exists here.");
+            throw new DocumentNameTakenException(fileName);
         }
 
         if (createResponse.StatusCode == HttpStatusCode.Forbidden)
@@ -2615,6 +2635,65 @@ public sealed class SimplArchiveApiClient
         // auto-classification"; the client no longer classifies.
 
         return documentId;
+    }
+
+    /// <summary>What is already in the target folder under a dropped file's name, and a free name to offer instead.</summary>
+    /// <param name="existing">The row whose name collided, or null if it went away between the 409 and this read.
+    /// It carries its own addresses, so filing a new version of it follows the row's <c>versions</c> rel.</param>
+    /// <param name="suggestedName">A stem not currently taken here — "Invoice" becomes "Invoice (2)".</param>
+    public sealed record NameConflict(Node? Existing, string SuggestedName);
+
+    /// <summary>
+    /// Reads the target folder ONCE and answers both questions a name conflict raises.
+    /// </summary>
+    /// <remarks>
+    /// One listing rather than "does it exist?" plus "what name is free?": the same rows answer both, and the
+    /// rows carry the addresses the resolution then follows (ADRs 0555/0557). The suggested name is a starting
+    /// point only — the user may type anything, and the server has the final say on uniqueness.
+    /// </remarks>
+    public async Task<NameConflict> DescribeNameConflictAsync(string childrenHref, string stem, CancellationToken cancellationToken = default)
+    {
+        var (children, _) = await GetFolderContentsAsync(childrenHref, cancellationToken);
+        var existing = children.FirstOrDefault(c => string.Equals(c.Name, stem, StringComparison.OrdinalIgnoreCase));
+        var taken = children.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        for (var n = 2; n < 1000; n++)
+        {
+            if (!taken.Contains($"{stem} ({n})"))
+            {
+                return new NameConflict(existing, $"{stem} ({n})");
+            }
+        }
+
+        return new NameConflict(existing, $"{stem} ({Guid.NewGuid().ToString("N")[..6]})");
+    }
+
+    /// <summary>An inline preview of a check-out's WORKING COPY — what you are about to check in.</summary>
+    /// <remarks>
+    /// Follows the row's own `preview` rel (ADRs 0543/0555). The rel is absent until a working copy has been
+    /// saved, and its absence means exactly that — there is nothing to preview — so it is not an error.
+    /// </remarks>
+    public async Task<Preview?> GetCheckoutPreviewAsync(CheckoutItem checkout, CancellationToken cancellationToken = default)
+    {
+        if (checkout.Href("preview") is not { } href)
+        {
+            return null;
+        }
+
+        using var response = await _http.GetAsync(href, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+
+        // No text layout / pages / annotations: those belong to an archived VERSION, and a working copy is not
+        // one yet. The preview is the picture, nothing more.
+        return new Preview(
+            json.GetProperty("previewUrl").GetString(),
+            json.TryGetProperty("previewConverted", out var c) && c.ValueKind == JsonValueKind.True,
+            null, null, null, checkout.FileExtension);
     }
 
     // ---- Check-out / check-in (ADR "Document check-out / check-in") -----------------------------------
@@ -2877,12 +2956,20 @@ public sealed class SimplArchiveApiClient
 
     // Uploads bytes as a NEW version of an existing document (the check-in upload) — POST /versions → PUT bytes
     // → finalize. Distinct from UploadFileAsync, which creates a new document.
-    public async Task UploadNewVersionAsync(Guid documentId, byte[] bytes, string fileExtension, string? comment = null, CancellationToken cancellationToken = default)
+    public async Task UploadNewVersionAsync(Guid documentId, byte[] bytes, string fileExtension, string? comment = null, CancellationToken cancellationToken = default) =>
+        await UploadNewVersionAsync(await DocumentRelAsync(documentId, "versions", cancellationToken), bytes, fileExtension, comment, cancellationToken);
+
+    /// <summary>The same new version, posted to a versions address the caller already holds.</summary>
+    /// <remarks>
+    /// A caller holding the ROW — a folder listing advertises each child's <c>versions</c> rel — follows it
+    /// directly instead of fetching the document again to find it (ADRs 0555/0557).
+    /// </remarks>
+    public async Task UploadNewVersionAsync(string versionsHref, byte[] bytes, string fileExtension, string? comment = null, CancellationToken cancellationToken = default)
     {
         // The check-in comment is the new version's "why this revision" note (ADR 0528) — set on the version
         // itself, not posted to the chat feed as it used to be.
         var versionComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
-        using var versionResponse = await _http.PostAsJsonAsync(await DocumentRelAsync(documentId, "versions", cancellationToken), new { fileExtension, comment = versionComment }, cancellationToken);
+        using var versionResponse = await _http.PostAsJsonAsync(versionsHref, new { fileExtension, comment = versionComment }, cancellationToken);
         if (versionResponse.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException("This document is checked out by another user or under a legal hold.");

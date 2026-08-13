@@ -1,0 +1,87 @@
+@* A dropped file whose name is already taken in the target folder.
+
+   Before this dialog the file was simply dropped: the create returned 409 and the client showed a warning the
+   user had usually stopped looking at, so a drag-and-drop appeared to do nothing. The two things they could
+   plausibly have meant are offered instead — this is a newer revision of the document that is already there, or
+   it is a different document that happens to share a name — with the filing comment they would otherwise have
+   had to add afterwards.
+
+   Deliberately no "overwrite": nothing in this product replaces content in place. The nearest true thing is a
+   new version, which is the first option. *@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@Strings.Get("NcTitle")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <div style="min-width:480px;">
+            <MudText Typo="Typo.body2" Class="mb-3">
+                @((MarkupString)string.Format(Strings.Get(CanFileAsVersion ? "NcIntro" : "NcIntroFolder"), FileName))
+            </MudText>
+
+            <MudRadioGroup T="string" @bind-Value="_action">
+                @* A folder can hold the name too — sibling names are unique across folders AND documents — and
+                   adding a "version" to a folder would turn it into a document. So the choice is shown disabled
+                   with the reason, rather than omitted: a user who expected it needs to know why it is gone. *@
+                <MudRadio T="string" Value="@("version")" Dense="true" Disabled="@(!CanFileAsVersion)">
+                    <MudText Typo="Typo.body2"><b>@Strings.Get("NcAsVersion")</b></MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @Strings.Get(CanFileAsVersion ? "NcAsVersionHint" : "NcAsVersionFolder")
+                    </MudText>
+                </MudRadio>
+                <MudRadio T="string" Value="@("rename")" Dense="true" Class="mt-2">
+                    <MudText Typo="Typo.body2"><b>@Strings.Get("NcAsNew")</b></MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("NcAsNewHint")</MudText>
+                </MudRadio>
+            </MudRadioGroup>
+
+            @* Only meaningful for the second choice, so it is disabled rather than hidden: a field that appears
+               and disappears as you change your mind moves the buttons under the cursor (ADR 0550). *@
+            <MudTextField T="string" @bind-Value="_newName" Immediate="true" Disabled="@(_action != "rename")"
+                          Label="@Strings.Get("NcNewName")" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-3"
+                          Error="@(_action == "rename" && string.IsNullOrWhiteSpace(_newName))"
+                          ErrorText="@Strings.Get("NcNameRequired")" />
+
+            <MudTextField T="string" @bind-Value="_comment" Label="@Strings.Get("NcComment")" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Class="mt-2" Lines="2" Placeholder="@Strings.Get("NcCommentHint")" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => Dialog.Cancel())">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_action == "rename" && string.IsNullOrWhiteSpace(_newName))" OnClick="File">@Strings.Get("NcFile")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+
+    /// <summary>The dropped file's name, as the user sees it (stem + extension).</summary>
+    [Parameter] public string FileName { get; set; } = "";
+
+    /// <summary>A free name in the target folder, offered as the starting point for the second choice.</summary>
+    [Parameter] public string SuggestedName { get; set; } = "";
+
+    /// <summary>False when the name is held by a FOLDER — then renaming is the only thing that can happen.</summary>
+    [Parameter] public bool CanFileAsVersion { get; set; } = true;
+
+    private string _action = "version";
+    private string _newName = "";
+    private string _comment = "";
+
+    protected override void OnInitialized()
+    {
+        _newName = SuggestedName;
+        if (!CanFileAsVersion)
+        {
+            _action = "rename";
+        }
+    }
+
+    private void File() =>
+        Dialog.Close(DialogResult.Ok(new NameConflictChoice(_action, _newName.Trim(), _comment.Trim())));
+
+    /// <summary>
+    /// <c>version</c> = file it as a new version of the document already there; <c>rename</c> = file it as a new
+    /// document called <see cref="NewName"/>. <see cref="Comment"/> is the version comment either way.
+    /// </summary>
+    public record NameConflictChoice(string Action, string NewName, string Comment);
+}

@@ -84,10 +84,32 @@ public class WebWebDavTests
         await Expect(dialog.GetByText("Copy this password now")).ToBeVisibleAsync();
         await dialog.GetByRole(AriaRole.Button, new() { Name = "Close" }).ClickAsync();
 
-        // Inbox tab → Copy WebDAV URL → the single "SimplArchive" mount URL lands on the clipboard (ADR 0509).
+        // Inbox tab → Copy WebDAV URL → the address of THIS TAB'S folder inside the single "SimplArchive"
+        // mount (ADR 0509). Deep-linked rather than the bare mount root: the desktop's button opens the tab's
+        // own folder, and handing over its address is the nearest thing a browser is allowed to do (ADR 0560).
         await page.Locator(".wb-tab[aria-label=\"Inbox\"]").First.ClickAsync();
         await page.GetByRole(AriaRole.Button, new() { Name = "Copy WebDAV URL" }).ClickAsync();
         await Expect(page.GetByText("Copied WebDAV URL")).ToBeVisibleAsync();
-        Assert.EndsWith("/SimplArchive", await page.EvaluateAsync<string>("() => navigator.clipboard.readText()"));
+        Assert.EndsWith("/SimplArchive/Personal/Inbox", await page.EvaluateAsync<string>("() => navigator.clipboard.readText()"));
+    }
+
+    // The two tabs must copy DIFFERENT addresses — that is the whole point of the deep link, and a shared
+    // handler that ignored its argument would pass the Inbox test above while silently doing nothing here.
+    [Fact]
+    public async Task The_checkout_tab_copies_its_own_folder_not_the_inbox_one()
+    {
+        var page = await Ui.LoginAsync(_app, new[] { "clipboard-read", "clipboard-write" });
+
+        await page.Locator(".wb-userbox").ClickAsync();
+        await page.GetByText("WebDAV access…").ClickAsync();
+        var dialog = page.Locator(".mud-dialog");
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Generate password" }).ClickAsync();
+        await Expect(dialog.GetByText("Copy this password now")).ToBeVisibleAsync();
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Close" }).ClickAsync();
+
+        await page.Locator(".wb-tab[aria-label=\"Check-out\"]").First.ClickAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Copy WebDAV URL" }).ClickAsync();
+        await Expect(page.GetByText("Copied WebDAV URL")).ToBeVisibleAsync();
+        Assert.EndsWith("/SimplArchive/Personal/Check-out", await page.EvaluateAsync<string>("() => navigator.clipboard.readText()"));
     }
 }

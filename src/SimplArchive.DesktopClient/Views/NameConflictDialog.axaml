@@ -1,0 +1,46 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.NameConflictDialog"
+        Title="{loc:Tr NcTitle}" Width="520" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="12">
+        <TextBlock Text="{loc:Tr NcTitle}" FontWeight="SemiBold" FontSize="15" />
+        <TextBlock x:Name="IntroBlock" TextWrapping="Wrap" />
+
+        <StackPanel Spacing="8">
+            <RadioButton x:Name="VersionChoice" GroupName="NcAction" IsChecked="True">
+                <StackPanel>
+                    <TextBlock Text="{loc:Tr NcAsVersion}" FontWeight="SemiBold" />
+                    <TextBlock x:Name="VersionHint" TextWrapping="Wrap"
+                               Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                </StackPanel>
+            </RadioButton>
+            <RadioButton x:Name="RenameChoice" GroupName="NcAction">
+                <StackPanel>
+                    <TextBlock Text="{loc:Tr NcAsNew}" FontWeight="SemiBold" />
+                    <TextBlock Text="{loc:Tr NcAsNewHint}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                </StackPanel>
+            </RadioButton>
+        </StackPanel>
+
+        <!-- Only meaningful for the second choice, so it is disabled rather than hidden: a field that appears and
+             disappears as you change your mind moves the buttons under the cursor (ADR 0550). -->
+        <StackPanel Spacing="4">
+            <TextBlock Text="{loc:Tr NcNewName}" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+            <TextBox x:Name="NewNameBox" IsEnabled="{Binding #RenameChoice.IsChecked}" />
+        </StackPanel>
+
+        <StackPanel Spacing="4">
+            <TextBlock Text="{loc:Tr NcComment}" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+            <TextBox x:Name="CommentBox" Watermark="{loc:Tr NcCommentHint}"
+                     AcceptsReturn="True" TextWrapping="Wrap" Height="56" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button x:Name="FileButton" Content="{loc:Tr NcFile}" Click="OnFile" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

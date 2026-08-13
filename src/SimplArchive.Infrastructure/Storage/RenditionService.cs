@@ -101,14 +101,15 @@ public class RenditionService : IDocumentPreviewService
         _logger = logger;
     }
 
-    public async Task<DocumentPreview?> GetPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, CancellationToken cancellationToken = default)
+    public async Task<DocumentPreview?> GetPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, CancellationToken cancellationToken = default, bool sourceMayHaveChanged = false)
     {
-        var kind = KindFor(objectKey);
+        var extension = ExtensionFor(objectKey, fileName);
+        var kind = KindFor(extension);
         if (kind == RenditionKind.None)
         {
             // No rendition needed: serve the original inline (it IS the original, so not "converted"),
             // forcing text/plain for .txt so it renders inline regardless of the stored type.
-            var contentType = PreviewContentTypeOverride(Path.GetExtension(objectKey));
+            var contentType = PreviewContentTypeOverride(extension);
             var originalUrl = await _objectStorageClient.GetPresignedPreviewUrlAsync(objectKey, expiry, fileName, contentType, cancellationToken);
             return new DocumentPreview(originalUrl, IsConverted: false);
         }
@@ -117,9 +118,14 @@ public class RenditionService : IDocumentPreviewService
 
         try
         {
-            if (!await _objectStorageClient.ExistsAsync(renditionKey, cancellationToken))
+            // The cached sidecar is keyed on the SOURCE PATH, which is right for a document version (immutable
+            // once confirmed) and wrong for a source that changes underneath a stable key — the check-out
+            // working-copy stash is rewritten on every save over WebDAV. Reusing the sidecar there would serve
+            // the PREVIOUS edit's rendition: a wrong document, shown confidently. So such a caller says so, and
+            // the rendition is regenerated over the same key rather than accumulating a variant per edit.
+            if (sourceMayHaveChanged || !await _objectStorageClient.ExistsAsync(renditionKey, cancellationToken))
             {
-                await GenerateRenditionAsync(objectKey, renditionKey, kind, cancellationToken);
+                await GenerateRenditionAsync(objectKey, renditionKey, kind, extension, cancellationToken);
             }
 
             var renditionUrl = await _objectStorageClient.GetPresignedPreviewUrlAsync(renditionKey, expiry, fileName, cancellationToken: cancellationToken);
@@ -142,7 +148,7 @@ public class RenditionService : IDocumentPreviewService
     // hit-overlay boxes line up. A rendition-conversion failure propagates (the caller treats it as no overlay).
     public async Task<string> GetDisplayObjectKeyAsync(string objectKey, CancellationToken cancellationToken = default)
     {
-        var kind = KindFor(objectKey);
+        var kind = KindFor(ExtensionFor(objectKey, null));
         if (kind == RenditionKind.None)
         {
             return objectKey; // displayed as-is (PDF, browser-viewable image, .txt)
@@ -151,7 +157,7 @@ public class RenditionService : IDocumentPreviewService
         var renditionKey = RenditionKey(objectKey, kind);
         if (!await _objectStorageClient.ExistsAsync(renditionKey, cancellationToken))
         {
-            await GenerateRenditionAsync(objectKey, renditionKey, kind, cancellationToken);
+            await GenerateRenditionAsync(objectKey, renditionKey, kind, ExtensionFor(objectKey, null), cancellationToken);
         }
 
         return renditionKey;
@@ -162,7 +168,7 @@ public class RenditionService : IDocumentPreviewService
     // (it uses the ordinary single ".preview.png").
     public async Task<PreviewPages?> GetPreviewPagesAsync(string objectKey, TimeSpan expiry, string? fileName = null, CancellationToken cancellationToken = default)
     {
-        if (KindFor(objectKey) != RenditionKind.ImageToPng)
+        if (KindFor(ExtensionFor(objectKey, null)) != RenditionKind.ImageToPng)
         {
             return null;
         }
@@ -193,7 +199,7 @@ public class RenditionService : IDocumentPreviewService
     // One display key per preview page — the per-page PNGs for a multi-page TIFF, else the single display key.
     public async Task<IReadOnlyList<string>> GetDisplayObjectKeysAsync(string objectKey, CancellationToken cancellationToken = default)
     {
-        if (KindFor(objectKey) == RenditionKind.ImageToPng)
+        if (KindFor(ExtensionFor(objectKey, null)) == RenditionKind.ImageToPng)
         {
             var keys = await EnsureImagePageKeysAsync(objectKey, cancellationToken);
             if (keys.Count > 1)
@@ -315,7 +321,7 @@ public class RenditionService : IDocumentPreviewService
 
     private static string ImagePagesManifestKey(string objectKey) => WithSuffix(objectKey, ".preview.pages");
 
-    private async Task GenerateRenditionAsync(string objectKey, string renditionKey, RenditionKind kind, CancellationToken cancellationToken)
+    private async Task GenerateRenditionAsync(string objectKey, string renditionKey, RenditionKind kind, string extension, CancellationToken cancellationToken)
     {
         byte[] originalBytes;
         await using (var source = await _objectStorageClient.GetObjectAsync(objectKey, cancellationToken))
@@ -328,8 +334,8 @@ public class RenditionService : IDocumentPreviewService
         var (renditionBytes, contentType) = kind switch
         {
             RenditionKind.ImageToPng => (ConvertToPng(originalBytes), "image/png"),
-            RenditionKind.OfficeToPdf => (await _officeConverter.ConvertToPdfAsync(originalBytes, $"source{Path.GetExtension(objectKey)}", cancellationToken), "application/pdf"),
-            RenditionKind.EmailToPdf => (await _emailConverter.ConvertToPdfAsync(originalBytes, Path.GetExtension(objectKey), cancellationToken), "application/pdf"),
+            RenditionKind.OfficeToPdf => (await _officeConverter.ConvertToPdfAsync(originalBytes, $"source{extension}", cancellationToken), "application/pdf"),
+            RenditionKind.EmailToPdf => (await _emailConverter.ConvertToPdfAsync(originalBytes, extension, cancellationToken), "application/pdf"),
             RenditionKind.MarkdownToPdf => (await _markdownConverter.ConvertToPdfAsync(originalBytes, cancellationToken), "application/pdf"),
             RenditionKind.HtmlToPdf => (await _htmlConverter.ConvertToPdfAsync(originalBytes, cancellationToken), "application/pdf"),
             RenditionKind.JsonPretty => (PrettyPrintJson(originalBytes), "application/json; charset=utf-8"),
@@ -359,9 +365,15 @@ public class RenditionService : IDocumentPreviewService
         }
     }
 
-    private static RenditionKind KindFor(string objectKey)
+    // The extension that decides the format. Normally the object key carries it, but a key can legitimately be
+    // extensionless — the check-out working-copy stash is (ADR 0517) — and then the caller's display file name is
+    // the only thing that knows what the bytes are. Without this fallback an extensionless key resolves to
+    // RenditionKind.None and the caller is handed a raw .docx as its "preview".
+    private static string ExtensionFor(string objectKey, string? fileName) =>
+        Path.GetExtension(objectKey) is { Length: > 0 } fromKey ? fromKey : Path.GetExtension(fileName ?? "");
+
+    private static RenditionKind KindFor(string extension)
     {
-        var extension = Path.GetExtension(objectKey);
         if (ImageExtensions.Contains(extension))
         {
             return RenditionKind.ImageToPng;

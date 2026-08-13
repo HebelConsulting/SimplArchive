@@ -3912,6 +3912,60 @@
   <data name="ExtLinkPagePageCount" xml:space="preserve">
     <value>{0} pagine</value>
   </data>
+  <data name="NcTitle" xml:space="preserve">
+    <value>Questo nome è già in uso qui</value>
+  </data>
+  <data name="NcIntro" xml:space="preserve">
+    <value>In questa cartella esiste già un documento chiamato «{0}». Cosa vuoi fare?</value>
+  </data>
+  <data name="NcAsVersion" xml:space="preserve">
+    <value>Archivia come nuova versione di quel documento</value>
+  </data>
+  <data name="NcAsVersionHint" xml:space="preserve">
+    <value>La cronologia viene mantenuta: i dati indice restano e la versione precedente resta disponibile.</value>
+  </data>
+  <data name="NcAsNew" xml:space="preserve">
+    <value>Archivia come nuovo documento con un altro nome</value>
+  </data>
+  <data name="NcAsNewHint" xml:space="preserve">
+    <value>Usalo quando sono due documenti diversi che per caso hanno lo stesso nome file.</value>
+  </data>
+  <data name="NcNewName" xml:space="preserve">
+    <value>Nuovo nome</value>
+  </data>
+  <data name="NcNameRequired" xml:space="preserve">
+    <value>Inserisci un nome</value>
+  </data>
+  <data name="NcComment" xml:space="preserve">
+    <value>Commento</value>
+  </data>
+  <data name="NcCommentHint" xml:space="preserve">
+    <value>Cosa è cambiato? (facoltativo)</value>
+  </data>
+  <data name="NcFile" xml:space="preserve">
+    <value>Archivia</value>
+  </data>
+  <data name="NcIntroFolder" xml:space="preserve">
+    <value>In questa cartella esiste già una <b>cartella</b> denominata «{0}», quindi questo file necessita di un nome diverso.</value>
+  </data>
+  <data name="NcAsVersionFolder" xml:space="preserve">
+    <value>Non disponibile — l’elemento con quel nome è una cartella, non un documento.</value>
+  </data>
+  <data name="MwWebDavOpenFailed" xml:space="preserve">
+    <value>Impossibile aprire la cartella: {0}</value>
+  </data>
+  <data name="StErrBeyondCompareLaunch" xml:space="preserve">
+    <value>Impossibile avviare Beyond Compare.</value>
+  </data>
+  <data name="CoBeyondCompare" xml:space="preserve">
+    <value>Beyond Compare…</value>
+  </data>
+  <data name="CoWorkingCopyPreview" xml:space="preserve">
+    <value>Copia di lavoro</value>
+  </data>
+  <data name="CoHeldN" xml:space="preserve">
+    <value>{0} documento/i in check-out.</value>
+  </data>
   <data name="CoAuto" xml:space="preserve">
     <value>automatico</value>
   </data>

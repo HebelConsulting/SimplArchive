@@ -3912,6 +3912,60 @@
   <data name="ExtLinkPagePageCount" xml:space="preserve">
     <value>{0} Seiten</value>
   </data>
+  <data name="NcTitle" xml:space="preserve">
+    <value>Dieser Name wird hier bereits verwendet</value>
+  </data>
+  <data name="NcIntro" xml:space="preserve">
+    <value>In diesem Ordner gibt es bereits ein Dokument namens „{0}“. Was möchten Sie tun?</value>
+  </data>
+  <data name="NcAsVersion" xml:space="preserve">
+    <value>Als neue Version dieses Dokuments ablegen</value>
+  </data>
+  <data name="NcAsVersionHint" xml:space="preserve">
+    <value>Der Verlauf bleibt erhalten — die Indexdaten bleiben, die vorherige Version bleibt verfügbar.</value>
+  </data>
+  <data name="NcAsNew" xml:space="preserve">
+    <value>Als neues Dokument mit anderem Namen ablegen</value>
+  </data>
+  <data name="NcAsNewHint" xml:space="preserve">
+    <value>Wählen Sie dies, wenn es sich um zwei verschiedene Dokumente handelt, die zufällig gleich heissen.</value>
+  </data>
+  <data name="NcNewName" xml:space="preserve">
+    <value>Neuer Name</value>
+  </data>
+  <data name="NcNameRequired" xml:space="preserve">
+    <value>Namen eingeben</value>
+  </data>
+  <data name="NcComment" xml:space="preserve">
+    <value>Kommentar</value>
+  </data>
+  <data name="NcCommentHint" xml:space="preserve">
+    <value>Was hat sich geändert? (optional)</value>
+  </data>
+  <data name="NcFile" xml:space="preserve">
+    <value>Ablegen</value>
+  </data>
+  <data name="NcIntroFolder" xml:space="preserve">
+    <value>In diesem Ordner gibt es bereits einen <b>Ordner</b> namens „{0}“, daher braucht diese Datei einen anderen Namen.</value>
+  </data>
+  <data name="NcAsVersionFolder" xml:space="preserve">
+    <value>Nicht möglich — der Eintrag mit diesem Namen ist ein Ordner, kein Dokument.</value>
+  </data>
+  <data name="MwWebDavOpenFailed" xml:space="preserve">
+    <value>Der Ordner konnte nicht geöffnet werden: {0}</value>
+  </data>
+  <data name="StErrBeyondCompareLaunch" xml:space="preserve">
+    <value>Beyond Compare konnte nicht gestartet werden.</value>
+  </data>
+  <data name="CoBeyondCompare" xml:space="preserve">
+    <value>Beyond Compare…</value>
+  </data>
+  <data name="CoWorkingCopyPreview" xml:space="preserve">
+    <value>Arbeitskopie</value>
+  </data>
+  <data name="CoHeldN" xml:space="preserve">
+    <value>{0} Dokument(e) ausgecheckt.</value>
+  </data>
   <data name="CoAuto" xml:space="preserve">
     <value>automatisch</value>
   </data>

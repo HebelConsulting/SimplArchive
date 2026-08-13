@@ -63,9 +63,14 @@ public class DesktopWebDavMountTests
     {
         // Guards the bug OsFileManager's own comment records: `mount volume` alone mounts SILENTLY, so nothing
         // appears to happen. Every platform's command must both mount and reveal the result.
+        //
+        // macOS is now the exception, deliberately: revealing the result means opening the mount point, and the
+        // point cannot be known until the mount finishes (macOS suffixes a colliding volume name). So the script
+        // mounts and OpenWebDavFolderAsync opens — asserted there, not here. What is still asserted here is that
+        // it mounts at all.
         var (macFile, macArgs) = OsFileManager.BuildOpenCommand("https://host/SimplArchive", OsFileManager.Platform.MacOs);
         Assert.Equal("osascript", macFile);
-        Assert.Contains(macArgs, a => a.Contains("mount volume") && a.Contains("Finder"));
+        Assert.Contains(macArgs, a => a.Contains("mount volume"));
 
         var (winFile, winArgs) = OsFileManager.BuildOpenCommand("https://host/SimplArchive", OsFileManager.Platform.Windows);
         Assert.Equal("explorer.exe", winFile);

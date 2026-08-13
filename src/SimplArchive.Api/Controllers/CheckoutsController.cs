@@ -35,6 +35,7 @@ public class CheckoutsController : ControllerBase
     private readonly IAuditRecorder _audit;
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly IDocumentVersionComparer _comparer;
+    private readonly IDocumentPreviewService _documentPreviewService;
 
     public CheckoutsController(
         SimplArchiveDbContext dbContext,
@@ -45,7 +46,8 @@ public class CheckoutsController : ControllerBase
         ILegalHoldService legalHold,
         IAuditRecorder audit,
         IUserSystemRightsResolver userSystemRights,
-        IDocumentVersionComparer comparer)
+        IDocumentVersionComparer comparer,
+        IDocumentPreviewService documentPreviewService)
     {
         _dbContext = dbContext;
         _currentUserAccessor = currentUserAccessor;
@@ -56,6 +58,7 @@ public class CheckoutsController : ControllerBase
         _audit = audit;
         _userSystemRights = userSystemRights;
         _comparer = comparer;
+        _documentPreviewService = documentPreviewService;
     }
 
     // The per-user working-copy stash key (ADR "Check-out working-copy stash + exit guard"): a durable home for
@@ -108,6 +111,15 @@ public class CheckoutsController : ControllerBase
     public class WorkingCopyUploadResource : HypermediaResource
     {
         public Uri UploadUrl { get; set; } = null!;
+    }
+
+    // An inline preview of the WORKING COPY — what the user is about to check in, not what is archived.
+    // Plain mutable class, not a record — same XmlSerializer rationale as elsewhere.
+    public class CheckoutPreviewResource : HypermediaResource
+    {
+        public string PreviewUrl { get; set; } = string.Empty;
+
+        public bool PreviewConverted { get; set; }
     }
 
     // Inline unified text diff of the current version vs the working copy in check-out (the stash) — ADR 0513 slice 3.
@@ -278,11 +290,92 @@ public class CheckoutsController : ControllerBase
                     // The working copy against the current version (ADR 0517) — a rel, so the compare dialog
                     // stops rebuilding /checkouts/{id}/compare from an id it was handed (issue #416).
                     new Link("compare", $"/api/checkouts/{d.Id}/compare", "GET"),
+                    // An inline preview of the WORKING COPY — what you are about to check in, not what is
+                    // archived. Advertised only when a stash exists, because a check-out with nothing saved
+                    // to it has no working copy to show and a rel that 404s is worse than no rel (ADR 0543).
+                    .. hasStash
+                        ? new[] { new Link("preview", $"/api/checkouts/{d.Id}/preview", "GET") }
+                        : [],
                 ],
             });
         }
 
         return items;
+    }
+
+    // Inline preview of the WORKING COPY (ADR "Check-out tab shows what you are about to check in"). The
+    // Check-out tab's preview must show the edited file, not the archived version: the whole question the tab
+    // answers is "what am I about to check in?", and previewing the archived side would answer the opposite.
+    //
+    // Holder-only, like every other action here. 204 when there is no stash yet (nothing has been saved) or the
+    // format has no browser-viewable preview — the client shows "No preview available" rather than a blank pane.
+    [HttpGet("{documentId:guid}/preview")]
+    public async Task<IActionResult> Preview(Guid documentId, CancellationToken cancellationToken)
+    {
+        var held = await ResolveHeldCheckoutAsync(documentId, cancellationToken);
+        if (held.Refusal is { } refusal)
+        {
+            return refusal;
+        }
+
+        var (stashKey, version, _) = held;
+        if (version is null || !await _objectStorage.ExistsAsync(stashKey, cancellationToken))
+        {
+            return NoContent();
+        }
+
+        // The stash key is extensionless (ADR 0517), so the display name carries the format — the same extension
+        // the row already reports, taken from the current version's object key. Without it the rendition service
+        // sees no extension and hands back a raw .docx as a "preview".
+        var fileName = await _dbContext.Documents.Where(d => d.Id == documentId).Select(d => d.Name).SingleAsync(cancellationToken)
+            + System.IO.Path.GetExtension(version.ObjectKey);
+
+        // sourceMayHaveChanged: the stash is rewritten under this same key on every save over WebDAV, so the
+        // cached rendition would be the PREVIOUS edit's.
+        var preview = await _documentPreviewService.GetPreviewUrlAsync(
+            stashKey, PresignedUrlExpiry, fileName, cancellationToken, sourceMayHaveChanged: true);
+
+        return preview is null
+            ? NoContent()
+            : Ok(new CheckoutPreviewResource
+            {
+                PreviewUrl = preview.Url.ToString(),
+                PreviewConverted = preview.IsConverted,
+                Links = [new Link("self", $"/api/checkouts/{documentId}/preview", "GET")],
+            });
+    }
+
+    [HttpHead("{documentId:guid}/preview")]
+    public async Task<IActionResult> PreviewHead(Guid documentId, CancellationToken cancellationToken)
+    {
+        var held = await ResolveHeldCheckoutAsync(documentId, cancellationToken);
+        return held.Refusal
+            ?? (await _objectStorage.ExistsAsync(held.StashKey, cancellationToken) ? NoContent() : NotFound());
+    }
+
+    // The stash key + current version for a check-out THIS caller holds, or the response to return instead.
+    // Shared by the two preview actions so the holder-only rule is stated once.
+    private async Task<(string StashKey, DocumentVersion? Version, IActionResult? Refusal)> ResolveHeldCheckoutAsync(
+        Guid documentId, CancellationToken cancellationToken)
+    {
+        if (_currentUserAccessor.UserId is not { } userId || _currentTenantAccessor.TenantId is not { } tenantId)
+        {
+            return (string.Empty, null, Forbid());
+        }
+
+        var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken);
+        if (document is null)
+        {
+            return (string.Empty, null, NotFound());
+        }
+
+        if (document.CheckedOutByUserId != userId)
+        {
+            return (string.Empty, null, Forbid()); // only the lock holder may see their own working copy
+        }
+
+        var version = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, document.CurrentVersionId, cancellationToken);
+        return (StashKey(tenantId, userId, documentId), version, null);
     }
 
     // "Save to cloud" — a presigned PUT to the working-copy stash, so in-progress edits survive logout/close and

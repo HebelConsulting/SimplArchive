@@ -955,13 +955,12 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                        <!-- Actions: WebDAV settings (access/password dialog) + mount-and-open in the OS file manager
-                             over WebDAV (ADR "Desktop inbox WebDAV buttons"); file the current selection. -->
+                        <!-- Actions: ONE WebDAV button that does the next useful thing — set up, mount, or (when
+                             already mounted) open this tab's own folder straight away (ADR "One WebDAV button per
+                             tab, deep-linked"); file the current selection. -->
                         <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
-                            <Button Click="OnManageWebDav" Padding="10,4" ToolTip.Tip="{loc:Tr MwWebDavSettingsTip}">
-                                <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-cog-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwWebDavSettings}" /></StackPanel>
-                            </Button>
-                            <Button Click="OnOpenWebDavMount" Tag="Personal/Inbox" Padding="10,4" ToolTip.Tip="{loc:Tr MwOpenWebDavTip}">
+                            <Button Click="OnWebDavTabButton" Tag="Personal/Inbox" Padding="10,4"
+                                    AutomationProperties.AutomationId="inbox-webdav" ToolTip.Tip="{Binding WebDav.Tooltip}">
                                 <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-folder-network-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwOpenInFileManager}" /></StackPanel>
                             </Button>
                             <Button Click="OnInboxFileMultiple" Padding="10,4" IsVisible="{Binding CanFileMultiple}" ToolTip.Tip="{loc:Tr MwFileSelectedTip}">
@@ -1095,68 +1094,160 @@
                         </Border>
                     </Panel>
                 </TabItem.Header>
-                <DockPanel Margin="16" LastChildFill="True">
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
-                        <TextBlock Text="{loc:Tr CoHeader}" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center" />
-                        <Button Command="{Binding Checkout.RefreshCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}" Padding="6,2"><i:Icon Value="mdi-refresh" /></Button>
-                        <!-- WebDAV access: settings dialog + mount-and-open the SimplArchive resource in the OS file
-                             manager (the Check-out folder lives under it) — parity with the Inbox tab (ADR 0509). -->
-                        <Button Click="OnManageWebDav" Padding="10,4" ToolTip.Tip="{loc:Tr MwWebDavSettingsTip}">
-                            <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-cog-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwWebDavSettings}" /></StackPanel>
-                        </Button>
-                        <Button Click="OnOpenWebDavMount" Tag="Personal/Check-out" Padding="10,4" ToolTip.Tip="{loc:Tr MwOpenWebDavTip}">
-                            <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-folder-network-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwOpenInFileManager}" /></StackPanel>
-                        </Button>
-                    </StackPanel>
+                <!-- Outer grid so the preview full-screen overlay can cover the tab (tab strip stays reachable). -->
+                <Grid>
+                <Grid Margin="14" ColumnDefinitions="*,10,1.15*">
 
-                    <TextBlock DockPanel.Dock="Bottom" Text="{Binding Checkout.Status}" Foreground="{DynamicResource WbFaint}" FontSize="12" Margin="0,6,0,0" />
-                    <TextBlock DockPanel.Dock="Top" IsVisible="{Binding !Checkout.HasItems}" TextWrapping="Wrap"
-                               Text="{loc:Tr MwCheckoutEmpty}"
-                               Foreground="{DynamicResource WbFaint}" />
-                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,*,150,150,410" Margin="4,0,4,4" IsVisible="{Binding Checkout.HasItems}">
-                        <TextBlock Grid.Column="0" Text="{loc:Tr ColDocument}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource WbMuted}" />
-                        <TextBlock Grid.Column="1" Text="{loc:Tr CoColRepoPath}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource WbMuted}" />
-                        <TextBlock Grid.Column="2" Text="{loc:Tr CoColAutoRelease}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource WbMuted}" />
-                        <TextBlock Grid.Column="3" Text="{loc:Tr WorkflowStatus}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource WbMuted}" />
-                    </Grid>
-                    <ScrollViewer>
-                        <ItemsControl ItemsSource="{Binding Checkout.Items}">
-                            <ItemsControl.ItemTemplate>
+                    <!-- Left column: what you hold locked, and what can be done with each. Same shape as the
+                         Inbox tab, because it is the same kind of place — a staging area you also reach from
+                         your file manager (ADR "The Check-out tab shows what you are about to check in"). -->
+                    <Grid Grid.Column="0" RowDefinitions="Auto,*,Auto">
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+                            <TextBlock Text="{loc:Tr CoHeader}" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center" />
+                            <Button Command="{Binding Checkout.RefreshCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}" Padding="6,2"><i:Icon Value="mdi-refresh" /></Button>
+                        </StackPanel>
+
+                        <DockPanel Grid.Row="1" LastChildFill="True">
+                        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Checkout.Status}" Foreground="{DynamicResource WbFaint}" FontSize="12" Margin="0,6,0,0" />
+                        <TextBlock DockPanel.Dock="Top" IsVisible="{Binding !Checkout.HasItems}" TextWrapping="Wrap"
+                                   Text="{loc:Tr MwCheckoutEmpty}"
+                                   Foreground="{DynamicResource WbFaint}" />
+                        <!-- No column headers, and icon buttons rather than labelled ones: the list is half the
+                             window now, and the wide table this replaced pushed the document NAME off the left
+                             edge — the one column nobody can do without. Path and expiry ride under the name;
+                             everything else is a tooltip. Same shape as the Inbox list, for the same reason. -->
+                        <ListBox ItemsSource="{Binding Checkout.Items}" SelectedItem="{Binding Checkout.SelectedRow}"
+                                 Background="Transparent" BorderThickness="0">
+                            <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:CheckoutRowViewModel">
-                                    <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="4,8">
-                                        <Grid ColumnDefinitions="*,*,150,150,410">
-                                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                                <!-- A check-out nobody asked for says so, or it reads as a bug: the user saved a file on the
-                                                     mounted drive and the document silently became theirs (ADR 0562). The tooltip names the
-                                                     client that did it. -->
-                                                <Border IsVisible="{Binding IsImplicit}" ToolTip.Tip="{Binding ImplicitTooltip}"
-                                                        Background="#1A5B4EE5" BorderBrush="#5b4ee5" BorderThickness="1" CornerRadius="9" Padding="6,1" VerticalAlignment="Center">
-                                                    <TextBlock Text="{loc:Tr CoAuto}" FontSize="10" Foreground="#5b4ee5" />
-                                                </Border>
-                                            </StackPanel>
-                                            <TextBlock Grid.Column="1" Text="{Binding Path}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Grid.Column="2" Text="{Binding ExpiresText}" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource WbMuted}" />
-                                            <TextBlock Grid.Column="3" Text="{Binding StatusText}" VerticalAlignment="Center" FontSize="12" />
-                                            <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                                                <Button Content="{loc:Tr CoEdit}" Padding="8,3" ToolTip.Tip="{loc:Tr CoEditTip}"
-                                                        Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.EditCommand}" CommandParameter="{Binding}" />
-                                                <Button Content="{loc:Tr CoCompare}" Padding="8,3" IsVisible="{Binding CanCheckIn}" Tag="{Binding}" Click="OnCheckoutCompare" />
-                                                <Button Content="{loc:Tr CoCheckIn}" Padding="8,3" IsVisible="{Binding CanCheckIn}"
-                                                        Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.CheckInCommand}" CommandParameter="{Binding}" />
-                                                <Button Content="{loc:Tr MwDiscard}" Padding="8,3" IsVisible="{Binding CanDiscard}" Tag="{Binding}" Click="OnCheckoutDiscard" />
-                                                <Button Content="{loc:Tr Extend}" Padding="8,3" IsVisible="{Binding CanExtend}" ToolTip.Tip="{loc:Tr MwExtendCheckoutTip}"
-                                                        Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.ExtendCommand}" CommandParameter="{Binding}" />
-                                                <Button Content="{loc:Tr MwUnlock}" Padding="8,3" IsVisible="{Binding CanUnlock}"
-                                                        Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.UnlockCommand}" CommandParameter="{Binding}" />
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
+                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,3">
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
+                                            <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Path}" Foreground="{DynamicResource WbFaint}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+
+                                        <!-- Modified is the whole reason to look at this list, so it is a chip
+                                             rather than a word in a column: it is what the eye should find first. -->
+                                        <Border Grid.Column="1" IsVisible="{Binding IsModified}" Background="#5b4ee5" CornerRadius="3"
+                                                Padding="5,1" Margin="0,0,8,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{loc:Tr CoModified}" FontSize="10" Foreground="White" />
+                                        </Border>
+                                        <TextBlock Grid.Column="1" IsVisible="{Binding !IsModified}" Text="{Binding StatusText}"
+                                                   Foreground="{DynamicResource WbFaint}" FontSize="11" Margin="0,0,8,0" VerticalAlignment="Center" />
+
+                                        <!-- A check-out nobody asked for says so, or it reads as a bug: the user
+                                             saved a file on the mounted drive and the document silently became
+                                             theirs (ADR 0562). The tooltip names the client that did it. Carried
+                                             into the new row layout — the restructure must not quietly drop it. -->
+                                        <Border Grid.Column="2" IsVisible="{Binding IsImplicit}" ToolTip.Tip="{Binding ImplicitTooltip}"
+                                                Background="#1A5B4EE5" BorderBrush="#5b4ee5" BorderThickness="1" CornerRadius="9"
+                                                Padding="6,1" Margin="0,0,8,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{loc:Tr CoAuto}" FontSize="10" Foreground="#5b4ee5" />
+                                        </Border>
+
+                                        <Button Grid.Column="3" ToolTip.Tip="{loc:Tr CoEditTip}"
+                                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.EditCommand}" CommandParameter="{Binding}"><i:Icon Value="mdi-pencil-outline" /></Button>
+
+                                        <!-- Both compare affordances sit on the row itself for a MODIFIED document:
+                                             the in-app unified diff, and the user's own Beyond Compare. The second
+                                             is shown whether or not the tool is installed (ADR 0518) — without an
+                                             install it leads to the vendor, which is the only way anyone discovers
+                                             it exists. -->
+                                        <Button Grid.Column="4" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr CoCompare}" IsVisible="{Binding CanCheckIn}"
+                                                Tag="{Binding}" Click="OnCheckoutCompare"><i:Icon Value="mdi-compare-horizontal" /></Button>
+                                        <Button Grid.Column="5" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr CoBeyondCompare}" IsVisible="{Binding CanCheckIn}"
+                                                Tag="{Binding}" Click="OnCheckoutBeyondCompare"><i:Icon Value="mdi-compare" /></Button>
+
+                                        <Button Grid.Column="6" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr CoCheckIn}" IsVisible="{Binding CanCheckIn}"
+                                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.CheckInCommand}" CommandParameter="{Binding}"><i:Icon Value="mdi-check" /></Button>
+                                        <Button Grid.Column="7" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwDiscard}" IsVisible="{Binding CanDiscard}"
+                                                Tag="{Binding}" Click="OnCheckoutDiscard"><i:Icon Value="mdi-delete-outline" /></Button>
+                                        <Button Grid.Column="7" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwUnlock}" IsVisible="{Binding CanUnlock}"
+                                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.UnlockCommand}" CommandParameter="{Binding}"><i:Icon Value="mdi-lock-open-variant-outline" /></Button>
+                                        <Button Grid.Column="8" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwExtendCheckoutTip}" IsVisible="{Binding CanExtend}"
+                                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.ExtendCommand}" CommandParameter="{Binding}"><i:Icon Value="mdi-clock-plus-outline" /></Button>
+                                    </Grid>
                                 </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </DockPanel>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        </DockPanel>
+
+                        <!-- ONE WebDAV button, in the lower-left corner exactly as on the Inbox tab: the two tabs
+                             are the same kind of place, so the control that takes you there belongs in the same
+                             corner on both. It does the next useful thing — set up, mount, or open
+                             Personal/Check-out directly when already mounted (ADR "One WebDAV button per tab,
+                             deep-linked"). -->
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
+                            <Button Click="OnWebDavTabButton" Tag="Personal/Check-out" Padding="10,4"
+                                    AutomationProperties.AutomationId="checkout-webdav" ToolTip.Tip="{Binding WebDav.Tooltip}">
+                                <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-folder-network-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwOpenInFileManager}" /></StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <GridSplitter Grid.Column="1" Background="#33808080" ResizeDirection="Columns" HorizontalAlignment="Stretch" />
+
+                    <!-- Right column: index data (top) over the WORKING COPY's preview (bottom). Each is
+                         resizable + collapsible, as on the Inbox tab. -->
+                    <Grid Grid.Column="2">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="{Binding Checkout.MaskHeight, Mode=TwoWay}" />
+                            <RowDefinition Height="6" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="{Binding Checkout.PreviewHeight, Mode=TwoWay}" />
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0">
+                            <Grid ColumnDefinitions="*,Auto" Margin="12,6">
+                                <TextBlock Grid.Column="0" Text="{Binding Checkout.DetailTitle}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Command="{Binding Checkout.ToggleMaskCommand}" ToolTip.Tip="{loc:Tr MwCollapseExpand}"><i:Icon Value="{Binding Checkout.MaskCaret}" /></Button>
+                            </Grid>
+                        </Border>
+
+                        <!-- Index data is READ-ONLY here: it belongs to the archived document and is the same
+                             either side of an edit. Editing it is the Repositories tab's job. -->
+                        <Border Grid.Row="1" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0" IsVisible="{Binding !Checkout.MaskCollapsed}">
+                            <ScrollViewer>
+                                <StackPanel Margin="12,4" Spacing="6">
+                                    <TextBlock Text="{loc:Tr SelectDocDetail}" Foreground="{DynamicResource WbFaint}"
+                                               TextWrapping="Wrap" IsVisible="{Binding !Checkout.SelectedRow}" />
+                                    <ItemsControl ItemsSource="{Binding Checkout.IndexFields}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:IndexFieldViewModel">
+                                                <Grid ColumnDefinitions="180,*" Margin="0,3">
+                                                    <TextBlock Grid.Column="0" Text="{Binding FieldName}" Foreground="{DynamicResource WbMuted}" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding Values}" TextWrapping="Wrap" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+
+                        <GridSplitter Grid.Row="2" Background="#33808080" ResizeDirection="Rows" HorizontalAlignment="Stretch"
+                                      IsEnabled="{Binding !Checkout.MaskCollapsed}" />
+
+                        <Border Grid.Row="3" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,1,0,0">
+                            <Grid ColumnDefinitions="*,Auto" Margin="12,6">
+                                <TextBlock Grid.Column="0" Text="{loc:Tr CoWorkingCopyPreview}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Command="{Binding Checkout.TogglePreviewCommand}" ToolTip.Tip="{loc:Tr MwCollapseExpand}"><i:Icon Value="{Binding Checkout.PreviewCaret}" /></Button>
+                            </Grid>
+                        </Border>
+
+                        <!-- The WORKING COPY, not the archived version. Showing the archived side here would
+                             answer the opposite of the question this tab exists to answer. -->
+                        <Border Grid.Row="4" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0" IsVisible="{Binding !Checkout.PreviewCollapsed}">
+                            <v:PreviewPane DataContext="{Binding Checkout.Preview}" />
+                        </Border>
+                    </Grid>
+                </Grid>
+
+                    <Border IsVisible="{Binding Checkout.Preview.PreviewFullscreen}" ZIndex="100" Background="{DynamicResource WbChrome}">
+                        <v:PreviewPane DataContext="{Binding Checkout.Preview}" />
+                    </Border>
+                </Grid>
             </TabItem>
 
             <TabItem AutomationProperties.AutomationId="tour:tab-search" ToolTip.Tip="{loc:Tr TabSearch}">

@@ -681,6 +681,24 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // export"). Returns null when there's no open folder or no session, mirroring ExportAuditBytesAsync.
     public string ExportRootName => Breadcrumbs.Count > 0 ? Breadcrumbs[^1].Name : "Repository";
 
+    /// <summary>Where the Repositories tab is, as a path inside the WebDAV mount — empty at the root.</summary>
+    /// <remarks>
+    /// The mounted volume IS the tree-pane (ADR 0509), so the folder the user is looking at has a mount path,
+    /// and it is the breadcrumb trail: the first crumb is the "Repositories" label rather than a folder, so it
+    /// is dropped. Empty means "open the whole archive", which is what the button means with nothing selected —
+    /// deliberately not a no-op, because a button that does nothing reads as broken (it was reported as such).
+    /// </remarks>
+    public string WebDavFolderPath()
+    {
+        var segments = Breadcrumbs.Skip(1).Select(b => b.Name).ToList();
+
+        // A name carrying a slash would silently address a different folder. It cannot happen through this
+        // client, but the archive is not the only thing that writes to it, so refuse rather than mis-navigate.
+        return segments.Count == 0 || segments.Any(n => n.Contains('/'))
+            ? string.Empty
+            : string.Join('/', segments);
+    }
+
     // The open folder's name for the import target label — null at the repository-list root (a new repository).
     public string? CurrentFolderName => _currentFolderId is null || Breadcrumbs.Count == 0 ? null : Breadcrumbs[^1].Name;
 
@@ -3515,14 +3533,30 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
+        // The target folder's own address for its children, resolved ONCE for the whole drop. Filing per file
+        // through the id overload fetched the folder again for every file — following a rel must not cost a
+        // request per use (ADR 0557). It is also what the name-conflict prompt reads the siblings from.
+        string childrenHref;
+        try
+        {
+            childrenHref = (await _api.GetDocumentLinksAsync(folderId))["children"];
+        }
+        catch (Exception e)
+        {
+            Status = string.Format(Strings.Get("StErrUpload2"), files[0].Name, e.Message);
+            return;
+        }
+
         var uploaded = 0;
         var failed = 0;
         foreach (var file in files)
         {
+            // Declared out here so the name-conflict recovery below can re-file the SAME bytes rather than
+            // reading the file a second time.
+            byte[] bytes = [];
             try
             {
                 Status = string.Format(Strings.Get("StUploadingFile"), file.Name);
-                byte[] bytes;
                 await using (var stream = await file.OpenReadAsync())
                 using (var buffer = new MemoryStream())
                 {
@@ -3554,8 +3588,22 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     }
                 }
 
-                await _api.UploadFileAsync(folderId, file.Name, bytes);
+                await _api.UploadFileAsync(childrenHref, file.Name, bytes);
                 uploaded++;
+            }
+            catch (Services.DocumentNameTakenException) when (NameConflictDialog is not null)
+            {
+                // The name is taken. Reporting that and dropping the file is what made a drag-and-drop appear to
+                // do nothing, so ask what was meant instead (a new version, or a new name) and carry it out.
+                var resolver = new Services.UploadConflictResolver(_api);
+                if (await resolver.ResolveAsync(childrenHref, file.Name, bytes, NameConflictDialog, m => Status = m))
+                {
+                    uploaded++;
+                }
+                else
+                {
+                    failed++;
+                }
             }
             catch (Services.ApiActionException e)
             {
@@ -4161,6 +4209,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // Set by the view: shows the upload-time duplicate modal (ADR "Duplicate document detection") and returns the
     // user's choice (reference / file / cancel), or null if dismissed.
     public Func<DuplicatePromptRequest, Task<DuplicatePromptResult?>>? DuplicateUploadDialog { get; set; }
+
+    // Set by the view: shows the name-conflict modal when a dropped file's name is already taken in the target
+    // folder, and returns what the user meant (a new version / a new name), or null if dismissed. The decision
+    // and the filing that follows live in Services.UploadConflictResolver — only the window is the view's job.
+    public Func<Services.UploadConflictResolver.NameConflictRequest, Task<Services.UploadConflictResolver.NameConflictChoice?>>? NameConflictDialog { get; set; }
 
     public sealed record DuplicatePromptRequest(string FileName, IReadOnlyList<SimplArchiveApiClient.DuplicateInfo> Duplicates);
     public sealed record DuplicatePromptResult(string Action, Guid TargetId);

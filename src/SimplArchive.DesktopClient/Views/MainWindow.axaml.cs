@@ -82,6 +82,7 @@ public partial class MainWindow : Window
                 vm.ExtendRetentionDialog = name => new ExtendRetentionDialog(name).ShowDialog<string?>(this);
                 vm.SaveSearchNamePrompt = () => new NewFolderDialog("Save search", "Name this saved search").ShowDialog<string?>(this);
                 vm.DuplicateUploadDialog = req => new DuplicateUploadDialog(req).ShowDialog<MainWindowViewModel.DuplicatePromptResult?>(this);
+                vm.NameConflictDialog = req => new NameConflictDialog(req).ShowDialog<Services.UploadConflictResolver.NameConflictChoice?>(this);
                 vm.ShowReminderDialog = rvm => new ReminderDialog(rvm).ShowDialog(this);
                 vm.ShowExternalLinksDialog = evm =>
                 {
@@ -348,10 +349,57 @@ public partial class MainWindow : Window
             return;
         }
 
+        // The Repositories tab's folder is its context, exactly as Personal/Inbox is the Inbox tab's — the
+        // mounted volume IS the tree-pane (ADR 0509). With nothing selected the path is empty and the whole
+        // archive opens: the button still does what it says, rather than nothing.
+        await OpenWebDavAtAsync(vm, api, vm.WebDavFolderPath());
+    });
+
+    private void OnManageWebDav(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel { Api: { } api })
+        {
+            await new WebDavDialog(api).ShowDialog(this);
+        }
+    });
+
+    // The Inbox / Check-out tabs' single WebDAV button (ADR "One WebDAV button per tab, deep-linked"). It does
+    // the same next-useful-thing the ribbon button does — set up credentials, else mount, else open what is
+    // already mounted — with one difference that is the whole point of it being on a tab: when the volume is
+    // ALREADY mounted it opens that tab's own folder directly, not the mount root. The user pressed a button on
+    // the Inbox tab; landing them in the archive root and making them navigate is answering a question they did
+    // not ask.
+    //
+    // The button's Tag names the folder within the single mount ("Personal/Inbox", "Personal/Check-out").
+    private void OnWebDavTabButton(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel { Api: { } api } vm)
+        {
+            return;
+        }
+
+        await OpenWebDavAtAsync(vm, api, ((sender as Control)?.Tag as string ?? string.Empty).Trim('/'));
+    });
+
+    // Set up credentials, else mount, else open — landing in `subFolder` within the one mount. Shared by the
+    // ribbon and both tab buttons so "what does this button do next" is answered in one place; only the folder
+    // differs, and that is the tab's own context.
+    private async Task OpenWebDavAtAsync(MainWindowViewModel vm, Services.SimplArchiveApiClient api, string subFolder)
+    {
+        // Already mounted: no server round trip and no re-mount — go straight to the folder on disk.
         if (OsFileManager.MountedPath() is { } mounted)
         {
             vm.Status = Strings.Get("MwWebDavOpening");
-            await OsFileManager.OpenWebDavAsync(mounted);
+            var target = subFolder.Length == 0
+                ? mounted
+                : System.IO.Path.Combine(mounted, System.IO.Path.Combine(subFolder.Split('/')));
+            var opened = await OsFileManager.OpenLocalFolderAsync(target);
+
+            // Always report the outcome. The ribbon used to discard this result, so a failure left the status
+            // line reading "Opening SimplArchive …" for ever — which is how a dead button looks from outside.
+            vm.Status = opened.Success
+                ? Strings.Get("MwWebDavMounted")
+                : string.Format(Strings.Get("MwWebDavOpenFailed"), opened.Error);
             return;
         }
 
@@ -365,71 +413,12 @@ public partial class MainWindow : Window
         }
 
         vm.Status = Strings.Get("MwWebDavMounting");
-        var result = await OsFileManager.OpenWebDavAsync(status.Url.TrimEnd('/'));
+        var result = await OsFileManager.OpenWebDavFolderAsync(status.Url.TrimEnd('/'), subFolder);
         vm.Status = result.Success
             ? Strings.Get("MwWebDavMounted")
             : string.Format(Strings.Get("MwWebDavMountFailed"), result.Error);
         await vm.RefreshWebDavStateAsync();
-    });
-
-    private void OnManageWebDav(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel { Api: { } api })
-        {
-            await new WebDavDialog(api).ShowDialog(this);
-        }
-    });
-
-    // "Open in file manager" (Inbox tab): mount the user's Personal WebDAV folder (Inbox / Check-out / archive)
-    // and open it in Finder / Explorer / Files. When WebDAV isn't set up yet, open the settings dialog so the
-    // user can set a password there and then, instead of just hinting (ADR "Desktop inbox WebDAV buttons").
-    private void OnOpenWebDavMount(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel { Api: { } api } vm)
-        {
-            return;
-        }
-
-        // The button's Tag names a subfolder to deep-open WITHIN the single mount (e.g. "Personal/Check-out"), so
-        // the Inbox / Check-out buttons land the user straight in that folder; absent → open the SimplArchive root.
-        var subFolder = (sender as Control)?.Tag as string;
-
-        try
-        {
-            var status = await api.GetWebDavStatusAsync();
-            if (!status.Enabled)
-            {
-                vm.Status = "Set up a WebDAV password to mount your folder.";
-                await new WebDavDialog(api).ShowDialog(this);
-                return;
-            }
-
-            // Mount the single "SimplArchive" resource — the whole tree (Personal, with Inbox/Check-out, + the
-            // shared repositories) so the OS volume is named "SimplArchive" (ADR 0509) — then, when a subfolder is
-            // given, open straight into it within that one mount.
-            var baseUrl = status.Url.TrimEnd('/');
-            OsFileManager.OpenResult result;
-            if (string.IsNullOrWhiteSpace(subFolder))
-            {
-                vm.Status = "Opening SimplArchive (your Personal space + repositories) in your file manager…";
-                result = await OsFileManager.OpenWebDavAsync(baseUrl);
-            }
-            else
-            {
-                vm.Status = $"Opening {subFolder} in your file manager…";
-                result = await OsFileManager.OpenWebDavFolderAsync(baseUrl, subFolder);
-            }
-
-            if (!result.Success)
-            {
-                vm.Status = $"Could not open the WebDAV folder: {result.Error}";
-            }
-        }
-        catch (Exception ex)
-        {
-            vm.Status = $"Could not open the WebDAV folder: {ex.Message}";
-        }
-    });
+    }
 
     private void OnNotificationPreferences(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
@@ -586,6 +575,21 @@ public partial class MainWindow : Window
         var ccvm = new CompareCheckoutViewModel();
         await ccvm.SetupAsync(api, checkout, row.DisplayName, row.FileExtension, row.StashDownloadUrl);
         await new CompareCheckoutDialog(ccvm).ShowDialog(this);
+    });
+
+    // "Beyond Compare …" straight from the row — the same comparison the dialog offers, without opening the
+    // dialog first to reach it. A user who works this way wants the external tool, not the inline diff, and
+    // making them pass through the diff to get to it is a step that exists only because of how it was built.
+    private void OnCheckoutBeyondCompare(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel { Api: { } api } vm ||
+            (sender as Control)?.Tag is not CheckoutRowViewModel row)
+        {
+            return;
+        }
+
+        vm.Status = Strings.Get("StOpeningBc");
+        vm.Status = await CheckoutDiffLauncher.OpenAsync(api, row.Id, row.FileExtension, row.StashDownloadUrl);
     });
 
     private void OnManageAccess(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>

@@ -42,12 +42,16 @@ public class WebCheckoutTests
         await page.Locator(".wb-tab[aria-label=\"Check-out\"]").First.ClickAsync();
         var checkout = page.Locator(".wb-checkout");
         await Expect(checkout).ToBeVisibleAsync();
-        var checkoutRow = checkout.Locator("tr").Filter(new() { HasText = name });
+        // Rows are list rows, not table rows: the tab now has the Inbox's two-pane shape, so the list shares
+        // half the width with the detail panes and a wide table no longer fits.
+        var checkoutRow = checkout.Locator(".wb-list-row").Filter(new() { HasText = name });
         await Expect(checkoutRow).ToBeVisibleAsync();
 
-        // Cancel the check-out → confirm → it leaves the tab.
-        await checkoutRow.GetByRole(AriaRole.Button, new() { Name = "Cancel check-out" }).ClickAsync();
+        // Cancel the check-out → confirm → it leaves the tab. The row actions live in a per-row menu.
+        await checkoutRow.Locator("button.mud-icon-button").Last.ClickAsync();
+        // MudMenuItem renders as .mud-menu-item, not an ARIA menuitem — matching by role finds nothing.
+        await page.Locator(".mud-menu-item").Filter(new() { HasText = "Cancel check-out" }).First.ClickAsync();
         await page.Locator(".mud-dialog").GetByRole(AriaRole.Button, new() { Name = "Cancel check-out" }).ClickAsync();
-        await Expect(checkout.Locator("tr").Filter(new() { HasText = name })).Not.ToBeVisibleAsync();
+        await Expect(checkout.Locator(".wb-list-row").Filter(new() { HasText = name })).Not.ToBeVisibleAsync();
     }
 }

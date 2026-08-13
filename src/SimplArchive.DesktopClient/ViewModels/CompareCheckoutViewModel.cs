@@ -25,9 +25,6 @@ public sealed partial class CompareCheckoutViewModel : ObservableObject
 
     public ObservableCollection<DiffLineViewModel> Lines { get; } = [];
 
-    // Only offered when Beyond Compare is actually installed (a native-client capability).
-    public bool BeyondCompareAvailable { get; } = BeyondCompare.IsInstalled;
-
     public async Task SetupAsync(SimplArchiveApiClient api, SimplArchiveApiClient.CheckoutItem checkout, string documentName, string fileExtension, string? stashDownloadUrl)
     {
         _api = api;
@@ -65,36 +62,14 @@ public sealed partial class CompareCheckoutViewModel : ObservableObject
     [RelayCommand]
     private async Task OpenInBeyondCompare()
     {
-        // The button is always shown (ADR 0518) — if Beyond Compare isn't installed, send the user to the vendor.
-        if (!BeyondCompareAvailable)
-        {
-            SystemBrowser.Open("https://www.scootersoftware.com");
-            return;
-        }
-
-        if (_api is null || _stashDownloadUrl is null)
+        if (_api is null)
         {
             return;
         }
 
+        // The staging, the left/right order and the not-installed branch (ADR 0518) live in CheckoutDiffLauncher,
+        // which the Check-out row's own button also calls — one implementation, so the two cannot drift apart.
         Status = Strings.Get("StOpeningBc");
-        try
-        {
-            // Left: the current confirmed version (what the server diffs against). Right: the working-copy stash.
-            var current = await StageAsync(await _api.DownloadCurrentVersionAsync(_documentId), "current");
-            var working = await StageAsync(await _api.DownloadStashAsync(_stashDownloadUrl), "working");
-            Status = BeyondCompare.Launch(current, working) ? "" : "Could not launch Beyond Compare.";
-        }
-        catch (Exception e)
-        {
-            Status = string.Format(Strings.Get("StErrBeyondCompare"), e.Message);
-        }
-    }
-
-    private async Task<string> StageAsync(byte[] bytes, string label)
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"simplarchive-{label}-{Guid.NewGuid():N}{_fileExtension}");
-        await File.WriteAllBytesAsync(path, bytes);
-        return path;
+        Status = await CheckoutDiffLauncher.OpenAsync(_api, _documentId, _fileExtension, _stashDownloadUrl);
     }
 }

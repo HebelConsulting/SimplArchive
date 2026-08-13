@@ -7,6 +7,7 @@
 @inject SimplArchive.Client.Services.ApiRoot ApiRoot
 @inject SimplArchive.Client.Services.InboxUploads InboxUploads
 @inject SimplArchive.Client.Services.OcrLanguageCatalog OcrLanguages
+@inject SimplArchive.Client.Services.WebDavMountLink WebDavLink
 @implements IAsyncDisposable
 
 @* The Inbox tab of the workbench (ADR "S3-backed inbox"), extracted from Home.razor per ADR 0558.
@@ -24,7 +25,7 @@
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload" HtmlTag="label" for="inbox-file-input">@Strings.Get("InboxUpload")</MudButton>
         <InputFile id="inbox-file-input" OnChange="OnInboxInputChangeAsync" multiple style="display:none" />
         <MudButton Variant="Variant.Text" OnClick="LoadInboxAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.Refresh">@Strings.Get("RibbonRefresh")</MudButton>
-        <MudButton Variant="Variant.Text" OnClick="@(() => CopyWebDavUrl.InvokeAsync())" Class="ml-2" StartIcon="@Icons.Material.Filled.ContentCopy">@Strings.Get("InboxCopyDav")</MudButton>
+        <MudButton Variant="Variant.Text" OnClick="@(() => WebDavLink.CopyAsync(WebDavFolder))" Class="ml-2" StartIcon="@Icons.Material.Filled.ContentCopy">@Strings.Get("InboxCopyDav")</MudButton>
         @* Own-items-only by default; the switch reveals my group inboxes (ADR 0532). Disabled while
            viewing another user's inbox — the two selectors are mutually exclusive. *@
         <MudSwitch T="bool" Value="_inboxIncludeGroups" ValueChanged="ToggleInboxGroupsAsync" Color="Color.Primary"
@@ -197,8 +198,8 @@
     /// Copies the WebDAV mount URL. Stays in the shell because the Check-out tab offers the same action, and it
     /// is stateless — a candidate for a small shared service when the shell is finally thinned (PR 4).
     /// </summary>
-    [Parameter]
-    public EventCallback CopyWebDavUrl { get; set; }
+    /// <summary>This tab's folder inside the WebDAV mount — the desktop's button opens it; the web copies it.</summary>
+    private const string WebDavFolder = "Personal/Inbox";
 
     /// <summary>
     /// The document selected on the Repositories tab, offered as "file as a new version of it" (ADR 0286).

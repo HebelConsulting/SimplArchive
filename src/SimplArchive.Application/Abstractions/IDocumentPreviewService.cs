@@ -13,7 +13,12 @@ public interface IDocumentPreviewService
     // omits the preview link in that case so the client shows "No preview available" rather than a blank
     // pane; the failure isn't cached, so a later request retries. See ADR "Preview fallback when a rendition
     // can't be produced".
-    Task<DocumentPreview?> GetPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, CancellationToken cancellationToken = default);
+    // sourceMayHaveChanged: the bytes at objectKey can be REWRITTEN under the same key (the check-out
+    // working-copy stash is, on every save over WebDAV). The rendition cache is keyed on the source path, so
+    // reusing it there would serve the previous edit's rendition — a wrong document, shown confidently. Such a
+    // caller passes true and the rendition is regenerated. Leave it false for an immutable source (a confirmed
+    // document version), which is the overwhelming majority and must stay cached.
+    Task<DocumentPreview?> GetPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, CancellationToken cancellationToken = default, bool sourceMayHaveChanged = false);
 
     // The object key whose bytes the client actually displays for this document — the cached preview rendition
     // when the format needs one (generated on demand, like GetPreviewUrlAsync), else the original key. Used by

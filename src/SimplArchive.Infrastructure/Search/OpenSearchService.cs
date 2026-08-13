@@ -196,78 +196,147 @@ public sealed class OpenSearchService : ISearchService
             body["post_filter"] = new { @bool = new { filter = facetSelections.Select(s => s.Clause).ToArray() } };
         }
 
-        var request = JsonSerializer.Serialize(body, NullOmittingJson); // omit a null `highlight` on a filter-only search
-
         try
         {
-            _logger.LogDebug("Querying the search index for tenant {TenantId}.", tenantId);
-            using var message = new HttpRequestMessage(HttpMethod.Post, $"{Index}/_search")
-            {
-                Content = new StringContent(request, Encoding.UTF8, "application/json"),
-            };
-            using var response = await _http.SendAsync(message, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                // A 404 before the index exists is normal; anything else is a degraded search backend.
-                if (response.StatusCode != HttpStatusCode.NotFound)
-                {
-                    _logger.LogWarning("Search query returned {Status} for tenant {TenantId}.", response.StatusCode, tenantId);
-                }
+            var page = await ExecuteAsync(body, tenantId, take, facetFieldNames, cancellationToken);
 
-                return new SearchPage([], false);
+            // Partial-word fallback (ADR "Partial-word search fallback"). The index is analyzed with the standard
+            // analyzer, so every field holds WHOLE WORDS: a query that is only part of one — "montage" against
+            // "Montagehalterung", "sechskant" inside a longer compound — matches nothing whatsoever, which reads
+            // as a broken search rather than a strict one. Rather than ngram-index every field (a permanently
+            // larger index, and a reindex, to serve a minority of queries), retry ONCE with each term wrapped in
+            // wildcards. The expensive pass runs only when the precise one already came back empty, so an
+            // ordinary search pays nothing for it.
+            if (hasQuery && page.Hits.Count == 0 && WildcardClause(query) is { } wildcard)
+            {
+                _logger.LogDebug("No whole-word hits for tenant {TenantId}; retrying as a partial-word search.", tenantId);
+                body["query"] = new { @bool = new { must = new[] { wildcard }, filter = baseClauses.ToArray() } };
+                page = await ExecuteAsync(body, tenantId, take, facetFieldNames, cancellationToken);
             }
 
-            var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-            var hits = json.GetProperty("hits").GetProperty("hits");
-
-            var candidates = new List<SearchCandidate>();
-            foreach (var hit in hits.EnumerateArray())
-            {
-                if (!Guid.TryParse(hit.GetProperty("_id").GetString(), out var id))
-                {
-                    continue;
-                }
-
-                var source = hit.GetProperty("_source");
-                var name = source.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-                var isFolder = source.TryGetProperty("isFolder", out var f) && f.GetBoolean();
-                Guid? parentId = source.TryGetProperty("parentId", out var p)
-                    && p.ValueKind == JsonValueKind.String && Guid.TryParse(p.GetString(), out var g) ? g : null;
-                candidates.Add(new SearchCandidate(id, name, isFolder, parentId, ExtractHighlight(hit)));
-            }
-
-            var hasMore = candidates.Count > take;
-
-            SearchFacets? facets = null;
-            if (json.TryGetProperty("aggregations", out var aggregations))
-            {
-                var fieldFacets = new List<SearchFieldFacet>();
-                for (var i = 0; i < facetFieldNames.Count; i++)
-                {
-                    var fieldBuckets = ParseNestedTerms(aggregations, $"field_{i}");
-                    if (fieldBuckets.Count > 0)
-                    {
-                        fieldFacets.Add(new SearchFieldFacet(facetFieldNames[i], fieldBuckets));
-                    }
-                }
-
-                facets = new SearchFacets(
-                    ParseFilteredTerms(aggregations, "documentType"),
-                    ParseFilteredTerms(aggregations, "createdBy"),
-                    SortYearsDescending(ParseFilteredTerms(aggregations, "documentYear")),
-                    ParseFilteredTerms(aggregations, "tags"),
-                    ParseFilteredTerms(aggregations, "fileType"),
-                    ParseFilteredTerms(aggregations, "sensitivityLabel"),
-                    fieldFacets);
-            }
-
-            return new SearchPage(candidates.Take(take).ToList(), hasMore, facets);
+            return page;
         }
         catch (Exception e)
         {
             _logger.LogWarning(e, "Search query failed for tenant {TenantId}; returning an empty page.", tenantId);
             return new SearchPage([], false);
         }
+    }
+
+    // Sends one prepared search body and parses the response into a page. Its own method because the
+    // partial-word fallback above runs the identical shape a second time with a different `query` clause.
+    private async Task<SearchPage> ExecuteAsync(
+        Dictionary<string, object?> body, Guid tenantId, int take, List<string> facetFieldNames, CancellationToken cancellationToken)
+    {
+        var request = JsonSerializer.Serialize(body, NullOmittingJson); // omit a null `highlight` on a filter-only search
+
+        _logger.LogDebug("Querying the search index for tenant {TenantId}.", tenantId);
+        using var message = new HttpRequestMessage(HttpMethod.Post, $"{Index}/_search")
+        {
+            Content = new StringContent(request, Encoding.UTF8, "application/json"),
+        };
+        using var response = await _http.SendAsync(message, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            // A 404 before the index exists is normal; anything else is a degraded search backend.
+            if (response.StatusCode != HttpStatusCode.NotFound)
+            {
+                _logger.LogWarning("Search query returned {Status} for tenant {TenantId}.", response.StatusCode, tenantId);
+            }
+
+            return new SearchPage([], false);
+        }
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        var hits = json.GetProperty("hits").GetProperty("hits");
+
+        var candidates = new List<SearchCandidate>();
+        foreach (var hit in hits.EnumerateArray())
+        {
+            if (!Guid.TryParse(hit.GetProperty("_id").GetString(), out var id))
+            {
+                continue;
+            }
+
+            var source = hit.GetProperty("_source");
+            var name = source.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+            var isFolder = source.TryGetProperty("isFolder", out var f) && f.GetBoolean();
+            Guid? parentId = source.TryGetProperty("parentId", out var p)
+                && p.ValueKind == JsonValueKind.String && Guid.TryParse(p.GetString(), out var g) ? g : null;
+            candidates.Add(new SearchCandidate(id, name, isFolder, parentId, ExtractHighlight(hit)));
+        }
+
+        var hasMore = candidates.Count > take;
+
+        SearchFacets? facets = null;
+        if (json.TryGetProperty("aggregations", out var aggregations))
+        {
+            var fieldFacets = new List<SearchFieldFacet>();
+            for (var i = 0; i < facetFieldNames.Count; i++)
+            {
+                var fieldBuckets = ParseNestedTerms(aggregations, $"field_{i}");
+                if (fieldBuckets.Count > 0)
+                {
+                    fieldFacets.Add(new SearchFieldFacet(facetFieldNames[i], fieldBuckets));
+                }
+            }
+
+            facets = new SearchFacets(
+                ParseFilteredTerms(aggregations, "documentType"),
+                ParseFilteredTerms(aggregations, "createdBy"),
+                SortYearsDescending(ParseFilteredTerms(aggregations, "documentYear")),
+                ParseFilteredTerms(aggregations, "tags"),
+                ParseFilteredTerms(aggregations, "fileType"),
+                ParseFilteredTerms(aggregations, "sensitivityLabel"),
+                fieldFacets);
+        }
+
+        return new SearchPage(candidates.Take(take).ToList(), hasMore, facets);
+    }
+
+    // The same fields the whole-word query searches, with the same boosts.
+    private static readonly (string Field, double Boost)[] FreeTextFields =
+        [("name", 3), ("indexValues", 2), ("annotations", 2), ("content", 1)];
+
+    /// <summary>Each term of <paramref name="query"/> as <c>*term*</c> across the free-text fields, or null if
+    /// there is nothing to match on.</summary>
+    /// <remarks>
+    /// <para>
+    /// Built as individual <c>wildcard</c> clauses rather than a <c>query_string</c> so the user's text is never
+    /// parsed as query syntax — a stray <c>(</c> or <c>:</c> would otherwise turn a search into a 400, and
+    /// escaping a mini-language correctly is a recurring source of exactly that.
+    /// </para>
+    /// <para>
+    /// Terms are ANDed (each must match SOME field) while fields are ORed within a term. A fallback is already
+    /// the loose pass; ORing the terms as well would make a two-word search return everything containing either.
+    /// The term is lowercased because the standard analyzer lowercases what it indexed, and <c>wildcard</c>
+    /// matches the stored token as-is — an uppercase pattern would match nothing.
+    /// </para>
+    /// </remarks>
+    private static object? WildcardClause(string query)
+    {
+        var terms = query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (terms.Length == 0)
+        {
+            return null;
+        }
+
+        var perTerm = terms.Select(object (term) => new
+        {
+            @bool = new
+            {
+                should = FreeTextFields.Select(object (f) => new
+                {
+                    wildcard = new Dictionary<string, object>
+                    {
+                        [f.Field] = new { value = $"*{term.ToLowerInvariant()}*", boost = f.Boost },
+                    },
+                }).ToArray(),
+                minimum_should_match = 1,
+            },
+        }).ToArray();
+
+        return new { @bool = new { must = perTerm } };
     }
 
     // Parses a filter-wrapped keyword terms aggregation (`<name>.v.buckets`) into facet buckets. Each dimension

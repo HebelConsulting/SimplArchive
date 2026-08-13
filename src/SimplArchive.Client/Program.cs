@@ -105,6 +105,11 @@ builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().Cre
 // against a scoped-per-request host.
 builder.Services.AddScoped<SimplArchive.Client.Services.ApiRoot>();
 
+// Owns what to do when a dropped file collides with an existing name (the dialog + the two outcomes), so the
+// workbench page does not (ADR 0558).
+builder.Services.AddScoped<SimplArchive.Client.Services.UploadConflictResolver>();
+builder.Services.AddScoped<SimplArchive.Client.Services.WebDavMountLink>();
+
 // The UI language is applied at the WASM runtime level via Blazor.start({ applicationCulture }) in index.html
 // (ADR "Web UI localization — shared resources") — set before the app runs, so the resx accessor resolves to
 // that language on the first render (no live switch; the switcher persists the choice and reloads).

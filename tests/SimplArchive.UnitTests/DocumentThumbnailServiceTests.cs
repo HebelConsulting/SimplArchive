@@ -156,7 +156,7 @@ public class DocumentThumbnailServiceTests
         public Task<IReadOnlyList<string>> GetDisplayObjectKeysAsync(string objectKey, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<string>>([_displayKey]);
 
-        public Task<DocumentPreview?> GetPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, CancellationToken cancellationToken = default) =>
+        public Task<DocumentPreview?> GetPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, CancellationToken cancellationToken = default, bool sourceMayHaveChanged = false) =>
             Task.FromResult<DocumentPreview?>(null);
 
         public Task<PreviewPages?> GetPreviewPagesAsync(string objectKey, TimeSpan expiry, string? fileName = null, CancellationToken cancellationToken = default) =>

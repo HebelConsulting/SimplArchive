@@ -8,9 +8,10 @@ namespace SimplArchive.DesktopClient.Services;
 
 // Mounts a WebDAV folder and opens it in the OS file manager (ADR "Desktop inbox via WebDAV" + "Fix
 // open-in-file-manager"). Native WebDAV mounting is OS-specific:
-//   • macOS  → one osascript that mounts the volume AND opens it in Finder + brings Finder forward. `mount
-//     volume` alone mounts silently WITHOUT opening a window (the original bug — nothing appeared to happen),
-//     so we capture the mounted disk and `open` it. osascript reports a mount failure via a non-zero exit.
+//   • macOS  → one osascript that mounts the volume AND opens it, because `mount volume` alone mounts silently
+//     without opening a window (the original bug — nothing appeared to happen). It opens the volume by PATH:
+//     `mount volume` returns no value, so capturing its result fails with -2753 "The variable d is not defined",
+//     most reliably when the volume is already mounted. osascript reports a mount failure via a non-zero exit.
 //   • Windows → `explorer` on the DavWWWRoot UNC path (the WebClient redirector mounts + opens a window).
 //   • Linux  → `xdg-open "davs://…"` (GVFS/Nautilus mounts + opens).
 // Command construction is a pure function (unit-tested); the launch is async so the mount's credential prompt
@@ -33,13 +34,16 @@ public static class OsFileManager
         var uri = new Uri(httpUrl);
         return platform switch
         {
-            // Mount, capture the disk, open it in Finder and bring Finder to the front — all in ONE -e script
-            // (each -e is a separate context, so the mount + open must share one script to share the `d` variable).
-            Platform.MacOs => ("osascript", new[]
-            {
-                "-e",
-                $"set d to (mount volume \"{httpUrl}\")\ntell application \"Finder\"\nactivate\nopen d\nend tell",
-            }),
+            // macOS MOUNTS ONLY; the caller opens the mount point afterwards (OpenWebDavFolderAsync).
+            //
+            // Two field failures put the open outside this script. `mount volume` returns NOTHING, so the old
+            // `set d to (mount volume …)` failed with -2753 "The variable d is not defined" — most reliably when
+            // the volume was already mounted. Opening a path derived from the URL instead then failed with "The
+            // file /Volumes/… does not exist", because macOS SUFFIXES a colliding volume name: a second
+            // SimplArchive mounts at /Volumes/SimplArchive-1, and no name derived from the URL can know that.
+            // The only reliable answer is to ask the OS where it put the mount, which needs the mount to have
+            // finished — so it cannot happen inside this script.
+            Platform.MacOs => ("osascript", new[] { "-e", $"mount volume \"{httpUrl}\"" }),
             Platform.Linux => ("xdg-open", new[] { ToDavScheme(uri) }),
             _ => ("explorer.exe", new[] { ToWindowsUnc(uri) }),
         };
@@ -49,10 +53,68 @@ public static class OsFileManager
     // thread) and reports success/failure. On macOS a non-zero osascript exit (e.g. the server is unreachable or
     // auth was cancelled) is surfaced; explorer.exe returns non-zero even on success and xdg-open just hands off,
     // so those are treated as fire-and-forget.
-    public static Task<OpenResult> OpenWebDavAsync(string httpUrl)
+    public static Task<OpenResult> OpenWebDavAsync(string httpUrl) => OpenWebDavFolderAsync(httpUrl, "");
+
+    /// <summary>Mounts if needed, waits for the mount to appear, and opens <paramref name="relativeFolder"/> in it.</summary>
+    /// <remarks>
+    /// <para>
+    /// The open is a separate step from the mount, against the mount point the OS actually chose (see
+    /// <see cref="MountedPathFor"/>). Doing it inside the AppleScript meant opening a path guessed from the URL,
+    /// which is wrong as soon as a second SimplArchive is mounted and macOS suffixes the name.
+    /// </para>
+    /// <para>
+    /// The wait exists because `mount volume` returns before the mount point is registered — opening immediately
+    /// after it produced "The file /Volumes/… does not exist" on a mount that had in fact just succeeded.
+    /// </para>
+    /// </remarks>
+    public static async Task<OpenResult> OpenWebDavFolderAsync(string httpBaseUrl, string relativeFolder)
     {
-        var (fileName, arguments) = BuildOpenCommand(httpUrl, Current);
-        return RunAsync(fileName, arguments, macOsChecksExit: Current == Platform.MacOs);
+        var baseUrl = httpBaseUrl.TrimEnd('/');
+        var relative = relativeFolder.Trim('/');
+
+        if (MountedPathFor(baseUrl) is null)
+        {
+            var (fileName, arguments) = BuildOpenCommand(baseUrl, Current);
+            var mount = await RunAsync(fileName, arguments, macOsChecksExit: Current == Platform.MacOs);
+            if (!mount.Success)
+            {
+                return mount;
+            }
+
+            // Non-macOS platforms mount AND open in the one command, so there is nothing left to do.
+            if (Current != Platform.MacOs)
+            {
+                return mount;
+            }
+        }
+
+        var mountPoint = await WaitForMountAsync(baseUrl);
+        if (mountPoint is null)
+        {
+            return new OpenResult(false, $"The volume for {baseUrl} did not appear.");
+        }
+
+        return await OpenLocalFolderAsync(relative.Length == 0
+            ? mountPoint
+            : System.IO.Path.Combine(mountPoint, System.IO.Path.Combine(relative.Split('/'))));
+    }
+
+    // `mount volume` returns before the mount point is registered, so poll briefly rather than open a path that
+    // is about to exist. Short and bounded: this runs off the UI thread, and a mount that has not appeared in a
+    // few seconds has not appeared.
+    private static async Task<string?> WaitForMountAsync(string baseUrl)
+    {
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            if (MountedPathFor(baseUrl) is { } found)
+            {
+                return found;
+            }
+
+            await Task.Delay(250);
+        }
+
+        return null;
     }
 
     // Runs the mount/open command on a background thread and reports success/failure. On macOS a non-zero
@@ -102,6 +164,10 @@ public static class OsFileManager
     //   • macOS  → osascript: mount the volume, then `open` the POSIX path /Volumes/<name>/<relativePath>.
     //   • Windows → `cmd /c start` on the DavWWWRoot UNC file path (the WebClient redirector fetches + opens it).
     //   • Linux  → `xdg-open` the davs:// file URL (GVFS mounts + opens it in the default app).
+    // /Volumes/<name>, where <name> is the LAST path segment of the WebDAV URL — macOS names the mounted volume
+    // after it, which is exactly why the single resource is served at /SimplArchive (ADR 0509).
+    private static string MacVolumePath(Uri baseUri) => $"/Volumes/{baseUri.AbsolutePath.Trim('/').Split('/')[^1]}";
+
     public static (string FileName, string[] Arguments) BuildOpenWebDavFileCommand(string httpBaseUrl, string relativePath, Platform platform)
     {
         var baseUri = new Uri(httpBaseUrl.TrimEnd('/'));
@@ -109,12 +175,13 @@ public static class OsFileManager
         switch (platform)
         {
             case Platform.MacOs:
-                var volumeName = baseUri.AbsolutePath.Trim('/').Split('/')[^1];
-                var posixPath = $"/Volumes/{volumeName}/{rel}";
+                var posixPath = $"{MacVolumePath(baseUri)}/{rel}";
                 return ("osascript", new[]
                 {
                     "-e",
-                    $"set d to (mount volume \"{httpBaseUrl.TrimEnd('/')}\")\ndo shell script \"open \" & quoted form of \"{posixPath}\"",
+                    // Same -2753 trap as BuildOpenCommand: `mount volume` returns nothing, so its result must
+                    // not be captured. Nothing here needed it — it was captured only out of symmetry.
+                    $"mount volume \"{httpBaseUrl.TrimEnd('/')}\"\ndo shell script \"open \" & quoted form of \"{posixPath}\"",
                 });
             case Platform.Linux:
                 var escaped = string.Join('/', rel.Split('/').Select(Uri.EscapeDataString));
@@ -127,19 +194,60 @@ public static class OsFileManager
 
     // Opens a single file inside the WebDAV mount in its native application (ADR 0513). Reuses the same background
     // runner as OpenWebDavAsync so the mount's credential prompt can't block the UI thread.
-    public static Task<OpenResult> OpenWebDavFileAsync(string httpBaseUrl, string relativePath)
+    public static async Task<OpenResult> OpenWebDavFileAsync(string httpBaseUrl, string relativePath)
     {
+        // macOS: same reasoning as OpenWebDavFolderAsync — mount, wait, then open the path the OS actually
+        // chose. Deriving it from the URL opens the WRONG SERVER'S file when two SimplArchives are mounted.
+        if (Current == Platform.MacOs)
+        {
+            var baseUrl = httpBaseUrl.TrimEnd('/');
+            if (MountedPathFor(baseUrl) is null)
+            {
+                var mount = await RunAsync("osascript", ["-e", $"mount volume \"{baseUrl}\""], macOsChecksExit: true);
+                if (!mount.Success)
+                {
+                    return mount;
+                }
+            }
+
+            if (await WaitForMountAsync(baseUrl) is not { } mountPoint)
+            {
+                return new OpenResult(false, $"The volume for {baseUrl} did not appear.");
+            }
+
+            var relative = relativePath.Trim('/');
+            return await OpenLocalFolderAsync(System.IO.Path.Combine(mountPoint, System.IO.Path.Combine(relative.Split('/'))));
+        }
+
         var (fileName, arguments) = BuildOpenWebDavFileCommand(httpBaseUrl, relativePath, Current);
-        return RunAsync(fileName, arguments, macOsChecksExit: Current == Platform.MacOs);
+        return await RunAsync(fileName, arguments, macOsChecksExit: false);
     }
 
-    // Opens a FOLDER inside the single WebDAV mount in the file manager (mounting the volume first) — e.g. the
-    // desktop Inbox / Check-out "Open in file manager" buttons open "Personal/Inbox" / "Personal/Check-out"
-    // directly, within the one "SimplArchive" mount (ADR 0509). Same mechanism as opening a file: on macOS `open`
-    // on a directory lands Finder there, on Windows `start` on the folder UNC opens Explorer, on Linux xdg-open
-    // opens the davs:// folder.
-    public static Task<OpenResult> OpenWebDavFolderAsync(string httpBaseUrl, string relativeFolder) =>
-        OpenWebDavFileAsync(httpBaseUrl, relativeFolder);
+    // The (executable, argument list) that opens an ALREADY-MOUNTED local folder in the file manager. Pure
+    // (unit-tested); the run is OpenLocalFolderAsync.
+    //
+    // Distinct from the WebDAV commands above because there is nothing left to mount: `MountedPath()` has already
+    // said the volume is there, so re-issuing `mount volume` would ask the OS to redo work it has done — and on
+    // macOS that is what makes the difference between Finder coming forward and a spinner while the mount is
+    // re-negotiated. This is the command behind the "already mounted → go straight to the folder" branch.
+    public static (string FileName, string[] Arguments) BuildOpenLocalFolderCommand(string path, Platform platform) =>
+        platform switch
+        {
+            Platform.MacOs => ("open", new[] { path }),
+            Platform.Windows => ("explorer.exe", new[] { path.Replace('/', '\\') }),
+            _ => ("xdg-open", new[] { path }),
+        };
+
+    /// <summary>Opens a folder that is already on the filesystem (a mounted volume, or a path inside one).</summary>
+    public static Task<OpenResult> OpenLocalFolderAsync(string path)
+    {
+        var (fileName, arguments) = BuildOpenLocalFolderCommand(path, Current);
+
+        // `open` reports a missing path with a non-zero exit, which is worth surfacing: the deep-link folder can
+        // legitimately not exist yet (an empty Inbox creates no directory), and silently doing nothing is the
+        // failure mode this whole button exists to remove.
+        return RunAsync(fileName, arguments, macOsChecksExit: Current == Platform.MacOs);
+    }
 
     // https://host:443/webdav/Inbox → davs://host:443/webdav/Inbox ; http → dav.
 
@@ -156,15 +264,120 @@ public static class OsFileManager
     /// A filesystem/DriveInfo check, not a network probe: the question is "does the user already have this on
     /// their desktop", and asking the server would answer a different one. Cheap enough to call per render.
     /// </remarks>
-    public static string? MountedPath() =>
-        Current switch
+    /// <summary>Where THIS server's WebDAV URL is mounted, or <c>null</c>.</summary>
+    /// <remarks>
+    /// <para>
+    /// Asks the OS which mount point belongs to this URL rather than deriving one from the URL's last path
+    /// segment, because that derivation is wrong the moment a second SimplArchive is mounted. macOS suffixes a
+    /// colliding volume name, so two servers both served at <c>/SimplArchive</c> become
+    /// <c>/Volumes/SimplArchive</c> and <c>/Volumes/SimplArchive-1</c> — and which one got the bare name is
+    /// simply whichever mounted first.
+    /// </para>
+    /// <para>
+    /// The failure that matters there is not the one you see. Deriving the name made an app connected to server
+    /// B find server A's mount and deep-link into ITS files: no error, no warning, the wrong archive. Matching on
+    /// the URL cannot do that — a mount point either belongs to this server or is not returned.
+    /// </para>
+    /// </remarks>
+    public static string? MountedPathFor(string httpBaseUrl)
+    {
+        var wanted = httpBaseUrl.TrimEnd('/');
+        return Current switch
         {
-            Platform.MacOs => System.IO.Directory.Exists($"/Volumes/{VolumeName}") ? $"/Volumes/{VolumeName}" : null,
+            // `mount` prints "<source> on <point> (type, …)"; the source is the mounted URL.
+            Platform.MacOs => MountEntries()
+                .FirstOrDefault(e => string.Equals(e.Source.TrimEnd('/'), wanted, StringComparison.OrdinalIgnoreCase)).Point,
             Platform.Windows => System.IO.DriveInfo.GetDrives()
                 .FirstOrDefault(d => d.DriveType == System.IO.DriveType.Network && VolumeLabelOf(d) == VolumeName)?.Name,
-            // gvfs mounts land under a per-user runtime dir and carry the scheme in the directory name.
             _ => GvfsDavMount(),
         };
+    }
+
+    // The (source, point) pairs `mount` reports. Best-effort: if it can't be run, callers fall back to treating
+    // the volume as not mounted, which costs a redundant mount attempt rather than opening the wrong thing.
+    private static IEnumerable<(string Source, string Point)> MountEntries()
+    {
+        string output;
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo("/sbin/mount")
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true,
+            });
+            if (process is null)
+            {
+                yield break;
+            }
+
+            output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+        }
+        catch (Exception)
+        {
+            yield break;
+        }
+
+        foreach (var entry in ParseMountOutput(output))
+        {
+            yield return entry;
+        }
+    }
+
+    // Pure (unit-tested) so the parsing is pinned without running `mount`.
+    public static IEnumerable<(string Source, string Point)> ParseMountOutput(string output)
+    {
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            // "<source> on <point> (type, …)" — the point ends at the space before the parenthesised options,
+            // and a mount point may legitimately contain spaces ("/Volumes/My Disk").
+            var on = line.IndexOf(" on ", StringComparison.Ordinal);
+            var options = line.LastIndexOf(" (", StringComparison.Ordinal);
+            if (on > 0 && options > on)
+            {
+                yield return (line[..on], line[(on + 4)..options]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Where THIS CLIENT'S server is mounted, or <c>null</c> — matched by host, not by volume name.
+    /// </summary>
+    /// <remarks>
+    /// The name test this replaced (<c>Directory.Exists("/Volumes/SimplArchive")</c>) answers the wrong
+    /// question. Every SimplArchive is served at <c>/SimplArchive</c> (ADR 0509), so every one of them wants
+    /// that volume name and macOS gives the bare name to whichever mounted first, suffixing the rest. A client
+    /// connected to server B therefore saw server A's mount, concluded "already mounted", and deep-linked into
+    /// A'S FILES — no error, no warning, the wrong archive. Matching the mount's SOURCE host against the server
+    /// this client is talking to cannot confuse two servers, whatever the volumes ended up being called.
+    /// </remarks>
+    public static string? MountedPath() => MountedPathForHost(DesktopClientOptions.ApiBaseUrl);
+
+    /// <summary>The mount whose source is served by the same host:port as <paramref name="serverUrl"/>.</summary>
+    public static string? MountedPathForHost(string serverUrl)
+    {
+        if (!Uri.TryCreate(serverUrl, UriKind.Absolute, out var server))
+        {
+            return null;
+        }
+
+        return Current switch
+        {
+            Platform.MacOs => MountEntries()
+                .Where(e => e.Point.StartsWith("/Volumes/", StringComparison.Ordinal))
+                .Where(e => Uri.TryCreate(e.Source, UriKind.Absolute, out var src)
+                            && string.Equals(src.Host, server.Host, StringComparison.OrdinalIgnoreCase)
+                            && src.Port == server.Port)
+                .Select(e => e.Point)
+                // `mount` keeps listing a WebDAV volume whose server has gone away, and opening one of those
+                // hands the user a Finder window that hangs. "Mounted" has to mean reachable, not merely listed.
+                .FirstOrDefault(System.IO.Directory.Exists),
+            Platform.Windows => System.IO.DriveInfo.GetDrives()
+                .FirstOrDefault(d => d.DriveType == System.IO.DriveType.Network && VolumeLabelOf(d) == VolumeName)?.Name,
+            _ => GvfsDavMount(),
+        };
+    }
 
     private static string? VolumeLabelOf(System.IO.DriveInfo drive)
     {

@@ -3912,6 +3912,60 @@
   <data name="ExtLinkPagePageCount" xml:space="preserve">
     <value>{0} páginas</value>
   </data>
+  <data name="NcTitle" xml:space="preserve">
+    <value>Ese nombre ya se usa aquí</value>
+  </data>
+  <data name="NcIntro" xml:space="preserve">
+    <value>Ya existe un documento llamado «{0}» en esta carpeta. ¿Qué quieres hacer?</value>
+  </data>
+  <data name="NcAsVersion" xml:space="preserve">
+    <value>Archivar como nueva versión de ese documento</value>
+  </data>
+  <data name="NcAsVersionHint" xml:space="preserve">
+    <value>Se conserva el historial: los datos de índice permanecen y la versión anterior sigue disponible.</value>
+  </data>
+  <data name="NcAsNew" xml:space="preserve">
+    <value>Archivar como documento nuevo con otro nombre</value>
+  </data>
+  <data name="NcAsNewHint" xml:space="preserve">
+    <value>Úsalo cuando sean dos documentos distintos que casualmente comparten nombre.</value>
+  </data>
+  <data name="NcNewName" xml:space="preserve">
+    <value>Nombre nuevo</value>
+  </data>
+  <data name="NcNameRequired" xml:space="preserve">
+    <value>Introduce un nombre</value>
+  </data>
+  <data name="NcComment" xml:space="preserve">
+    <value>Comentario</value>
+  </data>
+  <data name="NcCommentHint" xml:space="preserve">
+    <value>¿Qué ha cambiado? (opcional)</value>
+  </data>
+  <data name="NcFile" xml:space="preserve">
+    <value>Archivar</value>
+  </data>
+  <data name="NcIntroFolder" xml:space="preserve">
+    <value>En esta carpeta ya existe una <b>carpeta</b> llamada «{0}», por lo que este archivo necesita un nombre distinto.</value>
+  </data>
+  <data name="NcAsVersionFolder" xml:space="preserve">
+    <value>No disponible: el elemento con ese nombre es una carpeta, no un documento.</value>
+  </data>
+  <data name="MwWebDavOpenFailed" xml:space="preserve">
+    <value>No se pudo abrir la carpeta: {0}</value>
+  </data>
+  <data name="StErrBeyondCompareLaunch" xml:space="preserve">
+    <value>No se pudo iniciar Beyond Compare.</value>
+  </data>
+  <data name="CoBeyondCompare" xml:space="preserve">
+    <value>Beyond Compare…</value>
+  </data>
+  <data name="CoWorkingCopyPreview" xml:space="preserve">
+    <value>Copia de trabajo</value>
+  </data>
+  <data name="CoHeldN" xml:space="preserve">
+    <value>{0} documento(s) desprotegido(s).</value>
+  </data>
   <data name="CoAuto" xml:space="preserve">
     <value>automático</value>
   </data>

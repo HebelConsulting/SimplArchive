@@ -305,7 +305,7 @@ async function uploadFiles(dotNetRef, folderId, files) {
             }
 
             // .NET finalizes (server-side hash), sets index data, and assigns the default mask.
-            await dotNetRef.invokeMethodAsync('FinalizeUploadAsync', target.documentId, target.versionId, file.name, null);
+            await dotNetRef.invokeMethodAsync('FinalizeUploadAsync', target.documentId, target.versionId, file.name, target.comment ?? null);
         } catch (err) {
             await dotNetRef.invokeMethodAsync('ReportUploadFailureAsync', file.name, String(err));
         }

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
@@ -21,7 +22,103 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     // Invoked after a check-in / unlock / discard, so the Repositories list (lock glyphs) + the tab count refresh.
     public Func<Task>? OnChanged { get; set; }
 
-    public void Setup(SimplArchiveApiClient api) => _api = api;
+    public void Setup(SimplArchiveApiClient api)
+    {
+        _api = api;
+        Preview.Api = api;
+        Preview.StatusReporter = m => Report(m);
+    }
+
+    // ---- Detail panes (ADR "The Check-out tab shows what you are about to check in") -------------------
+    //
+    // The tab used to be a bare table: to see what you had actually edited you left it, found the document in
+    // Repositories, and looked at the ARCHIVED version — the one thing that is definitely not your edit. It now
+    // has the Inbox tab's shape, a list beside index data over a preview, because they are the same kind of
+    // place. The state lives here rather than on MainWindowViewModel, which is the largest entry on the
+    // 1000-line debt list and where this would otherwise have added a dozen more properties.
+
+    /// <summary>The working copy's preview — NOT the archived version (ADR 0543's `preview` rel on the row).</summary>
+    public PreviewViewModel Preview { get; } = new();
+
+    public ObservableCollection<IndexFieldViewModel> IndexFields { get; } = [];
+
+    [ObservableProperty] private string _detailTitle = "";
+
+    [ObservableProperty] private bool _maskCollapsed;
+
+    [ObservableProperty] private bool _previewCollapsed;
+
+    public string MaskCaret => MaskCollapsed ? "mdi-chevron-down" : "mdi-chevron-up";
+
+    public string PreviewCaret => PreviewCollapsed ? "mdi-chevron-down" : "mdi-chevron-up";
+
+    [ObservableProperty] private GridLength _maskHeight = new(1.1, GridUnitType.Star);
+
+    [ObservableProperty] private GridLength _previewHeight = new(1.6, GridUnitType.Star);
+
+    partial void OnMaskCollapsedChanged(bool value) => OnPropertyChanged(nameof(MaskCaret));
+
+    partial void OnPreviewCollapsedChanged(bool value) => OnPropertyChanged(nameof(PreviewCaret));
+
+    [RelayCommand]
+    private void ToggleMask() => MaskCollapsed = !MaskCollapsed;
+
+    [RelayCommand]
+    private void TogglePreview() => PreviewCollapsed = !PreviewCollapsed;
+
+    /// <summary>The row whose working copy the detail panes describe.</summary>
+    [ObservableProperty] private CheckoutRowViewModel? _selectedRow;
+
+    partial void OnSelectedRowChanged(CheckoutRowViewModel? value) => _ = LoadDetailAsync(value);
+
+    private async Task LoadDetailAsync(CheckoutRowViewModel? row)
+    {
+        IndexFields.Clear();
+        if (_api is null || row?.Item is not { } item)
+        {
+            DetailTitle = "";
+            Preview.Reset(Strings.Get("SelectDocDetail"));
+            return;
+        }
+
+        DetailTitle = row.DisplayName;
+        Preview.Reset(Strings.Get("StLoading"));
+
+        // Index data belongs to the DOCUMENT and is the same either side of an edit — a working copy carries no
+        // metadata of its own. The preview is the half that must come from the working copy.
+        try
+        {
+            foreach (var field in await _api.GetIndexDataAsync(row.Id))
+            {
+                IndexFields.Add(new IndexFieldViewModel
+                {
+                    FieldName = field.FieldName,
+                    Values = string.Join(", ", field.Values),
+                });
+            }
+        }
+        catch (Exception)
+        {
+            // Index data is context, not the point of this pane; failing to read it must not cost the preview.
+        }
+
+        try
+        {
+            var preview = await _api.GetCheckoutPreviewAsync(item);
+            if (preview is null)
+            {
+                // No working copy saved yet, or a format with no browser-viewable form. Both are ordinary.
+                Preview.Reset(Strings.Get("NoPreview"));
+                return;
+            }
+
+            await Preview.RenderAsync(preview);
+        }
+        catch (Exception)
+        {
+            Preview.Reset(Strings.Get("NoPreview"));
+        }
+    }
 
     public ObservableCollection<CheckoutRowViewModel> Items { get; } = [];
 
@@ -45,6 +142,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
         }
 
         Items.Clear();
+        SelectedRow = null;
         try
         {
             foreach (var item in await _api.GetCheckoutsAsync())

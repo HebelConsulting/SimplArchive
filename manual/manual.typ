@@ -136,6 +136,28 @@ belongs to something already filed, and how many you have. They all end in the s
 proxies them). *The Inbox* is a staging area: drop scans or files there, then classify each one (name, document
 type, index data) and *file* it into the archive.
 
+*When the name is already taken.*#idx("Name conflict") A folder cannot hold two things of the same name, so filing
+`Invoice.pdf` where an `Invoice` already sits asks you what you meant rather than refusing:
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt + luma(80%),
+  inset: 6pt,
+  [*Choice*], [*What happens*],
+  [*A new version of that document*], [The usual answer: the file is a newer revision of what is already there.
+   The document keeps its index data and its history, and the previous version stays available.],
+  [*A new document with a different name*], [The two are genuinely different documents that happen to share a
+   file name. A free name is offered — `Invoice (2)` — and you can change it.],
+)
+
+Either way you can add a *comment* saying what this file is, which becomes the version's comment. There is no
+"overwrite": nothing in SimplArchive replaces content in place, and the honest equivalent is a new version.
+
+#note[
+  If the name is held by a *folder* rather than a document, only the second choice is possible — a folder has no
+  versions to add one to.
+]
+
 *Versions.*#idx("Version comment") Uploading a new file to an existing document adds a *version* — the history is preserved. The
 *Versions* dialog lists every version; you can compare two of them or *make current* an older one. When you upload
 a file that already exists, SimplArchive warns you of the *duplicate*.
@@ -173,11 +195,30 @@ repositories you have permission to access, with your rights enforced on every o
 called *SimplArchive* and mirrors the Repositories tree exactly: your Personal space, then the repositories you
 can see, and nothing else.
 
-The *WebDAV* button on the Repositories ribbon does the next useful thing rather than always the same thing, and
-its tooltip says which. In the *desktop client*: if the drive is already mounted it opens the folder; if you have
-credentials it mounts the drive and then opens it (on Windows as a persistent drive letter, S: or the next one
-free); and if you have no credentials yet it opens the setup dialog. So "show me my documents in Finder" is one
-click once you are set up.
+The *WebDAV* button does the next useful thing rather than always the same thing, and its tooltip says which. In
+the *desktop client*: if you have no credentials yet it opens the setup dialog; if you have credentials it mounts
+the drive and opens it (on Windows as a persistent drive letter, S: or the next one free); and if the drive is
+already mounted it goes straight there. So "show me my documents in Finder" is one click once you are set up.
+
+*It opens where you already are.*#idx("WebDAV deep link") There is one button per tab, and each opens *its own*
+folder inside the drive rather than the top of the archive:
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt + luma(80%),
+  inset: 6pt,
+  [*Where you press it*], [*What opens*],
+  [*Repositories* ribbon], [The folder selected in the tree — the drive mirrors the tree exactly, so "where I am"
+   and "which folder on the drive" are the same place. With nothing selected, the whole archive opens.],
+  [*Inbox* tab, lower left], [Your *Inbox* folder.],
+  [*Check-out* tab, lower left], [Your *Check-out* folder, where working copies live.],
+)
+
+#note[
+  *If you connect to more than one SimplArchive* — a local one and a hosted one, say — your computer cannot give
+  both drives the same name, so the second is called something like *SimplArchive-1*. The button always opens the
+  drive belonging to the server you are signed in to, whichever name it ended up with.
+]
 
 The setup dialog shows the *mount URL* and your *username* (your e-mail), each with a *Copy* button, and a
 *Generate* button that issues an app-specific *WebDAV password* — separate from your login password and shown
@@ -255,6 +296,12 @@ type, date, sensitivity, and more — and you can *save* a search to re-run or s
 #pair("screenshots/web-search.png", "screenshots/desktop-search.png",
   [Full-text search with refinement filters and facets, in the web (left) and desktop (right) clients.])
 
+*Parts of words.*#idx("Partial-word search") Search matches whole words first, which is what keeps the most
+relevant document at the top. If that finds nothing, the search is retried looking for your text *inside* words —
+so `montage` finds a document that only ever says `Montagehalterung`, and `sechskant` finds the longer compound
+containing it. This matters most in German, where one word does the work of several. The second attempt is
+slower and its ranking is flatter, so it only runs when the first found nothing at all.
+
 = Collaboration
 
 Documents are collaborative: post *comments*#idx("Chat / comments") in a feed, attach *annotations*#idx("Annotations") (sticky notes, highlights, and shapes)
@@ -275,6 +322,33 @@ it tells you both what people said and what changed.
 #pair("screenshots/web-my-work.png", "screenshots/desktop-checkout.png",
   [Left: the *My work* dashboard. Right: the *Check-out* tab listing documents locked for exclusive editing —
    here one edited (_Modified_) and one untouched (_Unchanged_).])
+
+*Seeing your edit before you commit it.*#idx("Working copy") The *Check-out* tab#idx("Check-out") shows what you
+are *about to check in*, not what is already archived. Select a document you hold and the pane beside the list
+shows its index data and a preview of your *working copy* — the file as you have edited it. That is the version
+the *Check in* action will create, so you can look at it before committing, without leaving the tab to go and
+find the archived copy (which would show you the one thing that is certainly not your edit).
+
+A document you have edited is marked *Modified*, and only those offer the actions that make sense for an edit:
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt + luma(80%),
+  inset: 6pt,
+  [*Action*], [*What it does*],
+  [*Compare*], [An inline, side-by-side view of what changed between the archived version and your working copy.],
+  [*Beyond Compare*], [Opens the same two files in Beyond Compare, if you use it — a desktop-only convenience,
+   since a browser is not allowed to launch another application. Not affiliated with SimplArchive; the button
+   points you to the vendor if you do not have it.],
+  [*Check in*], [Files your working copy as a new version and releases the lock.],
+  [*Discard*], [Throws the working copy away and releases the lock, leaving the archived version untouched.],
+)
+
+#note[
+  If you have not saved anything to your working copy yet, the preview stays empty rather than showing the
+  archived version. There is genuinely nothing to preview, and showing the archived file there would be
+  answering a different question.
+]
 
 = Sharing outside SimplArchive
 

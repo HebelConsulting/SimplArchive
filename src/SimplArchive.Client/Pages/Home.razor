@@ -13,6 +13,7 @@
 @inject SimplArchive.Client.Services.ImpersonationService ImpersonationSvc
 @inject SimplArchive.Client.Services.AppNavigationState AppNav
 @inject SimplArchive.Client.Services.ApiRoot ApiRoot
+@inject SimplArchive.Client.Services.UploadConflictResolver UploadConflicts
 @inject SimplArchive.Client.Services.DocumentActions Actions
 @inject SimplArchive.Client.Services.BulkActions Bulk
 @inject SimplArchive.Client.Services.BrowseService Browse
@@ -748,11 +749,11 @@
                 <InboxTab CurrentFolderId="_selectedFolder?.Id" CurrentFolderName="@(_selectedFolder?.Name)"
                           CurrentDocumentId="@(_selectedItem is { IsFolder: false, IsReference: false } d ? (Guid?)d.Id : null)"
                           CurrentDocumentName="@(_selectedItem?.Name)"
-                          MyUserId="_myUserId" CanManageInboxes="_canManageInboxes" CopyWebDavUrl="CopyWebDavUrlAsync" />
+                          MyUserId="_myUserId" CanManageInboxes="_canManageInboxes" />
             }
             else if (_activeTab == Tab.Checkout)
             {
-                <CheckoutTab Checkouts="_checkouts" Refresh="LoadCheckoutsAsync" OpenRequested="NavigateToDocumentAsync" CopyWebDavUrl="CopyWebDavUrlAsync" />
+                <CheckoutTab Checkouts="_checkouts" Refresh="LoadCheckoutsAsync" OpenRequested="NavigateToDocumentAsync" />
             }
             else if (_activeTab == Tab.Tenant)
             {
@@ -2769,7 +2770,9 @@
 
     // ---- Upload orchestration (called from dropUpload.js) --------------------------------------------
 
-    public record UploadTarget(string DocumentId, string VersionId, string UploadUrl);
+    // Comment: the filing note the user typed in the name-conflict dialog, carried through so FinalizeUploadAsync
+    // can set it as the version comment (ADR 0528). Null for an ordinary drop, which asks for nothing.
+    public record UploadTarget(string DocumentId, string VersionId, string UploadUrl, string? Comment = null);
 
     [JSInvokable]
     public Task OnUploadsStartingAsync(int count)
@@ -2848,11 +2851,15 @@
             var stem = System.IO.Path.GetFileNameWithoutExtension(fileName);
             var extension = System.IO.Path.GetExtension(fileName);
 
-            var create = await Http.PostAsJsonAsync($"api/documents/{folderId}/children", new { name = stem });
+            var childrenHref = $"api/documents/{folderId}/children";
+            var create = await Http.PostAsJsonAsync(childrenHref, new { name = stem });
             if (create.StatusCode == HttpStatusCode.Conflict)
             {
-                Snackbar.Add(string.Format(Strings.Get("StUploadNameTaken"), fileName), Severity.Warning);
-                return null;
+                // Taken: ask what was meant rather than warning and dropping the file, which made a drag-and-drop
+                // look like it had done nothing (UploadConflictResolver owns the decision — ADR 0558).
+                return await UploadConflicts.ResolveAsync(childrenHref, fileName, stem, extension) is { } r
+                    ? new UploadTarget(r.DocumentId.ToString(), r.VersionId.ToString(), r.UploadUrl, r.Comment)
+                    : null;
             }
             if (create.StatusCode == HttpStatusCode.Forbidden)
             {
@@ -3165,34 +3172,6 @@
     // Copies the WebDAV mount URL of the caller's Personal folder (which holds the Inbox, Check-out, and personal
     // archive) so the user can paste it into their OS "Connect to Server" dialog (ADR "WebDAV Inbox/Check-out
     // under Personal"). A browser can't mount WebDAV itself, so this is copy-to-clipboard rather than a launch.
-    private async Task CopyWebDavUrlAsync()
-    {
-        try
-        {
-            var status = await Http.GetFromJsonAsync<WebDavStatusDto>(await ApiRoot.RequireMeAsync("webdavPassword"));
-            if (status is not { Enabled: true } || string.IsNullOrEmpty(status.Url))
-            {
-                Snackbar.Add(Strings.Get("StSetUpWebDavFirst"), Severity.Info);
-                return;
-            }
-
-            // The single "SimplArchive" resource (ADR 0509) — mounting it lists the whole tree (Personal, with
-            // Inbox/Check-out, + the shared repositories).
-            var mountUrl = status.Url.TrimEnd('/');
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", mountUrl);
-            Snackbar.Add(string.Format(Strings.Get("StCopiedWebDavUrl"), mountUrl), Severity.Success);
-        }
-        catch (Exception)
-        {
-            Snackbar.Add(Strings.Get("StErrCopyWebDavUrl"), Severity.Error);
-        }
-    }
-
-    private record WebDavStatusDto
-    {
-        public bool Enabled { get; set; }
-        public string Url { get; set; } = "";
-    }
 
 
     // The rels the OPEN document's resource advertised (set when the detail pane loads).
