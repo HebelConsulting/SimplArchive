@@ -1125,7 +1125,16 @@
                                 <DataTemplate x:DataType="vm:CheckoutRowViewModel">
                                     <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="4,8">
                                         <Grid ColumnDefinitions="*,*,150,150,410">
-                                            <TextBlock Grid.Column="0" Text="{Binding DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                <!-- A check-out nobody asked for says so, or it reads as a bug: the user saved a file on the
+                                                     mounted drive and the document silently became theirs (ADR 0562). The tooltip names the
+                                                     client that did it. -->
+                                                <Border IsVisible="{Binding IsImplicit}" ToolTip.Tip="{Binding ImplicitTooltip}"
+                                                        Background="#1A5B4EE5" BorderBrush="#5b4ee5" BorderThickness="1" CornerRadius="9" Padding="6,1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{loc:Tr CoAuto}" FontSize="10" Foreground="#5b4ee5" />
+                                                </Border>
+                                            </StackPanel>
                                             <TextBlock Grid.Column="1" Text="{Binding Path}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Grid.Column="2" Text="{Binding ExpiresText}" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource WbMuted}" />
                                             <TextBlock Grid.Column="3" Text="{Binding StatusText}" VerticalAlignment="Center" FontSize="12" />

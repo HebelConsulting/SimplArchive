@@ -81,6 +81,16 @@ public class Document : ITenantScoped, IConcurrencyTracked, ISoftDeletable
     // per check-out. Set by the sweep; cleared on release/acquire (independent of the CheckedOut* pairing).
     public DateTimeOffset? CheckoutReminderSentAt { get; set; }
 
+    // The client that caused an IMPLICIT check-out — the User-Agent of the WebDAV request whose save-by-rename
+    // took the lock (ADR 0562). Null for an explicit check-out, which is the whole point: this is how a client
+    // tells "checked out because I pressed the button" from "checked out because I opened the file", and the
+    // latter needs explaining to someone who never pressed anything.
+    //
+    // Evidence, never a condition: nothing branches on this value. It arrives from the request, so it is
+    // client-supplied and untrusted — length-capped on write, rendered escaped — and it is cleared with the rest
+    // of the check-out fields on release.
+    public string? ImplicitCheckoutAgent { get; set; }
+
     // Import provenance for idempotent re-import — see ADR "Idempotent re-import". Both null for a natively-
     // created document; set to the exporting instance's tenant id + the archive's original document id when this
     // row was created by an import. A partial unique index on (TenantId, OriginTenantId, OriginDocumentId) makes

@@ -500,11 +500,25 @@ public sealed partial class WebDavMiddleware
             return;
         }
 
-        // Don't file OS clutter (._*, .DS_Store, Thumbs.db, …) or other transient/editor temp files (~$*, .tmp,
-        // .swp, …) as documents in the permanent archive — accept + silently discard (ADR "WebDAV clutter filter").
-        if (IsOsClutter(fileName) || IsTransientClutter(fileName))
+        // Don't file OS clutter (._*, .DS_Store, Thumbs.db, …) as documents in the permanent archive — accept +
+        // silently discard (ADR "WebDAV clutter filter").
+        if (IsOsClutter(fileName))
         {
             context.Response.StatusCode = StatusCodes.Status201Created;
+            return;
+        }
+
+        // An editor temp / owner sidecar (~$*, .tmp, .swp, …) is BUFFERED in the per-user scratch area rather
+        // than discarded (ADR 0562). Discarding it is what made editing in place fail for a suite that saves by
+        // rename: it writes the new content to a temporary name and then renames that over the original, so a
+        // discarded temp leaves the committing MOVE with no source. The Check-out folder has buffered these
+        // since ADR 0508; this is the same thing one level out, in the tree where the document actually lives.
+        //
+        // Still never a document: nothing here creates or names a row, the scratch prefix is outside the mounted
+        // structure (ADR 0509), and an abandoned buffer is just an orphan object, exactly as under Check-out.
+        if (IsTransientClutter(fileName))
+        {
+            await StageTreeScratchAsync(context, services, fileName, user);
             return;
         }
 
@@ -895,6 +909,14 @@ public sealed partial class WebDavMiddleware
         // final name — if the source is a staged download-temp, materialize the real document from the staged
         // bytes (ADR "WebDAV .crdownload staging"). Falls through to a normal move when nothing is staged.
         if (IsDownloadTemp(segments[^1]) && await TryCommitDownloadTempAsync(context, services, db, user, segments))
+        {
+            return;
+        }
+
+        // Commit-on-rename for a save-by-rename edit: the source is a buffered editor temp and the destination is
+        // an existing document, so this rename IS the save. Turns it into an implicit check-out with the bytes in
+        // the user's stash (ADR 0562) — never a silent new version, and never a second document beside the first.
+        if (await TryCommitImplicitCheckoutAsync(context, services, db, user, segments))
         {
             return;
         }
@@ -1328,6 +1350,109 @@ public sealed partial class WebDavMiddleware
 
     // Per-user scratch area for the Check-out folder's in-flight atomic-save temp files (ADR 0508) — the same
     // tier as inbox/ and checkout/ (ADR 0368). A temp is committed to the doc's stash on the rename MOVE.
+    // Buffers an editor temp / owner sidecar written in the TREE into the per-user scratch area (ADR 0562).
+    // Keyed by name only: the rename that commits it names the same file, and the scratch prefix is per user, so
+    // two people editing different documents cannot collide unless they use the same temp name at the same
+    // moment — in which case the loser's buffer is overwritten and their editor's rename fails, which is the
+    // same outcome it would get from a local disk.
+    private static async Task StageTreeScratchAsync(HttpContext context, IServiceProvider services, string fileName, User user)
+    {
+        var storage = services.GetRequiredService<IObjectStorageClient>();
+        await using var buffered = new MemoryStream();
+        await context.Request.Body.CopyToAsync(buffered, context.RequestAborted);
+        buffered.Position = 0;
+
+        var key = CheckoutScratchPrefix(user) + fileName;
+        var existed = await storage.ExistsAsync(key, context.RequestAborted);
+        await storage.PutObjectAsync(key, buffered, context.Request.ContentType ?? "application/octet-stream", context.RequestAborted);
+        context.Response.StatusCode = existed ? StatusCodes.Status204NoContent : StatusCodes.Status201Created;
+    }
+
+    // A rename whose source is a buffered temp and whose destination is an existing document: the save-by-rename
+    // commit (ADR 0562). Returns false when this is an ordinary move, so the caller falls through.
+    //
+    // What it deliberately does NOT do: detect that the edit has finished, check in, or cancel. The document is
+    // left checked out with the bytes in the stash, which is the accurate description of what happened — the
+    // person editing decides when it is done, by checking in.
+    private async Task<bool> TryCommitImplicitCheckoutAsync(
+        HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments)
+    {
+        var storage = services.GetRequiredService<IObjectStorageClient>();
+        var scratchKey = CheckoutScratchPrefix(user) + segments[^1];
+        if (!await storage.ExistsAsync(scratchKey, context.RequestAborted))
+        {
+            return false;
+        }
+
+        var destSegments = ParseDestination(context);
+        if (destSegments is null || destSegments.Count < 2 || IsSpecialPath(destSegments))
+        {
+            return false;
+        }
+
+        var destination = await ResolveAsync(db, user, destSegments);
+        if (destination?.Document is not { } document || destination.IsCollection)
+        {
+            return false; // renaming a temp onto a NEW name is an ordinary create, handled elsewhere
+        }
+
+        // Every refusal the API path applies, applied here too: a mount must not be a side door (ADR 0562).
+        var rights = await RightsAsync(services, user, document.Id);
+        if (!rights.CanEditContent)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return true;
+        }
+
+        var legalHold = services.GetRequiredService<ILegalHoldService>();
+        if (await legalHold.IsFrozenAsync(document.Id, context.RequestAborted))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return true;
+        }
+
+        // Held by someone else: refuse the write rather than letting the editor believe it saved. 423 is what a
+        // WebDAV client understands, and it is what the lock store already returns elsewhere.
+        if (document.CheckedOutByUserId is { } holder && holder != user.Id)
+        {
+            context.Response.StatusCode = StatusCodes.Status423Locked;
+            return true;
+        }
+
+        var isNewCheckout = document.CheckedOutByUserId is null;
+        if (isNewCheckout)
+        {
+            document.CheckedOutByUserId = user.Id;
+            document.CheckedOutAt = DateTimeOffset.UtcNow;
+            document.CheckoutReminderSentAt = null;
+
+            // Evidence of WHAT took the lock, for someone who never pressed "check out". Client-supplied, so it
+            // is capped and never branched on (ADR 0562).
+            var agent = context.Request.Headers.UserAgent.ToString();
+            document.ImplicitCheckoutAgent = string.IsNullOrWhiteSpace(agent)
+                ? "(unidentified WebDAV client)"
+                : agent[..Math.Min(agent.Length, 256)];
+        }
+
+        // The bytes land in the same stash an explicit check-out uses, so check-in, discard, the Check-out tab
+        // and the stale sweep all work on this exactly as they already do.
+        await storage.CopyObjectAsync(scratchKey, CheckoutStashKey.Build(user.TenantId, user.Id, document.Id), context.RequestAborted);
+        await storage.DeleteObjectAsync(scratchKey, context.RequestAborted);
+        await db.SaveChangesAsync(context.RequestAborted);
+
+        if (isNewCheckout)
+        {
+            var audit = services.GetRequiredService<IAuditRecorder>();
+            await audit.RecordAsync(
+                Controllers.AuditActions.DocumentCheckedOutImplicitly, "Document", document.Id, document.Name,
+                $"checked out automatically by {document.ImplicitCheckoutAgent} saving over WebDAV",
+                cancellationToken: context.RequestAborted);
+        }
+
+        context.Response.StatusCode = StatusCodes.Status204NoContent;
+        return true;
+    }
+
     private static string CheckoutScratchPrefix(User user) => $"tenants/{user.TenantId}/users/{user.Id}/checkout-scratch/";
 
     private static async Task<List<SpecialFile>> CheckoutScratchFilesAsync(IObjectStorageClient storage, User user)

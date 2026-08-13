@@ -2621,7 +2621,9 @@ public sealed class SimplArchiveApiClient
 
     // A held check-out, carrying the addresses its own row advertised (ADR 0543/0555): `checkin`,
     // `working-copy`, `extend` and — only when there is a stash to diff — `compare`.
-    public sealed record CheckoutItem(Guid Id, string Name, string Path, string Sha256, string FileExtension, bool HasStash, bool IsModified, string? StashDownloadUrl, DateTimeOffset? ExpiresAt, IReadOnlyDictionary<string, string>? Links = null)
+    // ImplicitAgent: the client that took this lock without the user asking — a save-by-rename edit over the
+    // WebDAV mount (ADR 0562); null for an explicit check-out. Client-supplied text: display it, never act on it.
+    public sealed record CheckoutItem(Guid Id, string Name, string Path, string Sha256, string FileExtension, bool HasStash, bool IsModified, string? StashDownloadUrl, DateTimeOffset? ExpiresAt, IReadOnlyDictionary<string, string>? Links = null, string? ImplicitAgent = null)
     {
         public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
     }
@@ -2707,7 +2709,8 @@ public sealed class SimplArchiveApiClient
                     i.TryGetProperty("isModified", out var im) && im.ValueKind == JsonValueKind.True,
                     i.TryGetProperty("stashDownloadUrl", out var sdu) && sdu.ValueKind == JsonValueKind.String ? sdu.GetString() : null,
                     i.TryGetProperty("expiresAt", out var ea) && ea.ValueKind == JsonValueKind.String ? ea.GetDateTimeOffset() : null,
-                    ParseLinks(i)));
+                    ParseLinks(i),
+                    i.TryGetProperty("implicitAgent", out var ia) && ia.ValueKind == JsonValueKind.String ? ia.GetString() : null));
             }
         }
 

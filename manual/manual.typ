@@ -162,6 +162,12 @@ appear in several places without copying it. *Tags*#idx("Tags") label documents 
 curated tag catalogue with colours. *Sensitivity labels*#idx("Sensitivity label") mark how confidential a document is. Every user also has a
 *personal repository*#idx("Personal repository") for private documents.
 
+
+#shot("screenshots/web-tags.png",
+  [The tag catalogue: curated, colour-coded tags an administrator maintains for the whole tenant.])
+
+= Working from your file manager (WebDAV)
+
 The whole archive is reachable over *WebDAV*#idx("WebDAV") as a network drive — not just your personal space but the shared
 repositories you have permission to access, with your rights enforced on every operation. The mounted drive is
 called *SimplArchive* and mirrors the Repositories tree exactly: your Personal space, then the repositories you
@@ -187,8 +193,45 @@ the values to paste into them.
   [The web client's WebDAV dialog: the mount URL, your username and the one-shot password, each with a copy
    button, and the mount steps for the operating system you are using.])
 
-#shot("screenshots/web-tags.png",
-  [The tag catalogue: curated, colour-coded tags an administrator maintains for the whole tenant.])
+== Editing a document in place
+
+Open a document from the mounted drive, change it, save it — that is the whole gesture, and it works the way you
+would expect from any network drive.
+
+What happens underneath is worth knowing, because it changes what other people see. Simple editors write the file
+straight back, and the change becomes a new version immediately. An *office suite*, however, never overwrites a
+file in place: it writes a hidden companion file, then a temporary copy of the new content, and finally renames
+that copy over the original. SimplArchive recognises that sequence and turns it into a *check-out* — the same
+one you get from pressing *Check out* in the app.
+
+So after saving from your file manager:
+
+- the document is *checked out to you*, and appears on your *Check-out* tab marked *automatic*;
+- your edit is waiting there as your working copy — it is *not yet a new version*, and other people still see the
+  previous one;
+- nobody else can change the document until you are finished;
+- you finish by pressing *Check in*, from either client or by saving into the mount's *Check-out* folder.
+
+#note[
+  *Saving is not the same as publishing.* The system cannot tell when you have finished editing — only you can,
+  and *Check in* is how you say so. Until then your work is kept safely as your working copy. A check-out left
+  untouched for a long time is released automatically by your organisation's idle rule, and you are warned before
+  that happens.
+]
+
+The *automatic* marker exists so this never looks like a fault: a document you never explicitly checked out has
+become yours, and the tab says why, naming the program that did it.
+
+If someone else already has the document checked out, your editor is told the file is locked and opens it
+read-only, rather than letting you edit for ten minutes and failing at the save. Documents you are not allowed to
+edit, and documents frozen by a legal hold, behave in the mount exactly as they do in the app: they refuse.
+
+#note[
+  *A warning from your own software is not a fault in ours.* Some commercial vendors treat a WebDAV connection to
+  a site that is not on their own allow-list as suspicious, or refuse it outright. That is a policy decision in
+  the respective vendors' software, not a limitation of SimplArchive — the same mount that one program declines
+  will typically work in another on the same machine.
+]
 
 = Metadata & classification
 

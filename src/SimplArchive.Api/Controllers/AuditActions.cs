@@ -77,6 +77,10 @@ public static class AuditActions
     public const string DocumentRetentionExtended = "Document.RetentionExtended";
     // Check-out (exclusive edit lock) — ADR "Document check-out / check-in".
     public const string DocumentCheckedOut = "Document.CheckedOut";
+
+    // A save-by-rename edit through the WebDAV mount took the lock without anyone pressing "check out"
+    // (ADR 0562). The detail carries the client's User-Agent — evidence of WHAT did it, never a condition.
+    public const string DocumentCheckedOutImplicitly = "Document.CheckedOutImplicitly";
     public const string DocumentCheckedIn = "Document.CheckedIn";
     // The holder (or a CanOverrideCheckout admin) reset a check-out's idle timer (ADR "Self-service check-out
     // extension").

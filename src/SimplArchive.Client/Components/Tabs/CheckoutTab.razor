@@ -35,7 +35,18 @@
                             @foreach (var c in Checkouts)
                             {
                                 <tr>
-                                    <td>@c.Name@c.FileExtension</td>
+                                    <td>
+                                        @c.Name@c.FileExtension
+                                        @* A check-out nobody asked for needs saying so, or it reads as a bug: the
+                                           user edited a file on a mounted drive and the document silently became
+                                           theirs (ADR 0562). The tooltip names the client that did it. *@
+                                        @if (!string.IsNullOrEmpty(c.ImplicitAgent))
+                                        {
+                                            <MudTooltip Text="@string.Format(Strings.Get("CoAutoByTip"), c.ImplicitAgent)">
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Class="ml-2">@Strings.Get("CoAuto")</MudChip>
+                                            </MudTooltip>
+                                        }
+                                    </td>
                                     <td class="mud-text-secondary">@c.Path</td>
                                     <td>@(c.IsModified ? Strings.Get("CoModified") : "—")</td>
                                     <td>

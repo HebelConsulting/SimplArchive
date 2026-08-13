@@ -87,6 +87,12 @@ public class CheckoutsController : ControllerBase
         // check in. Computed server-side by hashing the stash vs Sha256 (ADR 0513); both clients gate Check-in on it.
         public bool IsModified { get; set; }
 
+        // The client that took this lock without anyone pressing "check out" — a save-by-rename edit through the
+        // WebDAV mount (ADR 0562). Null for an explicit check-out, which is how the clients tell the two apart:
+        // a user who never asked for a check-out is owed an explanation of why the document is now theirs.
+        // Client-supplied text, so both clients render it escaped and never act on it.
+        public string? ImplicitAgent { get; set; }
+
         public string? StashDownloadUrl { get; set; }
 
         // A presigned download of the current repository version — the web "Download from stash" falls back to
@@ -201,7 +207,7 @@ public class CheckoutsController : ControllerBase
         var docs = await _dbContext.Documents
             .Where(d => d.CheckedOutByUserId == userId)
             .OrderByDescending(d => d.CheckedOutAt)
-            .Select(d => new { d.Id, d.Name, d.ParentId, d.CurrentVersionId, CheckedOutAt = d.CheckedOutAt!.Value })
+            .Select(d => new { d.Id, d.Name, d.ParentId, d.CurrentVersionId, CheckedOutAt = d.CheckedOutAt!.Value, d.ImplicitCheckoutAgent })
             .ToListAsync(cancellationToken);
 
         var tenantId = _currentTenantAccessor.TenantId;
@@ -253,6 +259,7 @@ public class CheckoutsController : ControllerBase
                 ExpiresAt = ttlDays > 0 ? d.CheckedOutAt.AddDays(ttlDays) : null,
                 HasStash = hasStash,
                 IsModified = isModified,
+                ImplicitAgent = d.ImplicitCheckoutAgent,
                 StashDownloadUrl = stashDownloadUrl,
                 DownloadUrl = downloadUrl,
                 Links =

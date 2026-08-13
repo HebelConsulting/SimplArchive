@@ -56,6 +56,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
                     Path = item.Path,
                     FileExtension = item.FileExtension,
                     IsModified = item.IsModified,
+                    ImplicitAgent = item.ImplicitAgent,
                     ExpiresAt = item.ExpiresAt,
                     StashDownloadUrl = item.StashDownloadUrl,
                     Item = item,
@@ -205,6 +206,9 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     {
         Items.Clear();
         Items.Add(new CheckoutRowViewModel { Id = Guid.NewGuid(), Name = "Contract draft", Path = "Repositories / Demo Repository / Contracts", FileExtension = ".docx", IsModified = true });
+        // One row carries the "automatic" marker, so the screenshot path actually exercises it (ADR 0562) —
+        // a marker no rendered surface ever shows is a marker nobody can check.
+        Items.Add(new CheckoutRowViewModel { Id = Guid.NewGuid(), Name = "Price list", Path = "Repositories / Demo Repository / 2026", FileExtension = ".xlsx", IsModified = true, ImplicitAgent = "an office suite saving over WebDAV" });
         Items.Add(new CheckoutRowViewModel { Id = Guid.NewGuid(), Name = "Quarterly report", Path = "Repositories / Demo Repository / Finance", FileExtension = ".xlsx", IsModified = false });
         OnPropertyChanged(nameof(HasItems));
         OnPropertyChanged(nameof(Count));
@@ -226,6 +230,15 @@ public sealed class CheckoutRowViewModel
 
     // The working copy in check-out (the cloud stash) differs from the current version — computed server-side.
     public required bool IsModified { get; init; }
+
+    // Set when the lock was taken by a save-by-rename edit over the mount rather than by the user pressing
+    // "check out" (ADR 0562) — null otherwise. Drives the row's "automatic" marker: a check-out nobody asked
+    // for reads as a bug unless it explains itself.
+    public string? ImplicitAgent { get; init; }
+
+    public bool IsImplicit => !string.IsNullOrEmpty(ImplicitAgent);
+
+    public string ImplicitTooltip => string.Format(Strings.Get("CoAutoByTip"), ImplicitAgent);
 
     // Presigned GET for the working-copy stash (ADR 0517) — staged as the right-hand file for Beyond Compare.
     public string? StashDownloadUrl { get; init; }

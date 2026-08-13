@@ -11,8 +11,8 @@ A live instance is running at **<https://demo.simplarchive.dev>** — log in and
 | Sign in as | Email | Password | What it's for |
 |---|---|---|---|
 | **Demo Admin** | `demo@simplarchive.dev` | `SimplDemo2026!` | The tenant administrator — start here. Sees everything: administration, audit, retention, legal holds, every user's inbox. |
-| **Anna Meyer** | `anna@simplarchive.local` | `SimplDemo2026!` | An editor, and deliberately a **plain user without tenant-admin rights** — the account to use if you want to watch a permission actually deny something. |
-| **Tom Fischer** | `tom@simplarchive.local` | `SimplDemo2026!` | A clerk, also a plain user. Signing in as a second person is how the collaboration side shows up: chat and mentions from someone else, a workflow review arriving in another inbox, the shared *Scan Team* group inbox. |
+| **Anna Meyer** | `anna@simplarchive.dev` | `SimplDemo2026!` | An editor, and deliberately a **plain user without tenant-admin rights** — the account to use if you want to watch a permission actually deny something. |
+| **Tom Fischer** | `tom@simplarchive.dev` | `SimplDemo2026!` | A clerk, also a plain user. Signing in as a second person is how the collaboration side shows up: chat and mentions from someone else, a workflow review arriving in another inbox, the shared *Scan Team* group inbox. |
 
 These are deliberately trivial, publicly posted credentials on a throwaway demo that wipes itself nightly — they are demo furniture, not an example of how the product handles secrets.
 

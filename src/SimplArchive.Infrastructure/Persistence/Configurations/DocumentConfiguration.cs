@@ -86,6 +86,10 @@ public class DocumentConfiguration : IEntityTypeConfiguration<Document>
             "(\"CheckedOutByUserId\" IS NULL AND \"CheckedOutAt\" IS NULL) OR " +
             "(\"CheckedOutByUserId\" IS NOT NULL AND \"CheckedOutAt\" IS NOT NULL)"));
 
+        // Client-supplied (a WebDAV User-Agent, ADR 0562), so it is bounded here rather than trusted: a header is
+        // whatever the caller sent, and an unbounded one would make an unbounded row.
+        builder.Property(d => d.ImplicitCheckoutAgent).HasMaxLength(256);
+
         // Backs the "my check-outs" tab query (documents this user currently holds).
         builder.HasIndex(d => new { d.TenantId, d.CheckedOutByUserId });
 

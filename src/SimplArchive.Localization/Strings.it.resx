@@ -3912,4 +3912,10 @@
   <data name="ExtLinkPagePageCount" xml:space="preserve">
     <value>{0} pagine</value>
   </data>
+  <data name="CoAuto" xml:space="preserve">
+    <value>automatico</value>
+  </data>
+  <data name="CoAutoByTip" xml:space="preserve">
+    <value>Estratto automaticamente al salvataggio dall'unità montata ({0}). Esegui il check-in quando hai finito.</value>
+  </data>
 </root>

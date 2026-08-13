@@ -18,6 +18,12 @@ public record CheckoutDto
     public string FileExtension { get; set; } = "";
     public bool HasStash { get; set; }
     public bool IsModified { get; set; }
+
+    /// <summary>
+    /// The client that took this lock without the user asking — a save-by-rename edit over WebDAV (ADR 0562);
+    /// null for an explicit check-out. Client-supplied text: render it, never act on it.
+    /// </summary>
+    public string? ImplicitAgent { get; set; }
     public string? StashDownloadUrl { get; set; }
     public string? DownloadUrl { get; set; }
     public DateTimeOffset? ExpiresAt { get; set; }
