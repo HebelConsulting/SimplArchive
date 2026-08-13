@@ -10,9 +10,14 @@ namespace SimplArchive.UnitTests;
 // Home.razor is deliberately absent: it already has its own richer guard (WorkbenchShellSizeTests, with the
 // slack test this one omits). One guard per file — two guards on one file WILL disagree eventually.
 //
-// DocumentsController is gone from this list because its split landed with the same PR that added the guard
-// (2,613 → 838, five sibling controllers + DocumentAccessService + DocumentTreeQueries) — which is the shape
-// every entry below wants to follow: measure, split by responsibility, then delete the entry.
+// DocumentsController left the list with the PR that added the guard (2,613 → 838, ADR 0571); the tail —
+// WebDavMiddleware (1,762 → 964), MainWindow.axaml.cs (1,945 → 967) and HighlightOverlay (1,227 → 995) —
+// followed one PR later (ADR 0572). What remains is the two desktop giants, each its own multi-session
+// program: measure, split by responsibility, then delete the entry.
+//
+// One caveat ADR 0572 records: MainWindow's CLASS still spans ~1,575 lines across its three partial files —
+// the per-feature partial split for view-glue was the user-approved shape, so the file-level ceiling is what
+// this guard holds there.
 public class OverLimitFileCeilingTests
 {
     // File → its ceiling, measured when the guard was added (or last lowered). Growth fails; a deliberate
@@ -21,9 +26,16 @@ public class OverLimitFileCeilingTests
     {
         ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_990,
         ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 4_516,
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_945,
-        ["src/SimplArchive.Api/WebDav/WebDavMiddleware.cs"] = 1_762,
-        ["src/SimplArchive.DesktopClient/Views/HighlightOverlay.cs"] = 1_227,
+
+        // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
+        // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).
+        // MainWindow.axaml is pure markup; whether the 1000-line rule covers markup-only .axaml is undecided,
+        // but a ceiling costs nothing while that question waits.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 2_429,
+        ["src/SimplArchive.DesktopClient/Program.cs"] = 1_253,
+        ["src/SimplArchive.Api/Controllers/InboxController.cs"] = 1_071,
+        ["src/SimplArchive.Api/Controllers/DocumentVersionsController.cs"] = 1_067,
+        ["src/SimplArchive.Api/Controllers/UsersController.cs"] = 1_011,
     };
 
     public static TheoryData<string> Files => [.. Ceilings.Keys];

@@ -159,13 +159,13 @@ internal static class Program
         if (args.Contains("--intray-insert-test"))
         {
             // caret insert (no selection): "ab|cd" + "X" -> "abXcd", caret after X
-            var a = Views.HighlightOverlay.InsertWordInto("abcd", 2, 2, "X", append: false);
+            var a = Views.HighlightOverlayDrawing.InsertWordInto("abcd", 2, 2, "X", append: false);
             // shift prepends a space after a non-space: "ab|" + "X" -> "ab X"
-            var b = Views.HighlightOverlay.InsertWordInto("ab", 2, 2, "X", append: true);
+            var b = Views.HighlightOverlayDrawing.InsertWordInto("ab", 2, 2, "X", append: true);
             // shift at start: no leading space
-            var c = Views.HighlightOverlay.InsertWordInto("", 0, 0, "X", append: true);
+            var c = Views.HighlightOverlayDrawing.InsertWordInto("", 0, 0, "X", append: true);
             // replaces a selection: "abcd" with [1,3) selected + "X" -> "aXd"
-            var d = Views.HighlightOverlay.InsertWordInto("abcd", 1, 3, "X", append: false);
+            var d = Views.HighlightOverlayDrawing.InsertWordInto("abcd", 1, 3, "X", append: false);
             var ok = a == ("abXcd", 3) && b == ("ab X", 4) && c == ("X", 1) && d == ("aXd", 2);
             Console.WriteLine($"insert: caret={a} shiftSpace={b} shiftStart={c} replaceSel={d}");
             Console.WriteLine(ok ? "OK" : "FAILED");
@@ -802,7 +802,7 @@ internal static class Program
 
         foreach (var (label, p) in probes)
         {
-            var hit = Views.HighlightOverlay.HitTest(boxes, p, w, h);
+            var hit = Views.HighlightOverlayDrawing.HitTest(boxes, p, w, h);
             Console.WriteLine($"{label}: {hit?.Text ?? "(none)"}");
         }
     }

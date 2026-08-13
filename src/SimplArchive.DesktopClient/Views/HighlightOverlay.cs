@@ -21,16 +21,8 @@ namespace SimplArchive.DesktopClient.Views;
 // the same grid cell as the page Image so its bounds match the rendered page; every box is normalized 0..1.
 public sealed class HighlightOverlay : Control
 {
-    private static readonly IBrush Fill = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xD5, 0x00));
-    private static readonly IPen Stroke = new Pen(new SolidColorBrush(Color.FromArgb(0xCC, 0xE0, 0xA4, 0x00)), 1);
 
-    // Light grey for the word under the cursor (drawn under the yellow hits, so a hit stays yellow on hover).
-    private static readonly IBrush HoverFill = new SolidColorBrush(Color.FromArgb(0x3A, 0x90, 0x90, 0x90));
-    private static readonly IPen HoverStroke = new Pen(new SolidColorBrush(Color.FromArgb(0x99, 0x60, 0x60, 0x60)), 1);
 
-    // Orange for the "current match" (find prev/next) — drawn on top so it stands out among the yellow hits.
-    private static readonly IBrush ActiveFill = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0x8C, 0x00));
-    private static readonly IPen ActiveStroke = new Pen(new SolidColorBrush(Color.FromArgb(0xFF, 0xD2, 0x6E, 0x00)), 2);
 
     private HighlightBox? _hovered;
 
@@ -51,15 +43,6 @@ public sealed class HighlightOverlay : Control
     public static readonly StyledProperty<ICommand?> WordCopiedCommandProperty =
         AvaloniaProperty.Register<HighlightOverlay, ICommand?>(nameof(WordCopiedCommand));
 
-    // Sticky-note boxes on this page (ADR "Document annotations" / "Post-it note boxes") — an always-visible
-    // coloured box showing the note text, drawn + hit-tested + resizable.
-    private const double NotePad = 6;          // px inner padding
-    private const double NoteFontSize = 12;    // px
-    private const double NoteMinWidthPx = 90;  // px minimum box width
-    private const double NoteGripPx = 14;      // px bottom-right resize-grip zone
-    private static readonly IBrush NoteTextBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x22, 0x22, 0x22));
-    private static readonly IPen NoteBorder = new Pen(new SolidColorBrush(Color.FromArgb(0x88, 0x00, 0x00, 0x00)), 1);
-    private static readonly IBrush NoteGripBrush = new SolidColorBrush(Color.FromArgb(0x99, 0x00, 0x00, 0x00));
 
     public static readonly StyledProperty<IEnumerable<NoteBox>?> NotesProperty =
         AvaloniaProperty.Register<HighlightOverlay, IEnumerable<NoteBox>?>(nameof(Notes));
@@ -129,11 +112,6 @@ public sealed class HighlightOverlay : Control
         set => SetValue(NoteResizedCommandProperty, value);
     }
 
-    // Multi-select (ADR "Annotation multi-select"): a click/Ctrl-click on an annotation, a marquee over empty
-    // page area, clearing the selection (a plain click on empty), and a group drag of the whole selection.
-    private static readonly IPen SelectionPen = new Pen(new SolidColorBrush(Color.FromArgb(0xFF, 0x2f, 0x6f, 0xed)), 2) { DashStyle = new DashStyle([3, 2], 0) };
-    private static readonly IBrush MarqueeFill = new SolidColorBrush(Color.FromArgb(0x22, 0x2f, 0x6f, 0xed));
-    private static readonly IPen MarqueePen = new Pen(new SolidColorBrush(Color.FromArgb(0xAA, 0x2f, 0x6f, 0xed)), 1) { DashStyle = new DashStyle([2, 2], 0) };
 
     public static readonly StyledProperty<ICommand?> SelectAnnotationCommandProperty =
         AvaloniaProperty.Register<HighlightOverlay, ICommand?>(nameof(SelectAnnotationCommand));
@@ -260,76 +238,16 @@ public sealed class HighlightOverlay : Control
     private NoteBox? _resizingShape;
     private Point _shapeResizePoint;
 
-    // The pixel bounding box of a markup shape (box shapes: highlight/rectangle; also used for the arrow bbox).
-    private static Rect ShapeBounds(NoteBox s, double w, double h) =>
-        new(Math.Min(s.X, s.X + s.Width) * w, Math.Min(s.Y, s.Y + s.Height) * h, Math.Abs(s.Width) * w, Math.Abs(s.Height) * h);
 
-    // Whether a point is on an editable box shape's bottom-right resize grip (arrows have no grip — move-only).
-    private static bool InShapeGrip(NoteBox shape, Point point, double w, double h)
-    {
-        if (shape.Kind is not (1 or 2) || !shape.CanEdit)
-        {
-            return false;
-        }
-
-        var r = ShapeBounds(shape, w, h);
-        return new Rect(r.Right - NoteGripPx, r.Bottom - NoteGripPx, NoteGripPx, NoteGripPx).Contains(point);
-    }
 
     static HighlightOverlay()
     {
         AffectsRender<HighlightOverlay>(BoxesProperty, ActiveBoxProperty, BoundsProperty, NotesProperty);
     }
 
-    // The pixel rect of a note box (ADR "Post-it note boxes"): top-left at (X,Y); width = persisted (min
-    // NoteMinWidthPx); height auto-grown to fit the wrapped text (min), so the full text always shows. Also
-    // returns the FormattedText so Render can draw it without re-measuring.
-    private static (Rect Rect, FormattedText Text) MeasureNote(NoteBox note, double pw, double ph)
-    {
-        var w = Math.Max(NoteMinWidthPx, note.Width * pw);
-        var ft = new FormattedText(
-            string.IsNullOrEmpty(note.Text) ? " " : note.Text,
-            System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-            Typeface.Default, NoteFontSize, NoteTextBrush)
-        {
-            MaxTextWidth = Math.Max(10, w - 2 * NotePad),
-        };
-        var fitHeight = ft.Height + 2 * NotePad;
-        var h = Math.Max(fitHeight, note.Height * ph);
-        return (new Rect(note.X * pw, note.Y * ph, w, h), ft);
-    }
 
-    // Which note box (if any) a point falls in — the box rect (ADR "Post-it note boxes").
-    private static NoteBox? HitTestNote(IEnumerable<NoteBox>? notes, Point point, double width, double height)
-    {
-        if (notes is null || width <= 0 || height <= 0)
-        {
-            return null;
-        }
 
-        return notes.FirstOrDefault(n => n.Kind == 0 && MeasureNote(n, width, height).Rect.Contains(point));
-    }
 
-    // Whether a point is on an editable note box's bottom-right resize grip.
-    private static bool InNoteGrip(NoteBox note, Point point, double width, double height)
-    {
-        var r = MeasureNote(note, width, height).Rect;
-        return note.CanEdit && new Rect(r.Right - NoteGripPx, r.Bottom - NoteGripPx, NoteGripPx, NoteGripPx).Contains(point);
-    }
-
-    // Which markup shape (if any) a point falls in — the shape's padded bounding box (ADR "Annotation markup").
-    private static NoteBox? HitTestShape(IEnumerable<NoteBox>? notes, Point point, double width, double height)
-    {
-        if (notes is null || width <= 0 || height <= 0)
-        {
-            return null;
-        }
-
-        return notes.FirstOrDefault(n =>
-            n.Kind > 0 &&
-            new Rect(Math.Min(n.X, n.X + n.Width) * width - 4, Math.Min(n.Y, n.Y + n.Height) * height - 4,
-                Math.Abs(n.Width) * width + 8, Math.Abs(n.Height) * height + 8).Contains(point));
-    }
 
     // The annotation ids whose box (note) or bounding box (shape) intersect a marquee rect (ADR "Annotation
     // multi-select"). Pixel-space geometry over the current Notes.
@@ -346,7 +264,7 @@ public sealed class HighlightOverlay : Control
         foreach (var n in notes)
         {
             var r = n.Kind == 0
-                ? MeasureNote(n, width, height).Rect
+                ? HighlightOverlayDrawing.MeasureNote(n, width, height).Rect
                 : new Rect(Math.Min(n.X, n.X + n.Width) * width, Math.Min(n.Y, n.Y + n.Height) * height,
                     Math.Abs(n.Width) * width, Math.Abs(n.Height) * height);
             if (r.Intersects(marquee))
@@ -389,18 +307,6 @@ public sealed class HighlightOverlay : Control
         InvalidateVisual();
     }
 
-    // Which box (if any) a point in this control's coordinate space falls in. Pure geometry, so it's directly
-    // testable without a display.
-    public static HighlightBox? HitTest(IEnumerable<HighlightBox>? boxes, Point point, double width, double height)
-    {
-        if (boxes is null || width <= 0 || height <= 0)
-        {
-            return null;
-        }
-
-        return boxes.FirstOrDefault(b =>
-            new Rect(b.X * width, b.Y * height, b.Width * width, b.Height * height).Contains(point));
-    }
 
     public override void Render(DrawingContext context)
     {
@@ -420,21 +326,21 @@ public sealed class HighlightOverlay : Control
         // The word under the cursor (light grey), drawn first so a yellow search hit stays on top when hovered.
         if (_hovered is { } hovered)
         {
-            context.DrawRectangle(HoverFill, HoverStroke, ToRect(hovered));
+            context.DrawRectangle(HighlightOverlayDrawing.HoverFill, HighlightOverlayDrawing.HoverStroke, ToRect(hovered));
         }
 
         if (Boxes is { } boxes)
         {
             foreach (var box in boxes)
             {
-                context.DrawRectangle(Fill, Stroke, ToRect(box));
+                context.DrawRectangle(HighlightOverlayDrawing.Fill, HighlightOverlayDrawing.Stroke, ToRect(box));
             }
         }
 
         // The current match (find prev/next) on top, in orange.
         if (ActiveBox is { } active)
         {
-            context.DrawRectangle(ActiveFill, ActiveStroke, ToRect(active));
+            context.DrawRectangle(HighlightOverlayDrawing.ActiveFill, HighlightOverlayDrawing.ActiveStroke, ToRect(active));
         }
 
         // While group-dragging the selection, offset every selected annotation by the drag delta (ADR
@@ -466,15 +372,15 @@ public sealed class HighlightOverlay : Control
                         sh = Math.Max(0.01, _shapeResizePoint.Y / height - note.Y);
                     }
 
-                    DrawShape(context, note.Kind, sx, sy, sw, sh, width, height, ParseColor(note.Color), preview: false, note.Text, note.Points);
+                    HighlightOverlayDrawing.DrawShape(context, note.Kind, sx, sy, sw, sh, width, height, HighlightOverlayDrawing.ParseColor(note.Color), preview: false, note.Text, note.Points);
                     if (note.Selected)
                     {
                         // Freehand (kind 7) has no box extent — outline the poly-line's own bounds instead.
                         var bb = note.Kind == 7
-                            ? FreehandBounds(note.Points, width, height).Inflate(3)
+                            ? HighlightOverlayDrawing.FreehandBounds(note.Points, width, height).Inflate(3)
                             : new Rect(Math.Min(sx, sx + sw) * width - 3, Math.Min(sy, sy + sh) * height - 3,
                                 Math.Abs(sw) * width + 6, Math.Abs(sh) * height + 6);
-                        context.DrawRectangle(null, SelectionPen, bb);
+                        context.DrawRectangle(null, HighlightOverlayDrawing.SelectionPen, bb);
                     }
 
                     continue;
@@ -491,7 +397,7 @@ public sealed class HighlightOverlay : Control
                 {
                     eff = note with
                     {
-                        Width = Math.Max(NoteMinWidthPx, _resizePoint.X - note.X * width) / width,
+                        Width = Math.Max(HighlightOverlayDrawing.NoteMinWidthPx, _resizePoint.X - note.X * width) / width,
                         Height = Math.Max(0, _resizePoint.Y - note.Y * height) / height,
                     };
                 }
@@ -500,20 +406,20 @@ public sealed class HighlightOverlay : Control
                     eff = note with { X = note.X + gdx, Y = note.Y + gdy };
                 }
 
-                var (nrect, nft) = MeasureNote(eff, width, height);
-                context.DrawRectangle(new SolidColorBrush(ParseColor(eff.Color)), NoteBorder, nrect, 4, 4);
-                context.DrawText(nft, new Point(nrect.X + NotePad, nrect.Y + NotePad));
+                var (nrect, nft) = HighlightOverlayDrawing.MeasureNote(eff, width, height);
+                context.DrawRectangle(new SolidColorBrush(HighlightOverlayDrawing.ParseColor(eff.Color)), HighlightOverlayDrawing.NoteBorder, nrect, 4, 4);
+                context.DrawText(nft, new Point(nrect.X + HighlightOverlayDrawing.NotePad, nrect.Y + HighlightOverlayDrawing.NotePad));
                 if (note.Selected)
                 {
-                    context.DrawRectangle(null, SelectionPen, nrect.Inflate(2), 4, 4);
+                    context.DrawRectangle(null, HighlightOverlayDrawing.SelectionPen, nrect.Inflate(2), 4, 4);
                 }
 
                 if (eff.CanEdit)
                 {
                     var gx = nrect.Right - 3;
                     var gy = nrect.Bottom - 3;
-                    context.DrawLine(new Pen(NoteGripBrush, 1.5), new Point(gx - 8, gy), new Point(gx, gy - 8));
-                    context.DrawLine(new Pen(NoteGripBrush, 1.5), new Point(gx - 4, gy), new Point(gx, gy - 4));
+                    context.DrawLine(new Pen(HighlightOverlayDrawing.NoteGripBrush, 1.5), new Point(gx - 8, gy), new Point(gx, gy - 8));
+                    context.DrawLine(new Pen(HighlightOverlayDrawing.NoteGripBrush, 1.5), new Point(gx - 4, gy), new Point(gx, gy - 4));
                 }
             }
         }
@@ -521,152 +427,24 @@ public sealed class HighlightOverlay : Control
         // The marquee rubber-band (ADR "Annotation multi-select").
         if (_marqueeing)
         {
-            context.DrawRectangle(MarqueeFill, MarqueePen, new Rect(_marqueeStart, _marqueeCurrent));
+            context.DrawRectangle(HighlightOverlayDrawing.MarqueeFill, HighlightOverlayDrawing.MarqueePen, new Rect(_marqueeStart, _marqueeCurrent));
         }
 
         // The shape being drawn (a live preview from the drag start to the current point) — in the active draw
         // colour (ADR "Draw-tool behaviour"), so the drag matches the picked palette colour, not a hardcoded one.
         if (_drawing && DrawKind > 0)
         {
-            var color = string.IsNullOrEmpty(DrawColor) ? Colors.Yellow : ParseColor(DrawColor);
-            DrawShape(context, DrawKind, _drawStart.X, _drawStart.Y, _drawCurrent.X - _drawStart.X, _drawCurrent.Y - _drawStart.Y, width, height, color, preview: true);
+            var color = string.IsNullOrEmpty(DrawColor) ? Colors.Yellow : HighlightOverlayDrawing.ParseColor(DrawColor);
+            HighlightOverlayDrawing.DrawShape(context, DrawKind, _drawStart.X, _drawStart.Y, _drawCurrent.X - _drawStart.X, _drawCurrent.Y - _drawStart.Y, width, height, color, preview: true);
         }
     }
 
-    // Draws a markup shape from normalized geometry (x,y start / top-left; w,h signed extent) scaled to the page
-    // pixels. Kinds: 1 highlight fill, 2 rectangle outline, 3 arrow, 4 stamp (bordered box + centred uppercase
-    // bold caption), 5 strikethrough (a mid-height line across the box), 6 text-box (bordered box + its text),
-    // 7 freehand (a poly-line from Points) — ADR 0525. Text is used by 4/6; points by 7.
-    private static void DrawShape(DrawingContext ctx, int kind, double x, double y, double w, double h, double pw, double ph, Color color, bool preview, string text = "", string? points = null)
-    {
-        if (kind == 3)
-        {
-            var p1 = new Point(x * pw, y * ph);
-            var p2 = new Point((x + w) * pw, (y + h) * ph);
-            var pen = new Pen(new SolidColorBrush(color), preview ? 1.5 : 2);
-            ctx.DrawLine(pen, p1, p2);
-            var ang = Math.Atan2(p2.Y - p1.Y, p2.X - p1.X);
-            const double hd = 11, sp = 0.5;
-            var a = new Point(p2.X - hd * Math.Cos(ang - sp), p2.Y - hd * Math.Sin(ang - sp));
-            var b = new Point(p2.X - hd * Math.Cos(ang + sp), p2.Y - hd * Math.Sin(ang + sp));
-            ctx.DrawGeometry(new SolidColorBrush(color), null, new PolylineGeometry([p2, a, b], true));
-            return;
-        }
 
-        // Freehand (ADR 0525): a poly-line built from the normalized "x,y x,y …" points, scaled to page pixels.
-        // It has no box extent, so the x/y/w/h are ignored here.
-        if (kind == 7)
-        {
-            var pts = ParsePoints(points, pw, ph);
-            if (pts.Count >= 2)
-            {
-                var pen = new Pen(new SolidColorBrush(color), 1.5) { LineJoin = PenLineJoin.Round, LineCap = PenLineCap.Round };
-                ctx.DrawGeometry(null, pen, new PolylineGeometry(pts, false));
-            }
 
-            return;
-        }
 
-        var rect = new Rect(Math.Min(x, x + w) * pw, Math.Min(y, y + h) * ph, Math.Abs(w) * pw, Math.Abs(h) * ph);
-        switch (kind)
-        {
-            case 1: // highlight — a translucent fill in the annotation colour
-                ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(preview ? (byte)0x40 : (byte)0x60, color.R, color.G, color.B)), null, rect, 2, 2);
-                break;
-            case 5: // strikethrough — a horizontal line through the box's vertical middle, in the annotation colour
-                var midY = rect.Y + rect.Height / 2;
-                ctx.DrawLine(new Pen(new SolidColorBrush(color), 2), new Point(rect.X, midY), new Point(rect.Right, midY));
-                break;
-            case 4: // stamp — a bordered box with a centred, uppercase, bold caption in the annotation colour
-                ctx.DrawRectangle(null, new Pen(new SolidColorBrush(color), 2), rect, 3, 3);
-                DrawBoxText(ctx, rect, text, color, bold: true, centre: true, upper: true);
-                break;
-            case 6: // text-box — a bordered box on a translucent-white ground showing its text
-                ctx.DrawRectangle(new SolidColorBrush(Color.FromArgb(0xC0, 0xFF, 0xFF, 0xFF)), new Pen(new SolidColorBrush(color), 1), rect);
-                DrawBoxText(ctx, rect, text, Color.FromArgb(0xFF, 0x22, 0x22, 0x22), bold: false, centre: false, upper: false);
-                break;
-            default: // 2 — rectangle outline
-                ctx.DrawRectangle(null, new Pen(new SolidColorBrush(color), 2), rect);
-                break;
-        }
-    }
 
-    // Parses a normalized "x,y x,y …" poly-line (each coord 0..1, invariant-culture) into page-pixel points.
-    private static List<Point> ParsePoints(string? points, double pw, double ph)
-    {
-        var result = new List<Point>();
-        if (string.IsNullOrWhiteSpace(points))
-        {
-            return result;
-        }
 
-        foreach (var pair in points.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var xy = pair.Split(',');
-            if (xy.Length == 2 &&
-                double.TryParse(xy[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var px) &&
-                double.TryParse(xy[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var py))
-            {
-                result.Add(new Point(px * pw, py * ph));
-            }
-        }
 
-        return result;
-    }
-
-    // The pixel bounding box of a freehand poly-line (ADR 0525) — used to outline it when selected.
-    private static Rect FreehandBounds(string? points, double pw, double ph)
-    {
-        var pts = ParsePoints(points, pw, ph);
-        if (pts.Count == 0)
-        {
-            return default;
-        }
-
-        var bb = new Rect(pts[0], pts[0]);
-        foreach (var p in pts)
-        {
-            bb = bb.Union(new Rect(p, p));
-        }
-
-        return bb;
-    }
-
-    // Draws a caption inside a shape's box, clipped to it (stamp / text-box, ADR 0525): optionally uppercased,
-    // bold, and horizontally centred + vertically centred (stamp) or top-left (text-box).
-    private static void DrawBoxText(DrawingContext ctx, Rect rect, string text, Color color, bool bold, bool centre, bool upper)
-    {
-        if (string.IsNullOrEmpty(text) || rect.Width < 6 || rect.Height < 6)
-        {
-            return;
-        }
-
-        var content = upper ? text.ToUpperInvariant() : text;
-        var typeface = bold ? new Typeface(FontFamily.Default, FontStyle.Normal, FontWeight.Bold) : Typeface.Default;
-        var ft = new FormattedText(content, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-            typeface, 11, new SolidColorBrush(color))
-        {
-            MaxTextWidth = Math.Max(4, rect.Width - 6),
-            MaxTextHeight = Math.Max(4, rect.Height - 4),
-            TextAlignment = centre ? TextAlignment.Center : TextAlignment.Left,
-        };
-        using (ctx.PushClip(rect))
-        {
-            var ty = centre ? rect.Y + Math.Max(0, (rect.Height - ft.Height) / 2) : rect.Y + 2;
-            ctx.DrawText(ft, new Point(rect.X + 3, ty));
-        }
-    }
-
-    private static Color ParseColor(string hex) => TryParseColor(hex, out var c) ? c : Colors.Yellow;
-
-    private static readonly IPen NoteStroke = new Pen(new SolidColorBrush(Color.FromArgb(0xB0, 0x00, 0x00, 0x00)), 1);
-
-    private static bool TryParseColor(string hex, out Color color)
-    {
-        color = Colors.Yellow;
-        try { color = Color.Parse(hex); return true; }
-        catch { return false; }
-    }
 
     // Scroll the current match into view when it lands on this page, by nudging the enclosing ScrollViewer so
     // the box sits about a third down the viewport.
@@ -812,12 +590,12 @@ public sealed class HighlightOverlay : Control
         }
 
         var point = e.GetPosition(this);
-        var box = HitTest(Words, point, Bounds.Width, Bounds.Height);
-        var overNote = HitTestNote(Notes, point, Bounds.Width, Bounds.Height);
-        var overShape = overNote is null ? HitTestShape(Notes, point, Bounds.Width, Bounds.Height) : null;
+        var box = HighlightOverlayDrawing.HitTest(Words, point, Bounds.Width, Bounds.Height);
+        var overNote = HighlightOverlayDrawing.HitTestNote(Notes, point, Bounds.Width, Bounds.Height);
+        var overShape = overNote is null ? HighlightOverlayDrawing.HitTestShape(Notes, point, Bounds.Width, Bounds.Height) : null;
         Cursor =
-            overNote is not null && InNoteGrip(overNote, point, Bounds.Width, Bounds.Height) ? new Cursor(StandardCursorType.BottomRightCorner)
-            : overShape is not null && InShapeGrip(overShape, point, Bounds.Width, Bounds.Height) ? new Cursor(StandardCursorType.BottomRightCorner)
+            overNote is not null && HighlightOverlayDrawing.InNoteGrip(overNote, point, Bounds.Width, Bounds.Height) ? new Cursor(StandardCursorType.BottomRightCorner)
+            : overShape is not null && HighlightOverlayDrawing.InShapeGrip(overShape, point, Bounds.Width, Bounds.Height) ? new Cursor(StandardCursorType.BottomRightCorner)
             : overShape is not null ? new Cursor(StandardCursorType.SizeAll)         // a shape is movable (ADR "Highlighting redesign")
             : (box is not null || overNote is not null) ? new Cursor(StandardCursorType.Hand)
             : Cursor.Default;
@@ -883,7 +661,7 @@ public sealed class HighlightOverlay : Control
 
         var ctrl = CtrlOrCmd(e.KeyModifiers);
 
-        if (HitTestNote(Notes, point, Bounds.Width, Bounds.Height) is { } note)
+        if (HighlightOverlayDrawing.HitTestNote(Notes, point, Bounds.Width, Bounds.Height) is { } note)
         {
             e.Handled = true;
 
@@ -895,7 +673,7 @@ public sealed class HighlightOverlay : Control
             }
 
             // A press on the bottom-right grip resizes the box (ADR "Post-it note boxes").
-            if (note.CanEdit && InNoteGrip(note, point, Bounds.Width, Bounds.Height))
+            if (note.CanEdit && HighlightOverlayDrawing.InNoteGrip(note, point, Bounds.Width, Bounds.Height))
             {
                 _resizingNote = note;
                 _resizePoint = point;
@@ -928,7 +706,7 @@ public sealed class HighlightOverlay : Control
             // Otherwise select just this note and defer to release so we can tell a plain press from a drag
             // (reposition). Capture the pointer so the drag survives leaving the box; record the grab offset.
             SelectOne(note.Id);
-            var topLeft = MeasureNote(note, Bounds.Width, Bounds.Height).Rect.TopLeft;
+            var topLeft = HighlightOverlayDrawing.MeasureNote(note, Bounds.Width, Bounds.Height).Rect.TopLeft;
             _pressedNote = note;
             _pressPoint = point;
             _dragPoint = point;
@@ -938,7 +716,7 @@ public sealed class HighlightOverlay : Control
             return;
         }
 
-        if (HitTestShape(Notes, point, Bounds.Width, Bounds.Height) is { } shape)
+        if (HighlightOverlayDrawing.HitTestShape(Notes, point, Bounds.Width, Bounds.Height) is { } shape)
         {
             e.Handled = true;
 
@@ -950,7 +728,7 @@ public sealed class HighlightOverlay : Control
             }
 
             // A press on a box shape's corner grip resizes it (ADR "Highlighting redesign").
-            if (shape.CanEdit && InShapeGrip(shape, point, Bounds.Width, Bounds.Height))
+            if (shape.CanEdit && HighlightOverlayDrawing.InShapeGrip(shape, point, Bounds.Width, Bounds.Height))
             {
                 _resizingShape = shape;
                 _shapeResizePoint = point;
@@ -979,7 +757,7 @@ public sealed class HighlightOverlay : Control
             return;
         }
 
-        var box = HitTest(Words, point, Bounds.Width, Bounds.Height);
+        var box = HighlightOverlayDrawing.HitTest(Words, point, Bounds.Width, Bounds.Height);
         if (box is null)
         {
             // A press over empty page area starts a potential marquee (ADR "Annotation multi-select"); a drag
@@ -998,7 +776,7 @@ public sealed class HighlightOverlay : Control
 
         if (focusedTextBox is not null && focusedTextBox.Tag as string != "find")
         {
-            var (text, caret) = InsertWordInto(focusedTextBox.Text ?? "", focusedTextBox.SelectionStart, focusedTextBox.SelectionEnd, box.Text, append);
+            var (text, caret) = HighlightOverlayDrawing.InsertWordInto(focusedTextBox.Text ?? "", focusedTextBox.SelectionStart, focusedTextBox.SelectionEnd, box.Text, append);
             focusedTextBox.Text = text;
             focusedTextBox.CaretIndex = caret;
         }
@@ -1040,8 +818,8 @@ public sealed class HighlightOverlay : Control
             _resizingNote = null;
             InvalidateVisual();
 
-            var newW = Math.Max(NoteMinWidthPx, _resizePoint.X - rn.X * Bounds.Width) / Bounds.Width;
-            var fitHeightNorm = MeasureNote(rn with { Width = newW, Height = 0 }, Bounds.Width, Bounds.Height).Rect.Height / Bounds.Height;
+            var newW = Math.Max(HighlightOverlayDrawing.NoteMinWidthPx, _resizePoint.X - rn.X * Bounds.Width) / Bounds.Width;
+            var fitHeightNorm = HighlightOverlayDrawing.MeasureNote(rn with { Width = newW, Height = 0 }, Bounds.Width, Bounds.Height).Rect.Height / Bounds.Height;
             var newH = Math.Max(fitHeightNorm, Math.Max(0, _resizePoint.Y - rn.Y * Bounds.Height) / Bounds.Height);
             var resize = new NoteResize(rn.Id, PageIndex, newW, newH);
             if (NoteResizedCommand?.CanExecute(resize) == true)
@@ -1182,16 +960,6 @@ public sealed class HighlightOverlay : Control
         }
     }
 
-    // Inserts a clicked word into a text field at the caret (replacing any selection). Shift prepends a space
-    // (unless at the start or already after whitespace). Pure string logic, so it's testable without a display.
-    public static (string Text, int Caret) InsertWordInto(string text, int selectionStart, int selectionEnd, string word, bool append)
-    {
-        var from = Math.Clamp(Math.Min(selectionStart, selectionEnd), 0, text.Length);
-        var to = Math.Clamp(Math.Max(selectionStart, selectionEnd), 0, text.Length);
-        var prefix = append && from > 0 && !char.IsWhiteSpace(text[from - 1]) ? " " : "";
-        var insert = prefix + word;
-        return (text[..from] + insert + text[to..], from + insert.Length);
-    }
 
     private async Task CopyAsync(string word, bool append)
     {

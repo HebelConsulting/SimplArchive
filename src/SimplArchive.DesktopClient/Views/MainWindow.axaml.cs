@@ -12,42 +12,17 @@ namespace SimplArchive.DesktopClient.Views;
 
 public partial class MainWindow : Window
 {
-    // Custom drag payload for an internal move/reference drag (distinct from an OS-file drop). See ADR
-    // "Desktop drag-and-drop move and reference".
-    private const string NodeDragFormat = "simplarchive/node";
 
-    // One dragged item — the internal drag carries a LIST of these (the whole selection, or a single tree folder),
-    // so a drop moves/references all of them. Id is the underlying item (a reference's target), used for the ops.
-    private sealed record DragNode(Guid Id, string Name, bool IsFolder, bool IsReference);
 
-    // The nodes of an in-flight internal move/reference drag, held in a field (NOT as a DataObject format) so the
-    // drag's DataObject carries ONLY the staged OS files — then the macOS drag badge shows the real item count
-    // instead of the number of data formats (which was always 2: node-format + files). Set at drag-start, read by
-    // the drop handlers to tell an internal drag from an OS-file drop, cleared when the gesture ends.
-    private List<DragNode>? _internalDrag;
 
-    private NodeViewModel? _dragCandidate;
-    private Point _dragStart;
-    // The multi-selection captured at pointer-PRESS. A plain press on an already-selected row makes the ListBox
-    // collapse its selection to that one row before the drag threshold is crossed, so reading SelectedItems at
-    // drag-start would see only one item. The tunnel press handler fires before that collapse, so we snapshot here.
-    private List<NodeViewModel> _dragSelection = [];
-    private TreeNodeViewModel? _treeDragCandidate;
-    private Point _treeDragStart;
 
     public MainWindow()
     {
         InitializeComponent();
 
-        // Drag-and-drop upload onto the contents list (uploads into the currently-open folder), and internal
-        // move/reference drags of a row onto a folder. The Drop/DragOver routed events are added in
-        // code-behind (AllowDrop is set in XAML). See ADR "Desktop drag-and-drop upload" and "… move and
-        // reference".
-        ContentsList.AddHandler(DragDrop.DragOverEvent, OnDragOver);
-        ContentsList.AddHandler(DragDrop.DropEvent, OnDrop);
-        ContentsList.AddHandler(PointerPressedEvent, OnListPointerPressed, RoutingStrategies.Tunnel);
-        ContentsList.AddHandler(PointerMovedEvent, OnListPointerMoved, RoutingStrategies.Tunnel);
-        ContentsList.AddHandler(PointerReleasedEvent, OnListPointerReleased, RoutingStrategies.Tunnel);
+        // Drag-and-drop — OS-file drops + the internal move/reference drag — lives in WorkbenchDragDrop
+        // (issue #466); it wires its own handlers onto the list, tree and inbox controls.
+        new WorkbenchDragDrop(this, ContentsList, FolderTree, ServerInboxList).Wire();
 
         // Ctrl/Cmd+P opens the server manager (ADR "Desktop server configuration"), Ctrl/Cmd+O opens the selected
         // document (#482) — a window-level tunnel handler so they fire regardless of focus.
@@ -57,19 +32,6 @@ public partial class MainWindow : Window
         // Set here rather than in XAML because it is ⌘ on macOS and Ctrl elsewhere (Services.Shortcuts).
         OpenMenuItem.InputGesture = Shortcuts.Open;
 
-        // The folder tree is a drop target too (drop onto any folder, incl. a repository root) AND a drag source
-        // (drag a folder onto another folder to move/reference it). Tunnel pointer handlers mirror the list's, so
-        // a plain click still selects/expands and only a past-threshold drag starts a move.
-        FolderTree.AddHandler(DragDrop.DragOverEvent, OnTreeDragOver);
-        FolderTree.AddHandler(DragDrop.DropEvent, OnTreeDrop);
-        FolderTree.AddHandler(PointerPressedEvent, OnTreePointerPressed, RoutingStrategies.Tunnel);
-        FolderTree.AddHandler(PointerMovedEvent, OnTreePointerMoved, RoutingStrategies.Tunnel);
-        FolderTree.AddHandler(PointerReleasedEvent, OnTreePointerReleased, RoutingStrategies.Tunnel);
-
-        // The inbox file-list is a drop target for OS files — dropping uploads them into the S3-backed inbox
-        // (ADR "Inbox file-list drop-zone").
-        ServerInboxList.AddHandler(DragDrop.DragOverEvent, OnInboxDragOver);
-        ServerInboxList.AddHandler(DragDrop.DropEvent, OnInboxDrop);
         // Tapping a tree folder always shows its contents — even the already-selected node, so re-clicking the
         // tree re-syncs the list after drilling into a subfolder via the contents pane (the binding alone
         // short-circuits a same-node re-selection). See MainWindowViewModel.ReselectTreeFolderAsync.
@@ -154,283 +116,28 @@ public partial class MainWindow : Window
         }
     });
 
-    // Users & groups admin (ADR "Users & groups administration tab") — the New/Copy dialogs and the Delete
-    // confirm live in the view; the VM does the Api work.
-    private void OnNewUser(object? sender, RoutedEventArgs e) => Safe.Fire(() => NewPrincipalAsync(false));
 
-    private void OnNewGroup(object? sender, RoutedEventArgs e) => Safe.Fire(() => NewPrincipalAsync(true));
 
-    private async Task NewPrincipalAsync(bool isGroup)
-    {
-        if (DataContext is not MainWindowViewModel vm)
-        {
-            return;
-        }
 
-        var result = await new PrincipalDialog(isGroup, "", "").ShowDialog<PrincipalDialog.Result?>(this);
-        if (result is not null)
-        {
-            await vm.CreatePrincipalAsync(isGroup, result.Name, result.Email, null);
-        }
-    }
 
-    // Copy = the New dialog pre-filled from the selection; the created principal gets the source's rights.
-    private void OnCopyPrincipal(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || vm.SelectedPrincipal is not { } p)
-        {
-            return;
-        }
 
-        var initialName = p.IsGroup ? $"{p.Name} (copy)" : p.Name;
-        var result = await new PrincipalDialog(p.IsGroup, initialName, "").ShowDialog<PrincipalDialog.Result?>(this);
-        if (result is not null)
-        {
-            await vm.CreatePrincipalAsync(p.IsGroup, result.Name, result.Email, p.Rights);
-        }
-    });
 
-    // Discard a checked-out document's changes (ADR "Document check-out / check-in"; ADR 0513) — confirmed, since it
-    // abandons the working copy in check-out and releases the lock without creating a new version.
-    private void OnCheckoutDiscard(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel vm && sender is Button { Tag: CheckoutRowViewModel row }
-            && await new ConfirmDialog($"Discard the changes to '{row.Name}' and release the check-out?", "Discard").ShowDialog<bool>(this))
-        {
-            await vm.Checkout.DiscardAsync(row);
-        }
-    });
 
-    // Empty the whole recycle bin — gated behind the "I AGREE" confirmation dialog (ADR "Desktop recycle bin
-    // parity"). The per-row hard-delete needs no confirmation; this one is destructive across everything.
-    private void OnRecycleBinHardDeleteAll(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel vm && await new HardDeleteAllDialog().ShowDialog<bool>(this))
-        {
-            await vm.RecycleBin.HardDeleteAllAsync();
-        }
-    });
 
-    // Bulk purge of the checked items (ADR "Bulk purge of selected recycle-bin items") — same "I AGREE" gate.
-    private void OnRecycleBinPurgeSelected(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel vm && await new HardDeleteAllDialog().ShowDialog<bool>(this))
-        {
-            await vm.RecycleBin.PurgeSelectedAsync();
-        }
-    });
 
-    private void OnDeletePrincipal(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || vm.SelectedPrincipal is not { } p)
-        {
-            return;
-        }
 
-        var message = p.IsGroup ? $"Delete the group '{p.Name}'?" : $"Deactivate the user '{p.Name}'?";
-        var confirmLabel = p.IsGroup ? "Delete" : "Deactivate";
-        if (!await new ConfirmDialog(message, confirmLabel).ShowDialog<bool>(this))
-        {
-            return;
-        }
 
-        // A user with pending review tasks can't be deactivated without handing them over (ADR "Workflow
-        // review reassignment") — prompt for a replacement reviewer and retry.
-        if (await vm.DeleteSelectedPrincipalAsync() == MainWindowViewModel.DeletePrincipalOutcome.NeedsReplacementReviewer)
-        {
-            var candidates = vm.ReplacementReviewerCandidates();
-            if (candidates.Count == 0)
-            {
-                return;
-            }
 
-            if (await new ReplacementReviewerDialog(p.Name, candidates).ShowDialog<Guid?>(this) is { } replacementId)
-            {
-                await vm.ReassignReviewsAndDeactivateAsync(replacementId);
-            }
-        }
-    });
-
-    // Service accounts (machine-to-machine, ADR 0534) — a self-contained manager window that talks to the API
-    // via the shared client; gated on CanManageServiceAccounts (the server enforces it on every call too).
-    private void OnManageServiceAccounts(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel { Api: { } api })
-        {
-            await new ServiceAccountsWindow(api).ShowDialog(this);
-        }
-    });
-
-    // Profile photo (ADR "User profile photo") — the crop dialog lives in the view; the VM uploads.
-    // "Edit profile…" (#464) — replaces the separate photo and password entries. The dialog applies a password
-    // change itself; a new photo comes back as bytes and is uploaded here, exactly as ProfilePhotoDialog's did.
-    private void OnEditProfile(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel { Api: { } api } vm
-            && await new EditProfileDialog(api).ShowDialog<byte[]?>(this) is { } png)
-        {
-            await vm.SetMyPhotoAsync(png);
-        }
-    });
-
-    private void OnChangePrincipalPhoto(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel vm && await new ProfilePhotoDialog().ShowDialog<byte[]?>(this) is { } png)
-        {
-            await vm.SetSelectedUserPhotoAsync(png);
-        }
-    });
-
-    private void OnRemovePrincipalPhoto(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel vm)
-        {
-            await vm.RemoveSelectedUserPhotoAsync();
-        }
-    });
-
-    // Passwords (ADR "User password management") — the dialogs live in the view; the VM does the API call.
-    private void OnResetPrincipalPassword(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || vm.SelectedPrincipal is not { IsGroup: false } p)
-        {
-            return;
-        }
-
-        var message = $"Reset the password for '{p.Name}'? A new random password will be generated and shown once.";
-        if (!await new ConfirmDialog(message, "Reset").ShowDialog<bool>(this))
-        {
-            return;
-        }
-
-        if (await vm.ResetSelectedUserPasswordAsync() is { } password)
-        {
-            await new GeneratedPasswordDialog(p.Name, password).ShowDialog(this);
-        }
-    });
 
     // ---- Two-factor authentication (ADR "MFA (interactive login, TOTP)") ----------------------------
 
-    private void OnSetUpMfa(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel { Api: { } api } vm && await new MfaSetupDialog(api).ShowDialog<bool>(this))
-        {
-            vm.MarkMfaEnabled();
-        }
-    });
 
-    private void OnDisableMfa(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm)
-        {
-            return;
-        }
 
-        if (await new ConfirmDialog("You'll no longer be asked for a code when you sign in. Continue?", "Disable").ShowDialog<bool>(this))
-        {
-            await vm.DisableMyMfaAsync();
-        }
-    });
 
-    // Passkeys (ADR "Desktop passkey management") — list/remove natively; adding opens the browser ceremony.
-    private void OnManagePasskeys(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel { Api: { } api })
-        {
-            await new PasskeysDialog(api).ShowDialog(this);
-        }
-    });
 
-    // ONE ribbon button, three states (#461): set up credentials, mount, or open what is already mounted.
-    //
-    // The order matters and is not arbitrary. Already-mounted is checked FIRST and answered locally, so the
-    // common case — "show me my documents" — costs no request at all. Only then does it ask the server whether
-    // credentials exist, because that is the only question the client cannot answer itself.
-    private void OnWebDavRibbon(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel { Api: { } api } vm)
-        {
-            return;
-        }
 
-        // The Repositories tab's folder is its context, exactly as Personal/Inbox is the Inbox tab's — the
-        // mounted volume IS the tree-pane (ADR 0509). With nothing selected the path is empty and the whole
-        // archive opens: the button still does what it says, rather than nothing.
-        await OpenWebDavAtAsync(vm, api, vm.WebDavFolderPath());
-    });
 
-    private void OnManageWebDav(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel { Api: { } api })
-        {
-            await new WebDavDialog(api).ShowDialog(this);
-        }
-    });
 
-    // The Inbox / Check-out tabs' single WebDAV button (ADR "One WebDAV button per tab, deep-linked"). It does
-    // the same next-useful-thing the ribbon button does — set up credentials, else mount, else open what is
-    // already mounted — with one difference that is the whole point of it being on a tab: when the volume is
-    // ALREADY mounted it opens that tab's own folder directly, not the mount root. The user pressed a button on
-    // the Inbox tab; landing them in the archive root and making them navigate is answering a question they did
-    // not ask.
-    //
-    // The button's Tag names the folder within the single mount ("Personal/Inbox", "Personal/Check-out").
-    private void OnWebDavTabButton(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel { Api: { } api } vm)
-        {
-            return;
-        }
-
-        await OpenWebDavAtAsync(vm, api, ((sender as Control)?.Tag as string ?? string.Empty).Trim('/'));
-    });
-
-    // Set up credentials, else mount, else open — landing in `subFolder` within the one mount. Shared by the
-    // ribbon and both tab buttons so "what does this button do next" is answered in one place; only the folder
-    // differs, and that is the tab's own context.
-    private async Task OpenWebDavAtAsync(MainWindowViewModel vm, Services.SimplArchiveApiClient api, string subFolder)
-    {
-        // Already mounted: no server round trip and no re-mount — go straight to the folder on disk.
-        if (OsFileManager.MountedPath() is { } mounted)
-        {
-            vm.Status = Strings.Get("MwWebDavOpening");
-            var target = subFolder.Length == 0
-                ? mounted
-                : System.IO.Path.Combine(mounted, System.IO.Path.Combine(subFolder.Split('/')));
-            var opened = await OsFileManager.OpenLocalFolderAsync(target);
-
-            // Always report the outcome. The ribbon used to discard this result, so a failure left the status
-            // line reading "Opening SimplArchive …" for ever — which is how a dead button looks from outside.
-            vm.Status = opened.Success
-                ? Strings.Get("MwWebDavMounted")
-                : string.Format(Strings.Get("MwWebDavOpenFailed"), opened.Error);
-            return;
-        }
-
-        var status = await api.GetWebDavStatusAsync();
-        if (!status.Enabled)
-        {
-            // No credentials yet: the dialog IS the next useful thing, not an error about the missing ones.
-            await new WebDavDialog(api).ShowDialog(this);
-            await vm.RefreshWebDavStateAsync();
-            return;
-        }
-
-        vm.Status = Strings.Get("MwWebDavMounting");
-        var result = await OsFileManager.OpenWebDavFolderAsync(status.Url.TrimEnd('/'), subFolder);
-        vm.Status = result.Success
-            ? Strings.Get("MwWebDavMounted")
-            : string.Format(Strings.Get("MwWebDavMountFailed"), result.Error);
-        await vm.RefreshWebDavStateAsync();
-    }
-
-    private void OnNotificationPreferences(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel { Api: { } api })
-        {
-            await new NotificationPreferencesDialog(api).ShowDialog(this);
-        }
-    });
 
     // Help ▸ Manual (ADR 0504): open the auto-generated user manual (served at /download/manual/ on the
     // connected server, ADR 0502) in the system browser rather than embedding a PDF viewer.
@@ -441,84 +148,14 @@ public partial class MainWindow : Window
     private void OnShowAbout(object? sender, RoutedEventArgs e) =>
         Safe.Fire(async () => await new AboutDialog().ShowDialog(this));
 
-    // Refresh the notifications when the bell opens (ADR "Notification viewer + click-through"); the flyout opens
-    // automatically via Button.Flyout.
-    private void OnBellClick(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel vm)
-        {
-            await vm.LoadNotificationsAsync();
-        }
-    });
 
-    // Impersonate the selected user (ADR "User impersonation"): swap the session to act as them.
-    private void OnImpersonatePrincipal(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel vm && vm.SelectedPrincipal is { IsGroup: false } p)
-        {
-            await vm.ImpersonateAsync(p.Id);
-        }
-    });
 
-    private void OnResetPrincipalMfa(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || vm.SelectedPrincipal is not { IsGroup: false } p)
-        {
-            return;
-        }
-
-        var message = $"Disable two-factor authentication for '{p.Name}'? They'll be able to sign in with just their password until they re-enroll.";
-        if (await new ConfirmDialog(message, "Reset").ShowDialog<bool>(this))
-        {
-            await vm.ResetSelectedUserMfaAsync();
-        }
-    });
 
     // ---- Legal holds (ADR "Legal hold & retention enforcement") ------------------------------------
 
-    // Place a legal hold on the selected contents-list item — creates a new matter covering it.
-    private void OnPlaceLegalHold(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || vm.SelectedItem is not { } node || node.IsReference)
-        {
-            return;
-        }
 
-        if (await new LegalHoldDialog(node.Name).ShowDialog<LegalHoldDialog.Result?>(this) is { } result)
-        {
-            await vm.CreateLegalHoldAsync(result.Name, result.Reason, node.Id);
-        }
-    });
 
-    private void OnNewLegalHold(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel vm && await new LegalHoldDialog().ShowDialog<LegalHoldDialog.Result?>(this) is { } result)
-        {
-            await vm.CreateLegalHoldAsync(result.Name, result.Reason, null);
-        }
-    });
 
-    private void OnReleaseLegalHold(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || vm.SelectedLegalHold is not { } hold)
-        {
-            return;
-        }
-
-        var message = $"Release '{hold.Name}'? Its documents are unfrozen unless another active hold still covers them.";
-        if (await new ConfirmDialog(message, "Release").ShowDialog<bool>(this))
-        {
-            await vm.ReleaseSelectedHoldAsync();
-        }
-    });
-
-    private void OnRemoveLegalHoldItem(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel vm && sender is Button { Tag: LegalHoldItemRowViewModel row })
-        {
-            await vm.RemoveHoldItemAsync(row);
-        }
-    });
 
     // Open (context menu): same as the ribbon Open button / double-click — a folder (or a document with
     // children, e.g. an email with attachments) drills in, a plain document opens in its native application.
@@ -530,234 +167,22 @@ public partial class MainWindow : Window
         }
     }
 
-    // Save as…: pick a destination via the native save-file dialog, then download the document's bytes there.
-    // Triggered from both the ribbon button and the row context menu.
-    // Compare two versions of the selected document (ADR "Document version comparison") — an inline diff dialog
-    // (plus an optional Beyond Compare launch when installed).
-    // Versions dialog (ADR "Versions dialog") — list versions with Open/Save-as/Make-current + a Compare launcher.
-    private void OnVersions(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api || vm.SelectedItem is not { IsFolder: false } node)
-        {
-            return;
-        }
 
-        var vvm = new VersionsViewModel();
-        await vvm.SetupAsync(api, node.Id, node.Name, node.Href("versions"));
-        var dialog = new VersionsDialog(vvm);
-        vvm.RequestClose = dialog.Close;
-        await dialog.ShowDialog(this);
-        if (vvm.Changed)
-        {
-            await vm.ReloadSelectedDetailAsync();
-        }
-    });
 
-    private void OnCompareVersions(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api || vm.SelectedItem is not { IsFolder: false } node)
-        {
-            return;
-        }
 
-        var cvm = new CompareVersionsViewModel();
-        await cvm.SetupAsync(api, node.Id, node.Name, node.Href("versions"));
-        var dialog = new CompareVersionsDialog(cvm);
-        await dialog.ShowDialog(this); // compare is read-only now — "Make current" lives on the Versions dialog (#265)
-    });
 
-    // Compare a checked-out document's working copy against its current version (ADR 0517) — inline unified diff +
-    // an optional Beyond Compare launch. Shown only on modified rows (the row's Tag carries the CheckoutRowViewModel).
-    private void OnCheckoutCompare(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api ||
-            (sender as Control)?.Tag is not CheckoutRowViewModel { Item: { } checkout } row)
-        {
-            return;
-        }
 
-        var ccvm = new CompareCheckoutViewModel();
-        await ccvm.SetupAsync(api, checkout, row.DisplayName, row.FileExtension, row.StashDownloadUrl);
-        await new CompareCheckoutDialog(ccvm).ShowDialog(this);
-    });
 
-    // "Beyond Compare …" straight from the row — the same comparison the dialog offers, without opening the
-    // dialog first to reach it. A user who works this way wants the external tool, not the inline diff, and
-    // making them pass through the diff to get to it is a step that exists only because of how it was built.
-    private void OnCheckoutBeyondCompare(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel { Api: { } api } vm ||
-            (sender as Control)?.Tag is not CheckoutRowViewModel row)
-        {
-            return;
-        }
 
-        vm.Status = Strings.Get("StOpeningBc");
-        vm.Status = await CheckoutDiffLauncher.OpenAsync(api, row.Id, row.FileExtension, row.StashDownloadUrl);
-    });
-
-    private void OnManageAccess(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api || vm.SelectedItem is not { } node)
-        {
-            return;
-        }
-
-        var mvm = new ManageAccessViewModel();
-        await mvm.SetupAsync(api, node.Id, node.Name);
-        await new ManageAccessDialog(mvm).ShowDialog(this);
-    });
-
-    private void OnSaveAs(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || vm.SelectedItem is not { IsFolder: false } node)
-        {
-            return;
-        }
-
-        if (node.IsArchiveEntry)
-        {
-            await SaveArchiveEntryAsync(vm, node);
-            return;
-        }
-
-        var (url, suggestedFileName) = await vm.GetDownloadInfoAsync(node);
-        if (url is null)
-        {
-            vm.Status = $"'{node.Name}' has no downloadable version.";
-            return;
-        }
-
-        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-        {
-            Title = "Save as",
-            SuggestedFileName = suggestedFileName,
-        });
-        if (file is null)
-        {
-            return; // cancelled
-        }
-
-        try
-        {
-            var (bytes, _) = await SimplArchiveApiClient.DownloadAsync(url);
-            await using var stream = await file.OpenWriteAsync();
-            await stream.WriteAsync(bytes);
-            vm.Status = $"Saved '{node.Name}' to {file.Path.LocalPath}.";
-        }
-        catch (Exception ex)
-        {
-            vm.Status = $"Could not save '{node.Name}': {ex.Message}";
-        }
-    });
-
-    // References … (context menu, items with references): list the folders that reference this item; opening
-    // a row navigates to that folder.
-    private void OnReferences(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || vm.CreateReferencesViewModel() is not { } references)
-        {
-            return;
-        }
-
-        await references.LoadAsync();
-        var result = await new ReferencesDialog { DataContext = references }.ShowDialog<ReferencesDialogResult?>(this);
-        if (result is not { } r)
-        {
-            return;
-        }
-
-        if (r.Promote)
-        {
-            await vm.PromotePrimaryLocationAsync(references.ItemId, r.FolderId);
-        }
-        else
-        {
-            // Open the chosen folder AND select the item for viewing — its real row in the primary location, or its
-            // reference (shortcut) row in a referencing folder.
-            await vm.OpenFolderAsync(r.FolderId, references.ItemId);
-        }
-    });
-
-    // Go to … (context menu, references only): jump to the referenced item's real home folder.
-    private void OnGoTo(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel vm && vm.SelectedItem is { IsReference: true } node)
-        {
-            await vm.GoToReferenceAsync(node);
-        }
-    });
 
     // ---- Inbox (ADR "S3-backed inbox", phase 2) -------------------------------------------------------
 
     private static InboxItemViewModel? InboxItemFrom(object? sender) =>
         (sender as Control)?.Tag as InboxItemViewModel;
 
-    private void OnInboxItemDoubleTapped(object? sender, TappedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel vm)
-        {
-            await vm.OpenServerInboxItemCommand.ExecuteAsync(null);
-        }
-    });
 
-    private void OnInboxOpen(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is MainWindowViewModel vm && InboxItemFrom(sender) is { } item)
-        {
-            vm.SelectedServerInboxItem = item;
-            await vm.OpenServerInboxItemCommand.ExecuteAsync(null);
-        }
-    });
 
-    // File a server-inbox item into a folder chosen from the picker.
-    private void OnInboxFile(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || InboxItemFrom(sender) is not { } item ||
-            vm.CreateFolderPickerViewModel() is not { } picker)
-        {
-            return;
-        }
 
-        await picker.LoadAsync();
-        var result = await new FolderPickerDialog { DataContext = picker }.ShowDialog<FilingResult?>(this);
-        if (result is null)
-        {
-            return;
-        }
-
-        if (result.Mode == FilingMode.AsVersion)
-        {
-            await vm.FileServerInboxItemAsVersionAsync(item, result.TargetId, result.Comment);
-        }
-        else
-        {
-            await vm.FileServerInboxItemAsync(item, result.TargetId, result.Comment);
-        }
-    });
-
-    // "File multiple items": bulk-file the selected server inbox items into one folder (ADR "Bulk-file multiple
-    // inbox items").
-    private void OnInboxFileMultiple(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm)
-        {
-            return;
-        }
-
-        var items = ServerInboxList.SelectedItems?.OfType<InboxItemViewModel>().ToList() ?? [];
-        if (items.Count == 0 || vm.CreateBulkFolderPickerViewModel() is not { } picker)
-        {
-            return;
-        }
-
-        await picker.LoadAsync();
-        var result = await new FolderPickerDialog { DataContext = picker }.ShowDialog<FilingResult?>(this);
-        if (result is not null)
-        {
-            await vm.FileMultipleServerItemsAsync(items, result.TargetId, result.Comment);
-        }
-    });
 
     // Track the server-inbox selection count so the "File multiple items" button shows only for 2+.
     private void OnServerInboxSelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -768,31 +193,7 @@ public partial class MainWindow : Window
         }
     }
 
-    // OS files dropped onto the inbox list upload straight into the S3-backed inbox (ADR "Inbox file-list
-    // drop-zone"). Only external files are accepted (no internal row drag on the inbox). The classic DataObject/
-    // DragEventArgs.Data API is used across the drag-drop code (see the note by the region below), suppressed.
-#pragma warning disable CS0618
-    private static void OnInboxDragOver(object? sender, DragEventArgs e)
-    {
-        e.DragEffects = e.Data.Contains(DataFormats.Files) ? DragDropEffects.Copy : DragDropEffects.None;
-    }
 
-    private void OnInboxDrop(object? sender, DragEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm)
-        {
-            return;
-        }
-
-        var storageFiles = e.Data.GetFiles()?.OfType<IStorageFile>().ToList();
-        if (storageFiles is not { Count: > 0 })
-        {
-            return;
-        }
-
-        await vm.UploadFilesToInboxAsync(await ReadStorageFilesAsync(storageFiles));
-    });
-#pragma warning restore CS0618
 
     private void OnInboxDelete(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
@@ -1538,399 +939,20 @@ public partial class MainWindow : Window
         }
     }
 
-    // Begin an internal move/reference drag once the pointer leaves the pressed row by a small threshold.
-    private void OnListPointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (e.GetCurrentPoint(ContentsList).Properties.IsLeftButtonPressed
-            && FindDataContext<NodeViewModel>(e.Source) is { } node)
-        {
-            _dragCandidate = node;
-            _dragStart = e.GetPosition(ContentsList);
-            // Snapshot the full multi-selection now — the ListBox is about to collapse it to the pressed row.
-            _dragSelection = ContentsList.SelectedItems?.OfType<NodeViewModel>().ToList() ?? [];
-        }
-    }
 
-    // Avalonia 11.3's replacement DataTransfer API is still stabilising; the classic DataObject /
-    // DragEventArgs.Data / DragDrop.DoDragDrop members remain functional, so we use them across the whole
-    // drag-and-drop region and suppress the obsolete warnings here.
-#pragma warning disable CS0618
-    private void OnListPointerMoved(object? sender, PointerEventArgs e) => Safe.Fire(async () =>
-    {
-        if (_dragCandidate is not { } node)
-        {
-            return;
-        }
 
-        if (!e.GetCurrentPoint(ContentsList).Properties.IsLeftButtonPressed)
-        {
-            _dragCandidate = null;
-            return;
-        }
 
-        var delta = e.GetPosition(ContentsList) - _dragStart;
-        if (Math.Abs(delta.X) < 6 && Math.Abs(delta.Y) < 6)
-        {
-            return;
-        }
 
-        _dragCandidate = null;
 
-        // The drag carries the whole multi-selection when the grabbed row is part of it (else just that row), so a
-        // drop moves/references ALL of them — not only the one under the cursor. We use the press-time snapshot
-        // (_dragSelection), since the ListBox has since collapsed its live selection to the pressed row. Archive
-        // rows can't be dragged.
-        var source = (_dragSelection.Count > 1 && _dragSelection.Contains(node) ? _dragSelection : [node])
-            .Where(n => !n.IsArchiveEntry && !n.IsArchiveBack).ToList();
-        if (source.Count == 0)
-        {
-            return;
-        }
 
-        // Re-apply the multi-selection the ListBox collapsed to the pressed row on press, so the dragged items stay
-        // visibly highlighted (and the bulk bar stays up) throughout the drag — the user can see exactly what will
-        // move/reference.
-        if (source.Count > 1 && ContentsList.SelectedItems is { } sel)
-        {
-            sel.Clear();
-            foreach (var n in source)
-            {
-                sel.Add(n);
-            }
-        }
 
-        _internalDrag = source.Select(n => new DragNode(n.Id, n.Name, n.IsFolder, n.IsReference)).ToList();
-        var data = new DataObject();
 
-        // Also stage the selection as OS files so a drop OUTSIDE the app copies them to the filesystem (issue
-        // #266): a document as its current-version file (<stem><ext>), a folder as a recursive .zip. Real
-        // docs/folders only — a reference stays an internal-only drag. The files must exist before DoDragDrop, so
-        // stage (await) first, with a brief "preparing…" status (an async download can't run during the gesture).
-        // Only the staged files ride the DataObject — the internal payload lives in _internalDrag — so the drag
-        // badge counts items, not formats.
-        var fileCount = 0;
-        if (DataContext is MainWindowViewModel dragVm && dragVm.Api is { } dragApi)
-        {
-            var items = source.Where(n => !n.IsReference).Select(n => new DragOutItem(n.Id, n.Name, n.IsFolder)).ToList();
-            if (items.Count > 0)
-            {
-                dragVm.Status = Strings.Get("StPreparingDrag");
-                try
-                {
-                    var files = await DragOutStager.StageAsync(dragApi, items);
-                    if (files.Count > 0)
-                    {
-                        data.Set(DataFormats.FileNames, files);
-                        fileCount = files.Count;
-                    }
-                }
-                catch (Exception)
-                {
-                    // Best-effort — the internal move/reference drag still works even if staging fails.
-                }
-                finally
-                {
-                    dragVm.Status = "";
-                }
-            }
-        }
 
-        // An all-references drag stages no files; give the DataObject the node format so the OS still starts a drag.
-        if (fileCount == 0)
-        {
-            data.Set(NodeDragFormat, _internalDrag);
-        }
 
-        try
-        {
-            await DragDrop.DoDragDrop(e, data, DragDropEffects.Move | DragDropEffects.Copy);
-        }
-        finally
-        {
-            _internalDrag = null;
-        }
-    });
 
-    private void OnListPointerReleased(object? sender, PointerReleasedEventArgs e) => _dragCandidate = null;
-
-    // A real tree folder can be dragged onto another folder to move/reference it (synthetic/launcher/personal
-    // nodes aren't real, movable folders, so they're not drag sources). Mirrors the list's candidate+threshold so
-    // a plain click still selects/expands.
-    private void OnTreePointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (e.GetCurrentPoint(FolderTree).Properties.IsLeftButtonPressed
-            && FindDataContext<TreeNodeViewModel>(e.Source) is { IsSynthetic: false, IsLauncher: false, IsPersonal: false } node)
-        {
-            _treeDragCandidate = node;
-            _treeDragStart = e.GetPosition(FolderTree);
-        }
-    }
-
-    private void OnTreePointerMoved(object? sender, PointerEventArgs e) => Safe.Fire(async () =>
-    {
-        if (_treeDragCandidate is not { } node)
-        {
-            return;
-        }
-
-        if (!e.GetCurrentPoint(FolderTree).Properties.IsLeftButtonPressed)
-        {
-            _treeDragCandidate = null;
-            return;
-        }
-
-        var delta = e.GetPosition(FolderTree) - _treeDragStart;
-        if (Math.Abs(delta.X) < 6 && Math.Abs(delta.Y) < 6)
-        {
-            return;
-        }
-
-        _treeDragCandidate = null;
-
-        _internalDrag = [new DragNode(node.Id, node.Name, true, node.IsReference)];
-        var data = new DataObject();
-
-        // Stage the folder as a recursive .zip so a drop OUTSIDE the app copies it out (issue #266), unless it's a
-        // shortcut (internal-only). Only the staged file rides the DataObject (the payload is in _internalDrag).
-        var fileCount = 0;
-        if (!node.IsReference && DataContext is MainWindowViewModel dragVm && dragVm.Api is { } dragApi)
-        {
-            dragVm.Status = Strings.Get("StPreparingDrag");
-            try
-            {
-                var files = await DragOutStager.StageAsync(dragApi, [new DragOutItem(node.Id, node.Name, true)]);
-                if (files.Count > 0)
-                {
-                    data.Set(DataFormats.FileNames, files);
-                    fileCount = files.Count;
-                }
-            }
-            catch (Exception)
-            {
-                // Best-effort — the internal move/reference drag still works even if staging fails.
-            }
-            finally
-            {
-                dragVm.Status = "";
-            }
-        }
-
-        if (fileCount == 0)
-        {
-            data.Set(NodeDragFormat, _internalDrag);
-        }
-
-        try
-        {
-            await DragDrop.DoDragDrop(e, data, DragDropEffects.Move | DragDropEffects.Copy);
-        }
-        finally
-        {
-            _internalDrag = null;
-        }
-    });
-
-    private void OnTreePointerReleased(object? sender, PointerReleasedEventArgs e) => _treeDragCandidate = null;
-
-    private void OnDragOver(object? sender, DragEventArgs e)
-    {
-        e.DragEffects = _internalDrag is not null || e.Data.Contains(DataFormats.Files) || e.Data.Contains(NodeDragFormat)
-            ? DragDropEffects.Copy | DragDropEffects.Move
-            : DragDropEffects.None;
-    }
-
-    private void OnDrop(object? sender, DragEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm)
-        {
-            return;
-        }
-
-        // Internal move/reference drag (identified by the in-flight _internalDrag field, not a DataObject format):
-        // the dragged items dropped on a folder row file into that folder; dropped anywhere else in the pane file
-        // into the currently-open folder.
-        if (_internalDrag is { } dragged)
-        {
-            var node = FindDataContext<NodeViewModel>(e.Source);
-            var targetFolderId = node is { IsFolder: true } ? node.Id : vm.CurrentFolderId;
-            if (targetFolderId is { } folderId)
-            {
-                await PerformDropAsync(vm, dragged, folderId);
-            }
-
-            return;
-        }
-
-        var files = e.Data.GetFiles()?.OfType<IStorageFile>().ToList();
-        if (files is not { Count: > 0 })
-        {
-            return;
-        }
-
-        var target = FindDataContext<NodeViewModel>(e.Source);
-
-        // Dropped onto a document row → the inbox-style filing dialog: file as a new version of it, or into its
-        // folder, with an optional comment (ADR "List-pane drop filing").
-        if (target is { IsFolder: false, IsArchiveEntry: false, IsArchiveBack: false }
-            && vm.CreateDropFilingPickerViewModel(target, files.Count) is { } picker)
-        {
-            await picker.LoadAsync();
-            var result = await new FolderPickerDialog { DataContext = picker }.ShowDialog<FilingResult?>(this);
-            if (result is not null)
-            {
-                await vm.FileDroppedFilesAsync(files, result);
-            }
-
-            return;
-        }
-
-        // Dropped onto a folder row → that folder; anywhere else → the currently-open folder.
-        await vm.UploadDroppedFilesAsync(files, target is { IsFolder: true } ? target.Id : null);
-    });
-
-    private void OnTreeDragOver(object? sender, DragEventArgs e)
-    {
-        // The tree accepts an internal move/reference drag, and — since #467 — an OS-file drop, matching the web
-        // client. What it accepts depends on the node under the pointer, so that a target which cannot honour a
-        // drop does not advertise one (ADR 0543 applied to the affordance).
-        if (_internalDrag is not null || e.Data.Contains(NodeDragFormat))
-        {
-            var node = FindDataContext<TreeNodeViewModel>(e.Source);
-
-            // Personal ▸ Inbox takes a document as a TEMPLATE (a copy, hence Copy); a real folder takes a move
-            // or a reference; Check-out takes neither — a document already in the archive is not a working copy.
-            e.DragEffects = node switch
-            {
-                { PersonalKind: "inbox" } => DragDropEffects.Copy,
-                { PersonalKind: "checkout" } => DragDropEffects.None,
-                _ => DragDropEffects.Copy | DragDropEffects.Move,
-            };
-            return;
-        }
-
-        if (e.Data.Contains(DataFormats.Files))
-        {
-            // Every folder takes files; so do both launchers, each meaning something different (see OnTreeDrop).
-            var node = FindDataContext<TreeNodeViewModel>(e.Source);
-            e.DragEffects = node is null ? DragDropEffects.None : DragDropEffects.Copy;
-            return;
-        }
-
-        e.DragEffects = DragDropEffects.None;
-    }
-
-    private void OnTreeDrop(object? sender, DragEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || FindDataContext<TreeNodeViewModel>(e.Source) is not { } treeNode)
-        {
-            return;
-        }
-
-        // An internal drag: onto Personal ▸ Inbox it copies the document in as a TEMPLATE, carrying its mask and
-        // index values, so new work can start from an existing document without creating one (#467). Onto a real
-        // folder it moves or references, as before.
-        if (_internalDrag is { } dragged)
-        {
-            if (treeNode.PersonalKind == "inbox")
-            {
-                await vm.CopyDocumentsToInboxAsync(dragged.Select(d => d.Id).ToList());
-                return;
-            }
-
-            if (!treeNode.IsLauncher)
-            {
-                await PerformDropAsync(vm, dragged, treeNode.Id);
-            }
-
-            return;
-        }
-
-        var storageFiles = e.Data.GetFiles()?.OfType<IStorageFile>().ToList();
-        if (storageFiles is not { Count: > 0 })
-        {
-            return;
-        }
-
-        // The launchers each mean something specific, and neither can show its own result — the tree lists
-        // FOLDERS — so each opens the tab that can (#467).
-        if (treeNode.IsLauncher)
-        {
-            var files = await ReadStorageFilesAsync(storageFiles);
-            if (treeNode.PersonalKind == "inbox")
-            {
-                await vm.UploadFilesToInboxAsync(files);
-            }
-            else
-            {
-                await vm.StashDroppedFilesAsync(files);
-            }
-
-            vm.SelectedTab = treeNode.LauncherTab;
-            return;
-        }
-
-        // A plain folder node: file into THAT folder, then follow to it, so the user sees what they filed
-        // rather than being left looking at whatever folder was open.
-        await vm.UploadDroppedFilesAsync(storageFiles, treeNode.Id);
-        await vm.OpenFolderAsync(treeNode.Id);
-    });
-
-    // Reading the bytes is shared with the inbox pane's own drop handler; a copy would be a second place to get
-    // stream disposal wrong.
-    private static async Task<List<(string Name, byte[] Bytes)>> ReadStorageFilesAsync(IReadOnlyList<IStorageFile> storageFiles)
-    {
-        var files = new List<(string Name, byte[] Bytes)>();
-        foreach (var file in storageFiles)
-        {
-            await using var stream = await file.OpenReadAsync();
-            using var buffer = new MemoryStream();
-            await stream.CopyToAsync(buffer);
-            files.Add((file.Name, buffer.ToArray()));
-        }
-
-        return files;
-    }
-#pragma warning restore CS0618
-
-    // Dragged real items offer Move or Reference; a drag of only shortcuts only ever places more shortcuts (moving
-    // the real targets when you grabbed shortcuts would be surprising). Drops onto self are filtered out; the
-    // backend additionally skips a folder dropped into its own subtree (cycle) and no-op re-references.
-    private async Task PerformDropAsync(MainWindowViewModel vm, IReadOnlyList<DragNode> dragged, Guid targetFolderId)
-    {
-        var items = dragged.Where(d => d.Id != targetFolderId).ToList();
-        if (items.Count == 0)
-        {
-            return;
-        }
-
-        var ids = items.Select(d => d.Id).ToList();
-
-        // An all-shortcuts drag only ever places references.
-        if (items.All(d => d.IsReference))
-        {
-            await vm.BulkReferenceNodesAsync(ids, targetFolderId);
-            return;
-        }
-
-        var label = items.Count == 1 ? $"'{items[0].Name}'" : $"{items.Count} items";
-        var where = items.Count == 1 ? "it is" : "they are";
-        var action = await new DropActionDialog(
-            $"Move {label} here, or place a reference (shortcut) that leaves {(items.Count == 1 ? "it" : "them")} where {where}?")
-            .ShowDialog<DropAction?>(this);
-
-        switch (action)
-        {
-            case DropAction.Move:
-                await vm.BulkMoveNodesAsync(ids, targetFolderId);
-                break;
-            case DropAction.Reference:
-                await vm.BulkReferenceNodesAsync(ids, targetFolderId);
-                break;
-        }
-    }
 
     // Walks up the visual tree from a routed-event source to the nearest DataContext of type T.
-    private static T? FindDataContext<T>(object? source) where T : class
+    internal static T? FindDataContext<T>(object? source) where T : class
     {
         for (var visual = source as Visual; visual is not null; visual = visual.GetVisualParent())
         {

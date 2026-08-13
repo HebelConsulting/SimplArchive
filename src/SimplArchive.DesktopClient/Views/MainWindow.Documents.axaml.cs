@@ -1,0 +1,396 @@
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
+using SimplArchive.DesktopClient.Services;
+using SimplArchive.DesktopClient.ViewModels;
+using SimplArchive.Localization;
+
+namespace SimplArchive.DesktopClient.Views;
+
+// The document/session handlers of the workbench window (issue #466 split the code-behind by feature family):
+// legal holds, versions + comparisons, manage access, save-as, references, the inbox row actions, check-out,
+// recycle bin, and the WebDAV mount buttons. Same class — view-glue whose logic lives in the view models.
+public partial class MainWindow
+{
+    // Place a legal hold on the selected contents-list item — creates a new matter covering it.
+    private void OnPlaceLegalHold(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || vm.SelectedItem is not { } node || node.IsReference)
+        {
+            return;
+        }
+
+        if (await new LegalHoldDialog(node.Name).ShowDialog<LegalHoldDialog.Result?>(this) is { } result)
+        {
+            await vm.CreateLegalHoldAsync(result.Name, result.Reason, node.Id);
+        }
+    });
+
+    private void OnNewLegalHold(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && await new LegalHoldDialog().ShowDialog<LegalHoldDialog.Result?>(this) is { } result)
+        {
+            await vm.CreateLegalHoldAsync(result.Name, result.Reason, null);
+        }
+    });
+
+    private void OnReleaseLegalHold(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || vm.SelectedLegalHold is not { } hold)
+        {
+            return;
+        }
+
+        var message = $"Release '{hold.Name}'? Its documents are unfrozen unless another active hold still covers them.";
+        if (await new ConfirmDialog(message, "Release").ShowDialog<bool>(this))
+        {
+            await vm.ReleaseSelectedHoldAsync();
+        }
+    });
+
+    private void OnRemoveLegalHoldItem(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && sender is Button { Tag: LegalHoldItemRowViewModel row })
+        {
+            await vm.RemoveHoldItemAsync(row);
+        }
+    });
+
+    // Save as…: pick a destination via the native save-file dialog, then download the document's bytes there.
+    // Triggered from both the ribbon button and the row context menu.
+    // Compare two versions of the selected document (ADR "Document version comparison") — an inline diff dialog
+    // (plus an optional Beyond Compare launch when installed).
+    // Versions dialog (ADR "Versions dialog") — list versions with Open/Save-as/Make-current + a Compare launcher.
+    private void OnVersions(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api || vm.SelectedItem is not { IsFolder: false } node)
+        {
+            return;
+        }
+
+        var vvm = new VersionsViewModel();
+        await vvm.SetupAsync(api, node.Id, node.Name, node.Href("versions"));
+        var dialog = new VersionsDialog(vvm);
+        vvm.RequestClose = dialog.Close;
+        await dialog.ShowDialog(this);
+        if (vvm.Changed)
+        {
+            await vm.ReloadSelectedDetailAsync();
+        }
+    });
+
+    private void OnCompareVersions(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api || vm.SelectedItem is not { IsFolder: false } node)
+        {
+            return;
+        }
+
+        var cvm = new CompareVersionsViewModel();
+        await cvm.SetupAsync(api, node.Id, node.Name, node.Href("versions"));
+        var dialog = new CompareVersionsDialog(cvm);
+        await dialog.ShowDialog(this); // compare is read-only now — "Make current" lives on the Versions dialog (#265)
+    });
+
+    // Compare a checked-out document's working copy against its current version (ADR 0517) — inline unified diff +
+    // an optional Beyond Compare launch. Shown only on modified rows (the row's Tag carries the CheckoutRowViewModel).
+    private void OnCheckoutCompare(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api ||
+            (sender as Control)?.Tag is not CheckoutRowViewModel { Item: { } checkout } row)
+        {
+            return;
+        }
+
+        var ccvm = new CompareCheckoutViewModel();
+        await ccvm.SetupAsync(api, checkout, row.DisplayName, row.FileExtension, row.StashDownloadUrl);
+        await new CompareCheckoutDialog(ccvm).ShowDialog(this);
+    });
+
+    // "Beyond Compare …" straight from the row — the same comparison the dialog offers, without opening the
+    // dialog first to reach it. A user who works this way wants the external tool, not the inline diff, and
+    // making them pass through the diff to get to it is a step that exists only because of how it was built.
+    private void OnCheckoutBeyondCompare(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel { Api: { } api } vm ||
+            (sender as Control)?.Tag is not CheckoutRowViewModel row)
+        {
+            return;
+        }
+
+        vm.Status = Strings.Get("StOpeningBc");
+        vm.Status = await CheckoutDiffLauncher.OpenAsync(api, row.Id, row.FileExtension, row.StashDownloadUrl);
+    });
+
+    private void OnManageAccess(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api || vm.SelectedItem is not { } node)
+        {
+            return;
+        }
+
+        var mvm = new ManageAccessViewModel();
+        await mvm.SetupAsync(api, node.Id, node.Name);
+        await new ManageAccessDialog(mvm).ShowDialog(this);
+    });
+
+    private void OnSaveAs(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || vm.SelectedItem is not { IsFolder: false } node)
+        {
+            return;
+        }
+
+        if (node.IsArchiveEntry)
+        {
+            await SaveArchiveEntryAsync(vm, node);
+            return;
+        }
+
+        var (url, suggestedFileName) = await vm.GetDownloadInfoAsync(node);
+        if (url is null)
+        {
+            vm.Status = $"'{node.Name}' has no downloadable version.";
+            return;
+        }
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save as",
+            SuggestedFileName = suggestedFileName,
+        });
+        if (file is null)
+        {
+            return; // cancelled
+        }
+
+        try
+        {
+            var (bytes, _) = await SimplArchiveApiClient.DownloadAsync(url);
+            await using var stream = await file.OpenWriteAsync();
+            await stream.WriteAsync(bytes);
+            vm.Status = $"Saved '{node.Name}' to {file.Path.LocalPath}.";
+        }
+        catch (Exception ex)
+        {
+            vm.Status = $"Could not save '{node.Name}': {ex.Message}";
+        }
+    });
+
+    // References … (context menu, items with references): list the folders that reference this item; opening
+    // a row navigates to that folder.
+    private void OnReferences(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || vm.CreateReferencesViewModel() is not { } references)
+        {
+            return;
+        }
+
+        await references.LoadAsync();
+        var result = await new ReferencesDialog { DataContext = references }.ShowDialog<ReferencesDialogResult?>(this);
+        if (result is not { } r)
+        {
+            return;
+        }
+
+        if (r.Promote)
+        {
+            await vm.PromotePrimaryLocationAsync(references.ItemId, r.FolderId);
+        }
+        else
+        {
+            // Open the chosen folder AND select the item for viewing — its real row in the primary location, or its
+            // reference (shortcut) row in a referencing folder.
+            await vm.OpenFolderAsync(r.FolderId, references.ItemId);
+        }
+    });
+
+    // Go to … (context menu, references only): jump to the referenced item's real home folder.
+    private void OnGoTo(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && vm.SelectedItem is { IsReference: true } node)
+        {
+            await vm.GoToReferenceAsync(node);
+        }
+    });
+
+    private void OnInboxItemDoubleTapped(object? sender, TappedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm)
+        {
+            await vm.OpenServerInboxItemCommand.ExecuteAsync(null);
+        }
+    });
+
+    private void OnInboxOpen(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && InboxItemFrom(sender) is { } item)
+        {
+            vm.SelectedServerInboxItem = item;
+            await vm.OpenServerInboxItemCommand.ExecuteAsync(null);
+        }
+    });
+
+    // File a server-inbox item into a folder chosen from the picker.
+    private void OnInboxFile(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || InboxItemFrom(sender) is not { } item ||
+            vm.CreateFolderPickerViewModel() is not { } picker)
+        {
+            return;
+        }
+
+        await picker.LoadAsync();
+        var result = await new FolderPickerDialog { DataContext = picker }.ShowDialog<FilingResult?>(this);
+        if (result is null)
+        {
+            return;
+        }
+
+        if (result.Mode == FilingMode.AsVersion)
+        {
+            await vm.FileServerInboxItemAsVersionAsync(item, result.TargetId, result.Comment);
+        }
+        else
+        {
+            await vm.FileServerInboxItemAsync(item, result.TargetId, result.Comment);
+        }
+    });
+
+    // "File multiple items": bulk-file the selected server inbox items into one folder (ADR "Bulk-file multiple
+    // inbox items").
+    private void OnInboxFileMultiple(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm)
+        {
+            return;
+        }
+
+        var items = ServerInboxList.SelectedItems?.OfType<InboxItemViewModel>().ToList() ?? [];
+        if (items.Count == 0 || vm.CreateBulkFolderPickerViewModel() is not { } picker)
+        {
+            return;
+        }
+
+        await picker.LoadAsync();
+        var result = await new FolderPickerDialog { DataContext = picker }.ShowDialog<FilingResult?>(this);
+        if (result is not null)
+        {
+            await vm.FileMultipleServerItemsAsync(items, result.TargetId, result.Comment);
+        }
+    });
+
+    // Discard a checked-out document's changes (ADR "Document check-out / check-in"; ADR 0513) — confirmed, since it
+    // abandons the working copy in check-out and releases the lock without creating a new version.
+    private void OnCheckoutDiscard(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && sender is Button { Tag: CheckoutRowViewModel row }
+            && await new ConfirmDialog($"Discard the changes to '{row.Name}' and release the check-out?", "Discard").ShowDialog<bool>(this))
+        {
+            await vm.Checkout.DiscardAsync(row);
+        }
+    });
+
+    // Empty the whole recycle bin — gated behind the "I AGREE" confirmation dialog (ADR "Desktop recycle bin
+    // parity"). The per-row hard-delete needs no confirmation; this one is destructive across everything.
+    private void OnRecycleBinHardDeleteAll(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && await new HardDeleteAllDialog().ShowDialog<bool>(this))
+        {
+            await vm.RecycleBin.HardDeleteAllAsync();
+        }
+    });
+
+    // Bulk purge of the checked items (ADR "Bulk purge of selected recycle-bin items") — same "I AGREE" gate.
+    private void OnRecycleBinPurgeSelected(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && await new HardDeleteAllDialog().ShowDialog<bool>(this))
+        {
+            await vm.RecycleBin.PurgeSelectedAsync();
+        }
+    });
+
+    // ONE ribbon button, three states (#461): set up credentials, mount, or open what is already mounted.
+    //
+    // The order matters and is not arbitrary. Already-mounted is checked FIRST and answered locally, so the
+    // common case — "show me my documents" — costs no request at all. Only then does it ask the server whether
+    // credentials exist, because that is the only question the client cannot answer itself.
+    private void OnWebDavRibbon(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel { Api: { } api } vm)
+        {
+            return;
+        }
+
+        // The Repositories tab's folder is its context, exactly as Personal/Inbox is the Inbox tab's — the
+        // mounted volume IS the tree-pane (ADR 0509). With nothing selected the path is empty and the whole
+        // archive opens: the button still does what it says, rather than nothing.
+        await OpenWebDavAtAsync(vm, api, vm.WebDavFolderPath());
+    });
+
+    private void OnManageWebDav(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel { Api: { } api })
+        {
+            await new WebDavDialog(api).ShowDialog(this);
+        }
+    });
+
+    // The Inbox / Check-out tabs' single WebDAV button (ADR "One WebDAV button per tab, deep-linked"). It does
+    // the same next-useful-thing the ribbon button does — set up credentials, else mount, else open what is
+    // already mounted — with one difference that is the whole point of it being on a tab: when the volume is
+    // ALREADY mounted it opens that tab's own folder directly, not the mount root. The user pressed a button on
+    // the Inbox tab; landing them in the archive root and making them navigate is answering a question they did
+    // not ask.
+    //
+    // The button's Tag names the folder within the single mount ("Personal/Inbox", "Personal/Check-out").
+    private void OnWebDavTabButton(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel { Api: { } api } vm)
+        {
+            return;
+        }
+
+        await OpenWebDavAtAsync(vm, api, ((sender as Control)?.Tag as string ?? string.Empty).Trim('/'));
+    });
+
+    // Set up credentials, else mount, else open — landing in `subFolder` within the one mount. Shared by the
+    // ribbon and both tab buttons so "what does this button do next" is answered in one place; only the folder
+    // differs, and that is the tab's own context.
+    private async Task OpenWebDavAtAsync(MainWindowViewModel vm, Services.SimplArchiveApiClient api, string subFolder)
+    {
+        // Already mounted: no server round trip and no re-mount — go straight to the folder on disk.
+        if (OsFileManager.MountedPath() is { } mounted)
+        {
+            vm.Status = Strings.Get("MwWebDavOpening");
+            var target = subFolder.Length == 0
+                ? mounted
+                : System.IO.Path.Combine(mounted, System.IO.Path.Combine(subFolder.Split('/')));
+            var opened = await OsFileManager.OpenLocalFolderAsync(target);
+
+            // Always report the outcome. The ribbon used to discard this result, so a failure left the status
+            // line reading "Opening SimplArchive …" for ever — which is how a dead button looks from outside.
+            vm.Status = opened.Success
+                ? Strings.Get("MwWebDavMounted")
+                : string.Format(Strings.Get("MwWebDavOpenFailed"), opened.Error);
+            return;
+        }
+
+        var status = await api.GetWebDavStatusAsync();
+        if (!status.Enabled)
+        {
+            // No credentials yet: the dialog IS the next useful thing, not an error about the missing ones.
+            await new WebDavDialog(api).ShowDialog(this);
+            await vm.RefreshWebDavStateAsync();
+            return;
+        }
+
+        vm.Status = Strings.Get("MwWebDavMounting");
+        var result = await OsFileManager.OpenWebDavFolderAsync(status.Url.TrimEnd('/'), subFolder);
+        vm.Status = result.Success
+            ? Strings.Get("MwWebDavMounted")
+            : string.Format(Strings.Get("MwWebDavMountFailed"), result.Error);
+        await vm.RefreshWebDavStateAsync();
+    }
+}
