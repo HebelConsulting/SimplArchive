@@ -304,8 +304,9 @@ async function uploadFiles(dotNetRef, folderId, files) {
                 continue;
             }
 
-            // .NET finalizes (server-side hash), sets index data, and assigns the default mask.
-            await dotNetRef.invokeMethodAsync('FinalizeUploadAsync', target.documentId, target.versionId, file.name, target.comment ?? null);
+            // .NET finalizes (server-side hash), sets index data, and assigns the default mask — at the
+            // address the create response advertised, which rode through on the target (ADR 0543, #416).
+            await dotNetRef.invokeMethodAsync('FinalizeUploadAsync', target.finalizeHref, file.name, target.comment ?? null);
         } catch (err) {
             await dotNetRef.invokeMethodAsync('ReportUploadFailureAsync', file.name, String(err));
         }
@@ -341,7 +342,7 @@ async function uploadFilesToDocument(dotNetRef, docId, files) {
                     await dotNetRef.invokeMethodAsync('ReportUploadFailureAsync', file.name, `storage upload failed (${response.status})`);
                     continue;
                 }
-                await dotNetRef.invokeMethodAsync('FinalizeVersionAsync', docId, target.versionId, file.name, decision.comment);
+                await dotNetRef.invokeMethodAsync('FinalizeVersionAsync', target.finalizeHref, file.name, decision.comment);
             } catch (err) {
                 await dotNetRef.invokeMethodAsync('ReportUploadFailureAsync', file.name, String(err));
             }
@@ -368,7 +369,7 @@ async function uploadFilesToDocument(dotNetRef, docId, files) {
                 await dotNetRef.invokeMethodAsync('ReportUploadFailureAsync', file.name, `storage upload failed (${response.status})`);
                 continue;
             }
-            await dotNetRef.invokeMethodAsync('FinalizeUploadAsync', target.documentId, target.versionId, file.name, decision.comment);
+            await dotNetRef.invokeMethodAsync('FinalizeUploadAsync', target.finalizeHref, file.name, decision.comment);
         } catch (err) {
             await dotNetRef.invokeMethodAsync('ReportUploadFailureAsync', file.name, String(err));
         }

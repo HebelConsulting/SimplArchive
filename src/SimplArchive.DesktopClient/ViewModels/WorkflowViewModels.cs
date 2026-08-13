@@ -155,6 +155,9 @@ public sealed class TaskItemViewModel
 {
     public required Guid DocumentId { get; init; }
     public Guid? ParentId { get; init; }
+
+    /// <summary>The row's advertised addresses (`document`, `parent`, `workflow`) — opening follows these (#443).</summary>
+    public IReadOnlyDictionary<string, string>? Links { get; init; }
     public required string DocumentName { get; init; }
     public int? VersionNumber { get; init; }
     public DateTimeOffset AssignedAt { get; init; }

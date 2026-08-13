@@ -1933,6 +1933,30 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // Navigates the contents pane to a folder by id (shared by "Go to …" and the references dialog),
     // optionally selecting an item in it. Slice simplification — the breadcrumb is rebuilt as
     // Repositories / <folder> only (the read API doesn't expose full ancestry, and the tree isn't re-synced).
+    /// <summary>
+    /// Opens the folder behind an ADVERTISED address (#443) — what the payload-row consumers (a task, a
+    /// notification, a reminder, a search hit) use, following the row's `parent`/`document` rel instead of
+    /// handing a bare id back into the address turn. ONE read serves the name, the id and the collections,
+    /// where the id path costs two.
+    /// </summary>
+    public async Task OpenFolderAsync(string folderHref, Guid? selectTargetId = null)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var doc = await _api.GetDocumentByAddressAsync(folderHref);
+            await OpenLoadedFolderAsync(doc.Id, doc.Name, doc.Links, selectTargetId);
+        }
+        catch (Exception e)
+        {
+            Status = string.Format(Strings.Get("StErrOpenFolder"), e.Message);
+        }
+    }
+
     public async Task OpenFolderAsync(Guid folderId, Guid? selectTargetId = null)
     {
         if (_api is null)
@@ -1943,21 +1967,27 @@ public sealed partial class MainWindowViewModel : ObservableObject
         try
         {
             var name = await _api.GetDocumentNameAsync(folderId);
-            await LoadFolderContentsAsync(folderId);
-            Breadcrumbs.Clear();
-            Breadcrumbs.Add(new BreadcrumbViewModel { Name = "Repositories", FolderId = null, ShowSeparator = false });
-            Breadcrumbs.Add(new BreadcrumbViewModel { Name = name, FolderId = folderId, ShowSeparator = true });
-            if (selectTargetId is { } targetId)
-            {
-                // Prefer the item's real row; fall back to its reference (shortcut) row when the folder holds only
-                // a shortcut (a referencing folder) — selecting a reference loads the target document for viewing.
-                SelectedItem = Items.FirstOrDefault(i => i.Id == targetId && !i.IsReference)
-                    ?? Items.FirstOrDefault(i => i.Id == targetId);
-            }
+            await OpenLoadedFolderAsync(folderId, name, folderLinks: null, selectTargetId);
         }
         catch (Exception e)
         {
             Status = string.Format(Strings.Get("StErrOpenFolder"), e.Message);
+        }
+    }
+
+    // The shared tail of both opens: contents, breadcrumbs, selection.
+    private async Task OpenLoadedFolderAsync(Guid folderId, string name, IReadOnlyDictionary<string, string>? folderLinks, Guid? selectTargetId)
+    {
+        await LoadFolderContentsAsync(folderId, folderLinks);
+        Breadcrumbs.Clear();
+        Breadcrumbs.Add(new BreadcrumbViewModel { Name = "Repositories", FolderId = null, ShowSeparator = false });
+        Breadcrumbs.Add(new BreadcrumbViewModel { Name = name, FolderId = folderId, ShowSeparator = true });
+        if (selectTargetId is { } targetId)
+        {
+            // Prefer the item's real row; fall back to its reference (shortcut) row when the folder holds only
+            // a shortcut (a referencing folder) — selecting a reference loads the target document for viewing.
+            SelectedItem = Items.FirstOrDefault(i => i.Id == targetId && !i.IsReference)
+                ?? Items.FirstOrDefault(i => i.Id == targetId);
         }
     }
 
@@ -3155,6 +3185,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     Path = result.Path,
                     Highlight = result.Highlight,
                     VersionsHref = result.VersionsHref,
+                    Links = result.Links,
                 });
             }
 
@@ -3480,8 +3511,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         else if (result.ParentId is { } parentId)
         {
             // Reveal the document in context: expand + select its parent folder in the tree, load the folder into
-            // the list pane, and select the document there (issue #340).
-            await RevealDocumentInTreeAsync(result.Id, parentId);
+            // the list pane, and select the document there (issue #340). The contents load follows the hit's
+            // `parent` address (#443); the tree expansion stays id-matching against rows already loaded.
+            await RevealDocumentInTreeAsync(result.Id, parentId, result.Links?.GetValueOrDefault("parent"));
         }
         else
         {
@@ -3535,7 +3567,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     // Reveal a document: expand + select its parent folder in the tree, load the folder into the list, select the doc.
-    private async Task RevealDocumentInTreeAsync(Guid documentId, Guid parentFolderId)
+    private async Task RevealDocumentInTreeAsync(Guid documentId, Guid parentFolderId, string? parentHref = null)
     {
         if (_api is null)
         {
@@ -3544,8 +3576,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         var node = await ExpandTreePathAsync(await _api.GetAncestorsAsync(documentId));
 
-        // Load the parent folder into the list + select the document (+ its preview) regardless of the tree outcome.
-        await OpenFolderAsync(parentFolderId, documentId);
+        // Load the parent folder into the list + select the document (+ its preview) regardless of the tree
+        // outcome — following the caller's advertised address where it holds one (#443).
+        await (parentHref is not null
+            ? OpenFolderAsync(parentHref, documentId)
+            : OpenFolderAsync(parentFolderId, documentId));
 
         // Then reflect it in the tree — select the parent node without re-loading the folder (already loaded above).
         if (node is not null)
@@ -5176,10 +5211,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
             if (UnreadNotificationCount > 0) UnreadNotificationCount--;
         }
 
-        if (n.DocumentId is { } documentId)
+        // Follow the row's `parent` (its home folder) and select the document there; a root document has no
+        // parent, so its own `document` address opens as the folder (#443). Ids only for the row-matching.
+        if (n.DocumentId is { } documentId && (n.Notification.Links?.GetValueOrDefault("parent") ?? n.Notification.Links?.GetValueOrDefault("document")) is { } href)
         {
             SelectedTab = 0; // Repositories
-            await OpenFolderAsync(n.DocumentParentId ?? documentId, n.DocumentParentId is null ? null : documentId);
+            await OpenFolderAsync(href, n.Notification.Links?.ContainsKey("parent") == true ? documentId : null);
         }
     }
 
@@ -5203,6 +5240,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 {
                     DocumentId = t.DocumentId,
                     ParentId = t.ParentId,
+                    Links = t.Links,
                     DocumentName = t.DocumentName,
                     VersionNumber = t.VersionNumber,
                     AssignedAt = t.AssignedAt,
@@ -5225,14 +5263,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        SelectedTab = 0; // Repositories
-        if (task.ParentId is { } parentId)
+        // Follow the row's `parent` and select the document there; a root document opens itself (#443).
+        if ((task.Links?.GetValueOrDefault("parent") ?? task.Links?.GetValueOrDefault("document")) is { } href)
         {
-            await OpenFolderAsync(parentId, task.DocumentId);
-        }
-        else
-        {
-            await OpenFolderAsync(task.DocumentId);
+            SelectedTab = 0; // Repositories
+            await OpenFolderAsync(href, task.Links?.ContainsKey("parent") == true ? task.DocumentId : null);
         }
     }
 
@@ -5351,8 +5386,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        SelectedTab = 0;
-        await (row.ParentId is { } p ? OpenFolderAsync(p, row.DocumentId) : OpenFolderAsync(row.DocumentId));
+        // Follow the row's `parent` and select the document there; a root document opens itself (#443).
+        if ((row.Links?.GetValueOrDefault("parent") ?? row.Links?.GetValueOrDefault("document")) is { } href)
+        {
+            SelectedTab = 0;
+            await OpenFolderAsync(href, row.Links?.ContainsKey("parent") == true ? row.DocumentId : null);
+        }
     }
 
     [RelayCommand]
@@ -5363,8 +5402,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        SelectedTab = 0;
-        await (row.ParentId is { } p ? OpenFolderAsync(p, row.DocumentId) : OpenFolderAsync(row.DocumentId));
+        if ((row.Links?.GetValueOrDefault("parent") ?? row.Links?.GetValueOrDefault("document")) is { } href)
+        {
+            SelectedTab = 0;
+            await OpenFolderAsync(href, row.Links?.ContainsKey("parent") == true ? row.DocumentId : null);
+        }
     }
 
     // Loads the always-shown system fields for the selected document (ADR "System fields + OCR-language mask

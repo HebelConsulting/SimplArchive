@@ -78,8 +78,14 @@ public record PersonalRepositoryResponse
     public bool HasSubfolders { get; set; }
 }
 
-/// <summary>A document fetched for its links alone — the "I hold an id, not a resource" case (ADR 0543).</summary>
+/// <summary>
+/// A document fetched by id — the "I hold an id, not a resource" case (ADR 0543). Links is what the fetch is
+/// usually for; Name rides along so a caller that only wants the display name goes through the same single
+/// sanctioned fetch rather than keeping a private response type for the same GET.
+/// </summary>
 public sealed class DocumentLinksResponse
 {
+    public string Name { get; set; } = string.Empty;
+
     public List<LinkResponse>? Links { get; set; }
 }

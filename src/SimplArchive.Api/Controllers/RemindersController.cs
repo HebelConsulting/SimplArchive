@@ -89,7 +89,9 @@ public class RemindersController : ControllerBase
                 Recurrence = (int)r.Recurrence,
                 RecurrenceName = r.Recurrence.ToString(),
                 Overdue = r.RemindAt < now,
-                Links = [new Link("document", $"/api/documents/{r.DocumentId}", "GET")],
+                Links = r.ParentId is { } reminderParent
+                    ? [new Link("document", $"/api/documents/{r.DocumentId}", "GET"), new Link("parent", $"/api/documents/{reminderParent}", "GET")]
+                    : [new Link("document", $"/api/documents/{r.DocumentId}", "GET")],
             })
             .ToList();
 

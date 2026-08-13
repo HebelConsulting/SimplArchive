@@ -12,6 +12,9 @@ public sealed class SearchResultViewModel
 
     public required Guid? ParentId { get; init; }
 
+    /// <summary>The hit's advertised addresses (`self`, `versions`, `parent`) — opening follows these (#443).</summary>
+    public IReadOnlyDictionary<string, string>? Links { get; init; }
+
     public required string Path { get; init; }
 
     // A snippet with the matched terms wrapped in <em>…</em> (ADR "Search result highlighting"), or "" when

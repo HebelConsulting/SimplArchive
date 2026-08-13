@@ -32,200 +32,60 @@ public partial class ClientHypermediaTests
     // been reporting 41 when the real figure was 48.
     private static readonly Regex ComposedApiUrl = new("\\$?\"/?api/", RegexOptions.Compiled);
 
-    // Two different states, deliberately, because the two clients are at two different points.
+    // THE END STATE (#416): the budget dictionary this test carried for ten months is GONE, because the debt it
+    // measured is gone — the web burn-down finished at 26 → 0 and the desktop's finished earlier at 184 → 1.
+    // What remains is not a budget but a set of NAMED, COUNTED exceptions: each is a single deliberate line, and
+    // a file's count moving in EITHER direction fails the build. A budget says "this much debt is tolerated"; a
+    // named exception says "exactly this line, for exactly this reason".
     //
-    // THE DESKTOP CLIENT IS DONE. Its burn-down went 184 → 1, and the one that remains is a NAMED EXCEPTION
-    // rather than a budget: `SimplArchiveApiClient.DocumentAddress`, the single line that turns a document id
-    // back into a resource. A caller must do that when the only state it holds is a Guid, because a rel can be
-    // followed only from a resource you already have.
-    //
-    // It is NOT irreducible in principle, and calling it that would hide real work behind a principle. ADR 0555's
-    // answer is to hold the ROW, and then the address is `self`. It is irreducible only while (a) the desktop
-    // view-model's state is still id-shaped — `_currentFolderId`, a restored selection — and (b) the payloads
-    // that hand a client a bare document id (a notification, a task, a reminder, a search hit) do not also
-    // advertise that document's address. Closing both retires the exception — issue #443 records how.
-    //
-    // Why an exception beats a budget of 1: a budget of 1 permits ANY one composed URL anywhere in the file.
-    // This permits only that line, and fails the moment a second appears.
-    private const string ExceptionFile = "src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs";
-
-    private const int ExceptionCount = 1;
-
-    // THE WEB CLIENT IS NOT DONE, so it keeps the ratchet: the count must EQUAL the budget, so adding one fails
-    // and converting one fails until the number is lowered in the same commit. When this empties, delete the
-    // dictionary and the rule becomes "no client composes an API URL, except the named line above".
-    private static readonly Dictionary<string, int> Budget = new()
+    //   • ApiRoot — THE ENTRY POINT, permanent. ADR 0543's rule is that the only URL a client may know is the
+    //     API root, and this is the one line that knows it. Counted rather than exempted so that a second URL
+    //     appearing in the file fails the build.
+    //   • BrowseService.FetchAsync — the id→resource turn: a rel can be followed only from a resource you
+    //     already have, so a caller holding ONLY an id must fetch once before it can follow anything. It is
+    //     deliberately the single place the web client writes that address, because two copies of the one
+    //     sanctioned line is how a rule with one exception quietly acquires a second.
+    //   • SimplArchiveApiClient.DocumentAddress — the desktop's same turn, and the one that is DEBT rather than
+    //     design (#443): it survives only while the desktop view-model keeps id-shaped state and while the
+    //     id-bearing payloads (a notification, a task, a reminder, a search hit) do not advertise the document's
+    //     address. Retiring it deletes its entry here, and the message below says so.
+    private static readonly Dictionary<string, int> NamedExceptions = new()
     {
-        // 95 → 51 across earlier tranches (#416): the workbench's document, audit, tenant, tag, saved-search and
-        // search-field families. What remains is dominated by the row actions that need the full document
-        // RESOURCE rather than a listing row — checkout, move, set-primary-location — which cost a fetch per row
-        // action, and by the version-compare pair. The desktop side solved the same problem by holding the row
-        // (ADR 0555); the web client's equivalent migration has not been done.
-        //
-        // The budget is keyed by FILE, so decomposing the workbench page (ADR 0558) MOVES composed URLs between
-        // entries rather than removing them — and the entries still summing to the same total is what proves an
-        // extraction was a pure move rather than a rewrite that quietly gained or lost a call. The running sum:
-        // The running sum, each step stating whether it MOVED or CONVERTED, because only both numbers make a
-        // move provable: 51 = 48 + 3, then 51 = 44 + 4 + 3 (pure moves), then 50 = 43 + 4 + 3 (Search moved its
-        // region AND converted the one URL in it), then 50 = 36 + 7 + 4 + 3 (Inbox, a pure move).
-        //
-        // Now 41 = 23 + 7 + 4 + 3 + 1 + 3. The Recycle bin moved AND converted all NINE of its URLs — the biggest single
-        // drop since the desktop burn-down — because the server half landed first (#450 gave each row the four
-        // detail addresses its pane reads; the listing envelope already carried the three bulk actions). It cost
-        // no extra request either: both sets arrive with a listing that was already being read (ADR 0557). That
-        // is what the server tranche was for, and it is why the client half was cheap.
-        //
-        // Then 41 = 20 + 2 + 1 + 7 + 4 + 3 + 1 + 3 — pure moves again, of the three on the browse path.
-        //
-        // Now 49 = 23 + 4 + 1 + 2 + 1 + 7 + 4 + 3 + 1 + 3. The jump is NOT new debt: it is the seven the ledger
-        // could not see until the regex learned the leading-slash spelling, plus the API root's own entry point,
-        // which is now counted rather than invisible. The burn-down's real figure was 49 all along.
-        //
-        // That line said "48" for three commits while the entries beside it summed to 49 — a hand-arithmetic
-        // slip in prose, repeated into three commit messages and a PR description. The deltas were all right and
-        // the base was wrong, which is the least detectable way for a ledger to lie. Hence ExpectedTotal below:
-        // the headline number is now asserted against the entries rather than typed next to them.
-        //
-        // Still 48 = 21 + 2 + 4 + 1 + 2 + 1 + 7 + 4 + 3 + 1 + 3 — the edit lifecycle moved out (ADR 0558) and took
-        // its two with it. A pure move: same total, and neither was converted, because both are the same shape as
-        // the rest of the remaining debt — a caller holding an id (a mask, a version) that no row advertises an
-        // address for.
-        //
-        // Now 48 = 20 + …, and the missing one was neither moved nor converted — it was DEDUPLICATED. The page
-        // and BrowseService each had their own `api/documents/{id}` fetch-then-follow: the same line, and not any
-        // line, but the single address the client is permitted to build. Two copies of the one sanctioned
-        // exception is how a rule with one exception quietly acquires a second, so BrowseService.FetchRelAsync is
-        // now the only place it is written and the page's copy is gone. Worth stating separately from the other
-        // two outcomes: a total that drops because a duplicate died is not the same result as a conversion, and
-        // reading it as one would overstate the burn-down.
-        // 48 → 41. Check-out and legal holds are DONE — their entries are deleted rather than lowered, which is
-        // what finishing a file looks like here. Both were pure client-side conversions: #441 had already put the
-        // rels on the server (`checkin`, `cancel-checkout`, `working-copy`, `extend`; `release`, `remove`), and
-        // the checkout listing was already deserialising Links while composing the paths anyway. The legal-hold
-        // DTO's doc comment had promised a `RemoveHref` "advertised address" for months next to a record that had
-        // no such property — the comment described the intent and the code did the opposite.
-        //
-        // One behaviour change came with it, and it is the point of the rule rather than a side effect: the
-        // remove-from-hold button was gated on a client-side `IsActive` flag, and is now gated on whether the
-        // item advertises `remove`. The server already withholds that rel for a released hold, so the flag was a
-        // second copy of the rule — and two copies of a permission rule can disagree.
-        // 36 → 26, and the two justifications this ledger carried for that work were BOTH WRONG — which is the
-        // lesson worth more than the ten.
-        //
-        // "documents/bulk/* is a collection the API does not advertise a rel for yet" — the root has advertised
-        // `documentsBulk` all along, and the collection itself advertises move/reference/delete/tags/sensitivity.
-        // The entry is now deleted: BulkActions reads that collection once and follows its actions. Cached on
-        // purpose — ADR 0557 permits holding a rel set that is STRUCTURALLY FIXED, and these five are the
-        // collection's operations rather than its contents.
-        //
-        // "the inbox listing advertises only `self`, so the user-picker has no rel to follow" — written by me
-        // one commit earlier, after checking the LISTING and not the ROOT, which advertises `inboxUsers`
-        // pointing at exactly the URL being composed. A wrong justification is worse than none: it reads as a
-        // finished investigation and stops the next person looking.
-        //
-        // Both were checkable in one grep of RootController. Before recording that something needs a server
-        // change, grep the root's rels AND the resource's — the entry point is where a cross-document
-        // collection lives, and a per-row listing is the wrong place to look for it.
-        ["src/SimplArchive.Client/Pages/Home.razor"] = 15,
-        // The mask's field definitions and a version's document-date, carried out of the page with the edit
-        // lifecycle. Converting either is a server change first: the mask picker offers ids from a catalogue that
-        // advertises no per-mask address, and a version row does not carry a `document-date` rel.
-        ["src/SimplArchive.Client/Services/DetailEditor.cs"] = 2,
-        // THE ENTRY POINT, not a debt. ADR 0543 says the only URL a client may know is the API root, and this is
-        // the one line that knows it — every other address in both clients is followed from a rel reached from
-        // here. It is counted rather than exempted so that a SECOND URL appearing in this file fails the build.
         ["src/SimplArchive.Client/Services/ApiRoot.cs"] = 1,
-        // The two the shared browse plumbing carried out of the page (ADR 0558): a folder's references
-        // collection, and the ONE irreducible composition — fetching a document by id to follow its own
-        // `children` rel, for the caller that holds an id and no row (ADR 0543).
-        ["src/SimplArchive.Client/Services/BrowseService.cs"] = 2,
-        // The admin personal-repositories listing, which the tree's Administration branch carried out with it.
-        // Not reachable by rel today: it is the ONE listing the API root does not advertise, so converting it
-        // is a server change (a rel on the root, gated on tenant-admin) rather than part of this move.
-        ["src/SimplArchive.Client/Services/TreeState.cs"] = 1,
-        // The three the shared row actions carried out of the page with them (ADR 0558) — the legal-hold
-        // items collection and the reference endpoints, which belong to the web burn-down, not to the move.
-        ["src/SimplArchive.Client/Services/DocumentActions.cs"] = 3,
-        // 41 → 36. Five of the inbox's seven converted with no server change: the item rows had been carrying
-        // `preview` and `mask` all along while the tab rebuilt those paths from Name plus a hand-written
-        // `?group=`/`?user=` query — and the server's own hrefs already carry that source query, so the
-        // SourceQuery property that existed to re-append it is deleted rather than moved.
-        //
-        // The two listing variants converted as FOLLOWS, not compositions: `{inboxHref}?user=…` appends a QUERY
-        // to an advertised href, which ADR 0557 puts on the following side of the line — the server owns the
-        // path, the caller owns the filter. Appending a SEGMENT would have been composing in disguise.
-        //
-        // What remains needs the SERVER first: `api/masks/{id}` — a mask catalogue entry advertises no address
-        // of its own, the same gap DetailEditor's two sit in.
-        ["src/SimplArchive.Client/Components/Tabs/InboxTab.razor"] = 1,
-        // The one the Users & groups tab carried out with it — a principal's own address, which belongs to the
-        // web burn-down rather than to the extraction that moved it.
-        ["src/SimplArchive.Client/Components/Tabs/UsersGroupsTab.razor"] = 1,
+        ["src/SimplArchive.Client/Services/BrowseService.cs"] = 1,
+        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 1,
     };
 
-    // The burn-down's headline figure, asserted against the entries rather than written beside them.
-    //
-    // It was prose until 2026-08-12, and prose drifts: the comment above read "48" for three commits while the
-    // dictionary summed to 49, so every "48 → 47" that followed was off by one in the base while being exactly
-    // right in the delta. A wrong base is the least visible way for a ledger to mislead — the arithmetic all
-    // checks out locally, and only a fresh sum exposes it. Lower this with the entries, in the same commit.
-    private const int ExpectedTotal = 26;
-
     [Fact]
-    public void The_ledgers_headline_total_matches_its_entries()
-    {
-        var sum = Budget.Values.Sum();
-        Assert.True(sum == ExpectedTotal,
-            $"The budget entries sum to {sum} but ExpectedTotal says {ExpectedTotal}. Update both in the same "
-            + "commit — the point of the number is that it can be read off and trusted.");
-    }
-
-    [Fact]
-    public void No_client_composes_an_api_url_except_the_one_named_exception()
+    public void No_client_composes_an_api_url_except_the_named_exceptions()
     {
         var actual = CountByFile();
         var offenders = new List<string>();
 
         foreach (var (file, count) in actual.OrderBy(kv => kv.Key))
         {
-            var allowed = file == ExceptionFile ? ExceptionCount : Budget.TryGetValue(file, out var b) ? b : 0;
+            var allowed = NamedExceptions.GetValueOrDefault(file);
             if (count > allowed)
             {
                 offenders.Add($"  {file}: {count} composed api/ URL(s), {allowed} allowed — follow a link rel "
                     + "from the resource instead of composing the URL (ADR 0543). If the caller holds only an id, "
                     + "make it hold the ROW (ADR 0555), or add the rel to whatever handed it that id.");
             }
-            else if (count < allowed && file != ExceptionFile)
+            else if (count < allowed)
             {
-                offenders.Add($"  {file}: {count} composed api/ URL(s), budget {allowed} — good news: lower the "
-                    + $"budget in ClientHypermediaTests to {count} so the ledger stays honest.");
+                offenders.Add($"  {file}: {count} composed api/ URL(s) where the named exception expects {allowed} "
+                    + "— the exceptional line is gone. Good news: delete its NamedExceptions entry so the "
+                    + "carve-out dies with the line it named (and if it was DocumentAddress, close #443).");
             }
         }
 
-        foreach (var file in Budget.Keys.Where(f => !actual.ContainsKey(f)).OrderBy(f => f))
+        foreach (var file in NamedExceptions.Keys.Where(f => !actual.ContainsKey(f)).OrderBy(f => f))
         {
-            offenders.Add($"  {file}: no composed api/ URLs left (or the file moved) — delete its budget entry.");
+            offenders.Add($"  {file}: composes nothing (or the file moved) — delete its NamedExceptions entry.");
         }
 
         Assert.True(offenders.Count == 0,
-            "A client is composing API URLs (ADR 0543):\n" + string.Join("\n", offenders));
-    }
-
-    // The exception is a debt, not a licence, so it is asserted to still BE one line. If it is ever converted,
-    // this fails and the whole mechanism — both constants and both tests — is deleted rather than left behind
-    // asserting nothing. An exception nobody is forced to revisit is how a temporary carve-out becomes permanent.
-    [Fact]
-    public void The_one_named_exception_is_still_exactly_one_line()
-    {
-        var actual = CountByFile();
-        var count = actual.TryGetValue(ExceptionFile, out var c) ? c : 0;
-
-        Assert.True(count == ExceptionCount,
-            count == 0
-                ? $"{ExceptionFile} composes no api/ URL any more — the last one is gone. Delete ExceptionFile, "
-                  + "ExceptionCount and this test, and leave the rule as 'no client composes an API URL' (ADR 0543)."
-                : $"{ExceptionFile} composes {count} api/ URLs, expected exactly {ExceptionCount} "
-                  + "(DocumentAddress). A second one is a regression, not a new exception.");
+            "The hypermedia end-state rule is violated (ADR 0543, #416):\n" + string.Join("\n", offenders));
     }
 
     // Every rel a client follows must actually be advertised by the API.

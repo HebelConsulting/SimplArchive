@@ -36,7 +36,7 @@ public class WorkbenchShellSizeTests
     // caught +16, most of which was commentary that belonged in the commit message, and only the 11 lines that
     // are actually code survived the trim. That is the intended interaction: growth has to be argued for, not
     // noticed later.
-    private const int Ceiling = 3_205;
+    private const int Ceiling = 3_204;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

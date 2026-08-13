@@ -94,7 +94,7 @@ public sealed class UploadConflictResolver
         }
 
         var version = await response.Content.ReadFromJsonAsync<CreateVersionResponse>();
-        return new ResolvedUpload(existing.Id, version!.Id, version.UploadUrl, comment);
+        return new ResolvedUpload(existing.Id, version!.Id, version.UploadUrl, comment, Links.Href(version.Links, "self"));
     }
 
     private async Task<ResolvedUpload?> AsNewDocumentAsync(string childrenHref, string fileName, string extension, Dialogs.NameConflictDialog.NameConflictChoice choice)
@@ -128,7 +128,7 @@ public sealed class UploadConflictResolver
         }
 
         var body = await version.Content.ReadFromJsonAsync<CreateVersionResponse>();
-        return new ResolvedUpload(document!.Id, body!.Id, body.UploadUrl, choice.Comment);
+        return new ResolvedUpload(document!.Id, body!.Id, body.UploadUrl, choice.Comment, Links.Href(body.Links, "self"));
     }
 
     // The create-version response: id + the presigned PUT the caller uploads to. Its own copy rather than a
@@ -138,6 +138,8 @@ public sealed class UploadConflictResolver
         public Guid Id { get; set; }
 
         public string UploadUrl { get; set; } = "";
+
+        public List<LinkResponse> Links { get; set; } = [];
     }
 
     // "Invoice" → "Invoice (2)", skipping what is already there. A starting point only: the user can type
@@ -157,5 +159,6 @@ public sealed class UploadConflictResolver
     }
 }
 
-/// <summary>Where the bytes should go, and the filing comment to set once they are there.</summary>
-public sealed record ResolvedUpload(Guid DocumentId, Guid VersionId, string UploadUrl, string? Comment);
+/// <summary>Where the bytes should go, the filing comment to set once they are there, and the created
+/// version's own advertised address — the finalize PUT's target (ADR 0543).</summary>
+public sealed record ResolvedUpload(Guid DocumentId, Guid VersionId, string UploadUrl, string? Comment, string? FinalizeHref = null);

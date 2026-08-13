@@ -118,7 +118,7 @@ public sealed class SimplArchiveApiClient
     // VersionsHref is the address the HIT advertised (#462) — the row carries its own addresses, so previewing a
     // result follows what the listing handed over instead of resolving the document again (ADR 0555/0557). Null
     // for a folder, which advertises no `versions` because it has nothing to preview.
-    public sealed record SearchResult(Guid Id, string Name, bool IsFolder, Guid? ParentId, string Path, string Highlight, string? VersionsHref = null);
+    public sealed record SearchResult(Guid Id, string Name, bool IsFolder, Guid? ParentId, string Path, string Highlight, string? VersionsHref = null, IReadOnlyDictionary<string, string>? Links = null);
 
     public sealed record IndexField(string FieldName, IReadOnlyList<string> Values);
 
@@ -288,7 +288,7 @@ public sealed class SimplArchiveApiClient
     public sealed record WorkflowTransitionInfo(string ToStatusName, string? AssignedToName, string? PerformedByName, string? RejectionReason);
 
     // A pending review task assigned to the caller (backs the Tasks tab).
-    public sealed record TaskInfo(Guid DocumentId, Guid? ParentId, Guid VersionId, string DocumentName, int? VersionNumber, DateTimeOffset AssignedAt);
+    public sealed record TaskInfo(Guid DocumentId, Guid? ParentId, Guid VersionId, string DocumentName, int? VersionNumber, DateTimeOffset AssignedAt, IReadOnlyDictionary<string, string>? Links = null);
 
     // A user option for the reviewer picker.
     // RemoveHref is set only where the option came from a collection whose rows advertise a removal address —
@@ -601,6 +601,24 @@ public sealed class SimplArchiveApiClient
     public async Task<IReadOnlyDictionary<string, string>> GetDocumentLinksAsync(Guid documentId, CancellationToken cancellationToken = default) =>
         ParseLinks(await _http.GetFromJsonAsync<JsonElement>(DocumentAddress(documentId), cancellationToken))
         ?? throw new InvalidOperationException($"Document {documentId} advertised no links at all (ADR 0543).");
+
+    /// <summary>The essentials of a document reached by ADDRESS — what a cross-tab open needs in one read.</summary>
+    public sealed record DocumentStub(Guid Id, string Name, IReadOnlyDictionary<string, string> Links);
+
+    /// <summary>
+    /// A document by its ADVERTISED address (#443): id, name and rels from one GET. This is what a payload-row
+    /// consumer (a task, a notification, a reminder, a search hit) uses to open the folder its row named —
+    /// following the row's `parent`/`document` rel instead of handing a bare id back into the address turn.
+    /// One request where the id path cost two (a name fetch plus a links fetch).
+    /// </summary>
+    public async Task<DocumentStub> GetDocumentByAddressAsync(string documentHref, CancellationToken cancellationToken = default)
+    {
+        var json = await _http.GetFromJsonAsync<JsonElement>(documentHref, cancellationToken);
+        return new DocumentStub(
+            json.GetProperty("id").GetGuid(),
+            json.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "",
+            ParseLinks(json) ?? throw new InvalidOperationException($"'{documentHref}' advertised no links at all (ADR 0543)."));
+    }
 
     // The item's ancestor folder ids, repository-root first down to its immediate parent (issue #340) — used to
     // reveal a search hit in the lazy tree. Empty for an item filed at a repository root.
@@ -1487,8 +1505,8 @@ public sealed class SimplArchiveApiClient
 
     // Dashboard rows (ADR "My work dashboard"): a due-soon reminder / a followed document, each with the
     // document + its parent folder for click-through.
-    public sealed record DashReminderInfo(Guid DocumentId, Guid? ParentId, string DocumentName, DateTimeOffset RemindAt, string? Note, int Recurrence, string RecurrenceName, bool Overdue);
-    public sealed record DashFollowedInfo(Guid DocumentId, Guid? ParentId, string DocumentName);
+    public sealed record DashReminderInfo(Guid DocumentId, Guid? ParentId, string DocumentName, DateTimeOffset RemindAt, string? Note, int Recurrence, string RecurrenceName, bool Overdue, IReadOnlyDictionary<string, string>? Links = null);
+    public sealed record DashFollowedInfo(Guid DocumentId, Guid? ParentId, string DocumentName, IReadOnlyDictionary<string, string>? Links = null);
 
     // The caller's overdue + due-soon reminders across all documents (the dashboard's Reminders section).
     public async Task<IReadOnlyList<DashReminderInfo>> GetDashboardRemindersAsync(CancellationToken cancellationToken = default)
@@ -1507,7 +1525,8 @@ public sealed class SimplArchiveApiClient
                     r.TryGetProperty("note", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null,
                     r.GetProperty("recurrence").GetInt32(),
                     r.TryGetProperty("recurrenceName", out var rn) ? rn.GetString() ?? "" : "",
-                    r.TryGetProperty("overdue", out var o) && o.ValueKind == JsonValueKind.True));
+                    r.TryGetProperty("overdue", out var o) && o.ValueKind == JsonValueKind.True,
+                    ParseLinks(r)));
             }
         }
 
@@ -1526,7 +1545,8 @@ public sealed class SimplArchiveApiClient
                 list.Add(new DashFollowedInfo(
                     f.GetProperty("documentId").GetGuid(),
                     f.TryGetProperty("parentId", out var p) && p.ValueKind == JsonValueKind.String ? p.GetGuid() : null,
-                    f.GetProperty("documentName").GetString() ?? ""));
+                    f.GetProperty("documentName").GetString() ?? "",
+                    ParseLinks(f)));
             }
         }
 
@@ -3093,7 +3113,8 @@ public sealed class SimplArchiveApiClient
         item.TryGetProperty("parentId", out var p) && p.ValueKind != JsonValueKind.Null ? p.GetGuid() : null,
         item.TryGetProperty("path", out var path) ? path.GetString() ?? "" : "",
         item.TryGetProperty("highlight", out var hl) ? hl.GetString() ?? "" : "",
-        FindLink(item, "versions"));
+        FindLink(item, "versions"),
+        ParseLinks(item));
 
     private static ReferencingFolder ParseReferencingFolder(JsonElement item) => new(
         item.GetProperty("id").GetGuid(),
@@ -3441,7 +3462,8 @@ public sealed class SimplArchiveApiClient
                     t.GetProperty("versionId").GetGuid(),
                     t.GetProperty("documentName").GetString() ?? "",
                     t.TryGetProperty("versionNumber", out var vn) && vn.ValueKind == JsonValueKind.Number ? vn.GetInt32() : null,
-                    t.TryGetProperty("assignedAt", out var a) ? a.GetDateTimeOffset() : default));
+                    t.TryGetProperty("assignedAt", out var a) ? a.GetDateTimeOffset() : default,
+                    ParseLinks(t)));
             }
         }
 

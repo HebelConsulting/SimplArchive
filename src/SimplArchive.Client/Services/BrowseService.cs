@@ -24,6 +24,11 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
     public static string? ChildrenHrefOf(BrowseNode node) =>
         node.Links is not null && node.Links.TryGetValue("children", out var href) ? href : null;
 
+    /// <summary>The row's advertised references address — travels with children so opening a folder reads both
+    /// collections from the addresses the row carried rather than fetching to learn one of them (ADR 0557).</summary>
+    public static string? ReferencesHrefOf(BrowseNode node) =>
+        node.Links is not null && node.Links.TryGetValue("references", out var href) ? href : null;
+
     /// <summary>
     /// Turns an id back into an address by FETCHING the resource and following its own <paramref name="rel"/>.
     /// The <c>api/documents/{id}</c> here is the one composition that cannot be avoided — the irreducible case
@@ -41,10 +46,17 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
     /// </remarks>
     public async Task<string> FetchRelAsync(Guid documentId, string rel)
     {
-        var doc = await http.GetFromJsonAsync<DocumentLinksResponse>($"api/documents/{documentId}");
+        var doc = await FetchAsync(documentId);
         return Links.Href(doc?.Links, rel)
             ?? throw new InvalidOperationException($"Document {documentId} advertised no '{rel}' rel (ADR 0543).");
     }
+
+    /// <summary>
+    /// The resource behind an id — ONE read whose rels the caller may then follow several of (ADR 0557), where
+    /// <see cref="FetchRelAsync"/> answers for exactly one. This is the only method that composes the address.
+    /// </summary>
+    public Task<DocumentLinksResponse?> FetchAsync(Guid documentId) =>
+        http.GetFromJsonAsync<DocumentLinksResponse>($"api/documents/{documentId}");
 
     /// <summary>A folder's children address, resolved from its id — see <see cref="FetchRelAsync"/>.</summary>
     public Task<string> FetchChildrenHrefAsync(Guid folderId) => FetchRelAsync(folderId, "children");
@@ -64,11 +76,21 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
     /// <c>trackAsCurrentFolder</c> flag that reached back into the page's state — not something a service can do,
     /// and not something a reader could see at the call site.
     /// </remarks>
-    public async Task<FolderContents> LoadContentsAsync(Guid folderId, Guid repositoryId, string? childrenHref = null)
+    public async Task<FolderContents> LoadContentsAsync(Guid folderId, Guid repositoryId, string? childrenHref = null, string? referencesHref = null)
     {
+        // A caller holding the row passes BOTH addresses it advertises; a caller holding only an id costs one
+        // fetch for the two of them together — never a fetch per rel (ADR 0557).
+        if (childrenHref is null || referencesHref is null)
+        {
+            var doc = await FetchAsync(folderId);
+            childrenHref ??= Links.Href(doc?.Links, "children")
+                ?? throw new InvalidOperationException($"Document {folderId} advertised no 'children' rel (ADR 0543).");
+            referencesHref ??= Links.Href(doc?.Links, "references");
+        }
+
         var nodes = new List<BrowseNode>();
         var order = (FolderContentsSortOrder?)null;
-        var url = childrenHref ?? await FetchChildrenHrefAsync(folderId);
+        var url = childrenHref;
         while (url is not null)
         {
             var page = await http.GetFromJsonAsync<DocumentChildrenResponse>(url);
@@ -84,13 +106,14 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
             url = Links.Href(page?.Links, "next");
         }
 
-        var refUrl = $"api/documents/{folderId}/references";
+        var refUrl = referencesHref;
         while (refUrl is not null)
         {
             var page = await http.GetFromJsonAsync<ReferenceListResponse>(refUrl);
             foreach (var r in page?.References ?? [])
             {
                 nodes.Add(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, r.HasReferences, true, r.ReferenceId, r.RealParentId, repositoryId,
+                    ChatHref: Links.Href(r.Links, "chat"), // reference rows now carry the target's sub-resources
                     Links: Links.RelMap(r.Links)));
             }
             refUrl = Links.Href(page?.Links, "next");

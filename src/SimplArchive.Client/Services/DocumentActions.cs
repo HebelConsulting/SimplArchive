@@ -28,7 +28,7 @@ namespace SimplArchive.Client.Services;
 /// detail pane — again the caller's business, not this one's.
 /// </para>
 /// </remarks>
-public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISnackbar snackbar, ApiRoot apiRoot)
+public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISnackbar snackbar, ApiRoot apiRoot, BrowseService browse)
 {
     /// <summary>
     /// A row's own address, taken from the rel it advertises rather than built from its id (ADR 0543). A row
@@ -111,10 +111,17 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
             return false;
         }
 
-        // The ETag probe follows the row's address; the `move` rel that would replace the path below lives on
-        // the full document resource, not on a listing row, so converting it needs a fetch first (issue #416).
-        var etag = await GetETagAsync(selfHref);
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"api/documents/{node.Id}/parent")
+        // ONE GET of the row's address serves both needs at once: its ETag header is the If-Match the mutation
+        // wants, and its body advertises `move` — which lives on the full resource, not on a listing row. The
+        // old shape was a HEAD for the etag plus a composed path; same request count, no composition (#416).
+        var (etag, moveHref) = await FetchETagAndRelAsync(selfHref, "move");
+        if (moveHref is null)
+        {
+            snackbar.Add("Can't move the item there.", Severity.Error);
+            return false;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, moveHref)
         {
             Content = JsonContent.Create(new { parentId = folderId }),
         };
@@ -132,6 +139,80 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Check out (take the exclusive edit lock). `checkout` is CONDITIONAL on the resource — absent when the
+    /// lock is taken (then `cancel-checkout` is there instead) or when the caller can't edit — so reading which
+    /// of the two is advertised answers 409-vs-403 from the server's own offer, before any mutation is sent
+    /// (ADR 0543, #416).
+    /// </summary>
+    public async Task<bool> CheckOutAsync(BrowseNode node)
+    {
+        try
+        {
+            var doc = await browse.FetchAsync(node.Id);
+            if (Hypermedia.Links.Href(doc?.Links, "checkout") is not { } checkoutHref)
+            {
+                var alreadyOut = Hypermedia.Links.Href(doc?.Links, "cancel-checkout") is not null;
+                snackbar.Add(Strings.Get(alreadyOut ? "CoErrAlreadyOut" : "CoErrNoPermission"), alreadyOut ? Severity.Warning : Severity.Error);
+                return false;
+            }
+
+            var resp = await http.PutAsync(checkoutHref, null);
+            if (resp.StatusCode == HttpStatusCode.Conflict) { snackbar.Add(Strings.Get("CoErrAlreadyOut"), Severity.Warning); return false; }
+            if (resp.StatusCode == HttpStatusCode.Forbidden) { snackbar.Add(Strings.Get("CoErrNoPermission"), Severity.Error); return false; }
+            resp.EnsureSuccessStatusCode();
+            snackbar.Add(string.Format(Strings.Get("CoOkCheckedOut"), node.Name), Severity.Success);
+            return true;
+        }
+        catch (Exception) { snackbar.Add(Strings.Get("CoErrCheckOut"), Severity.Error); return false; }
+    }
+
+    /// <summary>Force-release a lock — the rel is present exactly when the caller may (their own lock, or
+    /// CanOverrideCheckout). The confirm dialog stays with the caller, which knows who holds it.</summary>
+    public async Task<bool> OverrideCheckoutAsync(BrowseNode node)
+    {
+        try
+        {
+            (await http.DeleteAsync(await browse.FetchRelAsync(node.Id, "cancel-checkout"))).EnsureSuccessStatusCode();
+            snackbar.Add(string.Format(Strings.Get("StReleasedCheckout"), node.Name), Severity.Success);
+            return true;
+        }
+        catch (Exception) { snackbar.Add(Strings.Get("CoErrOverride"), Severity.Error); return false; }
+    }
+
+    /// <summary>
+    /// Promote a folder to be the document's primary location (ADR 0506): one atomic server call (move + leave
+    /// a reference at the old home). As in <see cref="MoveAsync"/>, ONE GET of the row's address yields the
+    /// If-Match etag and the `set-primary-location` rel together (ADR 0557, #416).
+    /// </summary>
+    public async Task<bool> SetPrimaryLocationAsync(BrowseNode node, Guid folderId)
+    {
+        if (DocumentAddress(node) is not { } selfHref)
+        {
+            return false;
+        }
+
+        var (etag, primaryHref) = await FetchETagAndRelAsync(selfHref, "set-primary-location");
+        if (primaryHref is null)
+        {
+            return false;
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, primaryHref)
+        {
+            Content = JsonContent.Create(new { folderId }),
+        };
+        if (etag is not null)
+        {
+            request.Headers.TryAddWithoutValidation("If-Match", etag);
+        }
+
+        var response = await http.SendAsync(request);
+        return await HandleMutationAsync(response, $"'{node.Name}' now lives in the chosen folder.",
+            "Can't set that folder as the primary location.",
+            "An item with that name already exists in the target folder.");
     }
 
     public async Task<bool> DeleteAsync(BrowseNode node)
@@ -191,7 +272,9 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
             return false;
         }
 
-        var response = await http.PostAsJsonAsync($"api/documents/{folderId}/references", new { targetId = node.Id });
+        // The picker hands back an id, not a row, so the folder's references collection is reached by fetching
+        // the folder once and following its own rel — the sanctioned id-to-address path (ADR 0543, #416).
+        var response = await http.PostAsJsonAsync(await browse.FetchRelAsync(folderId, "references"), new { targetId = node.Id });
         if (!await HandleMutationAsync(response, $"Placed a reference to '{node.Name}'.",
             "Can't reference an item into itself or one of its own sub-folders.", "This item is already referenced in that folder."))
         {
@@ -213,7 +296,12 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
             using var created = await http.PostAsJsonAsync(await apiRoot.RequireAsync("legalHolds"), new { name = result.Name, reason = result.Reason });
             created.EnsureSuccessStatusCode();
             var hold = await created.Content.ReadFromJsonAsync<LegalHoldDto>();
-            using var added = await http.PostAsJsonAsync($"api/legal-holds/{hold!.Id}/items", new { documentId = node.Id });
+
+            // The create response is the hold resource, and a hold this fresh is active — so it advertises
+            // `add-item`, and its absence would mean the server refuses the very thing this flow exists to do.
+            var addItemHref = Hypermedia.Links.Href(hold?.Links, "add-item")
+                ?? throw new InvalidOperationException("The created hold advertised no 'add-item' rel (ADR 0543).");
+            using var added = await http.PostAsJsonAsync(addItemHref, new { documentId = node.Id });
             added.EnsureSuccessStatusCode();
             snackbar.Add(string.Format(Strings.Get("StPlacedUnderHold"), node.Name), Severity.Success);
             return true;
@@ -247,6 +335,23 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
         using var request = new HttpRequestMessage(HttpMethod.Head, selfHref);
         var response = await http.SendAsync(request);
         return response.Headers.ETag?.Tag;
+    }
+
+    /// <summary>
+    /// One GET of the resource, returning its ETag header and one advertised rel together — for the mutations
+    /// whose target rel lives on the full resource rather than the listing row. The alternative was a HEAD for
+    /// the etag plus a second request for the rel, which is the request-per-rel shape ADR 0557 rules out.
+    /// </summary>
+    public async Task<(string? ETag, string? Href)> FetchETagAndRelAsync(string selfHref, string rel)
+    {
+        var response = await http.GetAsync(selfHref);
+        if (!response.IsSuccessStatusCode)
+        {
+            return (null, null);
+        }
+
+        var body = await response.Content.ReadFromJsonAsync<DocumentLinksResponse>();
+        return (response.Headers.ETag?.Tag, Hypermedia.Links.Href(body?.Links, rel));
     }
 
     /// <summary>Asks the user to choose a target folder; null when they dismissed the picker.</summary>

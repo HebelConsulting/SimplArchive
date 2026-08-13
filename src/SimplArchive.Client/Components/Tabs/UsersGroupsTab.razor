@@ -586,6 +586,7 @@
         try
         {
             Guid newId;
+            string? rightsHref;
             using (var resp = isGroup
                 ? await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("groups"), new { name })
                 : await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("users"), new { email, displayName = name }))
@@ -601,14 +602,23 @@
                     return;
                 }
 
-                newId = isGroup
-                    ? (await resp.Content.ReadFromJsonAsync<GroupAdminDto>())!.Id
-                    : (await resp.Content.ReadFromJsonAsync<UserAdminDto>())!.Id;
+                // The create response IS the new principal, and it advertises where its rights are set —
+                // followed for the copy-rights option rather than rebuilt from the fresh id (ADR 0543, #416).
+                if (isGroup)
+                {
+                    var g = (await resp.Content.ReadFromJsonAsync<GroupAdminDto>())!;
+                    (newId, rightsHref) = (g.Id, Links.Href(g.Links, "rights"));
+                }
+                else
+                {
+                    var u = (await resp.Content.ReadFromJsonAsync<UserAdminDto>())!;
+                    (newId, rightsHref) = (u.Id, Links.Href(u.Links, "rights"));
+                }
             }
 
-            if (copyRights is not null)
+            if (copyRights is not null && rightsHref is not null)
             {
-                await Http.PutAsJsonAsync($"api/{(isGroup ? "groups" : "users")}/{newId}/rights", copyRights);
+                await Http.PutAsJsonAsync(rightsHref, copyRights);
             }
 
             await LoadPrincipalsAsync();

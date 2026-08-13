@@ -42,6 +42,10 @@ public sealed class DetailState
 
     public bool SysHasVersion { get; set; }
     public Guid SysCurrentVersionId { get; set; }
+
+    /// <summary>The current version's advertised `document-date` address, captured from the version row when
+    /// the detail loads — so saving an edited date follows the rel rather than rebuilding the path (ADR 0543).</summary>
+    public string? SysDocumentDateHref { get; set; }
     public int? SysCurrentVersion { get; set; }
     public string SysName { get; set; } = "";
     public string SysFileExtension { get; set; } = "";

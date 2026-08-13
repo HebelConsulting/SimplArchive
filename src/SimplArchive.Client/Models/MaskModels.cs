@@ -1,3 +1,5 @@
+using SimplArchive.Client.Hypermedia;
+
 namespace SimplArchive.Client.Models;
 
 /// <summary>A mask the caller may assign, as offered by the mask picker.</summary>
@@ -12,7 +14,12 @@ namespace SimplArchive.Client.Models;
 /// became a compile error the moment it was promoted — the rename keeps it usable without a qualifier.
 /// </para>
 /// </remarks>
-public record MaskSummary(Guid Id, string Name);
+public record MaskSummary(Guid Id, string Name)
+{
+    /// <summary>The row's advertised addresses — its <c>self</c> is where the mask's field definitions live,
+    /// so a picker choice is followed rather than rebuilt from the id (ADR 0543, #416).</summary>
+    public List<LinkResponse> Links { get; init; } = [];
+}
 
 /// <summary>The masks available to the current tenant.</summary>
 public record MaskListResponse

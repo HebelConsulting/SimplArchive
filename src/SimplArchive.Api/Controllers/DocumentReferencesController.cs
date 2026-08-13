@@ -279,13 +279,23 @@ public class DocumentReferencesController : ControllerBase
 
     private static ReferenceResource BuildResource(Guid folderId, ReferenceRow row)
     {
+        // A reference row stands for a REAL document, so it advertises the same unconditional target
+        // sub-resources a children row does (issue #416) — without them, a client that selects a reference has
+        // the target's address but none of its collections, and either special-cases the row (a fetch per rel)
+        // or quietly offers it less than the real row beside it. The row's own affordances (`delete`, `go-to`)
+        // ride alongside. Conditional rels stay off for the children-listing's stated reason: a listing is the
+        // wrong place to answer "may I?".
         var links = new List<Link>
         {
             new("delete", $"/api/documents/{folderId}/references/{row.ReferenceId}", "DELETE"),
-            // The TARGET document's own address (issue #416). A reference row stands for a real document, and a
-            // client holding one may rename or delete that document — without this rel it has an id and no
-            // address, which is what made those actions compose a path.
             new("self", $"/api/documents/{row.TargetId}", "GET"),
+            new("chat", $"/api/documents/{row.TargetId}/chat", "GET"),
+            new("versions", $"/api/documents/{row.TargetId}/versions", "GET"),
+            new("children", $"/api/documents/{row.TargetId}/children", "GET"),
+            new("mask", $"/api/documents/{row.TargetId}/mask", "GET"),
+            new("index-data", $"/api/documents/{row.TargetId}/index-data", "GET"),
+            new("references", $"/api/documents/{row.TargetId}/references", "GET"),
+            new("referencing-folders", $"/api/documents/{row.TargetId}/referencing-folders", "GET"),
         };
 
         if (row.RealParentId is { } realParentId)

@@ -507,7 +507,14 @@
             return;
         }
 
-        var fields = await Http.GetFromJsonAsync<MaskFieldsResponse>($"api/masks/{id}");
+        // The picker's rows are the catalogue listing, and each row carries its own address (ADR 0555) — the
+        // fields live behind the chosen row's `self`, not behind a path rebuilt from its id.
+        if (Links.Href(_inboxStgMasks.FirstOrDefault(m => m.Id == id)?.Links, "self") is not { } maskHref)
+        {
+            return;
+        }
+
+        var fields = await Http.GetFromJsonAsync<MaskFieldsResponse>(maskHref);
         foreach (var f in fields?.Fields ?? [])
         {
             var values = useDraftValues && _inboxDraftValues.TryGetValue(f.Id, out var v) ? v : [];

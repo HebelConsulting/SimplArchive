@@ -90,7 +90,7 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
 
         // Folders are always sorted alphabetically in the tree (issue #339); the contents load orders for its list
         // default, so re-sort the folder nodes by name here.
-        var children = (await browse.LoadContentsAsync(node.Id, node.RepositoryId, BrowseService.ChildrenHrefOf(node))).Nodes
+        var children = (await browse.LoadContentsAsync(node.Id, node.RepositoryId, BrowseService.ChildrenHrefOf(node), BrowseService.ReferencesHrefOf(node))).Nodes
             .Where(c => !c.HasVersions)
             .OrderBy(c => c.DisplayName, StringComparer.OrdinalIgnoreCase).Select(BrowseService.ToTreeItem).ToList();
 
@@ -123,10 +123,18 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
             ];
         }
 
-        // admin-users → one node per user's personal repository (browsable via the admin's ACL bypass). A fetch
-        // error returns an empty branch rather than breaking the tree.
+        // admin-users → one node per user's personal repository (browsable via the admin's ACL bypass). Reached
+        // by following root → `admin` → `personal-repositories` — the admin index exists precisely so this
+        // listing has a rel to follow (#416); the ledger's old claim that it needed a server change was stale.
+        // A fetch error returns an empty branch rather than breaking the tree.
         AdminPersonalReposResponse? page;
-        try { page = await http.GetFromJsonAsync<AdminPersonalReposResponse>("api/admin/personal-repositories"); }
+        try
+        {
+            var admin = await http.GetFromJsonAsync<AdminIndexResponse>(await apiRoot.RequireAsync("admin"));
+            page = Links.Href(admin?.Links, "personal-repositories") is { } href
+                ? await http.GetFromJsonAsync<AdminPersonalReposResponse>(href)
+                : null;
+        }
         catch (Exception) { page = null; }
         return (page?.Repositories ?? []).Select(r => new TreeItemData<BrowseNode>
         {
@@ -159,6 +167,9 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
 
 
     private record AdminPersonalReposResponse { public List<AdminPersonalRepo> Repositories { get; set; } = []; }
+
+    /// <summary>The admin index — an entry-point resource whose rels are what it exists to advertise.</summary>
+    private record AdminIndexResponse { public List<LinkResponse> Links { get; set; } = []; }
 
     private record AdminPersonalRepo
     {

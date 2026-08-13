@@ -84,13 +84,23 @@ public partial class SearchController : ControllerBase
     // A folder gets only `self`: there is nothing to preview, and advertising a rel that leads nowhere would
     // make the client offer an affordance the server cannot honour. A missing rel means "not available here"
     // (ADR 0543), which for a folder is precisely true.
-    private static List<Link> BuildHitLinks(Guid id, bool isFolder) =>
-        isFolder
-            ? [new Link("self", $"/api/documents/{id}", "GET")]
-            : [
-                new Link("self", $"/api/documents/{id}", "GET"),
-                new Link("versions", $"/api/documents/{id}/versions", "GET"),
-              ];
+    private static List<Link> BuildHitLinks(Guid id, bool isFolder, Guid? parentId)
+    {
+        var links = new List<Link> { new("self", $"/api/documents/{id}", "GET") };
+        if (!isFolder)
+        {
+            links.Add(new Link("versions", $"/api/documents/{id}/versions", "GET"));
+        }
+
+        // The hit's home folder (#443): opening a document hit navigates to its PARENT, and a row that names a
+        // parent id without its address leaves the client an id it can only compose from. Absent at a root.
+        if (parentId is { } parent)
+        {
+            links.Add(new Link("parent", $"/api/documents/{parent}", "GET"));
+        }
+
+        return links;
+    }
 
     public class SearchResultsResource : HypermediaResource
     {
@@ -195,7 +205,7 @@ public partial class SearchController : ControllerBase
                 ParentId = hit.ParentId,
                 Path = path,
                 Highlight = hit.Highlight ?? "",
-                Links = BuildHitLinks(hit.Id, hit.IsFolder),
+                Links = BuildHitLinks(hit.Id, hit.IsFolder, hit.ParentId),
             });
         }
 

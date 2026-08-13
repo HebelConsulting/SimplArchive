@@ -300,6 +300,34 @@ public class NotificationsController : ControllerBase
         // Present only while it is unread: the POST is idempotent, so this is not about preventing a bad call —
         // it is ADR 0543's "a missing rel is meaningful". An already-read notification offers nothing to do, and
         // a client that reads the rel rather than the flag draws the same conclusion the server already reached.
-        Links = n.ReadAt is null ? [new Link("read", $"/api/notifications/{n.Id}/read", "POST")] : [],
+        //
+        // `document` — the subject's own address, for a documentful notification (#443): this row was the last
+        // id-bearing payload that handed a client an id with no address, which is what kept the desktop's
+        // DocumentAddress composition alive. Task rows, reminder rows, followed rows and search hits already
+        // carried theirs.
+        Links = BuildLinks(n, parents),
     };
+
+    private static List<Link> BuildLinks(Notification n, IReadOnlyDictionary<Guid, Guid?> parents)
+    {
+        var links = new List<Link>();
+        if (n.ReadAt is null)
+        {
+            links.Add(new Link("read", $"/api/notifications/{n.Id}/read", "POST"));
+        }
+
+        if (n.DocumentId is { } documentId)
+        {
+            links.Add(new Link("document", $"/api/documents/{documentId}", "GET"));
+
+            // The subject's home folder — where "open" actually navigates to (#443). Absent at a root, where
+            // opening the document itself as a folder is the client's correct fallback.
+            if (parents.TryGetValue(documentId, out var parent) && parent is { } parentId)
+            {
+                links.Add(new Link("parent", $"/api/documents/{parentId}", "GET"));
+            }
+        }
+
+        return links;
+    }
 }

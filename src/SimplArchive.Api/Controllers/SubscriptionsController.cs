@@ -57,7 +57,10 @@ public class SubscriptionsController : ControllerBase
                 ParentId = d.ParentId,
                 DocumentName = d.Name,
                 FollowedAt = s.CreatedAt,
-                Links = new List<Link> { new("document", $"/api/documents/{d.Id}", "GET") },
+                // No pattern-matching here: this Select is an EF expression tree, which rejects `is` (CS8122).
+                Links = d.ParentId != null
+                    ? new List<Link> { new("document", $"/api/documents/{d.Id}", "GET"), new("parent", $"/api/documents/{d.ParentId}", "GET") }
+                    : new List<Link> { new("document", $"/api/documents/{d.Id}", "GET") },
             })
             .OrderByDescending(f => f.FollowedAt)
             .ToListAsync(cancellationToken);

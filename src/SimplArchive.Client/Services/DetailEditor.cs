@@ -164,7 +164,14 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
             return;
         }
 
-        var fields = await http.GetFromJsonAsync<MaskFieldsResponse>($"api/masks/{id}");
+        // The mask id came from the picker, and the picker's rows are the catalogue listing — whose rows carry
+        // their own address (ADR 0555). A mask not in the catalogue has no address and no fields to offer.
+        if (Links.Href(catalogs.Masks.FirstOrDefault(m => m.Id == id)?.Links, "self") is not { } maskHref)
+        {
+            return;
+        }
+
+        var fields = await http.GetFromJsonAsync<MaskFieldsResponse>(maskHref);
         var valuesByName = useCurrentValues
             ? (detail.IndexData ?? []).ToDictionary(f => f.FieldName, f => f.Values)
             : new Dictionary<string, List<string>>();
@@ -208,9 +215,11 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
                 else { failures.Add(DetailSaveFailure.Name); }
             }
 
-            if (detail.SysHasVersion && detail.SysCurrentVersionId != Guid.Empty && detail.EditDocumentDate is { } dd && dd != detail.OrigDocumentDate)
+            // The address is the one the current version's row advertised when the detail loaded (`document-date`,
+            // captured in DeriveSystemFields) — its absence means the row offered no such edit here (ADR 0543).
+            if (detail.SysHasVersion && detail.SysDocumentDateHref is { } ddHref && detail.EditDocumentDate is { } dd && dd != detail.OrigDocumentDate)
             {
-                var resp = await http.PutAsJsonAsync($"api/documents/{item.Id}/versions/{detail.SysCurrentVersionId}/document-date", new { documentDate = dd.ToString("yyyy-MM-dd") });
+                var resp = await http.PutAsJsonAsync(ddHref, new { documentDate = dd.ToString("yyyy-MM-dd") });
                 if (resp.IsSuccessStatusCode) { detail.SysDocumentDate = detail.OrigDocumentDate = dd; } else { failures.Add(DetailSaveFailure.DocumentDate); }
             }
 

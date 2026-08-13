@@ -83,11 +83,21 @@ public class TasksController : ControllerBase
             AssignedAt = r.AssignedAt,
             DueAt = r.DueAt,
             IsOverdue = r.DueAt is { } due && now > due,
-            Links =
-            [
-                new Link("document", $"/api/documents/{r.DocumentId}", "GET"),
-                new Link("workflow", $"/api/documents/{r.DocumentId}/versions/{r.VersionId}/workflow", "GET"),
-            ],
+            // `parent` beside `document` (#443): opening a task navigates to the document's HOME folder, and a
+            // row that names a parent id without its address leaves the client an id it can only compose from.
+            // Absent for a repository-root document, where "the parent" is the repositories listing itself.
+            Links = r.ParentId is { } taskParent
+                ?
+                [
+                    new Link("document", $"/api/documents/{r.DocumentId}", "GET"),
+                    new Link("parent", $"/api/documents/{taskParent}", "GET"),
+                    new Link("workflow", $"/api/documents/{r.DocumentId}/versions/{r.VersionId}/workflow", "GET"),
+                ]
+                :
+                [
+                    new Link("document", $"/api/documents/{r.DocumentId}", "GET"),
+                    new Link("workflow", $"/api/documents/{r.DocumentId}/versions/{r.VersionId}/workflow", "GET"),
+                ],
         }).ToList();
 
         return Ok(new TaskListResource { Tasks = tasks, Links = links });

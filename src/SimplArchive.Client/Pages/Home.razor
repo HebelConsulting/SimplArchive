@@ -925,6 +925,15 @@
     private Components.Panes.TreePane? _treePane;
 
     private BrowseNode? _selectedFolder;
+
+    // Drop-target addresses (children per folder, versions per document): the drop hands over an id per FILE,
+    // and a bulk drop must not spend a resolve per file (ADR 0557). Hrefs are stable, so the memos live for
+    // the page.
+    private readonly Dictionary<Guid, string> _childrenHrefByFolder = [];
+    private readonly Dictionary<Guid, string> _versionsHrefByDoc = [];
+
+    private async Task<string> MemoisedRelAsync(Dictionary<Guid, string> memo, Guid id, string rel) =>
+        memo.TryGetValue(id, out var href) ? href : memo[id] = await Browse.FetchRelAsync(id, rel);
     private List<BrowseNode> _folderContents = [];
 
     // The contents pane component, so the shell can drop its ephemeral header ordering when the listing's
@@ -1474,7 +1483,9 @@
             if (options.IncludePermissions) query.Add("includePermissions=true");
 
             Snackbar.Add(Strings.Get("StPreparingExport"), Severity.Info);
-            var bytes = await Http.GetByteArrayAsync($"api/documents/{root.Id}/export?" + string.Join("&", query));
+            // The tree row advertises browsing, not exporting, so the resource is fetched once and its own
+            // `export` rel followed; the options append as a QUERY, which is following, not composing (ADR 0557).
+            var bytes = await Http.GetByteArrayAsync(await Browse.FetchRelAsync(root.Id, "export") + "?" + string.Join("&", query));
             using var stream = new MemoryStream(bytes);
             using var streamRef = new DotNetStreamReference(stream);
             await JS.InvokeVoidAsync("downloadFileFromStream", $"{root.Name}-export-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip", streamRef);
@@ -1505,7 +1516,13 @@
             fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
             content.Add(fileContent, "file", options.FileName);
 
-            var basePath = _selectedFolder is { } folder ? $"api/documents/{folder.Id}/import" : "api/repositories/import";
+            // Grafting under a folder follows that folder's `import`; a brand-new top-level repository belongs
+            // to the COLLECTION, whose listing advertises its own `import` (#416). One extra GET on a rare
+            // admin action, and the listing is capped to one row because only its links are wanted.
+            var basePath = _selectedFolder is { } folder
+                ? await Browse.FetchRelAsync(folder.Id, "import")
+                : Links.Href((await Http.GetFromJsonAsync<RepositoryListResponse>($"{await ApiRoot.RequireAsync("repositories")}?limit=1"))?.Links, "import")
+                    ?? throw new InvalidOperationException("The repositories collection advertised no 'import' rel (ADR 0543).");
             var query = $"?updateExisting={options.UpdateExisting.ToString().ToLowerInvariant()}&includePermissions={options.IncludePermissions.ToString().ToLowerInvariant()}&merge={options.Merge.ToString().ToLowerInvariant()}&leafConflict={options.LeafConflict}";
             var resp = await Http.PostAsync($"{basePath}{query}", content);
             if (!resp.IsSuccessStatusCode)
@@ -1626,33 +1643,16 @@
         }
     }
 
-    // Check out a document (take the exclusive edit lock) from the Repositories row menu.
+    // Check out / force-release live in DocumentActions (row actions, ADR 0558); the page refreshes what changed.
     private async Task CheckOutAsync(BrowseNode node)
     {
-        try
-        {
-            var resp = await Http.PutAsync($"api/documents/{node.Id}/checkout", null);
-            if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add(Strings.Get("CoErrAlreadyOut"), Severity.Warning); return; }
-            if (resp.StatusCode == System.Net.HttpStatusCode.Forbidden) { Snackbar.Add(Strings.Get("CoErrNoPermission"), Severity.Error); return; }
-            resp.EnsureSuccessStatusCode();
-            Snackbar.Add(string.Format(Strings.Get("CoOkCheckedOut"), node.Name), Severity.Success);
-            await ReloadCurrentFolderAsync();
-            await LoadCheckoutsAsync();
-        }
-        catch (Exception) { Snackbar.Add(Strings.Get("CoErrCheckOut"), Severity.Error); }
+        if (await Actions.CheckOutAsync(node)) { await ReloadCurrentFolderAsync(); await LoadCheckoutsAsync(); }
     }
 
-    // Force-release another user's lock (a CanOverrideCheckout holder).
     private async Task OverrideCheckoutAsync(BrowseNode node)
     {
         if (!await Confirm(string.Format(Strings.Get("CoConfirmOverride"), node.Name, node.CheckedOutByName), Strings.Get("CoOverride"))) return;
-        try
-        {
-            (await Http.DeleteAsync($"api/documents/{node.Id}/checkout")).EnsureSuccessStatusCode();
-            Snackbar.Add(string.Format(Strings.Get("StReleasedCheckout"), node.Name), Severity.Success);
-            await ReloadCurrentFolderAsync();
-        }
-        catch (Exception) { Snackbar.Add(Strings.Get("CoErrOverride"), Severity.Error); }
+        if (await Actions.OverrideCheckoutAsync(node)) { await ReloadCurrentFolderAsync(); }
     }
 
     private async Task ReloadCurrentFolderAsync()
@@ -1682,7 +1682,7 @@
     // order"). A tree-child load wants the rows only, and calls the service directly.
     private async Task<List<BrowseNode>> OpenFolderContentsAsync(BrowseNode folder)
     {
-        var contents = await Browse.LoadContentsAsync(folder.Id, folder.RepositoryId, BrowseService.ChildrenHrefOf(folder));
+        var contents = await Browse.LoadContentsAsync(folder.Id, folder.RepositoryId, BrowseService.ChildrenHrefOf(folder), BrowseService.ReferencesHrefOf(folder));
         _folderSortOrder = contents.SortOrder ?? _folderSortOrder;
         _listPane?.ResetHeaderSort();
         return contents.Nodes;
@@ -1717,7 +1717,7 @@
         _selectedFolder = folder;
         _currentRepositoryId = folder?.RepositoryId ?? Guid.Empty;
         ClearDetail();
-        _folderContents = folder is null ? [] : (await Browse.LoadContentsAsync(folder.Id, folder.RepositoryId, BrowseService.ChildrenHrefOf(folder))).Nodes;
+        _folderContents = folder is null ? [] : (await Browse.LoadContentsAsync(folder.Id, folder.RepositoryId, BrowseService.ChildrenHrefOf(folder), BrowseService.ReferencesHrefOf(folder))).Nodes;
 
         // A folder has its own comment thread, and — since issue #408 — its own detail pane: the same one a
         // document gets, because a folder is a Document with a mask and index data of its own.
@@ -2014,6 +2014,7 @@
         Detail.IsEditing = false;
         Detail.SysHasVersion = false;
         Detail.SysCurrentVersionId = Guid.Empty;
+        Detail.SysDocumentDateHref = null; // an address must not outlive its subject (ADR 0559)
         Detail.SysCurrentVersion = null;
         Detail.VersionCount = 0;
         Detail.SysName = "";
@@ -2147,6 +2148,7 @@
 
         Detail.SysHasVersion = true;
         Detail.SysCurrentVersionId = current.Id;
+        Detail.SysDocumentDateHref = Links.Href(current.Links, "document-date");
         Detail.SysCurrentVersion = current.VersionNumber;
         Detail.VersionCount = confirmed.Count;
         Detail.SysName = item.Name;
@@ -2292,9 +2294,10 @@
 
     // ---- Chat thread ---------------------------------------------------------------------------------
 
-    // Prefers the server-advertised "chat" rel and only composes a URL when the node came from a list that does
-    // not emit it yet (ADR 0543). Every composed URL here is an entry in the hypermedia guard's allowlist.
-    private string ChatUrlFor(BrowseNode node) => node.ChatHref ?? $"api/documents/{node.Id}/chat";
+    // The row's advertised "chat" rel; a row whose listing does not emit it (a reference row) resolves the
+    // target once and follows its own rel instead of composing the path it used to (ADR 0543, #416).
+    private async Task<string> ChatUrlForAsync(BrowseNode node) =>
+        node.ChatHref ?? await Browse.FetchRelAsync(node.Id, "chat");
 
     private async Task LoadCommentsAsync(BrowseNode node)
     {
@@ -2304,7 +2307,7 @@
         _mentionableUsersHref = null;
         try
         {
-            var url = ChatUrlFor(node);
+            var url = await ChatUrlForAsync(node);
             while (url is not null)
             {
                 var page = await Http.GetFromJsonAsync<ChatMessageListResponse>(url);
@@ -2420,7 +2423,7 @@
             return;
         }
 
-        var response = await Http.PostAsJsonAsync(ChatUrlFor(item), new { body = _newComment });
+        var response = await Http.PostAsJsonAsync(await ChatUrlForAsync(item), new { body = _newComment });
         if (response.IsSuccessStatusCode)
         {
             _newComment = "";
@@ -2439,7 +2442,7 @@
             return;
         }
 
-        var response = await Http.PostAsJsonAsync(ChatUrlFor(item), new { body = _replyText, parentMessageId });
+        var response = await Http.PostAsJsonAsync(await ChatUrlForAsync(item), new { body = _replyText, parentMessageId });
         if (response.IsSuccessStatusCode)
         {
             _replyText = "";
@@ -2475,7 +2478,10 @@
             return;
         }
 
-        var response = await Http.PostAsJsonAsync($"api/documents/{folder.Id}/children", new { name });
+        // The children collection the folder row already advertised — creating in it is a POST to the same
+        // address browsing reads (ADR 0543); the fetch fallback covers a synthetic node with no listing links.
+        var childrenHref = BrowseService.ChildrenHrefOf(folder) ?? await Browse.FetchChildrenHrefAsync(folder.Id);
+        var response = await Http.PostAsJsonAsync(childrenHref, new { name });
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             Snackbar.Add(string.Format(Strings.Get("StNameTaken"), name), Severity.Warning);
@@ -2650,36 +2656,15 @@
     }
 
 
-    // Promote a referenced folder to be the document's primary location (ADR 0506): one atomic server call
-    // (move + leave a reference at the old home). Same If-Match contract as MoveAsync.
+    // Promote a referenced folder to be the document's primary location (ADR 0506) — the action itself is a
+    // row action and lives in DocumentActions; the page follows the document to its new home afterwards.
     private async Task PromotePrimaryLocationAsync(BrowseNode node, Guid folderId)
     {
-        if (DocumentActions.DocumentAddress(node) is not { } selfHref)
+        if (await Actions.SetPrimaryLocationAsync(node, folderId))
         {
-            return;
+            await RefreshAsync();
+            await NavigateToFolderAsync(folderId, node.Id);
         }
-
-        // As in MoveAsync: `set-primary-location` is a rel on the document resource, not on the row.
-        var etag = await Actions.GetETagAsync(selfHref);
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"api/documents/{node.Id}/primary-location")
-        {
-            Content = JsonContent.Create(new { folderId }),
-        };
-        if (etag is not null)
-        {
-            request.Headers.TryAddWithoutValidation("If-Match", etag);
-        }
-
-        var response = await Http.SendAsync(request);
-        if (!await Actions.HandleMutationAsync(response, $"'{node.Name}' now lives in the chosen folder.",
-            "Can't set that folder as the primary location.",
-            "An item with that name already exists in the target folder."))
-        {
-            return;
-        }
-
-        await RefreshAsync();
-        await NavigateToFolderAsync(folderId, node.Id);
     }
 
 
@@ -2718,7 +2703,9 @@
     {
         try
         {
-            return (await Http.GetFromJsonAsync<DocNameResponse>($"api/documents/{id}"))?.Name;
+            // Through the single sanctioned id-to-resource fetch (BrowseService), not a private copy of the
+            // same GET — two copies of the one address the client may build is how the exception multiplies.
+            return (await Browse.FetchAsync(id))?.Name;
         }
         catch (HttpRequestException)
         {
@@ -2772,7 +2759,10 @@
 
     // Comment: the filing note the user typed in the name-conflict dialog, carried through so FinalizeUploadAsync
     // can set it as the version comment (ADR 0528). Null for an ordinary drop, which asks for nothing.
-    public record UploadTarget(string DocumentId, string VersionId, string UploadUrl, string? Comment = null);
+    // FinalizeHref is the created version's own advertised address — where the finalize PUT goes. It rides
+    // through JS untouched (dropUpload.js hands the whole target back), so the finalize step follows the rel
+    // the create response stated rather than rebuilding the path from two ids (ADR 0543, #416).
+    public record UploadTarget(string DocumentId, string VersionId, string UploadUrl, string? Comment = null, string? FinalizeHref = null);
 
     [JSInvokable]
     public Task OnUploadsStartingAsync(int count)
@@ -2812,7 +2802,9 @@
 
             if (choice.Action == "reference" && Guid.TryParse(folderId, out var folderGuid))
             {
-                var refResp = await Http.PostAsJsonAsync($"api/documents/{folderGuid}/references", new { targetId = choice.TargetId });
+                // The drop target arrives from JS as a bare id, so its references collection is reached by the
+                // sanctioned fetch-then-follow (ADR 0543).
+                var refResp = await Http.PostAsJsonAsync(await Browse.FetchRelAsync(folderGuid, "references"), new { targetId = choice.TargetId });
                 if (refResp.IsSuccessStatusCode)
                 {
                     Snackbar.Add(string.Format(Strings.Get("StReferencedInstead"), fileName), Severity.Success);
@@ -2851,14 +2843,16 @@
             var stem = System.IO.Path.GetFileNameWithoutExtension(fileName);
             var extension = System.IO.Path.GetExtension(fileName);
 
-            var childrenHref = $"api/documents/{folderId}/children";
+            // JS hands over the drop target as a bare id, once per FILE — resolved via the sanctioned fetch
+            // and memoised (ADR 0557: one read, many follows).
+            var childrenHref = await MemoisedRelAsync(_childrenHrefByFolder, Guid.Parse(folderId), "children");
             var create = await Http.PostAsJsonAsync(childrenHref, new { name = stem });
             if (create.StatusCode == HttpStatusCode.Conflict)
             {
                 // Taken: ask what was meant rather than warning and dropping the file, which made a drag-and-drop
                 // look like it had done nothing (UploadConflictResolver owns the decision — ADR 0558).
                 return await UploadConflicts.ResolveAsync(childrenHref, fileName, stem, extension) is { } r
-                    ? new UploadTarget(r.DocumentId.ToString(), r.VersionId.ToString(), r.UploadUrl, r.Comment)
+                    ? new UploadTarget(r.DocumentId.ToString(), r.VersionId.ToString(), r.UploadUrl, r.Comment, r.FinalizeHref)
                     : null;
             }
             if (create.StatusCode == HttpStatusCode.Forbidden)
@@ -2869,11 +2863,15 @@
             create.EnsureSuccessStatusCode();
             var created = await create.Content.ReadFromJsonAsync<DocumentSummary>();
 
-            var versionResponse = await Http.PostAsJsonAsync($"api/documents/{created!.Id}/versions", new { fileExtension = extension });
+            // The create response IS the new document, and it advertises its versions collection; the version
+            // it creates advertises its own address, which is where the finalize PUT goes (ADR 0543, #416).
+            var versionsHref = Links.Href(created!.Links, "versions")
+                ?? throw new InvalidOperationException("The created document advertised no 'versions' rel (ADR 0543).");
+            var versionResponse = await Http.PostAsJsonAsync(versionsHref, new { fileExtension = extension });
             versionResponse.EnsureSuccessStatusCode();
             var version = await versionResponse.Content.ReadFromJsonAsync<CreateVersionResponse>();
 
-            return new UploadTarget(created.Id.ToString(), version!.Id.ToString(), version.UploadUrl);
+            return new UploadTarget(created.Id.ToString(), version!.Id.ToString(), version.UploadUrl, FinalizeHref: Links.Href(version.Links, "self"));
         }
         catch (Exception)
         {
@@ -2883,14 +2881,15 @@
     }
 
     [JSInvokable]
-    public async Task FinalizeUploadAsync(string documentId, string versionId, string fileName, string? comment)
+    public async Task FinalizeUploadAsync(string finalizeHref, string fileName, string? comment)
     {
         try
         {
             // The filing comment is the version's "why this revision" note (ADR 0528) — set on the version at
-            // finalize (the drop-upload created it first), not posted to the chat feed as it used to be.
+            // finalize (the drop-upload created it first), not posted to the chat feed as it used to be. The
+            // address is the one the create response advertised, carried through JS on the upload target.
             var versionComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
-            (await Http.PutAsJsonAsync($"api/documents/{documentId}/versions/{versionId}", new { comment = versionComment })).EnsureSuccessStatusCode();
+            (await Http.PutAsJsonAsync(finalizeHref, new { comment = versionComment })).EnsureSuccessStatusCode();
 
             // The server assigns the mask at finalize (eMail for .eml/.msg, else Basic Entry) — see ADR
             // "Email auto-classification"; the client no longer classifies.
@@ -3064,7 +3063,9 @@
         try
         {
             var extension = System.IO.Path.GetExtension(fileName);
-            var versionResponse = await Http.PostAsJsonAsync($"api/documents/{documentId}/versions", new { fileExtension = extension });
+            // The drop target is a bare id from JS, once per FILE — resolved once and memoised (ADR 0543/0557).
+            var versionsHref = await MemoisedRelAsync(_versionsHrefByDoc, Guid.Parse(documentId), "versions");
+            var versionResponse = await Http.PostAsJsonAsync(versionsHref, new { fileExtension = extension });
             if (versionResponse.StatusCode == HttpStatusCode.Conflict)
             {
                 Snackbar.Add(string.Format(Strings.Get("StVersionBlocked"), fileName), Severity.Warning);
@@ -3077,7 +3078,7 @@
             }
             versionResponse.EnsureSuccessStatusCode();
             var version = await versionResponse.Content.ReadFromJsonAsync<CreateVersionResponse>();
-            return new UploadTarget(documentId, version!.Id.ToString(), version.UploadUrl);
+            return new UploadTarget(documentId, version!.Id.ToString(), version.UploadUrl, FinalizeHref: Links.Href(version.Links, "self"));
         }
         catch (Exception)
         {
@@ -3087,14 +3088,14 @@
     }
 
     [JSInvokable]
-    public async Task FinalizeVersionAsync(string documentId, string versionId, string fileName, string? comment)
+    public async Task FinalizeVersionAsync(string finalizeHref, string fileName, string? comment)
     {
         try
         {
             // The check-in comment is the new version's "why this revision" note (ADR 0528) — set on the version
-            // at finalize, not posted to the chat feed.
+            // at finalize, not posted to the chat feed. Address as in FinalizeUploadAsync above.
             var versionComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
-            (await Http.PutAsJsonAsync($"api/documents/{documentId}/versions/{versionId}", new { comment = versionComment })).EnsureSuccessStatusCode();
+            (await Http.PutAsJsonAsync(finalizeHref, new { comment = versionComment })).EnsureSuccessStatusCode();
 
             Snackbar.Add(string.Format(Strings.Get("StFiledVersion"), fileName), Severity.Success);
         }
@@ -3191,8 +3192,7 @@
 
     private record ArchiveEntriesResponse { public List<ArchiveEntryDto> Entries { get; set; } = []; }
     private record ArchiveEntryDto { public string Name { get; set; } = ""; public string Path { get; set; } = ""; public long Size { get; set; } public List<LinkResponse> Links { get; set; } = []; }
-    private record DocNameResponse { public string Name { get; set; } = ""; }
-    private record CreateVersionResponse { public Guid Id { get; set; } public string UploadUrl { get; set; } = ""; }
+    private record CreateVersionResponse { public Guid Id { get; set; } public string UploadUrl { get; set; } = ""; public List<LinkResponse> Links { get; set; } = []; }
 
 
 
