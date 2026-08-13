@@ -18,5 +18,10 @@ public sealed class SearchResultViewModel
     // nothing textual matched. Rendered into bold runs by the InlineHighlighter attached property.
     public string Highlight { get; init; } = "";
 
+    // The `versions` address this hit advertised, or null for a folder (which has nothing to preview). Carried
+    // on the row so previewing follows what the listing handed over rather than re-resolving the document
+    // (#462, ADRs 0543/0555/0557).
+    public string? VersionsHref { get; init; }
+
     public string IconValue => IsFolder ? "mdi-folder" : "mdi-file-document-outline";
 }

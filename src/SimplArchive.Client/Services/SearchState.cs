@@ -96,6 +96,37 @@ public sealed class SearchState
         FacetSensitivity.Clear();
         FacetFields.Clear();
     }
+
+    /// <summary>
+    /// The result being previewed, or null when nothing is selected (#462).
+    /// </summary>
+    /// <remarks>
+    /// Here rather than in the component for the same reason as everything else on this class: following a hit
+    /// switches to the Repositories tab, which disposes the tab, and coming back to a search whose selection had
+    /// silently reset would lose the user's place on the path #462 makes the COMMON one (ADR 0558 rule 4).
+    /// </remarks>
+    public SearchHit? SelectedHit { get; set; }
+
+    /// <summary>
+    /// Everything the user has entered or narrowed: the query, the refinement filters, and every facet
+    /// drill-down. This is what "Reset search criteria" means (#462).
+    /// </summary>
+    /// <remarks>
+    /// It exists because the old "Clear filters" reset the refinement panel and left the FACETS applied, so the
+    /// results stayed narrowed by drill-downs that were no longer visible anywhere in the form — a user could
+    /// not get back to an unfiltered search except by reloading. Results and facets are deliberately NOT
+    /// cleared: they describe the last search that ran, and blanking them would make the tab look broken until
+    /// the next one completes.
+    /// </remarks>
+    public void ResetCriteria()
+    {
+        Query = "";
+        RepositoryId = null;
+        DocDateFrom = DocDateTo = CreatedFrom = CreatedTo = null;
+        CreatedBy = "";
+        FieldFilters = [];
+        ClearFacetSelections();
+    }
 }
 
 /// <summary>One index-field filter row in the refinement panel: which field, which operator, which value.</summary>

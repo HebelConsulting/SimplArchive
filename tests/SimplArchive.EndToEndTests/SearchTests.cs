@@ -99,6 +99,52 @@ public class SearchTests
         return (repoId, docId);
     }
 
+    // A hit hands out the addresses a client needs to act on it (#462): `versions` is what a preview follows to
+    // reach the current version's `preview` and `text-layout` rels. Without it the Search tab would have to
+    // compose `api/documents/{id}/versions`, which is the thing ADR 0543 exists to stop.
+    //
+    // Asserted per KIND, not just presence: a folder has nothing to preview, and advertising `versions` on one
+    // would have the client offer a preview affordance the server cannot honour.
+    [Fact]
+    public async Task A_search_hit_advertises_the_rels_a_client_acts_on()
+    {
+        var word = $"zzyzx{Guid.NewGuid():N}";
+        var (clientId, secret, _) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+
+        // The repository itself is a folder (a document with no parent), and its name carries the word — so one
+        // search returns both kinds and the two branches are compared against the same response.
+        var (repoId, docId) = await CreateRepoWithDocAsync(owner, $"rels-{word}", "hit-doc", $"content {word} here");
+
+        await PollAsync(
+            async () => (await SearchIdsAsync(owner, word)).Contains(docId),
+            "the document is indexed");
+
+        var response = await TestJson.Get(owner, $"/api/search?q={Uri.EscapeDataString(word)}");
+        var hits = response.GetProperty("results").EnumerateArray().ToList();
+
+        var doc = hits.Single(h => h.GetProperty("id").GetGuid() == docId);
+        var docRels = doc.GetProperty("links").EnumerateArray()
+            .Select(l => l.GetProperty("rel").GetString()).ToHashSet();
+        Assert.Contains("self", docRels);
+        Assert.Contains("versions", docRels);
+
+        // The `versions` address must actually resolve — a rel that 404s is worse than no rel, because the
+        // client offers the affordance and then fails at the point of use.
+        var versionsHref = doc.GetProperty("links").EnumerateArray()
+            .First(l => l.GetProperty("rel").GetString() == "versions").GetProperty("href").GetString()!;
+        var versions = await TestJson.Get(owner, versionsHref);
+        Assert.NotEmpty(versions.GetProperty("versions").EnumerateArray().ToList());
+
+        if (hits.FirstOrDefault(h => h.GetProperty("id").GetGuid() == repoId) is { ValueKind: System.Text.Json.JsonValueKind.Object } folder)
+        {
+            var folderRels = folder.GetProperty("links").EnumerateArray()
+                .Select(l => l.GetProperty("rel").GetString()).ToHashSet();
+            Assert.Contains("self", folderRels);
+            Assert.DoesNotContain("versions", folderRels);
+        }
+    }
+
     private static async Task<HashSet<Guid>> SearchIdsAsync(HttpClient client, string q, Guid? repositoryId = null)
     {
         var url = $"/api/search?q={Uri.EscapeDataString(q)}";

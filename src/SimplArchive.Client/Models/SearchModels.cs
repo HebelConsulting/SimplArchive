@@ -20,6 +20,17 @@ public record SearchHit
     public string Path { get; set; } = "";
 
     public string Highlight { get; set; } = "";
+
+    /// <summary>
+    /// What this hit lets you do: <c>self</c> always, and <c>versions</c> for a document — the rel a preview
+    /// follows to reach the current version's <c>preview</c> and <c>text-layout</c> addresses (#462).
+    /// </summary>
+    /// <remarks>
+    /// The row carries its own addresses so previewing a hit follows what the listing advertised rather than
+    /// re-resolving the document (ADR 0555/0557). A folder advertises no <c>versions</c>, which is how the tab
+    /// knows there is nothing to preview — a missing rel means "not available here" (ADR 0543).
+    /// </remarks>
+    public List<LinkResponse> Links { get; set; } = [];
 }
 
 /// <summary>A page of search results, its facets, and the link to the next page.</summary>

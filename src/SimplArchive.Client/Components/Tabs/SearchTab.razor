@@ -14,9 +14,48 @@
    SearchState for why. Everything below therefore reads and writes S.*, and the only things that cross the
    component boundary are the two bridges the shell owns — a tag click coming IN, and a hit click going OUT. *@
 
+@* This tab's own styling, moved out of the shell's stylesheet when the results/preview split was added (#462).
+   The shell's <style> holds every tab's CSS, which is the other half of what ADR 0558 is decomposing — a tab
+   that owns its markup and its state should own its appearance too, and these classes are used nowhere else.
+
+   Four rules deliberately STAY in the shell — `.wb-search`, `.wb-search-bar`, `.wb-search-status` and
+   `.wb-search-results` — because InboxTab reuses them. A rule that only exists while THIS tab is rendered takes
+   the Inbox's layout with it when the user is anywhere else, and `.wb-search` is what makes the tab fill its
+   space: without it the Inbox's content panel collapses and the bottom tab bar rides up off the workbench.
+   That is not hypothetical — moving them was this change's one regression, caught by WebTabBarTests. *@
+<style>
+    .wb-search-filters { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 4px 2px 8px; }
+    .wb-filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .wb-filter-label { flex: 0 0 96px; font-size: .8rem; color: var(--mud-palette-text-secondary); }
+    .wb-filter-date { max-width: 150px; }
+    .wb-saved-searches { flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 4px 2px; }
+    .wb-search-facets { flex: 0 0 auto; display: flex; flex-direction: column; gap: 2px; padding: 2px 2px 8px; border-bottom: 1px solid var(--mud-palette-lines-default); margin-bottom: 4px; }
+    .wb-facet-group { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+    .wb-facet-label { font-size: .72rem; font-weight: 600; color: var(--mud-palette-text-secondary); min-width: 74px; }
+    .wb-search-path { font-size: .72rem; color: var(--mud-palette-text-secondary); }
+    .wb-search-snippet { font-size: .78rem; color: var(--mud-palette-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .wb-search-snippet em { font-style: normal; font-weight: 600; background: var(--mud-palette-warning-lighten); color: var(--mud-palette-text-primary); border-radius: 2px; padding: 0 1px; }
+
+    /* Results beside their preview (#462). The sizing is scoped to children of the body rather than set on
+       `.wb-search-results` itself, because that class is shared with the Inbox — widening it there would have
+       been an invisible change to another tab's layout. */
+    .wb-search-body { flex: 1 1 auto; min-height: 0; display: flex; gap: 6px; }
+    .wb-search-body > .wb-search-results { flex: 1 1 42%; min-width: 0; }
+    .wb-search-body > .wb-search-preview { flex: 1 1 58%; min-width: 0; min-height: 0; display: flex; flex-direction: column;
+        border-left: 1px solid var(--mud-palette-lines-default); padding-left: 6px; }
+    /* Below the workbench's tablet breakpoint the preview is DROPPED rather than squeezed: two columns at
+       ~350px each are both unusable, and the results are what the tab is for (ADR 0491). */
+    @@media (max-width: 1199px) {
+        .wb-search-body > .wb-search-preview { display: none; }
+        .wb-search-body > .wb-search-results { flex: 1 1 auto; }
+    }
+</style>
+
 <div class="wb-search">
     <div class="wb-search-bar">
-        <MudTextField @bind-Value="S.Query" Immediate="true" OnKeyDown="OnSearchKeyDown" Style="flex:1 1 auto;"
+        @* Clearable puts the × inside the field: it clears the TEXT only, leaving the filters and facets in
+           place, which is the narrow job. "Reset" below is the one that clears everything (#462). *@
+        <MudTextField @bind-Value="S.Query" Immediate="true" Clearable="true" OnKeyDown="OnSearchKeyDown" Style="flex:1 1 auto;"
                       Placeholder="@Strings.Get("SearchPlaceholder")" Variant="Variant.Outlined" Margin="Margin.Dense"
                       Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
         <MudSelect T="Guid?" @bind-Value="S.RepositoryId" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
@@ -127,7 +166,10 @@
 
             <div class="wb-filter-row">
                 <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add" OnClick="AddFieldFilter" Disabled="@(S.AvailableFields.Count == 0)">@Strings.Get("AddIndexFilter")</MudButton>
-                <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="ClearFilters">@Strings.Get("ClearFilters")</MudButton>
+                @* Clears EVERYTHING the user entered — text, refinement filters and facet drill-downs. The old
+                   "Clear filters" left the facets applied, so results stayed narrowed by drill-downs that were
+                   no longer shown anywhere in the form (#462). *@
+                <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.RestartAlt" OnClick="ResetCriteriaAsync">@Strings.Get("ResetSearchCriteria")</MudButton>
             </div>
         </div>
     }
@@ -148,22 +190,47 @@
             }
         </div>
     }
-    <div class="wb-search-results">
-        @foreach (var hit in S.Results)
-        {
-            <div class="wb-list-row" @onclick="() => OnOpenHit.InvokeAsync(hit)">
-                <MudIcon Icon="@(hit.IsFolder ? Icons.Material.Filled.Folder : Icons.Material.Filled.Description)" Size="Size.Small" />
-                <div style="min-width:0;">
-                    <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@hit.Name</div>
-                    @if (!string.IsNullOrEmpty(hit.Highlight))
-                    {
-                        @* Highlight is HTML-escaped surrounding text with only <em> match tags (ADR "Search result highlighting") — safe to render as markup. *@
-                        <div class="wb-search-snippet">@((MarkupString)hit.Highlight)</div>
-                    }
-                    <div class="wb-search-path">@hit.Path</div>
+    @* Results beside their preview (#462). The splitter is the workbench's own (wbLayout.js), not a bespoke
+       one, so the widths persist exactly like every other pane. On a narrow screen the preview is dropped
+       rather than squeezed: two unusable columns are worse than one usable one (ADR 0491). *@
+    <div class="wb-search-body">
+        <div class="wb-search-results" data-pane="search-results">
+            @foreach (var hit in S.Results)
+            {
+                <div class="wb-list-row @(S.SelectedHit?.Id == hit.Id ? "wb-row-selected" : "")"
+                     @onclick="() => SelectHitAsync(hit)"
+                     @ondblclick="() => OpenHitAsync(hit)">
+                    <MudIcon Icon="@(hit.IsFolder ? Icons.Material.Filled.Folder : Icons.Material.Filled.Description)" Size="Size.Small" />
+                    <div style="min-width:0; flex:1 1 auto;">
+                        <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@hit.Name</div>
+                        @if (!string.IsNullOrEmpty(hit.Highlight))
+                        {
+                            @* Highlight is HTML-escaped surrounding text with only <em> match tags (ADR "Search result highlighting") — safe to render as markup. *@
+                            <div class="wb-search-snippet">@((MarkupString)hit.Highlight)</div>
+                        }
+                        <div class="wb-search-path">@hit.Path</div>
+                    </div>
+                    @* The discoverable way to leave the tab. Double-click does the same for people who expect
+                       the tree's gesture, but a gesture cannot be the only route — it is invisible, and touch
+                       has no double-click (ADR 0511).
+
+                       Wrapped in a span carrying the stopPropagation: the directive needs a DOM @onclick on the
+                       SAME element, and MudIconButton's OnClick is a component parameter, not one. Without it
+                       the click would also select the row underneath — harmless-looking, but it would fire a
+                       preview fetch for a row the user is leaving. *@
+                    <span @onclick="NoOp" @onclick:stopPropagation="true">
+                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small"
+                                       title="@Strings.Get("SearchGoToDocument")"
+                                       aria-label="@Strings.Get("SearchGoToDocument")"
+                                       OnClick="() => OpenHitAsync(hit)" />
+                    </span>
                 </div>
-            </div>
-        }
+            }
+        </div>
+        <div class="wb-search-preview" data-pane="search-preview">
+            <PreviewPane @ref="_preview" DataPane="search-preview-inner" EmptyText="@Strings.Get("SearchPreviewEmpty")"
+                         AnnotationHost="null" />
+        </div>
     </div>
 </div>
 
@@ -181,12 +248,18 @@
     public EventCallback OnFilterApplied { get; set; }
 
     /// <summary>
-    /// A result the user clicked. The shell owns it because opening a hit means navigating the Repositories
-    /// tab's contents pane to the hit's folder and selecting it — the one thing this tab cannot do itself.
+    /// A result the user asked to open. The shell owns it because opening a hit means navigating the
+    /// Repositories tab's contents pane to the hit's folder and selecting it — the one thing this tab cannot
+    /// do itself.
     /// </summary>
+    /// <remarks>
+    /// Since #462 this fires from the row's "Go to" button or a double-click, not from a plain click: a click
+    /// now selects the row and previews it, so navigating had to move to an affordance of its own.
+    /// </remarks>
     [Parameter]
     public EventCallback<SearchHit> OnOpenHit { get; set; }
 
+    private PreviewPane? _preview;
     private bool _searching;
     private List<SavedSearchDto> _savedSearches = [];
     private string? _shareTargetsHref;
@@ -445,12 +518,89 @@
         row.DateValue = null;
     }
 
-    private void ClearFilters()
+    // Everything the user entered, then re-run: leaving stale results under an emptied form would read as
+    // "reset did nothing" (#462). With no query and no filters this is the unfiltered search, which is exactly
+    // what the button promises.
+    private async Task ResetCriteriaAsync()
     {
-        S.RepositoryId = null;
-        S.DocDateFrom = S.DocDateTo = S.CreatedFrom = S.CreatedTo = null;
-        S.CreatedBy = "";
-        S.FieldFilters = [];
+        S.ResetCriteria();
+        await ClearSelectionAsync();
+        await RunSearchAsync();
+    }
+
+    // Select a row and preview it. A folder has nothing to preview and advertises no `versions`, so the pane
+    // clears rather than showing the previous document's page under a folder's name.
+    private async Task SelectHitAsync(SearchHit hit)
+    {
+        S.SelectedHit = hit;
+        if (hit.IsFolder)
+        {
+            _preview?.Clear();
+            return;
+        }
+
+        await RenderPreviewAsync(hit);
+    }
+
+    // Follows what the ROW advertised (ADR 0555): `versions` → the current version → its `preview` and
+    // `text-layout`. Nothing here composes an address, and a hit that advertises no `versions` simply gets no
+    // preview — a missing rel means "not available here" (ADR 0543).
+    private async Task RenderPreviewAsync(SearchHit hit)
+    {
+        try
+        {
+            if (Links.Href(hit.Links, "versions") is not { } versionsHref)
+            {
+                _preview?.Clear();
+                return;
+            }
+
+            var versions = await Http.GetFromJsonAsync<VersionListResponse>(versionsHref);
+            var confirmed = versions?.Versions?.Where(v => v.Status == "Confirmed").ToList() ?? [];
+            if (VersionListResponse.PickCurrent(confirmed, versions?.CurrentVersionId) is not { } latest)
+            {
+                _preview?.Clear();
+                return;
+            }
+
+            // The point of previewing a HIT rather than a document: seedQuery drives the hit overlay, so the
+            // pane opens showing why this document matched instead of merely showing its first page (ADR 0294).
+            // The machinery already existed and had no caller until now.
+            if (_preview is not null)
+            {
+                await _preview.RenderAsync(
+                    Http.Absolute(Links.Href(latest.Links, "preview")),
+                    Links.Href(latest.Links, "text-layout"),
+                    latest.PreviewConverted,
+                    seedQuery: S.Query);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            // The preview is an extra, never the tab. A document whose version list or rendition is unreachable
+            // still shows as a result, and the user can still open it.
+            _preview?.Clear();
+        }
+        catch (InvalidOperationException)
+        {
+            _preview?.Clear();
+        }
+    }
+
+    private Task ClearSelectionAsync()
+    {
+        S.SelectedHit = null;
+        _preview?.Clear();
+        return Task.CompletedTask;
+    }
+
+    // Leaving the tab for the document itself — from the row's button or a double-click.
+    private Task OpenHitAsync(SearchHit hit) => OnOpenHit.InvokeAsync(hit);
+
+    // Exists only to give the wrapper span a DOM click handler, which is what @onclick:stopPropagation attaches
+    // to. The button's own OnClick does the work.
+    private void NoOp()
+    {
     }
 
     // ---- Running a search ----------------------------------------------------------------------------

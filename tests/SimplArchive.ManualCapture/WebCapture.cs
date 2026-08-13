@@ -21,7 +21,10 @@ public static partial class WebCapture
         // Freeze the app's demo clock so the audit / tasks / my-work screens are byte-stable run-to-run (ADR 0510).
         // Matches the desktop capture's fixed clock (MainWindowViewModel.ScreenshotClock) so both halves of the
         // manual read the same date.
-        await using var app = new SelfHostedApp { DemoClock = "2026-06-01T09:00:00Z" };
+        // WithOcrSidecar: the external-link landing figure is supposed to show the document thumbnail (#476),
+        // and nothing else in the deployment can rasterise a PDF. Only this harness asks for it — the UI suites
+        // would pay the image build for a picture they never take.
+        await using var app = new SelfHostedApp { DemoClock = "2026-06-01T09:00:00Z", WithOcrSidecar = true };
         Console.WriteLine("[web] booting the self-hosted app (Postgres + SeaweedFS + OpenSearch + Tika + Gotenberg + API)…");
         await app.StartAsync();
         Console.WriteLine($"[web] app ready at {app.BaseUrl}");

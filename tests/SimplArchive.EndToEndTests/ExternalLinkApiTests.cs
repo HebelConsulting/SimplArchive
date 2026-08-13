@@ -365,6 +365,96 @@ public class ExternalLinkApiTests
     // fixture here would be testing a path the product no longer has. Tenant admin so the ACL side is satisfied
     // without building an entry per test — the right being separately required is what
     // Creating_requires_the_dedicated_right pins, using a non-admin who can read.
+    // The landing page's thumbnail (issue #476) — the refusals, which are the part that matters here.
+    //
+    // The POSITIVE path is not asserted from this suite on purpose: generation needs a rasteriser, and neither
+    // exists in a test run. NetVips ships musl-only natives for the Alpine image (no libvips on a dev Mac or on
+    // the ubuntu runner), and the PDF path needs the OCR sidecar, which this fixture does not start. Generation
+    // is covered by DocumentThumbnailServiceTests against a fake sidecar, and end-to-end by docker compose.
+    [Fact]
+    public async Task The_thumbnail_route_refuses_exactly_like_a_dead_link()
+    {
+        var (api, tenantId, docId) = await SeedShareableDocumentAsync();
+
+        var created = await PostJson(api, $"/api/documents/{docId}/external-links", new { });
+        var token = created.GetProperty("url").GetString()!.Split('/').Last();
+
+        // AllowAutoRedirect = false: were a thumbnail present the route would answer with a redirect to a
+        // presigned URL, and a following client would report whatever storage said instead of what we said.
+        using var anonymous = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        // No rasteriser here, so this document has no thumbnail — and "none to give" must look exactly like a
+        // token that never existed. A 404 here would confirm a real link sits at this token.
+        using var missing = await anonymous.GetAsync($"/api/external-links/{token}/thumbnail");
+        using var unknown = await anonymous.GetAsync($"/api/external-links/{ExternalLinkTokenThatCannotExist}/thumbnail");
+        Assert.Equal(HttpStatusCode.Gone, missing.StatusCode);
+        Assert.Equal(unknown.StatusCode, missing.StatusCode);
+
+        // Fetching it costs the recipient nothing: the count belongs to opening the link, and the full download
+        // beside it is unmetered too.
+        var before = await AccessCountAsync(tenantId, docId);
+        using (var again = await anonymous.GetAsync($"/api/external-links/{token}/thumbnail")) { }
+
+        Assert.Equal(before, await AccessCountAsync(tenantId, docId));
+
+        // Revoked: still the same answer, so revocation cannot be detected through this route either.
+        await RevokeEveryLinkAsync(tenantId, docId);
+        using var afterRevoke = await anonymous.GetAsync($"/api/external-links/{token}/thumbnail");
+        Assert.Equal(HttpStatusCode.Gone, afterRevoke.StatusCode);
+    }
+
+    // A format with neither a PDF nor an image form gets no picture at all — and the page must then look exactly
+    // as it did before this feature, with no <img> to render as a broken glyph.
+    [Fact]
+    public async Task A_document_with_no_thumbnail_leaves_the_page_as_it_was()
+    {
+        var (api, _, docId) = await SeedShareableDocumentAsync(); // .txt — no rendition, no image
+
+        var created = await PostJson(api, $"/api/documents/{docId}/external-links", new { });
+        var token = created.GetProperty("url").GetString()!.Split('/').Last();
+
+        using var anonymous = _factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/external-links/{token}");
+        request.Headers.TryAddWithoutValidation("Accept", "text/html");
+        using var response = await anonymous.SendAsync(request);
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.DoesNotContain("/thumbnail", html);
+        Assert.DoesNotContain("<img", html);
+
+        // The route still answers like a dead link rather than admitting there is nothing to draw.
+        using var thumbnail = await anonymous.GetAsync($"/api/external-links/{token}/thumbnail");
+        Assert.Equal(HttpStatusCode.Gone, thumbnail.StatusCode);
+    }
+
+    private const string ExternalLinkTokenThatCannotExist = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz";
+
+    private async Task<int> AccessCountAsync(Guid tenantId, Guid documentId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+        return await db.ExternalLinks.IgnoreQueryFilters()
+            .Where(l => l.TenantId == tenantId && l.DocumentId == documentId)
+            .Select(l => l.AccessCount)
+            .FirstAsync();
+    }
+
+    private async Task RevokeEveryLinkAsync(Guid tenantId, Guid documentId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+        var links = await db.ExternalLinks.IgnoreQueryFilters()
+            .Where(l => l.TenantId == tenantId && l.DocumentId == documentId)
+            .ToListAsync();
+        foreach (var link in links)
+        {
+            link.RevokedAt = DateTimeOffset.UtcNow;
+        }
+
+        await db.SaveChangesAsync();
+    }
+
     private async Task<(HttpClient Api, Guid TenantId, Guid DocumentId)> SeedShareableDocumentAsync()
     {
         var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);

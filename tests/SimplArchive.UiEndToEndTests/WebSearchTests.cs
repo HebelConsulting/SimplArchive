@@ -27,7 +27,9 @@ public class WebSearchTests
 
         var result = page.Locator(".wb-search-results .wb-list-row").Filter(new() { HasText = "Invoice 2026-003" });
         await Expect(result).ToBeVisibleAsync();
-        await result.First.ClickAsync();
+        // The row's "Go to" button, not the row itself: since #462 a plain click SELECTS the result and previews
+        // it in the tab, so navigating moved to an affordance of its own.
+        await result.First.GetByRole(AriaRole.Button, new() { Name = "Go to document" }).ClickAsync();
 
         // Navigates to the Repositories tab and selects the document — its name shows in the detail pane (the
         // preview is a pdf.js canvas for the seeded invoice PDF, so assert on the index detail, not preview text).
@@ -58,7 +60,7 @@ public class WebSearchTests
 
         var result = page.Locator(".wb-search-results .wb-list-row").Filter(new() { HasText = "Invoice 2026-003" });
         await Expect(result).ToBeVisibleAsync();
-        await result.First.ClickAsync();
+        await result.First.GetByRole(AriaRole.Button, new() { Name = "Go to document" }).ClickAsync();
 
         await Expect(page.Locator(".wb-tab-active")).ToHaveAttributeAsync("aria-label", "Repositories");
         await Expect(page.Locator(".wb-pv-page").First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 30000 });

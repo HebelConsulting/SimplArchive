@@ -105,7 +105,10 @@ public sealed class SimplArchiveApiClient
 
     // A metadata-search hit — see ADR "Metadata search (first slice)". ParentId is the item's home folder
     // (null = a repository root), for navigating to it.
-    public sealed record SearchResult(Guid Id, string Name, bool IsFolder, Guid? ParentId, string Path, string Highlight);
+    // VersionsHref is the address the HIT advertised (#462) — the row carries its own addresses, so previewing a
+    // result follows what the listing handed over instead of resolving the document again (ADR 0555/0557). Null
+    // for a folder, which advertises no `versions` because it has nothing to preview.
+    public sealed record SearchResult(Guid Id, string Name, bool IsFolder, Guid? ParentId, string Path, string Highlight, string? VersionsHref = null);
 
     public sealed record IndexField(string FieldName, IReadOnlyList<string> Values);
 
@@ -1615,6 +1618,23 @@ public sealed class SimplArchiveApiClient
         return new Preview(FindLink(confirmed, "preview"), converted, FindLink(confirmed, "download"), FindLink(confirmed, "text-layout"), FindLink(confirmed, "preview-pages"), extension, FindLink(confirmed, "annotations"));
     }
 
+    // A preview from an ALREADY-ADVERTISED versions address, for a caller holding a row rather than an id
+    // (#462). Same body as GetPreviewAsync below the first line; that one has to turn an id back into the
+    // address first, which is the round trip a row-holder should not pay (ADR 0557).
+    public async Task<Preview> GetPreviewFromVersionsAsync(string versionsHref, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.GetFromJsonAsync<JsonElement>(versionsHref.TrimStart('/'), cancellationToken);
+        if (PickCurrentVersionElement(response) is not { } picked)
+        {
+            return new Preview(null, false, null, null, null, "");
+        }
+
+        var confirmed = picked.Version;
+        var converted = confirmed.TryGetProperty("previewConverted", out var pc) && pc.GetBoolean();
+        var extension = confirmed.TryGetProperty("fileExtension", out var fe) ? fe.GetString() ?? "" : "";
+        return new Preview(FindLink(confirmed, "preview"), converted, FindLink(confirmed, "download"), FindLink(confirmed, "text-layout"), FindLink(confirmed, "preview-pages"), extension, FindLink(confirmed, "annotations"));
+    }
+
     // --- Sticky notes / annotations (ADR "Document annotations") ----------------------------------------
 
     // The annotation list + whether the caller may create a note here (CanAnnotate, ADR "CanAnnotate right").
@@ -2982,7 +3002,8 @@ public sealed class SimplArchiveApiClient
         item.TryGetProperty("isFolder", out var f) && f.GetBoolean(),
         item.TryGetProperty("parentId", out var p) && p.ValueKind != JsonValueKind.Null ? p.GetGuid() : null,
         item.TryGetProperty("path", out var path) ? path.GetString() ?? "" : "",
-        item.TryGetProperty("highlight", out var hl) ? hl.GetString() ?? "" : "");
+        item.TryGetProperty("highlight", out var hl) ? hl.GetString() ?? "" : "",
+        FindLink(item, "versions"));
 
     private static ReferencingFolder ParseReferencingFolder(JsonElement item) => new(
         item.GetProperty("id").GetGuid(),

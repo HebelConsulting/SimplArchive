@@ -268,14 +268,19 @@ accumulate an indefinite link.
 #shot("screenshots/web-external-links-list.png",
   [*My external links* — every live link you have shared, with go-to, details and revoke on each row.])
 
-*What the recipient sees.* A single page with the document's name, a preview, and buttons to open or download it.
-Nothing else: no tree, no navigation, no route to any other document.
+*What the recipient sees.* A single page with the document's name, a picture of its first page, and buttons to
+open or download it — with the number of pages marked on the picture when there is more than one, so they know
+what they are about to open. Nothing else: no tree, no navigation, no route to any other document.
+
+The picture is drawn when you create the link, not when the recipient opens it, so there is nothing to wait for.
+A document with no picture to draw — an archive, a binary — simply shows its name and the buttons.
 
 An unknown, expired, exhausted or revoked link all produce the *same* response. That is deliberate — telling a
 stranger which of those they hit would confirm a real link exists and hint at how to reach a usable one.
 
 #shot("screenshots/web-external-link-landing.png",
-  [The recipient's view. No account, one document, nothing else reachable from it.])
+  [The recipient's view: the document's name and a picture of its first page. This one is a single page, so it
+   carries no page-count marker. No account, one document, nothing else reachable from it.])
 
 == The controls an administrator holds
 

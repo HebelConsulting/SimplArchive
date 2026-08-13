@@ -30,6 +30,7 @@ public class DocumentExternalLinksController : ControllerBase
     private readonly ICurrentServiceAccountAccessor _currentServiceAccount;
     private readonly ICurrentTenantAccessor _tenant;
     private readonly IAuditRecorder _audit;
+    private readonly IDocumentThumbnailService _thumbnails;
     private readonly TimeProvider _clock;
 
     public DocumentExternalLinksController(
@@ -40,6 +41,7 @@ public class DocumentExternalLinksController : ControllerBase
         ICurrentServiceAccountAccessor currentServiceAccount,
         ICurrentTenantAccessor tenant,
         IAuditRecorder audit,
+        IDocumentThumbnailService thumbnails,
         TimeProvider clock)
     {
         _dbContext = dbContext;
@@ -49,6 +51,7 @@ public class DocumentExternalLinksController : ControllerBase
         _currentServiceAccount = currentServiceAccount;
         _tenant = tenant;
         _audit = audit;
+        _thumbnails = thumbnails;
         _clock = clock;
     }
 
@@ -260,6 +263,21 @@ public class DocumentExternalLinksController : ControllerBase
         // The link id, never the token — an audit log is exported and streamed to a SIEM (ADR 0546).
         await _audit.RecordAsync(AuditActions.ExternalLinkCreated, "Document", documentId, document.Name,
             $"External link {link.Id} created, expires {expiresAt:u}", cancellationToken: cancellationToken);
+
+        // Draw the landing page's thumbnail NOW, while a signed-in person is waiting on a request they expect to
+        // take a moment — rather than when a stranger opens the link and would otherwise watch an empty card
+        // rasterise (issue #476). Best-effort throughout: a share must never fail because a picture could not be
+        // drawn, so a null here simply leaves the page as it was before this feature existed.
+        if (await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, document.CurrentVersionId, cancellationToken) is { } version
+            && version.ObjectKey is { Length: > 0 } versionKey
+            && await _thumbnails.EnsureThumbnailAsync(versionKey, cancellationToken) is { PageCount: { } pageCount })
+        {
+            // Stored on the VERSION, so a document shared twice does not count its pages twice, and so the badge
+            // survives without re-reading the PDF on every page load. Only written when the count was actually
+            // determined — null keeps meaning "not determined", never "no pages".
+            version.PageCount = pageCount;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
 
         SetETag(link.ConcurrencyToken);
         return StatusCode(StatusCodes.Status201Created, new ExternalLinkResource

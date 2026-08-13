@@ -244,11 +244,24 @@ public static class DependencyInjection
             });
             services.AddScoped<ISearchablePdfQueue, SearchablePdfOutboxQueue>();
             services.AddHostedService<SearchablePdfWorker>();
+
+            // The same sidecar draws external-link thumbnails (issue #476) — it is the only container in the
+            // deployment with a PDF rasteriser, since the Api image is musl and PDFium/NetVips ship glibc-only
+            // PDF support. A shorter timeout than OCR's: one page at 300px is quick, and the sharer is waiting.
+            services.AddHttpClient<IDocumentThumbnailService, DocumentThumbnailService>(client =>
+            {
+                client.BaseAddress = new Uri(ocrUrl);
+                client.Timeout = TimeSpan.FromSeconds(60);
+            });
         }
         else
         {
             services.AddSingleton<ISearchablePdfConverter, NullSearchablePdfConverter>();
             services.AddScoped<ISearchablePdfQueue, NullSearchablePdfQueue>();
+
+            // No sidecar, no thumbnails. Registered with no BaseAddress so the service short-circuits, which
+            // keeps every test and OCR-less deployment on the pre-#476 landing page rather than failing.
+            services.AddHttpClient<IDocumentThumbnailService, DocumentThumbnailService>();
         }
 
         return services;

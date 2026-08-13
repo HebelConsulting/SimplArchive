@@ -76,6 +76,22 @@ public partial class SearchController : ControllerBase
         public string Highlight { get; set; } = "";
     }
 
+    // The rels a hit hands out, so a client that wants to DO something with a result never composes a URL
+    // (ADR 0543). `versions` is what a preview needs: it resolves to the current version, which carries the
+    // `preview` and `text-layout` rels the renderer follows — the same two-step the contents list already
+    // uses (DocumentsController's child rows advertise `versions` for exactly this reason).
+    //
+    // A folder gets only `self`: there is nothing to preview, and advertising a rel that leads nowhere would
+    // make the client offer an affordance the server cannot honour. A missing rel means "not available here"
+    // (ADR 0543), which for a folder is precisely true.
+    private static List<Link> BuildHitLinks(Guid id, bool isFolder) =>
+        isFolder
+            ? [new Link("self", $"/api/documents/{id}", "GET")]
+            : [
+                new Link("self", $"/api/documents/{id}", "GET"),
+                new Link("versions", $"/api/documents/{id}/versions", "GET"),
+              ];
+
     public class SearchResultsResource : HypermediaResource
     {
         public List<SearchResultResource> Results { get; set; } = [];
@@ -179,7 +195,7 @@ public partial class SearchController : ControllerBase
                 ParentId = hit.ParentId,
                 Path = path,
                 Highlight = hit.Highlight ?? "",
-                Links = [new Link("self", $"/api/documents/{hit.Id}", "GET")],
+                Links = BuildHitLinks(hit.Id, hit.IsFolder),
             });
         }
 

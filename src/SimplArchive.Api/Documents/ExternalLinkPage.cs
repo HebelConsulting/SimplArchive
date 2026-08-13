@@ -36,17 +36,40 @@ public static class ExternalLinkPage
     /// the page and decided — handing them the storage provider's raw XML error, which is exactly the ugliness
     /// this page exists to remove.
     /// </param>
-    public static string Live(string fileName, DateTimeOffset expiresAt, string contentPath)
+    public static string Live(
+        string fileName,
+        DateTimeOffset expiresAt,
+        string contentPath,
+        string? thumbnailPath = null,
+        int? pageCount = null)
     {
         var encoded = HtmlEncoder.Default.Encode(fileName);
         var until = string.Format(
             Strings.Get("ExtLinkPageAvailableUntil"), expiresAt.ToLocalTime().ToString("d MMMM yyyy"));
+
+        // The thumbnail is emitted only when one actually exists (issue #476). Always emitting it and letting
+        // the request fail would put a broken-image glyph on the page, which is worse than no picture — and this
+        // page's whole job is to look trustworthy to someone who has never seen the product.
+        //
+        // The page-count badge rides on the picture, so it appears only with one, and only above a single page:
+        // a red "1" on a one-page document is decoration, while "12" tells the reader what they are about to
+        // download. Rendered as text over the image rather than burnt into the PNG, so it stays crisp, follows
+        // the page's own styling, and is translated like everything else here.
+        var figure = thumbnailPath is null
+            ? ""
+            : $"""
+                 <div class="thumb">
+                   <img src="{HtmlEncoder.Default.Encode(thumbnailPath)}" alt="{encoded}" width="150" loading="lazy">
+                   {(pageCount is > 1 ? $"""<span class="pages">{string.Format(Strings.Get("ExtLinkPagePageCount"), pageCount)}</span>""" : "")}
+                 </div>
+             """;
 
         return Document(
             Strings.Get("ExtLinkPageTitle"),
             $"""
                  <h1>{encoded}</h1>
                  <p class="meta">{HtmlEncoder.Default.Encode(until)}</p>
+             {figure}
                  <p class="actions">
                    <a class="btn primary" href="{HtmlEncoder.Default.Encode(contentPath)}">{Strings.Get("ExtLinkPageOpen")}</a>
                    <a class="btn" href="{HtmlEncoder.Default.Encode(contentPath)}?download=true">{Strings.Get("ExtLinkPageDownload")}</a>
@@ -97,6 +120,15 @@ public static class ExternalLinkPage
                    box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 8px 24px rgba(0,0,0,.08); text-align: center; }
             h1 { font-size: 1.35rem; line-height: 1.35; margin: 0 0 .5rem; overflow-wrap: anywhere; }
             .meta { color: #5b5b66; font-size: .95rem; margin: 0 0 1.75rem; }
+            /* The first page, at half the raster's width so it stays sharp on a retina screen (issue #476). */
+            .thumb { position: relative; display: inline-block; margin: 0 0 1.75rem; line-height: 0; }
+            .thumb img { width: 150px; height: auto; border: 1px solid #d3d3dc; border-radius: 6px;
+                         box-shadow: 0 1px 4px rgba(0,0,0,.10); background: #fff; }
+            /* Corner badge, deliberately loud: the page count is the one thing about the document a reader
+               cannot infer from its name. */
+            .pages { position: absolute; top: -.5rem; right: -.5rem; background: #d92b2b; color: #fff;
+                     font-size: .72rem; line-height: 1; padding: .3rem .5rem; border-radius: 999px;
+                     box-shadow: 0 1px 3px rgba(0,0,0,.25); white-space: nowrap; }
             .actions { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; margin: 0; }
             .btn { display: inline-block; padding: .6rem 1.25rem; border-radius: 8px; text-decoration: none;
                    border: 1px solid #d3d3dc; color: #1c1c21; font-size: .95rem; }

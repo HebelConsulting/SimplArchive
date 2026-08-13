@@ -23,6 +23,14 @@ public class DocumentVersion : ITenantScoped
 
     public required string ObjectKey { get; set; }
 
+    // How many pages this version has, or null when nobody has needed to know yet — it is filled in as a
+    // by-product of drawing the first-page thumbnail (issue #476), not by a pass over every version.
+    //
+    // A property of the version rather than of the thing that asked for it: the same document shared twice
+    // should not count its pages twice, and a page count is useful well beyond the one caller that populates
+    // it today. Null therefore means "not determined", never "no pages".
+    public int? PageCount { get; set; }
+
     public string? Sha256Hash { get; set; }
 
     // Exactly one of CreatedByUserId/CreatedByServiceAccountId is set — a ServiceAccount-driven upload

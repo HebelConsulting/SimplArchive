@@ -23,7 +23,7 @@
         </StackPanel>
 
         <!-- Header row -->
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="90,120,150,*,*,110" Margin="4,0,4,4">
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="90,120,150,*,2*,110" Margin="4,0,4,4">
             <TextBlock Grid.Column="0" Text="{loc:Tr VerColVersion}" FontWeight="SemiBold" FontSize="11" />
             <TextBlock Grid.Column="1" Text="{loc:Tr VerColDocDate}" FontWeight="SemiBold" FontSize="11" />
             <TextBlock Grid.Column="2" Text="{loc:Tr VerColFiled}" FontWeight="SemiBold" FontSize="11" />
@@ -44,7 +44,9 @@
             </ListBox.Styles>
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:VersionRowViewModel">
-                    <Grid ColumnDefinitions="90,120,150,*,*,110" Margin="4,3">
+                    <!-- Must match the header grid's columns exactly (including the comment's wider 2* share),
+                         or the headers stop lining up with the values under them. -->
+                    <Grid ColumnDefinitions="90,120,150,*,2*,110" Margin="4,3">
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                             <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
                             <Border IsVisible="{Binding IsCurrent}" Background="#5b4ee5" CornerRadius="3" Padding="4,0" VerticalAlignment="Center">
@@ -54,7 +56,12 @@
                         <TextBlock Grid.Column="1" Text="{Binding DocumentDate}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" />
                         <TextBlock Grid.Column="2" Text="{Binding Filed}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" />
                         <TextBlock Grid.Column="3" Text="{Binding By}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Grid.Column="4" Text="{Binding Comment}" ToolTip.Tip="{Binding Comment}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                        <!-- The comment WRAPS rather than being clipped to one line (#474): it is the only column
+                             that answers *why*, and it was the only one truncated, with a hover tooltip as the
+                             sole way to read the rest. Two lines before it clamps, so one long comment cannot
+                             stretch every row. -->
+                        <TextBlock Grid.Column="4" Text="{Binding Comment}" ToolTip.Tip="{Binding Comment}" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource WbMuted}" FontSize="12" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
                         <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
                             <Button Click="OnOpen" ToolTip.Tip="{loc:Tr MwOpen}" Padding="6,2"><i:Icon Value="mdi-open-in-app" /></Button>
                             <Button Click="OnSaveAs" ToolTip.Tip="{loc:Tr RibbonSaveAs}" Padding="6,2"><i:Icon Value="mdi-content-save-outline" /></Button>

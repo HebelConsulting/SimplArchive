@@ -3897,4 +3897,19 @@
   <data name="SaEditNameRights" xml:space="preserve">
     <value>Editar nombre y derechos</value>
   </data>
+  <data name="ResetSearchCriteria" xml:space="preserve">
+    <value>Restablecer criterios de búsqueda</value>
+  </data>
+  <data name="SearchGoToDocument" xml:space="preserve">
+    <value>Ir al documento</value>
+  </data>
+  <data name="SearchPreviewEmpty" xml:space="preserve">
+    <value>Selecciona un resultado para verlo.</value>
+  </data>
+  <data name="SearchClearText" xml:space="preserve">
+    <value>Borrar el texto de búsqueda</value>
+  </data>
+  <data name="ExtLinkPagePageCount" xml:space="preserve">
+    <value>{0} páginas</value>
+  </data>
 </root>

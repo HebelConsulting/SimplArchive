@@ -33,6 +33,7 @@ public class ExternalLinksController : ControllerBase
     // to SET it from the resolved link — the same thing WebDavMiddleware does for its own pre-tenant lookup.
     private readonly CurrentTenantAccessor _tenant;
     private readonly IAuditRecorder _audit;
+    private readonly IDocumentThumbnailService _thumbnails;
     private readonly TimeProvider _clock;
 
     public ExternalLinksController(
@@ -40,12 +41,14 @@ public class ExternalLinksController : ControllerBase
         IObjectStorageClient objectStorage,
         CurrentTenantAccessor tenant,
         IAuditRecorder audit,
+        IDocumentThumbnailService thumbnails,
         TimeProvider clock)
     {
         _dbContext = dbContext;
         _objectStorage = objectStorage;
         _tenant = tenant;
         _audit = audit;
+        _thumbnails = thumbnails;
         _clock = clock;
     }
 
@@ -102,8 +105,22 @@ public class ExternalLinksController : ControllerBase
 
         if (WantsHtml())
         {
+            // Ask whether a thumbnail EXISTS before offering one (issue #476): emitting the <img> unconditionally
+            // would leave a broken-image glyph on the page for every document that has none — a .bin, a .zip, or
+            // anything shared before this feature existed. One existence check, and the page falls back to
+            // exactly what it rendered before.
+            var hasThumbnail = await _thumbnails.GetThumbnailUrlAsync(objectKey, PresignedUrlExpiry, cancellationToken) is not null;
+            var pageCount = hasThumbnail
+                ? (await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, document.Id, document.CurrentVersionId, cancellationToken))?.PageCount
+                : null;
+
             return Html(StatusCodes.Status200OK,
-                ExternalLinkPage.Live(fileName, link.ExpiresAt, $"/api/external-links/{token}/content"));
+                ExternalLinkPage.Live(
+                    fileName,
+                    link.ExpiresAt,
+                    $"/api/external-links/{token}/content",
+                    hasThumbnail ? $"/api/external-links/{token}/thumbnail" : null,
+                    pageCount));
         }
 
         var url = await _objectStorage.GetPresignedDownloadUrlAsync(objectKey, PresignedUrlExpiry, null, cancellationToken);
@@ -155,6 +172,40 @@ public class ExternalLinksController : ControllerBase
                 WebDav.ContentTypes.ForExtension(Path.GetExtension(objectKey)), cancellationToken);
 
         return Redirect(url.ToString());
+    }
+
+    /// <summary>
+    /// A picture of the first page, so the recipient can see they have been sent the right document before
+    /// downloading anything (issue #476).
+    /// </summary>
+    /// <remarks>
+    /// The page-raster, not the preview URL: for a PDF the "preview" IS the PDF, which no <c>&lt;img&gt;</c> can
+    /// render — the rasterized first page is the only thing that works across the formats this page might carry.
+    ///
+    /// <para>Two rules this route must not break.</para>
+    ///
+    /// <para><b>It counts nothing.</b> The redemption was counted once when the page was fetched; the thumbnail
+    /// is part of that same page view, exactly as the content route is the delivery half of it. Counting here
+    /// would burn a recipient's allowance merely for looking, and would halve every cap an administrator set.</para>
+    ///
+    /// <para><b>A missing rendition answers exactly like a dead link.</b> The obvious implementation returns 404
+    /// when there is no preview to give, and that 404 is an oracle: it confirms a real, live link exists at this
+    /// token, which is precisely what <see cref="Gone"/> exists to deny. So "no preview possible" and "unknown,
+    /// expired, exhausted or revoked" are the same 410, and the page hides an image that fails to load.</para>
+    /// </remarks>
+    // No companion HEAD, for the same reason as Redeem: it would be a cheaper existence oracle than the GET.
+    [HttpGet("{token}/thumbnail")]
+    public async Task<IActionResult> Thumbnail(string token, CancellationToken cancellationToken)
+    {
+        if (await ResolveAsync(token, cancellationToken) is not ({ } _, { } document, { } objectKey))
+        {
+            return Gone();
+        }
+
+        // Reads a thumbnail drawn when the LINK was created; it never draws one. The recipient should not wait
+        // for a rasterisation, and an anonymous route must not be a lever for making the server do work.
+        var url = await _thumbnails.GetThumbnailUrlAsync(objectKey, PresignedUrlExpiry, cancellationToken);
+        return url is not null ? Redirect(url.ToString()) : Gone();
     }
 
     // Everything a redemption has to be true for, in one place, so the landing page and the content route cannot

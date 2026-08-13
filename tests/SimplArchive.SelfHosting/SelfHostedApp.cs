@@ -83,6 +83,8 @@ public sealed class SelfHostedApp : IAsyncDisposable
     private string _openSearchUrl = "";
     private string _tikaUrl = "";
     private string _gotenbergUrl = "";
+    private IContainer? _ocr;
+    private string _ocrUrl = "";
 
     public string BaseUrl { get; private set; } = "";
 
@@ -91,12 +93,42 @@ public sealed class SelfHostedApp : IAsyncDisposable
     // The E2E fixtures leave this null and run against the real clock, exactly as before. Must be set before StartAsync.
     public string? DemoClock { get; set; }
 
+    // When true, the OCR sidecar is built and started too, and Ocr:Url points at it — which is what draws the
+    // external-link landing page's thumbnail (issue #476). Opt-in because building that image is slow (Debian +
+    // tesseract language packs) and only the MANUAL capture needs it: the UI and desktop suites would pay the
+    // build on every run for a figure they never take. Must be set before StartAsync.
+    public bool WithOcrSidecar { get; set; }
+
     // The self-hosted app's Postgres — exposed so a caller can clean up data it seeded.
     public string PostgresConnectionString => _postgres.GetConnectionString();
 
     public async Task StartAsync()
     {
+        if (WithOcrSidecar)
+        {
+            // Built from the repo's own ocr/ Dockerfile rather than pulled: the thumbnail route is ours, so
+            // there is no published image to use. Docker layer-caches it, so the cost lands on the first run.
+            var image = new ImageFromDockerfileBuilder()
+                .WithDockerfileDirectory(new CommonDirectoryPath(RepoRoot()), "ocr")
+                .WithDockerfile("Dockerfile")
+                .WithName("simplarchive-ocr-capture:latest")
+                .WithCleanUp(false)
+                .Build();
+            await image.CreateAsync();
+
+            _ocr = new ContainerBuilder()
+                .WithImage(image)
+                .WithPortBinding(8080, true)
+                .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(8080).ForPath("/health").ForStatusCode(HttpStatusCode.OK)))
+                .Build();
+        }
+
         await Task.WhenAll(_postgres.StartAsync(), _storage.StartAsync(), _openSearch.StartAsync(), _tika.StartAsync(), _gotenberg.StartAsync());
+        if (_ocr is not null)
+        {
+            await _ocr.StartAsync();
+            _ocrUrl = $"http://{_ocr.Hostname}:{_ocr.GetMappedPublicPort(8080)}";
+        }
         var storageUrl = $"http://{_storage.Hostname}:{_storage.GetMappedPublicPort(8333)}";
         _openSearchUrl = $"http://{_openSearch.Hostname}:{_openSearch.GetMappedPublicPort(9200)}";
         _tikaUrl = $"http://{_tika.Hostname}:{_tika.GetMappedPublicPort(9998)}";
@@ -174,6 +206,11 @@ public sealed class SelfHostedApp : IAsyncDisposable
             ["Demo__RepositoryName"] = "Demo Repository",
         };
         // Deterministic capture (ADR 0510): a fixed demo clock only when the caller asked for one.
+        if (!string.IsNullOrWhiteSpace(_ocrUrl))
+        {
+            env["Ocr__Url"] = _ocrUrl;
+        }
+
         if (!string.IsNullOrWhiteSpace(DemoClock))
         {
             env["Demo__Clock"] = DemoClock;
@@ -261,6 +298,10 @@ public sealed class SelfHostedApp : IAsyncDisposable
 
         _api?.Dispose();
         await _gotenberg.DisposeAsync();
+        if (_ocr is not null)
+        {
+            await _ocr.DisposeAsync();
+        }
         await _tika.DisposeAsync();
         await _openSearch.DisposeAsync();
         await _storage.DisposeAsync();
