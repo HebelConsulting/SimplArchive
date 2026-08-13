@@ -3308,7 +3308,16 @@ public sealed class SimplArchiveApiClient
     public sealed record ExternalLinkInfo(
         Guid Id, Guid DocumentId, string DocumentName, string? Url, DateTimeOffset ExpiresAt,
         int? MaxAccesses, int AccessCount, string CreatedByName, bool CanExtend, string Etag,
-        string? RevokeHref, string? AvailabilityHref, Guid? ParentId);
+        string? RevokeHref, string? AvailabilityHref, Guid? ParentId, string? RevealUrlHref = null)
+    {
+        /// <summary>
+        /// The expiry as the READER experiences it. The server sends UTC; the row used to format that raw while
+        /// the detail dialog called ToLocalTime(), so one link showed two times an hour apart outside UTC — the
+        /// list said 20:40 and its own detail said 21:40 (the bug report this fixes). One property now, used by
+        /// both, so they cannot drift again.
+        /// </summary>
+        public string ExpiresLocal => ExpiresAt.ToLocalTime().ToString("g");
+    }
 
     public sealed record ExternalLinkListInfo(IReadOnlyList<ExternalLinkInfo> Links, bool CanCreate, bool CanViewOthers);
 
@@ -3409,7 +3418,31 @@ public sealed class SimplArchiveApiClient
         RelHref(item, "availability"),
         // Null in the per-document list, which is already sitting on the document — "Go to" only means something
         // in the cross-document one, where a row is the reader's only handle on where the thing lives.
-        item.TryGetProperty("parentId", out var pid) && pid.ValueKind != JsonValueKind.Null ? pid.GetGuid() : null);
+        item.TryGetProperty("parentId", out var pid) && pid.ValueKind != JsonValueKind.Null ? pid.GetGuid() : null,
+        // The tenant's opt-in to revealing an existing link's URL (issue #412), as the server states it: the rel
+        // is advertised only where ShowExternalLinkUrl is on, so its ABSENCE is what makes "not shown" truthful
+        // (ADR 0543). The desktop ignored it entirely and always claimed the URL was unavailable.
+        RelHref(item, "reveal-url"));
+
+    /// <summary>
+    /// An existing link's URL, fetched on demand by FOLLOWING the row's advertised <c>reveal-url</c> (ADR 0543).
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not carried by the listing: the token travels only when somebody asks for this one link,
+    /// which is what keeps it out of the page every row arrived on. Null when the fetch fails, so the caller
+    /// leaves the note as it was rather than showing an empty "URL:".
+    /// </remarks>
+    public async Task<string?> RevealExternalLinkUrlAsync(string revealHref, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.GetAsync(revealHref, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        return doc.RootElement.TryGetProperty("url", out var url) ? url.GetString() : null;
+    }
 
     // Fetch an author's identity card by FOLLOWING the href the message advertised (ADR 0544).
     public async Task<(UserCard Card, byte[]? Photo)?> GetUserCardAsync(string cardHref, CancellationToken cancellationToken = default)

@@ -163,7 +163,11 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
             return;
         }
 
-        var detail = new ExternalLinkDetailDialogViewModel(_api, link);
+        // The document name comes from THIS dialog, not from the row: the per-document listing sends an empty
+        // documentName (its caller already knows the document), which the detail dialog rendered as a blank
+        // "Document". In the cross-document list the row does carry it, and the constructor prefers whichever
+        // is non-empty.
+        var detail = new ExternalLinkDetailDialogViewModel(_api, link, _crossDocument ? null : DocumentName);
         await ShowDetailDialog(detail);
 
         if (detail.Renewed)

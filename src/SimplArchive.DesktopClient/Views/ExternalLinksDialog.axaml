@@ -53,7 +53,7 @@
                                 <StackPanel Grid.Column="0" Spacing="1">
                                     <TextBlock Text="{Binding DocumentName}" FontWeight="SemiBold" FontSize="12" />
                                     <TextBlock FontSize="11" Foreground="{DynamicResource WbMuted}"
-                                               Text="{Binding ExpiresAt, StringFormat='{}{0:g}'}" />
+                                               Text="{Binding ExpiresLocal}" />
                                     <TextBlock FontSize="11" Foreground="{DynamicResource WbMuted}"
                                                Text="{Binding CreatedByName}" />
                                 </StackPanel>

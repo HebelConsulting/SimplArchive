@@ -22,11 +22,22 @@
             <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr ExtLinkAccesses}" Foreground="{DynamicResource WbMuted}" Margin="0,6,0,0" />
             <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Accesses}" Margin="0,6,0,0" />
 
-            <!-- The token is shown once, when the link is created, and the list endpoints never return it — so
-                 this row explains an absence rather than leaving a reader hunting for the URL. -->
+            <!-- Three states, decided by whether the server advertised `reveal-url` (issue #412): a tenant that
+                 has not opted in gets the note explaining the absence; one that has gets a button, and then the
+                 URL itself with a copy. The note and the URL are mutually exclusive — showing the "not shown"
+                 line next to a shown URL is exactly the contradiction this row used to print. -->
             <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Tr ExtLinkUrl}" Foreground="{DynamicResource WbMuted}" Margin="0,6,0,0" />
-            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding UrlNote}" Foreground="{DynamicResource WbMuted}"
-                       FontStyle="Italic" TextWrapping="Wrap" Margin="0,6,0,0" />
+            <StackPanel Grid.Row="4" Grid.Column="1" Spacing="6" Margin="0,6,0,0">
+                <TextBlock Text="{Binding UrlNote}" IsVisible="{Binding ShowUrlNote}" Foreground="{DynamicResource WbMuted}"
+                           FontStyle="Italic" TextWrapping="Wrap" />
+                <Button Content="{loc:Tr ExtLinkShowUrl}" Command="{Binding RevealUrlCommand}"
+                        IsVisible="{Binding ShowRevealButton}" HorizontalAlignment="Left" Padding="10,3" />
+                <StackPanel Spacing="4" IsVisible="{Binding HasRevealedUrl}">
+                    <SelectableTextBlock Text="{Binding RevealedUrl}" TextWrapping="Wrap" />
+                    <Button Content="{loc:Tr ExtLinkCopyToClipboard}" Command="{Binding CopyUrlCommand}"
+                            HorizontalAlignment="Left" Padding="10,3" />
+                </StackPanel>
+            </StackPanel>
         </Grid>
 
         <!-- Renewal moves BOTH halves of "still usable" at once: the server takes them in one call, so they can

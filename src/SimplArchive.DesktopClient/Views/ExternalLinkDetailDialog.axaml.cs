@@ -21,6 +21,16 @@ public partial class ExternalLinkDetailDialog : Window
             // The view-model closes the window itself once a renewal lands, so the list behind it reloads without
             // the reader having to dismiss a dialog whose numbers are already stale.
             viewModel.RequestClose = Close;
+
+            // The clipboard is the view's to reach (the VM stays toolkit-agnostic, as StatusReporter does):
+            // revealing a URL is only useful if it can be pasted somewhere.
+            viewModel.CopyToClipboard = async text =>
+            {
+                if (Clipboard is { } clipboard)
+                {
+                    await clipboard.SetTextAsync(text);
+                }
+            };
         }
     }
 

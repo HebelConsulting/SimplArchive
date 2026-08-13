@@ -3975,4 +3975,10 @@
   <data name="PvFitPage" xml:space="preserve">
     <value>Fit whole page</value>
   </data>
+  <data name="ExtLinkUrlRevealFailed" xml:space="preserve">
+    <value>Could not show the link.</value>
+  </data>
+  <data name="ExtLinkUrlCopied" xml:space="preserve">
+    <value>Link copied to the clipboard.</value>
+  </data>
 </root>
