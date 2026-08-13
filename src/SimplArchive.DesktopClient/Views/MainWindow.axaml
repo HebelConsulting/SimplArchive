@@ -180,7 +180,7 @@
 
                             <!-- Documents group: operations on the selected document/item (order: Open · Save · Rename · Delete · Upload · Check-out · Workflow). -->
                             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
-                                <Button Command="{Binding OpenCommand}" ToolTip.Tip="{loc:Tr RibbonOpen}"><i:Icon Value="mdi-open-in-app" FontSize="18" /></Button>
+                                <Button Command="{Binding OpenCommand}" ToolTip.Tip="{x:Static vm:MainWindowViewModel.RibbonOpenTip}"><i:Icon Value="mdi-open-in-app" FontSize="18" /></Button>
                                 <Button IsEnabled="{Binding CanSaveAs}" Click="OnSaveAs" ToolTip.Tip="{loc:Tr RibbonSaveAs}"><i:Icon Value="mdi-content-save-outline" FontSize="18" /></Button>
                                 <Button IsEnabled="{Binding HasSelectedItem}" Click="OnRename" ToolTip.Tip="{loc:Tr RibbonRename}"><i:Icon Value="mdi-rename-box" FontSize="18" /></Button>
                                 <Button IsEnabled="{Binding HasSelectedItem}" Click="OnDelete" ToolTip.Tip="{loc:Tr RibbonDelete}"><i:Icon Value="mdi-delete" FontSize="18" /></Button>
@@ -363,7 +363,9 @@
                                  ContextRequested="OnContentsContextRequested" KeyDown="OnListKeyDown">
                             <ListBox.ContextMenu>
                                 <ContextMenu>
-                                    <MenuItem Header="{loc:Tr MwOpen}" Click="OnOpen">
+                                    <!-- InputGesture is set in code-behind, not here: the chord is ⌘ on macOS and
+                                         Ctrl elsewhere, which XAML cannot express (#482). -->
+                                    <MenuItem x:Name="OpenMenuItem" Header="{loc:Tr MwOpen}" Click="OnOpen">
                                         <MenuItem.Icon><i:Icon Value="mdi-open-in-app" /></MenuItem.Icon>
                                     </MenuItem>
                                     <MenuItem Header="{loc:Tr RibbonSaveAs}" Click="OnSaveAs">
@@ -948,7 +950,8 @@
                                         <!-- Own item → "Send to…"; a group / other-user item → "Move to my inbox" (ADR 0532). -->
                                         <Button Grid.Column="4" IsVisible="{Binding IsOwn}" ToolTip.Tip="{loc:Tr InboxSendTitle}" Click="OnInboxSend" Tag="{Binding}"><i:Icon Value="mdi-send-outline" /></Button>
                                         <Button Grid.Column="4" IsVisible="{Binding !IsOwn}" ToolTip.Tip="{loc:Tr InboxClaimToMine}" Click="OnInboxMoveToMine" Tag="{Binding}"><i:Icon Value="mdi-inbox-arrow-down-outline" /></Button>
-                                        <Button Grid.Column="5" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwOpen}" Click="OnInboxOpen" Tag="{Binding}"><i:Icon Value="mdi-open-in-new" /></Button>
+                                        <!-- The tooltip carries the ⌘/Ctrl+O chord: a button has no InputGesture (#482). -->
+                                        <Button Grid.Column="5" Margin="4,0,0,0" ToolTip.Tip="{x:Static vm:MainWindowViewModel.OpenTip}" Click="OnInboxOpen" Tag="{Binding}"><i:Icon Value="mdi-open-in-new" /></Button>
                                         <Button Grid.Column="6" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwFileIntoFolder}" Click="OnInboxFile" Tag="{Binding}"><i:Icon Value="mdi-file-move-outline" /></Button>
                                         <Button Grid.Column="7" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr UgDelete}" Click="OnInboxDelete" Tag="{Binding}"><i:Icon Value="mdi-delete-outline" /></Button>
                                     </Grid>

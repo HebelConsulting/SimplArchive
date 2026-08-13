@@ -20,12 +20,16 @@
     <DockPanel LastChildFill="True">
         <!-- Toolbar: find-in-document (when a text layout exists) + the full-screen toggle (always, when there's
              a preview) — mirrors the web (ADRs 0295, "Search hit overlay"). -->
-        <Border DockPanel.Dock="Top" IsVisible="{Binding HasPreview}" Padding="6,4"
+        <Border DockPanel.Dock="Top" IsVisible="{Binding HasPreview}" Padding="6,4" ClipToBounds="True"
                 Background="{DynamicResource WbChrome}" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
             <!-- Toolbar items in a WrapPanel so a whole cluster reflows onto the next line when the pane is too
-                 narrow to fit them all, instead of clipping (ADR "Desktop Repositories-tab UI polish"). -->
+                 narrow to fit them all, instead of clipping (ADR "Desktop Repositories-tab UI polish").
+                 The CLUSTERS wrap too, not just the line between them (#480): a cluster is a horizontal panel, so
+                 one that is wider than the pane used to be cut off at the pane edge — which hid the last buttons
+                 of the very group the issue is about. ClipToBounds above is the backstop: whatever cannot fit is
+                 not drawn over the neighbouring pane. -->
             <WrapPanel Orientation="Horizontal">
-                <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <WrapPanel Orientation="Horizontal" ItemSpacing="4" LineSpacing="4" Margin="0,0,12,4">
                     <!-- Sticky notes: Add needs CanAnnotate (ADR "CanAnnotate right"); show/hide needs only read. -->
                     <Button Command="{Binding AddNoteCommand}" IsVisible="{Binding CanAddNote}"
                             ToolTip.Tip="{loc:Tr AddStickyNote}" Height="26" Padding="6,0">
@@ -74,29 +78,59 @@
                             IsVisible="{Binding CanAddNote}" ToolTip.Tip="{loc:Tr DeleteAnnotationsTip}" Height="26" Padding="6,0">
                         <i:Icon Value="mdi-delete-outline" />
                     </Button>
+                    <!-- Zoom (#480): out ↔ fit-width ↔ fit-page ↔ 4x; Ctrl/⌘+wheel drives the same model. Only
+                         a page preview can zoom — a text preview has nothing to scale. -->
+                    <Button Command="{Binding ZoomOutCommand}" IsVisible="{Binding HasPreviewPages}"
+                            ToolTip.Tip="{loc:Tr PvZoomOut}" Height="26" Padding="6,0">
+                        <i:Icon Value="mdi-minus" />
+                    </Button>
+                    <Button Command="{Binding ZoomResetCommand}" IsVisible="{Binding HasPreviewPages}"
+                            ToolTip.Tip="{loc:Tr PvZoomReset}" Height="26" Padding="6,0">
+                        <i:Icon Value="mdi-image-filter-center-focus" />
+                    </Button>
+                    <!-- Fit the WHOLE page. Distinct from fit-width beside it: for a portrait page in a pane
+                         wider than it is tall, fitting the width pushes the bottom off screen. -->
+                    <Button Command="{Binding FitPageCommand}" IsVisible="{Binding HasPreviewPages}"
+                            ToolTip.Tip="{loc:Tr PvFitPage}" Height="26" Padding="6,0">
+                        <i:Icon Value="mdi-fit-to-page-outline" />
+                    </Button>
+                    <Button Command="{Binding ZoomInCommand}" IsVisible="{Binding HasPreviewPages}"
+                            ToolTip.Tip="{loc:Tr PvZoomIn}" Height="26" Padding="6,0">
+                        <i:Icon Value="mdi-plus" />
+                    </Button>
                     <Button Command="{Binding TogglePreviewFullscreenCommand}"
                             ToolTip.Tip="{Binding PreviewFullscreenTip}" Height="26" Padding="6,0">
                         <i:Icon Value="{Binding PreviewFullscreenIcon}" />
                     </Button>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding CanFindInDocument}">
+                </WrapPanel>
+                <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="4" IsVisible="{Binding CanFindInDocument}">
                     <i:Icon Value="mdi-magnify" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
-                    <TextBox Text="{Binding FindQuery}" Watermark="{loc:Tr FindInDocument}" Tag="find" Width="240" Height="26" Padding="4,2" VerticalContentAlignment="Center" />
+                    <!-- 160, not the 240 it was: at the DEFAULT pane width the find cluster was already wider
+                         than the preview and its last button was being clipped — #480's second half, present
+                         before any zoom button existed. It stays a fixed width because a WrapPanel arranges each
+                         child at its DESIRED width, and a TextBox with no Width desires almost nothing. -->
+                    <TextBox Text="{Binding FindQuery}" Watermark="{loc:Tr FindInDocument}" Tag="find" Width="160" Height="26" Padding="4,2" VerticalContentAlignment="Center" />
                     <TextBlock Text="{Binding FindPosition}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" MinWidth="44"
                                IsVisible="{Binding FindQuery, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                     <Button Command="{Binding FindPreviousCommand}" IsEnabled="{Binding CanFindNavigate}" ToolTip.Tip="{loc:Tr PvFindPrev}" Height="26" Padding="6,0"><i:Icon Value="mdi-chevron-up" /></Button>
                     <Button Command="{Binding FindNextCommand}" IsEnabled="{Binding CanFindNavigate}" ToolTip.Tip="{loc:Tr PvFindNext}" Height="26" Padding="6,0"><i:Icon Value="mdi-chevron-down" /></Button>
                     <Button Command="{Binding ClearFindCommand}" ToolTip.Tip="{loc:Tr AuditClear}" Height="26" Padding="6,0"
                             IsVisible="{Binding FindQuery, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"><i:Icon Value="mdi-close" /></Button>
-                </StackPanel>
+                </WrapPanel>
             </WrapPanel>
         </Border>
         <Grid>
-            <ScrollViewer IsVisible="{Binding HasPreviewPages}">
+            <!-- HorizontalScrollBarVisibility Auto so a zoomed-in page can be panned rather than clipped (#480). -->
+            <ScrollViewer x:Name="PagesScroll" IsVisible="{Binding HasPreviewPages}" HorizontalScrollBarVisibility="Auto">
                 <ItemsControl ItemsSource="{Binding PreviewPages}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:PreviewPageViewModel">
-                            <Grid Margin="6,6,6,0">
+                            <!-- The explicit width is what the zoom acts on (#480): the pane's width times the
+                                 zoom, or Auto (NaN) before the pane has been measured. An explicit width with the
+                                 default Stretch alignment centres the page, so a fitted page sits in the middle
+                                 of the pane rather than against its left edge. -->
+                            <Grid Margin="6,6,6,0"
+                                  Width="{ReflectionBinding $parent[ItemsControl].DataContext.PageWidth}">
                                 <Image Source="{Binding Image}" Stretch="Uniform" />
                                 <!-- Draws the hit boxes; every word is clickable to copy, shift-click appends (ADR "Copy a preview word to the clipboard"). -->
                                 <v:HighlightOverlay Boxes="{Binding Highlights}" Words="{Binding AllWords}" ActiveBox="{Binding ActiveHighlight}"

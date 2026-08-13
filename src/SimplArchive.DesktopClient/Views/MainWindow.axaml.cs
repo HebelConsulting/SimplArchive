@@ -49,9 +49,13 @@ public partial class MainWindow : Window
         ContentsList.AddHandler(PointerMovedEvent, OnListPointerMoved, RoutingStrategies.Tunnel);
         ContentsList.AddHandler(PointerReleasedEvent, OnListPointerReleased, RoutingStrategies.Tunnel);
 
-        // Ctrl/Cmd+P opens the server manager (ADR "Desktop server configuration") — a window-level tunnel
-        // handler so it fires regardless of focus.
+        // Ctrl/Cmd+P opens the server manager (ADR "Desktop server configuration"), Ctrl/Cmd+O opens the selected
+        // document (#482) — a window-level tunnel handler so they fire regardless of focus.
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
+
+        // Advertise the Open chord in the menu entry itself — a shortcut nobody can discover is one nobody uses.
+        // Set here rather than in XAML because it is ⌘ on macOS and Ctrl elsewhere (Services.Shortcuts).
+        OpenMenuItem.InputGesture = Shortcuts.Open;
 
         // The folder tree is a drop target too (drop onto any folder, incl. a repository root) AND a drag source
         // (drag a folder onto another folder to move/reference it). Tunnel pointer handlers mirror the list's, so
@@ -1205,13 +1209,36 @@ public partial class MainWindow : Window
         }
     }
 
-    // Ctrl/Cmd+P → the server manager (ADR "Desktop server configuration").
+    // Window-level chords. Tunnelling, so they fire regardless of which pane has focus — neither is a chord that
+    // produces text, so taking it out of a focused TextBox costs the user nothing.
+    //   Ctrl/Cmd+P → the server manager (ADR "Desktop server configuration")
+    //   Ctrl/Cmd+O → open the selected document natively (#482, ADR "One shortcut for opening a document")
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.P && (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta)))
+        var command = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+        if (!command)
         {
-            e.Handled = true;
-            _ = new ServerManagerWindow().ShowDialog(this);
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.P:
+                e.Handled = true;
+                _ = new ServerManagerWindow().ShowDialog(this);
+                break;
+
+            // Handled unconditionally, not only when something is selected: the browser-style alternative — let
+            // it fall through when there is no selection — would mean the chord sometimes reaches whatever has
+            // focus, which is a worse surprise than a keystroke that does nothing.
+            case Key.O:
+                e.Handled = true;
+                if (DataContext is MainWindowViewModel vm)
+                {
+                    Safe.Fire(() => vm.OpenSelectedCommand.ExecuteAsync(null));
+                }
+
+                break;
         }
     }
 

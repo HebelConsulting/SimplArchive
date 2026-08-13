@@ -45,6 +45,10 @@
                     @* Preview zoom (#357): fit ↔ 4×; pinch + ⌘/Ctrl-wheel also zoom (preview.js). *@
                     <MudIconButton Class="wb-pv-zoom-out" Icon="@Icons.Material.Filled.Remove" Size="Size.Small" OnClick="@(() => ZoomAsync(1d / 1.25))" title="@Strings.Get("PvZoomOut")" />
                     <MudIconButton Class="wb-pv-zoom-reset" Icon="@Icons.Material.Filled.FilterCenterFocus" Size="Size.Small" OnClick="ZoomResetAsync" title="@Strings.Get("PvZoomReset")" />
+                    @* Fit the whole page (#480). Distinct from fit-WIDTH above: for a portrait page in a pane
+                       wider than it is tall, fitting the width pushes the bottom off screen. *@
+                    @* FitScreen, not Fullscreen: the full-screen toggle sits two buttons away and wore the same icon. *@
+                    <MudIconButton Class="wb-pv-zoom-fit-page" Icon="@Icons.Material.Filled.FitScreen" Size="Size.Small" OnClick="FitPageAsync" title="@Strings.Get("PvFitPage")" />
                     <MudIconButton Class="wb-pv-zoom-in" Icon="@Icons.Material.Filled.Add" Size="Size.Small" OnClick="@(() => ZoomAsync(1.25))" title="@Strings.Get("PvZoomIn")" />
                 }
                 <MudIconButton Class="wb-pv-fs-btn" Icon="@(_fullscreen ? Icons.Material.Filled.FullscreenExit : Icons.Material.Filled.Fullscreen)" Size="Size.Small" OnClick="ToggleFullscreenAsync" title="@(_fullscreen ? Strings.Get("PvExitFullscreen") : Strings.Get("PvFullscreen"))" />
@@ -315,6 +319,16 @@
         if (_module is not null)
         {
             await _module.InvokeVoidAsync("zoomBy", _host, multiplier);
+        }
+    }
+
+    // Fit the whole page in view. The scale is measured in JS from the page as rendered — the pane is
+    // user-resizable, so there is no width the C# side could assume.
+    private async Task FitPageAsync()
+    {
+        if (_module is not null)
+        {
+            await _module.InvokeVoidAsync("fitPage", _host);
         }
     }
 

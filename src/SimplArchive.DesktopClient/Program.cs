@@ -287,6 +287,94 @@ internal static class Program
             return;
         }
 
+        // The Open shortcut (#482, ADR "One shortcut for opening a document"): `--shortcut-test`. Prints the chord
+        // as the user will see it in the menu — which is the whole point of advertising it — and checks that the
+        // command dispatches ONLY on the tabs whose Open means "open natively". The negative half is the one that
+        // matters: a Search result is "opened" by revealing it in Repositories, which would switch the tab, so a
+        // tab that stays put proves the chord did not quietly acquire a second meaning.
+        if (args.Contains("--shortcut-test"))
+        {
+            AppBuilder.Configure<App>()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia()
+                .SetupWithoutStarting();
+            var vm = new MainWindowViewModel();
+            var chord = Services.Shortcuts.Open.ToString();
+
+            // Every tab, nothing selected: a no-op, never a crash.
+            var survivedEmpty = true;
+            for (var tab = 0; tab <= 3; tab++)
+            {
+                vm.SelectedTab = tab;
+                try { vm.OpenSelectedCommand.ExecuteAsync(null).GetAwaiter().GetResult(); }
+                catch (Exception ex) { survivedEmpty = false; Console.WriteLine($"tab {tab} threw: {ex.Message}"); }
+            }
+
+            // Search: a selected result the chord must NOT act on. Revealing it would set SelectedTab to 0.
+            vm.SelectedTab = 3;
+            vm.SelectedSearchResult = new SearchResultViewModel { Id = Guid.NewGuid(), Name = "irrelevant", IsFolder = false, ParentId = null, Path = "" };
+            vm.OpenSelectedCommand.ExecuteAsync(null).GetAwaiter().GetResult();
+            var searchUntouched = vm.SelectedTab == 3;
+
+            var tipCarriesChord = MainWindowViewModel.OpenTip.Contains(chord) && MainWindowViewModel.RibbonOpenTip.Contains(chord);
+
+            Console.WriteLine($"chord: {chord} | ribbon tooltip: {MainWindowViewModel.RibbonOpenTip}");
+            Console.WriteLine($"survivedEmpty={survivedEmpty} searchUntouched={searchUntouched} tipCarriesChord={tipCarriesChord}");
+            Console.WriteLine(survivedEmpty && searchUntouched && tipCarriesChord ? "OK" : "FAILED");
+            return;
+        }
+
+        // Preview zoom over the REAL raster path (#480, ADR "Fit the whole page"): `--zoom-test`. Rasterises a
+        // portrait A4-ish page through PDFium, hands it to a PreviewViewModel with a pane WIDER than it is tall —
+        // the case fit-width cannot serve — and checks the whole model: fit-width is the default, fit-page lands
+        // below 1 with the page's full height inside the pane, zooming out then stops at whole-page instead of at
+        // fit-width, zooming in stops at the ceiling, and a new document goes back to fit-width.
+        if (args.Contains("--zoom-test"))
+        {
+            AppBuilder.Configure<App>()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia()
+                .SetupWithoutStarting();
+            var pdf = System.Text.Encoding.ASCII.GetBytes(
+                "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n" +
+                "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Contents 4 0 R>>endobj\n" +
+                "4 0 obj<</Length 0>>stream\nendstream endobj\ntrailer<</Root 1 0 R/Size 5>>\n%%EOF");
+            var vm = new PreviewViewModel();
+            vm.SetPreviewPagesForScreenshot([Services.PreviewRenderer.RenderPdfFirstPage(pdf)]);
+
+            const double paneWidth = 900, paneHeight = 520;   // wider than tall — a portrait page cannot fit by width
+            vm.SetViewport(new Avalonia.Size(paneWidth, paneHeight));
+            var pageBase = paneWidth - 12;
+            var aspect = vm.PreviewPages[0].Image.Size.Height / vm.PreviewPages[0].Image.Size.Width;
+
+            var fitsWidthByDefault = vm.Zoom == 1 && Math.Abs(vm.PageWidth - pageBase) < 0.001;
+            var tooTallByWidth = pageBase * aspect > paneHeight; // the bug: the bottom is off screen at fit-width
+
+            vm.FitPageCommand.Execute(null);
+            var fitPageIsBelowOne = vm.Zoom < 1;
+            var wholePageVisible = vm.PageWidth * aspect <= paneHeight;
+            var fitPageZoom = vm.Zoom;
+
+            vm.ZoomOutCommand.Execute(null);
+            var outStopsAtWholePage = Math.Abs(vm.Zoom - fitPageZoom) < 0.001;
+
+            for (var i = 0; i < 20; i++) { vm.ZoomInCommand.Execute(null); }
+            var inStopsAtCeiling = Math.Abs(vm.Zoom - 4) < 0.001;
+
+            vm.Reset(null);
+            vm.SetPreviewPagesForScreenshot([Services.PreviewRenderer.RenderPdfFirstPage(pdf)]);
+            vm.ZoomOutCommand.Execute(null);
+            var newDocumentOpensAtFitWidth = vm.Zoom == 1;
+
+            Console.WriteLine($"at fit-width the page is {vm.PageWidth:0.#}x{vm.PageWidth * aspect:0.#} in a {paneWidth}x{paneHeight} pane; fit-page zoom {fitPageZoom:0.###}");
+            Console.WriteLine($"fitsWidthByDefault={fitsWidthByDefault} tooTallByWidth={tooTallByWidth} fitPageIsBelowOne={fitPageIsBelowOne} "
+                + $"wholePageVisible={wholePageVisible} outStopsAtWholePage={outStopsAtWholePage} inStopsAtCeiling={inStopsAtCeiling} "
+                + $"newDocumentOpensAtFitWidth={newDocumentOpensAtFitWidth}");
+            Console.WriteLine(fitsWidthByDefault && tooTallByWidth && fitPageIsBelowOne && wholePageVisible
+                && outStopsAtWholePage && inStopsAtCeiling && newDocumentOpensAtFitWidth ? "OK" : "FAILED");
+            return;
+        }
+
         // Headless test of the new-folder flow against a running Api: `--newfolder-test <token> <name>`.
         var newFolderIndex = Array.IndexOf(args, "--newfolder-test");
         if (newFolderIndex >= 0 && newFolderIndex + 2 < args.Length)
@@ -820,9 +908,27 @@ internal static class Program
             viewModel.Preview.PreviewFullscreen = true;
         }
 
+        // `--narrow`: hand the preview's neighbours most of the width, so the preview column is about as narrow
+        // as a user can drag it to. Issue #480's second half is only visible here — the default layout is wide
+        // enough to hide a toolbar that does not wrap.
+        if (Environment.GetCommandLineArgs().Contains("--narrow"))
+        {
+            viewModel.TreeWidth = new Avalonia.Controls.GridLength(4, Avalonia.Controls.GridUnitType.Star);
+            viewModel.ListWidth = new Avalonia.Controls.GridLength(9, Avalonia.Controls.GridUnitType.Star);
+            viewModel.ChatWidth = new Avalonia.Controls.GridLength(6, Avalonia.Controls.GridUnitType.Star);
+        }
+
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
         Dispatcher.UIThread.RunJobs();
+
+        // `--fit-page`: the zoom that fits the whole page (#480), applied AFTER the first arrange because it is
+        // measured from the pane the preview actually got.
+        if (Environment.GetCommandLineArgs().Contains("--fit-page"))
+        {
+            viewModel.Preview.FitPageCommand.Execute(null);
+            Dispatcher.UIThread.RunJobs();
+        }
 
         // Force a hovered word so the light-grey hover box (ADR "Copy a preview word to the clipboard") shows in
         // the otherwise-static screenshot.

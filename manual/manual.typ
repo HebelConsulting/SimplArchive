@@ -84,7 +84,13 @@ Expand the *tree* to a folder and its documents appear in the *contents* list, w
 Selecting a document shows its *index data* in the detail pane and renders a *preview* below — PDFs, images, and
 converted Office/e-mail/Markdown documents alike. Full-text search hits are highlighted directly on the preview#idx("Hit highlighting"),
 and you can click a word to copy it. In the desktop client you can also *open* the document in its native
-application.
+application#idx("Open a document") — from the row's context menu, the ribbon, a double-click, or the keyboard
+shortcut *⌘O* (*Ctrl+O* on Windows and Linux). The same shortcut opens the selected item on the *Inbox* tab.
+
+The preview's toolbar carries the *zoom*#idx("Zoom") controls. A document opens fitted to the width of the pane;
+#emph[fit page] shrinks it until the whole page is visible at once — useful when the pane is wider than it is
+tall, where fitting the width pushes the bottom of the page out of sight. Zooming out after that walks back down
+to the whole page and stops there. Ctrl+scroll (⌘+scroll on a Mac) zooms as well.
 
 #shot("screenshots/desktop-search-hit-overlay.png",
   [The preview with search hits highlighted on the page — click a word to copy it, or step through the matches.])

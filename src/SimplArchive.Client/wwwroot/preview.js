@@ -22,10 +22,16 @@ const el = (tag, cls) => { const e = document.createElement(tag); if (cls) e.cla
 const TOUCH_ONLY = typeof window !== 'undefined' && window.matchMedia
     && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
 
-const ZOOM_MIN = 1, ZOOM_MAX = 4;
+// 1 is fit-WIDTH, not the smallest useful zoom: for a portrait page in a pane wider than it is tall, fitting the
+// width pushes the bottom of the page out of view — exactly when the user wants to see it AS A PAGE (#480). So the
+// floor is the fit-PAGE scale, computed per host from the rendered page, and is normally below 1. Until a page has
+// been measured the floor stays at 1, which is the behaviour that shipped.
+const ZOOM_MAX = 4, ZOOM_FLOOR_MIN = 0.1;
+
+const zoomFloor = host => parseFloat(host.dataset.zoomFloor || '1');
 
 function applyZoom(host, z) {
-    z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+    z = Math.min(ZOOM_MAX, Math.max(zoomFloor(host), z));
     host.dataset.zoom = z;
     host.style.setProperty('--wb-pv-zoom', z);
     host.classList.toggle('wb-pv-zoomed', z > 1.001);
@@ -33,6 +39,32 @@ function applyZoom(host, z) {
 
 export function zoomBy(host, mult) { applyZoom(host, parseFloat(host.dataset.zoom || '1') * mult); }
 export function zoomReset(host) { applyZoom(host, 1); }
+
+// Fit the WHOLE page in view (#480). Measures the first page as currently rendered and scales so its height fits
+// the host, which for a portrait page is below 1 — hence the floor below.
+//
+// "Fit entire document" deliberately means fit the CURRENT page, not all of them: a PDF is rendered as N stacked
+// pages, so fitting the lot would zoom a 40-page document to nothing.
+export function fitPage(host) {
+    const scale = fitPageScale(host);
+    if (scale) {
+        host.dataset.zoomFloor = scale;   // zooming out now walks down to whole-page and stops there
+        applyZoom(host, scale);
+    }
+}
+
+// The zoom at which one page's full height fits the host, or null when nothing is rendered yet. Derived from the
+// page as currently drawn, so it is correct at any starting zoom rather than assuming the default.
+function fitPageScale(host) {
+    const page = host.querySelector('.wb-pv-page');
+    if (!page || !host.clientHeight) return null;
+
+    const drawn = page.getBoundingClientRect().height;
+    if (!drawn) return null;
+
+    const z = parseFloat(host.dataset.zoom || '1');
+    return Math.max(ZOOM_FLOOR_MIN, Math.min(1, z * host.clientHeight / drawn));
+}
 
 // Wire two-finger pinch + Ctrl/⌘-wheel zoom once per host (the host element persists across loads; only its
 // children are replaced, so guard against re-wiring). Single-finger touch still pans via native overflow scroll —
@@ -53,6 +85,7 @@ function wireZoomGestures(host) {
 export async function load(host, url, layout, dotNetRef) {
     host.innerHTML = '';
     state = { host, pages: [], dotNetRef, active: -1 };
+    delete host.dataset.zoomFloor;  // the floor belongs to the PAGE, not the host — a new document recomputes it
     applyZoom(host, 1);        // each new document opens at fit-width
     wireZoomGestures(host);    // idempotent — wires pinch/⌘-wheel once per host
     if (!url) return { kind: 'unsupported', text: '' };

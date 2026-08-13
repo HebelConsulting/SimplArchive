@@ -3972,4 +3972,7 @@
   <data name="CoAutoByTip" xml:space="preserve">
     <value>Checked out automatically when you saved it from the mounted drive ({0}). Check in when you are done.</value>
   </data>
+  <data name="PvFitPage" xml:space="preserve">
+    <value>Fit whole page</value>
+  </data>
 </root>

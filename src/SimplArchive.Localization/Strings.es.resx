@@ -3972,4 +3972,7 @@
   <data name="CoAutoByTip" xml:space="preserve">
     <value>Extraído automáticamente al guardarlo desde la unidad montada ({0}). Haz el check-in cuando termines.</value>
   </data>
+  <data name="PvFitPage" xml:space="preserve">
+    <value>Ajustar página completa</value>
+  </data>
 </root>

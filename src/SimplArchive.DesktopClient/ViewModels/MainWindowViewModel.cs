@@ -1326,6 +1326,40 @@ public sealed partial class MainWindowViewModel : ObservableObject
         await LoadFolderContentsAsync(folderId, crumb.Links);
     }
 
+    // "Open (⌘O)" for the affordances that are a plain button rather than a menu entry — the ribbon's Open and
+    // the Inbox row's Open — since only a MenuItem can carry an InputGesture. Composed from the localized label
+    // plus the platform chord, so it needs no resource of its own.
+    // Trailing after a dash, not in brackets: the ribbon's own label is already a parenthesised sentence, and a
+    // second bracket inside a tooltip reads as a nested aside rather than as a shortcut.
+    private static string WithOpenChord(string labelKey) => $"{Strings.Get(labelKey)} — {Services.Shortcuts.Open}";
+
+    public static string OpenTip => WithOpenChord("MwOpen");
+    public static string RibbonOpenTip => WithOpenChord("RibbonOpen");
+
+    // ⌘/Ctrl+O on the current tab's selected row (#482, ADR "One shortcut for opening a document"). Opening is
+    // the most frequent action in the product and needed a right-click and a menu pick every time.
+    //
+    // Deliberately only the two tabs whose Open means **open in the native application**. Search and Tasks have
+    // an "Open" too, but theirs REVEALS the document in Repositories — a different action wearing the same word,
+    // and one chord that means two things is a chord nobody trusts. Check-out and the Recycle bin have no Open
+    // at all, and ADR 0554 says an action that cannot succeed is not advertised.
+    //
+    // Addressed from the SELECTION, never from a pane's loaded state (ADR 0559): both commands read the selected
+    // row, which is set synchronously on click, so a shortcut pressed mid-load still acts on what is selected.
+    [RelayCommand]
+    private async Task OpenSelectedAsync()
+    {
+        switch (SelectedTab)
+        {
+            case 0 when OpenCommand.CanExecute(null):
+                await OpenCommand.ExecuteAsync(null);
+                break;
+            case 1 when SelectedServerInboxItem is not null:
+                await OpenServerInboxItemCommand.ExecuteAsync(null);
+                break;
+        }
+    }
+
     [RelayCommand(CanExecute = nameof(HasSelection))]
     private async Task OpenAsync()
     {

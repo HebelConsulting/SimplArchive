@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Text;
+using Avalonia;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -53,6 +54,73 @@ public sealed partial class PreviewViewModel : ObservableObject
     private void TogglePreviewFullscreen() => PreviewFullscreen = !PreviewFullscreen;
 
     public void ExitFullscreen() => PreviewFullscreen = false;
+
+    // --- Zoom (#480, ADR "Fit the whole page") -------------------------------------------------------------
+    // The page is drawn at an explicit width — the pane's width times the zoom — rather than left to stretch, so
+    // the zoom has something to act on. The hit and annotation overlays sit in the same grid cell and are
+    // normalized 0..1 over their own bounds, so they follow the page for free and no overlay math changes.
+    //
+    // The scale that fits a whole page cannot be assumed: the panes are user-resizable and the page's own aspect
+    // comes from the document, so both come from measurement — the pane from the ScrollViewer's viewport (pushed
+    // in by the view), the aspect from the rendered first page.
+    private Size _viewport;
+    private double _zoomFloor = 1;
+
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(PageWidth))] private double _zoom = 1;
+
+    // The width every page is drawn at. NaN — Avalonia's "Auto" — until the pane has been measured, so an
+    // unmeasured preview lays out exactly as it did before zoom existed instead of collapsing to nothing.
+    public double PageWidth => PageBaseWidth > 0 ? PageBaseWidth * Zoom : double.NaN;
+
+    // The width fit-width means: the viewport less the page item's own margin.
+    private double PageBaseWidth => _viewport.Width - PreviewZoom.PageMargin;
+
+    // Pushed in by the view whenever the pages ScrollViewer is measured.
+    //
+    // A degenerate size is ignored rather than stored: the docked pane and the full-screen overlay are two
+    // PreviewPanes bound to this ONE view model, and the one being hidden reports an empty viewport on its way
+    // out — which would otherwise take the page width back to Auto just as the other one appears.
+    public void SetViewport(Size viewport)
+    {
+        if (viewport == _viewport || viewport.Width <= 0 || viewport.Height <= 0)
+        {
+            return;
+        }
+
+        _viewport = viewport;
+        OnPropertyChanged(nameof(PageWidth));
+    }
+
+    [RelayCommand] private void ZoomIn() => ZoomBy(PreviewZoom.Step);
+
+    [RelayCommand] private void ZoomOut() => ZoomBy(1 / PreviewZoom.Step);
+
+    // Back to fit-width. The floor is deliberately left where it is: having seen the whole page once, the user
+    // can still zoom back down to it — mirrors the web's zoomReset.
+    [RelayCommand] private void ZoomReset() => Zoom = PreviewZoom.Clamp(1, _zoomFloor);
+
+    // Ctrl/⌘ + wheel, from the view. (Pinch is a touch gesture the desktop shell does not deliver to a mouse-and-
+    // keyboard window; the web has it because a tablet browser does.)
+    public void ZoomBy(double multiplier) => Zoom = PreviewZoom.Clamp(Zoom * multiplier, _zoomFloor);
+
+    // Fit the whole page in view. Also lowers the floor to that scale, so zooming out now walks down to
+    // whole-page and stops there instead of stopping at fit-width and doing nothing.
+    //
+    // "Fit entire document" deliberately means fit the CURRENT page, not all of them: a PDF renders as N stacked
+    // pages, so fitting the lot would zoom a 40-page document to nothing. The first page stands for the page
+    // shape, which is uniform in every format that reaches here.
+    [RelayCommand]
+    private void FitPage()
+    {
+        if (PreviewPages.FirstOrDefault()?.Image.Size is not { Width: > 0, Height: > 0 } size
+            || PreviewZoom.FitPageScale(PageBaseWidth, _viewport.Height, size.Height / size.Width) is not { } scale)
+        {
+            return;
+        }
+
+        _zoomFloor = scale;
+        Zoom = scale;
+    }
 
     // Find-in-document (ADR "Search hit overlay"): the query whose matching words are highlighted on the
     // preview. Seeded from the search when a document is opened from a result; also editable in the preview's
@@ -794,6 +862,10 @@ public sealed partial class PreviewViewModel : ObservableObject
 
     public void Reset(string? placeholder)
     {
+        // Every document opens at fit-width, and the floor goes back to 1 with it: the floor belongs to the PAGE,
+        // so a landscape page following a portrait one would otherwise be pinned above its own fit-page scale.
+        Zoom = 1;
+        _zoomFloor = 1;
         PreviewPages.Clear();
         HasPreviewPages = false;
         PreviewText = null;
