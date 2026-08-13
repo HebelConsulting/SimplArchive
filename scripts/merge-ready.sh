@@ -57,7 +57,26 @@ printf 'PR #%s — %s\n\n' "$pr" "$title"
 
 # `gh pr checks` exits non-zero when checks are failing or pending, so don't let -e kill us here.
 checks="$(gh pr checks "$pr" --json name,bucket,link 2>/dev/null || true)"
-[ -n "$checks" ] || die "merge-ready: could not read checks for PR #$pr."
+
+# An EMPTY check list has two very different causes, and saying "could not read checks" for both is what let
+# the near-miss on #477 happen (issue #478). A `pull_request` workflow runs against the MERGE ref, which
+# GitHub cannot compute for a conflicting PR — so a CONFLICTING PR never starts a single check and sits with
+# an empty list forever. That is not a transient API blip; it is actionable, and it is the likelier cause
+# here, because the manual bot commits to main on a schedule of its own.
+if [ -z "$checks" ]; then
+    mergeable="$(gh pr view "$pr" --json mergeable --jq .mergeable 2>/dev/null || echo UNKNOWN)"
+    if [ "$mergeable" = "CONFLICTING" ]; then
+        die "merge-ready: PR #$pr is CONFLICTING, so NO check will ever run — a pull_request workflow needs a
+mergeable ref, and GitHub cannot compute one. This is not a CI outage and waiting will not fix it.
+
+    Merge main into the branch, resolve, and push:
+      git fetch origin && git merge origin/main
+      # …resolve, then push. Checks start on the new head."
+    fi
+
+    die "merge-ready: no checks reported for PR #$pr (mergeable: $mergeable).
+    If the PR was just pushed, they may not have registered yet — re-run in a moment."
+fi
 
 count_bucket() { jq -r --arg b "$1" '[.[] | select(.bucket == $b)] | length' <<<"$checks"; }
 e2e_in_bucket() {

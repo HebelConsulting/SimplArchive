@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Infrastructure.Persistence;
 
@@ -18,18 +19,30 @@ namespace SimplArchive.Api.Documents;
 public sealed class ChatSystemEntryRecorder
 {
     private readonly SimplArchiveDbContext _dbContext;
+    private readonly TimeProvider _clock;
 
-    public ChatSystemEntryRecorder(SimplArchiveDbContext dbContext) => _dbContext = dbContext;
+    // The keyed "demo-clock" — a FIXED instant only when Demo:Clock is set (the manual capture and the demo
+    // seed), TimeProvider.System everywhere else, exactly as AuditRecorder resolves it. A system entry is
+    // demo-visible content, so it has to date from the same clock the rest of the demo does.
+    public ChatSystemEntryRecorder(SimplArchiveDbContext dbContext, [FromKeyedServices("demo-clock")] TimeProvider clock)
+    {
+        _dbContext = dbContext;
+        _clock = clock;
+    }
 
     // Called once a version is confirmed — ONE entry per version, first or not. Filing used to add a second,
     // separate "filed a new document" entry beside it, which said the same thing twice and left the per-version
     // one reading "saved a new working version" of a document that had no earlier version. The version number
     // the entry already points at is enough for a client to choose the right sentence, so the split earned
     // nothing. Which version this is stays the clients' question to answer, not a fact duplicated here.
+    // Dated from the VERSION, not from "now": this entry records that filing, so the two must agree. They did
+    // not — the entry took DateTimeOffset.UtcNow while the version kept its own CreatedAt, so a demo document
+    // filed in June carried a feed entry stamped today, and the manual's chat screenshots changed on every
+    // capture run because the timestamp was literally the moment of capture (issue #478).
     public async Task RecordVersionFiledAsync(DocumentVersion version, CancellationToken cancellationToken)
     {
         Add(version.TenantId, version.DocumentId, ChatMessageKind.VersionFiled, version.Id,
-            version.CreatedByUserId, version.CreatedByServiceAccountId);
+            version.CreatedByUserId, version.CreatedByServiceAccountId, version.CreatedAt);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
@@ -41,11 +54,12 @@ public sealed class ChatSystemEntryRecorder
         Guid tenantId, Guid documentId, Guid documentVersionId, Guid? userId, Guid? serviceAccountId,
         CancellationToken cancellationToken)
     {
-        Add(tenantId, documentId, ChatMessageKind.VersionActivated, documentVersionId, userId, serviceAccountId);
+        // The pinning is happening NOW (unlike a filing, which is dated from its version), so it takes the clock.
+        Add(tenantId, documentId, ChatMessageKind.VersionActivated, documentVersionId, userId, serviceAccountId, _clock.GetUtcNow());
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private void Add(Guid tenantId, Guid documentId, ChatMessageKind kind, Guid? documentVersionId, Guid? userId, Guid? serviceAccountId) =>
+    private void Add(Guid tenantId, Guid documentId, ChatMessageKind kind, Guid? documentVersionId, Guid? userId, Guid? serviceAccountId, DateTimeOffset at) =>
         _dbContext.ChatMessages.Add(new ChatMessage
         {
             Id = Guid.NewGuid(),
@@ -57,6 +71,6 @@ public sealed class ChatSystemEntryRecorder
             Body = "",
             CreatedByUserId = userId,
             CreatedByServiceAccountId = serviceAccountId,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = at,
         });
 }

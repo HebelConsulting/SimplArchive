@@ -161,14 +161,21 @@ public class AuditEventsController : ControllerBase
         var pageSize = PageSize.Resolve(limit);
         var query = ApplyFilters(_dbContext.AuditEvents.AsQueryable(), actorId, action, targetType, targetId, from, to);
 
-        // Newest first; the cursor is a (Timestamp, Id) position, so "next" = strictly older.
-        if (Cursor.TryDecode(cursor, out var cursorTimestamp, out var cursorId))
+        // Newest first; the cursor is a (Timestamp, Sequence) position, so "next" = strictly older.
+        //
+        // The tiebreak is the hash chain's own Sequence, NOT the row Id (issue #478). Id is a random Guid, so
+        // same-instant events came back in an arbitrary order that differed on every read — invisible in
+        // production, where timestamps rarely collide, and glaring under the manual capture's frozen demo clock,
+        // where EVERY event shares one instant and the audit screenshot reshuffled itself on every run. Sequence
+        // is the order the events were actually appended in (ADR 0321 makes it authoritative for the chain), so
+        // ordering by it is both stable and more truthful than ordering by when they happen to have been stamped.
+        if (Cursor.TryDecodeSequence(cursor, out var cursorTimestamp, out var cursorSequence))
         {
-            query = query.Where(e => e.Timestamp < cursorTimestamp || (e.Timestamp == cursorTimestamp && e.Id < cursorId));
+            query = query.Where(e => e.Timestamp < cursorTimestamp || (e.Timestamp == cursorTimestamp && e.Sequence < cursorSequence));
         }
 
         var fetched = await query
-            .OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id)
+            .OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Sequence)
             .Take(pageSize + 1)
             .ToListAsync(cancellationToken);
         var (page, hasMore) = Cursor.Split(fetched, pageSize);
@@ -188,7 +195,7 @@ public class AuditEventsController : ControllerBase
         };
         if (hasMore)
         {
-            var nextCursor = Cursor.Encode(page[^1].Timestamp, page[^1].Id);
+            var nextCursor = Cursor.Encode(page[^1].Timestamp, page[^1].Sequence);
             links.Add(new Link("next", Url.Action(nameof(List), new { cursor = nextCursor, limit = pageSize })!, "GET"));
         }
 
