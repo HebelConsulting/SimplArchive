@@ -76,13 +76,22 @@ public sealed class InboxApi(HttpClient http, SimplArchiveApiClient client)
     /// did not offer it — a one-page file has no split and no sort — so the client disables the affordance
     /// rather than offering a button that fails on click (ADR 0554).
     /// </summary>
-    public sealed record PagesInfo(string Format, int PageCount, string? SplitHref, string? SortHref, string? DeskewHref = null, bool Signed = false)
+    public sealed record PagesInfo(
+        string Format,
+        int PageCount,
+        string? SplitHref,
+        string? SortHref,
+        string? DeskewHref = null,
+        bool Signed = false,
+        string? PatchCodesHref = null)
     {
         public bool CanSplit => SplitHref is not null;
 
         public bool CanSort => SortHref is not null;
 
         public bool CanDeskew => DeskewHref is not null;
+
+        public bool CanCutAtPatchCodes => PatchCodesHref is not null;
     }
 
     /// <summary>Null when the row advertised no <c>pages</c> rel at all — no request is made in that case.</summary>
@@ -109,33 +118,48 @@ public sealed class InboxApi(HttpClient http, SimplArchiveApiClient client)
             links.TryGetValue("split", out var split) ? split : null,
             links.TryGetValue("sort", out var sort) ? sort : null,
             links.TryGetValue("deskew", out var deskew) ? deskew : null,
-            json.TryGetProperty("signed", out var signed) && signed.ValueKind == JsonValueKind.True);
+            json.TryGetProperty("signed", out var signed) && signed.ValueKind == JsonValueKind.True,
+            links.TryGetValue("patchCodes", out var patch) ? patch : null);
     }
 
+    /// <summary>The inbox ribbon's two standing preferences, as the "me" resource reports them.</summary>
+    public sealed record InboxPreferences(bool Deskew, bool CutAtPatchCodes);
+
     /// <summary>
-    /// Whether crooked scans arriving in this user's inbox are straightened automatically (#491), read from the
-    /// "me" resource. Defaults true when the resource cannot be read, matching the server's own default.
+    /// Both preferences from <b>one</b> read of "me" (ADR 0557). Defaults to on when the resource cannot be
+    /// read, matching the server's own defaults — a ribbon that comes up showing "off" would be a claim the
+    /// server never made, and the user would turn back on something that was never off.
     /// </summary>
-    public async Task<bool> GetDeskewPreferenceAsync(CancellationToken cancellationToken = default)
+    public async Task<InboxPreferences> GetPreferencesAsync(CancellationToken cancellationToken = default)
     {
         try
         {
             var me = await http.GetFromJsonAsync<JsonElement>(await client.RootHrefAsync("me", cancellationToken), cancellationToken);
-            return !me.TryGetProperty("deskewInboxUploads", out var d) || d.ValueKind != JsonValueKind.False;
+            return new InboxPreferences(IsOn(me, "deskewInboxUploads"), IsOn(me, "cutInboxUploadsAtPatchCodes"));
         }
         catch (Exception)
         {
-            return true;
+            return new InboxPreferences(true, true);
         }
+
+        static bool IsOn(JsonElement me, string property) =>
+            !me.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.False;
     }
 
-    /// <summary>
-    /// Turns automatic straightening on or off, following the rel the "me" resource advertises (ADR 0543).
-    /// </summary>
-    public async Task SetDeskewPreferenceAsync(bool enabled, CancellationToken cancellationToken = default)
+    /// <summary>Turns automatic straightening on or off (#491).</summary>
+    public Task SetDeskewPreferenceAsync(bool enabled, CancellationToken cancellationToken = default) =>
+        SetPreferenceAsync("deskewPreference", enabled, cancellationToken);
+
+    /// <summary>Turns automatic cutting at separator sheets on or off (#492).</summary>
+    public Task SetPatchCodePreferenceAsync(bool enabled, CancellationToken cancellationToken = default) =>
+        SetPreferenceAsync("patchCodePreference", enabled, cancellationToken);
+
+    // Which rel differs; nothing else does. Following the rel the "me" resource advertises rather than composing
+    // its URL is ADR 0543 — and it is why adding the second preference cost one line rather than a second copy.
+    private async Task SetPreferenceAsync(string rel, bool enabled, CancellationToken cancellationToken)
     {
         var me = await http.GetFromJsonAsync<JsonElement>(await client.RootHrefAsync("me", cancellationToken), cancellationToken);
-        var href = SimplArchiveApiClient.ParseLinks(me)?.GetValueOrDefault("deskewPreference")
+        var href = SimplArchiveApiClient.ParseLinks(me)?.GetValueOrDefault(rel)
             ?? throw new ApiActionException(Strings.Get("ApiErrGeneric"));
 
         using var response = await http.PutAsJsonAsync(href.TrimStart('/'), new { enabled }, cancellationToken);
@@ -151,6 +175,21 @@ public sealed class InboxApi(HttpClient http, SimplArchiveApiClient client)
         using var response = await http.PostAsJsonAsync(deskewHref.TrimStart('/'), new { }, cancellationToken);
         await SimplArchiveApiClient.ThrowIfProblemAsync(response, Strings.Get("ApiErrGeneric"), cancellationToken);
         return (await NamesAsync(response, cancellationToken)).FirstOrDefault() ?? string.Empty;
+    }
+
+    /// <summary>Fetches an advertised href's bytes — the printable separator sheet and its sample batch.</summary>
+    public Task<byte[]> GetBytesAsync(string href, CancellationToken cancellationToken = default) =>
+        http.GetByteArrayAsync(href.TrimStart('/'), cancellationToken);
+
+    /// <summary>
+    /// Cuts a batch scan at its separator sheets and returns the resulting items' names (#492). The batch
+    /// itself is kept, renamed with a "_to_be_deleted" suffix.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> CutAtPatchCodesAsync(string patchCodesHref, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.PostAsJsonAsync(patchCodesHref.TrimStart('/'), new { }, cancellationToken);
+        await SimplArchiveApiClient.ThrowIfProblemAsync(response, Strings.Get("ApiErrGeneric"), cancellationToken);
+        return await NamesAsync(response, cancellationToken);
     }
 
     /// <summary>Splits the item into one inbox item per page and returns their names. The source is kept.</summary>

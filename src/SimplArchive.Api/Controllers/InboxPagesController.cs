@@ -75,6 +75,14 @@ public class InboxPagesController(
             links.Add(new Link("deskew", Href(name, "deskew", group, user), "POST"));
         }
 
+        // Cutting at separator sheets needs at least two pages, since a one-page file is either the separator
+        // or the document (#492). Whether it CONTAINS any is not knowable without rasterising every page, and
+        // paying for that to decide whether to draw a button would cost a sidecar round trip per row.
+        if (info.PageCount > 1 && !info.Signed)
+        {
+            links.Add(new Link("patchCodes", Href(name, "patch-codes", group, user), "POST"));
+        }
+
         return Ok(new InboxPagesResource
         {
             Format = info.Format.ToString().ToLowerInvariant(),
@@ -240,6 +248,81 @@ public class InboxPagesController(
         });
     }
 
+    /// <summary>The printable Patch 3 separator sheet — the piece of paper the whole feature is about (#492).</summary>
+    /// <remarks>
+    /// <para>
+    /// Generated on request rather than served as a checked-in binary. The geometry lives in exactly one place
+    /// (<see cref="PatchCodePage"/>), so the sheet a user prints cannot drift away from the one the detector is
+    /// taught to find — which is the failure that would be hardest to diagnose, because both halves look right.
+    /// </para>
+    /// <para>
+    /// <b>Anonymous, deliberately.</b> It is the same page for every tenant and carries nothing about anybody —
+    /// the same status as the user manual, which is served as a static file. It also has to be: the web client
+    /// reaches it with a plain link, so the browser can show the PDF and print it, and a plain link carries no
+    /// bearer token. Fetching it into a blob would take the browser's own PDF viewer away and give nothing back.
+    /// </para>
+    /// </remarks>
+    [AllowAnonymous]
+    [HttpGet("patch-code-sheet")]
+    public IActionResult PatchCodeSheet() =>
+        File(PatchCodePage.CreatePdf(), "application/pdf", "SimplArchive-Patch3-Separator.pdf");
+
+    [HttpHead("patch-code-sheet")]
+    public IActionResult PatchCodeSheetHead() => NoContent();
+
+    /// <summary>
+    /// A sample batch scan: three short documents with a separator sheet between each (#492).
+    /// </summary>
+    /// <remarks>
+    /// So the feature can be tried without owning a scanner. One page is upside-down and one is crooked, which
+    /// is what makes it a fixture rather than a demo — a batch of correctly-oriented pages exercises neither
+    /// the orientation detection nor the straightening that runs before the cut (ADR 0576).
+    /// </remarks>
+    [AllowAnonymous]
+    [HttpGet("patch-code-sample")]
+    public IActionResult PatchCodeSample() =>
+        File(PatchCodeSampleBatch.CreatePdf(), "application/pdf", "SimplArchive-Patch3-Sample-Batch.pdf");
+
+    [HttpHead("patch-code-sample")]
+    public IActionResult PatchCodeSampleHead() => NoContent();
+
+    /// <summary>
+    /// Cuts a batch scan into one item per document, at the Patch 3 separator sheets between them (#492).
+    /// </summary>
+    /// <remarks>
+    /// The deliberate counterpart to the automatic path, and like straightening it ignores the user's standing
+    /// preference — they have asked about this document. The source is kept under a
+    /// <c>_to_be_deleted</c> name rather than removed, and the answer lists what came out of it, so a client
+    /// can select the results without re-reading the whole inbox.
+    /// </remarks>
+    [HttpPost("{name}/patch-codes")]
+    public async Task<IActionResult> CutAtPatchCodes(
+        string name,
+        [FromQuery] Guid? group,
+        [FromQuery] Guid? user,
+        CancellationToken cancellationToken)
+    {
+        if (await scopes.ResolveAsync(group, user, name, cancellationToken) is not { } scope)
+        {
+            return Forbid();
+        }
+
+        if (!await objectStorageClient.ExistsAsync(scope.Prefix + name, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        var parts = await pageService.CutAtPatchCodesAsync(scope.Prefix, name, cancellationToken);
+
+        return Ok(new InboxPageItemsResource
+        {
+            // Null is "detection could not run" — no sidecar, or it failed. The item is untouched, and saying so
+            // by naming it back is what stops a client redrawing a list that did not change.
+            Names = parts is null ? [name] : [.. parts],
+            Links = [new Link("self", "/api/inbox", "GET")],
+        });
+    }
+
     /// <summary>
     /// Runs the ingest pipeline over a freshly uploaded item (#494) — straightening today, patch-code splitting
     /// later — and answers with the item's name afterwards, which differs when a processor changed the format.
@@ -278,7 +361,9 @@ public class InboxPagesController(
 
         return Ok(new InboxPageItemsResource
         {
-            Names = [processed ?? name],
+            // Usually the one item, under its own name or a new one when a processor changed the format; several
+            // when a processor cut it up (#492); the name it came in under when nothing ran.
+            Names = processed.Count > 0 ? [.. processed] : [name],
             Links = [new Link("self", "/api/inbox", "GET")],
         });
     }

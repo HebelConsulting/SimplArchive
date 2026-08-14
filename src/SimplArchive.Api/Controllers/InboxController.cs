@@ -297,6 +297,9 @@ public class InboxController : ControllerBase
         // Joining several staged items into one (ADR 0575). A collection-level action, advertised where the
         // collection is read (ADR 0557) — the client enables it once the selection is two compatible items.
         new Link("join", "/api/inbox/from-items", "POST"),
+        // The printable Patch 3 separator sheet, and a sample batch made with it (ADR 0577).
+        new Link("patchCodeSheet", "/api/inbox/patch-code-sheet", "GET"),
+        new Link("patchCodeSample", "/api/inbox/patch-code-sample", "GET"),
     ];
 
     // Preview renditions + the text-layout sidecar are cached next to the item (`<stem>.preview.*`,

@@ -77,6 +77,7 @@ public static class DependencyInjection
         // profile and two degrees of rotation flattens it. Adding a processor here is choosing where in the
         // sequence it runs, which is why they are listed rather than discovered.
         services.AddScoped<Inbox.IInboxIngestProcessor, Inbox.DeskewIngestProcessor>();
+        services.AddScoped<Inbox.IInboxIngestProcessor, Inbox.PatchCodeIngestProcessor>();
         services.AddScoped<Inbox.InboxIngestPipeline>();
         services.AddHostedService<Inbox.InboxIngestSweepWorker>();
         services.AddScoped<IWormLockService, Worm.WormLockService>();
@@ -261,11 +262,20 @@ public static class DependencyInjection
                 client.BaseAddress = new Uri(ocrUrl);
                 client.Timeout = TimeSpan.FromSeconds(60);
             });
+
+            // And it is the only image that can read a patch code, for the same reason (#492). A whole batch is
+            // rasterised page by page, so the timeout is OCR-sized rather than thumbnail-sized.
+            services.AddHttpClient<IPatchCodeDetector, SidecarPatchCodeDetector>(client =>
+            {
+                client.BaseAddress = new Uri(ocrUrl);
+                client.Timeout = TimeSpan.FromMinutes(5);
+            });
         }
         else
         {
             services.AddSingleton<ISearchablePdfConverter, NullSearchablePdfConverter>();
             services.AddScoped<ISearchablePdfQueue, NullSearchablePdfQueue>();
+            services.AddSingleton<IPatchCodeDetector, NullPatchCodeDetector>();
 
             // No sidecar, no thumbnails. Registered with no BaseAddress so the service short-circuits, which
             // keeps every test and OCR-less deployment on the pre-#476 landing page rather than failing.

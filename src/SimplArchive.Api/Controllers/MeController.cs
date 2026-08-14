@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using SimplArchive.Api.Hypermedia;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Application.Abstractions;
+using SimplArchive.Domain.Users;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Controllers;
@@ -66,9 +67,17 @@ public class MeController : ControllerBase
         /// involved at all.
         /// </remarks>
         public bool DeskewInboxUploads { get; set; }
+
+        /// <summary>
+        /// Whether a batch scan arriving in this user's inbox is cut into one item per document, at the Patch 3
+        /// separator sheets between them (#492).
+        /// </summary>
+        /// <remarks>A sibling of the flag above in every respect — see its remarks for why it lives here.</remarks>
+        public bool CutInboxUploadsAtPatchCodes { get; set; }
     }
 
-    public class DeskewPreferenceRequest
+    /// <summary>The intended state of one on/off inbox-ingest preference. Shared, because they are all this.</summary>
+    public class PreferenceRequest
     {
         public bool Enabled { get; set; }
     }
@@ -88,7 +97,7 @@ public class MeController : ControllerBase
         // screen asking "who am I" should not cost a full entity load.
         var me = await _dbContext.Users
             .Where(u => u.Id == userId)
-            .Select(u => new { u.Email, u.DeskewInboxUploads })
+            .Select(u => new { u.Email, u.DeskewInboxUploads, u.CutInboxUploadsAtPatchCodes })
             .FirstOrDefaultAsync(cancellationToken);
 
         return Ok(new MeResource
@@ -96,6 +105,7 @@ public class MeController : ControllerBase
             UserId = userId,
             Email = me?.Email,
             DeskewInboxUploads = me?.DeskewInboxUploads ?? true,
+            CutInboxUploadsAtPatchCodes = me?.CutInboxUploadsAtPatchCodes ?? true,
             Links =
             [
                 new Link("self", "/api/me", "GET"),
@@ -110,8 +120,9 @@ public class MeController : ControllerBase
                 new Link("webdavPassword", "/api/me/webdav-password", "GET"),
                 new Link("personalRepository", "/api/me/personal-repository", "GET"),
                 new Link("notificationPreferences", "/api/notifications/preferences", "GET"),
-                // The inbox ribbon's straighten toggle follows this rather than composing it (ADR 0543).
+                // The inbox ribbon's toggles follow these rather than composing them (ADR 0543).
                 new Link("deskewPreference", "/api/me/deskew", "PUT"),
+                new Link("patchCodePreference", "/api/me/patch-codes", "PUT"),
             ],
         });
     }
@@ -122,8 +133,23 @@ public class MeController : ControllerBase
     /// started, and the client already knows which state it wants.
     /// </remarks>
     [HttpPut("deskew")]
-    public async Task<IActionResult> SetDeskewPreference(
-        [FromBody] DeskewPreferenceRequest request,
+    public Task<IActionResult> SetDeskewPreference(
+        [FromBody] PreferenceRequest request,
+        CancellationToken cancellationToken) =>
+        SetPreferenceAsync((user, enabled) => user.DeskewInboxUploads = enabled, request, cancellationToken);
+
+    /// <summary>Turns automatic cutting of batch scans at their separator sheets on or off for the caller (#492).</summary>
+    [HttpPut("patch-codes")]
+    public Task<IActionResult> SetPatchCodePreference(
+        [FromBody] PreferenceRequest request,
+        CancellationToken cancellationToken) =>
+        SetPreferenceAsync((user, enabled) => user.CutInboxUploadsAtPatchCodes = enabled, request, cancellationToken);
+
+    // Which flag differs; nothing else does. Passed as a lambda at the call site so the difference and the
+    // delegation read on one line, rather than as a second copy of the load-check-save.
+    private async Task<IActionResult> SetPreferenceAsync(
+        Action<User, bool> apply,
+        PreferenceRequest request,
         CancellationToken cancellationToken)
     {
         if (_currentUser.UserId is not { } userId)
@@ -137,7 +163,7 @@ public class MeController : ControllerBase
             return NotFound();
         }
 
-        user.DeskewInboxUploads = request.Enabled;
+        apply(user, request.Enabled);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
     }

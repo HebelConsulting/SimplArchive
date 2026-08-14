@@ -109,9 +109,13 @@ public sealed class InboxIngestSweepWorker(
                 }
 
                 var processed = await pipeline.RunAsync(user.TenantId, user.Id, prefix, name, cancellationToken);
-                if (processed is not null && processed != name)
+
+                // Worth a line only when something actually changed: nothing ran (empty), or the item came back
+                // under its own name, is the overwhelmingly common case and would drown the log.
+                if (processed.Count > 0 && (processed.Count > 1 || processed[0] != name))
                 {
-                    logger.LogInformation("Inbox sweep processed {Item} into {Result}.", name, processed);
+                    logger.LogInformation(
+                        "Inbox sweep processed {Item} into {Result}.", name, string.Join(", ", processed));
                 }
             }
         }

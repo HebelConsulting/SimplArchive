@@ -4044,6 +4044,9 @@
   <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
     <value>El orden de páginas debe incluir cada página exactamente una vez.</value>
   </data>
+  <data name="ApiErrInboxNoPatchCodes" xml:space="preserve">
+    <value>No se encontraron hojas separadoras en este escaneo, así que no hay nada que cortar. Compruebe que las hojas estaban en la pila y pasaron lo bastante rectas.</value>
+  </data>
   <data name="SignedBadge" xml:space="preserve">
     <value>Firmado</value>
   </data>
@@ -4067,6 +4070,27 @@
   </data>
   <data name="StInboxDeskewNothing" xml:space="preserve">
     <value>No hay nada que enderezar en &#x27;{0}&#x27;.</value>
+  </data>
+  <data name="InboxPatchAuto" xml:space="preserve">
+    <value>Cortar lotes automáticamente en las hojas separadoras</value>
+  </data>
+  <data name="InboxPatchAutoTip" xml:space="preserve">
+    <value>Corta un escaneo por lotes entrante en un documento por cada hoja separadora. El lote se conserva y se renombra &#x27;…_to_be_deleted&#x27;. Los documentos firmados nunca se modifican.</value>
+  </data>
+  <data name="InboxPatchCutNow" xml:space="preserve">
+    <value>Cortar en las hojas separadoras…</value>
+  </data>
+  <data name="InboxPatchCutConfirm" xml:space="preserve">
+    <value>¿Cortar &#x27;{0}&#x27; en sus hojas separadoras? Las páginas separadoras se descartan y el lote se conserva, renombrado &#x27;…_to_be_deleted&#x27;, para que compruebe el resultado antes de eliminarlo.</value>
+  </data>
+  <data name="InboxPatchSheetTip" xml:space="preserve">
+    <value>Imprima la hoja separadora: la página que se coloca entre los documentos de la pila.</value>
+  </data>
+  <data name="InboxPatchSampleTip" xml:space="preserve">
+    <value>Descargue un escaneo de ejemplo para probarlo sin un escáner.</value>
+  </data>
+  <data name="StInboxCutAtPatchCodes" xml:space="preserve">
+    <value>&#x27;{0}&#x27; cortado en {1} documento(s).</value>
   </data>
   <data name="InboxPageRemove" xml:space="preserve">
     <value>Quitar esta página</value>

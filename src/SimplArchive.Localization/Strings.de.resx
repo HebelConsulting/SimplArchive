@@ -4044,6 +4044,9 @@
   <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
     <value>Die Seitenreihenfolge muss jede Seite genau einmal enthalten.</value>
   </data>
+  <data name="ApiErrInboxNoPatchCodes" xml:space="preserve">
+    <value>In diesem Scan wurden keine Trennblätter gefunden, es gibt also nichts zu schneiden. Prüfen Sie, ob die Blätter im Stapel lagen und gerade genug eingezogen wurden.</value>
+  </data>
   <data name="SignedBadge" xml:space="preserve">
     <value>Signiert</value>
   </data>
@@ -4067,6 +4070,27 @@
   </data>
   <data name="StInboxDeskewNothing" xml:space="preserve">
     <value>In &#x27;{0}&#x27; gibt es nichts gerade zu richten.</value>
+  </data>
+  <data name="InboxPatchAuto" xml:space="preserve">
+    <value>Stapel automatisch an Trennblättern schneiden</value>
+  </data>
+  <data name="InboxPatchAutoTip" xml:space="preserve">
+    <value>Einen eingehenden Stapelscan an jedem Trennblatt in ein Dokument schneiden. Der Stapel selbst bleibt erhalten und wird in &#x27;…_to_be_deleted&#x27; umbenannt. Signierte Dokumente werden nie verändert.</value>
+  </data>
+  <data name="InboxPatchCutNow" xml:space="preserve">
+    <value>An Trennblättern schneiden…</value>
+  </data>
+  <data name="InboxPatchCutConfirm" xml:space="preserve">
+    <value>&#x27;{0}&#x27; an den Trennblättern schneiden? Die Trennseiten werden verworfen, der Stapel bleibt erhalten und wird in &#x27;…_to_be_deleted&#x27; umbenannt, damit Sie das Ergebnis vor dem Löschen prüfen können.</value>
+  </data>
+  <data name="InboxPatchSheetTip" xml:space="preserve">
+    <value>Trennblatt drucken – die Seite, die Sie im Stapel zwischen die Dokumente legen.</value>
+  </data>
+  <data name="InboxPatchSampleTip" xml:space="preserve">
+    <value>Beispiel-Stapelscan herunterladen, um dies ohne Scanner auszuprobieren.</value>
+  </data>
+  <data name="StInboxCutAtPatchCodes" xml:space="preserve">
+    <value>&#x27;{0}&#x27; in {1} Dokument(e) geschnitten.</value>
   </data>
   <data name="InboxPageRemove" xml:space="preserve">
     <value>Diese Seite entfernen</value>

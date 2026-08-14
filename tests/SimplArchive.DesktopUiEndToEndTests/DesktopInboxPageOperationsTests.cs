@@ -68,6 +68,22 @@ public class DesktopInboxPageOperationsTests
         Assert.Equal(canSort, actions.CanSort);
     }
 
+    // Cutting at separator sheets is its own rel too (#492), and it is the one whose absence is easiest to get
+    // wrong: the server withholds it for a one-page file and for a signed document, and a client that inferred
+    // it from "this is a multi-page PDF" would offer a button that 400s on the second of those.
+    [Theory]
+    [InlineData("api/inbox/a.pdf/patch-codes", true)]
+    [InlineData(null, false)]
+    public void Cutting_at_separator_sheets_follows_its_own_rel(string? patchCodesHref, bool canCut)
+    {
+        var actions = new InboxItemActionsViewModel
+        {
+            Pages = new InboxApi.PagesInfo("pdf", 6, null, null, PatchCodesHref: patchCodesHref),
+        };
+
+        Assert.Equal(canCut, actions.CanCutAtPatchCodes);
+    }
+
     // Join needs BOTH a multiple selection and the collection's advertised address. The selection alone is not
     // enough: a server that stopped offering the join must take the button with it (ADR 0543).
     [Theory]
@@ -99,5 +115,6 @@ public class DesktopInboxPageOperationsTests
         Assert.Null(actions.Pages);
         Assert.False(actions.CanSplit);
         Assert.False(actions.CanSort);
+        Assert.False(actions.CanCutAtPatchCodes);
     }
 }

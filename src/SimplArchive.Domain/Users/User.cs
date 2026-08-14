@@ -113,5 +113,10 @@ public class User : ITenantScoped
     // it on INSERT, so a user created with `false` would silently be written as `true`.
     public bool DeskewInboxUploads { get; set; } = true;
 
+    // Cut an arriving batch scan into one item per document, at the Patch 3 separator sheets between them
+    // (#492, ADR 0577). A sibling of the flag above in every respect — same reason it is per-user, same reason
+    // it is stored here rather than in a client, and the same reason it carries no HasDefaultValue.
+    public bool CutInboxUploadsAtPatchCodes { get; set; } = true;
+
     public DateTimeOffset CreatedAt { get; set; }
 }

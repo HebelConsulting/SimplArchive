@@ -4044,6 +4044,9 @@
   <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
     <value>The page order must list each page exactly once.</value>
   </data>
+  <data name="ApiErrInboxNoPatchCodes" xml:space="preserve">
+    <value>No separator sheets were found in this scan, so there is nothing to cut it into. Check that the sheets were in the stack and came through straight enough to read.</value>
+  </data>
   <data name="SignedBadge" xml:space="preserve">
     <value>Signed</value>
   </data>
@@ -4067,6 +4070,27 @@
   </data>
   <data name="StInboxDeskewNothing" xml:space="preserve">
     <value>Nothing to straighten in &#x27;{0}&#x27;.</value>
+  </data>
+  <data name="InboxPatchAuto" xml:space="preserve">
+    <value>Cut batches at separator sheets automatically</value>
+  </data>
+  <data name="InboxPatchAutoTip" xml:space="preserve">
+    <value>Cut an arriving batch scan into one document per separator sheet. The batch itself is kept, renamed &#x27;…_to_be_deleted&#x27;. Signed documents are never touched.</value>
+  </data>
+  <data name="InboxPatchCutNow" xml:space="preserve">
+    <value>Cut at separator sheets…</value>
+  </data>
+  <data name="InboxPatchCutConfirm" xml:space="preserve">
+    <value>Cut &#x27;{0}&#x27; at its separator sheets? The separator pages are discarded and the batch is kept, renamed &#x27;…_to_be_deleted&#x27;, so you can check the result before deleting it.</value>
+  </data>
+  <data name="InboxPatchSheetTip" xml:space="preserve">
+    <value>Print the separator sheet — the page you put between documents in a stack before scanning.</value>
+  </data>
+  <data name="InboxPatchSampleTip" xml:space="preserve">
+    <value>Download a sample batch scan to try this without a scanner.</value>
+  </data>
+  <data name="StInboxCutAtPatchCodes" xml:space="preserve">
+    <value>Cut &#x27;{0}&#x27; into {1} document(s).</value>
   </data>
   <data name="InboxPageRemove" xml:space="preserve">
     <value>Remove this page</value>

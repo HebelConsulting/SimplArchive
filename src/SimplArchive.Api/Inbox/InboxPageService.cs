@@ -1,5 +1,6 @@
 using SimplArchive.Api.Errors.Exceptions.Inbox;
 using SimplArchive.Application.Abstractions;
+using SimplArchive.Infrastructure.Inbox;
 using SimplArchive.Infrastructure.Storage;
 
 namespace SimplArchive.Api.Inbox;
@@ -30,7 +31,10 @@ namespace SimplArchive.Api.Inbox;
 /// back restores the original exactly.
 /// </para>
 /// </remarks>
-public sealed class InboxPageService(IObjectStorageClient storage, ISearchablePdfConverter converter)
+public sealed class InboxPageService(
+    IObjectStorageClient storage,
+    ISearchablePdfConverter converter,
+    IPatchCodeDetector patchCodes)
 {
     /// <summary>What the pages of one staged item look like: the format, and how many there are.</summary>
     /// <remarks>
@@ -240,6 +244,71 @@ public sealed class InboxPageService(IObjectStorageClient storage, ISearchablePd
         return newName;
     }
 
+    /// <summary>
+    /// Cuts a batch scan into one item per document, at the Patch 3 separator sheets between them (#492), and
+    /// returns what the batch became. Null when detection could not run at all.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The source is kept, renamed</b> with <see cref="InboxNaming.ToBeDeletedSuffix"/> rather than deleted.
+    /// A batch cut in the wrong place — a sheet that jammed, a code the detector read on somebody's letterhead —
+    /// is recoverable only from the batch, and at the moment this runs nobody has looked at the result yet. The
+    /// suffix is what stops "kept for safety" turning into "an unexplained duplicate of everything".
+    /// </para>
+    /// <para>
+    /// Unlike straightening, the format survives: a TIFF batch becomes TIFFs. No page is rasterised, so there
+    /// is nothing to lose by staying where we started.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyList<string>?> CutAtPatchCodesAsync(
+        string prefix,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        var (format, bytes) = await LoadPagedAsync(prefix, name, cancellationToken);
+        var kind = format == PageComposer.PageFormat.Pdf ? SearchablePdfSourceKind.Pdf : SearchablePdfSourceKind.Tiff;
+
+        var separators = await patchCodes.DetectSeparatorPagesAsync(bytes, kind, cancellationToken);
+        if (separators is null)
+        {
+            return null; // no sidecar, or it failed — the item is left exactly as it was
+        }
+
+        // Asked for explicitly, so "there is nothing here to cut" is an answer the user needs to be told,
+        // not a silent no-op that looks like a broken button.
+        if (separators.Count == 0)
+        {
+            throw new InboxNoPatchCodesFoundException(name);
+        }
+
+        var parts = PageComposer.CutAt(bytes, format, separators);
+        if (parts.Count == 0)
+        {
+            throw new InboxNoPatchCodesFoundException(name); // nothing but separator sheets: no document in there
+        }
+
+        var stem = Stem(name);
+        var extension = Path.GetExtension(name);
+        var written = new List<string>(parts.Count);
+
+        for (var i = 0; i < parts.Count; i++)
+        {
+            var partName = await FreeNameAsync(prefix, $"{stem} ({i + 1}){extension}", cancellationToken);
+            await WriteAsync(prefix + partName, parts[i], format, cancellationToken);
+            await CopyMaskDraftAsync(prefix, name, partName, cancellationToken);
+            written.Add(partName);
+        }
+
+        var kept = await FreeNameAsync(prefix, $"{stem}{InboxNaming.ToBeDeletedSuffix}{extension}", cancellationToken);
+        await storage.CopyObjectAsync(prefix + name, prefix + kept, cancellationToken);
+        await InboxNaming.MoveMaskDraftAsync(storage, prefix, name, kept, cancellationToken);
+        await storage.DeleteObjectAsync(prefix + name, cancellationToken);
+
+        // The batch's cached preview and text layout describe a file that no longer exists under that name.
+        await SweepRenditionsAsync(prefix, name, cancellationToken);
+        return written;
+    }
+
     // The sidecar's own default set: per-version OCR languages are a property of a FILED document (ADR 0272),
     // and nothing in the inbox has been filed yet, so there is nothing more specific to ask for.
     private const string OcrLanguages = "eng+deu+fra+ita";
@@ -290,20 +359,12 @@ public sealed class InboxPageService(IObjectStorageClient storage, ISearchablePd
         await storage.PutObjectAsync(key, payload, ContentTypeOf(format), cancellationToken);
     }
 
-    // The staged mask draft, if the source has one. Best-effort by design: a missing draft is the normal case
-    // (nothing has been typed yet), not an error that should fail the split.
-    private async Task CopyMaskDraftAsync(
+    private Task CopyMaskDraftAsync(
         string prefix,
         string sourceName,
         string targetName,
-        CancellationToken cancellationToken)
-    {
-        var source = $"{prefix}{sourceName}{MaskSidecarSuffix}";
-        if (await storage.ExistsAsync(source, cancellationToken))
-        {
-            await storage.CopyObjectAsync(source, $"{prefix}{targetName}{MaskSidecarSuffix}", cancellationToken);
-        }
-    }
+        CancellationToken cancellationToken) =>
+        InboxNaming.CopyMaskDraftAsync(storage, prefix, sourceName, targetName, cancellationToken);
 
     private async Task SweepRenditionsAsync(string prefix, string name, CancellationToken cancellationToken)
     {
@@ -320,38 +381,16 @@ public sealed class InboxPageService(IObjectStorageClient storage, ISearchablePd
         }
     }
 
-    // Splitting the same file twice is a normal thing to do, so a taken name gets a numeric suffix the way a
-    // file manager would rather than failing the whole operation half-written. The cap is a guard against an
-    // unbounded loop, not a real limit anyone reaches.
-    private async Task<string> FreeNameAsync(string prefix, string candidate, CancellationToken cancellationToken)
-    {
-        if (!await storage.ExistsAsync(prefix + candidate, cancellationToken))
-        {
-            return candidate;
-        }
-
-        var stem = Stem(candidate);
-        var extension = Path.GetExtension(candidate);
-        for (var attempt = 2; attempt <= 999; attempt++)
-        {
-            var next = $"{stem} ({attempt}){extension}";
-            if (!await storage.ExistsAsync(prefix + next, cancellationToken))
-            {
-                return next;
-            }
-        }
-
-        throw new InboxItemNameConflictException(candidate);
-    }
+    // Shared with the ingest pipeline, which now does the same naming on the same prefix (#492) — one scheme
+    // rather than two that can drift. The exception is this layer's, because "give up" is an HTTP answer.
+    private async Task<string> FreeNameAsync(string prefix, string candidate, CancellationToken cancellationToken) =>
+        await InboxNaming.FreeNameAsync(storage, prefix, candidate, cancellationToken)
+        ?? throw new InboxItemNameConflictException(candidate);
 
     private static string EnsureExtension(string name, string extension) =>
         Path.GetExtension(name).Equals(extension, StringComparison.OrdinalIgnoreCase) ? name : name + extension;
 
-    private static string Stem(string name)
-    {
-        var lastDot = name.LastIndexOf('.');
-        return lastDot >= 0 ? name[..lastDot] : name;
-    }
+    private static string Stem(string name) => InboxNaming.Stem(name);
 
     private static string ContentTypeOf(PageComposer.PageFormat format) => format switch
     {
@@ -360,7 +399,10 @@ public sealed class InboxPageService(IObjectStorageClient storage, ISearchablePd
         _ => "application/octet-stream",
     };
 
-    /// <summary>The staged-mask sidecar's name suffix. Defined here and used by the controller too, so the
-    /// sidecar naming is one scheme rather than two copies that can drift apart.</summary>
-    public const string MaskSidecarSuffix = ".mask.json";
+    /// <summary>The staged-mask sidecar's name suffix, as the Api's controllers already know it.</summary>
+    /// <remarks>
+    /// Forwards to <see cref="InboxNaming"/>, which is where the inbox's naming now lives: the ingest pipeline
+    /// in Infrastructure needs the same constant, and Infrastructure cannot see the Api.
+    /// </remarks>
+    public const string MaskSidecarSuffix = InboxNaming.MaskSidecarSuffix;
 }

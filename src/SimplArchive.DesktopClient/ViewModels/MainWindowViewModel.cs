@@ -75,7 +75,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         // The straightening toggle's state belongs to the USER, not the machine, so it is read from the server
         // once per session rather than restored from local settings (#491).
-        Safe.Fire(async () => await InboxActions.LoadDeskewPreferenceAsync());
+        Safe.Fire(async () => await InboxActions.LoadIngestPreferencesAsync());
 
         // Read the API root's link relations once per session (ADR 0543): the root is the one URL a client may
         // know, and everything else is discovered from it. Fire-and-forget — a workbench that cannot reach the
@@ -2320,6 +2320,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             // address, so the Join action costs no extra request when a selection later enables it.
             var listing = await _api.Inbox.ListAsync(InboxIncludeGroups, InboxViewUserId);
             InboxActions.JoinHref = listing.Href("join");
+            InboxActions.PatchCodeSheetHref = listing.Href("patchCodeSheet");
             foreach (var item in listing.Items)
             {
                 ServerInbox.Add(new InboxItemViewModel

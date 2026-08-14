@@ -48,6 +48,9 @@ public sealed partial class InboxItemActionsViewModel : ObservableObject
     /// </remarks>
     [ObservableProperty] private string? _joinHref;
 
+    /// <summary>The printable Patch 3 separator sheet's address, captured from the same listing (#492).</summary>
+    [ObservableProperty] private string? _patchCodeSheetHref;
+
     /// <summary>
     /// What the SELECTED item's pages can do, or null when the server offers nothing — a format with no page
     /// sequence, a one-page file, or no selection at all.
@@ -70,6 +73,8 @@ public sealed partial class InboxItemActionsViewModel : ObservableObject
 
     public bool CanDeskew => Pages?.CanDeskew == true;
 
+    public bool CanCutAtPatchCodes => Pages?.CanCutAtPatchCodes == true;
+
     /// <summary>
     /// Whether crooked scans are straightened automatically for this user (#491) — the ribbon toggle's state,
     /// held down while on.
@@ -81,11 +86,18 @@ public sealed partial class InboxItemActionsViewModel : ObservableObject
     /// </remarks>
     [ObservableProperty] private bool _deskewAutomatically = true;
 
+    /// <summary>
+    /// Whether an arriving batch scan is cut into one item per document at its separator sheets (#492) — the
+    /// second ribbon toggle, and a sibling of the one above in every respect.
+    /// </summary>
+    [ObservableProperty] private bool _cutAtPatchCodesAutomatically = true;
+
     partial void OnPagesChanged(InboxApi.PagesInfo? value)
     {
         OnPropertyChanged(nameof(CanSplit));
         OnPropertyChanged(nameof(CanSort));
         OnPropertyChanged(nameof(CanDeskew));
+        OnPropertyChanged(nameof(CanCutAtPatchCodes));
     }
 
     partial void OnSelectedCountChanged(int value) => OnPropertyChanged(nameof(CanJoin));
@@ -214,32 +226,91 @@ public sealed partial class InboxItemActionsViewModel : ObservableObject
         });
     }
 
-    /// <summary>Reads the caller's automatic-straightening preference, at sign-in.</summary>
-    public async Task LoadDeskewPreferenceAsync()
-    {
-        if (_api?.Invoke() is { } api)
-        {
-            DeskewAutomatically = await api.Inbox.GetDeskewPreferenceAsync();
-        }
-    }
-
-    /// <summary>Writes the toggle through, putting the button back if the server refuses.</summary>
-    public async Task SetDeskewAutomaticallyAsync(bool enabled)
+    /// <summary>Cuts one batch scan at its separator sheets, on demand (#492).</summary>
+    public async Task CutAtPatchCodesAsync(InboxItemViewModel item, string patchCodesHref)
     {
         if (_api?.Invoke() is not { } api)
         {
             return;
         }
 
-        var previous = DeskewAutomatically;
-        DeskewAutomatically = enabled;
+        await RunAsync(async () =>
+        {
+            var parts = await api.Inbox.CutAtPatchCodesAsync(patchCodesHref);
+            Status(string.Format(Strings.Get("StInboxCutAtPatchCodes"), item.Name, parts.Count));
+        });
+    }
+
+    /// <summary>
+    /// Fetches the printable separator sheet and opens it in whatever prints PDFs on this machine (#492).
+    /// </summary>
+    /// <remarks>
+    /// Opening it rather than saving it somewhere: the sheet's whole purpose is to come out of a printer, and
+    /// a file the user then has to find is a step between them and the only thing they wanted.
+    /// </remarks>
+    public async Task OpenPatchCodeSheetAsync()
+    {
+        if (_api?.Invoke() is not { } api || PatchCodeSheetHref is not { } href)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var sheet = await api.Inbox.GetBytesAsync(href);
+            await NativeFileOpener.OpenBytesAsync(sheet, "SimplArchive-Patch3-Separator.pdf");
+        });
+    }
+
+    /// <summary>Reads both ribbon preferences at sign-in, in one request.</summary>
+    public async Task LoadIngestPreferencesAsync()
+    {
+        if (_api?.Invoke() is { } api)
+        {
+            var preferences = await api.Inbox.GetPreferencesAsync();
+            DeskewAutomatically = preferences.Deskew;
+            CutAtPatchCodesAutomatically = preferences.CutAtPatchCodes;
+        }
+    }
+
+    /// <summary>Writes the straighten toggle through, putting the button back if the server refuses.</summary>
+    public Task SetDeskewAutomaticallyAsync(bool enabled) =>
+        SetPreferenceAsync(
+            enabled,
+            DeskewAutomatically,
+            value => DeskewAutomatically = value,
+            (api, on) => api.Inbox.SetDeskewPreferenceAsync(on));
+
+    /// <summary>Writes the cut-at-separators toggle through, on the same terms.</summary>
+    public Task SetCutAtPatchCodesAutomaticallyAsync(bool enabled) =>
+        SetPreferenceAsync(
+            enabled,
+            CutAtPatchCodesAutomatically,
+            value => CutAtPatchCodesAutomatically = value,
+            (api, on) => api.Inbox.SetPatchCodePreferenceAsync(on));
+
+    // Optimistic, then reverted on refusal — a toggle that stays down after the server said no is a button
+    // claiming a state nobody holds. Which property and which call differ; the shape does not, so it is stated
+    // once and the difference arrives as two lambdas.
+    private async Task SetPreferenceAsync(
+        bool enabled,
+        bool previous,
+        Action<bool> set,
+        Func<SimplArchiveApiClient, bool, Task> write)
+    {
+        if (_api?.Invoke() is not { } api)
+        {
+            return;
+        }
+
+        set(enabled);
         try
         {
-            await api.Inbox.SetDeskewPreferenceAsync(enabled);
+            await write(api, enabled);
         }
         catch (ApiActionException e)
         {
-            DeskewAutomatically = previous;
+            set(previous);
             Status(e.Message);
         }
     }

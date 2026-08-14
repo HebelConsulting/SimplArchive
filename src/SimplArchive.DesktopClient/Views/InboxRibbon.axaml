@@ -1,0 +1,61 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.InboxRibbon"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- Inbox ribbon (ADR 0575) — the tab's own actions, in the same place the Repositories tab keeps
+         its own: grouped by concern in a WrapPanel so whole groups reflow rather than clip. The page
+         operations live here rather than on the row, because Join acts on a SELECTION and a per-row
+         button cannot express that. The WebDAV button moved up from the bottom-left corner, so every
+         inbox action is in one place instead of two. -->
+    <Border Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+        <WrapPanel Orientation="Horizontal">
+            <!-- Pages group: what is INSIDE a staged scan (#487). Each is disabled until the server
+                 says it can succeed — a one-page file offers no split or sort (ADR 0554). -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="inbox-split" IsEnabled="{Binding InboxActions.CanSplit}"
+                        Click="OnInboxSplit" ToolTip.Tip="{loc:Tr InboxSplit}"><i:Icon Value="mdi-call-split" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="inbox-sort" IsEnabled="{Binding InboxActions.CanSort}"
+                        Click="OnInboxSortPages" ToolTip.Tip="{loc:Tr InboxSortTitle}"><i:Icon Value="mdi-sort" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="inbox-join" IsEnabled="{Binding InboxActions.CanJoin}"
+                        Click="OnInboxJoin" ToolTip.Tip="{loc:Tr InboxJoinTitle}"><i:Icon Value="mdi-call-merge" FontSize="18" /></Button>
+            </StackPanel>
+            <!-- Straightening group (#491): the sticky preference, held DOWN while on, beside the
+                 one-off action. A toggle that stays down is the affordance asked for — it says what
+                 the system will keep doing, where a menu item says only what it did once. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <ToggleButton AutomationProperties.AutomationId="inbox-deskew-auto"
+                              IsChecked="{Binding InboxActions.DeskewAutomatically}"
+                              Click="OnInboxDeskewAutoToggled" ToolTip.Tip="{loc:Tr InboxDeskewAutoTip}"><i:Icon Value="mdi-image-auto-adjust" FontSize="18" /></ToggleButton>
+                <Button AutomationProperties.AutomationId="inbox-deskew" IsEnabled="{Binding InboxActions.CanDeskew}"
+                        Click="OnInboxDeskew" ToolTip.Tip="{loc:Tr InboxDeskewNow}"><i:Icon Value="mdi-angle-acute" FontSize="18" /></Button>
+            </StackPanel>
+            <!-- Separator-sheet group (#492): the same shape as straightening, and next to it,
+                 because the two are one story — a batch is straightened and then cut, in that
+                 order. The third button prints the sheet itself, which is the step nothing else
+                 in the app can substitute for. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <ToggleButton AutomationProperties.AutomationId="inbox-patch-auto"
+                              IsChecked="{Binding InboxActions.CutAtPatchCodesAutomatically}"
+                              Click="OnInboxPatchAutoToggled" ToolTip.Tip="{loc:Tr InboxPatchAutoTip}"><i:Icon Value="mdi-content-cut" FontSize="18" /></ToggleButton>
+                <Button AutomationProperties.AutomationId="inbox-patch-cut" IsEnabled="{Binding InboxActions.CanCutAtPatchCodes}"
+                        Click="OnInboxPatchCut" ToolTip.Tip="{loc:Tr InboxPatchCutNow}"><i:Icon Value="mdi-scissors-cutting" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="inbox-patch-sheet"
+                        Click="OnInboxPatchSheet" ToolTip.Tip="{loc:Tr InboxPatchSheetTip}"><i:Icon Value="mdi-printer" FontSize="18" /></Button>
+            </StackPanel>
+            <!-- Item group: what to do with the staged file as a whole. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button IsEnabled="{Binding CanFileMultiple}" Click="OnInboxFileMultiple" ToolTip.Tip="{loc:Tr MwFileSelectedTip}"><i:Icon Value="mdi-file-move-outline" FontSize="18" /></Button>
+                <Button Command="{Binding RefreshInboxCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
+            </StackPanel>
+            <!-- General group: one WebDAV button that does the next useful thing — set up, mount, or
+                 open this tab's own folder (ADR "One WebDAV button per tab, deep-linked"). -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+                <Button Click="OnWebDavTabButton" Tag="Personal/Inbox" AutomationProperties.AutomationId="inbox-webdav"
+                        ToolTip.Tip="{Binding WebDav.Tooltip}"><i:Icon Value="mdi-folder-network-outline" FontSize="18" /></Button>
+            </StackPanel>
+        </WrapPanel>
+    </Border>
+</UserControl>

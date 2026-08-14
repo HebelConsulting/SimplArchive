@@ -209,7 +209,7 @@ public partial class MainWindow : Window
     // Each is addressed from the href the server advertised for the SELECTED row, never composed (ADR 0543),
     // and each re-reads that address at the moment of acting rather than trusting pane state (ADR 0559).
 
-    private void OnInboxSplit(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnInboxSplit(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm
             || ServerInboxList.SelectedItem is not InboxItemViewModel item
@@ -227,7 +227,7 @@ public partial class MainWindow : Window
         }
     });
 
-    private void OnInboxSortPages(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnInboxSortPages(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm
             || ServerInboxList.SelectedItem is not InboxItemViewModel item
@@ -246,7 +246,7 @@ public partial class MainWindow : Window
         }
     });
 
-    private void OnInboxDeskewAutoToggled(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnInboxDeskewAutoToggled(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && sender is ToggleButton { IsChecked: { } enabled })
         {
@@ -256,7 +256,7 @@ public partial class MainWindow : Window
 
     // Straighten THIS document, now. Addressed from the selected row's own deskew rel, re-read at the moment of
     // acting rather than trusted from pane state (ADR 0559).
-    private void OnInboxDeskew(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnInboxDeskew(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm
             || ServerInboxList.SelectedItem is not InboxItemViewModel item
@@ -274,7 +274,45 @@ public partial class MainWindow : Window
         }
     });
 
-    private void OnInboxJoin(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnInboxPatchAutoToggled(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && sender is ToggleButton { IsChecked: { } enabled })
+        {
+            await vm.InboxActions.SetCutAtPatchCodesAutomaticallyAsync(enabled);
+        }
+    });
+
+    // Cut THIS batch at its separator sheets, now — addressed from the selected row's own rel, re-read at the
+    // moment of acting rather than trusted from pane state (ADR 0559).
+    internal void OnInboxPatchCut(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm
+            || ServerInboxList.SelectedItem is not InboxItemViewModel item
+            || await vm.InboxActions.GetPagesAsync(item) is not { PatchCodesHref: { } patchCodesHref })
+        {
+            return;
+        }
+
+        // What happens to the batch is stated before it happens: it stays, under a name that says it can go.
+        // A user who expects it to vanish and finds it still there concludes the cut did not work.
+        var prompt = string.Format(Strings.Get("InboxPatchCutConfirm"), item.Name);
+        if (await new ConfirmDialog(prompt, Strings.Get("InboxPatchCutNow")).ShowDialog<bool>(this))
+        {
+            await vm.InboxActions.CutAtPatchCodesAsync(item, patchCodesHref);
+        }
+    });
+
+    // The separator sheet itself, opened in whatever the OS prints PDFs with. Nothing else in the app can
+    // substitute for this step: without a printed sheet there is nothing to cut at.
+    internal void OnInboxPatchSheet(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm)
+        {
+            await vm.InboxActions.OpenPatchCodeSheetAsync();
+        }
+    });
+
+    internal void OnInboxJoin(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {

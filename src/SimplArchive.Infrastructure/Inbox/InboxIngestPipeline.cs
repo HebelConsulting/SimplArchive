@@ -50,13 +50,17 @@ public sealed class InboxIngestPipeline(
     /// </remarks>
     public const string SignedSuffix = ".signed";
 
-    private const string MaskSidecarSuffix = ".mask.json";
+    private const string MaskSidecarSuffix = InboxNaming.MaskSidecarSuffix;
 
     /// <summary>
-    /// Runs the pipeline over one staged item. Returns the item's name afterwards — which differs from the one
-    /// passed in when a processor changed the format — or null when nothing ran.
+    /// Runs the pipeline over one staged item, and answers with what is in the inbox afterwards.
     /// </summary>
-    public async Task<string?> RunAsync(
+    /// <remarks>
+    /// Usually that is the same one item, under the same name or a new one when a processor changed the
+    /// format. It is <b>several</b> when a processor cut the item up (#492), and <b>empty</b> when nothing ran
+    /// at all — a sidecar, an item already processed, or one that has since been deleted.
+    /// </remarks>
+    public async Task<IReadOnlyList<string>> RunAsync(
         Guid tenantId,
         Guid userId,
         string prefix,
@@ -68,12 +72,12 @@ public sealed class InboxIngestPipeline(
             || name.EndsWith(MaskSidecarSuffix, StringComparison.OrdinalIgnoreCase)
             || await storage.ExistsAsync($"{prefix}{name}{MarkerSuffix}", cancellationToken))
         {
-            return null; // a sidecar, or already done
+            return []; // a sidecar, or already done
         }
 
         if (!await storage.ExistsAsync(prefix + name, cancellationToken))
         {
-            return null; // an upload that never completed, or an item deleted since
+            return []; // an upload that never completed, or an item deleted since
         }
 
         var bytes = await ReadAsync(prefix + name, cancellationToken);
@@ -94,68 +98,133 @@ public sealed class InboxIngestPipeline(
             }
 
             await MarkSeenAsync(prefix, name, cancellationToken);
-            return null;
+            return [];
         }
 
-        var currentName = name;
-        var ran = new List<string>();
+        // The item, and then whatever it became. A processor is allowed to cut one item into several, and the
+        // ones after it get a turn over each piece — which is why this is a list and not a running name.
+        var items = new List<(string Name, byte[] Bytes)> { (name, bytes) };
+        var ran = new List<string>();  // each processor at most once, however many items it acted on
 
         foreach (var processor in processors)
         {
-            try
-            {
-                if (await processor.TryProcessAsync(
-                        new InboxIngestContext(tenantId, userId, prefix, currentName, bytes), cancellationToken)
-                    is not { } processed)
-                {
-                    continue; // declined: not enabled, or not the kind of file it acts on
-                }
+            var next = new List<(string Name, byte[] Bytes)>();
 
-                bytes = processed.Bytes;
-                currentName = await ReplaceAsync(prefix, currentName, processed, cancellationToken);
-                ran.Add(processor.Name);
-            }
-            catch (Exception e)
+            foreach (var item in items)
             {
-                // One processor failing must not deprive the item of the others, and must not leave it
-                // unmarked — an item that throws every pass would otherwise be retried by the sweep forever.
-                logger.LogWarning(e, "Inbox ingest processor {Processor} failed for {Item}; continuing.", processor.Name, currentName);
+                try
+                {
+                    if (await processor.TryProcessAsync(
+                            new InboxIngestContext(tenantId, userId, prefix, item.Name, item.Bytes), cancellationToken)
+                        is not { } processed)
+                    {
+                        next.Add(item); // declined: not enabled, or not the kind of file it acts on
+                        continue;
+                    }
+
+                    next.AddRange(await ReplaceAsync(prefix, item.Name, processed, cancellationToken));
+                    if (!ran.Contains(processor.Name))
+                    {
+                        ran.Add(processor.Name);
+                    }
+                }
+                catch (Exception e)
+                {
+                    // One processor failing must not deprive the item of the others, and must not leave it
+                    // unmarked — an item that throws every pass would otherwise be retried by the sweep forever.
+                    logger.LogWarning(e, "Inbox ingest processor {Processor} failed for {Item}; continuing.", processor.Name, item.Name);
+                    next.Add(item);
+                }
             }
+
+            items = next;
         }
 
-        await MarkAsync(prefix, currentName, ran, cancellationToken);
-        return currentName;
+        foreach (var item in items)
+        {
+            await MarkAsync(prefix, item.Name, ran, cancellationToken);
+        }
+
+        return items.Select(i => i.Name).ToList();
     }
 
-    // Replaces the item in place, or under a new name when the format changed — and takes the staged mask
-    // sidecar with it, since the draft belongs to the item and not to its extension.
-    private async Task<string> ReplaceAsync(
+    /// <summary>
+    /// Writes what a processor produced, and answers with what is now in the inbox in the source's place.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>One part replaces the item</b> — in place, or under a new name when the format changed, taking the
+    /// staged mask sidecar with it, since the draft belongs to the item and not to its extension.
+    /// </para>
+    /// <para>
+    /// <b>Several parts leave the source behind</b>, renamed with <see cref="InboxNaming.ToBeDeletedSuffix"/>
+    /// and marked as already processed. Deleting it would be the tidier-looking choice and the wrong one: a
+    /// batch cut in the wrong place is recoverable only from the batch, and the user has not seen the result
+    /// yet at the moment this runs.
+    /// </para>
+    /// </remarks>
+    private async Task<List<(string Name, byte[] Bytes)>> ReplaceAsync(
         string prefix,
         string name,
         InboxProcessed processed,
         CancellationToken cancellationToken)
     {
-        var stem = Path.GetFileNameWithoutExtension(name);
-        var newName = stem + processed.Extension;
+        var stem = InboxNaming.Stem(name);
 
-        await using (var payload = new MemoryStream(processed.Bytes))
+        if (processed.Parts is [var only])
         {
-            await storage.PutObjectAsync(prefix + newName, payload, processed.ContentType, cancellationToken);
-        }
+            var newName = stem + only.Extension;
+            await WriteAsync(prefix + newName, only, cancellationToken);
 
-        if (!string.Equals(newName, name, StringComparison.Ordinal))
-        {
-            var draft = $"{prefix}{name}{MaskSidecarSuffix}";
-            if (await storage.ExistsAsync(draft, cancellationToken))
+            if (!string.Equals(newName, name, StringComparison.Ordinal))
             {
-                await storage.CopyObjectAsync(draft, $"{prefix}{newName}{MaskSidecarSuffix}", cancellationToken);
-                await storage.DeleteObjectAsync(draft, cancellationToken);
+                await InboxNaming.MoveMaskDraftAsync(storage, prefix, name, newName, cancellationToken);
+                await storage.DeleteObjectAsync(prefix + name, cancellationToken);
             }
 
-            await storage.DeleteObjectAsync(prefix + name, cancellationToken);
+            return [(newName, only.Bytes)];
         }
 
-        return newName;
+        var written = new List<(string Name, byte[] Bytes)>(processed.Parts.Count);
+        for (var i = 0; i < processed.Parts.Count; i++)
+        {
+            var part = processed.Parts[i];
+            var candidate = $"{stem} ({i + 1}){part.Extension}";
+            if (await InboxNaming.FreeNameAsync(storage, prefix, candidate, cancellationToken) is not { } partName)
+            {
+                continue; // a thousand items of the same name: leave the batch alone rather than half-write it
+            }
+
+            await WriteAsync(prefix + partName, part, cancellationToken);
+            await InboxNaming.CopyMaskDraftAsync(storage, prefix, name, partName, cancellationToken);
+            written.Add((partName, part.Bytes));
+        }
+
+        await RenameSourceAsync(prefix, name, cancellationToken);
+        return written;
+    }
+
+    private async Task RenameSourceAsync(string prefix, string name, CancellationToken cancellationToken)
+    {
+        var kept = $"{InboxNaming.Stem(name)}{InboxNaming.ToBeDeletedSuffix}{Path.GetExtension(name)}";
+        if (await InboxNaming.FreeNameAsync(storage, prefix, kept, cancellationToken) is not { } keptName)
+        {
+            return; // leave it under its own name rather than lose it to a naming collision
+        }
+
+        await storage.CopyObjectAsync(prefix + name, prefix + keptName, cancellationToken);
+        await InboxNaming.MoveMaskDraftAsync(storage, prefix, name, keptName, cancellationToken);
+        await storage.DeleteObjectAsync(prefix + name, cancellationToken);
+
+        // Marked here rather than by the loop above: the source is no longer one of the items being carried
+        // forward, and an unmarked file in an inbox is one the sweep will pick up and cut all over again.
+        await MarkSeenAsync(prefix, keptName, cancellationToken);
+    }
+
+    private async Task WriteAsync(string key, InboxPart part, CancellationToken cancellationToken)
+    {
+        await using var payload = new MemoryStream(part.Bytes);
+        await storage.PutObjectAsync(key, payload, part.ContentType, cancellationToken);
     }
 
     /// <summary>
@@ -205,4 +274,20 @@ public interface IInboxIngestProcessor
 
 public sealed record InboxIngestContext(Guid TenantId, Guid UserId, string Prefix, string Name, byte[] Bytes);
 
-public sealed record InboxProcessed(byte[] Bytes, string Extension, string ContentType);
+/// <summary>What a processor made out of the item it was given: usually one file, sometimes several.</summary>
+/// <remarks>
+/// The plural case is patch-code cutting (#492), where one batch scan becomes one item per document in the
+/// stack. Modelling it as a list rather than giving fan-out its own contract is what lets the processors after
+/// it run over each piece — a rule the pipeline can state once, instead of one that holds only while the
+/// fan-out happens to be last.
+/// </remarks>
+public sealed record InboxProcessed(IReadOnlyList<InboxPart> Parts)
+{
+    /// <summary>The ordinary case: the item rewritten, still one file.</summary>
+    public InboxProcessed(byte[] bytes, string extension, string contentType)
+        : this([new InboxPart(bytes, extension, contentType)])
+    {
+    }
+}
+
+public sealed record InboxPart(byte[] Bytes, string Extension, string ContentType);

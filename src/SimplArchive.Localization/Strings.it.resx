@@ -4044,6 +4044,9 @@
   <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
     <value>L&#x27;ordine delle pagine deve elencare ogni pagina esattamente una volta.</value>
   </data>
+  <data name="ApiErrInboxNoPatchCodes" xml:space="preserve">
+    <value>In questa scansione non sono stati trovati fogli separatori, quindi non c&#x27;è nulla da tagliare. Verifica che i fogli fossero nella pila e siano passati abbastanza dritti.</value>
+  </data>
   <data name="SignedBadge" xml:space="preserve">
     <value>Firmato</value>
   </data>
@@ -4067,6 +4070,27 @@
   </data>
   <data name="StInboxDeskewNothing" xml:space="preserve">
     <value>Niente da raddrizzare in &#x27;{0}&#x27;.</value>
+  </data>
+  <data name="InboxPatchAuto" xml:space="preserve">
+    <value>Taglia i lotti automaticamente ai fogli separatori</value>
+  </data>
+  <data name="InboxPatchAutoTip" xml:space="preserve">
+    <value>Taglia una scansione di un lotto in arrivo in un documento per ogni foglio separatore. Il lotto viene conservato e rinominato &#x27;…_to_be_deleted&#x27;. I documenti firmati non vengono mai toccati.</value>
+  </data>
+  <data name="InboxPatchCutNow" xml:space="preserve">
+    <value>Taglia ai fogli separatori…</value>
+  </data>
+  <data name="InboxPatchCutConfirm" xml:space="preserve">
+    <value>Tagliare &#x27;{0}&#x27; ai suoi fogli separatori? Le pagine separatrici vengono scartate e il lotto viene conservato, rinominato &#x27;…_to_be_deleted&#x27;, così puoi controllare il risultato prima di eliminarlo.</value>
+  </data>
+  <data name="InboxPatchSheetTip" xml:space="preserve">
+    <value>Stampa il foglio separatore: la pagina da mettere tra i documenti della pila.</value>
+  </data>
+  <data name="InboxPatchSampleTip" xml:space="preserve">
+    <value>Scarica una scansione di esempio per provare senza uno scanner.</value>
+  </data>
+  <data name="StInboxCutAtPatchCodes" xml:space="preserve">
+    <value>&#x27;{0}&#x27; tagliato in {1} documento/i.</value>
   </data>
   <data name="InboxPageRemove" xml:space="preserve">
     <value>Rimuovi questa pagina</value>

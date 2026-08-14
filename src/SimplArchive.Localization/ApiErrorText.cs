@@ -50,6 +50,7 @@ public static class ApiErrorText
         "INBOX_JOIN_NEEDS_SEVERAL_ITEMS" => Strings.Get("ApiErrInboxJoinNeedsSeveral"),
         "INBOX_JOIN_NOT_HOMOGENEOUS" => Strings.Get("ApiErrInboxJoinNotHomogeneous"),
         "INBOX_PAGE_ORDER_INVALID" => Strings.Get("ApiErrInboxPageOrderInvalid"),
+        "INBOX_NO_PATCH_CODES_FOUND" => Strings.Get("ApiErrInboxNoPatchCodes"),
         _ => Strings.Get("ApiErrGeneric"),
     };
 }

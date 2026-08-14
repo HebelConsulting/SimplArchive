@@ -31,7 +31,9 @@ public class OverLimitFileCeilingTests
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).
         // MainWindow.axaml is pure markup; whether the 1000-line rule covers markup-only .axaml is undecided,
         // but a ceiling costs nothing while that question waits.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 2_464,
+        // Lowered from 2,464 by ADR 0577: the Inbox ribbon became InboxRibbon.axaml. It had gained a group per
+        // feature — pages, straightening, separator sheets — and each one arrived here as more lines.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 2_427,
         ["src/SimplArchive.DesktopClient/Program.cs"] = 1_253,
         ["src/SimplArchive.Api/Controllers/InboxController.cs"] = 1_071,
         ["src/SimplArchive.Api/Controllers/DocumentVersionsController.cs"] = 1_067,

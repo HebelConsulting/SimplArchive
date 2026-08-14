@@ -260,7 +260,7 @@ public partial class MainWindow
 
     // "File multiple items": bulk-file the selected server inbox items into one folder (ADR "Bulk-file multiple
     // inbox items").
-    private void OnInboxFileMultiple(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnInboxFileMultiple(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
@@ -345,7 +345,7 @@ public partial class MainWindow
     // not ask.
     //
     // The button's Tag names the folder within the single mount ("Personal/Inbox", "Personal/Check-out").
-    private void OnWebDavTabButton(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnWebDavTabButton(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel { Api: { } api } vm)
         {

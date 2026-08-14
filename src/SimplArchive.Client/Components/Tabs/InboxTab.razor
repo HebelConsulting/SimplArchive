@@ -66,12 +66,27 @@
         {
             <MudButton Variant="Variant.Text" OnClick="DeskewAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.Straighten">@Strings.Get("InboxDeskewNow")</MudButton>
         }
-        @* The sticky preference, held DOWN while on — the desktop's ribbon toggle, in this tab's toolbar
-           (ADR 0511). Server-side per user, because the Worker's sweep reads it for WebDAV arrivals. *@
+        @if (_pages is { CanCutAtPatchCodes: true })
+        {
+            <MudButton Variant="Variant.Text" OnClick="CutAtPatchCodesAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.ContentCut">@Strings.Get("InboxPatchCutNow")</MudButton>
+        }
+        @* The sticky preferences, held DOWN while on — the desktop's ribbon toggles, in this tab's toolbar
+           (ADR 0511). Server-side per user, because the Worker's sweep reads them for WebDAV arrivals. *@
         <MudToggleIconButton Toggled="_deskewAutomatically" ToggledChanged="SetDeskewAutomaticallyAsync"
                              Icon="@Icons.Material.Outlined.AutoFixHigh" ToggledIcon="@Icons.Material.Filled.AutoFixHigh"
                              Color="Color.Default" ToggledColor="Color.Primary" Class="ml-2"
                              title="@Strings.Get("InboxDeskewAutoTip")" />
+        <MudToggleIconButton Toggled="_cutAtPatchCodesAutomatically" ToggledChanged="SetCutAtPatchCodesAutomaticallyAsync"
+                             Icon="@Icons.Material.Outlined.ContentCut" ToggledIcon="@Icons.Material.Filled.ContentCut"
+                             Color="Color.Default" ToggledColor="Color.Primary" Class="ml-1"
+                             title="@Strings.Get("InboxPatchAutoTip")" />
+        @if (_patchCodeSheetHref is { } sheetHref)
+        {
+            @* A plain link, because the browser already knows how to show a PDF and then print it — a fetch
+               into a blob would take that away and give nothing back. *@
+            <MudIconButton Href="@sheetHref" Target="_blank" Icon="@Icons.Material.Filled.Print" Class="ml-1"
+                           title="@Strings.Get("InboxPatchSheetTip")" />
+        }
         @if (_inboxBusy)
         {
             <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="ml-2" />
@@ -351,6 +366,7 @@
         {
             var me = await Http.GetFromJsonAsync<MeResponse>(await ApiRoot.RequireAsync("me"));
             _deskewAutomatically = me?.DeskewInboxUploads ?? true;
+            _cutAtPatchCodesAutomatically = me?.CutInboxUploadsAtPatchCodes ?? true;
         }
         catch (Exception)
         {
@@ -377,6 +393,7 @@
                 : inbox;
             var response = await Http.GetFromJsonAsync<InboxResponse>(url);
             _joinHref = Links.Href(response?.Links, "join");
+            _patchCodeSheetHref = Links.Href(response?.Links, "patchCodeSheet");
             _inboxItems = (response?.Items ?? []).Select(i => new InboxItem(
                 i.Name, i.Size, i.HasMask,
                 Links.Href(i.Links, "download") ?? "", Links.Href(i.Links, "preview") ?? "",
@@ -646,16 +663,28 @@
     private string? _joinHref;
     private PagesInfo? _pages;
 
-    private sealed record PagesInfo(int PageCount, string? SplitHref, string? SortHref, string? DeskewHref)
+    private sealed record PagesInfo(
+        int PageCount,
+        string? SplitHref,
+        string? SortHref,
+        string? DeskewHref,
+        string? PatchCodesHref)
     {
         public bool CanSplit => SplitHref is not null;
 
         public bool CanSort => SortHref is not null;
 
         public bool CanDeskew => DeskewHref is not null;
+
+        public bool CanCutAtPatchCodes => PatchCodesHref is not null;
     }
 
     private bool _deskewAutomatically = true;
+
+    private bool _cutAtPatchCodesAutomatically = true;
+
+    // The printable separator sheet, captured from the inbox listing that advertised it (ADR 0557).
+    private string? _patchCodeSheetHref;
 
     // Asked whenever the checked set changes, and CLEARED first: a rel that has not arrived means "not
     // available here, now", which during the request is exactly true — so the buttons never describe the
@@ -676,7 +705,8 @@
                 response?.PageCount ?? 0,
                 Links.Href(response?.Links, "split"),
                 Links.Href(response?.Links, "sort"),
-                Links.Href(response?.Links, "deskew"));
+                Links.Href(response?.Links, "deskew"),
+                Links.Href(response?.Links, "patchCodes"));
         }
         catch (Exception)
         {
@@ -797,16 +827,55 @@
         });
     }
 
-    // Writes the toggle through, putting the button back if the server refuses — a control showing a state the
-    // server does not hold is worse than one that failed visibly.
-    private async Task SetDeskewAutomaticallyAsync(bool enabled)
+    // Cut THIS batch at its separator sheets, now. What happens to the batch is stated before it happens: it
+    // stays, under a name that says it can go — a user who expects it to vanish and finds it still there
+    // concludes the cut did not work.
+    private async Task CutAtPatchCodesAsync()
     {
-        var previous = _deskewAutomatically;
-        _deskewAutomatically = enabled;
+        if (_pages is not { PatchCodesHref: { } patchCodesHref } || _inboxChecked.SingleOrDefault() is not { } item)
+        {
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = Strings.Get("InboxPatchCutNow"),
+            Message = string.Format(Strings.Get("InboxPatchCutConfirm"), item.Name),
+            YesText = Strings.Get("InboxPatchCutNow"),
+            CancelText = Strings.Get("Cancel"),
+        });
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(async () =>
+        {
+            var response = await Http.PostAsJsonAsync(patchCodesHref, new { });
+            await ThrowIfRefusedAsync(response);
+            var written = await response.Content.ReadFromJsonAsync<InboxPageItemsResponse>();
+            _inboxStatus = string.Format(
+                Strings.Get("StInboxCutAtPatchCodes"), item.Name, written?.Names.Count ?? 0);
+        });
+    }
+
+    // Writes a toggle through, putting the button back if the server refuses — a control showing a state the
+    // server does not hold is worse than one that failed visibly. Which rel and which field differ; the shape
+    // does not, so the difference arrives as two lambdas rather than as a second copy.
+    private Task SetDeskewAutomaticallyAsync(bool enabled) =>
+        SetPreferenceAsync("deskewPreference", enabled, _deskewAutomatically, value => _deskewAutomatically = value);
+
+    private Task SetCutAtPatchCodesAutomaticallyAsync(bool enabled) =>
+        SetPreferenceAsync("patchCodePreference", enabled, _cutAtPatchCodesAutomatically, value => _cutAtPatchCodesAutomatically = value);
+
+    private async Task SetPreferenceAsync(string rel, bool enabled, bool previous, Action<bool> set)
+    {
+        set(enabled);
         try
         {
             var me = await Http.GetFromJsonAsync<MeResponse>(await ApiRoot.RequireAsync("me"));
-            if (Links.Href(me?.Links, "deskewPreference") is not { } href)
+            if (Links.Href(me?.Links, rel) is not { } href)
             {
                 return;
             }
@@ -815,12 +884,19 @@
         }
         catch (Exception)
         {
-            _deskewAutomatically = previous;
+            set(previous);
             _inboxStatus = ApiErrorText.For(null);
         }
     }
 
-    private record MeResponse { public bool DeskewInboxUploads { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record MeResponse
+    {
+        public bool DeskewInboxUploads { get; set; }
+
+        public bool CutInboxUploadsAtPatchCodes { get; set; }
+
+        public List<LinkResponse> Links { get; set; } = [];
+    }
 
     private async Task JoinItemsAsync()
     {

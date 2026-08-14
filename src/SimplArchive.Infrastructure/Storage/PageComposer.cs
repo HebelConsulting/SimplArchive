@@ -104,6 +104,53 @@ public static class PageComposer
         return Join(picked, format);
     }
 
+    /// <summary>
+    /// One file per stretch of pages <b>between</b> the given separator pages, which are themselves discarded
+    /// (issue #492). The separators are 1-based page numbers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Empty stretches vanish rather than becoming empty documents: two separators in a row, or one at the
+    /// very front or back of the batch. That is not a defensive nicety — a person feeding a stack puts a sheet
+    /// at the front out of habit, and back-to-back sheets are what happens when one document is pulled out of
+    /// the pile at the last moment.
+    /// </para>
+    /// <para>
+    /// A batch with no separators yields the whole thing as one part, which is exactly right: nothing was
+    /// asked for, so nothing is cut.
+    /// </para>
+    /// </remarks>
+    public static List<byte[]> CutAt(byte[] bytes, PageFormat format, IReadOnlyList<int> separatorPages)
+    {
+        var pages = Split(bytes, format);
+        var separators = separatorPages.ToHashSet();
+        var parts = new List<byte[]>();
+        var current = new List<byte[]>();
+
+        for (var page = 1; page <= pages.Count; page++)
+        {
+            if (separators.Contains(page))
+            {
+                if (current.Count > 0)
+                {
+                    parts.Add(Join(current, format));
+                    current = [];
+                }
+
+                continue;
+            }
+
+            current.Add(pages[page - 1]);
+        }
+
+        if (current.Count > 0)
+        {
+            parts.Add(Join(current, format));
+        }
+
+        return parts;
+    }
+
     private static List<byte[]> SplitPdf(byte[] bytes)
     {
         var pages = new List<byte[]>();

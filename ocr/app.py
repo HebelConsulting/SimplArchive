@@ -10,14 +10,23 @@ as a new document version. Kept deliberately minimal — all the real work is OC
     text and PRESERVE the original page images (don't re-rasterize). The Api only sends a PDF here once it has
     detected it as image-only, so in practice every page gets OCR'd.
 """
+import glob
 import os
 import subprocess
 import tempfile
 
+import numpy as np
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
+from PIL import Image, ImageSequence
+
+import patchcode
 
 app = FastAPI()
+
+# What patch-code detection rasterises at. Well over the ~40 px a 0.08 in narrow bar needs to be measurable,
+# and far under what a 600 dpi colour scan would cost to hold in memory a page at a time.
+PATCH_DPI = 150
 
 
 @app.get("/health")
@@ -73,6 +82,71 @@ async def ocr(
             pdf = handle.read()
 
     return Response(content=pdf, media_type="application/pdf")
+
+
+@app.post("/patch-codes")
+async def patch_codes(file: UploadFile = File(...), kind: str = Query("pdf")):
+    """POST a PDF or a multi-page TIFF, get back which of its pages are Patch 3 separator sheets (issue #492).
+
+    Detection only — the caller does the cutting, because the page algebra it already owns produces the same
+    result for both formats and this endpoint would otherwise have to reproduce it in Python.
+
+    Returns `{"pageCount": n, "patchPages": [2, 5]}` with 1-based page numbers. An empty list is the ordinary
+    answer for a batch nobody put separators in, and is not an error.
+    """
+    data = await file.read()
+    with tempfile.TemporaryDirectory() as work:
+        pages = _tiff_pages(data, work) if kind == "tiff" else _pdf_pages(data, work)
+
+        found = []
+        count = 0
+        for count, (gray, dpi) in enumerate(pages, start=1):
+            if patchcode.find_patch3(gray, dpi):
+                found.append(count)
+
+    return {"pageCount": count, "patchPages": found}
+
+
+def _pdf_pages(data: bytes, work: str):
+    """Every page as an 8-bit greyscale array, rasterised by ghostscript at a known DPI."""
+    src = os.path.join(work, "in.pdf")
+    with open(src, "wb") as handle:
+        handle.write(data)
+
+    result = subprocess.run(
+        ["gs", "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-sDEVICE=pnggray",
+         f"-r{PATCH_DPI}", f"-sOutputFile={os.path.join(work, 'p-%05d.png')}", src],
+        capture_output=True,
+    )
+    rendered = sorted(glob.glob(os.path.join(work, "p-*.png")))
+    if result.returncode != 0 and not rendered:
+        raise HTTPException(status_code=500, detail=result.stderr.decode(errors="replace")[:2000])
+
+    for path in rendered:
+        with Image.open(path) as page:
+            yield np.asarray(page.convert("L")), float(PATCH_DPI)
+
+
+def _tiff_pages(data: bytes, work: str):
+    """Every frame of a multi-page TIFF, downscaled to the detection DPI so a 600 dpi scan is not carried whole."""
+    src = os.path.join(work, "in.tif")
+    with open(src, "wb") as handle:
+        handle.write(data)
+
+    with Image.open(src) as tiff:
+        for frame in ImageSequence.Iterator(tiff):
+            gray = frame.convert("L")
+
+            # Scanner TIFFs carry XResolution in practice (the Api's own scan sniff leans on it). Without one,
+            # assume the long side is a sheet of paper: A4 is 11.7 in and Letter 11.0, so 11.5 is under 5 %
+            # out either way — inside every tolerance the detector uses, all of which are ratios or generous.
+            dpi = float((gray.info.get("dpi") or (0, 0))[0]) or max(gray.size) / 11.5
+            if dpi > PATCH_DPI * 1.5:
+                scale = PATCH_DPI / dpi
+                gray = gray.resize((max(1, int(gray.width * scale)), max(1, int(gray.height * scale))))
+                dpi = PATCH_DPI
+
+            yield np.asarray(gray), dpi
 
 
 @app.post("/thumbnail")
