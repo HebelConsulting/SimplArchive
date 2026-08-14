@@ -84,3 +84,19 @@ dist/
 /src/SimplArchive.Api/wwwroot/download/clients/**/*.tar.gz
 /src/SimplArchive.Api/wwwroot/download/clients/**/*.dmg
 white-bar-bug.png
+
+# Screenshot debris and dropped fixtures at the repo root. `--demo` is what a malformed
+# `--screenshot --demo` invocation writes when the flag order puts it where the output path belongs, and it
+# reached the PUBLIC mirror twice before anyone noticed. Anything dropped here for verification (real scans,
+# bug screenshots) is somebody's own document and must never be published.
+/--*
+/*.jpg
+/*.jpeg
+/*.png
+src/SimplArchive.DesktopClient/--*
+
+# Real scans dropped in the repo root for verification (#491). They are somebody's actual receipts and
+# invoices, and this repository is published — so they must never be committed, not even by a sweeping
+# `git add -A`, which is exactly how a set of them got committed once already.
+/*.tif
+/*.tiff
