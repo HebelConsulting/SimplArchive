@@ -1,0 +1,94 @@
+@* A search or filter text field with an × that clears it and leaves the caret in the field (#503).
+
+   Shared rather than copied, and this is the case that proves why: MudBlazor's `Clearable` gives the × for
+   free, so four fields could each have grown one — and every one of them would have had the same defect, that
+   clearing loses the caret. The user then clicks ×, and has to click the field again before typing, which is a
+   one-click action costing three. Fixed once here, it cannot land on four fields and miss the fifth.
+
+   Esc is the keyboard equivalent and clears only when there is text, so an empty field lets it through to
+   whatever else Esc means there (ADR 0550). The desktop is canonical and does exactly the same (ADR 0511).
+
+   The × is MudBlazor's own adornment, so it appears whenever there is text and is not hover-gated — touch has
+   no hover (ADR 0491). *@
+
+<MudTextField @ref="_field" T="string" Value="@Value" ValueChanged="OnValueChangedAsync"
+              Immediate="@Immediate" Clearable="true" OnClearButtonClick="ClearAsync" OnKeyDown="OnKeyDownAsync"
+              Label="@Label" Placeholder="@Placeholder" Variant="Variant.Outlined" Margin="Margin.Dense"
+              Adornment="@Adornment" AdornmentIcon="@AdornmentIcon"
+              Style="@Style" Class="@Class" />
+
+@code {
+    private MudTextField<string>? _field;
+
+    /// <summary>The text in the field. Two-way: use <c>@bind-Value</c>.</summary>
+    [Parameter]
+    public string? Value { get; set; }
+
+    [Parameter]
+    public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>Raised after the field is emptied by the × or by Esc, for a caller that re-runs a query.</summary>
+    [Parameter]
+    public EventCallback Cleared { get; set; }
+
+    /// <summary>Raised for every key, so a caller can still act on Enter. Esc is consumed here.</summary>
+    [Parameter]
+    public EventCallback<KeyboardEventArgs> OnKeyDown { get; set; }
+
+    /// <summary>The floating label, where the field sits in a row of labelled controls.</summary>
+    [Parameter]
+    public string? Label { get; set; }
+
+    [Parameter]
+    public string? Placeholder { get; set; }
+
+    /// <summary>False (the default) commits on blur, which is MudBlazor's behaviour for a plain filter field.</summary>
+    [Parameter]
+    public bool Immediate { get; set; }
+
+    [Parameter]
+    public Adornment Adornment { get; set; } = Adornment.None;
+
+    [Parameter]
+    public string? AdornmentIcon { get; set; }
+
+    [Parameter]
+    public string? Style { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    // Normalised to the empty string, never null. MudBlazor's own clear sets the value to `default`, so every
+    // caller would otherwise have to be null-safe on a path that only happens when the × is clicked — and the
+    // one that is not would hand null to JS interop and take the pane down.
+    private async Task OnValueChangedAsync(string? value)
+    {
+        Value = value ?? string.Empty;
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs args)
+    {
+        // Only when there is something to clear: an empty field must not swallow Esc from whatever else wants it.
+        if (args.Key == "Escape" && !string.IsNullOrEmpty(Value))
+        {
+            await ClearAsync();
+            return;
+        }
+
+        await OnKeyDown.InvokeAsync(args);
+    }
+
+    // The order matters: empty the value first, THEN focus. Focusing a field whose value is still the old one
+    // and letting the clear land afterwards is how a cleared field re-commits what the user just removed.
+    private async Task ClearAsync()
+    {
+        await OnValueChangedAsync(string.Empty);
+        await Cleared.InvokeAsync();
+
+        if (_field is not null)
+        {
+            await _field.FocusAsync();
+        }
+    }
+}

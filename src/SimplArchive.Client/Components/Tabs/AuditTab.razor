@@ -19,7 +19,8 @@
                of security-sensitive events, cursor-paginated via a "Load more" button. *@
             <div class="wb-audit">
                 <div class="wb-audit-filters">
-                    <MudTextField @bind-Value="_auditActionFilter" Label="@Strings.Get("AuditActionLabel")" Placeholder="@Strings.Get("AuditActionPlaceholder")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:220px;" />
+                    <SearchField @bind-Value="_auditActionFilter" Label="@Strings.Get("AuditActionLabel")"
+                                 Placeholder="@Strings.Get("AuditActionPlaceholder")" Style="max-width:220px;" />
                     <MudDatePicker @bind-Date="_auditFrom" Label="@Strings.Get("AuditFrom")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:170px;" />
                     <MudDatePicker @bind-Date="_auditTo" Label="@Strings.Get("AuditTo")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:170px;" />
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="RunAuditSearchAsync">@Strings.Get("AuditApply")</MudButton>

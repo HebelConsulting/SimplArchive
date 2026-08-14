@@ -148,9 +148,6 @@ public sealed partial class PreviewViewModel : ObservableObject
     partial void OnFindQueryChanged(string value) => ApplyFindToPages();
 
     [RelayCommand]
-    private void ClearFind() => FindQuery = "";
-
-    [RelayCommand]
     private void FindNext()
     {
         if (FindCount == 0)

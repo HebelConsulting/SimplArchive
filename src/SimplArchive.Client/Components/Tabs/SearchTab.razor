@@ -53,11 +53,12 @@
 
 <div class="wb-search">
     <div class="wb-search-bar">
-        @* Clearable puts the × inside the field: it clears the TEXT only, leaving the filters and facets in
-           place, which is the narrow job. "Reset" below is the one that clears everything (#462). *@
-        <MudTextField @bind-Value="S.Query" Immediate="true" Clearable="true" OnKeyDown="OnSearchKeyDown" Style="flex:1 1 auto;"
-                      Placeholder="@Strings.Get("SearchPlaceholder")" Variant="Variant.Outlined" Margin="Margin.Dense"
-                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+        @* The × clears the TEXT only, leaving the filters and facets in place, which is the narrow job. "Reset"
+           below is the one that clears everything (#462). Shared component since #503 — the × was here already,
+           but it dropped the caret, so clearing then typing took a second click. *@
+        <SearchField @bind-Value="S.Query" Immediate="true" OnKeyDown="OnSearchKeyDown" Style="flex:1 1 auto;"
+                     Placeholder="@Strings.Get("SearchPlaceholder")"
+                     Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
         <MudSelect T="Guid?" @bind-Value="S.RepositoryId" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined"
                    Style="max-width:180px;" Class="ml-2" Placeholder="@Strings.Get("SearchAllRepos")">
             <MudSelectItem T="Guid?" Value="@((Guid?)null)">@Strings.Get("SearchAllRepos")</MudSelectItem>
@@ -126,7 +127,7 @@
             </div>
             <div class="wb-filter-row">
                 <span class="wb-filter-label">@Strings.Get("FilterCreatedBy")</span>
-                <MudTextField @bind-Value="S.CreatedBy" Placeholder="@Strings.Get("FilterNameContains")" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:240px;" />
+                <SearchField @bind-Value="S.CreatedBy" Placeholder="@Strings.Get("FilterNameContains")" Style="max-width:240px;" />
             </div>
 
             @foreach (var row in S.FieldFilters)
@@ -158,9 +159,11 @@
                     }
                     else
                     {
-                        <MudTextField @bind-Value="row.Value" Placeholder="@Strings.Get("FilterValue")" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:200px;" />
+                        <SearchField @bind-Value="row.Value" Placeholder="@Strings.Get("FilterValue")" Style="max-width:200px;" />
                     }
-                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="@(() => S.FieldFilters.Remove(row))" />
+                    @* Not a Close icon: it now sits beside an × that CLEARS the value, and two identical glyphs
+                       meaning "empty this" and "delete this row" is a choice the user has to make twice. *@
+                    <MudIconButton Icon="@Icons.Material.Filled.RemoveCircleOutline" Size="Size.Small" OnClick="@(() => S.FieldFilters.Remove(row))" />
                 </div>
             }
 

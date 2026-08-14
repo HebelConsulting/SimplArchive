@@ -2991,10 +2991,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void RemoveFieldFilter(FieldFilterRowViewModel row) => FieldFilters.Remove(row);
 
-    // Clears the search TEXT only, leaving the filters and facets in place — the narrow job behind the × in the
-    // search box (#462). "Reset search criteria" is the one that clears everything.
-    [RelayCommand]
-    private void ClearSearchText() => SearchQuery = "";
 
     // Everything the user entered: text, refinement filters and facet drill-downs, then re-run.
     //

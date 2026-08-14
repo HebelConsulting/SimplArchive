@@ -26,14 +26,19 @@
 </style>
 
 <div class="wb-checkout">
+    @* The tab's own actions, grouped left in one bar — the Inbox's shape, because the two tabs are the same
+       kind of place (#500). The heading is gone from the bar: the tab strip already names the tab, the count
+       is the line below, and a title inside the action bar pushed the actions apart for no information.
+
+       Deliberately NOT here: split, join and sort. A checked-out document is a version of a FILED document,
+       so reshaping its pages is a records question, not a clerical one — ADR 0575 confined the page algebra to
+       the Inbox. Someone who needs it drags the file into the Inbox, reshapes it there, and checks it in. *@
     <div class="wb-search-bar">
-        <MudText Typo="Typo.h6">@Strings.Get("CoHeader")</MudText>
-        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="() => Refresh.InvokeAsync()" title="@Strings.Get("RibbonRefresh")" />
-        <div style="flex:1 1 auto;"></div>
+        <MudButton Variant="Variant.Text" OnClick="() => Refresh.InvokeAsync()" StartIcon="@Icons.Material.Filled.Refresh">@Strings.Get("RibbonRefresh")</MudButton>
         @* One WebDAV control, deep-linked to the Check-out folder — the desktop's button mounts and opens; a
            browser is not allowed to mount a drive, so the nearest web-native equivalent is to hand over the
            address of that same folder (ADR 0560: a capability the browser lacks is a divergence, not a gap). *@
-        <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.ContentCopy"
+        <MudButton Variant="Variant.Text" Class="ml-2" StartIcon="@Icons.Material.Filled.ContentCopy"
                    OnClick="() => WebDavLink.CopyAsync(WebDavFolder)">@Strings.Get("InboxCopyDav")</MudButton>
     </div>
     <div class="wb-search-status">@(Checkouts.Count == 0 ? Strings.Get("CoEmpty") : string.Format(Strings.Get("CoHeldN"), Checkouts.Count))</div>

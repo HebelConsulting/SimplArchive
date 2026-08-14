@@ -100,3 +100,7 @@ src/SimplArchive.DesktopClient/--*
 # `git add -A`, which is exactly how a set of them got committed once already.
 /*.tif
 /*.tiff
+
+# Screenshots and scratch files dropped in ./tmp for a bug report. Same story as the scans above, and it has
+# already happened once: a bug screenshot rode into `main` on a `git add -A` (#507) and had to be removed.
+/tmp/

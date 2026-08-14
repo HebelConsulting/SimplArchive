@@ -31,8 +31,8 @@
             {
                 <span class="wb-pv-findgrp">
                     <MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Small" />
-                    <MudTextField T="string" Value="State.FindQuery" ValueChanged="ApplyFindAsync" Immediate="true" Placeholder="@Strings.Get("FindInDocument")"
-                                  Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:220px;" />
+                    <SearchField Value="State.FindQuery" ValueChanged="ApplyFindAsync" Immediate="true"
+                                 Placeholder="@Strings.Get("FindInDocument")" Style="max-width:220px;" />
                     <span class="mud-text-secondary" style="font-size:.8em; min-width:46px;">@State.Index / @State.Count</span>
                     <MudIconButton Class="wb-pv-find-prev" Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Disabled="@(State.Count == 0)" OnClick="FindPrevAsync" />
                     <MudIconButton Class="wb-pv-find-next" Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Disabled="@(State.Count == 0)" OnClick="FindNextAsync" />

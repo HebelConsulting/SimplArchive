@@ -282,40 +282,20 @@ internal static class Program
             return;
         }
 
-        // The Open shortcut (#482, ADR "One shortcut for opening a document"): `--shortcut-test`. Prints the chord
-        // as the user will see it in the menu — which is the whole point of advertising it — and checks that the
-        // command dispatches ONLY on the tabs whose Open means "open natively". The negative half is the one that
-        // matters: a Search result is "opened" by revealing it in Repositories, which would switch the tab, so a
-        // tab that stays put proves the chord did not quietly acquire a second meaning.
+        // The clearable search field (#503): `--searchclear-test`. Its body lives in SearchFieldCheck — this
+        // file is on the 1000-line standing-debt list (issue #466) and may only get smaller, and a verification
+        // routine is exactly the kind of self-contained thing that has no business growing here.
+        if (args.Contains("--searchclear-test"))
+        {
+            SearchFieldCheck.Run();
+            return;
+        }
+
+        // The Open shortcut (#482, ADR "One shortcut for opening a document"): `--shortcut-test`, in
+        // OpenShortcutCheck.
         if (args.Contains("--shortcut-test"))
         {
-            AppBuilder.Configure<App>()
-                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
-                .UseSkia()
-                .SetupWithoutStarting();
-            var vm = new MainWindowViewModel();
-            var chord = Services.Shortcuts.Open.ToString();
-
-            // Every tab, nothing selected: a no-op, never a crash.
-            var survivedEmpty = true;
-            for (var tab = 0; tab <= 3; tab++)
-            {
-                vm.SelectedTab = tab;
-                try { vm.OpenSelectedCommand.ExecuteAsync(null).GetAwaiter().GetResult(); }
-                catch (Exception ex) { survivedEmpty = false; Console.WriteLine($"tab {tab} threw: {ex.Message}"); }
-            }
-
-            // Search: a selected result the chord must NOT act on. Revealing it would set SelectedTab to 0.
-            vm.SelectedTab = 3;
-            vm.SelectedSearchResult = new SearchResultViewModel { Id = Guid.NewGuid(), Name = "irrelevant", IsFolder = false, ParentId = null, Path = "" };
-            vm.OpenSelectedCommand.ExecuteAsync(null).GetAwaiter().GetResult();
-            var searchUntouched = vm.SelectedTab == 3;
-
-            var tipCarriesChord = MainWindowViewModel.OpenTip.Contains(chord) && MainWindowViewModel.RibbonOpenTip.Contains(chord);
-
-            Console.WriteLine($"chord: {chord} | ribbon tooltip: {MainWindowViewModel.RibbonOpenTip}");
-            Console.WriteLine($"survivedEmpty={survivedEmpty} searchUntouched={searchUntouched} tipCarriesChord={tipCarriesChord}");
-            Console.WriteLine(survivedEmpty && searchUntouched && tipCarriesChord ? "OK" : "FAILED");
+            OpenShortcutCheck.Run();
             return;
         }
 

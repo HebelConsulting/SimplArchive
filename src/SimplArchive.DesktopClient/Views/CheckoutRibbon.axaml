@@ -1,0 +1,32 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.CheckoutRibbon"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- Check-out ribbon (#500) — the same shape as the Inbox's, because the two tabs are the same kind of
+         place: a staging area you also reach from your file manager. Its two actions already existed; what
+         they lacked was a home. Refresh sat beside the heading and WebDAV in the bottom-left corner, so the
+         tab's own actions were in two places and neither looked like the Inbox's.
+
+         Deliberately NOT here: split, join and sort. A checked-out document is a version of a FILED document,
+         so reshaping its pages is a records question, not a clerical one — which is why ADR 0575 confined the
+         page algebra to the Inbox. The route for someone who needs it is to drag the file into the Inbox,
+         reshape it there, and check it in as a new version. -->
+    <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+        <WrapPanel Orientation="Horizontal">
+            <!-- Item group: what to do with the list as a whole. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="checkout-refresh" Command="{Binding Checkout.RefreshCommand}"
+                        ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
+            </StackPanel>
+            <!-- General group: one WebDAV button that does the next useful thing — set up, mount, or open this
+                 tab's own folder (ADR "One WebDAV button per tab, deep-linked"). -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+                <Button Click="OnWebDavTabButton" Tag="Personal/Check-out" AutomationProperties.AutomationId="checkout-webdav"
+                        ToolTip.Tip="{Binding WebDav.Tooltip}"><i:Icon Value="mdi-folder-network-outline" FontSize="18" /></Button>
+            </StackPanel>
+        </WrapPanel>
+    </Border>
+</UserControl>
