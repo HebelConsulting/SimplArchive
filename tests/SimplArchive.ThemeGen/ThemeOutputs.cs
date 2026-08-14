@@ -20,5 +20,11 @@ public static class ThemeOutputs
 
         (Path.Combine(repoRoot, "src", "SimplArchive.Client", "wwwroot", "css", "tokens.generated.css"),
             ThemeEmitter.ToCss(ThemeTokensReader.Shipped)),
+
+        // The user manual's chrome (issue #513): the teal flip regenerated every screenshot and left the Typst
+        // template's own hardcoded purple in place — the manual is a third styled surface, so it gets the same
+        // treatment as the other two, guarded by the same test.
+        (Path.Combine(repoRoot, "manual", "colors.generated.typ"),
+            ThemeEmitter.ToTypst(ThemeTokensReader.Shipped)),
     ];
 }

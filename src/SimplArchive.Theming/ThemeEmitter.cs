@@ -65,6 +65,22 @@ public static class ThemeEmitter
         return css.ToString();
     }
 
+    /// <summary>The user manual's colours (issue #513) — so a rebrand cannot strand the third styled surface.</summary>
+    /// <remarks>
+    /// The manual found out the hard way that it was a third styled surface: the teal flip (ADR 0578)
+    /// regenerated every screenshot from the running app, and the Typst chrome around them kept its own
+    /// hardcoded purple. Deliberately tiny — the manual consumes exactly one colour (headings, links, its
+    /// darkened variants are computed in Typst), and print wants the LIGHT accent regardless of anybody's
+    /// dark-mode preference, because paper is white.
+    /// </remarks>
+    public static string ToTypst(ThemeTokens tokens)
+    {
+        var typ = new StringBuilder();
+        typ.Append("// ").Append(DoNotEdit.Replace("\n", "\n// ")).Append('\n');
+        typ.Append("#let accent = rgb(\"").Append(tokens.Light.Accent.Primary).Append("\")\n");
+        return typ.ToString();
+    }
+
     private static void AppendAvaloniaTheme(StringBuilder xml, string theme, ThemePalette palette)
     {
         xml.Append("        <ResourceDictionary x:Key=\"").Append(theme).Append("\">\n");

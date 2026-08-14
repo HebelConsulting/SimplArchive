@@ -1,7 +1,10 @@
 // Shared styling + helpers for the SimplArchive user manual (ADR 0502).
 // Kept deliberately minimal + font-safe (no bespoke fonts) so `typst compile` is reproducible in CI.
 
-#let accent = rgb("#5b4ee6") // matches the app's indigo app-bar
+// The accent comes from the SAME tokens.json as both clients (issue #513): the manual is a third styled
+// surface, and the teal flip proved it — every screenshot regenerated teal while this file's own hardcoded
+// purple stayed. ThemeGenerationTests now guards the generated file, so the next rebrand cannot strand it.
+#import "colors.generated.typ": accent
 
 // Document-wide configuration. Wrap the whole manual body in `#show: conf`.
 #let conf(version: "", date: "", doc) = {
