@@ -21,6 +21,9 @@
   <data name="LogonLanguage" xml:space="preserve">
     <value>Idioma</value>
   </data>
+  <data name="SessionExpired" xml:space="preserve">
+    <value>Su sesión ha caducado: vuelva a iniciar sesión.</value>
+  </data>
   <data name="LogonLogin" xml:space="preserve">
     <value>Iniciar sesión</value>
   </data>

@@ -88,7 +88,13 @@ builder.Services.AddScoped<SimplArchive.Client.Services.DetailEditor>();
 // copied selection is work the user did, not a listing that can simply be re-fetched.
 builder.Services.AddScoped<SimplArchive.Client.Services.AnnotationEditor>();
 
+// Outermost, so it sees the FINAL response after the authorization and impersonation handlers (issue #509):
+// a 401 means the server repudiated the token, which is app-wide and must send the user to sign in — not be
+// reported by whichever tab happened to ask first as its own feature failing.
+builder.Services.AddScoped<SimplArchive.Client.Services.SessionExpiredHandler>();
+
 builder.Services.AddHttpClient("SimplArchive.Api", client => client.BaseAddress = new Uri(builder.HostEnvironment.BaseAddress))
+    .AddHttpMessageHandler(sp => sp.GetRequiredService<SimplArchive.Client.Services.SessionExpiredHandler>())
     .AddHttpMessageHandler(sp => sp.GetRequiredService<AuthorizationMessageHandler>()
         .ConfigureHandler(authorizedUrls: [builder.HostEnvironment.BaseAddress]))
     .AddHttpMessageHandler(sp => sp.GetRequiredService<SimplArchive.Client.Services.ImpersonationHandler>());

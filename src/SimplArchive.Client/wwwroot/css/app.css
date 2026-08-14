@@ -116,3 +116,22 @@ h1:focus {
 .wb-list-row-selected { background: var(--sa-selection); box-shadow: inset 2px 0 0 0 var(--sa-accent); }
 .wb-list-row-selected:hover { background: var(--sa-accent-tint); }
 .wb-tab-active { color: var(--sa-accent-text); box-shadow: inset 0 -2px 0 0 var(--sa-accent); }
+
+/* ── Toolbar buttons are icons on a pointer, icon + label on touch ─────────────────────────────────────────
+   Moved here from Home.razor's style block when every tab started using it, not just Repositories: the shell
+   is being decomposed (ADR 0558) and may only get smaller, and a rule a dozen components apply is not the
+   shell's markup.
+
+   The label lives in the button as .wb-rib-label and in `title` + `aria-label`, so hiding it costs nothing a
+   mouse user cannot get back by hovering — and costs a screen reader nothing at all, because aria-label is
+   what computes the accessible name either way.
+
+   The query is `(hover: hover) and (pointer: fine)`, not a width breakpoint: the question is whether this
+   person has a hover to reveal a tooltip with, and that is a property of the input device, not the window
+   (ADR 0491). A touch user keeps the visible label, because for them a tooltip does not exist. */
+.wb-rib-btn .wb-rib-label { margin-left: 6px; }
+
+@media (hover: hover) and (pointer: fine) {
+    .wb-rib-btn { min-width: 0; }
+    .wb-rib-btn .wb-rib-label { display: none; }
+}

@@ -32,14 +32,8 @@
        matching the preview-pane toolbar's wrapping behavior (both clients). */
     .wb-ribbon { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 12px;
         border-bottom: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
-    /* #305: the label sits after the icon inside the button; a small gap when it's shown. */
-    .wb-rib-btn .wb-rib-label { margin-left: 6px; }
-    /* Icon-only ribbon buttons on hover-capable computers — the label rides in the `title` tooltip, matching the
-       desktop client + the #298 tabs (ADR 0511). Touch devices keep the visible label. */
-    @@media (hover: hover) and (pointer: fine) {
-        .wb-rib-btn { min-width: 0; }
-        .wb-rib-btn .wb-rib-label { display: none; }
-    }
+    /* .wb-rib-btn / .wb-rib-label now live in app.css: every tab's toolbar uses them, not just this ribbon,
+       so they stopped being the shell's markup (ADR 0558). */
     .wb-cols { flex: 1 1 auto; min-height: 0; display: flex; }
     .wb-pane { overflow: auto; }
     /* Pane basis/collapsed state are set inline by wbLayout.js (persisted); these are the pre-JS fallbacks.

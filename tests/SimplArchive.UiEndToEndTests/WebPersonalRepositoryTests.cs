@@ -48,7 +48,15 @@ public class WebPersonalRepositoryTests
         await Expect(tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Check-out" }).First).ToBeVisibleAsync();
 
         // Clicking the Inbox launcher switches to the Inbox bottom tab (its "Upload to inbox" action appears).
+        //
+        // By aria-label, not by text: the toolbar shows icons only on a hover-capable device and carries the
+        // label in `aria-label` + `title`, so the visible span is display:none here (ADR 0491 — touch, which
+        // has no hover, still shows it). Asserting on the text asserted on the rendering rather than on the
+        // control being there.
+        //
+        // And not by ROLE either, which finds nothing: this one is `HtmlTag="label"` (it opens the hidden file
+        // input), so MudBlazor renders a <label>, and a label has no button role.
         await inbox.ClickAsync();
-        await Expect(page.GetByText("Upload to inbox")).ToBeVisibleAsync();
+        await Expect(page.Locator("[aria-label='Upload to inbox']")).ToBeVisibleAsync();
     }
 }

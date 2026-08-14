@@ -22,10 +22,22 @@
 @* Per-user S3-backed inbox (ADR "S3-backed inbox") — staged files to file into a repository. *@
 <div class="wb-search">
     <div class="wb-search-bar">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload" HtmlTag="label" for="inbox-file-input">@Strings.Get("InboxUpload")</MudButton>
+        @* Upload keeps its filled accent — it is the tab's primary action, and losing the label must not also
+           lose the emphasis that says "start here". *@
+        <MudButton Class="wb-rib-btn" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                   HtmlTag="label" for="inbox-file-input"
+                   title="@Strings.Get("InboxUpload")" aria-label="@Strings.Get("InboxUpload")">
+            <MudIcon Icon="@Icons.Material.Filled.Upload" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("InboxUpload")</span>
+        </MudButton>
         <InputFile id="inbox-file-input" OnChange="OnInboxInputChangeAsync" multiple style="display:none" />
-        <MudButton Variant="Variant.Text" OnClick="LoadInboxAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.Refresh">@Strings.Get("RibbonRefresh")</MudButton>
-        <MudButton Variant="Variant.Text" OnClick="@(() => WebDavLink.CopyAsync(WebDavFolder))" Class="ml-2" StartIcon="@Icons.Material.Filled.ContentCopy">@Strings.Get("InboxCopyDav")</MudButton>
+        <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="LoadInboxAsync"
+                   title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
+            <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="@(() => WebDavLink.CopyAsync(WebDavFolder))"
+                   title="@Strings.Get("InboxCopyDav")" aria-label="@Strings.Get("InboxCopyDav")">
+            <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("InboxCopyDav")</span>
+        </MudButton>
         @* Own-items-only by default; the switch reveals my group inboxes (ADR 0532). Disabled while
            viewing another user's inbox — the two selectors are mutually exclusive. *@
         <MudSwitch T="bool" Value="_inboxIncludeGroups" ValueChanged="ToggleInboxGroupsAsync" Color="Color.Primary"
@@ -45,30 +57,51 @@
         }
         @if (_inboxChecked.Count >= 2)
         {
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="FileMultipleAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.DriveFileMove">@string.Format(Strings.Get("InboxFileN"), _inboxChecked.Count)</MudButton>
+            @* The label carries a COUNT, so the tooltip carries the same formatted string rather than a bare
+               verb: hiding the label must not hide how many things are about to move. *@
+            <MudButton Class="wb-rib-btn ml-2" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="FileMultipleAsync"
+                       title="@string.Format(Strings.Get("InboxFileN"), _inboxChecked.Count)"
+                       aria-label="@string.Format(Strings.Get("InboxFileN"), _inboxChecked.Count)">
+                <MudIcon Icon="@Icons.Material.Filled.DriveFileMove" Size="Size.Small" /><span class="wb-rib-label">@string.Format(Strings.Get("InboxFileN"), _inboxChecked.Count)</span>
+            </MudButton>
         }
         @* Page operations (#487, ADR 0575), matching the desktop ribbon's group. Each appears only when the
            server said it can succeed: one checked item with more than one page for split/sort, two or more for
            join. A missing rel means "not available to you, here, now" (ADR 0543/0554). *@
         @if (_pages is { CanSplit: true })
         {
-            <MudButton Variant="Variant.Text" OnClick="SplitPagesAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.CallSplit">@Strings.Get("InboxSplit")</MudButton>
+            <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="SplitPagesAsync"
+                       title="@Strings.Get("InboxSplit")" aria-label="@Strings.Get("InboxSplit")">
+                <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("InboxSplit")</span>
+            </MudButton>
         }
         @if (_pages is { CanSort: true })
         {
-            <MudButton Variant="Variant.Text" OnClick="SortPagesAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.Sort">@Strings.Get("InboxSortTitle")</MudButton>
+            <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="SortPagesAsync"
+                       title="@Strings.Get("InboxSortTitle")" aria-label="@Strings.Get("InboxSortTitle")">
+                <MudIcon Icon="@Icons.Material.Filled.Sort" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("InboxSortTitle")</span>
+            </MudButton>
         }
         @if (_inboxChecked.Count >= 2 && _joinHref is not null)
         {
-            <MudButton Variant="Variant.Text" OnClick="JoinItemsAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.CallMerge">@Strings.Get("InboxJoinTitle")</MudButton>
+            <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="JoinItemsAsync"
+                       title="@Strings.Get("InboxJoinTitle")" aria-label="@Strings.Get("InboxJoinTitle")">
+                <MudIcon Icon="@Icons.Material.Filled.CallMerge" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("InboxJoinTitle")</span>
+            </MudButton>
         }
         @if (_pages is { CanDeskew: true })
         {
-            <MudButton Variant="Variant.Text" OnClick="DeskewAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.Straighten">@Strings.Get("InboxDeskewNow")</MudButton>
+            <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="DeskewAsync"
+                       title="@Strings.Get("InboxDeskewNow")" aria-label="@Strings.Get("InboxDeskewNow")">
+                <MudIcon Icon="@Icons.Material.Filled.Straighten" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("InboxDeskewNow")</span>
+            </MudButton>
         }
         @if (_pages is { CanCutAtPatchCodes: true })
         {
-            <MudButton Variant="Variant.Text" OnClick="CutAtPatchCodesAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.ContentCut">@Strings.Get("InboxPatchCutNow")</MudButton>
+            <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="CutAtPatchCodesAsync"
+                       title="@Strings.Get("InboxPatchCutNow")" aria-label="@Strings.Get("InboxPatchCutNow")">
+                <MudIcon Icon="@Icons.Material.Filled.ContentCut" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("InboxPatchCutNow")</span>
+            </MudButton>
         }
         @* The sticky preferences, held DOWN while on — the desktop's ribbon toggles, in this tab's toolbar
            (ADR 0511). Server-side per user, because the Worker's sweep reads them for WebDAV arrivals. *@
