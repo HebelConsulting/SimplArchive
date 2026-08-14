@@ -30,7 +30,7 @@ namespace SimplArchive.Api.Inbox;
 /// back restores the original exactly.
 /// </para>
 /// </remarks>
-public sealed class InboxPageService(IObjectStorageClient storage)
+public sealed class InboxPageService(IObjectStorageClient storage, ISearchablePdfConverter converter)
 {
     /// <summary>What the pages of one staged item look like: the format, and how many there are.</summary>
     /// <remarks>
@@ -38,7 +38,7 @@ public sealed class InboxPageService(IObjectStorageClient storage)
     /// unreadable or non-paged file. The caller turns that into an absent rel rather than a button that fails
     /// on click (ADR 0554).
     /// </remarks>
-    public sealed record PageInfo(PageComposer.PageFormat Format, int PageCount);
+    public sealed record PageInfo(PageComposer.PageFormat Format, int PageCount, bool Signed = false);
 
     public async Task<PageInfo> DescribeAsync(string prefix, string name, CancellationToken cancellationToken)
     {
@@ -49,7 +49,12 @@ public sealed class InboxPageService(IObjectStorageClient storage)
         }
 
         var bytes = await ReadAsync(prefix + name, cancellationToken);
-        return new PageInfo(format, PageComposer.CountPages(bytes, format));
+
+        // A signed document reports its pages but offers no operation on them: the count is information, while
+        // split and sort would void the signature. Zero pages is what the caller turns into "no rels".
+        return DigitalSignature.IsSigned(bytes)
+            ? new PageInfo(format, PageComposer.CountPages(bytes, format), Signed: true)
+            : new PageInfo(format, PageComposer.CountPages(bytes, format));
     }
 
     /// <summary>
@@ -115,6 +120,11 @@ public sealed class InboxPageService(IObjectStorageClient storage)
         foreach (var name in names)
         {
             var bytes = await ReadAsync(prefix + name, cancellationToken);
+            if (DigitalSignature.IsSigned(bytes))
+            {
+                throw new InboxItemIsSignedException(name);
+            }
+
             if (PageComposer.CountPages(bytes, format) == 0)
             {
                 throw new InboxItemHasNoPagesException(name);
@@ -135,13 +145,23 @@ public sealed class InboxPageService(IObjectStorageClient storage)
     }
 
     /// <summary>
-    /// Rewrites the item with its pages in the given order — 1-based page numbers, every page exactly once.
+    /// Rewrites the item with its pages in the given order — 1-based page numbers, each at most once. Pages
+    /// left out are DELETED, which is how the sort dialog's bin button removes a blank back or a separator
+    /// sheet (#487).
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The one operation that replaces its source, because "sort these pages" is about THIS document; producing
-    /// a sorted copy and leaving the unsorted original behind would just add a second thing to clean up. The
-    /// permutation check below is what makes that safe: a request that would drop or duplicate a page is
-    /// refused before anything is written, so the file cannot end up shorter than it started.
+    /// a sorted copy and leaving the unsorted original behind would add a second thing to clean up at exactly
+    /// the moment the user is tidying.
+    /// </para>
+    /// <para>
+    /// <b>That used to be safe because the order had to be a permutation</b> — a sort could not lose a page.
+    /// Allowing deletion trades that guarantee for a smaller one: it loses only pages the caller explicitly
+    /// listed out, never by accident. What survives the change is the validation that a page cannot be
+    /// duplicated, cannot be out of range, and cannot all be dropped — and the clients confirm the count before
+    /// sending, because in-place deletion has nothing to undo it.
+    /// </para>
     /// </remarks>
     public async Task ReorderAsync(
         string prefix,
@@ -152,7 +172,10 @@ public sealed class InboxPageService(IObjectStorageClient storage)
         var (format, bytes) = await LoadPagedAsync(prefix, name, cancellationToken);
         var pageCount = PageComposer.CountPages(bytes, format);
 
-        if (pageOrder.Count != pageCount || pageOrder.Distinct().Count() != pageCount
+        // A subset is allowed (the omitted pages are deleted); a duplicate, an out-of-range page, or an empty
+        // order is not — those are the shapes that mean the caller has made a mistake rather than a choice.
+        if (pageOrder.Count == 0 || pageOrder.Count > pageCount
+            || pageOrder.Distinct().Count() != pageOrder.Count
             || pageOrder.Any(p => p < 1 || p > pageCount))
         {
             throw new InboxPageOrderInvalidException(name, pageCount);
@@ -166,6 +189,61 @@ public sealed class InboxPageService(IObjectStorageClient storage)
         await SweepRenditionsAsync(prefix, name, cancellationToken);
     }
 
+    /// <summary>
+    /// Straightens the item on demand and returns its new name — a TIFF becomes a PDF, because straightening
+    /// re-renders the pages and the converter only emits PDF. Null when nothing could be produced.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately does NOT consult the user's automatic-straightening preference or the "does this look like
+    /// a scan" sniff, both of which exist to decide whether to act on somebody's behalf. Here they have asked.
+    /// The signature refusal does still apply: that one is not a convenience.
+    /// </remarks>
+    public async Task<string?> DeskewAsync(string prefix, string name, CancellationToken cancellationToken)
+    {
+        var bytes = await ReadAsync(prefix + name, cancellationToken);
+        if (DigitalSignature.IsSigned(bytes))
+        {
+            throw new InboxItemIsSignedException(name);
+        }
+
+        var kind = PageComposer.FormatOf(name) switch
+        {
+            PageComposer.PageFormat.Tiff => SearchablePdfSourceKind.Tiff,
+            PageComposer.PageFormat.Pdf => SearchablePdfSourceKind.Pdf,
+            _ => (SearchablePdfSourceKind?)null,
+        };
+
+        if (kind is not { } sourceKind)
+        {
+            throw new InboxPagesNotSupportedException(name);
+        }
+
+        var straightened = await converter.ConvertToSearchablePdfAsync(
+            bytes, sourceKind, OcrLanguages, deskew: true, cancellationToken);
+
+        if (straightened is null)
+        {
+            return null; // the sidecar is unavailable or refused; the item is left exactly as it was
+        }
+
+        var newName = $"{Stem(name)}.pdf";
+        await WriteAsync(prefix + newName, straightened, PageComposer.PageFormat.Pdf, cancellationToken);
+
+        if (!string.Equals(newName, name, StringComparison.Ordinal))
+        {
+            await CopyMaskDraftAsync(prefix, name, newName, cancellationToken);
+            await storage.DeleteObjectAsync($"{prefix}{name}{MaskSidecarSuffix}", cancellationToken);
+            await storage.DeleteObjectAsync(prefix + name, cancellationToken);
+        }
+
+        await SweepRenditionsAsync(prefix, newName, cancellationToken);
+        return newName;
+    }
+
+    // The sidecar's own default set: per-version OCR languages are a property of a FILED document (ADR 0272),
+    // and nothing in the inbox has been filed yet, so there is nothing more specific to ask for.
+    private const string OcrLanguages = "eng+deu+fra+ita";
+
     private async Task<(PageComposer.PageFormat Format, byte[] Bytes)> LoadPagedAsync(
         string prefix,
         string name,
@@ -178,6 +256,14 @@ public sealed class InboxPageService(IObjectStorageClient storage)
         }
 
         var bytes = await ReadAsync(prefix + name, cancellationToken);
+
+        // Enforced here rather than only at the rel, because a rel is a client courtesy and this is a
+        // correctness rule: a signature covers a byte range, so any rewrite voids it (#491).
+        if (DigitalSignature.IsSigned(bytes))
+        {
+            throw new InboxItemIsSignedException(name);
+        }
+
         if (PageComposer.CountPages(bytes, format) == 0)
         {
             throw new InboxItemHasNoPagesException(name);

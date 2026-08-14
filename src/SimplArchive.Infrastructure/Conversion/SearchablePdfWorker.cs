@@ -140,7 +140,7 @@ public sealed class SearchablePdfWorker : BackgroundService
                 .SingleOrDefaultAsync(cancellationToken) ?? Domain.Documents.OcrLanguages.Default;
         }
 
-        var pdfBytes = await converter.ConvertToSearchablePdfAsync(sourceBytes, kind.Value, languages, cancellationToken);
+        var pdfBytes = await converter.ConvertToSearchablePdfAsync(sourceBytes, kind.Value, languages, cancellationToken: cancellationToken);
         if (pdfBytes is null)
         {
             row.Attempts++;

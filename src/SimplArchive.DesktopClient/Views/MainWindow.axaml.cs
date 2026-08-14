@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Controls.Primitives;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
@@ -242,6 +243,34 @@ public partial class MainWindow : Window
         if (await dialog.ShowDialog<IReadOnlyList<int>?>(this) is { } order)
         {
             await vm.InboxActions.SortAsync(item, sortHref, order);
+        }
+    });
+
+    private void OnInboxDeskewAutoToggled(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && sender is ToggleButton { IsChecked: { } enabled })
+        {
+            await vm.InboxActions.SetDeskewAutomaticallyAsync(enabled);
+        }
+    });
+
+    // Straighten THIS document, now. Addressed from the selected row's own deskew rel, re-read at the moment of
+    // acting rather than trusted from pane state (ADR 0559).
+    private void OnInboxDeskew(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm
+            || ServerInboxList.SelectedItem is not InboxItemViewModel item
+            || await vm.InboxActions.GetPagesAsync(item) is not { DeskewHref: { } deskewHref })
+        {
+            return;
+        }
+
+        // The format change is stated before it happens: a TIFF comes back a PDF, because straightening
+        // re-renders the pages. Discovering that afterwards is how a user concludes the archive is unreliable.
+        var prompt = string.Format(Strings.Get("InboxDeskewConfirm"), item.Name);
+        if (await new ConfirmDialog(prompt, Strings.Get("InboxDeskewNow")).ShowDialog<bool>(this))
+        {
+            await vm.InboxActions.DeskewAsync(item, deskewHref);
         }
     });
 

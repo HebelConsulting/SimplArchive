@@ -1,5 +1,6 @@
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Infrastructure.Acl;
+using SimplArchive.Infrastructure.Inbox;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Inbox;
@@ -39,11 +40,12 @@ public sealed class InboxScopeResolver(
             ? (tenantId, userId)
             : null;
 
-    public static string UserPrefix(Guid tenantId, Guid userId) => $"tenants/{tenantId}/users/{userId}/inbox/";
+    public static string UserPrefix(Guid tenantId, Guid userId) => InboxScopePrefix.ForUser(tenantId, userId);
 
     // A group inbox is the exact peer of the per-user inbox, keyed by group (ADR 0532) — implicit for every
-    // group, access = effective group membership.
-    public static string GroupPrefix(Guid tenantId, Guid groupId) => $"tenants/{tenantId}/groups/{groupId}/inbox/";
+    // group, access = effective group membership. The formula itself lives in Infrastructure, because the
+    // Worker's sweep needs it too and cannot reference the Api (ADR 0576).
+    public static string GroupPrefix(Guid tenantId, Guid groupId) => InboxScopePrefix.ForGroup(tenantId, groupId);
 
     /// <summary>
     /// Resolves + authorizes the storage scope of an inbox item addressed by name plus an optional source

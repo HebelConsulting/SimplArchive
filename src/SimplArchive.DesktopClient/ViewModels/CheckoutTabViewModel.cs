@@ -154,6 +154,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
                     Path = item.Path,
                     FileExtension = item.FileExtension,
                     IsModified = item.IsModified,
+                    IsSigned = item.IsSigned,
                     ImplicitAgent = item.ImplicitAgent,
                     ExpiresAt = item.ExpiresAt,
                     StashDownloadUrl = item.StashDownloadUrl,
@@ -335,6 +336,15 @@ public sealed class CheckoutRowViewModel
     public string? ImplicitAgent { get; init; }
 
     public bool IsImplicit => !string.IsNullOrEmpty(ImplicitAgent);
+
+    // The current version's content carries a digital signature (#491), examined at finalize. TRI-STATE: null
+    // means the version was never examined — every version filed before this shipped — so the badge shows only
+    // for a definite true, and an unexamined version says nothing rather than making a claim nobody checked.
+    public bool? IsSigned { get; init; }
+
+    public bool ShowSignedBadge => IsSigned == true;
+
+    public string SignedTooltip => Strings.Get("SignedBadgeTip");
 
     public string ImplicitTooltip => string.Format(Strings.Get("CoAutoByTip"), ImplicitAgent);
 

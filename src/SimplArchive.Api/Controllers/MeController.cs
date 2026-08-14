@@ -55,6 +55,22 @@ public class MeController : ControllerBase
         /// overlap with whoami's identity fields is the price of two clear questions, not an accident.
         /// </remarks>
         public string? Email { get; set; }
+
+        /// <summary>
+        /// Whether crooked scans arriving in this user's inbox are straightened automatically (#491).
+        /// </summary>
+        /// <remarks>
+        /// A per-USER preference, because it is the person feeding the scanner who knows whether their scans
+        /// come out crooked — and stored server-side rather than in a client's local settings, because the
+        /// Worker's backstop sweep has to read it for items that arrive over WebDAV, where no client is
+        /// involved at all.
+        /// </remarks>
+        public bool DeskewInboxUploads { get; set; }
+    }
+
+    public class DeskewPreferenceRequest
+    {
+        public bool Enabled { get; set; }
     }
 
     [HttpGet]
@@ -70,15 +86,16 @@ public class MeController : ControllerBase
 
         // One projection rather than loading the user: this action is otherwise pure links, and a profile
         // screen asking "who am I" should not cost a full entity load.
-        var email = await _dbContext.Users
+        var me = await _dbContext.Users
             .Where(u => u.Id == userId)
-            .Select(u => u.Email)
+            .Select(u => new { u.Email, u.DeskewInboxUploads })
             .FirstOrDefaultAsync(cancellationToken);
 
         return Ok(new MeResource
         {
             UserId = userId,
-            Email = email,
+            Email = me?.Email,
+            DeskewInboxUploads = me?.DeskewInboxUploads ?? true,
             Links =
             [
                 new Link("self", "/api/me", "GET"),
@@ -93,8 +110,36 @@ public class MeController : ControllerBase
                 new Link("webdavPassword", "/api/me/webdav-password", "GET"),
                 new Link("personalRepository", "/api/me/personal-repository", "GET"),
                 new Link("notificationPreferences", "/api/notifications/preferences", "GET"),
+                // The inbox ribbon's straighten toggle follows this rather than composing it (ADR 0543).
+                new Link("deskewPreference", "/api/me/deskew", "PUT"),
             ],
         });
+    }
+
+    /// <summary>Turns automatic straightening of inbox scans on or off for the caller (#491).</summary>
+    /// <remarks>
+    /// A PUT of the intended value rather than a toggle: a toggle applied twice by a retry lands where it
+    /// started, and the client already knows which state it wants.
+    /// </remarks>
+    [HttpPut("deskew")]
+    public async Task<IActionResult> SetDeskewPreference(
+        [FromBody] DeskewPreferenceRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (_currentUser.UserId is not { } userId)
+        {
+            return Forbid();
+        }
+
+        var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+        if (user is null)
+        {
+            return NotFound();
+        }
+
+        user.DeskewInboxUploads = request.Enabled;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return NoContent();
     }
 
     // Standing convention: every GET action gets a companion HEAD action.

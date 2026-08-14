@@ -4044,4 +4044,37 @@
   <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
     <value>L&#x27;ordine delle pagine deve elencare ogni pagina esattamente una volta.</value>
   </data>
+  <data name="SignedBadge" xml:space="preserve">
+    <value>Firmato</value>
+  </data>
+  <data name="SignedBadgeTip" xml:space="preserve">
+    <value>Questo documento contiene una firma digitale. Non viene mai raddrizzato, diviso, ordinato o unito, perché qualsiasi modifica ai suoi byte invaliderebbe la firma.</value>
+  </data>
+  <data name="InboxDeskewAuto" xml:space="preserve">
+    <value>Raddrizza automaticamente le scansioni</value>
+  </data>
+  <data name="InboxDeskewAutoTip" xml:space="preserve">
+    <value>Raddrizza le scansioni storte quando arrivano nella tua posta in arrivo. I documenti firmati non vengono mai toccati.</value>
+  </data>
+  <data name="InboxDeskewNow" xml:space="preserve">
+    <value>Raddrizza documento…</value>
+  </data>
+  <data name="InboxDeskewConfirm" xml:space="preserve">
+    <value>Raddrizzare &#x27;{0}&#x27;? Un TIFF diventa un PDF, perché il raddrizzamento ridisegna le pagine.</value>
+  </data>
+  <data name="StInboxDeskewed" xml:space="preserve">
+    <value>&#x27;{0}&#x27; raddrizzato.</value>
+  </data>
+  <data name="StInboxDeskewNothing" xml:space="preserve">
+    <value>Niente da raddrizzare in &#x27;{0}&#x27;.</value>
+  </data>
+  <data name="InboxPageRemove" xml:space="preserve">
+    <value>Rimuovi questa pagina</value>
+  </data>
+  <data name="InboxPagesRemovedCount" xml:space="preserve">
+    <value>{0} pagina/e verranno eliminate</value>
+  </data>
+  <data name="InboxPagesRemoveConfirm" xml:space="preserve">
+    <value>{0} pagina/e verranno eliminate da questo documento. L&#x27;operazione non può essere annullata. Continuare?</value>
+  </data>
 </root>

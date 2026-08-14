@@ -12,6 +12,11 @@ namespace SimplArchive.Client.Models;
 public record CheckoutListResponse { public List<CheckoutDto> Items { get; set; } = []; }
 public record CheckoutDto
 {
+    // The current version's content carries a digital signature (#491), examined once at finalize. TRI-STATE:
+    // null means the version was NEVER EXAMINED — every version filed before this shipped — which is not the
+    // same as "not signed", so the badge shows only for a definite true.
+    public bool? IsSigned { get; set; }
+
     public Guid Id { get; set; }
     public string Name { get; set; } = "";
     public string Path { get; set; } = "";

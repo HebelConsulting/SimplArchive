@@ -247,7 +247,7 @@ public sealed class SimplArchiveApiClient
     // exactly the part the client used to rebuild by hand (ADR 0543/0555, issue #416).
     public sealed record InboxItemInfo(string Name, long Size, string DownloadUrl, bool HasMask,
         Guid? GroupId = null, string? GroupName = null, Guid? UserId = null, string? UserName = null, string MoveUrl = "",
-        IReadOnlyDictionary<string, string>? Links = null)
+        IReadOnlyDictionary<string, string>? Links = null, bool Signed = false)
     {
         public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
 
@@ -2696,7 +2696,7 @@ public sealed class SimplArchiveApiClient
     // `working-copy`, `extend` and — only when there is a stash to diff — `compare`.
     // ImplicitAgent: the client that took this lock without the user asking — a save-by-rename edit over the
     // WebDAV mount (ADR 0562); null for an explicit check-out. Client-supplied text: display it, never act on it.
-    public sealed record CheckoutItem(Guid Id, string Name, string Path, string Sha256, string FileExtension, bool HasStash, bool IsModified, string? StashDownloadUrl, DateTimeOffset? ExpiresAt, IReadOnlyDictionary<string, string>? Links = null, string? ImplicitAgent = null)
+    public sealed record CheckoutItem(Guid Id, string Name, string Path, string Sha256, string FileExtension, bool HasStash, bool IsModified, string? StashDownloadUrl, DateTimeOffset? ExpiresAt, IReadOnlyDictionary<string, string>? Links = null, string? ImplicitAgent = null, bool? IsSigned = null)
     {
         public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
     }
@@ -2783,7 +2783,11 @@ public sealed class SimplArchiveApiClient
                     i.TryGetProperty("stashDownloadUrl", out var sdu) && sdu.ValueKind == JsonValueKind.String ? sdu.GetString() : null,
                     i.TryGetProperty("expiresAt", out var ea) && ea.ValueKind == JsonValueKind.String ? ea.GetDateTimeOffset() : null,
                     ParseLinks(i),
-                    i.TryGetProperty("implicitAgent", out var ia) && ia.ValueKind == JsonValueKind.String ? ia.GetString() : null));
+                    i.TryGetProperty("implicitAgent", out var ia) && ia.ValueKind == JsonValueKind.String ? ia.GetString() : null,
+                    // Tri-state: absent means never examined (#491), which is not the same as "not signed".
+                    i.TryGetProperty("isSigned", out var sg) && sg.ValueKind is JsonValueKind.True or JsonValueKind.False
+                        ? sg.GetBoolean()
+                        : null));
             }
         }
 

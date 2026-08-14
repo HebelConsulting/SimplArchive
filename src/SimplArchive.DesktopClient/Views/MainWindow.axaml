@@ -925,6 +925,16 @@
                             <Button AutomationProperties.AutomationId="inbox-join" IsEnabled="{Binding InboxActions.CanJoin}"
                                     Click="OnInboxJoin" ToolTip.Tip="{loc:Tr InboxJoinTitle}"><i:Icon Value="mdi-call-merge" FontSize="18" /></Button>
                         </StackPanel>
+                        <!-- Straightening group (#491): the sticky preference, held DOWN while on, beside the
+                             one-off action. A toggle that stays down is the affordance asked for — it says what
+                             the system will keep doing, where a menu item says only what it did once. -->
+                        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                            <ToggleButton AutomationProperties.AutomationId="inbox-deskew-auto"
+                                          IsChecked="{Binding InboxActions.DeskewAutomatically}"
+                                          Click="OnInboxDeskewAutoToggled" ToolTip.Tip="{loc:Tr InboxDeskewAutoTip}"><i:Icon Value="mdi-image-auto-adjust" FontSize="18" /></ToggleButton>
+                            <Button AutomationProperties.AutomationId="inbox-deskew" IsEnabled="{Binding InboxActions.CanDeskew}"
+                                    Click="OnInboxDeskew" ToolTip.Tip="{loc:Tr InboxDeskewNow}"><i:Icon Value="mdi-angle-acute" FontSize="18" /></Button>
+                        </StackPanel>
                         <!-- Item group: what to do with the staged file as a whole. -->
                         <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
                             <Button IsEnabled="{Binding CanFileMultiple}" Click="OnInboxFileMultiple" ToolTip.Tip="{loc:Tr MwFileSelectedTip}"><i:Icon Value="mdi-file-move-outline" FontSize="18" /></Button>
@@ -971,21 +981,23 @@
                                  SelectionMode="Multiple" SelectionChanged="OnServerInboxSelectionChanged" DoubleTapped="OnInboxItemDoubleTapped">
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:InboxItemViewModel">
-                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,2">
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,2">
                                         <i:Icon Grid.Column="0" Value="{Binding IconValue}" Foreground="#5b4ee5" VerticalAlignment="Center" Margin="0,0,8,0" />
                                         <TextBlock Grid.Column="1" Text="{Binding DisplayName}" VerticalAlignment="Center" />
                                         <!-- Source chip: whose queue a non-own item came from (a group, or a user for an admin view). -->
                                         <Border Grid.Column="2" IsVisible="{Binding HasSource}" Background="{DynamicResource WbBorder}" CornerRadius="3" Padding="5,1" Margin="0,0,8,0" VerticalAlignment="Center">
                                             <TextBlock Text="{Binding SourceLabel}" FontSize="10" Foreground="{DynamicResource WbMuted}" />
                                         </Border>
-                                        <TextBlock Grid.Column="3" Text="{Binding SizeText}" Foreground="{DynamicResource WbFaint}" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                        <!-- No page operation is offered on a signed item (#491). -->
+                                        <v:SignedBadge Grid.Column="3" IsVisible="{Binding IsSigned}" />
+                                        <TextBlock Grid.Column="4" Text="{Binding SizeText}" Foreground="{DynamicResource WbFaint}" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" />
                                         <!-- Own item → "Send to…"; a group / other-user item → "Move to my inbox" (ADR 0532). -->
-                                        <Button Grid.Column="4" IsVisible="{Binding IsOwn}" ToolTip.Tip="{loc:Tr InboxSendTitle}" Click="OnInboxSend" Tag="{Binding}"><i:Icon Value="mdi-send-outline" /></Button>
-                                        <Button Grid.Column="4" IsVisible="{Binding !IsOwn}" ToolTip.Tip="{loc:Tr InboxClaimToMine}" Click="OnInboxMoveToMine" Tag="{Binding}"><i:Icon Value="mdi-inbox-arrow-down-outline" /></Button>
+                                        <Button Grid.Column="5" IsVisible="{Binding IsOwn}" ToolTip.Tip="{loc:Tr InboxSendTitle}" Click="OnInboxSend" Tag="{Binding}"><i:Icon Value="mdi-send-outline" /></Button>
+                                        <Button Grid.Column="5" IsVisible="{Binding !IsOwn}" ToolTip.Tip="{loc:Tr InboxClaimToMine}" Click="OnInboxMoveToMine" Tag="{Binding}"><i:Icon Value="mdi-inbox-arrow-down-outline" /></Button>
                                         <!-- The tooltip carries the ⌘/Ctrl+O chord: a button has no InputGesture (#482). -->
-                                        <Button Grid.Column="5" Margin="4,0,0,0" ToolTip.Tip="{x:Static vm:MainWindowViewModel.OpenTip}" Click="OnInboxOpen" Tag="{Binding}"><i:Icon Value="mdi-open-in-new" /></Button>
-                                        <Button Grid.Column="6" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwFileIntoFolder}" Click="OnInboxFile" Tag="{Binding}"><i:Icon Value="mdi-file-move-outline" /></Button>
-                                        <Button Grid.Column="7" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr UgDelete}" Click="OnInboxDelete" Tag="{Binding}"><i:Icon Value="mdi-delete-outline" /></Button>
+                                        <Button Grid.Column="6" Margin="4,0,0,0" ToolTip.Tip="{x:Static vm:MainWindowViewModel.OpenTip}" Click="OnInboxOpen" Tag="{Binding}"><i:Icon Value="mdi-open-in-new" /></Button>
+                                        <Button Grid.Column="7" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwFileIntoFolder}" Click="OnInboxFile" Tag="{Binding}"><i:Icon Value="mdi-file-move-outline" /></Button>
+                                        <Button Grid.Column="8" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr UgDelete}" Click="OnInboxDelete" Tag="{Binding}"><i:Icon Value="mdi-delete-outline" /></Button>
                                     </Grid>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
@@ -1144,7 +1156,7 @@
                                  Background="Transparent" BorderThickness="0">
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:CheckoutRowViewModel">
-                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,3">
+                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,3">
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
                                             <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Text="{Binding Path}" Foreground="{DynamicResource WbFaint}" FontSize="11" TextTrimming="CharacterEllipsis" />
@@ -1169,7 +1181,9 @@
                                             <TextBlock Text="{loc:Tr CoAuto}" FontSize="10" Foreground="#5b4ee5" />
                                         </Border>
 
-                                        <Button Grid.Column="3" ToolTip.Tip="{loc:Tr CoEditTip}"
+                                        <!-- Only a definite yes: an unexamined version says nothing (#491). -->
+                                        <v:SignedBadge Grid.Column="3" IsVisible="{Binding ShowSignedBadge}" />
+                                        <Button Grid.Column="4" ToolTip.Tip="{loc:Tr CoEditTip}"
                                                 Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.EditCommand}" CommandParameter="{Binding}"><i:Icon Value="mdi-pencil-outline" /></Button>
 
                                         <!-- Both compare affordances sit on the row itself for a MODIFIED document:
@@ -1177,18 +1191,18 @@
                                              is shown whether or not the tool is installed (ADR 0518) — without an
                                              install it leads to the vendor, which is the only way anyone discovers
                                              it exists. -->
-                                        <Button Grid.Column="4" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr CoCompare}" IsVisible="{Binding CanCheckIn}"
+                                        <Button Grid.Column="5" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr CoCompare}" IsVisible="{Binding CanCheckIn}"
                                                 Tag="{Binding}" Click="OnCheckoutCompare"><i:Icon Value="mdi-compare-horizontal" /></Button>
-                                        <Button Grid.Column="5" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr CoBeyondCompare}" IsVisible="{Binding CanCheckIn}"
+                                        <Button Grid.Column="6" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr CoBeyondCompare}" IsVisible="{Binding CanCheckIn}"
                                                 Tag="{Binding}" Click="OnCheckoutBeyondCompare"><i:Icon Value="mdi-compare" /></Button>
 
-                                        <Button Grid.Column="6" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr CoCheckIn}" IsVisible="{Binding CanCheckIn}"
+                                        <Button Grid.Column="7" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr CoCheckIn}" IsVisible="{Binding CanCheckIn}"
                                                 Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.CheckInCommand}" CommandParameter="{Binding}"><i:Icon Value="mdi-check" /></Button>
-                                        <Button Grid.Column="7" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwDiscard}" IsVisible="{Binding CanDiscard}"
+                                        <Button Grid.Column="8" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwDiscard}" IsVisible="{Binding CanDiscard}"
                                                 Tag="{Binding}" Click="OnCheckoutDiscard"><i:Icon Value="mdi-delete-outline" /></Button>
-                                        <Button Grid.Column="7" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwUnlock}" IsVisible="{Binding CanUnlock}"
+                                        <Button Grid.Column="8" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwUnlock}" IsVisible="{Binding CanUnlock}"
                                                 Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.UnlockCommand}" CommandParameter="{Binding}"><i:Icon Value="mdi-lock-open-variant-outline" /></Button>
-                                        <Button Grid.Column="8" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwExtendCheckoutTip}" IsVisible="{Binding CanExtend}"
+                                        <Button Grid.Column="9" Margin="4,0,0,0" ToolTip.Tip="{loc:Tr MwExtendCheckoutTip}" IsVisible="{Binding CanExtend}"
                                                 Command="{ReflectionBinding $parent[ItemsControl].DataContext.Checkout.ExtendCommand}" CommandParameter="{Binding}"><i:Icon Value="mdi-clock-plus-outline" /></Button>
                                     </Grid>
                                 </DataTemplate>

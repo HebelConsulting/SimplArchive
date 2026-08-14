@@ -29,6 +29,7 @@ namespace SimplArchive.DesktopClient.Views;
 public partial class SortPagesDialog : Window
 {
     private readonly ObservableCollection<InboxPageViewModel> _pages = [];
+    private int _removed;
 
     public SortPagesDialog() : this(string.Empty, [])
     {
@@ -60,6 +61,24 @@ public partial class SortPagesDialog : Window
     /// <summary>Moves the page at <paramref name="index"/> one place later.</summary>
     public void MoveLater(int index) => Move(index, +1);
 
+    /// <summary>
+    /// Removes a page from the result. It is deleted when the order is applied, not before — so cancelling the
+    /// dialog costs nothing, and the count of what will be lost stays visible until then.
+    /// </summary>
+    public void Remove(InboxPageViewModel page)
+    {
+        if (_pages.Count <= 1)
+        {
+            return; // the last page cannot be removed: an empty document is not a sort
+        }
+
+        var index = _pages.IndexOf(page);
+        _pages.Remove(page);
+        _removed++;
+        PageList.SelectedIndex = System.Math.Min(index, _pages.Count - 1);
+        UpdateRemovedText();
+    }
+
     /// <summary>Reverses the whole order — the one bulk case worth a button (a stack scanned back-to-front).</summary>
     public void Reverse()
     {
@@ -82,7 +101,35 @@ public partial class SortPagesDialog : Window
 
     private void OnReverse(object? sender, RoutedEventArgs e) => Reverse();
 
+    private void OnRemovePage(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { Tag: InboxPageViewModel page })
+        {
+            Remove(page);
+        }
+    }
+
+    private void UpdateRemovedText()
+    {
+        RemovedText.IsVisible = _removed > 0;
+        RemovedText.Text = string.Format(Strings.Get("InboxPagesRemovedCount"), _removed);
+    }
+
     private void OnCancel(object? sender, RoutedEventArgs e) => Close(null);
 
-    private void OnApply(object? sender, RoutedEventArgs e) => Close(CurrentOrder);
+    // The confirm exists because this deletion is in place and has nothing to undo it. Only when pages were
+    // actually removed — a pure reorder needs no ceremony.
+    private async void OnApply(object? sender, RoutedEventArgs e)
+    {
+        if (_removed > 0)
+        {
+            var prompt = string.Format(Strings.Get("InboxPagesRemoveConfirm"), _removed);
+            if (!await new ConfirmDialog(prompt, Strings.Get("InboxPagesApply")).ShowDialog<bool>(this))
+            {
+                return;
+            }
+        }
+
+        Close(CurrentOrder);
+    }
 }

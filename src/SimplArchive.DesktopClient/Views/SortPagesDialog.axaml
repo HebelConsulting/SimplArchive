@@ -22,9 +22,17 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:InboxPageViewModel">
                             <StackPanel Width="130" Margin="4" Spacing="4">
-                                <Border Background="White" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" Height="150">
-                                    <Image Source="{Binding Image}" Stretch="Uniform" />
-                                </Border>
+                                <Panel>
+                                    <Border Background="White" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" Height="150">
+                                        <Image Source="{Binding Image}" Stretch="Uniform" />
+                                    </Border>
+                                    <!-- The bin sits ON the page it removes, top-right, rather than in the
+                                         toolbar: a delete that acts on "the selection" is one the user has to
+                                         double-check before pressing (#487). -->
+                                    <Button Click="OnRemovePage" Tag="{Binding}" ToolTip.Tip="{loc:Tr InboxPageRemove}"
+                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0"
+                                            Padding="4,2"><i:Icon Value="mdi-delete-outline" FontSize="12" /></Button>
+                                </Panel>
                                 <TextBlock Text="{Binding Label}" HorizontalAlignment="Center"
                                            Foreground="{DynamicResource WbMuted}" FontSize="11" />
                             </StackPanel>
@@ -48,6 +56,8 @@
                     </StackPanel>
                 </Button>
                 <Button x:Name="ReverseButton" Click="OnReverse" Content="{loc:Tr InboxPagesReverse}" />
+                <TextBlock x:Name="RemovedText" Foreground="#c62828" FontSize="11" VerticalAlignment="Center"
+                           Margin="8,0,0,0" IsVisible="False" />
             </StackPanel>
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
                 <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />

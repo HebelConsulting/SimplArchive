@@ -6,6 +6,7 @@ using SimplArchive.Domain.Notifications;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Masks;
 using SimplArchive.Infrastructure.Persistence;
+using SimplArchive.Infrastructure.Storage;
 
 namespace SimplArchive.Api.Documents;
 
@@ -62,12 +63,36 @@ public class DocumentFinalizer
         }
 
         // Re-fetch and re-hash the object server-side rather than trusting a client-supplied hash.
+        //
+        // A PDF is buffered rather than streamed, because the same read answers a second question: whether the
+        // content carries a digital signature (#491). Examining it HERE costs nothing extra — the bytes are
+        // being fetched either way — where doing it later would mean downloading every version again to paint a
+        // list. Only PDFs are buffered; nothing else has an in-file signature to find, so everything else keeps
+        // streaming straight into the hash.
         string sha256Hash;
-        await using (var stream = await _objectStorageClient.GetObjectAsync(version.ObjectKey, cancellationToken))
+        bool? isSigned = null;
+
+        if (Path.GetExtension(version.ObjectKey).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
         {
-            var hashBytes = await SHA256.HashDataAsync(stream, cancellationToken);
-            sha256Hash = Convert.ToHexStringLower(hashBytes);
+            byte[] content;
+            await using (var stream = await _objectStorageClient.GetObjectAsync(version.ObjectKey, cancellationToken))
+            {
+                using var buffer = new MemoryStream();
+                await stream.CopyToAsync(buffer, cancellationToken);
+                content = buffer.ToArray();
+            }
+
+            sha256Hash = Convert.ToHexStringLower(SHA256.HashData(content));
+            isSigned = DigitalSignature.IsSigned(content);
         }
+        else
+        {
+            await using var stream = await _objectStorageClient.GetObjectAsync(version.ObjectKey, cancellationToken);
+            sha256Hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken));
+            isSigned = false; // examined, and this format cannot carry one — distinct from "never examined"
+        }
+
+        version.IsSigned = isSigned;
 
         var nextVersionNumber = 1 + await _dbContext.DocumentVersions
             .Where(v => v.DocumentId == version.DocumentId && v.VersionNumber != null)

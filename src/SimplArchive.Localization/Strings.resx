@@ -4044,4 +4044,37 @@
   <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
     <value>The page order must list each page exactly once.</value>
   </data>
+  <data name="SignedBadge" xml:space="preserve">
+    <value>Signed</value>
+  </data>
+  <data name="SignedBadgeTip" xml:space="preserve">
+    <value>This document carries a digital signature. It is never straightened, split, sorted or joined, because any change to its bytes would void the signature.</value>
+  </data>
+  <data name="InboxDeskewAuto" xml:space="preserve">
+    <value>Straighten scans automatically</value>
+  </data>
+  <data name="InboxDeskewAutoTip" xml:space="preserve">
+    <value>Straighten crooked scans as they arrive in your inbox. Signed documents are never touched.</value>
+  </data>
+  <data name="InboxDeskewNow" xml:space="preserve">
+    <value>Straighten document…</value>
+  </data>
+  <data name="InboxDeskewConfirm" xml:space="preserve">
+    <value>Straighten &#x27;{0}&#x27;? A TIFF becomes a PDF, because straightening re-renders the pages.</value>
+  </data>
+  <data name="StInboxDeskewed" xml:space="preserve">
+    <value>Straightened &#x27;{0}&#x27;.</value>
+  </data>
+  <data name="StInboxDeskewNothing" xml:space="preserve">
+    <value>Nothing to straighten in &#x27;{0}&#x27;.</value>
+  </data>
+  <data name="InboxPageRemove" xml:space="preserve">
+    <value>Remove this page</value>
+  </data>
+  <data name="InboxPagesRemovedCount" xml:space="preserve">
+    <value>{0} page(s) will be deleted</value>
+  </data>
+  <data name="InboxPagesRemoveConfirm" xml:space="preserve">
+    <value>{0} page(s) will be deleted from this document. This cannot be undone. Continue?</value>
+  </data>
 </root>

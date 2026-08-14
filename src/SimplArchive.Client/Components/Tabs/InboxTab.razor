@@ -62,6 +62,16 @@
         {
             <MudButton Variant="Variant.Text" OnClick="JoinItemsAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.CallMerge">@Strings.Get("InboxJoinTitle")</MudButton>
         }
+        @if (_pages is { CanDeskew: true })
+        {
+            <MudButton Variant="Variant.Text" OnClick="DeskewAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.Straighten">@Strings.Get("InboxDeskewNow")</MudButton>
+        }
+        @* The sticky preference, held DOWN while on — the desktop's ribbon toggle, in this tab's toolbar
+           (ADR 0511). Server-side per user, because the Worker's sweep reads it for WebDAV arrivals. *@
+        <MudToggleIconButton Toggled="_deskewAutomatically" ToggledChanged="SetDeskewAutomaticallyAsync"
+                             Icon="@Icons.Material.Outlined.AutoFixHigh" ToggledIcon="@Icons.Material.Filled.AutoFixHigh"
+                             Color="Color.Default" ToggledColor="Color.Primary" Class="ml-2"
+                             title="@Strings.Get("InboxDeskewAutoTip")" />
         @if (_inboxBusy)
         {
             <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="ml-2" />
@@ -85,6 +95,14 @@
                     {
                         @* Whose queue this item came from (a group, or — for an admin view — another user). *@
                         <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default" Class="ma-0">@src</MudChip>
+                    }
+                    @if (item.Signed)
+                    {
+                        @* Every page operation would void a signature, so none is offered on this row (#491). *@
+                        <MudTooltip Text="@Strings.Get("SignedBadgeTip")">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined"
+                                     Icon="@Icons.Material.Filled.WorkspacePremium" Class="ma-0">@Strings.Get("SignedBadge")</MudChip>
+                        </MudTooltip>
                     }
                     <span class="mud-text-secondary" style="font-size:.8em;">@SimplArchive.Client.Services.ByteSize.Format(item.Size)</span>
                     <div @onclick:stopPropagation="true">
@@ -312,7 +330,7 @@
     // `preview`, which the row had been carrying all along while the tab rebuilt them from Name plus a
     // hand-written `?group=`/`?user=` query. The server's own hrefs already carry that source query, so the
     // SourceQuery property that existed to re-append it is gone (ADR 0532/0543, #416).
-    private record InboxItem(string Name, long Size, bool HasMask, string DownloadHref, string PreviewHref, string FileHref, string DeleteHref, string MoveHref, string MaskHref, Guid? GroupId, string? GroupName, Guid? UserId, string? UserName, string? PagesHref)
+    private record InboxItem(string Name, long Size, bool HasMask, string DownloadHref, string PreviewHref, string FileHref, string DeleteHref, string MoveHref, string MaskHref, Guid? GroupId, string? GroupName, Guid? UserId, string? UserName, string? PagesHref, bool Signed)
     {
         // Un-classified items (no staged mask sidecar) show in square brackets (ADRs 0279/0281).
         public string DisplayName => HasMask ? Name : $"[{Name}]";
@@ -327,6 +345,18 @@
 
     private async Task LoadInboxAsync()
     {
+        // The toggle's state belongs to the USER, not the browser, so it is read from the server rather than
+        // restored from layout persistence (#491).
+        try
+        {
+            var me = await Http.GetFromJsonAsync<MeResponse>(await ApiRoot.RequireAsync("me"));
+            _deskewAutomatically = me?.DeskewInboxUploads ?? true;
+        }
+        catch (Exception)
+        {
+            // Leave it at its default; the ribbon still works and the server remains the authority.
+        }
+
         _inboxBusy = true;
         _inboxStatus = "Loading…";
         _inboxChecked.Clear();
@@ -353,7 +383,7 @@
                 Links.Href(i.Links, "file") ?? "", Links.Href(i.Links, "self") ?? "",
                 Links.Href(i.Links, "move") ?? "", Links.Href(i.Links, "mask") ?? "",
                 // A null `pages` means the server offered no page operations for this row's format (ADR 0554).
-                i.GroupId, i.GroupName, i.UserId, i.UserName, Links.Href(i.Links, "pages"))).ToList();
+                i.GroupId, i.GroupName, i.UserId, i.UserName, Links.Href(i.Links, "pages"), i.Signed)).ToList();
             _inboxStatus = _inboxItems.Count == 0 ? "Your inbox is empty. Upload files to file them into a repository." : $"{_inboxItems.Count} item(s).";
         }
         catch (Exception)
@@ -616,12 +646,16 @@
     private string? _joinHref;
     private PagesInfo? _pages;
 
-    private sealed record PagesInfo(int PageCount, string? SplitHref, string? SortHref)
+    private sealed record PagesInfo(int PageCount, string? SplitHref, string? SortHref, string? DeskewHref)
     {
         public bool CanSplit => SplitHref is not null;
 
         public bool CanSort => SortHref is not null;
+
+        public bool CanDeskew => DeskewHref is not null;
     }
+
+    private bool _deskewAutomatically = true;
 
     // Asked whenever the checked set changes, and CLEARED first: a rel that has not arrived means "not
     // available here, now", which during the request is exactly true — so the buttons never describe the
@@ -641,7 +675,8 @@
             _pages = new PagesInfo(
                 response?.PageCount ?? 0,
                 Links.Href(response?.Links, "split"),
-                Links.Href(response?.Links, "sort"));
+                Links.Href(response?.Links, "sort"),
+                Links.Href(response?.Links, "deskew"));
         }
         catch (Exception)
         {
@@ -726,6 +761,66 @@
             _inboxStatus = string.Format(Strings.Get("StInboxSorted"), item.Name);
         });
     }
+
+    // Straighten THIS item, now. The format change is stated before it happens: a TIFF comes back a PDF,
+    // because straightening re-renders the pages, and discovering that afterwards is how a user concludes the
+    // archive is unreliable.
+    private async Task DeskewAsync()
+    {
+        if (_pages is not { DeskewHref: { } deskewHref } || _inboxChecked.SingleOrDefault() is not { } item)
+        {
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = Strings.Get("InboxDeskewNow"),
+            Message = string.Format(Strings.Get("InboxDeskewConfirm"), item.Name),
+            YesText = Strings.Get("InboxDeskewNow"),
+            CancelText = Strings.Get("Cancel"),
+        });
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(async () =>
+        {
+            var response = await Http.PostAsJsonAsync(deskewHref, new { });
+            await ThrowIfRefusedAsync(response);
+            var written = await response.Content.ReadFromJsonAsync<InboxPageItemsResponse>();
+            var name = written?.Names.FirstOrDefault() ?? string.Empty;
+            _inboxStatus = string.Format(
+                Strings.Get(name.Length > 0 ? "StInboxDeskewed" : "StInboxDeskewNothing"),
+                name.Length > 0 ? name : item.Name);
+        });
+    }
+
+    // Writes the toggle through, putting the button back if the server refuses — a control showing a state the
+    // server does not hold is worse than one that failed visibly.
+    private async Task SetDeskewAutomaticallyAsync(bool enabled)
+    {
+        var previous = _deskewAutomatically;
+        _deskewAutomatically = enabled;
+        try
+        {
+            var me = await Http.GetFromJsonAsync<MeResponse>(await ApiRoot.RequireAsync("me"));
+            if (Links.Href(me?.Links, "deskewPreference") is not { } href)
+            {
+                return;
+            }
+
+            (await Http.PutAsJsonAsync(href, new { enabled })).EnsureSuccessStatusCode();
+        }
+        catch (Exception)
+        {
+            _deskewAutomatically = previous;
+            _inboxStatus = ApiErrorText.For(null);
+        }
+    }
+
+    private record MeResponse { public bool DeskewInboxUploads { get; set; } public List<LinkResponse> Links { get; set; } = []; }
 
     private async Task JoinItemsAsync()
     {
@@ -982,7 +1077,7 @@
     }
 
     private record InboxResponse { public List<InboxItemDto> Items { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
-    private record InboxItemDto { public string Name { get; set; } = ""; public long Size { get; set; } public bool HasMask { get; set; } public Guid? GroupId { get; set; } public string? GroupName { get; set; } public Guid? UserId { get; set; } public string? UserName { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record InboxItemDto { public string Name { get; set; } = ""; public long Size { get; set; } public bool HasMask { get; set; } public bool Signed { get; set; } public Guid? GroupId { get; set; } public string? GroupName { get; set; } public Guid? UserId { get; set; } public string? UserName { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record InboxMaskDraft { public string? Name { get; set; } public string? DocumentDate { get; set; } public Guid? MaskId { get; set; } public List<InboxDraftField> Fields { get; set; } = []; public List<string>? OcrLanguages { get; set; } }
     private record InboxPreviewResponse { public string? PreviewUrl { get; set; } public bool PreviewConverted { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record InboxDraftField { public Guid FieldDefinitionId { get; set; } public List<string> Values { get; set; } = []; }

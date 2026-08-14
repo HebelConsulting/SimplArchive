@@ -62,7 +62,9 @@ public sealed class InboxApi(HttpClient http, SimplArchiveApiClient client)
                     item.TryGetProperty("size", out var s) ? s.GetInt64() : 0,
                     Link("download"),
                     item.TryGetProperty("hasMask", out var hm) && hm.GetBoolean(),
-                    Id("groupId"), Str("groupName"), Id("userId"), Str("userName"), Link("move"), SimplArchiveApiClient.ParseLinks(item)));
+                    Id("groupId"), Str("groupName"), Id("userId"), Str("userName"), Link("move"), SimplArchiveApiClient.ParseLinks(item),
+                    // Answered by the listing from a sidecar's existence, so it costs no extra request (#491).
+                    item.TryGetProperty("signed", out var sg) && sg.ValueKind == JsonValueKind.True));
             }
         }
 
@@ -74,11 +76,13 @@ public sealed class InboxApi(HttpClient http, SimplArchiveApiClient client)
     /// did not offer it — a one-page file has no split and no sort — so the client disables the affordance
     /// rather than offering a button that fails on click (ADR 0554).
     /// </summary>
-    public sealed record PagesInfo(string Format, int PageCount, string? SplitHref, string? SortHref)
+    public sealed record PagesInfo(string Format, int PageCount, string? SplitHref, string? SortHref, string? DeskewHref = null, bool Signed = false)
     {
         public bool CanSplit => SplitHref is not null;
 
         public bool CanSort => SortHref is not null;
+
+        public bool CanDeskew => DeskewHref is not null;
     }
 
     /// <summary>Null when the row advertised no <c>pages</c> rel at all — no request is made in that case.</summary>
@@ -103,7 +107,50 @@ public sealed class InboxApi(HttpClient http, SimplArchiveApiClient client)
             json.TryGetProperty("format", out var f) ? f.GetString() ?? string.Empty : string.Empty,
             json.TryGetProperty("pageCount", out var c) ? c.GetInt32() : 0,
             links.TryGetValue("split", out var split) ? split : null,
-            links.TryGetValue("sort", out var sort) ? sort : null);
+            links.TryGetValue("sort", out var sort) ? sort : null,
+            links.TryGetValue("deskew", out var deskew) ? deskew : null,
+            json.TryGetProperty("signed", out var signed) && signed.ValueKind == JsonValueKind.True);
+    }
+
+    /// <summary>
+    /// Whether crooked scans arriving in this user's inbox are straightened automatically (#491), read from the
+    /// "me" resource. Defaults true when the resource cannot be read, matching the server's own default.
+    /// </summary>
+    public async Task<bool> GetDeskewPreferenceAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var me = await http.GetFromJsonAsync<JsonElement>(await client.RootHrefAsync("me", cancellationToken), cancellationToken);
+            return !me.TryGetProperty("deskewInboxUploads", out var d) || d.ValueKind != JsonValueKind.False;
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Turns automatic straightening on or off, following the rel the "me" resource advertises (ADR 0543).
+    /// </summary>
+    public async Task SetDeskewPreferenceAsync(bool enabled, CancellationToken cancellationToken = default)
+    {
+        var me = await http.GetFromJsonAsync<JsonElement>(await client.RootHrefAsync("me", cancellationToken), cancellationToken);
+        var href = SimplArchiveApiClient.ParseLinks(me)?.GetValueOrDefault("deskewPreference")
+            ?? throw new ApiActionException(Strings.Get("ApiErrGeneric"));
+
+        using var response = await http.PutAsJsonAsync(href.TrimStart('/'), new { enabled }, cancellationToken);
+        await SimplArchiveApiClient.ThrowIfProblemAsync(response, Strings.Get("ApiErrGeneric"), cancellationToken);
+    }
+
+    /// <summary>
+    /// Straightens the item on demand, returning its new name — a TIFF comes back a PDF, because straightening
+    /// re-renders the pages and the converter only emits PDF.
+    /// </summary>
+    public async Task<string> DeskewAsync(string deskewHref, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.PostAsJsonAsync(deskewHref.TrimStart('/'), new { }, cancellationToken);
+        await SimplArchiveApiClient.ThrowIfProblemAsync(response, Strings.Get("ApiErrGeneric"), cancellationToken);
+        return (await NamesAsync(response, cancellationToken)).FirstOrDefault() ?? string.Empty;
     }
 
     /// <summary>Splits the item into one inbox item per page and returns their names. The source is kept.</summary>

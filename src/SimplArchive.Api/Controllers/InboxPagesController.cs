@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Api.Inbox;
 using SimplArchive.Application.Abstractions;
+using SimplArchive.Infrastructure.Inbox;
 using SimplArchive.Infrastructure.Storage;
 
 namespace SimplArchive.Api.Controllers;
@@ -31,7 +32,8 @@ namespace SimplArchive.Api.Controllers;
 public class InboxPagesController(
     InboxScopeResolver scopes,
     IObjectStorageClient objectStorageClient,
-    InboxPageService pageService) : ControllerBase
+    InboxPageService pageService,
+    InboxIngestPipeline pipeline) : ControllerBase
 {
     /// <summary>
     /// What the item's pages are, and which page operations it can actually take.
@@ -60,16 +62,24 @@ public class InboxPagesController(
 
         var info = await pageService.DescribeAsync(scope.Prefix, name, cancellationToken);
         var links = new List<Link> { new("self", Href(name, "pages", group, user), "GET") };
-        if (info.PageCount > 1)
+        if (info.PageCount > 1 && !info.Signed)
         {
             links.Add(new Link("split", Href(name, "pages/split", group, user), "POST"));
             links.Add(new Link("sort", Href(name, "pages/order", group, user), "POST"));
+        }
+
+        // Straightening needs only a page, not several — and it is offered for a signed document never, for the
+        // same reason as the rest: any rewrite voids the signature (#491).
+        if (info.PageCount > 0 && !info.Signed)
+        {
+            links.Add(new Link("deskew", Href(name, "deskew", group, user), "POST"));
         }
 
         return Ok(new InboxPagesResource
         {
             Format = info.Format.ToString().ToLowerInvariant(),
             PageCount = info.PageCount,
+            Signed = info.Signed,
             Links = links,
         });
     }
@@ -195,6 +205,84 @@ public class InboxPagesController(
         });
     }
 
+    /// <summary>
+    /// Straightens the item on demand (#491) — the deliberate counterpart to the automatic path.
+    /// </summary>
+    /// <remarks>
+    /// Unlike the automatic path this does NOT consult the user's preference or the "does it look like a scan"
+    /// sniff: the user has said what they want about this document, and a guess has no business overriding
+    /// them. The signature refusal still applies, because that one is a correctness rule rather than a
+    /// convenience.
+    /// </remarks>
+    [HttpPost("{name}/deskew")]
+    public async Task<IActionResult> Deskew(
+        string name,
+        [FromQuery] Guid? group,
+        [FromQuery] Guid? user,
+        CancellationToken cancellationToken)
+    {
+        if (await scopes.ResolveAsync(group, user, name, cancellationToken) is not { } scope)
+        {
+            return Forbid();
+        }
+
+        if (!await objectStorageClient.ExistsAsync(scope.Prefix + name, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        var straightened = await pageService.DeskewAsync(scope.Prefix, name, cancellationToken);
+
+        return Ok(new InboxPageItemsResource
+        {
+            Names = [straightened ?? name],
+            Links = [new Link("self", "/api/inbox", "GET")],
+        });
+    }
+
+    /// <summary>
+    /// Runs the ingest pipeline over a freshly uploaded item (#494) — straightening today, patch-code splitting
+    /// later — and answers with the item's name afterwards, which differs when a processor changed the format.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The client calls this straight after its PUT to object storage, because the Api never sees the bytes and
+    /// therefore gets no completion signal of its own. That makes this the FAST path, not the only one: the
+    /// Worker's sweep is the backstop for items that arrived over WebDAV or from a browser tab that closed
+    /// between the upload and this call.
+    /// </para>
+    /// <para>
+    /// Idempotent by way of the marker: calling it twice processes once. So a client that retries after a
+    /// timeout cannot convert an already-converted file, which matters when the first call succeeded and only
+    /// its response was lost.
+    /// </para>
+    /// </remarks>
+    [HttpPost("{name}/processed")]
+    public async Task<IActionResult> Processed(
+        string name,
+        [FromQuery] Guid? group,
+        [FromQuery] Guid? user,
+        CancellationToken cancellationToken)
+    {
+        if (await scopes.ResolveAsync(group, user, name, cancellationToken) is not { } scope)
+        {
+            return Forbid();
+        }
+
+        if (!await objectStorageClient.ExistsAsync(scope.Prefix + name, cancellationToken))
+        {
+            return NotFound();
+        }
+
+        var processed = await pipeline.RunAsync(scope.TenantId, scope.UserId, scope.Prefix, name, cancellationToken);
+
+        return Ok(new InboxPageItemsResource
+        {
+            Names = [processed ?? name],
+            Links = [new Link("self", "/api/inbox", "GET")],
+        });
+    }
+
     // The `?group=`/`?user=` source query, so a link keeps acting on the prefix it was read from; own-inbox
     // items carry no query. Mirrors InboxController's own href shape.
     private static string Href(string name, string suffix, Guid? group, Guid? user)
@@ -209,6 +297,9 @@ public class InboxPagesController(
         public string Format { get; set; } = string.Empty;
 
         public int PageCount { get; set; }
+
+        /// <summary>True when the content carries a digital signature — which is why no operation is offered.</summary>
+        public bool Signed { get; set; }
     }
 
     // Split and join both answer with "these inbox items now exist", so they share one shape rather than each

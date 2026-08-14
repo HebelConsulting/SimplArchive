@@ -4044,4 +4044,37 @@
   <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
     <value>Die Seitenreihenfolge muss jede Seite genau einmal enthalten.</value>
   </data>
+  <data name="SignedBadge" xml:space="preserve">
+    <value>Signiert</value>
+  </data>
+  <data name="SignedBadgeTip" xml:space="preserve">
+    <value>Dieses Dokument trägt eine digitale Signatur. Es wird nie gerade gerichtet, aufgeteilt, sortiert oder zusammengefügt, da jede Änderung seiner Bytes die Signatur ungültig machen würde.</value>
+  </data>
+  <data name="InboxDeskewAuto" xml:space="preserve">
+    <value>Scans automatisch gerade richten</value>
+  </data>
+  <data name="InboxDeskewAutoTip" xml:space="preserve">
+    <value>Schiefe Scans beim Eingang in Ihren Posteingang gerade richten. Signierte Dokumente werden nie verändert.</value>
+  </data>
+  <data name="InboxDeskewNow" xml:space="preserve">
+    <value>Dokument gerade richten…</value>
+  </data>
+  <data name="InboxDeskewConfirm" xml:space="preserve">
+    <value>&#x27;{0}&#x27; gerade richten? Ein TIFF wird zu einem PDF, da die Seiten dabei neu gerendert werden.</value>
+  </data>
+  <data name="StInboxDeskewed" xml:space="preserve">
+    <value>&#x27;{0}&#x27; gerade gerichtet.</value>
+  </data>
+  <data name="StInboxDeskewNothing" xml:space="preserve">
+    <value>In &#x27;{0}&#x27; gibt es nichts gerade zu richten.</value>
+  </data>
+  <data name="InboxPageRemove" xml:space="preserve">
+    <value>Diese Seite entfernen</value>
+  </data>
+  <data name="InboxPagesRemovedCount" xml:space="preserve">
+    <value>{0} Seite(n) werden gelöscht</value>
+  </data>
+  <data name="InboxPagesRemoveConfirm" xml:space="preserve">
+    <value>{0} Seite(n) werden aus diesem Dokument gelöscht. Das kann nicht rückgängig gemacht werden. Fortfahren?</value>
+  </data>
 </root>

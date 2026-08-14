@@ -1,4 +1,8 @@
 [
+  "NetVips.Native.linux-arm64",
+  "NetVips.Native.linux-musl-arm64",
   "NetVips.Native.linux-musl-x64",
-  "NetVips.Native.linux-musl-arm64"
+  "NetVips.Native.linux-x64",
+  "NetVips.Native.osx-arm64",
+  "NetVips.Native.osx-x64"
 ]

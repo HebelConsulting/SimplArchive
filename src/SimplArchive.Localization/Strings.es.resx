@@ -4044,4 +4044,37 @@
   <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
     <value>El orden de páginas debe incluir cada página exactamente una vez.</value>
   </data>
+  <data name="SignedBadge" xml:space="preserve">
+    <value>Firmado</value>
+  </data>
+  <data name="SignedBadgeTip" xml:space="preserve">
+    <value>Este documento contiene una firma digital. Nunca se endereza, divide, ordena ni une, porque cualquier cambio en sus bytes invalidaría la firma.</value>
+  </data>
+  <data name="InboxDeskewAuto" xml:space="preserve">
+    <value>Enderezar escaneos automáticamente</value>
+  </data>
+  <data name="InboxDeskewAutoTip" xml:space="preserve">
+    <value>Endereza los escaneos torcidos al llegar a tu bandeja de entrada. Los documentos firmados nunca se modifican.</value>
+  </data>
+  <data name="InboxDeskewNow" xml:space="preserve">
+    <value>Enderezar documento…</value>
+  </data>
+  <data name="InboxDeskewConfirm" xml:space="preserve">
+    <value>¿Enderezar &#x27;{0}&#x27;? Un TIFF se convierte en PDF, porque el enderezado vuelve a renderizar las páginas.</value>
+  </data>
+  <data name="StInboxDeskewed" xml:space="preserve">
+    <value>&#x27;{0}&#x27; enderezado.</value>
+  </data>
+  <data name="StInboxDeskewNothing" xml:space="preserve">
+    <value>No hay nada que enderezar en &#x27;{0}&#x27;.</value>
+  </data>
+  <data name="InboxPageRemove" xml:space="preserve">
+    <value>Quitar esta página</value>
+  </data>
+  <data name="InboxPagesRemovedCount" xml:space="preserve">
+    <value>Se eliminarán {0} página(s)</value>
+  </data>
+  <data name="InboxPagesRemoveConfirm" xml:space="preserve">
+    <value>Se eliminarán {0} página(s) de este documento. Esto no se puede deshacer. ¿Continuar?</value>
+  </data>
 </root>

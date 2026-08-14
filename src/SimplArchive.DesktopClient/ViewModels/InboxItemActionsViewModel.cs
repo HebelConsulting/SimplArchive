@@ -68,10 +68,24 @@ public sealed partial class InboxItemActionsViewModel : ObservableObject
 
     public bool CanJoin => SelectedCount > 1 && JoinHref is not null;
 
+    public bool CanDeskew => Pages?.CanDeskew == true;
+
+    /// <summary>
+    /// Whether crooked scans are straightened automatically for this user (#491) — the ribbon toggle's state,
+    /// held down while on.
+    /// </summary>
+    /// <remarks>
+    /// A server-side preference rather than a local setting, because the Worker's sweep reads it for items
+    /// arriving over WebDAV. Setting it writes through; a failure puts it back rather than leaving the button
+    /// showing a state the server does not hold.
+    /// </remarks>
+    [ObservableProperty] private bool _deskewAutomatically = true;
+
     partial void OnPagesChanged(InboxApi.PagesInfo? value)
     {
         OnPropertyChanged(nameof(CanSplit));
         OnPropertyChanged(nameof(CanSort));
+        OnPropertyChanged(nameof(CanDeskew));
     }
 
     partial void OnSelectedCountChanged(int value) => OnPropertyChanged(nameof(CanJoin));
@@ -181,6 +195,53 @@ public sealed partial class InboxItemActionsViewModel : ObservableObject
             await api.Inbox.SortAsync(sortHref, pageOrder);
             Status(string.Format(Strings.Get("StInboxSorted"), item.Name));
         });
+    }
+
+    /// <summary>Straightens one item on demand — the deliberate counterpart to the automatic path.</summary>
+    public async Task DeskewAsync(InboxItemViewModel item, string deskewHref)
+    {
+        if (_api?.Invoke() is not { } api)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var straightened = await api.Inbox.DeskewAsync(deskewHref);
+            Status(string.Format(
+                Strings.Get(straightened.Length > 0 ? "StInboxDeskewed" : "StInboxDeskewNothing"),
+                straightened.Length > 0 ? straightened : item.Name));
+        });
+    }
+
+    /// <summary>Reads the caller's automatic-straightening preference, at sign-in.</summary>
+    public async Task LoadDeskewPreferenceAsync()
+    {
+        if (_api?.Invoke() is { } api)
+        {
+            DeskewAutomatically = await api.Inbox.GetDeskewPreferenceAsync();
+        }
+    }
+
+    /// <summary>Writes the toggle through, putting the button back if the server refuses.</summary>
+    public async Task SetDeskewAutomaticallyAsync(bool enabled)
+    {
+        if (_api?.Invoke() is not { } api)
+        {
+            return;
+        }
+
+        var previous = DeskewAutomatically;
+        DeskewAutomatically = enabled;
+        try
+        {
+            await api.Inbox.SetDeskewPreferenceAsync(enabled);
+        }
+        catch (ApiActionException e)
+        {
+            DeskewAutomatically = previous;
+            Status(e.Message);
+        }
     }
 
     /// <summary>Joins the named items into one, in the order given, keeping the sources.</summary>

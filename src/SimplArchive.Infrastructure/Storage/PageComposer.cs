@@ -136,8 +136,15 @@ public static class PageComposer
     }
 
     // A multi-page TIFF is written as one tall strip plus a page-height, which is how libvips represents pages
-    // (the same shape `n=-1` loads back). Every page is normalised to the widest page first: arrayjoin needs a
-    // common width, and a scan batch is not guaranteed to be uniform.
+    // (the same shape `n=-1` loads back). One consequence is unavoidable and worth knowing: the pages of a TIFF
+    // must share a size, so joining mixed sizes PADS to the largest, and a split-then-join does not round-trip
+    // the smaller pages' dimensions.
+    //
+    // That case is real, not theoretical: a two-page scan out of a commercial DMS held an A4 page (2489x3511)
+    // and a receipt strip (667x1846). Padding rather than scaling, because scaling changes what the page IS —
+    // a receipt stretched to A4 is a different document, one centred on A4 is the same document on a bigger
+    // sheet. No pixels are lost either way, and the source is kept regardless (ADR 0575). PDF has no such
+    // constraint, which is one more reason the straightening path's TIFF-to-PDF conversion is not a side effect.
     private static byte[] JoinTiff(IReadOnlyList<byte[]> sources)
     {
         var pages = new List<Image>();

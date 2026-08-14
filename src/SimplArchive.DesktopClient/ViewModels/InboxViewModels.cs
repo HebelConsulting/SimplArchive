@@ -1,4 +1,5 @@
 using System.Globalization;
+using SimplArchive.Localization;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -38,6 +39,13 @@ public sealed partial class InboxItemViewModel : ObservableObject
     private bool _hasMask;
 
     public string DisplayName => HasMask ? Name : $"[{Name}]";
+
+    // The content carries a digital signature (#491). Badged, and no page operation is offered: a signature
+    // covers a byte range, so splitting, sorting, joining or straightening it would void it — silently, since
+    // the file still opens and still looks right.
+    public bool IsSigned { get; init; }
+
+    public string SignedTooltip => Strings.Get("SignedBadgeTip");
 
     // A person icon for another user's item, a group icon for a group item, else a file.
     public string IconValue => GroupId is not null ? "mdi-account-group-outline" : UserId is not null ? "mdi-account-outline" : "mdi-file-document-outline";

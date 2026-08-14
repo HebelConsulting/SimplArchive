@@ -5,13 +5,22 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-    <!-- Points the test host at a system libvips on macOS; see build/tests.runsettings. Referenced here rather
-         than passed as a `dotnet test` flag so it applies to every way this project is run: the CLI, the IDE,
-         and CI, instead of only the invocation someone remembered to decorate. -->
-    <RunSettingsFilePath>$(MSBuildThisFileDirectory)../../build/tests.runsettings</RunSettingsFilePath>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The native libvips for the platforms TESTS run on, version-matched to the NetVips managed package.
+         NOT a product dependency: the Api image is Alpine and carries the linux-musl natives, and these are
+         referenced only by test projects, so nothing ships with them.
+
+         This replaces installing libvips from the distro, which was wrong in a way local runs could never
+         show: `apt-get install libvips42t64` on Ubuntu 24.04 gives 8.15.1, while NetVips 3.2.0 is paired with
+         8.18.4 — so the test host CRASHED on CI (a native fault, not a test failure) while passing locally on
+         Homebrew's 8.18. Pinning the native to the managed package is the only version-matched answer, and it
+         removes the `brew install vips` prerequisite and the DYLD path fix-up with it. -->
+    <PackageReference Include="NetVips.Native.linux-x64" Version="8.18.4" />
+    <PackageReference Include="NetVips.Native.linux-arm64" Version="8.18.4" />
+    <PackageReference Include="NetVips.Native.osx-arm64" Version="8.18.4" />
+    <PackageReference Include="NetVips.Native.osx-x64" Version="8.18.4" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />

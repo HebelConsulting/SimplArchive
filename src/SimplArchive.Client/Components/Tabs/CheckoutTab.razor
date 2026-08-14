@@ -60,6 +60,15 @@
                             <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Class="ma-0">@Strings.Get("CoAuto")</MudChip>
                         </MudTooltip>
                     }
+                    @if (c.IsSigned == true)
+                    {
+                        @* Only a definite yes: a version filed before #491 was never examined, and silence is
+                           honest where a badge would be a claim nobody checked. *@
+                        <MudTooltip Text="@Strings.Get("SignedBadgeTip")">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined"
+                                     Icon="@Icons.Material.Filled.WorkspacePremium" Class="ma-0">@Strings.Get("SignedBadge")</MudChip>
+                        </MudTooltip>
+                    }
                     @if (c.IsModified)
                     {
                         @* Modified is the whole reason to look at this list — it should be what the eye finds. *@

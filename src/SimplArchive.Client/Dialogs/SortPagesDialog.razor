@@ -1,3 +1,5 @@
+@inject IDialogService DialogService
+
 @* Sort the pages of a staged inbox item (#487, ADR 0575) — the web half of the desktop's SortPagesDialog,
    which is the canonical one (ADR 0511). Returns the chosen order as 1-based ORIGINAL page numbers.
 
@@ -26,7 +28,13 @@
                          data-page="@tile.OriginalNumber"
                          class="@(selected ? "wb-page-tile wb-page-tile-on" : "wb-page-tile")"
                          style="width:130px; cursor:pointer; border:2px solid @(selected ? "var(--mud-palette-primary)" : "transparent"); border-radius:4px; padding:4px;">
-                        <div style="height:150px; background:#fff; border:1px solid var(--mud-palette-lines-default); display:flex; align-items:center; justify-content:center; overflow:hidden;">
+                        @* The bin sits ON the page it removes rather than in the toolbar: a delete that acts on
+                           "the selection" is one the user has to double-check before pressing (#487). *@
+                        <div style="position:relative; height:150px; background:#fff; border:1px solid var(--mud-palette-lines-default); display:flex; align-items:center; justify-content:center; overflow:hidden;">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                           Style="position:absolute; top:2px; right:2px; background:rgba(255,255,255,0.85);"
+                                           title="@Strings.Get("InboxPageRemove")"
+                                           OnClick="@(() => Remove(tile))" data-remove="@tile.OriginalNumber" />
                             @if (tile.Image is { Length: > 0 })
                             {
                                 <img src="@tile.Image" style="max-width:100%; max-height:100%;" alt="@tile.OriginalNumber" />
@@ -47,6 +55,12 @@
         <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" Disabled="@(_selected is null)" OnClick="MoveEarlier">@Strings.Get("InboxPageEarlier")</MudButton>
         <MudButton EndIcon="@Icons.Material.Filled.ArrowForward" Disabled="@(_selected is null)" OnClick="MoveLater">@Strings.Get("InboxPageLater")</MudButton>
         <MudButton OnClick="Reverse">@Strings.Get("InboxPagesReverse")</MudButton>
+        @if (_removed > 0)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Error" Class="ml-2">
+                @string.Format(Strings.Get("InboxPagesRemovedCount"), _removed)
+            </MudText>
+        }
         <MudSpacer />
         <MudButton OnClick="@(() => Dialog.Cancel())">@Strings.Get("Cancel")</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Apply">@Strings.Get("InboxPagesApply")</MudButton>
@@ -73,6 +87,7 @@
 
     private readonly List<Page> _pages = [];
     private Page? _selected;
+    private int _removed;
 
     protected override void OnInitialized()
     {
@@ -106,5 +121,43 @@
         _selected = _pages.FirstOrDefault();
     }
 
-    private void Apply() => Dialog.Close(DialogResult.Ok(_pages.Select(p => p.OriginalNumber).ToList()));
+    /// <summary>
+    /// Removes a page from the result — applied only when the dialog is, so cancelling costs nothing and the
+    /// count of what will be lost stays visible until then.
+    /// </summary>
+    private void Remove(Page tile)
+    {
+        if (_pages.Count <= 1)
+        {
+            return; // the last page cannot be removed: an empty document is not a sort
+        }
+
+        var index = _pages.IndexOf(tile);
+        _pages.Remove(tile);
+        _removed++;
+        _selected = _pages[Math.Min(index, _pages.Count - 1)];
+    }
+
+    // The confirm exists because this deletion is in place and has nothing to undo it. Only when pages were
+    // actually removed — a pure reorder needs no ceremony.
+    private async Task Apply()
+    {
+        if (_removed > 0)
+        {
+            var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+            {
+                Title = Strings.Get("InboxSortTitle"),
+                Message = string.Format(Strings.Get("InboxPagesRemoveConfirm"), _removed),
+                YesText = Strings.Get("InboxPagesApply"),
+                CancelText = Strings.Get("Cancel"),
+            });
+
+            if (confirmed != true)
+            {
+                return;
+            }
+        }
+
+        Dialog.Close(DialogResult.Ok(_pages.Select(p => p.OriginalNumber).ToList()));
+    }
 }

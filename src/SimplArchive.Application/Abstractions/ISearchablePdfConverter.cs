@@ -17,5 +17,9 @@ public interface ISearchablePdfConverter
 {
     // languages: a Tesseract language string (e.g. "eng+deu+fra+ita") applied to this conversion, passed per
     // request so it can vary per call. kind selects the sidecar's OCR mode for the source format.
-    Task<byte[]?> ConvertToSearchablePdfAsync(byte[] sourceBytes, SearchablePdfSourceKind kind, string languages, CancellationToken cancellationToken = default);
+    //
+    // deskew (#491) additionally straightens the pages: Leptonica's sub-degree correction plus Tesseract's
+    // orientation detection. A parameter on this call rather than a second client, because it is one more flag
+    // on a request this already makes — and nearly free, since the pages are being rasterised either way.
+    Task<byte[]?> ConvertToSearchablePdfAsync(byte[] sourceBytes, SearchablePdfSourceKind kind, string languages, bool deskew = false, CancellationToken cancellationToken = default);
 }

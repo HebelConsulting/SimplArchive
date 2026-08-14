@@ -11,7 +11,7 @@ public sealed class InboxPageOrderInvalidException : InboxException
         : base(
             "INBOX_PAGE_ORDER_INVALID",
             StatusCodes.Status400BadRequest,
-            $"The page order must list each of the {pageCount} pages of '{name}' exactly once.")
+            $"The page order must list pages of '{name}' (1 to {pageCount}), each at most once, and keep at least one.")
     {
     }
 }

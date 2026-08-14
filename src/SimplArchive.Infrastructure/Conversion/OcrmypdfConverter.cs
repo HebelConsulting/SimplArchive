@@ -18,7 +18,7 @@ public sealed class OcrmypdfConverter : ISearchablePdfConverter
         _logger = logger;
     }
 
-    public async Task<byte[]?> ConvertToSearchablePdfAsync(byte[] sourceBytes, SearchablePdfSourceKind kind, string languages, CancellationToken cancellationToken = default)
+    public async Task<byte[]?> ConvertToSearchablePdfAsync(byte[] sourceBytes, SearchablePdfSourceKind kind, string languages, bool deskew = false, CancellationToken cancellationToken = default)
     {
         if (_http.BaseAddress is null)
         {
@@ -38,7 +38,7 @@ public sealed class OcrmypdfConverter : ISearchablePdfConverter
             file.Headers.ContentType = new MediaTypeHeaderValue(contentType);
             content.Add(file, "file", fileName);
 
-            var url = $"ocr?lang={Uri.EscapeDataString(languages)}&kind={kindParam}";
+            var url = $"ocr?lang={Uri.EscapeDataString(languages)}&kind={kindParam}{(deskew ? "&deskew=true" : string.Empty)}";
             using var response = await _http.PostAsync(url, content, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
@@ -59,6 +59,6 @@ public sealed class OcrmypdfConverter : ISearchablePdfConverter
 // No-op when Ocr:Url isn't configured — the searchable-PDF workflow is simply disabled.
 public sealed class NullSearchablePdfConverter : ISearchablePdfConverter
 {
-    public Task<byte[]?> ConvertToSearchablePdfAsync(byte[] sourceBytes, SearchablePdfSourceKind kind, string languages, CancellationToken cancellationToken = default) =>
+    public Task<byte[]?> ConvertToSearchablePdfAsync(byte[] sourceBytes, SearchablePdfSourceKind kind, string languages, bool deskew = false, CancellationToken cancellationToken = default) =>
         Task.FromResult<byte[]?>(null);
 }

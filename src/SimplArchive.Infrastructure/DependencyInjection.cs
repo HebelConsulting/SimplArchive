@@ -71,6 +71,14 @@ public static class DependencyInjection
         services.AddHostedService<Retention.RetentionWorker>();
         services.AddScoped<IStaleCheckoutService, Checkout.StaleCheckoutService>();
         services.AddHostedService<Checkout.StaleCheckoutWorker>();
+
+        // The inbox ingest pipeline (ADR 0576). REGISTRATION ORDER IS THE PIPELINE ORDER: straightening must
+        // run before patch-code detection (#492), because a patch code is horizontal bars read by a projection
+        // profile and two degrees of rotation flattens it. Adding a processor here is choosing where in the
+        // sequence it runs, which is why they are listed rather than discovered.
+        services.AddScoped<Inbox.IInboxIngestProcessor, Inbox.DeskewIngestProcessor>();
+        services.AddScoped<Inbox.InboxIngestPipeline>();
+        services.AddHostedService<Inbox.InboxIngestSweepWorker>();
         services.AddScoped<IWormLockService, Worm.WormLockService>();
 
         // TOTP-secret encryption (ADR "MFA require-policy + TOTP secret encryption"): OpenBao transit when

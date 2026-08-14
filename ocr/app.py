@@ -26,7 +26,12 @@ def health():
 
 
 @app.post("/ocr")
-async def ocr(file: UploadFile = File(...), lang: str = Query("eng+deu+fra+ita"), kind: str = Query("tiff")):
+async def ocr(
+    file: UploadFile = File(...),
+    lang: str = Query("eng+deu+fra+ita"),
+    kind: str = Query("tiff"),
+    deskew: bool = Query(False),
+):
     data = await file.read()
     is_pdf = kind == "pdf"
     with tempfile.TemporaryDirectory() as work:
@@ -38,11 +43,29 @@ async def ocr(file: UploadFile = File(...), lang: str = Query("eng+deu+fra+ita")
         # tiff → --force-ocr (rasterize the pure image); pdf → --skip-text (OCR image pages, keep the images).
         # --image-dpi 300: fallback resolution when the source carries none.
         mode = "--skip-text" if is_pdf else "--force-ocr"
-        result = subprocess.run(
-            ["ocrmypdf", mode, "--language", lang, "--output-type", "pdf",
-             "--image-dpi", "300", src, dst],
-            capture_output=True,
-        )
+        args = ["ocrmypdf", mode, "--language", lang, "--output-type", "pdf", "--image-dpi", "300"]
+
+        # Straightening (#491): --deskew is Leptonica's sub-degree correction, --rotate-pages is Tesseract's
+        # orientation detection for a page that is 90 or 180 degrees out. They fix different things and a
+        # scanner produces both, so they travel together.
+        #
+        # Free here in a way it is nowhere else: this path already rasterises every page, so straightening adds
+        # no conversion that was not happening anyway — and it IMPROVES the OCR in the same pass, since
+        # Tesseract reads straight text better. Both flags are incompatible with --redo-ocr, which is why the
+        # modes above stay --force-ocr / --skip-text.
+        if deskew:
+            args += ["--deskew", "--rotate-pages"]
+
+            # --optimize 3 only on this path, and only because this path already re-encodes: straightening
+            # cannot happen without rasterising, so the pixels are being rewritten regardless. Measured on a
+            # real colour scan: 2.2 MB source -> 10 MB at the default level 1, 2.0 MB at level 3. Level 3 is
+            # LOSSY, which is a deliberate trade the caller has made by asking for straightening at all — and
+            # it is why a digitally signed document never reaches this code (the pipeline refuses it outright,
+            # since any re-encoding voids the signature).
+            args += ["--optimize", "3"]
+
+        args += [src, dst]
+        result = subprocess.run(args, capture_output=True)
         if result.returncode != 0 or not os.path.exists(dst):
             raise HTTPException(status_code=500, detail=result.stderr.decode(errors="replace")[:2000])
 

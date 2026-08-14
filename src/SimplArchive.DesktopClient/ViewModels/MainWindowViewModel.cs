@@ -73,6 +73,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SearchPreview.Api = api;
         RecycleBin.SetApi(api);
 
+        // The straightening toggle's state belongs to the USER, not the machine, so it is read from the server
+        // once per session rather than restored from local settings (#491).
+        Safe.Fire(async () => await InboxActions.LoadDeskewPreferenceAsync());
+
         // Read the API root's link relations once per session (ADR 0543): the root is the one URL a client may
         // know, and everything else is discovered from it. Fire-and-forget — a workbench that cannot reach the
         // root has larger problems, and the only consequence here is that the affordance stays hidden.
@@ -2329,6 +2333,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     UserId = item.UserId,
                     UserName = item.UserName,
                     MoveUrl = item.MoveUrl,
+                    IsSigned = item.Signed,
                     Item = item,
                 });
             }

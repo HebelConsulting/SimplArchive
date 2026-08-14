@@ -1,0 +1,18 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             x:Class="SimplArchive.DesktopClient.Views.SignedBadge">
+    <!-- "This document carries a digital signature" (#491), shown on an inbox row and a check-out row.
+         ONE control rather than the same ten lines in both lists: the second copy is where a wording or colour
+         change would have been made in one place only, and the two lists would have quietly disagreed about
+         what a signature looks like. -->
+    <Border Background="#1A0F9D58" BorderBrush="#0f9d58" BorderThickness="1" CornerRadius="9"
+            Padding="6,1" Margin="0,0,8,0" VerticalAlignment="Center"
+            ToolTip.Tip="{loc:Tr SignedBadgeTip}">
+        <StackPanel Orientation="Horizontal" Spacing="4">
+            <i:Icon Value="mdi-certificate-outline" FontSize="11" Foreground="#0f9d58" />
+            <TextBlock Text="{loc:Tr SignedBadge}" FontSize="10" Foreground="#0f9d58" />
+        </StackPanel>
+    </Border>
+</UserControl>

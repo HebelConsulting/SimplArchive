@@ -110,8 +110,26 @@ public class InboxPageOperationsTests
         Assert.DoesNotContain("sort", rels);
     }
 
+    // Leaving a page OUT of the order deletes it — how the sort dialog's bin button removes a blank back or a
+    // separator sheet. It is the one operation that destroys content, which is why the clients confirm the
+    // count first: replacing in place leaves nothing to undo it.
     [Fact]
-    public async Task A_sort_that_would_lose_a_page_is_refused_and_changes_nothing()
+    public async Task Leaving_a_page_out_of_the_order_deletes_it()
+    {
+        var (client, _) = await SignedInUserAsync();
+        var name = await StageAsync(client, Pdf(300, 400, 500));
+
+        var pages = await FollowAsync(client, await ItemLinksAsync(client, name), "pages");
+        (await client.PostAsJsonAsync(Rel(pages, "sort"), new { pageOrder = new[] { 3, 1 } })).EnsureSuccessStatusCode();
+
+        // The middle page is gone, the survivors are in the order asked for, and there is no second item left
+        // behind — a sort still produces exactly one document.
+        Assert.Equal([500, 300], await PageWidthsAsync(client, name));
+        Assert.Single(await NamesAsync(client), n => n == name);
+    }
+
+    [Fact]
+    public async Task A_sort_that_would_duplicate_a_page_is_refused_and_changes_nothing()
     {
         var (client, _) = await SignedInUserAsync();
         var name = await StageAsync(client, Pdf(300, 400, 500));
@@ -119,8 +137,8 @@ public class InboxPageOperationsTests
         var pages = await FollowAsync(client, await ItemLinksAsync(client, name), "pages");
         var sort = Rel(pages, "sort");
 
-        // Page 2 listed twice, page 3 not at all. Refused BEFORE anything is written — which is the only reason
-        // sorting is allowed to replace its source at all.
+        // Page 2 listed TWICE. Dropping a page is now legitimate, but duplicating one is not a choice anybody
+        // makes on purpose — and it is refused before anything is written, because the sort replaces in place.
         var response = await client.PostAsJsonAsync(sort, new { pageOrder = new[] { 1, 2, 2 } });
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
 

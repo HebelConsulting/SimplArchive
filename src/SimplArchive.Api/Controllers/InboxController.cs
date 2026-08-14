@@ -102,6 +102,12 @@ public class InboxController : ControllerBase
         // True when a `{name}.mask.json` sidecar exists — the item has a staged mask/index-data draft.
         public bool HasMask { get; set; }
 
+        // True when a `{name}.signed` sidecar exists: the content carries a digital signature (#491). Answered
+        // from the prefix listing rather than the bytes, the same way HasMask is — reading each item to paint a
+        // list would cost one download per row. The clients badge these, and offer no page operation on them,
+        // because any rewrite voids a signature.
+        public bool Signed { get; set; }
+
         // The source of a group-inbox item (ADR 0532): the group's id + name, so the client labels it `[GroupName]`
         // and its action links already carry `?group=`. Null for the caller's own inbox items.
         public Guid? GroupId { get; set; }
@@ -297,7 +303,10 @@ public class InboxController : ControllerBase
     // `<stem>.textlayout.json` — ADR "Server-side preview renditions"/"Search hit overlay"). They must never
     // appear as inbox items, and are swept when the item leaves the inbox (ADR "Avoid inbox preview litter").
     private static bool IsDerivedArtifact(string name) =>
-        name.Contains(".preview.", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".textlayout.json", StringComparison.OrdinalIgnoreCase);
+        name.Contains(".preview.", StringComparison.OrdinalIgnoreCase)
+        || name.EndsWith(".textlayout.json", StringComparison.OrdinalIgnoreCase)
+        || name.EndsWith(SimplArchive.Infrastructure.Inbox.InboxIngestPipeline.MarkerSuffix, StringComparison.OrdinalIgnoreCase)
+        || name.EndsWith(SimplArchive.Infrastructure.Inbox.InboxIngestPipeline.SignedSuffix, StringComparison.OrdinalIgnoreCase);
 
     // The caller's inbox. By default shows only the caller's OWN items (ADR 0532's "show own only" filter, on by
     // default). `?includeGroups=true` also aggregates the inbox of every group the caller is an effective member of
@@ -385,6 +394,7 @@ public class InboxController : ControllerBase
                 Size = storageObject.Size,
                 LastModified = storageObject.LastModified,
                 HasMask = names.Contains(SidecarName(name)),
+                Signed = names.Contains(name + SimplArchive.Infrastructure.Inbox.InboxIngestPipeline.SignedSuffix),
                 Links =
                 [
                     new Link("download", download.ToString(), "GET"),

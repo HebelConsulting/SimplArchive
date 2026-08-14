@@ -101,6 +101,12 @@ public class CheckoutsController : ControllerBase
         // A presigned download of the current repository version — the web "Download from stash" falls back to
         // this when there's no stash yet (the initial working copy).
         public string? DownloadUrl { get; set; }
+
+        // The current version's content carries a digital signature (#491), examined once at finalize. NULLABLE
+        // on purpose and the three states differ: true = signed, false = examined and not, null = NEVER
+        // EXAMINED, which is every version filed before this shipped. Both clients badge only `true`, so an
+        // unexamined version shows nothing rather than a claim nobody checked.
+        public bool? IsSigned { get; set; }
     }
 
     public class CheckoutsResource : HypermediaResource
@@ -274,6 +280,7 @@ public class CheckoutsController : ControllerBase
                 ImplicitAgent = d.ImplicitCheckoutAgent,
                 StashDownloadUrl = stashDownloadUrl,
                 DownloadUrl = downloadUrl,
+                IsSigned = version?.IsSigned,
                 Links =
                 [
                     new Link("self", $"/api/documents/{d.Id}", "GET"),

@@ -70,6 +70,18 @@ public class DocumentVersion : ITenantScoped
     // template the clients render, so a German user doesn't read an English sentence somebody's code wrote
     // (ADR 0545). Default UserComment, so every existing row keeps meaning exactly what it meant.
     public VersionCommentKind CommentKind { get; set; }
+
+    // Whether this version's content carries a digital signature (#491), examined once at finalize — where the
+    // bytes are already being read to verify the content hash, so it costs nothing extra.
+    //
+    // NULLABLE on purpose, and the three states are genuinely different: true = signed, false = examined and
+    // not signed, null = NEVER EXAMINED, which is every version that predates this. A non-null default would
+    // assert something untrue about the whole back catalogue, and the clients would then show "not signed"
+    // where they should show nothing at all.
+    //
+    // What it gates: a signed document is never straightened, split, sorted or joined, because a signature
+    // covers a byte range and any rewrite voids it — silently, since the file still opens and still looks right.
+    public bool? IsSigned { get; set; }
 }
 
 // Who wrote a DocumentVersion.Comment (ADR 0545) — a person, or the system.

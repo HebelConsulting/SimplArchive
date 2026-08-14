@@ -52,6 +52,29 @@ public class PageComposerTests
         Assert.Equal(4, PageComposer.CountPages(joined, PageComposer.PageFormat.Pdf));
     }
 
+    // A REAL scan batch is not uniform: a two-page TIFF from a commercial DMS turned out to hold an A4 page
+    // (2489x3511) and a receipt strip (667x1846). libvips represents a multi-page TIFF as one tall strip plus a
+    // single page-height, so the pages of one file MUST share a size — which means joining mixed sizes has to
+    // pad, and a split-then-join does NOT round-trip the smaller page's dimensions.
+    //
+    // Padding rather than scaling, because scaling would change what the page IS: a receipt stretched to A4 is
+    // a different document, while a receipt centred on an A4 page is the same document on a bigger sheet. No
+    // pixels are lost either way, and the source is kept regardless (ADR 0575).
+    [Fact]
+    public void Joining_pages_of_different_sizes_pads_them_to_the_largest()
+    {
+        var joined = PageComposer.Join([Tiff(200, 300), Tiff(80, 120)], PageComposer.PageFormat.Tiff);
+
+        Assert.Equal(2, PageComposer.CountPages(joined, PageComposer.PageFormat.Tiff));
+
+        using var second = NetVips.Image.NewFromBuffer(joined, kwargs: new NetVips.VOption { { "page", 1 }, { "n", 1 } });
+        Assert.Equal(200, second.Width);   // padded, not scaled…
+        Assert.Equal(300, second.Height);
+    }
+
+    private static byte[] Tiff(int width, int height) =>
+        (NetVips.Image.Black(width, height) + 255).Cast(NetVips.Enums.BandFormat.Uchar).WriteToBuffer(".tif");
+
     // Reorder keeps the page COUNT and applies the permutation. The count is what a bad implementation loses
     // (dropping or duplicating a page), and it is the only property assertable without rasterising.
     [Theory]
