@@ -26,107 +26,9 @@
 
     <DockPanel LastChildFill="True">
 
-        <!-- Top bar -->
-        <Border DockPanel.Dock="Top" Background="#5b4ee5" Padding="14,10">
-            <Grid ColumnDefinitions="Auto,*,Auto">
-                <TextBlock Grid.Column="0" Text="SimplArchive" Foreground="White" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" />
-                <!-- Current user: DisplayName + photo (or initials); click to change your own photo (ADR
-                     "User profile photo"). The self-service avatar sits in the right corner (rightmost), with
-                     the display name to its left (ADR "Desktop recycle bin parity"). The email is gone. -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center" IsVisible="{Binding IsLoggedIn}">
-
-                <!-- In-app notifications bell (ADR "Notification viewer + click-through"): unread badge + a flyout
-                     list; clicking a notification marks it read and navigates to its document. -->
-                <Button ToolTip.Tip="{loc:Tr AppbarNotifications}" Background="Transparent" BorderThickness="0" Padding="4" Click="OnBellClick">
-                    <Panel Width="24" Height="22">
-                        <i:Icon Value="mdi-bell-outline" Foreground="White" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        <Border Background="#e53935" CornerRadius="8" MinWidth="15" Height="15" HorizontalAlignment="Right" VerticalAlignment="Top"
-                                Margin="0,-4,-6,0" IsVisible="{Binding HasUnreadNotifications}">
-                            <TextBlock Text="{Binding UnreadNotificationCount}" Foreground="White" FontSize="10" Margin="3,0" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                    </Panel>
-                    <Button.Flyout>
-                        <Flyout Placement="BottomEdgeAlignedRight">
-                            <StackPanel Width="340" Spacing="4">
-                                <Grid ColumnDefinitions="*,Auto" Margin="4,2">
-                                    <TextBlock Grid.Column="0" Text="{loc:Tr AppbarNotifications}" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                    <Button Grid.Column="1" Content="{loc:Tr MarkAllRead}" Padding="6,2" FontSize="12" Command="{Binding MarkAllNotificationsReadCommand}" />
-                                </Grid>
-                                <TextBlock Text="{loc:Tr NoNotifications}" Foreground="{DynamicResource WbMuted}" Margin="4,6"
-                                           IsVisible="{Binding !Notifications.Count}" />
-                                <ScrollViewer MaxHeight="360">
-                                    <ItemsControl ItemsSource="{Binding Notifications}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate x:DataType="vm:NotificationRowViewModel">
-                                                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Padding="6,4"
-                                                        Command="{ReflectionBinding $parent[ItemsControl].DataContext.OpenNotificationCommand}" CommandParameter="{Binding}">
-                                                    <StackPanel>
-                                                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap"
-                                                                   FontWeight="{Binding IsRead, Converter={x:Static vm:BoolToWeightConverter.Instance}, ConverterParameter=invert}" />
-                                                        <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource WbMuted}" />
-                                                        <TextBlock Text="{Binding When}" FontSize="11" Foreground="{DynamicResource WbFaint}" />
-                                                    </StackPanel>
-                                                </Button>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </ScrollViewer>
-                            </StackPanel>
-                        </Flyout>
-                    </Button.Flyout>
-                </Button>
-
-                <!-- Help (?) menu (ADR 0504): the user manual + About box, mirroring the web client's Help menu. -->
-                <Button ToolTip.Tip="{loc:Tr Help}" Background="Transparent" BorderThickness="0" Padding="4">
-                    <i:Icon Value="mdi-help-circle-outline" Foreground="White" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    <Button.Flyout>
-                        <MenuFlyout Placement="BottomEdgeAlignedRight">
-                            <MenuItem Header="{loc:Tr HelpManual}" Click="OnOpenManual" />
-                            <MenuItem Header="{loc:Tr HelpAbout}" Click="OnShowAbout" />
-                        </MenuFlyout>
-                    </Button.Flyout>
-                </Button>
-
-                <Button HorizontalAlignment="Right" Margin="0,0,6,0"
-                        ToolTip.Tip="{loc:Tr AppbarAccount}" Background="Transparent" BorderThickness="0" Padding="4,2">
-                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding UserDisplayName}" Foreground="White" VerticalAlignment="Center" />
-                        <Border Width="28" Height="28" CornerRadius="14" ClipToBounds="True" Background="#8a7ff0">
-                            <Panel>
-                                <TextBlock Text="{Binding UserInitials}" Foreground="White" FontSize="12" FontWeight="SemiBold"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !HasProfilePhoto}" />
-                                <Image Source="{Binding ProfilePhoto}" Stretch="UniformToFill" IsVisible="{Binding HasProfilePhoto}" />
-                            </Panel>
-                        </Border>
-                    </StackPanel>
-                    <Button.Flyout>
-                        <!-- Open under the account button's right edge (the button sits in the top-right corner)
-                             rather than the default centred placement, which drifted the menu to the left. -->
-                        <MenuFlyout Placement="BottomEdgeAlignedRight">
-                            <!-- One way into your own account (#464): the photo and password entries were two
-                                 peers that showed you nothing about yourself, not even which account you are
-                                 signed in as. -->
-                            <MenuItem Header="{loc:Tr AccountEditProfile}" Click="OnEditProfile" />
-                            <MenuItem Header="{loc:Tr AccountEnableTwoFactor}" Click="OnSetUpMfa" IsVisible="{Binding !MfaEnabled}" />
-                            <MenuItem Header="{loc:Tr AccountDisableTwoFactor}" Click="OnDisableMfa" IsVisible="{Binding MfaEnabled}" />
-                            <MenuItem Header="{loc:Tr AccountPasskeys}" Click="OnManagePasskeys" />
-                            <MenuItem Header="{loc:Tr AccountWebDav}" Click="OnManageWebDav" />
-                            <MenuItem Header="{loc:Tr AccountNotificationPrefs}" Click="OnNotificationPreferences" />
-                            <Separator />
-                            <MenuItem Header="{loc:Tr AccountLogout}" Command="{Binding LogoutCommand}" />
-                        </MenuFlyout>
-                    </Button.Flyout>
-                </Button>
-
-                </StackPanel>
-                <Button Grid.Column="2" Command="{Binding LoginCommand}" IsVisible="{Binding !IsLoggedIn}" ToolTip.Tip="{loc:Tr LogonLogin}">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <i:Icon Value="mdi-login" />
-                        <TextBlock Text="{loc:Tr LogonLogin}" />
-                    </StackPanel>
-                </Button>
-            </Grid>
-        </Border>
+        <!-- The app chrome is its own control (ADR 0578): brand, notifications, theme and the account menu
+             are a responsibility, not a region, and this file has no room left for another one. -->
+        <v:TitleBar DockPanel.Dock="Top" />
 
         <!-- Impersonation banner (ADR "User impersonation") -->
         <Border DockPanel.Dock="Top" Background="#b26a00" Padding="12,5" IsVisible="{Binding IsImpersonating}">
@@ -163,7 +65,7 @@
                     <!-- Ribbon — buttons grouped by concern (tree / documents / general) with vertical separators
                          between the groups (ADR "Desktop Repositories-tab UI polish"). "Convert scans" moved to
                          the Tenant tab. The vertical separators are thin theme-coloured Borders. -->
-                    <Border DockPanel.Dock="Top" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+                    <Border Classes="ribbon" DockPanel.Dock="Top" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
                         <!-- WrapPanel so whole button-groups reflow onto a new row when the ribbon is too narrow to
                              fit them all, instead of clipping — matching the preview-pane toolbar (both clients). Each
                              concern-group is a cluster (a horizontal StackPanel) with a right/bottom margin; the margin
@@ -216,7 +118,7 @@
                                             <TextBlock Text="/" Foreground="{DynamicResource WbFaint}" Margin="4,0" VerticalAlignment="Center" IsVisible="{Binding ShowSeparator}" />
                                             <Button Content="{Binding Name}" CommandParameter="{Binding}"
                                                     Command="{ReflectionBinding $parent[ItemsControl].DataContext.NavigateToBreadcrumbCommand}"
-                                                    Background="Transparent" BorderThickness="0" Padding="3,1" Foreground="#5b4ee5" Cursor="Hand" />
+                                                    Background="Transparent" BorderThickness="0" Padding="3,1" Foreground="{DynamicResource WbAccentText}" Cursor="Hand" />
                                         </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -310,7 +212,7 @@
                         <!-- gutter: resize + collapse the tree. The GridSplitter must be a DIRECT child of the
                              resizable Grid (nesting it caused an NRE in Grid.ArrangeOverride); the caret Button
                              is a second child overlaid in the same cell. -->
-                        <GridSplitter Grid.Column="1" Background="#33808080" ResizeDirection="Columns" IsEnabled="{Binding !TreeCollapsed}" />
+                        <GridSplitter Grid.Column="1" Background="{DynamicResource WbBorder}" ResizeDirection="Columns" IsEnabled="{Binding !TreeCollapsed}" />
                         <Button Grid.Column="1" Command="{Binding ToggleTreeCommand}" Width="10" Height="24" Padding="0" MinWidth="0" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
                             <i:Icon Value="{Binding TreeCaret}" FontSize="11" />
                         </Button>
@@ -431,7 +333,7 @@
                                         <Grid Width="{Binding $parent[ListBox].DataContext.ColNameWidth}" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
                                             <!-- Folders follow the tree's glyph rules (ADR 0547) so the same object looks
                                                  the same in both panes; documents keep the list's accent. -->
-                                            <i:Icon Grid.Column="0" Value="{Binding IconValue}" Foreground="#5b4ee5"
+                                            <i:Icon Grid.Column="0" Value="{Binding IconValue}" Foreground="{DynamicResource WbMuted}"
                                                     Classes.wbFolder="{Binding UsesFolderBrush}"
                                                     Classes.wbFolderEmpty="{Binding UsesEmptyFolderBrush}"
                                                     VerticalAlignment="Center" Margin="0,0,6,0" />
@@ -459,7 +361,7 @@
                         </DockPanel>
 
                         <!-- gutter: resize + collapse the contents list -->
-                        <GridSplitter Grid.Column="3" Background="#33808080" ResizeDirection="Columns" IsEnabled="{Binding !ListCollapsed}" />
+                        <GridSplitter Grid.Column="3" Background="{DynamicResource WbBorder}" ResizeDirection="Columns" IsEnabled="{Binding !ListCollapsed}" />
                         <Button Grid.Column="3" Command="{Binding ToggleListCommand}" Width="10" Height="24" Padding="0" MinWidth="0" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
                             <i:Icon Value="{Binding ListCaret}" FontSize="11" />
                         </Button>
@@ -594,7 +496,7 @@
                                             <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:CompileBindings="False">
-                                                    <Button Margin="0,0,4,4" Padding="7,1" Background="#33808080" CornerRadius="3"
+                                                    <Button Margin="0,0,4,4" Padding="7,1" Background="{DynamicResource WbChrome}" CornerRadius="3"
                                                             CommandParameter="{Binding}"
                                                             Command="{Binding DataContext.SearchByTagCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}">
                                                         <StackPanel Orientation="Horizontal" Spacing="3">
@@ -649,7 +551,7 @@
                                                     <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate x:CompileBindings="False">
-                                                            <Border Margin="0,0,4,4" Padding="7,1" Background="#33808080" CornerRadius="3">
+                                                            <Border Margin="0,0,4,4" Padding="7,1" Background="{DynamicResource WbChrome}" CornerRadius="3">
                                                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                                                     <TextBlock Text="{Binding}" FontSize="11" VerticalAlignment="Center" />
                                                                     <Button Content="✕" Padding="3,0" MinWidth="0" MinHeight="0" FontSize="10" Background="Transparent"
@@ -675,7 +577,7 @@
                             </ScrollViewer>
 
                             <!-- gutter: resize + collapse the index-data pane -->
-                            <GridSplitter Grid.Row="1" Background="#33808080" ResizeDirection="Rows" HorizontalAlignment="Stretch" IsEnabled="{Binding !IndexCollapsed}" />
+                            <GridSplitter Grid.Row="1" Background="{DynamicResource WbBorder}" ResizeDirection="Rows" HorizontalAlignment="Stretch" IsEnabled="{Binding !IndexCollapsed}" />
                             <Button Grid.Row="1" Command="{Binding ToggleIndexCommand}" Width="24" Height="10" Padding="0" MinHeight="0" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
                                 <i:Icon Value="{Binding IndexCaret}" FontSize="11" />
                             </Button>
@@ -696,7 +598,7 @@
                                 </Border>
 
                                 <!-- gutter: resize + collapse the chat -->
-                                <GridSplitter Grid.Column="1" Background="#33808080" ResizeDirection="Columns" IsEnabled="{Binding !ChatCollapsed}" />
+                                <GridSplitter Grid.Column="1" Background="{DynamicResource WbBorder}" ResizeDirection="Columns" IsEnabled="{Binding !ChatCollapsed}" />
                                 <Button Grid.Column="1" Command="{Binding ToggleChatCommand}" Width="10" Height="24" Padding="0" MinWidth="0" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip.Tip="{loc:Tr MwCollapseExpand}">
                                     <i:Icon Value="{Binding ChatCaret}" FontSize="11" />
                                 </Button>
@@ -945,7 +847,7 @@
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:InboxItemViewModel">
                                     <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,2">
-                                        <i:Icon Grid.Column="0" Value="{Binding IconValue}" Foreground="#5b4ee5" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                        <i:Icon Grid.Column="0" Value="{Binding IconValue}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Margin="0,0,8,0" />
                                         <TextBlock Grid.Column="1" Text="{Binding DisplayName}" VerticalAlignment="Center" />
                                         <!-- Source chip: whose queue a non-own item came from (a group, or a user for an admin view). -->
                                         <Border Grid.Column="2" IsVisible="{Binding HasSource}" Background="{DynamicResource WbBorder}" CornerRadius="3" Padding="5,1" Margin="0,0,8,0" VerticalAlignment="Center">
@@ -967,7 +869,7 @@
                         </ListBox>
                     </Grid>
 
-                    <GridSplitter Grid.Column="1" Background="#33808080" ResizeDirection="Columns" HorizontalAlignment="Stretch" />
+                    <GridSplitter Grid.Column="1" Background="{DynamicResource WbBorder}" ResizeDirection="Columns" HorizontalAlignment="Stretch" />
 
                     <!-- Right column: mask/index-data pane (top) │ preview pane (bottom). Each is resizable
                          (the row splitter) + collapsible (its header caret) + persisted. -->
@@ -1052,7 +954,7 @@
                             </ScrollViewer>
                         </Border>
 
-                        <GridSplitter Grid.Row="2" Background="#33808080" ResizeDirection="Rows" HorizontalAlignment="Stretch"
+                        <GridSplitter Grid.Row="2" Background="{DynamicResource WbBorder}" ResizeDirection="Rows" HorizontalAlignment="Stretch"
                                       IsEnabled="{Binding !InboxMaskCollapsed}" />
 
                         <!-- Preview header -->
@@ -1087,9 +989,9 @@
                 <TabItem.Header>
                     <Panel>
                         <i:Icon Value="mdi-lock-outline" FontSize="20" />
-                        <Border IsVisible="{Binding HasCheckouts}" Background="#5b4ee5" CornerRadius="8" MinWidth="16" Height="16"
+                        <Border IsVisible="{Binding HasCheckouts}" Background="{DynamicResource WbAccent}" CornerRadius="8" MinWidth="16" Height="16"
                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-5,-9,0" Padding="4,0">
-                            <TextBlock Text="{Binding CheckoutCount}" Foreground="White" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding CheckoutCount}" Foreground="{DynamicResource WbOnAccent}" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                     </Panel>
                 </TabItem.Header>
@@ -1127,9 +1029,9 @@
 
                                         <!-- Modified is the whole reason to look at this list, so it is a chip
                                              rather than a word in a column: it is what the eye should find first. -->
-                                        <Border Grid.Column="1" IsVisible="{Binding IsModified}" Background="#5b4ee5" CornerRadius="3"
+                                        <Border Grid.Column="1" IsVisible="{Binding IsModified}" Background="{DynamicResource WbAccent}" CornerRadius="3"
                                                 Padding="5,1" Margin="0,0,8,0" VerticalAlignment="Center">
-                                            <TextBlock Text="{loc:Tr CoModified}" FontSize="10" Foreground="White" />
+                                            <TextBlock Text="{loc:Tr CoModified}" FontSize="10" Foreground="{DynamicResource WbOnAccent}" />
                                         </Border>
                                         <TextBlock Grid.Column="1" IsVisible="{Binding !IsModified}" Text="{Binding StatusText}"
                                                    Foreground="{DynamicResource WbFaint}" FontSize="11" Margin="0,0,8,0" VerticalAlignment="Center" />
@@ -1139,9 +1041,9 @@
                                              theirs (ADR 0562). The tooltip names the client that did it. Carried
                                              into the new row layout — the restructure must not quietly drop it. -->
                                         <Border Grid.Column="2" IsVisible="{Binding IsImplicit}" ToolTip.Tip="{Binding ImplicitTooltip}"
-                                                Background="#1A5B4EE5" BorderBrush="#5b4ee5" BorderThickness="1" CornerRadius="9"
+                                                Background="{DynamicResource WbAccentTint}" BorderBrush="{DynamicResource WbAccent}" BorderThickness="1" CornerRadius="9"
                                                 Padding="6,1" Margin="0,0,8,0" VerticalAlignment="Center">
-                                            <TextBlock Text="{loc:Tr CoAuto}" FontSize="10" Foreground="#5b4ee5" />
+                                            <TextBlock Text="{loc:Tr CoAuto}" FontSize="10" Foreground="{DynamicResource WbAccentText}" />
                                         </Border>
 
                                         <!-- Only a definite yes: an unexamined version says nothing (#491). -->
@@ -1186,7 +1088,7 @@
                         </StackPanel>
                     </Grid>
 
-                    <GridSplitter Grid.Column="1" Background="#33808080" ResizeDirection="Columns" HorizontalAlignment="Stretch" />
+                    <GridSplitter Grid.Column="1" Background="{DynamicResource WbBorder}" ResizeDirection="Columns" HorizontalAlignment="Stretch" />
 
                     <!-- Right column: index data (top) over the WORKING COPY's preview (bottom). Each is
                          resizable + collapsible, as on the Inbox tab. -->
@@ -1227,7 +1129,7 @@
                             </ScrollViewer>
                         </Border>
 
-                        <GridSplitter Grid.Row="2" Background="#33808080" ResizeDirection="Rows" HorizontalAlignment="Stretch"
+                        <GridSplitter Grid.Row="2" Background="{DynamicResource WbBorder}" ResizeDirection="Rows" HorizontalAlignment="Stretch"
                                       IsEnabled="{Binding !Checkout.MaskCollapsed}" />
 
                         <Border Grid.Row="3" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,1,0,0">
@@ -1481,7 +1383,7 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:SearchResultViewModel">
                                 <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3">
-                                    <i:Icon Grid.Column="0" Value="{Binding IconValue}" Foreground="#5b4ee5" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <i:Icon Grid.Column="0" Value="{Binding IconValue}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Margin="0,0,8,0" />
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Name}" />
                                         <!-- Highlight snippet: <em> match tags → bold runs (ADR "Search result highlighting"). -->
@@ -1574,7 +1476,7 @@
                                 </ListBox>
                             </DockPanel>
 
-                            <GridSplitter Grid.Column="1" Background="#33808080" ResizeDirection="Columns" />
+                            <GridSplitter Grid.Column="1" Background="{DynamicResource WbBorder}" ResizeDirection="Columns" />
 
                             <!-- Read-only detail: system fields + mask + index over (preview | chat). -->
                             <Panel Grid.Column="2">
@@ -1619,7 +1521,7 @@
                                                 IsVisible="{Binding !RecycleBin.Preview.PreviewFullscreen}">
                                             <v:PreviewPane DataContext="{Binding RecycleBin.Preview}" />
                                         </Border>
-                                        <GridSplitter Grid.Column="1" Background="#33808080" ResizeDirection="Columns" />
+                                        <GridSplitter Grid.Column="1" Background="{DynamicResource WbBorder}" ResizeDirection="Columns" />
                                         <Border Grid.Column="2" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,1,0,0">
                                             <DockPanel LastChildFill="True">
                                                 <TextBlock DockPanel.Dock="Top" Text="{loc:Tr CommentsHeader}" FontWeight="SemiBold" Margin="10,8" />
@@ -1837,7 +1739,7 @@
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:PrincipalRowViewModel">
                                     <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2">
-                                        <i:Icon Value="{Binding IconValue}" Foreground="#5b4ee5" VerticalAlignment="Center" />
+                                        <i:Icon Value="{Binding IconValue}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                                         <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </DataTemplate>
@@ -1870,7 +1772,7 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:CompileBindings="False">
                                                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,1">
-                                                    <i:Icon Value="mdi-account" Foreground="#5b4ee5" VerticalAlignment="Center" />
+                                                    <i:Icon Value="mdi-account" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                                                     <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" Width="240" TextTrimming="CharacterEllipsis" />
                                                     <Button Padding="4,0" ToolTip.Tip="{loc:Tr UgRemoveMember}"
                                                             Command="{Binding DataContext.RemoveMemberCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -1883,9 +1785,9 @@
                                 <!-- Profile photo (users only) — ADR "User profile photo". -->
                                 <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="0,0,0,12"
                                             IsVisible="{Binding SelectedPrincipalIsUser}">
-                                    <Border Width="56" Height="56" CornerRadius="28" ClipToBounds="True" Background="#8a7ff0">
+                                    <Border Width="56" Height="56" CornerRadius="28" ClipToBounds="True" Background="{DynamicResource WbAccentTint}">
                                         <Panel>
-                                            <TextBlock Text="{Binding SelectedPrincipalInitials}" Foreground="White" FontSize="20" FontWeight="SemiBold"
+                                            <TextBlock Text="{Binding SelectedPrincipalInitials}" Foreground="{DynamicResource WbAccentText}" FontSize="20" FontWeight="SemiBold"
                                                        HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !HasSelectedPrincipalPhoto}" />
                                             <Image Source="{Binding SelectedPrincipalPhoto}" Stretch="UniformToFill" IsVisible="{Binding HasSelectedPrincipalPhoto}" />
                                         </Panel>
@@ -2051,7 +1953,7 @@
                                             <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="0,2">
                                                 <Grid ColumnDefinitions="*,Auto">
                                                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-                                                        <i:Icon Value="mdi-file-document-outline" Foreground="#5b4ee5" VerticalAlignment="Center" />
+                                                        <i:Icon Value="mdi-file-document-outline" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                                                         <TextBlock Text="{Binding DocumentName}" VerticalAlignment="Center" />
                                                     </StackPanel>
                                                     <Button Grid.Column="1" Content="{loc:Tr UgRemove}" Click="OnRemoveLegalHoldItem" Tag="{Binding}" />

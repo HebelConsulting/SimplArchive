@@ -1,0 +1,122 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.TitleBar"
+             x:DataType="vm:MainWindowViewModel">
+<Border Background="{DynamicResource WbSurface}" Padding="14,10" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+    <Grid ColumnDefinitions="Auto,*,Auto">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><Border Width="10" Height="10" CornerRadius="3" Background="{DynamicResource WbAccent}" /><TextBlock Text="SimplArchive" Foreground="{DynamicResource WbText}" FontSize="17" FontWeight="SemiBold" /></StackPanel>
+        <!-- Current user: DisplayName + photo (or initials); click to change your own photo (ADR
+             "User profile photo"). The self-service avatar sits in the right corner (rightmost), with
+             the display name to its left (ADR "Desktop recycle bin parity"). The email is gone. -->
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" VerticalAlignment="Center" IsVisible="{Binding IsLoggedIn}">
+
+        <!-- In-app notifications bell (ADR "Notification viewer + click-through"): unread badge + a flyout
+             list; clicking a notification marks it read and navigates to its document. -->
+        <!-- Light / Dark / System (ADR 0578). A menu rather than a cycling button, because "System" is not
+             discoverable by clicking: a two-state toggle can never get back to following the OS, and that is
+             what this client did exclusively until now. -->
+        <Button ToolTip.Tip="{loc:Tr ThemeMode}" Background="Transparent" BorderThickness="0" Padding="4"
+                AutomationProperties.AutomationId="theme-mode">
+            <i:Icon Value="mdi-theme-light-dark" Foreground="{DynamicResource WbMuted}" FontSize="20" />
+            <Button.Flyout>
+                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                    <MenuItem Header="{loc:Tr ThemeModeSystem}" Click="OnThemeSystem" />
+                    <MenuItem Header="{loc:Tr ThemeModeLight}" Click="OnThemeLight" />
+                    <MenuItem Header="{loc:Tr ThemeModeDark}" Click="OnThemeDark" />
+                </MenuFlyout>
+            </Button.Flyout>
+        </Button>
+        <Button ToolTip.Tip="{loc:Tr AppbarNotifications}" Background="Transparent" BorderThickness="0" Padding="4" Click="OnBellClick">
+            <Panel Width="24" Height="22">
+                <i:Icon Value="mdi-bell-outline" Foreground="{DynamicResource WbMuted}" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <Border Background="#e53935" CornerRadius="8" MinWidth="15" Height="15" HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Margin="0,-4,-6,0" IsVisible="{Binding HasUnreadNotifications}">
+                    <TextBlock Text="{Binding UnreadNotificationCount}" Foreground="White" FontSize="10" Margin="3,0" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+            </Panel>
+            <Button.Flyout>
+                <Flyout Placement="BottomEdgeAlignedRight">
+                    <StackPanel Width="340" Spacing="4">
+                        <Grid ColumnDefinitions="*,Auto" Margin="4,2">
+                            <TextBlock Grid.Column="0" Text="{loc:Tr AppbarNotifications}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Content="{loc:Tr MarkAllRead}" Padding="6,2" FontSize="12" Command="{Binding MarkAllNotificationsReadCommand}" />
+                        </Grid>
+                        <TextBlock Text="{loc:Tr NoNotifications}" Foreground="{DynamicResource WbMuted}" Margin="4,6"
+                                   IsVisible="{Binding !Notifications.Count}" />
+                        <ScrollViewer MaxHeight="360">
+                            <ItemsControl ItemsSource="{Binding Notifications}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:NotificationRowViewModel">
+                                        <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Padding="6,4"
+                                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.OpenNotificationCommand}" CommandParameter="{Binding}">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Title}" TextWrapping="Wrap"
+                                                           FontWeight="{Binding IsRead, Converter={x:Static vm:BoolToWeightConverter.Instance}, ConverterParameter=invert}" />
+                                                <TextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource WbMuted}" />
+                                                <TextBlock Text="{Binding When}" FontSize="11" Foreground="{DynamicResource WbFaint}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Flyout>
+            </Button.Flyout>
+        </Button>
+
+        <!-- Help (?) menu (ADR 0504): the user manual + About box, mirroring the web client's Help menu. -->
+        <Button ToolTip.Tip="{loc:Tr Help}" Background="Transparent" BorderThickness="0" Padding="4">
+            <i:Icon Value="mdi-help-circle-outline" Foreground="{DynamicResource WbMuted}" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <Button.Flyout>
+                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                    <MenuItem Header="{loc:Tr HelpManual}" Click="OnOpenManual" />
+                    <MenuItem Header="{loc:Tr HelpAbout}" Click="OnShowAbout" />
+                </MenuFlyout>
+            </Button.Flyout>
+        </Button>
+
+        <Button HorizontalAlignment="Right" Margin="0,0,6,0"
+                ToolTip.Tip="{loc:Tr AppbarAccount}" Background="Transparent" BorderThickness="0" Padding="4,2">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="{Binding UserDisplayName}" Foreground="{DynamicResource WbText}" VerticalAlignment="Center" />
+                <Border Width="28" Height="28" CornerRadius="14" ClipToBounds="True" Background="{DynamicResource WbAccentTint}">
+                    <Panel>
+                        <TextBlock Text="{Binding UserInitials}" Foreground="{DynamicResource WbAccentText}" FontSize="12" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding !HasProfilePhoto}" />
+                        <Image Source="{Binding ProfilePhoto}" Stretch="UniformToFill" IsVisible="{Binding HasProfilePhoto}" />
+                    </Panel>
+                </Border>
+            </StackPanel>
+            <Button.Flyout>
+                <!-- Open under the account button's right edge (the button sits in the top-right corner)
+                     rather than the default centred placement, which drifted the menu to the left. -->
+                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                    <!-- One way into your own account (#464): the photo and password entries were two
+                         peers that showed you nothing about yourself, not even which account you are
+                         signed in as. -->
+                    <MenuItem Header="{loc:Tr AccountEditProfile}" Click="OnEditProfile" />
+                    <MenuItem Header="{loc:Tr AccountEnableTwoFactor}" Click="OnSetUpMfa" IsVisible="{Binding !MfaEnabled}" />
+                    <MenuItem Header="{loc:Tr AccountDisableTwoFactor}" Click="OnDisableMfa" IsVisible="{Binding MfaEnabled}" />
+                    <MenuItem Header="{loc:Tr AccountPasskeys}" Click="OnManagePasskeys" />
+                    <MenuItem Header="{loc:Tr AccountWebDav}" Click="OnManageWebDav" />
+                    <MenuItem Header="{loc:Tr AccountNotificationPrefs}" Click="OnNotificationPreferences" />
+                    <Separator />
+                    <MenuItem Header="{loc:Tr AccountLogout}" Command="{Binding LogoutCommand}" />
+                </MenuFlyout>
+            </Button.Flyout>
+        </Button>
+
+        </StackPanel>
+        <Button Grid.Column="2" Command="{Binding LoginCommand}" IsVisible="{Binding !IsLoggedIn}" ToolTip.Tip="{loc:Tr LogonLogin}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <i:Icon Value="mdi-login" />
+                <TextBlock Text="{loc:Tr LogonLogin}" />
+            </StackPanel>
+        </Button>
+    </Grid>
+</Border>
+</UserControl>

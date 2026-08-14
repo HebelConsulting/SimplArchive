@@ -1,0 +1,23 @@
+{
+  "name": "Teal",
+  "light": {
+    "accent": {
+      "primary": "#0F766E",
+      "hover": "#115E59",
+      "onPrimary": "#FFFFFF",
+      "text": "#0F766E",
+      "tint": "#E4F3F1",
+      "selection": "#EAF5F3"
+    }
+  },
+  "dark": {
+    "accent": {
+      "primary": "#14B8A6",
+      "hover": "#0D9488",
+      "onPrimary": "#0F1115",
+      "text": "#2DD4BF",
+      "tint": "#0E322F",
+      "selection": "#122A28"
+    }
+  }
+}

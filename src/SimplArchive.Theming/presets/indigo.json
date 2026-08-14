@@ -1,0 +1,23 @@
+{
+  "name": "Indigo",
+  "light": {
+    "accent": {
+      "primary": "#4F46E5",
+      "hover": "#4338CA",
+      "onPrimary": "#FFFFFF",
+      "text": "#4F46E5",
+      "tint": "#ECEBFD",
+      "selection": "#F0EFFE"
+    }
+  },
+  "dark": {
+    "accent": {
+      "primary": "#818CF8",
+      "hover": "#A5B4FC",
+      "onPrimary": "#0F1115",
+      "text": "#A5B4FC",
+      "tint": "#22224A",
+      "selection": "#1C1D3B"
+    }
+  }
+}

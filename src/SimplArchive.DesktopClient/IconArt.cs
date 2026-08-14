@@ -2,18 +2,25 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using SimplArchive.Theming;
 
 namespace SimplArchive.DesktopClient;
 
-// Draws the app icon — a filing cabinet on a rounded brand-purple tile — as an Avalonia visual, so it can be
+// Draws the app icon — a filing cabinet on a rounded brand tile — as an Avalonia visual, so it can be
 // rendered to PNG headlessly (no external image tools, no third-party art). See ADR "Desktop app icon".
+//
+// The colours come from the design tokens (ADR 0578) rather than being written here, so the launcher icon
+// follows the brand instead of contradicting it. That mattered the moment a custom accent became possible:
+// an application whose window is one colour and whose Dock icon is another looks unfinished, and the icon is
+// the half nobody remembers to change.
 internal static class IconArt
 {
     public static Control BuildTile()
     {
         const double size = 1024;
-        var brand = Color.Parse("#5b4ee5");
-        var brandLight = Color.Parse("#7d70f6");
+        var accent = ThemeTokensReader.Shipped.Light.Accent;
+        var brand = Color.Parse(accent.Primary);
+        var brandLight = Color.Parse(AccentDerivation.Shade(accent.Primary, 0.10));
 
         var tile = new Border
         {
@@ -45,8 +52,8 @@ internal static class IconArt
             {
                 Height = 150,
                 CornerRadius = new CornerRadius(18),
-                Background = new SolidColorBrush(Color.Parse("#f3f2fb")),
-                BorderBrush = new SolidColorBrush(Color.Parse("#e2e0f3")),
+                Background = new SolidColorBrush(Color.Parse(AccentDerivation.Shade(accent.Tint, 0.02))),
+                BorderBrush = new SolidColorBrush(Color.Parse(AccentDerivation.Shade(accent.Tint, -0.04))),
                 BorderThickness = new Thickness(3),
                 Child = new Border
                 {

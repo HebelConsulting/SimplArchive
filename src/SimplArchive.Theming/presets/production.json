@@ -1,0 +1,8 @@
+{
+  "name": "Production (live system)",
+  "light": {
+    "accent": {
+      "primary": "#C2410C"
+    }
+  }
+}

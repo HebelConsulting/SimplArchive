@@ -3,10 +3,11 @@
         xmlns:loc="using:SimplArchive.DesktopClient.Localization"
         xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
         xmlns:svc="using:SimplArchive.DesktopClient.Services"
+        xmlns:theming="using:SimplArchive.Theming"
         xmlns:i="using:Projektanker.Icons.Avalonia"
         x:Class="SimplArchive.DesktopClient.Views.ServerManagerWindow"
         x:DataType="vm:ServerManagerViewModel"
-        Title="{loc:Tr SmTitle}" Width="640" Height="400"
+        Title="{loc:Tr SmTitle}" Width="640" Height="470"
         WindowStartupLocation="CenterOwner">
     <Grid Margin="12" ColumnDefinitions="220,12,*" RowDefinitions="*,Auto">
         <!-- Server list (left) -->
@@ -45,6 +46,10 @@
                                            Foreground="{Binding SelectedIsOurServer, Converter={x:Static vm:GreenTintConverter.Instance}, ConverterParameter=fg}" />
                             </Border>
                         </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="{loc:Tr SmThemeLabel}" FontSize="11" Foreground="{DynamicResource WbMuted}" />
+                            <TextBlock Text="{Binding SelectedThemeName}" FontSize="14" />
+                        </StackPanel>
                         <Button Command="{Binding EditCommand}" HorizontalAlignment="Left" Margin="0,4,0,0">
                             <StackPanel Orientation="Horizontal" Spacing="5"><i:Icon Value="mdi-pencil" /><TextBlock Text="{loc:Tr Edit}" /></StackPanel>
                         </Button>
@@ -80,7 +85,21 @@
                             </TextBox.Styles>
                         </TextBox>
                     </StackPanel>
-                    <TextBlock Text="{Binding Error}" Foreground="#c0392b" FontSize="12" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap" />
+                    <StackPanel>
+                        <TextBlock Text="{loc:Tr SmThemeLabel}" FontSize="11" Foreground="{DynamicResource WbMuted}" />
+                        <!-- Applies as you pick rather than on Save (ADR 0578): the workbench is behind this
+                             window, so the only honest way to choose a colour is to see it. Cancel puts the
+                             previous one back. -->
+                        <ComboBox AutomationProperties.AutomationId="server-theme" ItemsSource="{Binding Themes}"
+                                  SelectedItem="{Binding EditTheme}" HorizontalAlignment="Stretch">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="theming:ThemeCatalog+Entry">
+                                    <TextBlock Text="{Binding Name}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Error}" Foreground="{DynamicResource WbDanger}" FontSize="12" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
                         <Button Command="{Binding SaveCommand}" Classes="accent"><StackPanel Orientation="Horizontal" Spacing="5"><i:Icon Value="mdi-content-save-outline" /><TextBlock Text="{loc:Tr Save}" /></StackPanel></Button>
                         <Button Command="{Binding CancelCommand}" Content="{loc:Tr Cancel}" />

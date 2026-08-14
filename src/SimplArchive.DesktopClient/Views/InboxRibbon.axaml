@@ -10,7 +10,7 @@
          operations live here rather than on the row, because Join acts on a SELECTION and a per-row
          button cannot express that. The WebDAV button moved up from the bottom-left corner, so every
          inbox action is in one place instead of two. -->
-    <Border Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+    <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
         <WrapPanel Orientation="Horizontal">
             <!-- Pages group: what is INSIDE a staged scan (#487). Each is disabled until the server
                  says it can succeed — a one-page file offers no split or sort (ADR 0554). -->

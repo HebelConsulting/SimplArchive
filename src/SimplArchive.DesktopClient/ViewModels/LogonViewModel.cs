@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
+using SimplArchive.Theming;
 using SimplArchive.Localization;
 
 namespace SimplArchive.DesktopClient.ViewModels;
@@ -131,6 +132,20 @@ public sealed partial class LogonViewModel : ObservableObject
 
     partial void OnSelectedServerChanged(ServerProfile? value)
     {
+        // The style belongs to the SERVER (ADR 0578), so it changes here rather than after signing in: picking
+        // a customer's deployment shows their colours from the logon window onward, which is also the only
+        // point at which it can be shown before there is a workbench to show it in.
+        //
+        // A style that no longer resolves falls back without an error dialog — a colour scheme is never worth
+        // interrupting somebody's work over — but not without trace. This client has no logger at all
+        // (issue #499), so stderr is the whole of it for now, and it reaches nobody in a packaged build. What
+        // IS answerable meanwhile is the server manager, whose Style field then reads the shipped design's
+        // name rather than the missing one.
+        foreach (var note in ThemeApplier.Apply(value?.Theme))
+        {
+            Console.Error.WriteLine($"SimplArchive style: {note}");
+        }
+
         if (_activated)
         {
             _ = CheckForUpdatesAsync();

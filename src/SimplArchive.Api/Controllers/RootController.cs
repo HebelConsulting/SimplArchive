@@ -33,6 +33,10 @@ public class RootController : ControllerBase
             Links =
             [
                 new Link("self", "/api", "GET"),
+                // This installation's colours (ADR 0578). On the ROOT because the web client applies them
+                // before anyone has signed in — a brand that appears only after login appears too late — and
+                // the root is the one resource reachable anonymously.
+                new Link("theme", "/api/theme", "GET"),
                 new Link("repositories", "/api/repositories", "GET"),
                 new Link("search", "/api/search", "GET"),
                 // Acting on a SET of documents, and finding the ones that already exist by content hash —

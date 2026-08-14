@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- TargetFramework is set explicitly (not just inherited from Directory.Build.props) because the Docker
+       restore layer copies only the .csproj files, not Directory.Build.props — every project does the same. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- The design tokens, and the code that turns them into each client's own idea of a theme (ADR 0578).
+       A shared leaf with no dependencies — the same shape as SimplArchive.Localization — so the Avalonia
+       desktop, the Blazor web client and the Api can all reference it.
+
+       tokens.json is EMBEDDED rather than merely read from disk: it is the shipped design, and the shipped
+       design has to exist without any file being present anywhere. The build-time generator and the runtime
+       override loader then read the very same document, which is what stops "what we generate" and "what we
+       validate an override against" drifting apart. -->
+  <ItemGroup>
+    <EmbeddedResource Include="tokens.json" />
+    <!-- The bundled alternatives the style picker offers (ADR 0578). Embedded for the same reason as
+         the tokens: a style that ships with the application must be pickable on a machine where nobody
+         has copied a folder anywhere. Styles found beside the executable are read from disk instead. -->
+    <EmbeddedResource Include="presets\*.json" />
+  </ItemGroup>
+
+</Project>

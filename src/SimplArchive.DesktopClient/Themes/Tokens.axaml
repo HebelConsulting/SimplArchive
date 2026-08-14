@@ -1,0 +1,65 @@
+<!--
+     This file is GENERATED from src/SimplArchive.Theming/tokens.json by scripts/generate-theme.sh.
+     Edit the tokens and regenerate — a hand edit here fails ThemeGenerationTests on the next build.
+-->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="WbCanvas" Color="#FAFAFC" />
+            <SolidColorBrush x:Key="WbSurface" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="WbChrome" Color="#F4F5F8" />
+            <SolidColorBrush x:Key="WbBorder" Color="#E6E7EC" />
+            <SolidColorBrush x:Key="WbText" Color="#14161C" />
+            <SolidColorBrush x:Key="WbMuted" Color="#5A5F6E" />
+            <SolidColorBrush x:Key="WbFaint" Color="#898F9E" />
+            <SolidColorBrush x:Key="WbFolder" Color="#D9A400" />
+            <SolidColorBrush x:Key="WbFolderEmpty" Color="#8cD9A400" />
+            <SolidColorBrush x:Key="WbAccent" Color="#5B4EE5" />
+            <SolidColorBrush x:Key="WbAccentHover" Color="#4A3CD9" />
+            <SolidColorBrush x:Key="WbOnAccent" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="WbAccentText" Color="#5B4EE5" />
+            <SolidColorBrush x:Key="WbAccentTint" Color="#E8E6FB" />
+            <SolidColorBrush x:Key="WbSelection" Color="#F0EFFD" />
+            <SolidColorBrush x:Key="WbDanger" Color="#B91C1C" />
+            <SolidColorBrush x:Key="WbSuccess" Color="#15803D" />
+            <SolidColorBrush x:Key="WbWarning" Color="#B45309" />
+
+            <Color x:Key="SystemAccentColor">#5B4EE5</Color>
+            <Color x:Key="SystemAccentColorLight1">#7C72EA</Color>
+            <Color x:Key="SystemAccentColorLight2">#9D95EF</Color>
+            <Color x:Key="SystemAccentColorLight3">#BEB9F5</Color>
+            <Color x:Key="SystemAccentColorDark1">#3A2AE0</Color>
+            <Color x:Key="SystemAccentColorDark2">#2B1DC5</Color>
+            <Color x:Key="SystemAccentColorDark3">#2318A1</Color>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="WbCanvas" Color="#0F1115" />
+            <SolidColorBrush x:Key="WbSurface" Color="#171A1F" />
+            <SolidColorBrush x:Key="WbChrome" Color="#12141A" />
+            <SolidColorBrush x:Key="WbBorder" Color="#292E37" />
+            <SolidColorBrush x:Key="WbText" Color="#E8EAEE" />
+            <SolidColorBrush x:Key="WbMuted" Color="#9DA3B0" />
+            <SolidColorBrush x:Key="WbFaint" Color="#6B7280" />
+            <SolidColorBrush x:Key="WbFolder" Color="#D9A400" />
+            <SolidColorBrush x:Key="WbFolderEmpty" Color="#8cD9A400" />
+            <SolidColorBrush x:Key="WbAccent" Color="#8A7FF0" />
+            <SolidColorBrush x:Key="WbAccentHover" Color="#A79FF5" />
+            <SolidColorBrush x:Key="WbOnAccent" Color="#14161C" />
+            <SolidColorBrush x:Key="WbAccentText" Color="#A79FF5" />
+            <SolidColorBrush x:Key="WbAccentTint" Color="#25263B" />
+            <SolidColorBrush x:Key="WbSelection" Color="#202231" />
+            <SolidColorBrush x:Key="WbDanger" Color="#F87171" />
+            <SolidColorBrush x:Key="WbSuccess" Color="#4ADE80" />
+            <SolidColorBrush x:Key="WbWarning" Color="#FBBF24" />
+
+            <Color x:Key="SystemAccentColor">#8A7FF0</Color>
+            <Color x:Key="SystemAccentColorLight1">#ABA4F4</Color>
+            <Color x:Key="SystemAccentColorLight2">#CDC8F9</Color>
+            <Color x:Key="SystemAccentColorLight3">#EEEDFD</Color>
+            <Color x:Key="SystemAccentColorDark1">#695AEC</Color>
+            <Color x:Key="SystemAccentColorDark2">#4736E7</Color>
+            <Color x:Key="SystemAccentColorDark3">#2C1ADB</Color>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

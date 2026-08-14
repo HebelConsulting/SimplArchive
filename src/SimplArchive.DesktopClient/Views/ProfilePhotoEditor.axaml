@@ -21,7 +21,7 @@
                 <primitives:Thumb x:Name="ResizeThumb" DragDelta="OnResize" Width="16" Height="16" IsVisible="False" Cursor="BottomRightCorner">
                     <primitives:Thumb.Template>
                         <ControlTemplate>
-                            <Ellipse Fill="White" Stroke="#5b4ee5" StrokeThickness="1" />
+                            <Ellipse Fill="White" Stroke="{DynamicResource WbAccent}" StrokeThickness="1" />
                         </ControlTemplate>
                     </primitives:Thumb.Template>
                 </primitives:Thumb>

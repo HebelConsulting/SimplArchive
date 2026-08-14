@@ -1,4 +1,7 @@
 @inherits LayoutComponentBase
+@using SimplArchive.Client.Services
+@using SimplArchive.Theming
+@using System.Net.Http.Json
 @implements IAsyncDisposable
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
@@ -237,7 +240,11 @@
 
     private MudThemeProvider _themeProvider = null!;
     private bool _isDarkMode;
-    private readonly MudTheme _theme = new();
+
+    // The design tokens rather than MudBlazor's stock palette (ADR 0578) — the stock one is where the whole
+    // "looks like a template" problem started. Replaced once the installation's own theme arrives, which is
+    // why it is not readonly.
+    private MudTheme _theme = SimplArchiveTheme.Shipped;
     private MudMenu _accountMenu = null!;
 
     // MudMenu 9.7's ActivatorContent auto-open doesn't fire reliably for a custom activator here, so open it
@@ -554,7 +561,31 @@
                 ? bool.Parse(stored)
                 : await _themeProvider.GetSystemDarkModeAsync();
 
+            await ApplyInstallationThemeAsync();
             StateHasChanged();
+        }
+    }
+
+    // The installation's own colours, if its operator put a custom/theme.json on the server (ADR 0578). Fetched
+    // rather than compiled in, because it belongs to the deployment and not to the build.
+    //
+    // Best-effort by design: the shipped design is already on screen by the time this runs, so a server that
+    // cannot answer costs the customer's accent, never the page. Anonymous on the server side, so this also
+    // works on the login screen — a brand that appears only after sign-in is a brand that appears too late.
+    private async Task ApplyInstallationThemeAsync()
+    {
+        try
+        {
+            // Followed from the API root's `theme` rel, never composed (ADR 0543). The root is anonymous, so
+            // this resolves on the login screen too.
+            if (await Http.GetFromJsonAsync<ThemeTokens>(await ApiRoot.RequireAsync("theme")) is { } tokens)
+            {
+                _theme = SimplArchiveTheme.From(tokens);
+            }
+        }
+        catch (Exception)
+        {
+            // Keeps SimplArchiveTheme.Shipped.
         }
     }
 

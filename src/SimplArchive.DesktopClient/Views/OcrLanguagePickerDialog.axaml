@@ -21,7 +21,7 @@
                                 Command="{ReflectionBinding $parent[ItemsControl].DataContext.ToggleCommand}"
                                 CommandParameter="{Binding}">
                             <Grid ColumnDefinitions="30,*">
-                                <Border Grid.Column="0" Width="22" Height="22" CornerRadius="11" Background="#5b4ee5"
+                                <Border Grid.Column="0" Width="22" Height="22" CornerRadius="11" Background="{DynamicResource WbAccent}"
                                         IsVisible="{Binding IsSelected}" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding PriorityLabel}" Foreground="White" FontSize="12"
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />

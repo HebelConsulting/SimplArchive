@@ -40,6 +40,9 @@
     <ProjectReference Include="..\SimplArchive.Auth\SimplArchive.Auth.csproj" />
     <ProjectReference Include="..\SimplArchive.Client\SimplArchive.Client.csproj" />
     <ProjectReference Include="..\SimplArchive.Localization\SimplArchive.Localization.csproj" />
+    <!-- The design tokens (ADR 0578): the shipped palette, and the loader that reads an
+         installation's custom/theme.json over it. -->
+    <ProjectReference Include="..\SimplArchive.Theming\SimplArchive.Theming.csproj" />
   </ItemGroup>
 
   <ItemGroup>

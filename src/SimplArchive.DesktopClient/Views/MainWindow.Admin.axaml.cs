@@ -94,7 +94,7 @@ public partial class MainWindow
     // Profile photo (ADR "User profile photo") — the crop dialog lives in the view; the VM uploads.
     // "Edit profile…" (#464) — replaces the separate photo and password entries. The dialog applies a password
     // change itself; a new photo comes back as bytes and is uploaded here, exactly as ProfilePhotoDialog's did.
-    private void OnEditProfile(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnEditProfile(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel { Api: { } api } vm
             && await new EditProfileDialog(api).ShowDialog<byte[]?>(this) is { } png)
@@ -139,7 +139,7 @@ public partial class MainWindow
         }
     });
 
-    private void OnSetUpMfa(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnSetUpMfa(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel { Api: { } api } vm && await new MfaSetupDialog(api).ShowDialog<bool>(this))
         {
@@ -147,7 +147,7 @@ public partial class MainWindow
         }
     });
 
-    private void OnDisableMfa(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnDisableMfa(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
@@ -161,7 +161,7 @@ public partial class MainWindow
     });
 
     // Passkeys (ADR "Desktop passkey management") — list/remove natively; adding opens the browser ceremony.
-    private void OnManagePasskeys(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnManagePasskeys(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel { Api: { } api })
         {
@@ -169,7 +169,7 @@ public partial class MainWindow
         }
     });
 
-    private void OnNotificationPreferences(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnNotificationPreferences(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel { Api: { } api })
         {
@@ -179,7 +179,7 @@ public partial class MainWindow
 
     // Refresh the notifications when the bell opens (ADR "Notification viewer + click-through"); the flyout opens
     // automatically via Button.Flyout.
-    private void OnBellClick(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnBellClick(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm)
         {

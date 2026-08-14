@@ -7,6 +7,14 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <!-- The theming library and its generator (ADR 0578): the tests assert that the checked-in generated
+       files still match the tokens, and that the shipped palette clears the same contrast bar every custom
+       theme is held to. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SimplArchive.Theming\SimplArchive.Theming.csproj" />
+    <ProjectReference Include="..\..\tests\SimplArchive.ThemeGen\SimplArchive.ThemeGen.csproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />

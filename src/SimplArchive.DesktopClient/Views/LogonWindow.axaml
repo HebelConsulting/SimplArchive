@@ -10,7 +10,7 @@
         CanResize="False" WindowStartupLocation="CenterScreen">
     <StackPanel Margin="28" Spacing="16">
         <StackPanel Orientation="Horizontal" Spacing="10">
-            <i:Icon Value="mdi-file-cabinet" FontSize="28" Foreground="#5b4ee5" />
+            <i:Icon Value="mdi-file-cabinet" FontSize="28" Foreground="{DynamicResource WbAccent}" />
             <TextBlock Text="SimplArchive" FontSize="22" FontWeight="SemiBold" VerticalAlignment="Center" />
         </StackPanel>
 

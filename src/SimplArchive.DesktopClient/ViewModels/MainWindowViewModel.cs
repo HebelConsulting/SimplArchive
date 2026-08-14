@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
+using SimplArchive.Theming;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -423,7 +424,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private string? _detailSensitivityColor;
     private bool _detailSensitivityWatermark;
     public string DetailSensitivityText => _detailSensitivityName;
-    public string DetailSensitivityBrush => string.IsNullOrEmpty(_detailSensitivityColor) ? "#5b4ee5" : _detailSensitivityColor;
+    // A label with no colour of its own falls back to the accent. Taken from the design tokens rather than
+    // written here (ADR 0578) — the light value specifically, because this is a filled chip whose text is
+    // white in both themes, so the darker of the two accents is the one that keeps it readable.
+    public string DetailSensitivityBrush => string.IsNullOrEmpty(_detailSensitivityColor)
+        ? ThemeTokensReader.Shipped.Light.Accent.Primary
+        : _detailSensitivityColor;
     public bool HasSensitivity => DetailSensitivityId != null;
 
     // The picker: "(None)" + the tenant's active labels; SelectedSensitivityItem is the staged edit value.

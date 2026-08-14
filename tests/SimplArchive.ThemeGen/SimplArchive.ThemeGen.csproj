@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- The design-token generator (ADR 0578). A build/dev tool, not shipped in the container: it writes the
+       Avalonia resource dictionary and the CSS custom-property sheet from src/SimplArchive.Theming/tokens.json.
+       Lives under tests/ (published to the public mirror) — NOT tools/, which the sync pipeline withholds
+       (ADR 0484), following the same placement as SimplArchive.ManualCapture. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SimplArchive.Theming\SimplArchive.Theming.csproj" />
+  </ItemGroup>
+
+</Project>

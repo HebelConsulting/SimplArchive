@@ -49,7 +49,7 @@
                     <Grid ColumnDefinitions="90,120,150,*,2*,110" Margin="4,3">
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                             <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
-                            <Border IsVisible="{Binding IsCurrent}" Background="#5b4ee5" CornerRadius="3" Padding="4,0" VerticalAlignment="Center">
+                            <Border IsVisible="{Binding IsCurrent}" Background="{DynamicResource WbAccent}" CornerRadius="3" Padding="4,0" VerticalAlignment="Center">
                                 <TextBlock Text="{loc:Tr VerCurrent}" Foreground="White" FontSize="9" FontWeight="SemiBold" />
                             </Border>
                         </StackPanel>

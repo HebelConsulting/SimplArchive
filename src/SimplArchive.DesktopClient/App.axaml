@@ -4,10 +4,11 @@
              x:Class="SimplArchive.DesktopClient.App"
              RequestedThemeVariant="Default">
     <Application.Resources>
-        <!-- Theme-adaptive workbench colours (light/dark), shared by MainWindow and the dialogs, replacing
-             the old hardcoded light greys that clashed in dark mode. WbChrome: status-bar surface; WbBorder:
-             1px pane/section separators; WbMuted/WbFaint: secondary/hint text. See ADR "Desktop dark-mode
-             colour pass".
+        <!-- Theme-adaptive workbench colours (light/dark), shared by MainWindow and the dialogs. The VALUES
+             now come from the design tokens (ADR 0578) rather than being written here; what stays here is why
+             they exist. WbChrome: sunken surfaces; WbBorder: pane separators; WbMuted/WbFaint:
+             secondary/hint text; WbAccent and friends: the accent, in the only roles it may hold. See also
+             ADR "Desktop dark-mode colour pass".
 
              WbFolder/WbFolderEmpty are the tree's folder glyphs (ADR "Folder icon scheme"). Gold means "a place
              documents live" — folders, the personal root, a referenced folder — so the launchers and the
@@ -20,28 +21,18 @@
              variable. The glyph also changes to the outline variant, so the distinction survives without colour
              vision. -->
         <ResourceDictionary>
-            <ResourceDictionary.ThemeDictionaries>
-                <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="WbChrome" Color="#f0f0f4" />
-                    <SolidColorBrush x:Key="WbBorder" Color="#dddde3" />
-                    <SolidColorBrush x:Key="WbMuted" Color="#555555" />
-                    <SolidColorBrush x:Key="WbFaint" Color="#888888" />
-                    <SolidColorBrush x:Key="WbFolder" Color="#d9a400" />
-                    <SolidColorBrush x:Key="WbFolderEmpty" Color="#8cd9a400" />
-                </ResourceDictionary>
-                <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="WbChrome" Color="#2b2b30" />
-                    <SolidColorBrush x:Key="WbBorder" Color="#3b3b42" />
-                    <SolidColorBrush x:Key="WbMuted" Color="#c2c2ca" />
-                    <SolidColorBrush x:Key="WbFaint" Color="#8f8f98" />
-                    <SolidColorBrush x:Key="WbFolder" Color="#d9a400" />
-                    <SolidColorBrush x:Key="WbFolderEmpty" Color="#8cd9a400" />
-                </ResourceDictionary>
-            </ResourceDictionary.ThemeDictionaries>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- GENERATED from src/SimplArchive.Theming/tokens.json (ADR 0578). Every brush the workbench
+                     uses is in there, for both themes; run scripts/generate-theme.sh after changing a token. -->
+                <ResourceInclude Source="avares://SimplArchive.DesktopClient/Themes/Tokens.axaml" />
+            </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
     <Application.Styles>
         <FluentTheme />
+        <!-- The redesign's SHAPE — ghost ribbon buttons, tinted selection with an accent edge
+             (ADR 0578). After FluentTheme, so it overrides rather than is overridden. -->
+        <StyleInclude Source="avares://SimplArchive.DesktopClient/Themes/Workbench.axaml" />
         <!-- The app icon on EVERY window's title bar and taskbar entry (#421). Set once here rather than on 44
              windows: only MainWindow carried Icon=, so the logon window — the first thing a user sees — and
              every dialog showed the platform default.

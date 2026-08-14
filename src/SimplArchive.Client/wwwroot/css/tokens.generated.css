@@ -1,0 +1,90 @@
+/*
+ * This file is GENERATED from src/SimplArchive.Theming/tokens.json by scripts/generate-theme.sh.
+ * Edit the tokens and regenerate — a hand edit here fails ThemeGenerationTests on the next build.
+ */
+
+:root {
+  --sa-canvas: #FAFAFC;
+  --sa-surface: #FFFFFF;
+  --sa-sunken: #F4F5F8;
+  --sa-hairline: #E6E7EC;
+  --sa-text: #14161C;
+  --sa-text-secondary: #5A5F6E;
+  --sa-text-faint: #898F9E;
+  --sa-folder: #D9A400;
+  --sa-folder-empty: #D9A4008c;
+  --sa-accent: #5B4EE5;
+  --sa-accent-hover: #4A3CD9;
+  --sa-on-accent: #FFFFFF;
+  --sa-accent-text: #5B4EE5;
+  --sa-accent-tint: #E8E6FB;
+  --sa-selection: #F0EFFD;
+  --sa-danger: #B91C1C;
+  --sa-success: #15803D;
+  --sa-warning: #B45309;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sa-canvas: #0F1115;
+    --sa-surface: #171A1F;
+    --sa-sunken: #12141A;
+    --sa-hairline: #292E37;
+    --sa-text: #E8EAEE;
+    --sa-text-secondary: #9DA3B0;
+    --sa-text-faint: #6B7280;
+    --sa-folder: #D9A400;
+    --sa-folder-empty: #D9A4008c;
+    --sa-accent: #8A7FF0;
+    --sa-accent-hover: #A79FF5;
+    --sa-on-accent: #14161C;
+    --sa-accent-text: #A79FF5;
+    --sa-accent-tint: #25263B;
+    --sa-selection: #202231;
+    --sa-danger: #F87171;
+    --sa-success: #4ADE80;
+    --sa-warning: #FBBF24;
+  }
+}
+
+:root[data-theme="dark"] {
+  --sa-canvas: #0F1115;
+  --sa-surface: #171A1F;
+  --sa-sunken: #12141A;
+  --sa-hairline: #292E37;
+  --sa-text: #E8EAEE;
+  --sa-text-secondary: #9DA3B0;
+  --sa-text-faint: #6B7280;
+  --sa-folder: #D9A400;
+  --sa-folder-empty: #D9A4008c;
+  --sa-accent: #8A7FF0;
+  --sa-accent-hover: #A79FF5;
+  --sa-on-accent: #14161C;
+  --sa-accent-text: #A79FF5;
+  --sa-accent-tint: #25263B;
+  --sa-selection: #202231;
+  --sa-danger: #F87171;
+  --sa-success: #4ADE80;
+  --sa-warning: #FBBF24;
+}
+
+:root[data-theme="light"] {
+  --sa-canvas: #FAFAFC;
+  --sa-surface: #FFFFFF;
+  --sa-sunken: #F4F5F8;
+  --sa-hairline: #E6E7EC;
+  --sa-text: #14161C;
+  --sa-text-secondary: #5A5F6E;
+  --sa-text-faint: #898F9E;
+  --sa-folder: #D9A400;
+  --sa-folder-empty: #D9A4008c;
+  --sa-accent: #5B4EE5;
+  --sa-accent-hover: #4A3CD9;
+  --sa-on-accent: #FFFFFF;
+  --sa-accent-text: #5B4EE5;
+  --sa-accent-tint: #E8E6FB;
+  --sa-selection: #F0EFFD;
+  --sa-danger: #B91C1C;
+  --sa-success: #15803D;
+  --sa-warning: #B45309;
+}

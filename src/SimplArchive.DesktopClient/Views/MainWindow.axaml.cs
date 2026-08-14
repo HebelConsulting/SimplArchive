@@ -143,11 +143,11 @@ public partial class MainWindow : Window
 
     // Help ▸ Manual (ADR 0504): open the auto-generated user manual (served at /download/manual/ on the
     // connected server, ADR 0502) in the system browser rather than embedding a PDF viewer.
-    private void OnOpenManual(object? sender, RoutedEventArgs e) =>
+    internal void OnOpenManual(object? sender, RoutedEventArgs e) =>
         SystemBrowser.Open($"{DesktopClientOptions.ApiBaseUrl}/download/manual/SimplArchive-Manual.pdf");
 
     // Help ▸ About (ADR 0504): the vendor block + the running client version.
-    private void OnShowAbout(object? sender, RoutedEventArgs e) =>
+    internal void OnShowAbout(object? sender, RoutedEventArgs e) =>
         Safe.Fire(async () => await new AboutDialog().ShowDialog(this));
 
 

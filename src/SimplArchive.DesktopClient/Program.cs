@@ -202,10 +202,12 @@ internal static class Program
             return;
         }
 
-        // Renders the app icon art (a filing cabinet on a rounded brand tile) to a 1024×1024 PNG:
-        // `--gen-icon <out.png>`. Packaged into sizes/.icns by the build script; see ADR "Desktop app icon".
+        // The icon hooks (ADR 0578): `--gen-icons [dir]` writes every launcher artefact from the one piece of
+        // art, `--gen-icon <out.png>` renders that art alone. Both need Skia, hence the shared setup; the
+        // dispatch and the argument walk belong to IconWriter, which is the thing that knows about icons.
+        var genIconsIndex = Array.IndexOf(args, "--gen-icons");
         var genIconIndex = Array.IndexOf(args, "--gen-icon");
-        if (genIconIndex >= 0 && genIconIndex + 1 < args.Length)
+        if (genIconsIndex >= 0 || (genIconIndex >= 0 && genIconIndex + 1 < args.Length))
         {
             AppBuilder.Configure<App>()
                 .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
@@ -213,14 +215,7 @@ internal static class Program
                 .WithInterFont()
                 .SetupWithoutStarting();
 
-            // RenderTargetBitmap starts fully transparent and only paints the visual, so the rounded tile's
-            // corners stay transparent (a window capture bakes an opaque background).
-            var visual = IconArt.BuildTile();
-            visual.Measure(new Size(1024, 1024));
-            visual.Arrange(new Rect(0, 0, 1024, 1024));
-            using var bitmap = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize(1024, 1024), new Vector(96, 96));
-            bitmap.Render(visual);
-            bitmap.Save(args[genIconIndex + 1]);
+            Services.IconWriter.Run(args, genIconsIndex, genIconIndex);
             return;
         }
 

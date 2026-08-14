@@ -15,6 +15,14 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            // The remembered light/dark choice (ADR 0578), before any window is built so nothing renders in one
+            // theme and repaints into the other.
+            //
+            // Inside this branch deliberately: the headless verification hooks have no desktop lifetime, so a
+            // developer whose own client is set to Dark cannot make --screenshot render dark and quietly change
+            // every figure in the user manual.
+            Services.ThemeModeService.Apply(Services.ThemeModeService.Load());
+
             ShowLogon(desktop);
         }
 

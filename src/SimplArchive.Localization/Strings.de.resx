@@ -3351,6 +3351,21 @@
   <data name="SmTitle" xml:space="preserve">
     <value>Server</value>
   </data>
+  <data name="ThemeMode" xml:space="preserve">
+    <value>Design</value>
+  </data>
+  <data name="ThemeModeSystem" xml:space="preserve">
+    <value>Systemeinstellung verwenden</value>
+  </data>
+  <data name="ThemeModeLight" xml:space="preserve">
+    <value>Hell</value>
+  </data>
+  <data name="ThemeModeDark" xml:space="preserve">
+    <value>Dunkel</value>
+  </data>
+  <data name="SmThemeLabel" xml:space="preserve">
+    <value>Design</value>
+  </data>
   <data name="SmNameLabel" xml:space="preserve">
     <value>Servername</value>
   </data>

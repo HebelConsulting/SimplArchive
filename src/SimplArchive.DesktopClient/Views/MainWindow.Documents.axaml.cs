@@ -329,7 +329,7 @@ public partial class MainWindow
         await OpenWebDavAtAsync(vm, api, vm.WebDavFolderPath());
     });
 
-    private void OnManageWebDav(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnManageWebDav(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel { Api: { } api })
         {

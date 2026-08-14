@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
+using SimplArchive.Theming;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -19,6 +20,7 @@ public sealed partial class ServerManagerViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelection))]
+    [NotifyPropertyChangedFor(nameof(SelectedThemeName))]
     [NotifyCanExecuteChangedFor(nameof(EditCommand))]
     [NotifyCanExecuteChangedFor(nameof(RemoveCommand))]
     private ServerProfile? _selected;
@@ -34,6 +36,21 @@ public sealed partial class ServerManagerViewModel : ObservableObject
     [ObservableProperty] private string _editName = "";
     [ObservableProperty] private string _editUrl = "";
     [ObservableProperty] private string _error = "";
+
+    // The styles this installation can offer: the ones bundled with the client, plus anything dropped into a
+    // themes/ folder beside it (ADR 0578). Read once — a picker that rescanned the disk on every keystroke
+    // would be answering a question nobody asked.
+    public ObservableCollection<ThemeCatalog.Entry> Themes { get; } =
+        new(ThemeCatalog.Available());
+
+    // Applied AS IT CHANGES rather than on Save: choosing a colour scheme from a list of names without seeing
+    // it is guesswork, and the workbench is right there behind this window.
+    [ObservableProperty] private ThemeCatalog.Entry? _editTheme;
+
+    partial void OnEditThemeChanged(ThemeCatalog.Entry? value) => ThemeApplier.Apply(value?.Id);
+
+    /// <summary>What the selected profile's style is CALLED — the read-only pane shows a name, not an id.</summary>
+    public string SelectedThemeName => ThemeFor(Selected?.Theme).Name;
 
     // True while EditUrl is a well-formed absolute http(s) address that a live probe confirmed is a SimplArchive
     // server — drives the light-green tint on the URL field while editing (issue #270).
@@ -184,6 +201,7 @@ public sealed partial class ServerManagerViewModel : ObservableObject
         IsAdding = false;
         EditName = Selected.Name;
         EditUrl = Selected.ApiRootUrl;
+        EditTheme = ThemeFor(Selected.Theme);
         Error = "";
         IsEditing = true;
     }
@@ -244,7 +262,7 @@ public sealed partial class ServerManagerViewModel : ObservableObject
 
         if (IsAdding)
         {
-            var profile = new ServerProfile { Name = name, ApiRootUrl = url };
+            var profile = new ServerProfile { Name = name, ApiRootUrl = url, Theme = EditTheme?.Id };
             Servers.Add(profile);
             Selected = profile;
             RemoveCommand.NotifyCanExecuteChanged();
@@ -253,6 +271,7 @@ public sealed partial class ServerManagerViewModel : ObservableObject
         {
             Selected.Name = name;
             Selected.ApiRootUrl = url;
+            Selected.Theme = EditTheme?.Id;
             // Re-select to refresh the read-only pane bindings.
             var idx = Servers.IndexOf(Selected);
             var current = Selected;
@@ -272,12 +291,24 @@ public sealed partial class ServerManagerViewModel : ObservableObject
         IsEditing = false;
         IsAdding = false;
         Error = "";
+
+        // The live preview is an edit like any other, so cancelling has to undo it too. Leaving the previewed
+        // style on screen would be the one edit a Cancel button did not cancel.
+        ThemeApplier.Apply(Selected?.Theme);
     }
+
+    // A stored id that no longer resolves lands on the shipped design rather than an empty picker — styles come
+    // and go, and a profile synced from another machine should still open.
+    private ThemeCatalog.Entry ThemeFor(string? id) =>
+        Themes.FirstOrDefault(t => string.Equals(t.Id, id, StringComparison.OrdinalIgnoreCase))
+        ?? Themes.First();
 
     private void Persist()
     {
         var config = ServerProfileStore.Load();
-        config.Servers = Servers.Select(t => new ServerProfile { Name = t.Name, ApiRootUrl = t.ApiRootUrl }).ToList();
+        config.Servers = Servers
+            .Select(t => new ServerProfile { Name = t.Name, ApiRootUrl = t.ApiRootUrl, Theme = t.Theme })
+            .ToList();
         // Keep the remembered last-chosen server only if it still exists.
         if (config.LastServer is not null && Servers.All(t => !string.Equals(t.Name, config.LastServer, StringComparison.OrdinalIgnoreCase)))
         {

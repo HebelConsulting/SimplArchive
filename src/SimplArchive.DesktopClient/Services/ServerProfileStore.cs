@@ -16,6 +16,11 @@ public sealed class ServerProfile
 {
     public string Name { get; set; } = "";
     public string ApiRootUrl { get; set; } = "";
+
+    // The style this server wears (ADR 0578) — an id from ThemeCatalog, or null/"default" for the shipped
+    // design. Per PROFILE rather than per application, so connecting to a customer's server shows their
+    // colours; an id that no longer resolves falls back to the shipped design without complaint.
+    public string? Theme { get; set; }
 }
 
 // The persisted server configuration: the list of servers + the last-chosen one (remembered across runs).

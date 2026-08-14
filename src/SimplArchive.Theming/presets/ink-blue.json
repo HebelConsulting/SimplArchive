@@ -1,0 +1,23 @@
+{
+  "name": "Ink blue",
+  "light": {
+    "accent": {
+      "primary": "#1D4ED8",
+      "hover": "#1E3A8A",
+      "onPrimary": "#FFFFFF",
+      "text": "#1D4ED8",
+      "tint": "#E8EFFD",
+      "selection": "#EDF2FE"
+    }
+  },
+  "dark": {
+    "accent": {
+      "primary": "#3B82F6",
+      "hover": "#60A5FA",
+      "onPrimary": "#0F1115",
+      "text": "#60A5FA",
+      "tint": "#16264A",
+      "selection": "#121F3B"
+    }
+  }
+}

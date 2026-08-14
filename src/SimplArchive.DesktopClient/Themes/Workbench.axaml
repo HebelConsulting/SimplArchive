@@ -1,0 +1,92 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        The parts of the redesign that are shape rather than colour (ADR 0578). Colours come from the generated
+        Themes/Tokens.axaml; this file says how controls USE them.
+
+        Its own file, not App.axaml, for two reasons: MainWindow.axaml is on the 1000-line standing-debt list
+        with no headroom, and styles are a different kind of thing from resources — one is what a colour IS, the
+        other is where it goes.
+    -->
+
+    <!--
+        Ribbon buttons: invisible until approached.
+
+        Every ribbon button used to be a filled grey rectangle with a border at rest — an Office 2003 toolbar,
+        and the second thing (after the brand-coloured chrome) that made the client look its age. A row of
+        twelve chips also reads as twelve things competing for attention, when what the user wants is the ONE
+        they came for. Ghost at rest, a quiet fill on hover, a firmer one on press.
+
+        Scoped to `Border.ribbon` rather than styling Button globally: dialogs have real buttons — Save, Cancel,
+        Delete — which must keep looking like buttons.
+    -->
+    <Style Selector="Border.ribbon Button /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="Border.ribbon Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource WbChrome}" />
+    </Style>
+    <Style Selector="Border.ribbon Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource WbBorder}" />
+    </Style>
+
+    <!--
+        Toggle buttons are the same, with one difference that is a requirement rather than a preference: a
+        sticky preference must read as HELD DOWN while it is on (ADR 0576). Ghosting it at rest and tinting it
+        when checked is what makes "on" visible without a label — and the accent tint is the right strength,
+        because a filled accent would make two permanently-on toggles the loudest thing in the ribbon.
+    -->
+    <Style Selector="Border.ribbon ToggleButton /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="Border.ribbon ToggleButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource WbChrome}" />
+    </Style>
+    <Style Selector="Border.ribbon ToggleButton:checked /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource WbAccentTint}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource WbAccentText}" />
+    </Style>
+    <Style Selector="Border.ribbon ToggleButton:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource WbAccentTint}" />
+    </Style>
+
+    <!--
+        Selection: a tint and an edge, not a bar of solid colour.
+
+        A saturated fill with white text on it is the Windows 2000 list selection, and it costs more than it
+        looks: the row's own colours are overwritten, so a folder's gold, a signed badge and a document's grey
+        glyph all disappear at exactly the moment the user is looking hardest at that row. A tint keeps every
+        one of them, and a 2px accent edge on the leading side is what makes the row unambiguous without
+        shouting — the same device the web client uses.
+    -->
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource WbSelection}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource WbAccent}" />
+        <Setter Property="BorderThickness" Value="2,0,0,0" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource WbText}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource WbAccentTint}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource WbText}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected:focus /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource WbSelection}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource WbText}" />
+    </Style>
+
+    <!-- The tree carries the same rule, so a selected folder still shows its gold. -->
+    <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{DynamicResource WbSelection}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource WbAccent}" />
+        <Setter Property="BorderThickness" Value="2,0,0,0" />
+    </Style>
+    <Style Selector="TreeViewItem:selected:pointerover /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{DynamicResource WbAccentTint}" />
+    </Style>
+
+</Styles>
