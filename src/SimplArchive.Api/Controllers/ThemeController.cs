@@ -52,7 +52,9 @@ public class ThemeController(IWebHostEnvironment environment, ILogger<ThemeContr
     /// who edits <c>custom/theme.json</c> expects a reload to show it rather than a restart. The response is
     /// deliberately not cached downstream for the same reason.
     /// </remarks>
-    [HttpGet("theme.css")]
+    // An ABSOLUTE route (leading slash), so this is /api/theme.css and not /api/theme/theme.css. It is linked
+    // from five hand-written pages as a stylesheet, and a stylesheet's URL wants to look like a file.
+    [HttpGet("/api/theme.css")]
     [Produces("text/css")]
     public IActionResult Css()
     {
@@ -60,7 +62,7 @@ public class ThemeController(IWebHostEnvironment environment, ILogger<ThemeContr
         return Content(ThemeEmitter.ToCss(Effective()), "text/css");
     }
 
-    [HttpHead("theme.css")]
+    [HttpHead("/api/theme.css")]
     public IActionResult CssHead() => NoContent();
 
     // Read on every request. A theme file is read once per page load in practice, and holding it in memory

@@ -22,11 +22,25 @@ namespace SimplArchive.Client.Services;
 /// </remarks>
 public sealed class ApiRoot
 {
+    /// <summary>The API client that carries no access token — see the constructor.</summary>
+    public const string AnonymousClient = "SimplArchive.Api.Anonymous";
+
     private readonly HttpClient _http;
+    private readonly HttpClient _anonymous;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Dictionary<string, string>? _rels;
 
-    public ApiRoot(HttpClient http) => _http = http;
+    /// <remarks>
+    /// Two clients, because the two documents differ in kind. The ROOT is [AllowAnonymous], has no conditional
+    /// links, and is read before anyone has signed in — so it is fetched without a token, or the read throws
+    /// AccessTokenNotAvailableException on the sign-in page and every rel with it. The "me" resource is the
+    /// caller's own account and needs the token by definition.
+    /// </remarks>
+    public ApiRoot(HttpClient http, IHttpClientFactory factory)
+    {
+        _http = http;
+        _anonymous = factory.CreateClient(AnonymousClient);
+    }
 
     /// <summary>
     /// The href for a root-level rel, or null when the server does not advertise it.
@@ -131,7 +145,7 @@ public sealed class ApiRoot
                 return inner;
             }
 
-            var root = await _http.GetFromJsonAsync<RootResponse>("api", cancellationToken);
+            var root = await _anonymous.GetFromJsonAsync<RootResponse>("api", cancellationToken);
             _rels = root?.Links
                 .Where(l => !string.IsNullOrEmpty(l.Rel) && !string.IsNullOrEmpty(l.Href))
                 .ToDictionary(l => l.Rel, l => Relative(l.Href))

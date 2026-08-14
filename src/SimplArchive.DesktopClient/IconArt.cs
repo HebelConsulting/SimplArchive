@@ -15,10 +15,15 @@ namespace SimplArchive.DesktopClient;
 // the half nobody remembers to change.
 internal static class IconArt
 {
-    public static Control BuildTile()
+    /// <param name="accent">
+    /// Which accent to draw in. Defaults to the shipped one; passing another is how a favicon is produced for
+    /// every bundled style, so an operator who sets custom/theme.json to indigo can drop a matching tab icon
+    /// beside it rather than keeping a teal one.
+    /// </param>
+    public static Control BuildTile(AccentTokens? accent = null)
     {
         const double size = 1024;
-        var accent = ThemeTokensReader.Shipped.Light.Accent;
+        accent ??= ThemeTokensReader.Shipped.Light.Accent;
         var brand = Color.Parse(accent.Primary);
         var brandLight = Color.Parse(AccentDerivation.Shade(accent.Primary, 0.10));
 

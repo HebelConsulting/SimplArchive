@@ -1,0 +1,23 @@
+{
+  "name": "Classic purple",
+  "light": {
+    "accent": {
+      "primary": "#5B4EE5",
+      "hover": "#4A3CD9",
+      "onPrimary": "#FFFFFF",
+      "text": "#5B4EE5",
+      "tint": "#E8E6FB",
+      "selection": "#F0EFFD"
+    }
+  },
+  "dark": {
+    "accent": {
+      "primary": "#8A7FF0",
+      "hover": "#A79FF5",
+      "onPrimary": "#14161C",
+      "text": "#A79FF5",
+      "tint": "#25263B",
+      "selection": "#202231"
+    }
+  }
+}

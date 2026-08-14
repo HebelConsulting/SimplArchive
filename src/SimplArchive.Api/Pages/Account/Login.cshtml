@@ -12,29 +12,29 @@
     <title>@Strings.Get("LoginPageTitle")</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+    @* The installation's own colours (ADR 0578), generated per request from the design tokens and any
+       custom/theme.json. This page is server-rendered — it never runs the Blazor client — so it cannot pick up
+       the theme the way the app does, and it is the FIRST thing anyone sees. *@
+    <link rel="stylesheet" href="/api/theme.css" />
     <style>
-        /* Aligned with the Blazor app's MudBlazor default theme (primary #594AE2, Roboto, Material
-           elevation). Server-rendered, so it can't read the app's localStorage light/dark preference —
-           it follows the system via prefers-color-scheme, matching the app's own default behaviour. */
+        /* The page keeps its own variable names — its rules are written against them — but every VALUE now
+           comes from the design tokens above (ADR 0578), so a custom identity reaches the sign-in page
+           without this file knowing anything about it. Light/dark is handled by the tokens themselves via
+           prefers-color-scheme, which is why only the shadow is restated below. */
         :root {
-            --primary: #594AE2;
-            --primary-hover: #4d3fd4;
-            --error: #f44336;
-            --page-bg: #f5f5f5;
-            --surface: #ffffff;
-            --text: rgba(0, 0, 0, 0.87);
-            --text-secondary: rgba(0, 0, 0, 0.54);
-            --border: rgba(0, 0, 0, 0.23);
+            --primary: var(--sa-accent, #0F766E);
+            --primary-hover: var(--sa-accent-hover, #115E59);
+            --error: var(--sa-danger, #B91C1C);
+            --page-bg: var(--sa-canvas, #FAFAFC);
+            --surface: var(--sa-surface, #FFFFFF);
+            --text: var(--sa-text, #14161C);
+            --text-secondary: var(--sa-text-secondary, #5A5F6E);
+            --border: var(--sa-hairline, #E6E7EC);
             --shadow: 0 3px 5px -1px rgba(0,0,0,.2), 0 6px 10px 0 rgba(0,0,0,.14), 0 1px 18px 0 rgba(0,0,0,.12);
         }
 
         @@media (prefers-color-scheme: dark) {
             :root {
-                --page-bg: #27272f;
-                --surface: #373740;
-                --text: rgba(255, 255, 255, 0.87);
-                --text-secondary: rgba(255, 255, 255, 0.60);
-                --border: rgba(255, 255, 255, 0.30);
                 --shadow: 0 3px 5px -1px rgba(0,0,0,.4), 0 6px 10px 0 rgba(0,0,0,.28), 0 1px 18px 0 rgba(0,0,0,.24);
             }
         }

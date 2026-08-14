@@ -27,6 +27,18 @@ namespace SimplArchive.Api.Documents;
 /// </remarks>
 public static class ExternalLinkPage
 {
+    /// <summary>The installation's colours, linked rather than inlined (ADR 0578).</summary>
+    /// <remarks>
+    /// This page is often a stranger's ONLY contact with the product, and it used to carry its own complete
+    /// palette — accent, neutrals, dark mode — so a customer's brand stopped at the front door while the
+    /// application behind it wore theirs. Linked, not inlined, so an override in custom/theme.json reaches it.
+    ///
+    /// A named constant because the surrounding HTML is a raw string in a C# file, NOT Razor: an explanatory
+    /// `@* … *@` written in there is not a comment, it is text, and it rendered as a paragraph of prose in the
+    /// middle of the shared-document card.
+    /// </remarks>
+    private const string ThemeStylesheet = "/api/theme.css";
+
     /// <summary>The page for a live link: what it is, how long it lasts, and the two ways to take it.</summary>
     /// <param name="fileName">The document's file name, as the recipient should see it.</param>
     /// <param name="expiresAt">When the share stops working, in the recipient's own words.</param>
@@ -111,39 +123,38 @@ public static class ExternalLinkPage
           <meta name="robots" content="noindex, nofollow">
           <meta name="referrer" content="no-referrer">
           <title>{{HtmlEncoder.Default.Encode(title)}}</title>
+          <link rel="stylesheet" href="{{ThemeStylesheet}}">
           <style>
             :root { color-scheme: light dark; }
             body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
                    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-                   background: #f4f4f7; color: #1c1c21; }
-            main { max-width: 32rem; padding: 2.5rem; margin: 1rem; background: #fff; border-radius: 12px;
+                   background: var(--sa-canvas, #FAFAFC); color: var(--sa-text, #14161C); }
+            main { max-width: 32rem; padding: 2.5rem; margin: 1rem; background: var(--sa-surface, #FFFFFF); border-radius: 12px;
                    box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 8px 24px rgba(0,0,0,.08); text-align: center; }
             h1 { font-size: 1.35rem; line-height: 1.35; margin: 0 0 .5rem; overflow-wrap: anywhere; }
-            .meta { color: #5b5b66; font-size: .95rem; margin: 0 0 1.75rem; }
+            .meta { color: var(--sa-text-secondary, #5A5F6E); font-size: .95rem; margin: 0 0 1.75rem; }
             /* The first page, at half the raster's width so it stays sharp on a retina screen (issue #476). */
             .thumb { position: relative; display: inline-block; margin: 0 0 1.75rem; line-height: 0; }
-            .thumb img { width: 150px; height: auto; border: 1px solid #d3d3dc; border-radius: 6px;
-                         box-shadow: 0 1px 4px rgba(0,0,0,.10); background: #fff; }
+            .thumb img { width: 150px; height: auto; border: 1px solid var(--sa-hairline, #E6E7EC); border-radius: 6px;
+                         box-shadow: 0 1px 4px rgba(0,0,0,.10); background: var(--sa-surface, #FFFFFF); }
             /* Corner badge, deliberately loud: the page count is the one thing about the document a reader
-               cannot infer from its name. */
-            .pages { position: absolute; top: -.5rem; right: -.5rem; background: #d92b2b; color: #fff;
+               cannot infer from its name. Semantic, not brand — it stays red when the accent is not. */
+            .pages { position: absolute; top: -.5rem; right: -.5rem; background: var(--sa-danger, #B91C1C); color: #fff;
                      font-size: .72rem; line-height: 1; padding: .3rem .5rem; border-radius: 999px;
                      box-shadow: 0 1px 3px rgba(0,0,0,.25); white-space: nowrap; }
             .actions { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; margin: 0; }
             .btn { display: inline-block; padding: .6rem 1.25rem; border-radius: 8px; text-decoration: none;
-                   border: 1px solid #d3d3dc; color: #1c1c21; font-size: .95rem; }
-            .btn.primary { background: #5b4ee5; border-color: #5b4ee5; color: #fff; }
-            footer { margin-top: 2rem; font-size: .8rem; color: #8a8a96; }
+                   border: 1px solid var(--sa-hairline, #E6E7EC); color: var(--sa-text, #14161C); font-size: .95rem; }
+            .btn.primary { background: var(--sa-accent, #0F766E); border-color: var(--sa-accent, #0F766E); color: var(--sa-on-accent, #FFFFFF); }
+            footer { margin-top: 2rem; font-size: .8rem; color: var(--sa-text-faint, #898F9E); }
             footer a { color: inherit; }
             /* Smaller and quieter than the line above it: the address must not compete with the document name
                and the two buttons, which are what the recipient came for (issue #411). */
-            address { margin-top: .75rem; font-style: normal; font-size: .72rem; line-height: 1.5; color: #9a9aa4; }
+            address { margin-top: .75rem; font-style: normal; font-size: .72rem; line-height: 1.5; color: var(--sa-text-faint, #898F9E); }
+            /* Dark mode is the tokens' job now — every variable above already switches. Only the elevation,
+               which they do not carry, is restated. */
             @media (prefers-color-scheme: dark) {
-              body { background: #16161a; color: #ececf1; }
-              main { background: #1f1f25; box-shadow: none; }
-              .meta { color: #a4a4b0; }
-              .btn { border-color: #3a3a44; color: #ececf1; }
-              .btn.primary { background: #6f63ff; border-color: #6f63ff; color: #fff; }
+              main { box-shadow: none; }
             }
           </style>
         </head>

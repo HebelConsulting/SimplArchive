@@ -46,16 +46,20 @@ h1:focus {
     margin: 0 auto 0 auto;
 }
 
+    /* The boot spinner was still the Blazor template's own colours — a grey track and #1b6ec2 blue, never
+       themed by anyone. It renders BEFORE the app exists, so it is the first colour a visitor sees, and a blue
+       ring in front of a teal product reads as a page that has not finished loading its stylesheet.
+       tokens.generated.css is linked ahead of this file in index.html, so the variables resolve here. */
     .loading-progress circle {
         fill: none;
-        stroke: #e0e0e0;
+        stroke: var(--sa-hairline);
         stroke-width: 0.6rem;
         transform-origin: 50% 50%;
         transform: rotate(-90deg);
     }
 
         .loading-progress circle:last-child {
-            stroke: #1b6ec2;
+            stroke: var(--sa-accent);
             stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * 0.8), 500%;
             transition: stroke-dasharray 0.05s ease-in-out;
         }
@@ -63,7 +67,8 @@ h1:focus {
 .loading-progress-text {
     position: absolute;
     text-align: center;
-    font-weight: bold;
+    color: var(--sa-text-secondary);
+    font-weight: 600;
     inset: calc(20vh + 3.25rem) 0 auto 0.2rem;
 }
 
@@ -74,7 +79,7 @@ h1:focus {
 /* Drag-and-drop upload feedback (ADR "Drag-and-drop document upload" / "Inbox file-list drop-zone"). A JS
    handler toggles .drop-target-active on the hovered drop target. */
 .drop-target-active {
-    outline: 2px dashed #5b4ee5;
+    outline: 2px dashed var(--sa-accent);
     outline-offset: -3px;
     background: rgba(91, 78, 229, 0.06);
 }
@@ -95,3 +100,19 @@ h1:focus {
     border: 1px dashed rgba(128, 128, 128, 0.4);
     border-radius: 6px;
 }
+
+/* ── Selection and the active tab (ADR 0578) ───────────────────────────────────────────────────────────────
+   Here rather than in Home.razor's style block: these are global classes that a dozen components apply, so
+   they are not the workbench SHELL's markup — and the shell is being decomposed (ADR 0558), which means it may
+   only get smaller.
+
+   A selected row is a tint with a 2px leading accent edge, never a fill. A solid row overwrites the row's own
+   colours, so the folder gold, the signed badge and the document glyph all disappear at exactly the moment the
+   user is looking hardest at that row. box-shadow rather than border-left, so nothing shifts by 2px.
+
+   The active tab is an accent underline for the same family of reason: a filled block makes the current tab
+   the loudest thing on screen for a fact the user already knows, and competes with the primary action for the
+   one colour that should draw the eye. Both mirror the desktop client (ADR 0511). */
+.wb-list-row-selected { background: var(--sa-selection); box-shadow: inset 2px 0 0 0 var(--sa-accent); }
+.wb-list-row-selected:hover { background: var(--sa-accent-tint); }
+.wb-tab-active { color: var(--sa-accent-text); box-shadow: inset 0 -2px 0 0 var(--sa-accent); }

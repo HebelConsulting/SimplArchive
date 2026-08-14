@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 using Avalonia;
 using Avalonia.Media.Imaging;
+using SimplArchive.Theming;
 
 namespace SimplArchive.DesktopClient.Services;
 
@@ -34,6 +35,10 @@ public static class IconWriter
 
     // Windows: the sizes Explorer picks between, from the tray to the 256px "extra large" view.
     private static readonly int[] IcoSizes = [16, 32, 48, 64, 96, 128, 256];
+
+    // A browser tab, a bookmark bar and a pinned-site tile. Smaller than the launcher's set: nothing asks a
+    // favicon for 256px, and every size is bytes on every page load.
+    private static readonly int[] FaviconSizes = [16, 32, 48, 64];
 
     // Linux hicolor: what the .desktop entry's installer copies into share/icons/hicolor/<n>x<n>/apps.
     private static readonly int[] HicolorSizes = [48, 64, 128, 256];
@@ -97,6 +102,26 @@ public static class IconWriter
         File.WriteAllBytes(icns, BuildIcns(master));
         written.Add(icns);
 
+        // The browsers' icon, from the same art (ADR 0578). It lives in the WEB client's wwwroot rather than
+        // beside the desktop's assets, because that is the one the Api serves — to the app, the sign-in page
+        // and the external-link landing page alike. Written from here because this is where the renderer is:
+        // the Api image is Alpine and has no way to rasterise anything.
+        //
+        // A .ico as well as the .png: Safari and older Explorer ask for /favicon.ico by name whatever the page
+        // declares, and a 404 there is the one console error a visitor sees on a page that is otherwise fine.
+        if (WebRoot(assetsDirectory) is { } webRoot)
+        {
+            var png = Path.Combine(webRoot, "favicon.png");
+            Save(master, 256, png);
+            written.Add(png);
+
+            var favicon = Path.Combine(webRoot, "favicon.ico");
+            File.WriteAllBytes(favicon, BuildIco(master, FaviconSizes));
+            written.Add(favicon);
+        }
+
+        written.AddRange(WriteStyleFavicons(assetsDirectory));
+
         var linux = Path.Combine(assetsDirectory, "linux-icons");
         Directory.CreateDirectory(linux);
         foreach (var size in HicolorSizes)
@@ -109,12 +134,43 @@ public static class IconWriter
         return written;
     }
 
+    /// <summary>
+    /// One favicon per bundled style, served from the download area (ADR 0578).
+    /// </summary>
+    /// <remarks>
+    /// The tab icon cannot follow a runtime theme — it is a file, and the Alpine image has no rasteriser — so
+    /// an installation that sets <c>custom/theme.json</c> to indigo would otherwise keep a teal tab. These are
+    /// the matching set: pick the style, copy the icon of the same name into <c>custom/</c>, done. Listed by
+    /// the themed directory browser at <c>/download/themes/</c>, so nobody has to be told where they are.
+    /// </remarks>
+    private static IEnumerable<string> WriteStyleFavicons(string assetsDirectory)
+    {
+        var target = ApiWebRoot(assetsDirectory);
+        if (target is null)
+        {
+            yield break;
+        }
+
+        var directory = Path.Combine(target, "download", "themes");
+        Directory.CreateDirectory(directory);
+
+        foreach (var style in ThemeCatalog.Available().Where(s => s.Bundled))
+        {
+            var load = ThemeCatalog.Load(style.Id);
+            using var master = Render(load.Tokens.Light.Accent);
+
+            var path = Path.Combine(directory, $"{style.Id}.ico");
+            File.WriteAllBytes(path, BuildIco(master, FaviconSizes));
+            yield return path;
+        }
+    }
+
     // Rendered once at 1024 and scaled down, rather than re-rendered per size. The art is rounded rectangles,
     // which a high-quality downscale handles cleanly; rendering the same vector at 16px would instead put the
     // tile's 224px corner radius through a layout pass that was never designed for it.
-    private static Bitmap Render()
+    private static Bitmap Render(AccentTokens? accent = null)
     {
-        var visual = IconArt.BuildTile();
+        var visual = IconArt.BuildTile(accent);
         visual.Measure(new Size(Source, Source));
         visual.Arrange(new Rect(0, 0, Source, Source));
 
@@ -165,9 +221,10 @@ public static class IconWriter
     /// Vista, and the BMP path needs its own AND mask — a second, differently-encoded copy of the transparency
     /// that is easy to get subtly wrong and impossible to notice until an icon has a black fringe at 16px.
     /// </remarks>
-    private static byte[] BuildIco(Bitmap master)
+    private static byte[] BuildIco(Bitmap master, int[]? sizes = null)
     {
-        var images = IcoSizes.Select(size => Png(master, size)).ToList();
+        var chosen = sizes ?? IcoSizes;
+        var images = chosen.Select(size => Png(master, size)).ToList();
         using var output = new MemoryStream();
         using var writer = new BinaryWriter(output);
 
@@ -179,8 +236,8 @@ public static class IconWriter
         for (var i = 0; i < images.Count; i++)
         {
             // 256 is written as 0: the field is one byte, and 256 does not fit in it.
-            writer.Write((byte)(IcoSizes[i] == 256 ? 0 : IcoSizes[i]));
-            writer.Write((byte)(IcoSizes[i] == 256 ? 0 : IcoSizes[i]));
+            writer.Write((byte)(chosen[i] == 256 ? 0 : chosen[i]));
+            writer.Write((byte)(chosen[i] == 256 ? 0 : chosen[i]));
             writer.Write((byte)0);                // palette size — 0 for truecolour
             writer.Write((byte)0);                // reserved
             writer.Write((ushort)1);              // colour planes
@@ -223,6 +280,23 @@ public static class IconWriter
         }
 
         return output.ToArray();
+    }
+
+    // src/SimplArchive.DesktopClient/Assets -> src/SimplArchive.Api/wwwroot, when run from the repository.
+    private static string? ApiWebRoot(string assetsDirectory)
+    {
+        var src = Directory.GetParent(assetsDirectory)?.Parent;
+        var root = src is null ? null : Path.Combine(src.FullName, "SimplArchive.Api", "wwwroot");
+        return root is not null && Directory.Exists(root) ? root : null;
+    }
+
+    // src/SimplArchive.DesktopClient/Assets -> src/SimplArchive.Client/wwwroot, when run from the repository.
+    // Null in a packaged build, where there is no web client beside us and nothing to write.
+    private static string? WebRoot(string assetsDirectory)
+    {
+        var src = Directory.GetParent(assetsDirectory)?.Parent;
+        var webRoot = src is null ? null : Path.Combine(src.FullName, "SimplArchive.Client", "wwwroot");
+        return webRoot is not null && Directory.Exists(webRoot) ? webRoot : null;
     }
 
     private static byte[] BigEndian(int value)

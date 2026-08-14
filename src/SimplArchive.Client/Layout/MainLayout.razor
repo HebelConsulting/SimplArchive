@@ -17,6 +17,7 @@
 @inject SimplArchive.Client.Services.ImpersonationService ImpersonationSvc
 @inject SimplArchive.Client.Services.AppNavigationState AppNav
 @inject SimplArchive.Client.Services.ApiRoot ApiRoot
+@inject IHttpClientFactory HttpFactory
 
 <MudThemeProvider @ref="_themeProvider" Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -32,6 +33,9 @@
        is taller than what's on screen and the bottom tab bar is pushed off under the browser chrome — the #350
        "tab bar disappears on touch" bug. 100vh stays as the fallback for browsers without dvh. */
     .wb-shell { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
+    /* Neutral chrome with a hairline under it, mirroring the desktop (ADR 0578). A brand-coloured band across
+       the top is the single most dated thing on a screen; the accent is spent on the mark beside the wordmark
+       and nowhere else up here. */
     .wb-appbar {
         flex: 0 0 auto;
         display: flex;
@@ -39,18 +43,27 @@
         gap: 8px;
         height: 56px;
         padding: 0 8px 0 16px;
-        background: var(--mud-palette-primary);
-        color: var(--mud-palette-primary-text);
+        background: var(--sa-surface);
+        color: var(--sa-text);
+        border-bottom: 1px solid var(--sa-hairline);
     }
-    .wb-brand { font-size: 1.15rem; font-weight: 500; }
+    /* The one spot of brand in the chrome — the desktop's 10px accent square, same size, same place. */
+    .wb-mark { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 3px; background: var(--sa-accent); }
+    .wb-brand { font-size: 1.0625rem; font-weight: 600; letter-spacing: -.01em; }
+    /* The unread badge is absolutely positioned 12px ABOVE the icon's top edge (MudBlazor's overlap rule,
+       bottom: calc(100% - 12px)). The bar is 56px and the icon button is centred at 40px, so there are only
+       8px of clearance — the badge crossed the top of .wb-shell, which clips it because the shell must keep
+       overflow:hidden or the whole page scrolls. Pull the badge down so it sits inside the bar.
+       Pre-existing; the light chrome merely made a clipped red dot obvious where purple hid it. */
+    .wb-appbar .mud-badge.mud-badge-top { bottom: calc(100% - 20px); }
     .wb-spacer { flex: 1 1 auto; }
-    .wb-user { opacity: .95; font-size: .875rem; }
+    .wb-user { color: var(--sa-text-secondary); font-size: .875rem; }
     .wb-userbox { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 2px 4px; border-radius: 6px; }
-    .wb-userbox:hover { background: rgba(255,255,255,.12); }
+    .wb-userbox:hover { background: var(--sa-sunken); }
     /* Language flag switcher, to the right of the notifications bell. */
     .wb-langbtn { display: flex; align-items: center; gap: 1px; cursor: pointer; padding: 4px 4px; border-radius: 6px; color: inherit; }
-    .wb-langbtn:hover { background: rgba(255,255,255,.12); }
-    .wb-flag { display: inline-flex; line-height: 0; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,.25); overflow: hidden; }
+    .wb-langbtn:hover { background: var(--sa-sunken); }
+    .wb-flag { display: inline-flex; line-height: 0; border-radius: 2px; box-shadow: 0 0 0 1px var(--sa-hairline); overflow: hidden; }
     .wb-flag svg { display: block; height: 14px; width: auto; }
     .wb-body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
     .wb-impersonation { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 4px 16px;
@@ -76,6 +89,7 @@
 
 <div class="wb-shell">
     <header class="wb-appbar">
+        <span class="wb-mark"></span>
         <span class="wb-brand">SimplArchive</span>
         <span class="wb-spacer"></span>
         <AuthorizeView Context="auth">
@@ -578,7 +592,8 @@
         {
             // Followed from the API root's `theme` rel, never composed (ADR 0543). The root is anonymous, so
             // this resolves on the login screen too.
-            if (await Http.GetFromJsonAsync<ThemeTokens>(await ApiRoot.RequireAsync("theme")) is { } tokens)
+            var anonymous = HttpFactory.CreateClient(ApiRoot.AnonymousClient);
+            if (await anonymous.GetFromJsonAsync<ThemeTokens>(await ApiRoot.RequireAsync("theme")) is { } tokens)
             {
                 _theme = SimplArchiveTheme.From(tokens);
             }

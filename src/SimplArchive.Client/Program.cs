@@ -94,6 +94,15 @@ builder.Services.AddHttpClient("SimplArchive.Api", client => client.BaseAddress 
     .AddHttpMessageHandler(sp => sp.GetRequiredService<SimplArchive.Client.Services.ImpersonationHandler>());
 builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().CreateClient("SimplArchive.Api"));
 
+// The same API, without the access-token handler (ADR 0578). Two endpoints are [AllowAnonymous] and are read
+// BEFORE anyone signs in: the API root — 36 links, no conditionals, identical for every caller — and the
+// installation's theme, which has to be on screen for the sign-in page rather than after it.
+//
+// With the authorized client those reads throw AccessTokenNotAvailableException while signed out, which is
+// swallowed and leaves the shipped design in place: the customer's own colours would appear only after login,
+// which is the one moment they are least needed.
+builder.Services.AddHttpClient(SimplArchive.Client.Services.ApiRoot.AnonymousClient, client => client.BaseAddress = new Uri(builder.HostEnvironment.BaseAddress));
+
 // The API root discovery document, fetched once and cached (ADR 0543, issue #416) — the client's single
 // entry point, so screens follow rels instead of composing request paths by hand. (Worded without the
 // literal path prefix on purpose: ClientHypermediaTests counts occurrences textually and does not strip

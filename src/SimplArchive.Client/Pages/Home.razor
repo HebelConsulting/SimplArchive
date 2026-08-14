@@ -238,7 +238,6 @@
     .wb-tabs { flex: 0 0 auto; display: flex; border-top: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
     .wb-tab { padding: 8px 22px; cursor: pointer; border-right: 1px solid var(--mud-palette-lines-default);
         user-select: none; font-size: .9rem; display: flex; align-items: center; gap: 6px; }
-    .wb-tab-active { background: var(--mud-palette-primary); color: var(--mud-palette-primary-text); }
     .wb-tab-disabled { opacity: .5; cursor: not-allowed; }
     /* #298: the icon wrapper anchors the live-count badge (Check-out/Tasks), mirroring the desktop client. */
     .wb-tab-ico { position: relative; display: inline-flex; align-items: center; }
@@ -246,7 +245,6 @@
         box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-radius: 8px;
         font-size: .625rem; line-height: 1; background: var(--mud-palette-primary); color: var(--mud-palette-primary-text); }
     /* On the active tab the tab background is already primary, so invert the badge to stay legible. */
-    .wb-tab-active .wb-tab-badge { background: var(--mud-palette-primary-text); color: var(--mud-palette-primary); }
     /* Icon-only tabs on hover-capable computers — the label rides in the `title` tooltip (#298). Touch devices
        (no hover ⇒ no tooltip) fall outside this query and keep the visible .wb-tab-label. */
     @@media (hover: hover) and (pointer: fine) {
@@ -279,7 +277,6 @@
     }
     .wb-list-row { display: flex; align-items: center; gap: 8px; padding: 5px 12px; cursor: pointer; user-select: none; }
     .wb-list-row:hover { background: var(--mud-palette-action-default-hover); }
-    .wb-list-row-selected { background: var(--mud-palette-primary-hover); }
     /* Touch (coarse pointer): enlarge the primary tap targets toward the ~44px guideline (#359). ADDITIVE — keyed
        off `pointer: coarse` (not `hover: none`), so a hybrid device with a mouse keeps the denser layout and every
        feature; a finger just gets bigger hit areas. The dead resize gutters (drag is mouse-only) lose their

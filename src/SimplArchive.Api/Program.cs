@@ -26,6 +26,7 @@ using SimplArchive.Domain.Tenants;
 using SimplArchive.Domain.Workflow;
 using SimplArchive.Infrastructure;
 using SimplArchive.Infrastructure.Persistence;
+using SimplArchive.Api.Branding;
 
 // Enterprise structured logging (ADR "Enterprise-grade structured logging with Serilog"). A bootstrap logger
 // captures anything logged before the host is built; it's replaced by the fully-configured logger (sinks +
@@ -516,6 +517,11 @@ app.UseSerilogRequestLogging(options =>
 app.UseMiddleware<SimplArchive.Api.WebDav.WebDavMiddleware>();
 
 app.UseBlazorFrameworkFiles();
+
+// An installation's own tab icon, if it dropped one beside its theme (ADR 0578). BEFORE UseStaticFiles,
+// because static files serve the first match and the shipped icon is already in wwwroot.
+app.UseCustomFavicon();
+
 app.UseStaticFiles();
 
 // Public desktop-client download area (ADR 0490): make ONLY /download browsable so a visitor can click through to
@@ -546,7 +552,14 @@ if (downloadDir is not null)
         ServeUnknownFileTypes = true,
         DefaultContentType = "application/octet-stream",
     });
-    app.UseDirectoryBrowser(new DirectoryBrowserOptions { FileProvider = downloadProvider, RequestPath = "/download" });
+    app.UseDirectoryBrowser(new DirectoryBrowserOptions
+    {
+        FileProvider = downloadProvider,
+        RequestPath = "/download",
+        // The product's own design rather than the framework's "Index of /download/…" (ADR 0578). The
+        // listing stays dynamic because archive filenames carry a version that changes every release.
+        Formatter = new SimplArchive.Api.Download.ThemedDirectoryFormatter(),
+    });
 }
 
 // Explicit UseRouting so it runs HERE, after the /download static/browse middleware — not auto-injected at the

@@ -43,9 +43,9 @@ public class ThemeTokenTests
 
     /// <summary>
     /// The alternates shipped in the desktop packages are real, applicable themes — not sample files that would
-    /// be refused the moment somebody renamed one to activate it. teal.json is the one the redesign chose; it
-    /// becomes the shipped default once the web client is on the same chassis, at which point today's
-    /// purple moves the other way and becomes the preset. production/integration/development are the
+    /// be refused the moment somebody picked one. classic-purple.json is the escape hatch: the identity the
+    /// product wore before the redesign, on the new chassis, one pick away — which is what made shipping teal
+    /// by default a reversible decision rather than a bet. production/integration/development are the
     /// ENVIRONMENT set: an administrator with three near-identical windows open needs to know at a glance
     /// which system they are about to change, and each states a single colour so the derivation builds the
     /// rest and the contrast gate proves it.
@@ -53,7 +53,7 @@ public class ThemeTokenTests
     [Theory]
     [InlineData("indigo.json")]
     [InlineData("ink-blue.json")]
-    [InlineData("teal.json")]
+    [InlineData("classic-purple.json")]
     [InlineData("production.json")]
     [InlineData("integration.json")]
     [InlineData("development.json")]
