@@ -473,7 +473,7 @@ public class GroupsController : ControllerBase
 
         ApplyRights(group, request);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await _audit.RecordAsync(AuditActions.GroupRightsChanged, "Group", group.Id, group.Name, UsersController.DescribeRights(request), cancellationToken: cancellationToken);
+        await _audit.RecordAsync(AuditActions.GroupRightsChanged, "Group", group.Id, group.Name, Users.SystemRightsMapping.Describe(request), cancellationToken: cancellationToken);
 
         return Ok(BuildResource(group));
     }

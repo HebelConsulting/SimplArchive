@@ -40,100 +40,60 @@ public class DocumentVersionsController : ControllerBase
     private static readonly TimeSpan PresignedUrlExpiry = TimeSpan.FromMinutes(15);
 
     private readonly SimplArchiveDbContext _dbContext;
-    private readonly IEffectiveRightsCalculator _effectiveRightsCalculator;
     private readonly IObjectStorageClient _objectStorageClient;
     private readonly IDocumentPreviewService _documentPreviewService;
     private readonly IDocumentTextLayoutService _textLayoutService;
-    private readonly ICurrentServiceAccountAccessor _currentServiceAccountAccessor;
     private readonly ICurrentUserAccessor _currentUserAccessor;
 
     public DocumentVersionsController(
         SimplArchiveDbContext dbContext,
-        IEffectiveRightsCalculator effectiveRightsCalculator,
         IObjectStorageClient objectStorageClient,
         IDocumentPreviewService documentPreviewService,
         IDocumentTextLayoutService textLayoutService,
-        ICurrentServiceAccountAccessor currentServiceAccountAccessor,
         ICurrentUserAccessor currentUserAccessor,
         IDocumentIndexQueue queue,
         DocumentFinalizer finalizer,
         Documents.ChatSystemEntryRecorder chatEntries,
-        ILegalHoldService legalHold,
         IWormLockService wormLock,
         IStorageQuotaService storageQuota,
         IAuditRecorder audit,
-        IUserSystemRightsResolver userSystemRights,
-        IDocumentVersionComparer comparer)
+        IDocumentVersionComparer comparer,
+        Documents.DocumentAccessService access)
     {
         _dbContext = dbContext;
-        _effectiveRightsCalculator = effectiveRightsCalculator;
         _objectStorageClient = objectStorageClient;
         _documentPreviewService = documentPreviewService;
         _textLayoutService = textLayoutService;
-        _currentServiceAccountAccessor = currentServiceAccountAccessor;
         _currentUserAccessor = currentUserAccessor;
         _queue = queue;
         _finalizer = finalizer;
         _chatEntries = chatEntries;
-        _legalHold = legalHold;
         _wormLock = wormLock;
         _storageQuota = storageQuota;
         _audit = audit;
-        _userSystemRights = userSystemRights;
         _comparer = comparer;
+        _access = access;
     }
 
-    private readonly IUserSystemRightsResolver _userSystemRights;
 
-    // The caller's effective CanImport (ADR 0403/0520) — a User's own-∪-groups rights or a ServiceAccount's column.
-    // Gates backdating a version's filing date (a past FiledAt); an omitted/now FiledAt needs only CanEditContent.
-    private async Task<bool> HasImportRightAsync(CancellationToken cancellationToken)
-    {
-        if (_currentUserAccessor.UserId is { } userId)
-        {
-            return (await _userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken)).CanImport;
-        }
-
-        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
-        {
-            return await _dbContext.ServiceAccounts.Where(s => s.Id == serviceAccountId).Select(s => s.CanImport).SingleOrDefaultAsync(cancellationToken);
-        }
-
-        return false;
-    }
+    // The caller's effective CanImport (ADR 0403/0520) gates backdating a version's filing date. Forwarded to
+    // DocumentAccessService — this controller carried verbatim COPIES of five of its members (issue #466), which
+    // is the drift the "same work is ONE implementation" principle names.
+    private Task<bool> HasImportRightAsync(CancellationToken cancellationToken) =>
+        _access.HasImportRightAsync(cancellationToken);
 
     private readonly IDocumentVersionComparer _comparer;
+    private readonly Documents.DocumentAccessService _access;
     private readonly IAuditRecorder _audit;
     private readonly IDocumentIndexQueue _queue;
-    private readonly ILegalHoldService _legalHold;
     private readonly IWormLockService _wormLock;
     private readonly IStorageQuotaService _storageQuota;
 
-    // Refuses a new version / metadata change on a document frozen by an active legal hold (ADR "Legal hold &
-    // retention enforcement").
-    private async Task EnsureNotFrozenAsync(Guid documentId, CancellationToken cancellationToken)
-    {
-        if (await _legalHold.IsFrozenAsync(documentId, cancellationToken))
-        {
-            throw new DocumentUnderLegalHoldException();
-        }
-    }
+    private Task EnsureNotFrozenAsync(Guid documentId, CancellationToken cancellationToken) =>
+        _access.EnsureNotFrozenAsync(documentId, cancellationToken);
 
-    // Refuses a new version / metadata change on a document checked out by a DIFFERENT user (ADR "Document
-    // check-out / check-in"). The holder proceeds — the desktop check-in uploads the new version while holding
-    // the lock, then releases it.
-    private async Task EnsureNotCheckedOutByOtherAsync(Guid documentId, CancellationToken cancellationToken)
-    {
-        var holder = await _dbContext.Documents
-            .Where(d => d.Id == documentId)
-            .Select(d => d.CheckedOutByUserId)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (holder is { } h && h != _currentUserAccessor.UserId)
-        {
-            throw new DocumentCheckedOutException();
-        }
-    }
+    private Task EnsureNotCheckedOutByOtherAsync(Guid documentId, CancellationToken cancellationToken) =>
+        _access.EnsureNotCheckedOutByOtherAsync(documentId, cancellationToken);
     private readonly DocumentFinalizer _finalizer;
     private readonly Documents.ChatSystemEntryRecorder _chatEntries;
 
@@ -801,17 +761,8 @@ public class DocumentVersionsController : ControllerBase
 
     // Refuses an operation while the document has an approval workflow in progress — a version In Review or
     // Approved but not yet Released (ADR "Version restore").
-    private async Task EnsureNoWorkflowInProgressAsync(Guid documentId, CancellationToken cancellationToken)
-    {
-        var inProgress = await _dbContext.WorkflowStates
-            .Where(w => (w.Status == WorkflowStatus.InReview || w.Status == WorkflowStatus.Approved)
-                && _dbContext.DocumentVersions.Any(v => v.Id == w.DocumentVersionId && v.DocumentId == documentId))
-            .AnyAsync(cancellationToken);
-        if (inProgress)
-        {
-            throw new WorkflowInProgressException();
-        }
-    }
+    private Task EnsureNoWorkflowInProgressAsync(Guid documentId, CancellationToken cancellationToken) =>
+        _access.EnsureNoWorkflowInProgressAsync(documentId, cancellationToken);
 
     // Edits a version's issuing date. Gated on CanEditIndexData (metadata, like the
     // mask/index-data sub-resources) and enqueues a reindex so search reflects the new date. See ADR
@@ -994,23 +945,8 @@ public class DocumentVersionsController : ControllerBase
         return "";
     }
 
-    // Checks ServiceAccount first, then a logged-in User — the two accessors are mutually exclusive per
-    // request (CurrentPrincipalMiddleware's three-way branch). See ADR "Document-scope authorization
-    // retrofit for User, and tenant-administrator-driven onboarding".
-    private async Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken)
-    {
-        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
-        {
-            return await _effectiveRightsCalculator.GetEffectiveRightsForServiceAccountAsync(serviceAccountId, documentId, cancellationToken);
-        }
-
-        if (_currentUserAccessor.UserId is { } userId)
-        {
-            return await _effectiveRightsCalculator.GetEffectiveRightsAsync(userId, documentId, cancellationToken);
-        }
-
-        return new EffectiveRights(false, false, false, false, false, false, false, false, false);
-    }
+    private Task<EffectiveRights> GetCallerRightsAsync(Guid documentId, CancellationToken cancellationToken) =>
+        _access.GetCallerRightsAsync(documentId, cancellationToken);
 
     private async Task<bool> CanEditContentAsync(Guid documentId, CancellationToken cancellationToken)
     {
@@ -1053,15 +989,5 @@ public class DocumentVersionsController : ControllerBase
         return (await GetCallerRightsAsync(documentId, cancellationToken)).CanEditIndexData;
     }
 
-    // Returns whichever principal actually made this request, for DocumentVersion creator attribution
-    // (CreatedByUserId/CreatedByServiceAccountId, CHECK-constrained to exactly one).
-    private (Guid? UserId, Guid? ServiceAccountId) GetCallerIdentity()
-    {
-        if (_currentServiceAccountAccessor.ServiceAccountId is { } serviceAccountId)
-        {
-            return (null, serviceAccountId);
-        }
-
-        return (_currentUserAccessor.UserId, null);
-    }
+    private (Guid? UserId, Guid? ServiceAccountId) GetCallerIdentity() => _access.GetCallerIdentity();
 }

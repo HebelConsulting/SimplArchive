@@ -420,37 +420,16 @@ public class UsersController : ControllerBase
             return NotFound();
         }
 
-        if (!SystemRightsPolicy.CanApply(caller, ReadRights(user), request))
+        if (!SystemRightsPolicy.CanApply(caller, Users.SystemRightsMapping.Read(user), request))
         {
             throw InsufficientRightsToGrantException.OnSystemRights();
         }
 
-        ApplyRights(user, request);
+        Users.SystemRightsMapping.Apply(user, request);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await _audit.RecordAsync(AuditActions.UserRightsChanged, "User", user.Id, user.DisplayName, DescribeRights(request), cancellationToken: cancellationToken);
+        await _audit.RecordAsync(AuditActions.UserRightsChanged, "User", user.Id, user.DisplayName, Users.SystemRightsMapping.Describe(request), cancellationToken: cancellationToken);
 
         return Ok(BuildResource(user));
-    }
-
-    // A short summary of the enabled rights, for the audit Details column.
-    internal static string DescribeRights(SystemRights r)
-    {
-        var names = new List<string>();
-        if (r.IsTenantAdmin) names.Add("TenantAdmin");
-        if (r.CanManageUsers) names.Add("ManageUsers");
-        if (r.CanManageRepositories) names.Add("ManageRepositories");
-        if (r.CanManageMasks) names.Add("ManageMasks");
-        if (r.CanManageServiceAccounts) names.Add("ManageServiceAccounts");
-        if (r.CanViewAuditLog) names.Add("ViewAuditLog");
-        if (r.CanImpersonate) names.Add("Impersonate");
-        if (r.CanOverrideCheckout) names.Add("OverrideCheckout");
-        if (r.CanLegalHold) names.Add("LegalHold");
-        if (r.CanManageClassification) names.Add("ManageClassification");
-        if (r.CanResetMfa) names.Add("ResetMfa");
-        if (r.CanExport) names.Add("Export");
-        if (r.CanImport) names.Add("Import");
-        if (r.ClearanceRank > 0) names.Add($"Clearance {r.ClearanceRank}");
-        return names.Count == 0 ? "(no rights)" : string.Join(", ", names);
     }
 
     // Self-service — requires being logged in as a User (ICurrentUserAccessor.UserId set), not gated on
@@ -849,7 +828,7 @@ public class UsersController : ControllerBase
             DisplayName = user.DisplayName,
             IsActive = user.IsActive,
             MfaEnabled = user.MfaEnabledAt is not null,
-            Rights = ReadRights(user),
+            Rights = Users.SystemRightsMapping.Read(user),
             Links =
             [
                 new Link("self", $"/api/users/{user.Id}", "GET"),
@@ -869,45 +848,6 @@ public class UsersController : ControllerBase
         };
     }
 
-    private static SystemRights ReadRights(User u) => new()
-    {
-        IsTenantAdmin = u.IsTenantAdmin,
-        CanImpersonate = u.CanImpersonate,
-        CanOverrideCheckout = u.CanOverrideCheckout,
-        CanLegalHold = u.CanLegalHold,
-        CanManageClassification = u.CanManageClassification,
-        CanResetMfa = u.CanResetMfa,
-        CanManageRepositories = u.CanManageRepositories,
-        CanManageMasks = u.CanManageMasks,
-        CanManageServiceAccounts = u.CanManageServiceAccounts,
-        CanManageUsers = u.CanManageUsers,
-        CanViewAuditLog = u.CanViewAuditLog,
-        CanExport = u.CanExport,
-        CanImport = u.CanImport,
-        CanManageInboxes = u.CanManageInboxes,
-        CanCreateExternalLink = u.CanCreateExternalLink,
-        ClearanceRank = u.ClearanceRank,
-    };
-
-    private static void ApplyRights(User u, SystemRights r)
-    {
-        u.IsTenantAdmin = r.IsTenantAdmin;
-        u.CanImpersonate = r.CanImpersonate;
-        u.CanOverrideCheckout = r.CanOverrideCheckout;
-        u.CanLegalHold = r.CanLegalHold;
-        u.CanManageClassification = r.CanManageClassification;
-        u.CanResetMfa = r.CanResetMfa;
-        u.CanManageRepositories = r.CanManageRepositories;
-        u.CanManageMasks = r.CanManageMasks;
-        u.CanManageServiceAccounts = r.CanManageServiceAccounts;
-        u.CanManageUsers = r.CanManageUsers;
-        u.CanViewAuditLog = r.CanViewAuditLog;
-        u.CanExport = r.CanExport;
-        u.CanImport = r.CanImport;
-        u.CanManageInboxes = r.CanManageInboxes;
-        u.CanCreateExternalLink = r.CanCreateExternalLink;
-        u.ClearanceRank = r.ClearanceRank;
-    }
 
     // The calling principal's identity, for attributing a workflow reassignment transition (exactly one of the
     // two is set — the two accessors are mutually exclusive per request, CurrentPrincipalMiddleware).

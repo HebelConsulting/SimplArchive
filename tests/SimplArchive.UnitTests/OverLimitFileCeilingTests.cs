@@ -38,9 +38,6 @@ public class OverLimitFileCeilingTests
         // Lowered from 1,253 by ADR 0578: the icon hooks moved into IconWriter, which is the class that
         // knows where icons go. Program.cs is a switchboard; it had started keeping the wiring too.
         ["src/SimplArchive.DesktopClient/Program.cs"] = 1_248,
-        ["src/SimplArchive.Api/Controllers/InboxController.cs"] = 1_071,
-        ["src/SimplArchive.Api/Controllers/DocumentVersionsController.cs"] = 1_067,
-        ["src/SimplArchive.Api/Controllers/UsersController.cs"] = 1_011,
     };
 
     public static TheoryData<string> Files => [.. Ceilings.Keys];

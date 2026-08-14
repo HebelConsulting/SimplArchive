@@ -134,4 +134,21 @@ public sealed class DocumentAccessService(
             throw new DocumentCheckedOutException();
         }
     }
+
+    /// <summary>
+    /// Refuses a mutation while any of the document's versions is in an unfinished workflow (ADR "Workflow
+    /// status-gating"): a version under review is a claim someone is examining, and changing the document
+    /// under them invalidates the examination.
+    /// </summary>
+    public async Task EnsureNoWorkflowInProgressAsync(Guid documentId, CancellationToken cancellationToken)
+    {
+        var inProgress = await dbContext.WorkflowStates
+            .Where(w => (w.Status == Domain.Workflow.WorkflowStatus.InReview || w.Status == Domain.Workflow.WorkflowStatus.Approved)
+                && dbContext.DocumentVersions.Any(v => v.Id == w.DocumentVersionId && v.DocumentId == documentId))
+            .AnyAsync(cancellationToken);
+        if (inProgress)
+        {
+            throw new Errors.Exceptions.Workflow.WorkflowInProgressException();
+        }
+    }
 }

@@ -43,7 +43,8 @@ namespace SimplArchive.Api.Controllers;
 [Authorize]
 public class InboxController : ControllerBase
 {
-    private static readonly TimeSpan PresignedUrlExpiry = TimeSpan.FromMinutes(15);
+    // Internal: InboxPreviewController (the derived-artifact sibling on these routes, issue #466) shares both.
+    internal static readonly TimeSpan PresignedUrlExpiry = TimeSpan.FromMinutes(15);
     private const string MaskSidecarSuffix = InboxPageService.MaskSidecarSuffix;
 
     private readonly SimplArchiveDbContext _dbContext;
@@ -189,48 +190,6 @@ public class InboxController : ControllerBase
         public Guid? TargetUserId { get; set; }
     }
 
-    public class InboxPreviewResource : HypermediaResource
-    {
-        public string? PreviewUrl { get; set; }
-
-        public bool PreviewConverted { get; set; }
-    }
-
-    public class InboxPreviewPagesResource : HypermediaResource
-    {
-        public bool Converted { get; set; }
-
-        public List<InboxPreviewPageResource> Pages { get; set; } = [];
-    }
-
-    public class InboxPreviewPageResource
-    {
-        public string Url { get; set; } = "";
-    }
-
-    public class InboxTextLayoutResource : HypermediaResource
-    {
-        public List<InboxTextLayoutPageResource> Pages { get; set; } = [];
-    }
-
-    public class InboxTextLayoutPageResource
-    {
-        public List<InboxTextLayoutWordResource> Words { get; set; } = [];
-    }
-
-    public class InboxTextLayoutWordResource
-    {
-        public string Text { get; set; } = "";
-
-        public double X { get; set; }
-
-        public double Y { get; set; }
-
-        public double Width { get; set; }
-
-        public double Height { get; set; }
-    }
-
     // The staged mask draft (also the on-the-wire shape and the sidecar JSON shape). MaskId null = "(No mask)".
     // Name/DocumentDate are staged system fields (the filed Document.Name / DocumentVersion.DocumentDate) —
     // DocumentDate is a "yyyy-MM-dd" string (ADR "Staged Name + Document date on inbox items").
@@ -277,7 +236,7 @@ public class InboxController : ControllerBase
     private static string SourceQuery(Guid? group, Guid? user) =>
         group is { } g ? $"?group={g}" : user is { } u ? $"?user={u}" : "";
 
-    private static string ItemHref(string name, string suffix, Guid? group, Guid? user)
+    internal static string ItemHref(string name, string suffix, Guid? group, Guid? user)
     {
         var path = suffix.Length == 0 ? $"/api/inbox/{Uri.EscapeDataString(name)}" : $"/api/inbox/{Uri.EscapeDataString(name)}/{suffix}";
         return path + SourceQuery(group, user);
@@ -595,124 +554,6 @@ public class InboxController : ControllerBase
         public Guid DocumentId { get; set; }
     }
 
-    // Inline preview for the item, via the rendition service on the inbox object key (renditions for TIFF/
-    // office/email, else the object shown as-is). 204 when no preview is available.
-    [HttpGet("{name}/preview")]
-    public async Task<IActionResult> Preview(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken)
-    {
-        if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)
-        {
-            return Forbid();
-        }
-
-        var key = scope.Prefix + name;
-        if (!await _objectStorageClient.ExistsAsync(key, cancellationToken))
-        {
-            return NotFound();
-        }
-
-        var preview = await _documentPreviewService.GetPreviewUrlAsync(key, PresignedUrlExpiry, name, cancellationToken);
-        if (preview is null)
-        {
-            return NoContent();
-        }
-
-        return Ok(new InboxPreviewResource
-        {
-            PreviewUrl = preview.Url.ToString(),
-            PreviewConverted = preview.IsConverted,
-            Links =
-            [
-                new Link("self", ItemHref(name, "preview", group, user), "GET"),
-                new Link("preview-pages", ItemHref(name, "preview-pages", group, user), "GET"),
-                new Link("text-layout", ItemHref(name, "text-layout", group, user), "GET"),
-            ],
-        });
-    }
-
-    [HttpHead("{name}/preview")]
-    public async Task<IActionResult> PreviewHead(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken)
-    {
-        if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)
-        {
-            return Forbid();
-        }
-
-        return await _objectStorageClient.ExistsAsync(scope.Prefix + name, cancellationToken) ? NoContent() : NotFound();
-    }
-
-    // Ordered per-page image URLs for a multi-page TIFF; 204 for every other format (the client uses `preview`).
-    [HttpGet("{name}/preview-pages")]
-    public async Task<IActionResult> PreviewPages(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken)
-    {
-        if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)
-        {
-            return Forbid();
-        }
-
-        var key = scope.Prefix + name;
-        if (!await _objectStorageClient.ExistsAsync(key, cancellationToken))
-        {
-            return NotFound();
-        }
-
-        var pages = await _documentPreviewService.GetPreviewPagesAsync(key, PresignedUrlExpiry, cancellationToken: cancellationToken);
-        if (pages is null)
-        {
-            return NoContent();
-        }
-
-        return Ok(new InboxPreviewPagesResource
-        {
-            Converted = pages.IsConverted,
-            Pages = pages.Urls.Select(u => new InboxPreviewPageResource { Url = u.ToString() }).ToList(),
-            Links = [new Link("self", ItemHref(name, "preview-pages", group, user), "GET")],
-        });
-    }
-
-    [HttpHead("{name}/preview-pages")]
-    public async Task<IActionResult> PreviewPagesHead(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken) =>
-        await PreviewHead(name, group, user, cancellationToken);
-
-    // Per-page word boxes for hit-overlay / find-in-document, via the text-layout service on the object key.
-    [HttpGet("{name}/text-layout")]
-    public async Task<IActionResult> TextLayout(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken)
-    {
-        if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)
-        {
-            return Forbid();
-        }
-
-        var key = scope.Prefix + name;
-        if (!await _objectStorageClient.ExistsAsync(key, cancellationToken))
-        {
-            return NotFound();
-        }
-
-        var layout = await _textLayoutService.GetTextLayoutAsync(key, cancellationToken);
-        if (layout is null)
-        {
-            return NoContent();
-        }
-
-        return Ok(new InboxTextLayoutResource
-        {
-            Pages = layout.Pages
-                .Select(p => new InboxTextLayoutPageResource
-                {
-                    Words = p.Words
-                        .Select(w => new InboxTextLayoutWordResource { Text = w.Text, X = w.X, Y = w.Y, Width = w.Width, Height = w.Height })
-                        .ToList(),
-                })
-                .ToList(),
-            Links = [new Link("self", ItemHref(name, "text-layout", group, user), "GET")],
-        });
-    }
-
-    [HttpHead("{name}/text-layout")]
-    public async Task<IActionResult> TextLayoutHead(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken) =>
-        await PreviewHead(name, group, user, cancellationToken);
-
     // Reads the staged mask/index-data draft from the `{name}.mask.json` sidecar; an empty draft (no sidecar).
     [HttpGet("{name}/mask")]
     public async Task<IActionResult> GetMask(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken)
@@ -734,8 +575,15 @@ public class InboxController : ControllerBase
     }
 
     [HttpHead("{name}/mask")]
-    public async Task<IActionResult> GetMaskHead(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken) =>
-        await PreviewHead(name, group, user, cancellationToken);
+    public async Task<IActionResult> GetMaskHead(string name, [FromQuery] Guid? group, [FromQuery] Guid? user, CancellationToken cancellationToken)
+    {
+        if (await ResolveScopeAsync(group, user, name, cancellationToken) is not { } scope)
+        {
+            return Forbid();
+        }
+
+        return await _objectStorageClient.ExistsAsync(scope.Prefix + name, cancellationToken) ? NoContent() : NotFound();
+    }
 
     // Writes (or, for "(No mask)", clears) the staged mask/index-data draft sidecar. A staging draft, not a
     // filed document, so no required-field/format validation runs here — that happens if/when the item is filed.
