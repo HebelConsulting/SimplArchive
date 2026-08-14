@@ -47,6 +47,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // local working-copy status.
     public CheckoutTabViewModel Checkout { get; } = new();
 
+    // The environment strip (#501) — set from the chosen server profile at login, empty for the normal case.
+    public EnvironmentBannerViewModel EnvBanner { get; } = new();
+
     public MainWindowViewModel()
     {
         LoadLayout();

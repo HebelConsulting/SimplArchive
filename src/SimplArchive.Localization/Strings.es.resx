@@ -24,6 +24,21 @@
   <data name="SessionExpired" xml:space="preserve">
     <value>Su sesión ha caducado: vuelva a iniciar sesión.</value>
   </data>
+  <data name="SmEnvLabel" xml:space="preserve">
+    <value>Entorno</value>
+  </data>
+  <data name="EnvNone" xml:space="preserve">
+    <value>(ninguno)</value>
+  </data>
+  <data name="EnvDevelopment" xml:space="preserve">
+    <value>Desarrollo</value>
+  </data>
+  <data name="EnvIntegration" xml:space="preserve">
+    <value>Integración</value>
+  </data>
+  <data name="EnvProduction" xml:space="preserve">
+    <value>Producción</value>
+  </data>
   <data name="LogonLogin" xml:space="preserve">
     <value>Iniciar sesión</value>
   </data>

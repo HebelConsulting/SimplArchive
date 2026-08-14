@@ -1,0 +1,16 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             x:Class="SimplArchive.DesktopClient.Views.EnvironmentBanner"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- The environment strip (#501): which system you are about to change, at the very top — ABOVE the
+         impersonation banner, because "which deployment" is the outer context of "as which user", and an admin
+         impersonating someone in production is precisely who needs both. Thin on purpose: it is read once per
+         window, then it should cost nothing. White text is safe on all three level colours (each was checked
+         for AA contrast when the set was fixed — see EnvironmentLevels). Hidden entirely when the profile
+         declares nothing, which is the single-deployment norm. -->
+    <Border Background="{Binding EnvBanner.Background}" Padding="12,3" IsVisible="{Binding EnvBanner.IsShown}">
+        <TextBlock Text="{Binding EnvBanner.Name}" Foreground="White" FontSize="12" FontWeight="SemiBold"
+                   HorizontalAlignment="Center" />
+    </Border>
+</UserControl>

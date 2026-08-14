@@ -803,6 +803,14 @@ internal static class Program
         }
 
         var viewModel = new MainWindowViewModel();
+        // `--envbanner <id>` renders the environment strip (#501) — the only way to see it headlessly, since
+        // it otherwise exists only after a real login chose a real profile.
+        var envIndex = Array.IndexOf(Environment.GetCommandLineArgs(), "--envbanner");
+        if (envIndex >= 0)
+        {
+            viewModel.EnvBanner.Set(Environment.GetCommandLineArgs()[envIndex + 1]);
+        }
+
         if (demo)
         {
             if (Environment.GetCommandLineArgs().Contains("--search"))

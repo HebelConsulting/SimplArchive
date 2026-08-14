@@ -21,6 +21,12 @@ public sealed class ServerProfile
     // design. Per PROFILE rather than per application, so connecting to a customer's server shows their
     // colours; an id that no longer resolves falls back to the shipped design without complaint.
     public string? Theme { get; set; }
+
+    // Which environment this server IS — an id from EnvironmentLevels ("production"/"integration"/
+    // "development"), or empty for none, which is the default and stays the norm: this is a support affordance
+    // for people who administer several deployments, and a single-deployment user should never see it (#501).
+    // Empty or unrecognised simply shows no banner, same posture as a missing Theme.
+    public string Environment { get; set; } = string.Empty;
 }
 
 // The persisted server configuration: the list of servers + the last-chosen one (remembered across runs).

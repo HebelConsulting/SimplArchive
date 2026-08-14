@@ -21,6 +21,7 @@ public sealed partial class ServerManagerViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelection))]
     [NotifyPropertyChangedFor(nameof(SelectedThemeName))]
+    [NotifyPropertyChangedFor(nameof(SelectedEnvironmentName))]
     [NotifyCanExecuteChangedFor(nameof(EditCommand))]
     [NotifyCanExecuteChangedFor(nameof(RemoveCommand))]
     private ServerProfile? _selected;
@@ -51,6 +52,16 @@ public sealed partial class ServerManagerViewModel : ObservableObject
 
     /// <summary>What the selected profile's style is CALLED — the read-only pane shows a name, not an id.</summary>
     public string SelectedThemeName => ThemeFor(Selected?.Theme).Name;
+
+    // The environments a profile can declare itself to be (#501) — a fixed set, "(none)" first. No live
+    // preview, unlike the style picker: the banner appears on the MAIN window, which doesn't exist yet while
+    // this window is the one being used.
+    public ObservableCollection<EnvironmentLevels.Level> Environments { get; } = new(EnvironmentLevels.All);
+
+    [ObservableProperty] private EnvironmentLevels.Level? _editEnvironment;
+
+    /// <summary>The selected profile's environment, by name — "(none)" when empty or unrecognised.</summary>
+    public string SelectedEnvironmentName => EnvironmentFor(Selected?.Environment).Name;
 
     // True while EditUrl is a well-formed absolute http(s) address that a live probe confirmed is a SimplArchive
     // server — drives the light-green tint on the URL field while editing (issue #270).
@@ -180,9 +191,13 @@ public sealed partial class ServerManagerViewModel : ObservableObject
 
     public ServerManagerViewModel()
     {
+        // Copy EVERY field. This copy used to carry only Name and ApiRootUrl while Persist() wrote Theme back
+        // from it — so merely opening this window and saving anything (an edit, a remove) silently erased the
+        // Theme of every profile not edited in that session. The copy and Persist() must agree on the field
+        // list; when adding a profile field, both change or the new field is quietly eaten the same way.
         foreach (var t in ServerProfileStore.Load().Servers)
         {
-            Servers.Add(new ServerProfile { Name = t.Name, ApiRootUrl = t.ApiRootUrl });
+            Servers.Add(new ServerProfile { Name = t.Name, ApiRootUrl = t.ApiRootUrl, Theme = t.Theme, Environment = t.Environment });
         }
 
         Selected = Servers.FirstOrDefault();
@@ -202,6 +217,7 @@ public sealed partial class ServerManagerViewModel : ObservableObject
         EditName = Selected.Name;
         EditUrl = Selected.ApiRootUrl;
         EditTheme = ThemeFor(Selected.Theme);
+        EditEnvironment = EnvironmentFor(Selected.Environment);
         Error = "";
         IsEditing = true;
     }
@@ -214,6 +230,7 @@ public sealed partial class ServerManagerViewModel : ObservableObject
         IsAdding = true;
         EditName = "";
         EditUrl = "";
+        EditEnvironment = Environments.First(); // "(none)" — a new server declares nothing until told otherwise
         Error = "";
         IsEditing = true;
     }
@@ -262,7 +279,13 @@ public sealed partial class ServerManagerViewModel : ObservableObject
 
         if (IsAdding)
         {
-            var profile = new ServerProfile { Name = name, ApiRootUrl = url, Theme = EditTheme?.Id };
+            var profile = new ServerProfile
+            {
+                Name = name,
+                ApiRootUrl = url,
+                Theme = EditTheme?.Id,
+                Environment = EditEnvironment?.Id ?? string.Empty,
+            };
             Servers.Add(profile);
             Selected = profile;
             RemoveCommand.NotifyCanExecuteChanged();
@@ -272,6 +295,7 @@ public sealed partial class ServerManagerViewModel : ObservableObject
             Selected.Name = name;
             Selected.ApiRootUrl = url;
             Selected.Theme = EditTheme?.Id;
+            Selected.Environment = EditEnvironment?.Id ?? string.Empty;
             // Re-select to refresh the read-only pane bindings.
             var idx = Servers.IndexOf(Selected);
             var current = Selected;
@@ -303,11 +327,16 @@ public sealed partial class ServerManagerViewModel : ObservableObject
         Themes.FirstOrDefault(t => string.Equals(t.Id, id, StringComparison.OrdinalIgnoreCase))
         ?? Themes.First();
 
+    // Unknown lands on "(none)" for the same reason ThemeFor falls back: the picker must open, whatever is on disk.
+    private EnvironmentLevels.Level EnvironmentFor(string? id) =>
+        Environments.FirstOrDefault(l => l.Id.Length > 0 && string.Equals(l.Id, id, StringComparison.OrdinalIgnoreCase))
+        ?? Environments.First();
+
     private void Persist()
     {
         var config = ServerProfileStore.Load();
         config.Servers = Servers
-            .Select(t => new ServerProfile { Name = t.Name, ApiRootUrl = t.ApiRootUrl, Theme = t.Theme })
+            .Select(t => new ServerProfile { Name = t.Name, ApiRootUrl = t.ApiRootUrl, Theme = t.Theme, Environment = t.Environment })
             .ToList();
         // Keep the remembered last-chosen server only if it still exists.
         if (config.LastServer is not null && Servers.All(t => !string.Equals(t.Name, config.LastServer, StringComparison.OrdinalIgnoreCase)))

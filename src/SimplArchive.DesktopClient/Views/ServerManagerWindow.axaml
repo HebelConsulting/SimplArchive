@@ -50,6 +50,10 @@
                             <TextBlock Text="{loc:Tr SmThemeLabel}" FontSize="11" Foreground="{DynamicResource WbMuted}" />
                             <TextBlock Text="{Binding SelectedThemeName}" FontSize="14" />
                         </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="{loc:Tr SmEnvLabel}" FontSize="11" Foreground="{DynamicResource WbMuted}" />
+                            <TextBlock Text="{Binding SelectedEnvironmentName}" FontSize="14" />
+                        </StackPanel>
                         <Button Command="{Binding EditCommand}" HorizontalAlignment="Left" Margin="0,4,0,0">
                             <StackPanel Orientation="Horizontal" Spacing="5"><i:Icon Value="mdi-pencil" /><TextBlock Text="{loc:Tr Edit}" /></StackPanel>
                         </Button>
@@ -94,6 +98,20 @@
                                   SelectedItem="{Binding EditTheme}" HorizontalAlignment="Stretch">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate x:DataType="theming:ThemeCatalog+Entry">
+                                    <TextBlock Text="{Binding Name}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Text="{loc:Tr SmEnvLabel}" FontSize="11" Foreground="{DynamicResource WbMuted}" />
+                        <!-- A fixed set, "(none)" first and default (#501): a support affordance for people who
+                             administer several deployments — free text would defeat the point, which is that
+                             "Production" looks identical on every machine. -->
+                        <ComboBox AutomationProperties.AutomationId="server-environment" ItemsSource="{Binding Environments}"
+                                  SelectedItem="{Binding EditEnvironment}" HorizontalAlignment="Stretch">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="svc:EnvironmentLevels+Level">
                                     <TextBlock Text="{Binding Name}" />
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>

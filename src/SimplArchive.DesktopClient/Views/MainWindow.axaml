@@ -29,6 +29,7 @@
         <!-- The app chrome is its own control (ADR 0578): brand, notifications, theme and the account menu
              are a responsibility, not a region, and this file has no room left for another one. -->
         <v:TitleBar DockPanel.Dock="Top" />
+        <v:EnvironmentBanner DockPanel.Dock="Top" />
 
         <!-- Impersonation banner (ADR "User impersonation") -->
         <Border DockPanel.Dock="Top" Background="#b26a00" Padding="12,5" IsVisible="{Binding IsImpersonating}">

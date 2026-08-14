@@ -44,6 +44,9 @@ public partial class App : Application
         {
             SimplArchive.Localization.Culture.Apply(logonVm.SelectedLanguage?.Code);
             var viewModel = new MainWindowViewModel();
+            // The environment strip (#501) comes from the profile the user just logged into — the same source
+            // as its style, decided at the same moment.
+            viewModel.EnvBanner.Set(logonVm.SelectedServer?.Environment);
             var window = new MainWindow { DataContext = viewModel };
 
             // Wire the crash guard (ADR "Desktop crash guard") to the new main window.
