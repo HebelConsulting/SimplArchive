@@ -1,0 +1,227 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using SimplArchive.DesktopClient.Services;
+using SimplArchive.Localization;
+
+namespace SimplArchive.DesktopClient.ViewModels;
+
+/// <summary>
+/// What a user can do TO a staged inbox item: send it on, claim it into their own inbox, delete it, and take
+/// its pages apart or together (issue #487).
+/// </summary>
+/// <remarks>
+/// <para>
+/// Extracted from <c>MainWindowViewModel</c> rather than added to it. That file is over the 1000-line ceiling,
+/// so it is a standing debt that may not grow — and these actions are one cohesive thing in their own right:
+/// they all take an item, act on it through an address the LISTING advertised, and end by refreshing.
+/// </para>
+/// <para>
+/// It holds no api client of its own. <see cref="Connect"/> hands it the same four seams the rest of the
+/// workbench uses — the client, the refresh, the status line, and who "me" is — as functions rather than
+/// values, because all four change when a session is replaced and a captured copy would go stale.
+/// </para>
+/// </remarks>
+public sealed partial class InboxItemActionsViewModel : ObservableObject
+{
+    private Func<SimplArchiveApiClient?>? _api;
+    private Func<Task>? _refresh;
+    private Action<string>? _setStatus;
+    private Func<Guid?>? _me;
+
+    public void Connect(
+        Func<SimplArchiveApiClient?> api,
+        Func<Task> refresh,
+        Action<string> setStatus,
+        Func<Guid?> currentUserId)
+    {
+        _api = api;
+        _refresh = refresh;
+        _setStatus = setStatus;
+        _me = currentUserId;
+    }
+
+    /// <summary>
+    /// The inbox collection's own `join` address, captured where the listing was read (ADR 0557).
+    /// </summary>
+    /// <remarks>
+    /// Null until an inbox has been listed, and null again if the server stops offering it — which is the
+    /// client's cue to keep the Join affordance hidden rather than to compose the URL itself (ADR 0543).
+    /// </remarks>
+    [ObservableProperty] private string? _joinHref;
+
+    /// <summary>
+    /// What the SELECTED item's pages can do, or null when the server offers nothing — a format with no page
+    /// sequence, a one-page file, or no selection at all.
+    /// </summary>
+    /// <remarks>
+    /// Refreshed on every selection change. A rel that has not arrived means "not available to you, here, now"
+    /// (ADR 0543), which during a load is exactly true — so this is CLEARED before the new item is asked about,
+    /// rather than left describing the previous selection while the request is in flight (ADR 0559).
+    /// </remarks>
+    [ObservableProperty] private InboxApi.PagesInfo? _pages;
+
+    /// <summary>How many inbox rows are selected — Join needs at least two.</summary>
+    [ObservableProperty] private int _selectedCount;
+
+    public bool CanSplit => Pages?.CanSplit == true;
+
+    public bool CanSort => Pages?.CanSort == true;
+
+    public bool CanJoin => SelectedCount > 1 && JoinHref is not null;
+
+    partial void OnPagesChanged(InboxApi.PagesInfo? value)
+    {
+        OnPropertyChanged(nameof(CanSplit));
+        OnPropertyChanged(nameof(CanSort));
+    }
+
+    partial void OnSelectedCountChanged(int value) => OnPropertyChanged(nameof(CanJoin));
+
+    partial void OnJoinHrefChanged(string? value) => OnPropertyChanged(nameof(CanJoin));
+
+    /// <summary>
+    /// Asks what the newly selected item's pages can do. One request, and only for a row whose name says it
+    /// might have pages — the api client returns null without a call when the row advertised no `pages` rel.
+    /// </summary>
+    public async Task LoadPagesAsync(InboxItemViewModel? item)
+    {
+        Pages = null;
+        if (item is not null)
+        {
+            Pages = await GetPagesAsync(item);
+        }
+    }
+
+    public async Task DeleteAsync(InboxItemViewModel item)
+    {
+        if (_api?.Invoke() is not { } api)
+        {
+            return;
+        }
+
+        await api.DeleteInboxItemAsync(item.Item!);
+        await RefreshAsync();
+    }
+
+    // The "Send to…" destinations for the dialog (ADR 0532): the caller's groups followed by the other users.
+    public async Task<IReadOnlyList<SimplArchiveApiClient.InboxTargetInfo>> GetSendTargetsAsync()
+    {
+        if (_api?.Invoke() is not { } api)
+        {
+            return [];
+        }
+
+        var groups = await api.GetInboxGroupsAsync();
+        var users = await api.GetInboxUsersAsync();
+        return groups.Concat(users).ToList();
+    }
+
+    // Sends an own item into a chosen group or user's inbox (ADR 0532), then refreshes.
+    public async Task SendAsync(InboxItemViewModel item, SimplArchiveApiClient.InboxTargetInfo target)
+    {
+        if (_api?.Invoke() is not { } api)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            await api.MoveInboxItemAsync(item.MoveUrl, target.IsGroup ? target.Id : null, target.IsGroup ? null : target.Id);
+            Status(string.Format(Strings.Get("StMoved"), item.Name));
+        });
+    }
+
+    // Claims a non-own (group / other-user) item into my own inbox (ADR 0532), then refreshes.
+    public async Task ClaimToMineAsync(InboxItemViewModel item)
+    {
+        if (_api?.Invoke() is not { } api || _me?.Invoke() is not { } me)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            await api.MoveInboxItemAsync(item.MoveUrl, null, me);
+            Status(string.Format(Strings.Get("StMoved"), item.Name));
+        });
+    }
+
+    // ---- Page operations (#487, ADR 0575) --------------------------------------------------------------
+
+    /// <summary>
+    /// The item's pages and which page operations it can take, or null when the server offers none.
+    /// </summary>
+    public async Task<InboxApi.PagesInfo?> GetPagesAsync(InboxItemViewModel item) =>
+        _api?.Invoke() is { } api && item.Item is { } info ? await api.Inbox.GetAsync(info) : null;
+
+    /// <summary>Splits the item into one inbox item per page, keeping the source.</summary>
+    public async Task SplitAsync(InboxItemViewModel item, string splitHref)
+    {
+        if (_api?.Invoke() is not { } api)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var written = await api.Inbox.SplitAsync(splitHref);
+            Status(string.Format(Strings.Get("StInboxSplit"), item.Name, written.Count));
+        });
+    }
+
+    /// <summary>Rewrites the item's pages in the given order (1-based, each page exactly once).</summary>
+    public async Task SortAsync(InboxItemViewModel item, string sortHref, IReadOnlyList<int> pageOrder)
+    {
+        if (_api?.Invoke() is not { } api)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            await api.Inbox.SortAsync(sortHref, pageOrder);
+            Status(string.Format(Strings.Get("StInboxSorted"), item.Name));
+        });
+    }
+
+    /// <summary>Joins the named items into one, in the order given, keeping the sources.</summary>
+    public async Task JoinAsync(IReadOnlyList<string> names, string? targetName)
+    {
+        if (_api?.Invoke() is not { } api || JoinHref is not { } joinHref)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var joined = await api.Inbox.JoinAsync(joinHref, names, targetName);
+            Status(string.Format(Strings.Get("StInboxJoined"), names.Count, joined));
+        });
+    }
+
+    // Every action ends the same way: the server's own words on refusal (its RFC 7807 `detail` says WHICH page
+    // was listed twice), and a refresh either way — a failed operation can still have been preceded by one that
+    // succeeded, so the list must not be left describing a state that no longer exists.
+    private async Task RunAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (ApiActionException e)
+        {
+            Status(e.Message);
+        }
+
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (_refresh is { } refresh)
+        {
+            await refresh();
+        }
+    }
+
+    private void Status(string message) => _setStatus?.Invoke(message);
+}

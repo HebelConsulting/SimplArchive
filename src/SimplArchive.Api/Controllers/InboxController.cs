@@ -12,10 +12,14 @@ using SimplArchive.Api.Errors.Exceptions.Checkout;
 using SimplArchive.Api.Errors.Exceptions.LegalHolds;
 using SimplArchive.Api.Errors.Exceptions.Storage;
 using SimplArchive.Api.Hypermedia;
+using SimplArchive.Api.Inbox;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Infrastructure.Acl;
 using SimplArchive.Infrastructure.Persistence;
+using SimplArchive.Infrastructure.Storage;
+
+using InboxScope = SimplArchive.Api.Inbox.InboxScopeResolver.InboxScope;
 
 namespace SimplArchive.Api.Controllers;
 
@@ -40,7 +44,7 @@ namespace SimplArchive.Api.Controllers;
 public class InboxController : ControllerBase
 {
     private static readonly TimeSpan PresignedUrlExpiry = TimeSpan.FromMinutes(15);
-    private const string MaskSidecarSuffix = ".mask.json";
+    private const string MaskSidecarSuffix = InboxPageService.MaskSidecarSuffix;
 
     private readonly SimplArchiveDbContext _dbContext;
     private readonly IObjectStorageClient _objectStorageClient;
@@ -50,6 +54,7 @@ public class InboxController : ControllerBase
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly DocumentFinalizer _finalizer;
+    private readonly InboxScopeResolver _scopes;
 
     public InboxController(
         SimplArchiveDbContext dbContext,
@@ -63,7 +68,8 @@ public class InboxController : ControllerBase
         ILegalHoldService legalHold,
         IStorageQuotaService storageQuota,
         IAuditRecorder audit,
-        IUserSystemRightsResolver userSystemRights)
+        IUserSystemRightsResolver userSystemRights,
+        InboxScopeResolver scopes)
     {
         _dbContext = dbContext;
         _objectStorageClient = objectStorageClient;
@@ -77,6 +83,7 @@ public class InboxController : ControllerBase
         _storageQuota = storageQuota;
         _audit = audit;
         _userSystemRights = userSystemRights;
+        _scopes = scopes;
     }
 
     private readonly ILegalHoldService _legalHold;
@@ -244,50 +251,20 @@ public class InboxController : ControllerBase
         public List<string> Values { get; set; } = [];
     }
 
-    private (Guid TenantId, Guid UserId)? Scope() =>
-        _currentTenantAccessor.TenantId is { } tenantId && _currentUserAccessor.UserId is { } userId ? (tenantId, userId) : null;
+    // Scope resolution + authorization is InboxScopeResolver (ADR 0575) — shared with InboxPagesController,
+    // because an authorization rule with two implementations is one that gets tightened in only one of them.
+    // These forwarders keep the call sites below reading as they did.
+    private (Guid TenantId, Guid UserId)? Scope() => _scopes.Caller();
 
-    private static string Prefix(Guid tenantId, Guid userId) => $"tenants/{tenantId}/users/{userId}/inbox/";
+    private static string Prefix(Guid tenantId, Guid userId) => InboxScopeResolver.UserPrefix(tenantId, userId);
 
-    // A group inbox is the exact peer of the per-user inbox, keyed by group (ADR 0532) — implicit for every group,
-    // access = effective group membership.
-    private static string GroupPrefix(Guid tenantId, Guid groupId) => $"tenants/{tenantId}/groups/{groupId}/inbox/";
+    private static string GroupPrefix(Guid tenantId, Guid groupId) => InboxScopeResolver.GroupPrefix(tenantId, groupId);
 
-    private sealed record InboxScope(Guid TenantId, Guid UserId, string Prefix);
-
-    // Resolves + authorizes the storage scope of an inbox item addressed by name + an optional source selector
-    // (ADR 0532): own inbox (neither set), a group inbox the caller is an effective member of (`group`), or a
-    // specific user's inbox (`user`) — the caller's own, or any user's if the caller holds CanManageInboxes.
-    // null → the caller may not act on it (Forbid); item existence stays a separate NotFound check. A mask sidecar
-    // is never addressable as an item. Scope.UserId is always the CALLER (filing attribution / rights checks);
-    // Scope.Prefix is where the object actually lives.
-    private async Task<InboxScope?> ResolveScopeAsync(Guid? group, Guid? user, string name, CancellationToken cancellationToken)
-    {
-        if (Scope() is not var (tenantId, callerId) || IsMaskSidecar(name))
-        {
-            return null;
-        }
-
-        if (group is { } groupId)
-        {
-            var groups = await GroupMembershipExpansion.GetEffectiveGroupIdsForUserAsync(_dbContext, callerId, cancellationToken);
-            return groups.Contains(groupId) ? new InboxScope(tenantId, callerId, GroupPrefix(tenantId, groupId)) : null;
-        }
-
-        if (user is { } userId && userId != callerId)
-        {
-            // Another user's inbox — admin-gated (CanManageInboxes).
-            return await CanManageInboxesAsync(callerId, cancellationToken)
-                ? new InboxScope(tenantId, callerId, Prefix(tenantId, userId))
-                : null;
-        }
-
-        // Neither source (or ?user= is the caller themselves) → the caller's own inbox.
-        return new InboxScope(tenantId, callerId, Prefix(tenantId, callerId));
-    }
+    private async Task<InboxScope?> ResolveScopeAsync(Guid? group, Guid? user, string name, CancellationToken cancellationToken) =>
+        await _scopes.ResolveAsync(group, user, name, cancellationToken);
 
     private async Task<bool> CanManageInboxesAsync(Guid userId, CancellationToken cancellationToken) =>
-        (await _userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken)).CanManageInboxes;
+        await _scopes.CanManageInboxesAsync(userId, cancellationToken);
 
     // The `?group=`/`?user=` source query for an item's action links, so the client keeps acting on the right
     // prefix; own-inbox items carry no query.
@@ -300,7 +277,7 @@ public class InboxController : ControllerBase
         return path + SourceQuery(group, user);
     }
 
-    private static bool IsMaskSidecar(string name) => name.EndsWith(MaskSidecarSuffix, StringComparison.OrdinalIgnoreCase);
+    private static bool IsMaskSidecar(string name) => InboxScopeResolver.IsMaskSidecar(name);
 
     private static string SidecarName(string name) => name + MaskSidecarSuffix;
 
@@ -311,6 +288,9 @@ public class InboxController : ControllerBase
     [
         new Link("self", "/api/inbox", "GET"),
         new Link("from-document", "/api/inbox/from-document", "POST"),
+        // Joining several staged items into one (ADR 0575). A collection-level action, advertised where the
+        // collection is read (ADR 0557) — the client enables it once the selection is two compatible items.
+        new Link("join", "/api/inbox/from-items", "POST"),
     ];
 
     // Preview renditions + the text-layout sidecar are cached next to the item (`<stem>.preview.*`,
@@ -413,6 +393,13 @@ public class InboxController : ControllerBase
                     new Link("file", ItemHref(name, "file", group, user), "POST"),
                     new Link("move", ItemHref(name, "move", group, user), "POST"),
                     new Link("self", ItemHref(name, "", group, user), "DELETE"),
+                    // Page operations (ADR 0575) — advertised from the NAME, which is all a listing can afford
+                    // to know: reading every item's bytes to count pages would make opening the inbox cost one
+                    // download per row. Whether split/sort can actually succeed is then the pages resource's
+                    // own answer.
+                    .. PageComposer.FormatOf(name) != PageComposer.PageFormat.None
+                        ? new[] { new Link("pages", ItemHref(name, "pages", group, user), "GET") }
+                        : [],
                 ],
             });
         }

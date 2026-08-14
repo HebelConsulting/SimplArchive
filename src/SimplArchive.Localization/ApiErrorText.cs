@@ -44,6 +44,12 @@ public static class ApiErrorText
         "STORAGE_QUOTA_EXCEEDED" => Strings.Get("ApiErrStorageQuotaExceeded"),
         "INVALID_WORKFLOW_TRANSITION" => Strings.Get("ApiErrWorkflowTransitionNotAllowed"),
         "CANNOT_CHANGE_ROOT_INHERITANCE" => Strings.Get("ApiErrCannotChangeRootInheritance"),
+        "INBOX_PAGES_NOT_SUPPORTED" => Strings.Get("ApiErrInboxPagesNotSupported"),
+        "INBOX_ITEM_HAS_NO_PAGES" => Strings.Get("ApiErrInboxItemHasNoPages"),
+        "INBOX_ITEM_HAS_NO_PAGES_TO_SPLIT" => Strings.Get("ApiErrInboxNoPagesToSplit"),
+        "INBOX_JOIN_NEEDS_SEVERAL_ITEMS" => Strings.Get("ApiErrInboxJoinNeedsSeveral"),
+        "INBOX_JOIN_NOT_HOMOGENEOUS" => Strings.Get("ApiErrInboxJoinNotHomogeneous"),
+        "INBOX_PAGE_ORDER_INVALID" => Strings.Get("ApiErrInboxPageOrderInvalid"),
         _ => Strings.Get("ApiErrGeneric"),
     };
 }

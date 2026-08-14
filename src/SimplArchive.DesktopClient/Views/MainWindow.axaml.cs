@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using SimplArchive.DesktopClient.Services;
@@ -187,11 +188,82 @@ public partial class MainWindow : Window
     // Track the server-inbox selection count so the "File multiple items" button shows only for 2+.
     private void OnServerInboxSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (DataContext is MainWindowViewModel vm)
+        if (DataContext is not MainWindowViewModel vm)
         {
-            vm.CanFileMultiple = (ServerInboxList.SelectedItems?.Count ?? 0) >= 2;
+            return;
         }
+
+        var selected = ServerInboxList.SelectedItems?.Count ?? 0;
+        vm.CanFileMultiple = selected >= 2;
+        vm.InboxActions.SelectedCount = selected;
+
+        // Ask what THIS row's pages can do. Fire-and-forget through Safe.Fire because a selection change must
+        // not wait on a request; the buttons are cleared first, so during the flight they say "not available",
+        // which is exactly true (ADR 0559).
+        Safe.Fire(async () => await vm.InboxActions.LoadPagesAsync(
+            selected == 1 ? ServerInboxList.SelectedItem as InboxItemViewModel : null));
     }
+
+    // ---- Page operations (#487, ADR 0575) -------------------------------------------------------------
+    // Each is addressed from the href the server advertised for the SELECTED row, never composed (ADR 0543),
+    // and each re-reads that address at the moment of acting rather than trusting pane state (ADR 0559).
+
+    private void OnInboxSplit(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm
+            || ServerInboxList.SelectedItem is not InboxItemViewModel item
+            || await vm.InboxActions.GetPagesAsync(item) is not { SplitHref: { } splitHref } pages)
+        {
+            return;
+        }
+
+        // Splitting adds N items and keeps the source, so the count is worth stating before it happens: on a
+        // 40-page scan the difference between "split" and "what have I done" is knowing it was 40.
+        var prompt = string.Format(Strings.Get("InboxSplitConfirm"), item.Name, pages.PageCount);
+        if (await new ConfirmDialog(prompt, Strings.Get("InboxSplit")).ShowDialog<bool>(this))
+        {
+            await vm.InboxActions.SplitAsync(item, splitHref);
+        }
+    });
+
+    private void OnInboxSortPages(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm
+            || ServerInboxList.SelectedItem is not InboxItemViewModel item
+            || item.Item is not { } info
+            || vm.Api is not { } api
+            || await vm.InboxActions.GetPagesAsync(item) is not { SortHref: { } sortHref })
+        {
+            return;
+        }
+
+        var thumbnails = await InboxPageThumbnails.LoadAsync(api, info);
+        var dialog = new SortPagesDialog(item.Name, thumbnails.Cast<Bitmap?>().ToList());
+        if (await dialog.ShowDialog<IReadOnlyList<int>?>(this) is { } order)
+        {
+            await vm.InboxActions.SortAsync(item, sortHref, order);
+        }
+    });
+
+    private void OnInboxJoin(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm)
+        {
+            return;
+        }
+
+        var names = (ServerInboxList.SelectedItems ?? new List<object>())
+            .OfType<InboxItemViewModel>().Select(i => i.Name).ToList();
+        if (names.Count < 2)
+        {
+            return;
+        }
+
+        if (await new JoinItemsDialog(names).ShowDialog<JoinItemsDialog.Result?>(this) is { } result)
+        {
+            await vm.InboxActions.JoinAsync(result.Names, result.Name);
+        }
+    });
 
 
 
@@ -204,7 +276,7 @@ public partial class MainWindow : Window
 
         if (await new ConfirmDialog($"Delete '{item.Name}' from the inbox?", "Delete").ShowDialog<bool>(this))
         {
-            await vm.DeleteServerInboxItemAsync(item);
+            await vm.InboxActions.DeleteAsync(item);
         }
     });
 
@@ -216,10 +288,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        var targets = await vm.GetInboxSendTargetsAsync();
+        var targets = await vm.InboxActions.GetSendTargetsAsync();
         if (await new SendToInboxDialog(item.Name, targets).ShowDialog<SimplArchiveApiClient.InboxTargetInfo?>(this) is { } target)
         {
-            await vm.SendInboxItemAsync(item, target);
+            await vm.InboxActions.SendAsync(item, target);
         }
     });
 
@@ -228,7 +300,7 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainWindowViewModel vm && InboxItemFrom(sender) is { } item)
         {
-            await vm.MoveInboxItemToMineAsync(item);
+            await vm.InboxActions.ClaimToMineAsync(item);
         }
     });
 

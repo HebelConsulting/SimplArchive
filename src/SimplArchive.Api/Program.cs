@@ -174,6 +174,9 @@ builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentAccessService>();
 // Restore of recycle-bin documents — shared by DocumentsController (per-item) and RecycleBinController (bulk).
 // See ADR "Bulk restore from the recycle bin".
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentRestorer>();
+// The inbox's page operations and the scope/authorization rule they share with InboxController (ADR 0575).
+builder.Services.AddScoped<SimplArchive.Api.Inbox.InboxScopeResolver>();
+builder.Services.AddScoped<SimplArchive.Api.Inbox.InboxPageService>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.RepositoryExporter>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.RepositoryImporter>();
 // Get-or-create the caller's personal repository — shared by PersonalRepositoryController and the WebDAV

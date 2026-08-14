@@ -3981,4 +3981,67 @@
   <data name="ExtLinkUrlCopied" xml:space="preserve">
     <value>Link copied to the clipboard.</value>
   </data>
+  <data name="InboxSplit" xml:space="preserve">
+    <value>Split into pages</value>
+  </data>
+  <data name="InboxSplitConfirm" xml:space="preserve">
+    <value>Split &#x27;{0}&#x27; into its {1} pages? The original is kept.</value>
+  </data>
+  <data name="InboxSortTitle" xml:space="preserve">
+    <value>Sort pages</value>
+  </data>
+  <data name="InboxSortPrompt" xml:space="preserve">
+    <value>Put the {1} pages of &#x27;{0}&#x27; in the order you want. Select a page, then move it.</value>
+  </data>
+  <data name="InboxPageEarlier" xml:space="preserve">
+    <value>Move earlier</value>
+  </data>
+  <data name="InboxPageLater" xml:space="preserve">
+    <value>Move later</value>
+  </data>
+  <data name="InboxPagesReverse" xml:space="preserve">
+    <value>Reverse order</value>
+  </data>
+  <data name="InboxPagesApply" xml:space="preserve">
+    <value>Apply order</value>
+  </data>
+  <data name="InboxJoinTitle" xml:space="preserve">
+    <value>Join items</value>
+  </data>
+  <data name="InboxJoin" xml:space="preserve">
+    <value>Join</value>
+  </data>
+  <data name="InboxJoinName" xml:space="preserve">
+    <value>Name:</value>
+  </data>
+  <data name="InboxJoinPrompt" xml:space="preserve">
+    <value>Join these {0} items into one, in this order. The originals are kept.</value>
+  </data>
+  <data name="StInboxSplit" xml:space="preserve">
+    <value>Split &#x27;{0}&#x27; into {1} items.</value>
+  </data>
+  <data name="StInboxSorted" xml:space="preserve">
+    <value>Sorted the pages of &#x27;{0}&#x27;.</value>
+  </data>
+  <data name="StInboxJoined" xml:space="preserve">
+    <value>Joined {0} items into &#x27;{1}&#x27;.</value>
+  </data>
+  <data name="ApiErrInboxPagesNotSupported" xml:space="preserve">
+    <value>Only PDF and TIFF files have pages that can be split, joined or sorted.</value>
+  </data>
+  <data name="ApiErrInboxItemHasNoPages" xml:space="preserve">
+    <value>That file could not be read as a paged document — it may be incomplete or corrupt.</value>
+  </data>
+  <data name="ApiErrInboxNoPagesToSplit" xml:space="preserve">
+    <value>That item has only one page, so there is nothing to split.</value>
+  </data>
+  <data name="ApiErrInboxJoinNeedsSeveral" xml:space="preserve">
+    <value>Joining needs at least two inbox items.</value>
+  </data>
+  <data name="ApiErrInboxJoinNotHomogeneous" xml:space="preserve">
+    <value>All the items being joined must be the same format — either all PDF or all TIFF.</value>
+  </data>
+  <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
+    <value>The page order must list each page exactly once.</value>
+  </data>
 </root>

@@ -1,0 +1,58 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        x:Class="SimplArchive.DesktopClient.Views.SortPagesDialog"
+        Title="{loc:Tr InboxSortTitle}" Width="720" Height="520"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="18" RowDefinitions="Auto,*,Auto">
+        <TextBlock Grid.Row="0" x:Name="PromptText" TextWrapping="Wrap" Margin="0,0,0,10" />
+
+        <!-- The pages themselves. A tile shows the picture and the number of the page it STARTED as, so a page
+             stays identifiable while it is being moved around. -->
+        <Border Grid.Row="1" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="4">
+            <ScrollViewer>
+                <ListBox x:Name="PageList" Background="Transparent" SelectionMode="Single">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:InboxPageViewModel">
+                            <StackPanel Width="130" Margin="4" Spacing="4">
+                                <Border Background="White" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" Height="150">
+                                    <Image Source="{Binding Image}" Stretch="Uniform" />
+                                </Border>
+                                <TextBlock Text="{Binding Label}" HorizontalAlignment="Center"
+                                           Foreground="{DynamicResource WbMuted}" FontSize="11" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </ScrollViewer>
+        </Border>
+
+        <!-- The actions of this state, next to the thing they act on and visible without hunting (ADR 0550). -->
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" Margin="0,12,0,0">
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                <Button x:Name="MoveEarlierButton" Click="OnMoveEarlier" ToolTip.Tip="{loc:Tr InboxPageEarlier}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <i:Icon Value="mdi-arrow-left" /><TextBlock Text="{loc:Tr InboxPageEarlier}" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="MoveLaterButton" Click="OnMoveLater" ToolTip.Tip="{loc:Tr InboxPageLater}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="{loc:Tr InboxPageLater}" /><i:Icon Value="mdi-arrow-right" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="ReverseButton" Click="OnReverse" Content="{loc:Tr InboxPagesReverse}" />
+            </StackPanel>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+                <Button x:Name="ApplyButton" Content="{loc:Tr InboxPagesApply}" Click="OnApply" IsDefault="True" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

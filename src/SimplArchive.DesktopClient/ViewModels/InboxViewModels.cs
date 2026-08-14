@@ -1,3 +1,5 @@
+using System.Globalization;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace SimplArchive.DesktopClient.ViewModels;
@@ -68,4 +70,22 @@ public sealed partial class LocalFileViewModel : ObservableObject
     public string DisplayName => HasMask ? Name : $"[{Name}]";
 
     public string SizeText => InboxItemViewModel.FormatSize(Size);
+}
+
+/// <summary>
+/// One page of a staged item in the sort dialog (issue #487): its picture, and which page it STARTED as.
+/// </summary>
+/// <remarks>
+/// The label is the original page number, not the current position, and that is the whole point: the position
+/// is visible from where the tile sits, while "which page is this" is the thing the user is tracking as they
+/// move tiles around. A tile relabelled on every move would make the list impossible to follow — and the
+/// original number is also literally what the request sends.
+/// </remarks>
+public sealed partial class InboxPageViewModel(int originalNumber, Bitmap? image) : ObservableObject
+{
+    public int OriginalNumber { get; } = originalNumber;
+
+    public Bitmap? Image { get; } = image;
+
+    public string Label => OriginalNumber.ToString(CultureInfo.CurrentCulture);
 }

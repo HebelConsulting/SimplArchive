@@ -47,6 +47,21 @@
         {
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="FileMultipleAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.DriveFileMove">@string.Format(Strings.Get("InboxFileN"), _inboxChecked.Count)</MudButton>
         }
+        @* Page operations (#487, ADR 0575), matching the desktop ribbon's group. Each appears only when the
+           server said it can succeed: one checked item with more than one page for split/sort, two or more for
+           join. A missing rel means "not available to you, here, now" (ADR 0543/0554). *@
+        @if (_pages is { CanSplit: true })
+        {
+            <MudButton Variant="Variant.Text" OnClick="SplitPagesAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.CallSplit">@Strings.Get("InboxSplit")</MudButton>
+        }
+        @if (_pages is { CanSort: true })
+        {
+            <MudButton Variant="Variant.Text" OnClick="SortPagesAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.Sort">@Strings.Get("InboxSortTitle")</MudButton>
+        }
+        @if (_inboxChecked.Count >= 2 && _joinHref is not null)
+        {
+            <MudButton Variant="Variant.Text" OnClick="JoinItemsAsync" Class="ml-2" StartIcon="@Icons.Material.Filled.CallMerge">@Strings.Get("InboxJoinTitle")</MudButton>
+        }
         @if (_inboxBusy)
         {
             <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="ml-2" />
@@ -297,7 +312,7 @@
     // `preview`, which the row had been carrying all along while the tab rebuilt them from Name plus a
     // hand-written `?group=`/`?user=` query. The server's own hrefs already carry that source query, so the
     // SourceQuery property that existed to re-append it is gone (ADR 0532/0543, #416).
-    private record InboxItem(string Name, long Size, bool HasMask, string DownloadHref, string PreviewHref, string FileHref, string DeleteHref, string MoveHref, string MaskHref, Guid? GroupId, string? GroupName, Guid? UserId, string? UserName)
+    private record InboxItem(string Name, long Size, bool HasMask, string DownloadHref, string PreviewHref, string FileHref, string DeleteHref, string MoveHref, string MaskHref, Guid? GroupId, string? GroupName, Guid? UserId, string? UserName, string? PagesHref)
     {
         // Un-classified items (no staged mask sidecar) show in square brackets (ADRs 0279/0281).
         public string DisplayName => HasMask ? Name : $"[{Name}]";
@@ -331,12 +346,14 @@
                 : _inboxIncludeGroups ? $"{inbox}?includeGroups=true"
                 : inbox;
             var response = await Http.GetFromJsonAsync<InboxResponse>(url);
+            _joinHref = Links.Href(response?.Links, "join");
             _inboxItems = (response?.Items ?? []).Select(i => new InboxItem(
                 i.Name, i.Size, i.HasMask,
                 Links.Href(i.Links, "download") ?? "", Links.Href(i.Links, "preview") ?? "",
                 Links.Href(i.Links, "file") ?? "", Links.Href(i.Links, "self") ?? "",
                 Links.Href(i.Links, "move") ?? "", Links.Href(i.Links, "mask") ?? "",
-                i.GroupId, i.GroupName, i.UserId, i.UserName)).ToList();
+                // A null `pages` means the server offered no page operations for this row's format (ADR 0554).
+                i.GroupId, i.GroupName, i.UserId, i.UserName, Links.Href(i.Links, "pages"))).ToList();
             _inboxStatus = _inboxItems.Count == 0 ? "Your inbox is empty. Upload files to file them into a repository." : $"{_inboxItems.Count} item(s).";
         }
         catch (Exception)
@@ -589,7 +606,201 @@
     private void ToggleInboxCheck(InboxItem item, bool on)
     {
         if (on) { _inboxChecked.Add(item); } else { _inboxChecked.Remove(item); }
+        _ = LoadPagesAsync();
     }
+
+    // ---- Page operations (#487, ADR 0575) -------------------------------------------------------------
+    // Every address here was advertised: the row's `pages` rel, and the split/sort rels that resource itself
+    // returns. Nothing is composed (ADR 0543), and each resource is read once and followed many times (0557).
+
+    private string? _joinHref;
+    private PagesInfo? _pages;
+
+    private sealed record PagesInfo(int PageCount, string? SplitHref, string? SortHref)
+    {
+        public bool CanSplit => SplitHref is not null;
+
+        public bool CanSort => SortHref is not null;
+    }
+
+    // Asked whenever the checked set changes, and CLEARED first: a rel that has not arrived means "not
+    // available here, now", which during the request is exactly true — so the buttons never describe the
+    // previously checked item while a newer one is loading (ADR 0559).
+    private async Task LoadPagesAsync()
+    {
+        _pages = null;
+        if (_inboxChecked.Count != 1 || _inboxChecked.Single().PagesHref is not { } pagesHref)
+        {
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            var response = await Http.GetFromJsonAsync<InboxPagesResponse>(pagesHref);
+            _pages = new PagesInfo(
+                response?.PageCount ?? 0,
+                Links.Href(response?.Links, "split"),
+                Links.Href(response?.Links, "sort"));
+        }
+        catch (Exception)
+        {
+            _pages = null;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task SplitPagesAsync()
+    {
+        if (_pages is not { SplitHref: { } splitHref } pages || _inboxChecked.SingleOrDefault() is not { } item)
+        {
+            return;
+        }
+
+        // Splitting adds N items and keeps the source, so the count is worth stating BEFORE it happens: on a
+        // 40-page scan the difference between "split" and "what have I done" is knowing it was 40.
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = Strings.Get("InboxSplit"),
+            Message = string.Format(Strings.Get("InboxSplitConfirm"), item.Name, pages.PageCount),
+            YesText = Strings.Get("InboxSplit"),
+            CancelText = Strings.Get("Cancel"),
+        });
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(async () =>
+        {
+            var response = await Http.PostAsJsonAsync(splitHref, new { });
+            await ThrowIfRefusedAsync(response);
+            var written = await response.Content.ReadFromJsonAsync<InboxPageItemsResponse>();
+            _inboxStatus = string.Format(Strings.Get("StInboxSplit"), item.Name, written?.Names.Count ?? 0);
+        });
+    }
+
+    private async Task SortPagesAsync()
+    {
+        if (_pages is not { SortHref: { } sortHref } pages || _inboxChecked.SingleOrDefault() is not { } item)
+        {
+            return;
+        }
+
+        // Thumbnails come from pdf.js, which this client already loads for the preview — the same trade the
+        // desktop makes with PDFium. A failure here costs the pictures, not the dialog: it falls back to
+        // numbered tiles rather than refusing to open.
+        var images = new List<string>();
+        try
+        {
+            var module = await JS.InvokeAsync<IJSObjectReference>("import", "./preview.js");
+            await using (module)
+            {
+                images = (await module.InvokeAsync<string[]>("pageThumbnails", item.DownloadHref, 260)).ToList();
+            }
+        }
+        catch (Exception)
+        {
+            images = [];
+        }
+
+        var parameters = new DialogParameters<Dialogs.SortPagesDialog>
+        {
+            { d => d.ItemName, item.Name },
+            { d => d.PageImages, images },
+            { d => d.PageCount, pages.PageCount },
+        };
+
+        var dialog = await DialogService.ShowAsync<Dialogs.SortPagesDialog>(Strings.Get("InboxSortTitle"), parameters);
+        if (await dialog.Result is not { Canceled: false, Data: List<int> order })
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(async () =>
+        {
+            var response = await Http.PostAsJsonAsync(sortHref, new { pageOrder = order });
+            await ThrowIfRefusedAsync(response);
+            _inboxStatus = string.Format(Strings.Get("StInboxSorted"), item.Name);
+        });
+    }
+
+    private async Task JoinItemsAsync()
+    {
+        if (_joinHref is not { } joinHref || _inboxChecked.Count < 2)
+        {
+            return;
+        }
+
+        var names = _inboxChecked.Select(i => i.Name).ToList();
+        var parameters = new DialogParameters<Dialogs.JoinItemsDialog> { { d => d.Names, names } };
+        var dialog = await DialogService.ShowAsync<Dialogs.JoinItemsDialog>(Strings.Get("InboxJoinTitle"), parameters);
+        if (await dialog.Result is not { Canceled: false, Data: Dialogs.JoinItemsDialog.Result result })
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(async () =>
+        {
+            var response = await Http.PostAsJsonAsync(joinHref, new { names = result.Names, name = result.Name });
+            await ThrowIfRefusedAsync(response);
+            var written = await response.Content.ReadFromJsonAsync<InboxPageItemsResponse>();
+            _inboxStatus = string.Format(Strings.Get("StInboxJoined"), result.Names.Count, written?.Names.FirstOrDefault() ?? "");
+        });
+    }
+
+    // Every page operation ends the same way: the server's own words on refusal, and a reload either way — a
+    // failed operation can still have followed one that succeeded, so the list must not be left describing a
+    // state that no longer exists.
+    private async Task RunPageOperationAsync(Func<Task> action)
+    {
+        _inboxBusy = true;
+        try
+        {
+            await action();
+        }
+        catch (Exception e)
+        {
+            _inboxStatus = e.Message;
+        }
+        finally
+        {
+            _inboxBusy = false;
+        }
+
+        await LoadInboxAsync();
+    }
+
+    // The refusal's ERROR CODE, mapped to words this client owns — never the Problem Details `detail`, which is
+    // English whatever the user's language, because the Api's exception classes carry their message as a
+    // constructor literal (issue #424). The code is the stable, language-neutral contract (ADR 0543).
+    private static async Task ThrowIfRefusedAsync(HttpResponseMessage response)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        string? errorCode = null;
+        try
+        {
+            errorCode = (await response.Content.ReadFromJsonAsync<ProblemResponse>())?.ErrorCode;
+        }
+        catch (Exception)
+        {
+            // No problem body at all (a proxy error page, a connection reset) — the generic text below covers it.
+        }
+
+        throw new InvalidOperationException(ApiErrorText.For(errorCode));
+    }
+
+    private record InboxPagesResponse { public string? Format { get; set; } public int PageCount { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+
+    private record InboxPageItemsResponse { public List<string> Names { get; set; } = []; }
+
+    private record ProblemResponse { public string? ErrorCode { get; set; } }
 
     // Shows the context-aware filing dialog seeded with the Repositories tab's current selection (ADR 0286).
     private async Task<FilingDialog.FilingChoice?> ShowFilingDialogAsync(string title, bool bulk)
@@ -770,7 +981,7 @@
         }
     }
 
-    private record InboxResponse { public List<InboxItemDto> Items { get; set; } = []; }
+    private record InboxResponse { public List<InboxItemDto> Items { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
     private record InboxItemDto { public string Name { get; set; } = ""; public long Size { get; set; } public bool HasMask { get; set; } public Guid? GroupId { get; set; } public string? GroupName { get; set; } public Guid? UserId { get; set; } public string? UserName { get; set; } public List<LinkResponse> Links { get; set; } = []; }
     private record InboxMaskDraft { public string? Name { get; set; } public string? DocumentDate { get; set; } public Guid? MaskId { get; set; } public List<InboxDraftField> Fields { get; set; } = []; public List<string>? OcrLanguages { get; set; } }
     private record InboxPreviewResponse { public string? PreviewUrl { get; set; } public bool PreviewConverted { get; set; } public List<LinkResponse> Links { get; set; } = []; }

@@ -46,6 +46,7 @@ public sealed class SimplArchiveApiClient
 {
     private static readonly HttpClient Anonymous = new();
     private readonly HttpClient _http;
+    private InboxApi? _inbox;
 
     public SimplArchiveApiClient(string accessToken)
     {
@@ -736,35 +737,8 @@ public sealed class SimplArchiveApiClient
         return json.TryGetProperty("count", out var c) ? c.GetInt32() : 0;
     }
 
-    // Lists inbox items (ADR "S3-backed inbox"). Own-items-only by default; includeGroups also aggregates the
-    // caller's group inboxes, and user opens a specific user's inbox for a CanManageInboxes holder (ADR 0532).
-    public async Task<IReadOnlyList<InboxItemInfo>> GetInboxAsync(bool includeGroups = false, Guid? user = null, CancellationToken cancellationToken = default)
-    {
-        // One advertised address, three views of it — a filter is a query parameter, not a different route.
-        var inbox = await RootHrefAsync("inbox", cancellationToken);
-        var url = user is { } viewUser ? $"{inbox}?user={viewUser}" : includeGroups ? $"{inbox}?includeGroups=true" : inbox;
-        var json = await _http.GetFromJsonAsync<JsonElement>(url, cancellationToken);
-        var items = new List<InboxItemInfo>();
-        if (json.TryGetProperty("items", out var array))
-        {
-            foreach (var item in array.EnumerateArray())
-            {
-                string Link(string rel) => item.TryGetProperty("links", out var links)
-                    ? links.EnumerateArray().FirstOrDefault(l => l.GetProperty("rel").GetString() == rel).GetProperty("href").GetString() ?? ""
-                    : "";
-                Guid? Id(string prop) => item.TryGetProperty(prop, out var p) && p.ValueKind == JsonValueKind.String ? p.GetGuid() : null;
-                string? Str(string prop) => item.TryGetProperty(prop, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
-                items.Add(new InboxItemInfo(
-                    item.GetProperty("name").GetString() ?? "",
-                    item.TryGetProperty("size", out var s) ? s.GetInt64() : 0,
-                    Link("download"),
-                    item.TryGetProperty("hasMask", out var hm) && hm.GetBoolean(),
-                    Id("groupId"), Str("groupName"), Id("userId"), Str("userName"), Link("move"), ParseLinks(item)));
-            }
-        }
-
-        return items;
-    }
+    /// <summary>The inbox's own api surface (ADR 0575) — its listing and its page operations.</summary>
+    public InboxApi Inbox => _inbox ??= new InboxApi(_http, this);
 
     // The caller's effective group inboxes (ADR 0532) — the "Send to a group" choices.
     public async Task<IReadOnlyList<InboxTargetInfo>> GetInboxGroupsAsync(CancellationToken cancellationToken = default) =>
@@ -1006,7 +980,7 @@ public sealed class SimplArchiveApiClient
     // path of every failed call in the desktop, which made it the single biggest source of English in an
     // otherwise German UI (issue #424). The code is the stable, language-neutral contract (ADR 0543), so it
     // crosses the wire and ApiErrorText supplies the words.
-    private static async Task ThrowIfProblemAsync(HttpResponseMessage response, string fallback, CancellationToken cancellationToken)
+    internal static async Task ThrowIfProblemAsync(HttpResponseMessage response, string fallback, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)
         {
@@ -3086,7 +3060,7 @@ public sealed class SimplArchiveApiClient
         ParseLinks(item));
 
     // rel -> href for one resource's advertised links, relative (the HttpClient has the base address).
-    private static IReadOnlyDictionary<string, string>? ParseLinks(JsonElement item)
+    internal static IReadOnlyDictionary<string, string>? ParseLinks(JsonElement item)
     {
         if (!item.TryGetProperty("links", out var links) || links.ValueKind != JsonValueKind.Array)
         {

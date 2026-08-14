@@ -1,0 +1,177 @@
+using NetVips;
+using UglyToad.PdfPig;
+using UglyToad.PdfPig.Writer;
+
+namespace SimplArchive.Infrastructure.Storage;
+
+/// <summary>
+/// Page algebra for the two multi-page formats a scan arrives in: how many pages a file has, and how to take
+/// pages out of it, put several together, or put them back in a different order (issue #487).
+/// </summary>
+/// <remarks>
+/// <para>
+/// Pure bytes-in/bytes-out — no storage, no HTTP, no naming. That is what lets the operations be tested on
+/// real files without a fleet, and it keeps the service above free to worry only about where bytes live and
+/// what they are called.
+/// </para>
+/// <para>
+/// PDF goes through <b>PdfPig</b>, which is already a dependency for text layout: it reads, and its
+/// <c>PdfDocumentBuilder</c>/<c>PdfMerger</c> also write, so splitting and joining needed no new library and
+/// no new licence question. TIFF goes through <b>NetVips</b>, likewise already here for previews — libvips
+/// addresses a multi-page TIFF by <c>page</c>/<c>n</c> load options, the same technique the per-page preview
+/// renditions use.
+/// </para>
+/// </remarks>
+public static class PageComposer
+{
+    /// <summary>The formats these operations understand. Anything else is not offered (ADR 0554).</summary>
+    public enum PageFormat
+    {
+        None,
+        Pdf,
+        Tiff,
+    }
+
+    public static PageFormat FormatOf(string fileName) => Path.GetExtension(fileName).ToLowerInvariant() switch
+    {
+        ".pdf" => PageFormat.Pdf,
+        ".tif" or ".tiff" => PageFormat.Tiff,
+        _ => PageFormat.None,
+    };
+
+    /// <summary>
+    /// How many pages the file holds. 0 when the bytes cannot be read as the format at all — the caller turns
+    /// that into "not offered" rather than a failed operation the user only discovers after clicking.
+    /// </summary>
+    public static int CountPages(byte[] bytes, PageFormat format)
+    {
+        try
+        {
+            switch (format)
+            {
+                case PageFormat.Pdf:
+                    using (var document = PdfDocument.Open(bytes))
+                    {
+                        return document.NumberOfPages;
+                    }
+
+                case PageFormat.Tiff:
+                    using (var image = Image.NewFromBuffer(bytes))
+                    {
+                        return Math.Max(1, Convert.ToInt32(image.Get("n-pages")));
+                    }
+
+                default:
+                    return 0;
+            }
+        }
+        catch (Exception)
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>One single-page file per page, in page order.</summary>
+    public static List<byte[]> Split(byte[] bytes, PageFormat format) =>
+        format switch
+        {
+            PageFormat.Pdf => SplitPdf(bytes),
+            PageFormat.Tiff => SplitTiff(bytes),
+            _ => [],
+        };
+
+    /// <summary>
+    /// One file from several, in the order given. The caller owns the order — "join" without a stated order is
+    /// a coin flip, so nothing here sorts.
+    /// </summary>
+    public static byte[] Join(IReadOnlyList<byte[]> sources, PageFormat format) =>
+        format switch
+        {
+            PageFormat.Pdf => PdfMerger.Merge(sources.ToArray()),
+            PageFormat.Tiff => JoinTiff(sources),
+            _ => [],
+        };
+
+    /// <summary>
+    /// The same pages, in the order given as 1-based page numbers. The order must be a permutation of the
+    /// file's pages — the caller validates that, because "which pages went missing" is a question the UI has
+    /// to answer, not this.
+    /// </summary>
+    public static byte[] Reorder(byte[] bytes, PageFormat format, IReadOnlyList<int> pageOrder)
+    {
+        var pages = Split(bytes, format);
+        var picked = pageOrder.Select(p => pages[p - 1]).ToList();
+        return Join(picked, format);
+    }
+
+    private static List<byte[]> SplitPdf(byte[] bytes)
+    {
+        var pages = new List<byte[]>();
+        using var document = PdfDocument.Open(bytes);
+
+        for (var page = 1; page <= document.NumberOfPages; page++)
+        {
+            var builder = new PdfDocumentBuilder();
+            builder.AddPage(document, page);
+            pages.Add(builder.Build());
+        }
+
+        return pages;
+    }
+
+    // libvips addresses a multi-page TIFF by load options rather than by an API for pages, so one page is one
+    // load of the same buffer — the technique the per-page preview renditions already use.
+    private static List<byte[]> SplitTiff(byte[] bytes)
+    {
+        var pages = new List<byte[]>();
+        var count = CountPages(bytes, PageFormat.Tiff);
+
+        for (var i = 0; i < count; i++)
+        {
+            using var page = Image.NewFromBuffer(bytes, kwargs: new VOption { { "page", i }, { "n", 1 } });
+            pages.Add(page.WriteToBuffer(".tif"));
+        }
+
+        return pages;
+    }
+
+    // A multi-page TIFF is written as one tall strip plus a page-height, which is how libvips represents pages
+    // (the same shape `n=-1` loads back). Every page is normalised to the widest page first: arrayjoin needs a
+    // common width, and a scan batch is not guaranteed to be uniform.
+    private static byte[] JoinTiff(IReadOnlyList<byte[]> sources)
+    {
+        var pages = new List<Image>();
+        try
+        {
+            foreach (var source in sources)
+            {
+                var count = CountPages(source, PageFormat.Tiff);
+                for (var i = 0; i < count; i++)
+                {
+                    pages.Add(Image.NewFromBuffer(source, kwargs: new VOption { { "page", i }, { "n", 1 } }));
+                }
+            }
+
+            if (pages.Count == 0)
+            {
+                return [];
+            }
+
+            var width = pages.Max(p => p.Width);
+            var height = pages.Max(p => p.Height);
+            var normalised = pages
+                .Select(p => p.Width == width && p.Height == height ? p : p.Gravity(Enums.CompassDirection.Centre, width, height))
+                .ToArray();
+
+            using var joined = Image.Arrayjoin(normalised, across: 1);
+            return joined.WriteToBuffer(".tif", new VOption { { "page_height", height } });
+        }
+        finally
+        {
+            foreach (var page in pages)
+            {
+                page.Dispose();
+            }
+        }
+    }
+}

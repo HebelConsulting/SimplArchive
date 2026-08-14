@@ -1,0 +1,143 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using SimplArchive.Localization;
+
+namespace SimplArchive.DesktopClient.Services;
+
+/// <summary>
+/// The inbox's api surface (issue #487, ADR 0575): listing what is staged, and the page operations — what an
+/// item's pages are, and splitting, sorting or joining them.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Its own class rather than more methods on <see cref="SimplArchiveApiClient"/>, which is on the 1000-line
+/// standing-debt list and may only get smaller (issue #466). The listing moved here with the page operations
+/// rather than staying behind: they are one subject, and splitting a subject across two files to satisfy a
+/// line count is how a class ends up with no describable responsibility at all. Reached as
+/// <c>api.Inbox.…</c>, sharing the same authenticated <see cref="HttpClient"/>.
+/// </para>
+/// <para>
+/// Every address here was ADVERTISED — the row's <c>pages</c> rel, and the <c>split</c>/<c>sort</c> rels that
+/// resource returns — so nothing composes a URL (ADR 0543), and no id is turned back into a resource to find
+/// one (ADR 0555/0557).
+/// </para>
+/// </remarks>
+public sealed class InboxApi(HttpClient http, SimplArchiveApiClient client)
+{
+    // The inbox listing: its items AND the collection's own actions (ADR 0557) — `join` lives here because it
+    // acts on a SELECTION, so it belongs to the collection rather than to any one row. Read once, followed many
+    // times; re-fetching the inbox to learn an address it already handed over is a round trip spent re-learning
+    // something in hand.
+    public sealed record InboxListing(IReadOnlyList<SimplArchiveApiClient.InboxItemInfo> Items, IReadOnlyDictionary<string, string> Links)
+    {
+        public string? Href(string rel) => Links.TryGetValue(rel, out var href) ? href : null;
+    }
+
+    // Lists inbox items (ADR "S3-backed inbox"). Own-items-only by default; includeGroups also aggregates the
+    // caller's group inboxes, and user opens a specific user's inbox for a CanManageInboxes holder (ADR 0532).
+    public async Task<InboxListing> ListAsync(bool includeGroups = false, Guid? user = null, CancellationToken cancellationToken = default)
+    {
+        // One advertised address, three views of it — a filter is a query parameter, not a different route.
+        var inbox = await client.RootHrefAsync("inbox", cancellationToken);
+        var url = user is { } viewUser ? $"{inbox}?user={viewUser}" : includeGroups ? $"{inbox}?includeGroups=true" : inbox;
+        var json = await http.GetFromJsonAsync<JsonElement>(url, cancellationToken);
+        var items = new List<SimplArchiveApiClient.InboxItemInfo>();
+        if (json.TryGetProperty("items", out var array))
+        {
+            foreach (var item in array.EnumerateArray())
+            {
+                string Link(string rel) => item.TryGetProperty("links", out var links)
+                    ? links.EnumerateArray().FirstOrDefault(l => l.GetProperty("rel").GetString() == rel).GetProperty("href").GetString() ?? ""
+                    : "";
+                Guid? Id(string prop) => item.TryGetProperty(prop, out var p) && p.ValueKind == JsonValueKind.String ? p.GetGuid() : null;
+                string? Str(string prop) => item.TryGetProperty(prop, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
+                items.Add(new SimplArchiveApiClient.InboxItemInfo(
+                    item.GetProperty("name").GetString() ?? "",
+                    item.TryGetProperty("size", out var s) ? s.GetInt64() : 0,
+                    Link("download"),
+                    item.TryGetProperty("hasMask", out var hm) && hm.GetBoolean(),
+                    Id("groupId"), Str("groupName"), Id("userId"), Str("userName"), Link("move"), SimplArchiveApiClient.ParseLinks(item)));
+            }
+        }
+
+        return new InboxListing(items, SimplArchiveApiClient.ParseLinks(json) ?? new Dictionary<string, string>());
+    }
+
+    /// <summary>
+    /// What one staged item's pages look like, plus what can be done with them. A missing href means the server
+    /// did not offer it — a one-page file has no split and no sort — so the client disables the affordance
+    /// rather than offering a button that fails on click (ADR 0554).
+    /// </summary>
+    public sealed record PagesInfo(string Format, int PageCount, string? SplitHref, string? SortHref)
+    {
+        public bool CanSplit => SplitHref is not null;
+
+        public bool CanSort => SortHref is not null;
+    }
+
+    /// <summary>Null when the row advertised no <c>pages</c> rel at all — no request is made in that case.</summary>
+    public async Task<PagesInfo?> GetAsync(
+        SimplArchiveApiClient.InboxItemInfo item,
+        CancellationToken cancellationToken = default)
+    {
+        if (item.Href("pages") is not { } pagesHref)
+        {
+            return null;
+        }
+
+        using var response = await http.GetAsync(pagesHref.TrimStart('/'), cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        var links = SimplArchiveApiClient.ParseLinks(json) ?? new Dictionary<string, string>();
+        return new PagesInfo(
+            json.TryGetProperty("format", out var f) ? f.GetString() ?? string.Empty : string.Empty,
+            json.TryGetProperty("pageCount", out var c) ? c.GetInt32() : 0,
+            links.TryGetValue("split", out var split) ? split : null,
+            links.TryGetValue("sort", out var sort) ? sort : null);
+    }
+
+    /// <summary>Splits the item into one inbox item per page and returns their names. The source is kept.</summary>
+    public async Task<IReadOnlyList<string>> SplitAsync(string splitHref, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.PostAsJsonAsync(splitHref.TrimStart('/'), new { }, cancellationToken);
+        await SimplArchiveApiClient.ThrowIfProblemAsync(response, Strings.Get("ApiErrGeneric"), cancellationToken);
+        return await NamesAsync(response, cancellationToken);
+    }
+
+    /// <summary>Rewrites the item's pages in the given order (1-based, each page exactly once).</summary>
+    public async Task SortAsync(string sortHref, IReadOnlyList<int> pageOrder, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.PostAsJsonAsync(sortHref.TrimStart('/'), new { pageOrder }, cancellationToken);
+        await SimplArchiveApiClient.ThrowIfProblemAsync(response, Strings.Get("ApiErrGeneric"), cancellationToken);
+    }
+
+    /// <summary>Joins several items into one, in the order given, and returns its name. The sources are kept.</summary>
+    public async Task<string> JoinAsync(
+        string joinHref,
+        IReadOnlyList<string> names,
+        string? name,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await http.PostAsJsonAsync(joinHref.TrimStart('/'), new { names, name }, cancellationToken);
+        await SimplArchiveApiClient.ThrowIfProblemAsync(response, Strings.Get("ApiErrGeneric"), cancellationToken);
+        return (await NamesAsync(response, cancellationToken)).FirstOrDefault() ?? string.Empty;
+    }
+
+    private static async Task<IReadOnlyList<string>> NamesAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return json.TryGetProperty("names", out var names) && names.ValueKind == JsonValueKind.Array
+            ? names.EnumerateArray().Select(n => n.GetString() ?? string.Empty).ToList()
+            : [];
+    }
+}

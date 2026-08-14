@@ -3981,4 +3981,67 @@
   <data name="ExtLinkUrlCopied" xml:space="preserve">
     <value>Enlace copiado al portapapeles.</value>
   </data>
+  <data name="InboxSplit" xml:space="preserve">
+    <value>Dividir en páginas</value>
+  </data>
+  <data name="InboxSplitConfirm" xml:space="preserve">
+    <value>¿Dividir &#x27;{0}&#x27; en sus {1} páginas? El original se conserva.</value>
+  </data>
+  <data name="InboxSortTitle" xml:space="preserve">
+    <value>Ordenar páginas</value>
+  </data>
+  <data name="InboxSortPrompt" xml:space="preserve">
+    <value>Coloca las {1} páginas de &#x27;{0}&#x27; en el orden que quieras. Selecciona una página y muévela.</value>
+  </data>
+  <data name="InboxPageEarlier" xml:space="preserve">
+    <value>Mover antes</value>
+  </data>
+  <data name="InboxPageLater" xml:space="preserve">
+    <value>Mover después</value>
+  </data>
+  <data name="InboxPagesReverse" xml:space="preserve">
+    <value>Invertir orden</value>
+  </data>
+  <data name="InboxPagesApply" xml:space="preserve">
+    <value>Aplicar orden</value>
+  </data>
+  <data name="InboxJoinTitle" xml:space="preserve">
+    <value>Unir elementos</value>
+  </data>
+  <data name="InboxJoin" xml:space="preserve">
+    <value>Unir</value>
+  </data>
+  <data name="InboxJoinName" xml:space="preserve">
+    <value>Nombre:</value>
+  </data>
+  <data name="InboxJoinPrompt" xml:space="preserve">
+    <value>Une estos {0} elementos en uno, en este orden. Los originales se conservan.</value>
+  </data>
+  <data name="StInboxSplit" xml:space="preserve">
+    <value>&#x27;{0}&#x27; dividido en {1} elementos.</value>
+  </data>
+  <data name="StInboxSorted" xml:space="preserve">
+    <value>Páginas de &#x27;{0}&#x27; ordenadas.</value>
+  </data>
+  <data name="StInboxJoined" xml:space="preserve">
+    <value>{0} elementos unidos en &#x27;{1}&#x27;.</value>
+  </data>
+  <data name="ApiErrInboxPagesNotSupported" xml:space="preserve">
+    <value>Solo los archivos PDF y TIFF tienen páginas que se puedan dividir, unir u ordenar.</value>
+  </data>
+  <data name="ApiErrInboxItemHasNoPages" xml:space="preserve">
+    <value>No se pudo leer el archivo como un documento con páginas: puede estar incompleto o dañado.</value>
+  </data>
+  <data name="ApiErrInboxNoPagesToSplit" xml:space="preserve">
+    <value>El elemento tiene una sola página, no hay nada que dividir.</value>
+  </data>
+  <data name="ApiErrInboxJoinNeedsSeveral" xml:space="preserve">
+    <value>Para unir se necesitan al menos dos elementos.</value>
+  </data>
+  <data name="ApiErrInboxJoinNotHomogeneous" xml:space="preserve">
+    <value>Todos los elementos que se unan deben tener el mismo formato: todos PDF o todos TIFF.</value>
+  </data>
+  <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
+    <value>El orden de páginas debe incluir cada página exactamente una vez.</value>
+  </data>
 </root>

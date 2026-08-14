@@ -1,0 +1,74 @@
+@* Join several staged inbox items into one (#487, ADR 0575) — the web half of the desktop's JoinItemsDialog
+   (ADR 0511). Returns the names in the chosen order plus an optional name for the result.
+
+   The order is the point of the dialog: a join with no stated order is a coin flip, and "which half of the
+   stack came off the scanner first" is knowledge only the person at the scanner has. *@
+
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 420px;">
+            <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">
+                @string.Format(Strings.Get("InboxJoinPrompt"), _names.Count)
+            </MudText>
+
+            <MudList T="string" Dense="true" Class="mb-2" style="max-height:40vh; overflow-y:auto;">
+                @foreach (var name in _names)
+                {
+                    var selected = name == _selected;
+                    <MudListItem T="string" OnClick="@(() => _selected = name)"
+                                 Class="@(selected ? "mud-selected-item" : null)" data-item="@name">
+                        @name
+                    </MudListItem>
+                }
+            </MudList>
+
+            <MudTextField T="string" @bind-Value="_name" Label="@Strings.Get("InboxJoinName")"
+                          Margin="Margin.Dense" Variant="Variant.Outlined" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton StartIcon="@Icons.Material.Filled.ArrowUpward" Disabled="@(_selected is null)" OnClick="MoveUp">@Strings.Get("InboxPageEarlier")</MudButton>
+        <MudButton StartIcon="@Icons.Material.Filled.ArrowDownward" Disabled="@(_selected is null)" OnClick="MoveDown">@Strings.Get("InboxPageLater")</MudButton>
+        <MudSpacer />
+        <MudButton OnClick="@(() => Dialog.Cancel())">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_names.Count < 2)" OnClick="Join">@Strings.Get("InboxJoin")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    /// <summary>The items to join, in the order they were selected.</summary>
+    [Parameter]
+    public IReadOnlyList<string> Names { get; set; } = [];
+
+    /// <summary>The names in order, and what to call the result (null → the server derives one).</summary>
+    public sealed record Result(List<string> Names, string? Name);
+
+    private readonly List<string> _names = [];
+    private string? _selected;
+    private string? _name;
+
+    protected override void OnInitialized()
+    {
+        _names.AddRange(Names);
+        _selected = _names.FirstOrDefault();
+    }
+
+    private void MoveUp() => Move(-1);
+
+    private void MoveDown() => Move(+1);
+
+    // The selection follows the item, so a second click moves the same one again (ListOrder.Move).
+    private void Move(int delta)
+    {
+        if (_selected is { } name)
+        {
+            SimplArchive.Client.Services.ListOrder.Move(_names, _names.IndexOf(name), delta);
+        }
+    }
+
+    private void Join() =>
+        Dialog.Close(DialogResult.Ok(new Result(_names.ToList(), string.IsNullOrWhiteSpace(_name) ? null : _name.Trim())));
+}

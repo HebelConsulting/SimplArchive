@@ -55,7 +55,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         RecycleBin.StatusReporter = m => Status = m;
         Checkout.StatusReporter = m => Status = m;
         Checkout.OnChanged = RefreshAfterCheckoutChangeAsync;
+        InboxActions.Connect(() => _api, RefreshInboxAsync, m => Status = m, () => _currentUserId);
     }
+
+    // What a user can do TO a staged inbox item — send it on, claim it, delete it, and take its pages apart or
+    // together (#487). Extracted from this class rather than added to it: the actions are one cohesive thing,
+    // and this file is over the 1000-line ceiling, so growing it further is not on the table (ADR 0575).
+    public InboxItemActionsViewModel InboxActions { get; } = new();
 
     // Sets the authenticated api client for the whole workbench, including both preview surfaces + the Recycle
     // bin tab (so every surface shares the same session token).
@@ -2306,7 +2312,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 }
             }
 
-            foreach (var item in await _api.GetInboxAsync(InboxIncludeGroups, InboxViewUserId))
+            // One read, many follows (ADR 0557): the listing carries the rows AND the collection's own `join`
+            // address, so the Join action costs no extra request when a selection later enables it.
+            var listing = await _api.Inbox.ListAsync(InboxIncludeGroups, InboxViewUserId);
+            InboxActions.JoinHref = listing.Href("join");
+            foreach (var item in listing.Items)
             {
                 ServerInbox.Add(new InboxItemViewModel
                 {
@@ -2743,71 +2753,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Status = string.Format(Strings.Get("StFiledOf"), filed, items.Count);
         await RefreshInboxAsync();
     }
-
-    public async Task DeleteServerInboxItemAsync(InboxItemViewModel item)
-    {
-        if (_api is null)
-        {
-            return;
-        }
-
-        await _api.DeleteInboxItemAsync(item.Item!);
-        await RefreshInboxAsync();
-    }
-
-    // The "Send to…" destinations for the dialog (ADR 0532): the caller's groups followed by the other users.
-    public async Task<IReadOnlyList<SimplArchiveApiClient.InboxTargetInfo>> GetInboxSendTargetsAsync()
-    {
-        if (_api is null)
-        {
-            return [];
-        }
-
-        var groups = await _api.GetInboxGroupsAsync();
-        var users = await _api.GetInboxUsersAsync();
-        return groups.Concat(users).ToList();
-    }
-
-    // Sends an own item into a chosen group or user's inbox (ADR 0532), then refreshes.
-    public async Task SendInboxItemAsync(InboxItemViewModel item, SimplArchiveApiClient.InboxTargetInfo target)
-    {
-        if (_api is null)
-        {
-            return;
-        }
-
-        try
-        {
-            await _api.MoveInboxItemAsync(item.MoveUrl, target.IsGroup ? target.Id : null, target.IsGroup ? null : target.Id);
-            Status = string.Format(Strings.Get("StMoved"), item.Name);
-            await RefreshInboxAsync();
-        }
-        catch (ApiActionException e)
-        {
-            Status = e.Message;
-        }
-    }
-
-    // Claims a non-own (group / other-user) item into my own inbox (ADR 0532), then refreshes.
-    public async Task MoveInboxItemToMineAsync(InboxItemViewModel item)
-    {
-        if (_api is null || _currentUserId is not { } me)
-        {
-            return;
-        }
-
-        try
-        {
-            await _api.MoveInboxItemAsync(item.MoveUrl, null, me);
-            Status = string.Format(Strings.Get("StMoved"), item.Name);
-            await RefreshInboxAsync();
-        }
-        catch (ApiActionException e)
-        {
-            Status = e.Message;
-        }
-    }
-
     // Builds the filing dialog VM, passing the Repositories tab's selected document (if any) so the dialog can
     // offer filing as a new version of it / into its folder (ADR "Context-aware inbox filing dialog").
     public FolderPickerViewModel CreateFolderPickerViewModel()
@@ -6705,17 +6650,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return false;
         }
 
-        var target = (await GetInboxSendTargetsAsync()).FirstOrDefault(t => !t.IsGroup && t.Id == recipient.Id);
+        var target = (await InboxActions.GetSendTargetsAsync()).FirstOrDefault(t => !t.IsGroup && t.Id == recipient.Id);
         if (target is null)
         {
             return false;
         }
 
-        await SendInboxItemAsync(item, target);
+        await InboxActions.SendAsync(item, target);
         var leftOwnInbox = ServerInbox.All(i => i.Name != name);                                  // gone from mine
-        var inRecipientInbox = (await _api.GetInboxAsync(user: recipient.Id)).Any(i => i.Name == name); // now theirs
+        var inRecipientInbox = (await _api.Inbox.ListAsync(user: recipient.Id)).Items.Any(i => i.Name == name); // now theirs
 
-        if ((await _api.GetInboxAsync(user: recipient.Id)).FirstOrDefault(i => i.Name == name) is { } handedOver)
+        if ((await _api.Inbox.ListAsync(user: recipient.Id)).Items.FirstOrDefault(i => i.Name == name) is { } handedOver)
         {
             await _api.DeleteInboxItemAsync(handedOver);
         }

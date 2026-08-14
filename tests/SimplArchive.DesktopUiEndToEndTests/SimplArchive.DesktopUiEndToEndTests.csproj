@@ -5,6 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- Points the test host at a system libvips on macOS; see build/tests.runsettings. Referenced here rather
+         than passed as a `dotnet test` flag so it applies to every way this project is run: the CLI, the IDE,
+         and CI, instead of only the invocation someone remembered to decorate. -->
+    <RunSettingsFilePath>$(MSBuildThisFileDirectory)../../build/tests.runsettings</RunSettingsFilePath>
   </PropertyGroup>
 
   <!-- Desktop UI end-to-end tests: exercise the real DesktopClient SimplArchiveApiClient against the self-hosted

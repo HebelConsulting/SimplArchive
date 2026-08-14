@@ -906,6 +906,39 @@
                 <TabItem.Header><i:Icon Value="mdi-inbox" FontSize="20" /></TabItem.Header>
                 <!-- Outer grid so the preview full-screen overlay can cover the inbox (tab strip stays reachable). -->
                 <Grid>
+                <DockPanel LastChildFill="True">
+
+                <!-- Inbox ribbon (ADR 0575) — the tab's own actions, in the same place the Repositories tab keeps
+                     its own: grouped by concern in a WrapPanel so whole groups reflow rather than clip. The page
+                     operations live here rather than on the row, because Join acts on a SELECTION and a per-row
+                     button cannot express that. The WebDAV button moved up from the bottom-left corner, so every
+                     inbox action is in one place instead of two. -->
+                <Border DockPanel.Dock="Top" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+                    <WrapPanel Orientation="Horizontal">
+                        <!-- Pages group: what is INSIDE a staged scan (#487). Each is disabled until the server
+                             says it can succeed — a one-page file offers no split or sort (ADR 0554). -->
+                        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                            <Button AutomationProperties.AutomationId="inbox-split" IsEnabled="{Binding InboxActions.CanSplit}"
+                                    Click="OnInboxSplit" ToolTip.Tip="{loc:Tr InboxSplit}"><i:Icon Value="mdi-call-split" FontSize="18" /></Button>
+                            <Button AutomationProperties.AutomationId="inbox-sort" IsEnabled="{Binding InboxActions.CanSort}"
+                                    Click="OnInboxSortPages" ToolTip.Tip="{loc:Tr InboxSortTitle}"><i:Icon Value="mdi-sort" FontSize="18" /></Button>
+                            <Button AutomationProperties.AutomationId="inbox-join" IsEnabled="{Binding InboxActions.CanJoin}"
+                                    Click="OnInboxJoin" ToolTip.Tip="{loc:Tr InboxJoinTitle}"><i:Icon Value="mdi-call-merge" FontSize="18" /></Button>
+                        </StackPanel>
+                        <!-- Item group: what to do with the staged file as a whole. -->
+                        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                            <Button IsEnabled="{Binding CanFileMultiple}" Click="OnInboxFileMultiple" ToolTip.Tip="{loc:Tr MwFileSelectedTip}"><i:Icon Value="mdi-file-move-outline" FontSize="18" /></Button>
+                            <Button Command="{Binding RefreshInboxCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
+                        </StackPanel>
+                        <!-- General group: one WebDAV button that does the next useful thing — set up, mount, or
+                             open this tab's own folder (ADR "One WebDAV button per tab, deep-linked"). -->
+                        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+                            <Button Click="OnWebDavTabButton" Tag="Personal/Inbox" AutomationProperties.AutomationId="inbox-webdav"
+                                    ToolTip.Tip="{Binding WebDav.Tooltip}"><i:Icon Value="mdi-folder-network-outline" FontSize="18" /></Button>
+                        </StackPanel>
+                    </WrapPanel>
+                </Border>
+
                 <Grid Margin="14" ColumnDefinitions="*,10,1.15*">
 
                     <!-- Left column: the server inbox (the S3-backed staging area) + actions. The old local-inbox
@@ -917,7 +950,6 @@
                                 <TextBlock Text="{loc:Tr TabInbox}" FontWeight="SemiBold" />
                                 <TextBlock Text="{Binding InboxStatus}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                             </StackPanel>
-                            <Button Grid.Column="1" Margin="8,0,0,0" Command="{Binding RefreshInboxCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" /></Button>
                         </Grid>
                         <!-- View filters (ADR 0532): own-items-only by default; a toggle reveals my group inboxes,
                              and a CanManageInboxes holder gets a user-picker to open another user's inbox. -->
@@ -958,18 +990,6 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                        <!-- Actions: ONE WebDAV button that does the next useful thing — set up, mount, or (when
-                             already mounted) open this tab's own folder straight away (ADR "One WebDAV button per
-                             tab, deep-linked"); file the current selection. -->
-                        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10" Margin="0,8,0,0">
-                            <Button Click="OnWebDavTabButton" Tag="Personal/Inbox" Padding="10,4"
-                                    AutomationProperties.AutomationId="inbox-webdav" ToolTip.Tip="{Binding WebDav.Tooltip}">
-                                <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-folder-network-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwOpenInFileManager}" /></StackPanel>
-                            </Button>
-                            <Button Click="OnInboxFileMultiple" Padding="10,4" IsVisible="{Binding CanFileMultiple}" ToolTip.Tip="{loc:Tr MwFileSelectedTip}">
-                                <StackPanel Orientation="Horizontal" Spacing="6"><i:Icon Value="mdi-file-move-outline" FontSize="16" /><TextBlock Text="{loc:Tr MwFileSelected}" /></StackPanel>
-                            </Button>
-                        </StackPanel>
                     </Grid>
 
                     <GridSplitter Grid.Column="1" Background="#33808080" ResizeDirection="Columns" HorizontalAlignment="Stretch" />
@@ -1076,6 +1096,7 @@
                         </Border>
                     </Grid>
                 </Grid>
+                </DockPanel>
 
                     <!-- Full-screen preview overlay for the Inbox tab (its own InboxPreview, disconnected from Repositories). -->
                     <Border IsVisible="{Binding InboxPreview.PreviewFullscreen}" ZIndex="100" Background="{DynamicResource WbChrome}">

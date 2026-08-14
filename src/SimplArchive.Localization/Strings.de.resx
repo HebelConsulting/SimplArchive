@@ -3981,4 +3981,67 @@
   <data name="ExtLinkUrlCopied" xml:space="preserve">
     <value>Link in die Zwischenablage kopiert.</value>
   </data>
+  <data name="InboxSplit" xml:space="preserve">
+    <value>In Seiten aufteilen</value>
+  </data>
+  <data name="InboxSplitConfirm" xml:space="preserve">
+    <value>&#x27;{0}&#x27; in seine {1} Seiten aufteilen? Das Original bleibt erhalten.</value>
+  </data>
+  <data name="InboxSortTitle" xml:space="preserve">
+    <value>Seiten sortieren</value>
+  </data>
+  <data name="InboxSortPrompt" xml:space="preserve">
+    <value>Bringen Sie die {1} Seiten von &#x27;{0}&#x27; in die gewünschte Reihenfolge. Wählen Sie eine Seite aus und verschieben Sie sie.</value>
+  </data>
+  <data name="InboxPageEarlier" xml:space="preserve">
+    <value>Nach vorne</value>
+  </data>
+  <data name="InboxPageLater" xml:space="preserve">
+    <value>Nach hinten</value>
+  </data>
+  <data name="InboxPagesReverse" xml:space="preserve">
+    <value>Reihenfolge umkehren</value>
+  </data>
+  <data name="InboxPagesApply" xml:space="preserve">
+    <value>Reihenfolge übernehmen</value>
+  </data>
+  <data name="InboxJoinTitle" xml:space="preserve">
+    <value>Einträge zusammenfügen</value>
+  </data>
+  <data name="InboxJoin" xml:space="preserve">
+    <value>Zusammenfügen</value>
+  </data>
+  <data name="InboxJoinName" xml:space="preserve">
+    <value>Name:</value>
+  </data>
+  <data name="InboxJoinPrompt" xml:space="preserve">
+    <value>Diese {0} Einträge in dieser Reihenfolge zu einem zusammenfügen. Die Originale bleiben erhalten.</value>
+  </data>
+  <data name="StInboxSplit" xml:space="preserve">
+    <value>&#x27;{0}&#x27; in {1} Einträge aufgeteilt.</value>
+  </data>
+  <data name="StInboxSorted" xml:space="preserve">
+    <value>Seiten von &#x27;{0}&#x27; sortiert.</value>
+  </data>
+  <data name="StInboxJoined" xml:space="preserve">
+    <value>{0} Einträge zu &#x27;{1}&#x27; zusammengefügt.</value>
+  </data>
+  <data name="ApiErrInboxPagesNotSupported" xml:space="preserve">
+    <value>Nur PDF- und TIFF-Dateien haben Seiten, die aufgeteilt, zusammengefügt oder sortiert werden können.</value>
+  </data>
+  <data name="ApiErrInboxItemHasNoPages" xml:space="preserve">
+    <value>Die Datei konnte nicht als seitenbasiertes Dokument gelesen werden — sie ist möglicherweise unvollständig oder beschädigt.</value>
+  </data>
+  <data name="ApiErrInboxNoPagesToSplit" xml:space="preserve">
+    <value>Der Eintrag hat nur eine Seite, es gibt nichts aufzuteilen.</value>
+  </data>
+  <data name="ApiErrInboxJoinNeedsSeveral" xml:space="preserve">
+    <value>Zum Zusammenfügen werden mindestens zwei Einträge benötigt.</value>
+  </data>
+  <data name="ApiErrInboxJoinNotHomogeneous" xml:space="preserve">
+    <value>Alle zusammenzufügenden Einträge müssen dasselbe Format haben — entweder alle PDF oder alle TIFF.</value>
+  </data>
+  <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
+    <value>Die Seitenreihenfolge muss jede Seite genau einmal enthalten.</value>
+  </data>
 </root>

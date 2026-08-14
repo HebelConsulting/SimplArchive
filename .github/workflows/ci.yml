@@ -89,6 +89,21 @@ jobs:
       # signal over Domain/Application/Infrastructure, not a full end-to-end figure.
       - name: Unit tests
         run: dotnet test tests/SimplArchive.UnitTests --no-build -c Debug --collect:"XPlat Code Coverage" --results-directory ./coverage/unit
+      # The integration suite's page-algebra tests (issue #487) build and re-split real multi-page TIFFs through
+      # NetVips, which needs a native libvips. Infrastructure references only the linux-musl natives — what the
+      # Alpine image ships — so this glibc runner has none. A system package rather than more NetVips.Native.*
+      # NuGet packages: those would extend the LGPL exception in build/licenses/ignored-packages.json to
+      # platforms the product never ships, to satisfy a test-only need. Developers install it with
+      # `brew install vips` (see CLAUDE.md's Commands); apt puts it on the default loader path, so nothing else
+      # is needed here — the macOS path fix-up lives in the project's .runsettings.
+      #
+      # The package is libvips42t64 on Ubuntu 24.04 (the 64-bit time_t transition renamed it) and libvips42 on
+      # 22.04; both provide the same libvips.so.42 SONAME. Trying both keeps this working across a runner-image
+      # bump in either direction — verified against ubuntu:24.04, where plain libvips42 has no candidate at all.
+      - name: Install libvips (native dependency of the TIFF page tests)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvips42t64 || sudo apt-get install -y libvips42
       - name: Integration tests
         run: dotnet test tests/SimplArchive.IntegrationTests --no-build -c Debug --collect:"XPlat Code Coverage" --results-directory ./coverage/integration
       # Merge the two cobertura files into one report (ReportGenerator, pinned in .config/dotnet-tools.json). The

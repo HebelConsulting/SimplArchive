@@ -590,3 +590,32 @@ export function setFullscreen(dotNetRef, on) {
         document.addEventListener('keydown', escHandler);
     }
 }
+
+// Page thumbnails as data URLs, for the inbox's sort-pages dialog (#487, ADR 0575).
+//
+// Here rather than in a module of its own because pdf.js is already imported and configured in this file, and a
+// second import would pull a second copy of the worker. The desktop does the same thing with PDFium — the two
+// clients rasterise with what each already has, rather than the server growing a per-page rendition endpoint
+// for PDFs that nothing else would use.
+//
+// Rendered small deliberately: a 40-page scan at preview scale is a lot of pixels to hold as base64 for
+// pictures displayed 130 px wide.
+export async function pageThumbnails(url, width) {
+    const target = width || 260;
+    const buf = await fetch(url).then(r => r.arrayBuffer());
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const thumbnails = [];
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const unscaled = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({ scale: target / unscaled.width });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        thumbnails.push(canvas.toDataURL('image/png'));
+    }
+
+    return thumbnails;
+}

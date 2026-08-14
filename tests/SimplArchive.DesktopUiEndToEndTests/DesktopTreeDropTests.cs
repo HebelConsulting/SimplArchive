@@ -40,7 +40,7 @@ public class DesktopTreeDropTests
         // It lands under the document's name plus the version's extension — the naming that later lets it be
         // dragged onto Check-out and matched back by filename.
         var stem = Path.GetFileNameWithoutExtension(docName);
-        var item = (await api.GetInboxAsync()).SingleOrDefault(i => i.Name == stem + ".txt");
+        var item = (await api.Inbox.ListAsync()).Items.SingleOrDefault(i => i.Name == stem + ".txt");
         Assert.NotNull(item);
 
         // The point of a template is the staged mask, not the bytes: a copy that arrived without it would look
