@@ -1,0 +1,34 @@
+@* Pick the merge target for a catalog tag (#530, tranche 6): every document tagged with the source is
+   re-tagged with the target and the source retires. Returns the chosen target id; the caller merges. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 320px;">
+            <MudSelect T="Guid" @bind-Value="_targetId" Label="@Strings.Get("TagsMergeInto")"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                @foreach (var (id, name) in Candidates)
+                {
+                    <MudSelectItem T="Guid" Value="@id">@name</MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Ok" Disabled="@(_targetId == Guid.Empty)">@Strings.Get("MwMerge")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    /// <summary>The pickable targets — every catalog tag except the merge source.</summary>
+    [Parameter]
+    public List<(Guid Id, string Name)> Candidates { get; set; } = [];
+
+    private Guid _targetId = Guid.Empty;
+
+    private void Ok() => Dialog.Close(DialogResult.Ok(_targetId));
+
+    private void Cancel() => Dialog.Cancel();
+}

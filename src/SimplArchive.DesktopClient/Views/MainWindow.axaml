@@ -2177,44 +2177,28 @@
             <!-- Tag catalog (ADR "Tag controlled vocabulary") — added last to avoid re-indexing the other tabs. -->
             <TabItem ToolTip.Tip="{loc:Tr TabTags}" IsVisible="{Binding IsTenantAdmin}">
                 <TabItem.Header><i:Icon Value="mdi-tag-multiple-outline" FontSize="20" /></TabItem.Header>
-                <ScrollViewer Margin="14">
-                    <StackPanel Spacing="8" MaxWidth="720" HorizontalAlignment="Left">
-                        <TextBlock Text="{loc:Tr TagsCatalogHeader}" FontSize="16" FontWeight="SemiBold" />
-                        <TextBlock Text="{loc:Tr MwTagCatalogDesc}"
-                                   Foreground="{DynamicResource WbMuted}" TextWrapping="Wrap" />
-
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBox Text="{Binding NewTagName}" Watermark="{loc:Tr TagsNewPlaceholder}" Width="200" />
-                            <TextBox Text="{Binding NewTagColor}" Watermark="#RRGGBB" Width="110" />
-                            <Button Content="{loc:Tr TagsAdd}" Command="{Binding CreateTagCommand}" />
-                        </StackPanel>
-
-                        <ItemsControl ItemsSource="{Binding TagCatalogAdmin}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:TagCatalogRow">
-                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2">
-                                        <Border Width="14" Height="14" CornerRadius="3" VerticalAlignment="Center"
-                                                Background="{Binding SwatchBrush}" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" />
-                                        <TextBox Text="{Binding Name}" Width="180" />
-                                        <TextBox Text="{Binding Color}" Watermark="#RRGGBB" Width="100" />
-                                        <Button Content="{loc:Tr Save}"
-                                                Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).SaveTagCommand}" CommandParameter="{Binding}" />
-                                        <ComboBox ItemsSource="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).TagCatalogAdmin}"
-                                                  SelectedItem="{Binding MergeTarget}" PlaceholderText="{loc:Tr MwMergeInto}" Width="150">
-                                            <ComboBox.ItemTemplate>
-                                                <DataTemplate x:DataType="vm:TagCatalogRow"><TextBlock Text="{Binding Name}" /></DataTemplate>
-                                            </ComboBox.ItemTemplate>
-                                        </ComboBox>
-                                        <Button Content="{loc:Tr MwMerge}"
-                                                Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).MergeTagCommand}" CommandParameter="{Binding}" />
-                                        <Button Content="{loc:Tr TagsRetire}"
-                                                Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).RetireTagCommand}" CommandParameter="{Binding}" />
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </ScrollViewer>
+                <DockPanel LastChildFill="True" Margin="8">
+                    <!-- The ribbon is its own control (#530 tranche 6); + replaced the inline create form and
+                         the "Tag catalog" header said what the tab strip already says. The catalog
+                         description is information, not an action — its own line beneath. -->
+                    <v:TagRibbon DockPanel.Dock="Top" />
+                    <TextBlock DockPanel.Dock="Top" Text="{loc:Tr MwTagCatalogDesc}" Margin="0,8,0,0"
+                               Foreground="{DynamicResource WbMuted}" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left" />
+                    <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" Margin="0,8,0,0"
+                            MaxWidth="520" HorizontalAlignment="Left" VerticalAlignment="Top">
+                        <ScrollViewer>
+                            <ListBox ItemsSource="{Binding TagCatalogAdmin}" SelectedItem="{Binding SelectedTagRow}"
+                                     Background="Transparent" BorderThickness="0">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:TagCatalogRow">
+                                        <!-- The row and its menu are their own control (#530 tranche 6). -->
+                                        <v:TagRow />
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </ScrollViewer>
+                    </Border>
+                </DockPanel>
             </TabItem>
 
         </TabControl>

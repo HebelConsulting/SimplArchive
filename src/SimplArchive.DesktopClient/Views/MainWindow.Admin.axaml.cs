@@ -209,4 +209,61 @@ public partial class MainWindow
             await vm.ResetSelectedUserMfaAsync();
         }
     });
+
+    // ---- Tag catalog (#530 tranche 6) — the dialogs live here (they need this window as their parent);
+    // the view-model's existing row commands do the API work. A ribbon Click arrives without a Tag and
+    // falls back to the selection; a row-menu Click hands its row over as the Tag (ADR 0559).
+    private TagCatalogRow? TagFrom(object? sender) =>
+        (sender as Control)?.Tag as TagCatalogRow ?? (DataContext as MainWindowViewModel)?.SelectedTagRow;
+
+    internal void OnNewTag(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm
+            && await new TagEditDialog(TagEditDialog.Mode.Create).ShowDialog<TagEditDialog.Result?>(this) is { } result)
+        {
+            vm.NewTagName = result.Name;
+            vm.NewTagColor = result.Color;
+            await vm.CreateTagCommand.ExecuteAsync(null);
+        }
+    });
+
+    internal void OnRenameTag(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && TagFrom(sender) is { } row
+            && await new TagEditDialog(TagEditDialog.Mode.Rename, row.Name).ShowDialog<TagEditDialog.Result?>(this) is { } result)
+        {
+            row.Name = result.Name;
+            await vm.SaveTagCommand.ExecuteAsync(row);
+        }
+    });
+
+    internal void OnRecolourTag(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && TagFrom(sender) is { } row
+            && await new TagEditDialog(TagEditDialog.Mode.Recolour, initialColor: row.Color).ShowDialog<TagEditDialog.Result?>(this) is { } result)
+        {
+            row.Color = result.Color.Length == 0 ? null : result.Color;
+            await vm.SaveTagCommand.ExecuteAsync(row);
+        }
+    });
+
+    internal void OnMergeTag(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || TagFrom(sender) is not { } row)
+        {
+            return;
+        }
+
+        var candidates = vm.TagCatalogAdmin.Where(t => t.Id != row.Id).ToList();
+        if (candidates.Count == 0)
+        {
+            return;
+        }
+
+        if (await new MergeTagDialog(row.Name, candidates).ShowDialog<TagCatalogRow?>(this) is { } target)
+        {
+            row.MergeTarget = target;
+            await vm.MergeTagCommand.ExecuteAsync(row);
+        }
+    });
 }

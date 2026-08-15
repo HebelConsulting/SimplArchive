@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.TagRibbon"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- Tag catalog ribbon (#530, tranche 6). New first (+ opens the create dialog, by decision — the inline
+         name/colour form is gone); then the selected-tag group rename/recolour/merge; retire SEPARATED as the
+         destructive one; refresh last. The dialogs need the window as their parent, so those Clicks forward
+         there; retire and refresh bind straight to the view-model. -->
+    <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+        <WrapPanel Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="tag-new" Click="OnNewTag"
+                        ToolTip.Tip="{loc:Tr TagsAdd}"><i:Icon Value="mdi-plus" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="tag-rename" IsEnabled="{Binding HasSelectedTagRow}" Click="OnRenameTag"
+                        ToolTip.Tip="{loc:Tr RibbonRename}"><i:Icon Value="mdi-form-textbox" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="tag-recolour" IsEnabled="{Binding HasSelectedTagRow}" Click="OnRecolourTag"
+                        ToolTip.Tip="{loc:Tr TagsSetColour}"><i:Icon Value="mdi-palette-outline" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="tag-merge" IsEnabled="{Binding HasSelectedTagRow}" Click="OnMergeTag"
+                        ToolTip.Tip="{loc:Tr TagsMergeInto}"><i:Icon Value="mdi-merge" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="tag-retire" IsEnabled="{Binding HasSelectedTagRow}"
+                        Command="{Binding RetireTagCommand}" CommandParameter="{Binding SelectedTagRow}"
+                        ToolTip.Tip="{loc:Tr TagsRetire}"><i:Icon Value="mdi-tag-off-outline" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+                <Button Command="{Binding RefreshTagCatalogCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
+            </StackPanel>
+        </WrapPanel>
+    </Border>
+</UserControl>

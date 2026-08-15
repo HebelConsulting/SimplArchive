@@ -22,10 +22,13 @@ public class WebTagCatalogTests
         await page.Locator(".wb-tab[aria-label=\"Tags\"]").First.ClickAsync();
         await Expect(page.Locator(".wb-tab-active")).ToHaveAttributeAsync("aria-label", "Tags");
 
+        // + opens the create dialog (#530 tranche 6) — the inline form is gone.
         var panel = page.Locator(".wb-tags");
-        await panel.Locator("input").First.FillAsync(tag);
-        await panel.Locator("input").Nth(1).FillAsync("#2e7d32");
         await panel.GetByRole(AriaRole.Button, new() { Name = "Add tag" }).ClickAsync();
+        var dialog = page.Locator(".mud-dialog");
+        await dialog.Locator("input").First.FillAsync(tag);
+        await dialog.Locator("input").Nth(1).FillAsync("#2e7d32");
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Add tag" }).ClickAsync();
 
         // The new catalog tag appears as a chip in the table.
         await Expect(panel.GetByText(tag)).ToBeVisibleAsync();

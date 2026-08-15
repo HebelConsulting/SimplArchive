@@ -1,0 +1,23 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.TagEditDialog"
+        Width="360" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <!-- Create / rename / recolour a catalog tag (#530, tranche 6) — ONE dialog, shown with the fields the
+         action needs (both for create, name for rename, colour for recolour), instead of three near-copies. -->
+    <StackPanel Margin="18" Spacing="10">
+        <StackPanel x:Name="NamePanel" Spacing="4">
+            <TextBlock Text="{loc:Tr TagsColTag}" />
+            <TextBox x:Name="NameBox" Watermark="{loc:Tr TagsNewPlaceholder}" />
+        </StackPanel>
+        <StackPanel x:Name="ColorPanel" Spacing="4">
+            <TextBlock Text="{loc:Tr TagsSetColour}" />
+            <TextBox x:Name="ColorBox" Watermark="#RRGGBB" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button Content="{loc:Tr Save}" Click="OnOk" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

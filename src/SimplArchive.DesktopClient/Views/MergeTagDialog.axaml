@@ -1,0 +1,22 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.MergeTagDialog"
+        Title="{loc:Tr TagsMergeInto}" Width="360" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <!-- Pick the merge target for a catalog tag (#530, tranche 6): every document tagged with the source is
+         re-tagged with the target and the source retires. -->
+    <StackPanel Margin="18" Spacing="10">
+        <TextBlock x:Name="SourceText" TextWrapping="Wrap" Foreground="#888" />
+        <ComboBox x:Name="TargetBox" HorizontalAlignment="Stretch" PlaceholderText="{loc:Tr MwMergeInto}">
+            <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:TagCatalogRow"><TextBlock Text="{Binding Name}" /></DataTemplate>
+            </ComboBox.ItemTemplate>
+        </ComboBox>
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button Content="{loc:Tr MwMerge}" Click="OnOk" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

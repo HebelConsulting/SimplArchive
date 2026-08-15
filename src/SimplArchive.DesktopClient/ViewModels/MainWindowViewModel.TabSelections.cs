@@ -58,4 +58,28 @@ public sealed partial class MainWindowViewModel
             SelectedHoldItems.Add(new LegalHoldItemRowViewModel(item.DocumentId, item.DocumentName, item));
         }
     }
+
+    /// <summary>The catalog tag the ribbon acts on (#530, tranche 6) — single-select.</summary>
+    [CommunityToolkit.Mvvm.ComponentModel.ObservableProperty]
+    [CommunityToolkit.Mvvm.ComponentModel.NotifyPropertyChangedFor(nameof(HasSelectedTagRow))]
+    private TagCatalogRow? _selectedTagRow;
+
+    public bool HasSelectedTagRow => SelectedTagRow is not null;
+
+    /// <summary>The ribbon's refresh — the load itself lives with the other tag commands.</summary>
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private Task RefreshTagCatalog() => LoadTagCatalogAsync();
+
+    // Populates the Tag catalog for the headless screenshot (#530 tranche 6): coloured, colourless and
+    // selected rows, so the render proves the row template + the ribbon's greying.
+    internal void PopulateTagsDemoForScreenshot()
+    {
+        IsLoggedIn = true;
+        IsTenantAdmin = true;
+        TagCatalogAdmin.Clear();
+        TagCatalogAdmin.Add(new TagCatalogRow(new Services.SimplArchiveApiClient.TagCatalogItem(Guid.NewGuid(), "contract", "#2e7d32")));
+        TagCatalogAdmin.Add(new TagCatalogRow(new Services.SimplArchiveApiClient.TagCatalogItem(Guid.NewGuid(), "invoice", "#1565c0")));
+        TagCatalogAdmin.Add(new TagCatalogRow(new Services.SimplArchiveApiClient.TagCatalogItem(Guid.NewGuid(), "urgent", null)));
+        SelectedTagRow = TagCatalogAdmin[0];
+    }
 }

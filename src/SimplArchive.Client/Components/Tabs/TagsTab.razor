@@ -12,43 +12,72 @@
    on list rows. So the tab raises CatalogChanged after every mutation rather than reaching into that state,
    and each side keeps what it is responsible for. *@
 
-            @* The tenant tag catalog (ADR "Tag controlled vocabulary") — admin curation. *@
-            <div class="wb-tags pa-4" style="overflow:auto; max-width:720px;">
-                <MudText Typo="Typo.h6" Class="mb-2">@Strings.Get("TagsCatalogHeader")</MudText>
-                <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">@Strings.Get("TagsCatalogDesc")</MudText>
-
-                <div style="display:flex; gap:8px; align-items:center; margin-bottom:16px;">
-                    <MudTextField T="string" @bind-Value="_newTagName" Placeholder="@Strings.Get("TagsNewPlaceholder")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:220px;" />
-                    <MudTextField T="string" @bind-Value="_newTagColor" Placeholder="#RRGGBB" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:120px;" />
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateTagAsync">@Strings.Get("TagsAdd")</MudButton>
+            @* The tenant tag catalog (ADR "Tag controlled vocabulary") — admin curation, in the Repositories
+               shape (#530 tranche 6): [+ opens the create dialog, by decision — the inline form is gone] |
+               [rename, recolour, merge acting on the selected row] | [retire SEPARATED, no error accent
+               (ADR 0581)] | [refresh]. The row's ⋮ menu mirrors everything, row-addressed. *@
+            <div class="wb-tags" style="height:100%; display:flex; flex-direction:column;">
+                <div class="wb-search-bar pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="NewTagAsync"
+                               title="@Strings.Get("TagsAdd")" aria-label="@Strings.Get("TagsAdd")">
+                        <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("TagsAdd")</span>
+                    </MudButton>
+                    <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_selected is null)" OnClick="@(() => RenameTagAsync(_selected!))"
+                               title="@Strings.Get("RibbonRename")" aria-label="@Strings.Get("RibbonRename")">
+                        <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRename")</span>
+                    </MudButton>
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selected is null)" OnClick="@(() => RecolourTagAsync(_selected!))"
+                               title="@Strings.Get("TagsSetColour")" aria-label="@Strings.Get("TagsSetColour")">
+                        <MudIcon Icon="@Icons.Material.Filled.Palette" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("TagsSetColour")</span>
+                    </MudButton>
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selected is null || _catalogTags.Count < 2)" OnClick="@(() => MergeTagFromDialogAsync(_selected!))"
+                               title="@Strings.Get("TagsMergeInto")" aria-label="@Strings.Get("TagsMergeInto")">
+                        <MudIcon Icon="@Icons.Material.Filled.CallMerge" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("TagsMergeInto")</span>
+                    </MudButton>
+                    <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_selected is null)" OnClick="@(() => RetireTagAsync(_selected!))"
+                               title="@Strings.Get("TagsRetire")" aria-label="@Strings.Get("TagsRetire")">
+                        <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("TagsRetire")</span>
+                    </MudButton>
+                    <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" OnClick="LoadTagCatalogAsync"
+                               title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
+                        <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
+                    </MudButton>
                 </div>
-
-                <MudSimpleTable Dense="true" Hover="true" Style="max-width:680px;">
-                    <thead><tr><th>@Strings.Get("TagsColTag")</th><th style="width:200px;">@Strings.Get("TagsColActions")</th></tr></thead>
-                    <tbody>
-                        @foreach (var t in _catalogTags)
-                        {
-                            <tr>
-                                <td><MudChip T="string" Size="Size.Small" Style="@ChipStyle(t.Color)">@t.Name</MudChip></td>
-                                <td>
-                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" title="@Strings.Get("RibbonRename")" OnClick="@(() => RenameTagAsync(t))" />
-                                    <MudIconButton Icon="@Icons.Material.Filled.Palette" Size="Size.Small" title="@Strings.Get("TagsSetColour")" OnClick="@(() => RecolourTagAsync(t))" />
-                                    <MudMenu Icon="@Icons.Material.Filled.CallMerge" Size="Size.Small" Dense="true" title="@Strings.Get("TagsMergeInto")">
-                                        @foreach (var other in _catalogTags.Where(x => x.Id != t.Id))
-                                        {
-                                            <MudMenuItem OnClick="@(() => MergeTagAsync(t, other))">@other.Name</MudMenuItem>
-                                        }
-                                    </MudMenu>
-                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="@Strings.Get("TagsRetire")" OnClick="@(() => RetireTagAsync(t))" />
-                                </td>
-                            </tr>
-                        }
-                        @if (_catalogTags.Count == 0)
-                        {
-                            <tr><td colspan="2" class="mud-text-secondary">@Strings.Get("TagsEmpty")</td></tr>
-                        }
-                    </tbody>
-                </MudSimpleTable>
+                @* The catalog description is information, not an action — its own line (the Retention shape). *@
+                <div class="pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("TagsCatalogDesc")</MudText>
+                </div>
+                <div style="flex:1 1 auto; overflow:auto;">
+                    <MudTable Items="_catalogTags" Dense="true" Hover="true" Bordered="false" Elevation="0" T="TagCatalogEntry"
+                              Style="max-width:680px;"
+                              OnRowClick="@((TableRowClickEventArgs<TagCatalogEntry> e) => _selected = e.Item)"
+                              RowClassFunc="@((row, _) => row == _selected ? "wb-list-row-selected" : "")">
+                        <HeaderContent>
+                            <MudTh>@Strings.Get("TagsColTag")</MudTh>
+                            <MudTh Style="width:1px;"></MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="row">
+                            <MudTd><MudChip T="string" Size="Size.Small" Style="@ChipStyle(row.Color)">@row.Name</MudChip></MudTd>
+                            @* What can be done to THIS row lives in its ⋮ menu (#521's split), row-addressed;
+                               retire keeps its distance at the bottom. *@
+                            <MudTd Style="text-align:right;" @onclick:stopPropagation="true">
+                                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
+                                    <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => RenameTagAsync(row)">@Strings.Get("RibbonRename")</MudMenuItem>
+                                    <MudMenuItem Icon="@Icons.Material.Filled.Palette" OnClick="() => RecolourTagAsync(row)">@Strings.Get("TagsSetColour")</MudMenuItem>
+                                    @if (_catalogTags.Count > 1)
+                                    {
+                                        <MudMenuItem Icon="@Icons.Material.Filled.CallMerge" OnClick="() => MergeTagFromDialogAsync(row)">@Strings.Get("TagsMergeInto")</MudMenuItem>
+                                    }
+                                    <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="() => RetireTagAsync(row)">@Strings.Get("TagsRetire")</MudMenuItem>
+                                </MudMenu>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                    @if (_catalogTags.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="pa-3 mud-text-secondary">@Strings.Get("TagsEmpty")</MudText>
+                    }
+                </div>
             </div>
         
 
@@ -67,8 +96,9 @@
     // ---- Tag catalog admin (ADR "Tag controlled vocabulary") ----------------------------------------
     private List<TagCatalogEntry> _catalogTags = [];
     private Dictionary<string, string?> _tagColors = new();
-    private string _newTagName = "";
-    private string _newTagColor = "";
+
+    /// <summary>The row the toolbar acts on (#530 tranche 6) — single-select.</summary>
+    private TagCatalogEntry? _selected;
 
     private static string ChipStyle(string? color) => string.IsNullOrEmpty(color) ? "" : $"background:{color}; color:#fff;";
     private string? TagColor(string name) => _tagColors.TryGetValue(name, out var c) ? c : null;
@@ -85,14 +115,38 @@
         catch (Exception) { _catalogTags = []; }
     }
 
-    private async Task CreateTagAsync()
+    // + opens the create dialog, by decision (#530 tranche 6) — the inline form is gone.
+    private async Task NewTagAsync()
     {
-        var name = (_newTagName ?? "").Trim();
-        if (name.Length == 0) return;
-        var color = string.IsNullOrWhiteSpace(_newTagColor) ? null : _newTagColor.Trim();
-        var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("tags"), new { name, color });
-        if (resp.IsSuccessStatusCode) { _newTagName = ""; _newTagColor = ""; await LoadTagCatalogAsync(); }
+        var dialog = await DialogService.ShowAsync<Dialogs.NewTagDialog>(Strings.Get("TagsAdd"));
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not Dialogs.NewTagDialog.NewTagResult tag)
+        {
+            return;
+        }
+
+        var resp = await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("tags"), new { name = tag.Name, color = tag.Color });
+        if (resp.IsSuccessStatusCode) await LoadTagCatalogAsync();
         else Snackbar.Add(Strings.Get(resp.StatusCode == HttpStatusCode.Conflict ? "StTagExists" : "StErrAddTag"), Severity.Warning);
+    }
+
+    // The toolbar and the ⋮ menu start merge with the target PICK (a dialog — a second pick is needed
+    // wherever merge starts); the confirm + POST stay in MergeTagAsync.
+    private async Task MergeTagFromDialogAsync(TagCatalogEntry from)
+    {
+        var parameters = new DialogParameters
+        {
+            [nameof(Dialogs.MergeTagDialog.Candidates)] = _catalogTags.Where(x => x.Id != from.Id).Select(x => (x.Id, x.Name)).ToList(),
+        };
+        var dialog = await DialogService.ShowAsync<Dialogs.MergeTagDialog>(Strings.Get("TagsMergeInto"), parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not Guid targetId
+            || _catalogTags.FirstOrDefault(x => x.Id == targetId) is not { } into)
+        {
+            return;
+        }
+
+        await MergeTagAsync(from, into);
     }
 
     private async Task RenameTagAsync(TagCatalogEntry t)

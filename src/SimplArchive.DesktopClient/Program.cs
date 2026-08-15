@@ -624,6 +624,11 @@ internal static class Program
                 viewModel.PopulateRetentionDemoForScreenshot();
                 viewModel.SelectedTab = 9; // Retention tab
             }
+            else if (Environment.GetCommandLineArgs().Contains("--tagstab"))
+            {
+                viewModel.PopulateTagsDemoForScreenshot();
+                viewModel.SelectedTab = 12; // Tag catalog tab
+            }
             else if (Environment.GetCommandLineArgs().Contains("--tenant"))
             {
                 viewModel.PopulateTenantSettingsDemoForScreenshot();

@@ -1,0 +1,30 @@
+@* Create a catalog tag (#530, tranche 6): name + optional colour. Returns (Name, Color); the caller does the
+   API work. Replaces the inline form that sat above the catalog list, by decision. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 320px;">
+            <MudTextField @bind-Value="_name" Label="@Strings.Get("TagsColTag")" Placeholder="@Strings.Get("TagsNewPlaceholder")"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Class="mb-2" />
+            <MudTextField @bind-Value="_color" Label="@Strings.Get("TagsSetColour")" Placeholder="#RRGGBB"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Ok" Disabled="@(_name.Trim().Length == 0)">@Strings.Get("TagsAdd")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    private string _name = "";
+    private string _color = "";
+
+    private void Ok() => Dialog.Close(DialogResult.Ok(new NewTagResult(_name.Trim(), string.IsNullOrWhiteSpace(_color) ? null : _color.Trim())));
+
+    private void Cancel() => Dialog.Cancel();
+
+    public record NewTagResult(string Name, string? Color);
+}
