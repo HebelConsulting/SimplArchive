@@ -139,7 +139,7 @@ public class RepositoryReimportTests
     private async Task<RepositoryImporter.ImportResult> ImportAsync(SqliteConnection c, DictStorage storage, CurrentTenantAccessor accessor, MemoryStream zip, bool updateExisting)
     {
         using var db = Ctx(c, accessor);
-        return await new RepositoryImporter(db, storage, accessor, new WellKnownMaskSeeder(db), new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance), NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance).ImportAsync(zip, null, updateExisting, includePermissions: false, merge: false, SimplArchive.Api.Documents.LeafMergeMode.Rename, CancellationToken.None);
+        return await new RepositoryImporter(db, storage, accessor, new WellKnownMaskSeeder(db), new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance), NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance, new SimplArchive.Api.Documents.PersonalRepositoryProvisioner(db, NoOpAuditRecorder.Instance)).ImportAsync(zip, null, updateExisting, includePermissions: false, merge: false, SimplArchive.Api.Documents.LeafMergeMode.Rename, CancellationToken.None);
     }
 
     private async Task<int> CountDocumentsAsync(SqliteConnection c, CurrentTenantAccessor accessor)

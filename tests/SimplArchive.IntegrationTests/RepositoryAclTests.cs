@@ -97,7 +97,7 @@ public class RepositoryAclTests
         RepositoryImporter.ImportResult result;
         using (var db = Ctx(connection, accessor))
         {
-            result = await new RepositoryImporter(db, storage, accessor, new WellKnownMaskSeeder(db), new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance), NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance).ImportAsync(zip, null, updateExisting: false, includePermissions: true, merge: false, SimplArchive.Api.Documents.LeafMergeMode.Rename, CancellationToken.None);
+            result = await new RepositoryImporter(db, storage, accessor, new WellKnownMaskSeeder(db), new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance), NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance, new SimplArchive.Api.Documents.PersonalRepositoryProvisioner(db, NoOpAuditRecorder.Instance)).ImportAsync(zip, null, updateExisting: false, includePermissions: true, merge: false, SimplArchive.Api.Documents.LeafMergeMode.Rename, CancellationToken.None);
         }
 
         using (var db = Ctx(connection, accessor))
@@ -139,7 +139,7 @@ public class RepositoryAclTests
         accessor.TenantId = tenantB;
         using (var db = Ctx(connection, accessor))
         {
-            var result = await new RepositoryImporter(db, storage, accessor, new WellKnownMaskSeeder(db), new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance), NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance).ImportAsync(zip, null, updateExisting: false, includePermissions: false, merge: false, SimplArchive.Api.Documents.LeafMergeMode.Rename, CancellationToken.None);
+            var result = await new RepositoryImporter(db, storage, accessor, new WellKnownMaskSeeder(db), new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance), NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance, new SimplArchive.Api.Documents.PersonalRepositoryProvisioner(db, NoOpAuditRecorder.Instance)).ImportAsync(zip, null, updateExisting: false, includePermissions: false, merge: false, SimplArchive.Api.Documents.LeafMergeMode.Rename, CancellationToken.None);
             Assert.Empty(await db.AclEntries.Where(a => a.DocumentId == result.RootDocumentId).ToListAsync());
             Assert.Empty(await db.Groups.Where(g => g.Name == "Editors").ToListAsync()); // no placeholder group either
         }

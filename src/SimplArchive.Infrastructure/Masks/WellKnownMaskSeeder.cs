@@ -42,6 +42,13 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("Subject", FieldDataType.Text, IsRequired: true),
             new FieldSpec("Date", FieldDataType.Date, IsRequired: false),
             new FieldSpec("Entry ID", FieldDataType.Text, IsRequired: false),
+            // Threading + provenance (ADR 0587). "Conversation ID" is RFC 5322 threading (References/In-Reply-To)
+            // and is meaningful for any mail client; "Mailbox path" and "Reference" are the folder a message was
+            // filed from and the filing reference — an import fills them, a manual filing leaves them empty.
+            // Optional, all three: a mail without them must still classify.
+            new FieldSpec("Conversation ID", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Mailbox path", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Reference", FieldDataType.Text, IsRequired: false),
         ], cancellationToken);
     }
 

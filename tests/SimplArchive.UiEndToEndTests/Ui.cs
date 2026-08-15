@@ -45,6 +45,18 @@ internal static partial class Ui
         // (the login helper's wait for the app bar timed out at 30s there, while passing locally on more cores).
         page.SetDefaultTimeout(60000);
 
+        // …and the SAME reasoning for ASSERTIONS, which Playwright budgets SEPARATELY: SetDefaultTimeout covers
+        // actions (click, fill, wait-for), while every `Expect(...)` runs on its own default of **5 s** unless
+        // this is set. So the fix above only ever half-applied — a click got 60 s and the assertion that follows
+        // it got 5, in the same test, on the same slow runner.
+        //
+        // That gap is a coin flip on anything asynchronous: an upload round-trip (presigned PUT → finalize →
+        // classify → list refresh) legitimately needs more than 5 s on a 2-core hosted runner. Measured on the
+        // runner that exposed this: WebEmailTests died at 11.7 s with its 5 s assertion expired, while a sibling
+        // upload test PASSED at 14.2 s — the difference being how much of each test's time sat inside one
+        // assertion. It reproduces on no developer machine, because there the same round-trip takes 6-7 s total.
+        Assertions.SetDefaultExpectTimeout(30000);
+
         // DOMContentLoaded, not NetworkIdle: a Blazor WASM SPA keeps making background requests (WASM boot, the
         // OIDC silent-renew iframe), so the network never goes "idle" and GotoAsync times out — the source of an
         // intermittent login flake. Readiness is instead signalled by the explicit element waits below.

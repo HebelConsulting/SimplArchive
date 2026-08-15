@@ -53,8 +53,9 @@ public sealed class RepositoryImporter
     // Imported versions eligible for a searchable-PDF successor (ADR 0527) — enqueued once at the end.
     private readonly List<SearchablePdfJob> _searchablePdfJobs = [];
 
-    public RepositoryImporter(SimplArchiveDbContext dbContext, IObjectStorageClient objectStorage, ICurrentTenantAccessor tenant, IWellKnownMaskSeeder seeder, IStorageQuotaService storageQuota, IDocumentIndexQueue indexQueue, ISearchablePdfQueue searchablePdfQueue)
+    public RepositoryImporter(SimplArchiveDbContext dbContext, IObjectStorageClient objectStorage, ICurrentTenantAccessor tenant, IWellKnownMaskSeeder seeder, IStorageQuotaService storageQuota, IDocumentIndexQueue indexQueue, ISearchablePdfQueue searchablePdfQueue, PersonalRepositoryProvisioner personalRepositories)
     {
+        _personalRepositories = personalRepositories;
         _dbContext = dbContext;
         _objectStorage = objectStorage;
         _tenant = tenant;
@@ -63,6 +64,8 @@ public sealed class RepositoryImporter
         _indexQueue = indexQueue;
         _searchablePdfQueue = searchablePdfQueue;
     }
+
+    private readonly PersonalRepositoryProvisioner _personalRepositories;
 
     public sealed record ImportResult(Guid RootDocumentId, string RootName, int Documents, int Versions, int Comments, int Skipped);
 
@@ -214,6 +217,24 @@ public sealed class RepositoryImporter
 
             foreach (var doc in ready)
             {
+                // A node the archive names as a user's PERSONAL space is not created as a folder — it maps onto
+                // that user's personal repository, which is a root Document, not a child of anything (ADR 0370).
+                // Its subtree then hangs under the personal root, and the tenant-admin "Administration → Users"
+                // branch (ADR 0377) lists it with no extra work: it enumerates exactly these roots.
+                //
+                // This is what makes an external system's per-user areas import AS personal spaces rather than as
+                // ordinary folders buried in the imported tree (ADR 0587).
+                // A group or service account has no personal space, so only a mapped USER claims one; anything
+                // else falls through and imports as an ordinary folder rather than being silently dropped.
+                if (doc.PersonalOfUserId is { } archiveOwnerId
+                    && userMap.TryGetValue(archiveOwnerId, out var owner)
+                    && owner.UserId is { } ownerId)
+                {
+                    var personal = await _personalRepositories.EnsureAsync(ownerId, tenantId, cancellationToken);
+                    docMap[doc.Id] = personal.Id;
+                    continue;
+                }
+
                 var parentTargetId = doc.Id == rootDoc.Id ? targetFolderId : docMap[doc.ParentId!.Value];
                 var name = await UniqueChildNameAsync(parentTargetId, doc.Name, cancellationToken);
                 AddDocument(doc, docMap, tenantId, originTenant, parentTargetId, name, userMap);
@@ -414,6 +435,16 @@ public sealed class RepositoryImporter
                 if (userId is null && svcId is null && groupId is null)
                 {
                     continue; // principal didn't resolve — skip rather than write an orphan grant
+                }
+
+                // A document mapped onto an EXISTING one already carries grants — a personal repository is created
+                // with its owner's (ADR 0370/0587), so importing the archive's grant for that same user hits the
+                // partial unique index on (DocumentId, principal) and fails the whole import. The existing grant
+                // wins: it is the one the target system established, and an import must not quietly widen it.
+                if (await _dbContext.AclEntries.AnyAsync(a => a.DocumentId == targetDocId
+                        && a.UserId == userId && a.ServiceAccountId == svcId && a.GroupId == groupId, cancellationToken))
+                {
+                    continue;
                 }
 
                 _dbContext.AclEntries.Add(new AclEntry
@@ -896,7 +927,7 @@ public sealed class RepositoryImporter
     private sealed record ArchiveLabel(string Name, int Rank, string? Color, bool Watermark);
     private sealed record ArchiveMembership(Guid GroupId, Guid UserId);
     private sealed record ArchiveAcl(Guid DocumentId, Guid? UserId, Guid? GroupId, Guid? ServiceAccountId, bool CanSee, bool CanReadContent, bool CanEditContent, bool CanEditIndexData, bool CanDelete, bool CanCreateSubItems, bool CanMove, bool CanManagePermissions, bool CanAnnotate);
-    private sealed record ArchiveDocument(Guid Id, Guid? ParentId, string Name, Guid? MaskVersionId, string? SensitivityLabel, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt, bool BreaksInheritance);
+    private sealed record ArchiveDocument(Guid Id, Guid? ParentId, string Name, Guid? MaskVersionId, string? SensitivityLabel, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt, bool BreaksInheritance, Guid? PersonalOfUserId = null);
     private sealed record ArchiveVersion(Guid Id, Guid DocumentId, int? VersionNumber, string DocumentDate, DateTimeOffset FiledAt, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, string? Sha256, string? FileExtension, string? OcrLanguages, string? Comment, string? BlobRef);
     private sealed record ArchiveChatMessage(Guid Id, Guid DocumentId, Guid? ParentMessageId, string Body, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt);
 

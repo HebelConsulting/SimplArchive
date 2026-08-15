@@ -48,7 +48,7 @@ public class RepositoryClassificationTests
 
     private static RepositoryImporter Importer(SimplArchiveDbContext db, DictStorage storage, CurrentTenantAccessor accessor) =>
         new(db, storage, accessor, new WellKnownMaskSeeder(db),
-            new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance), NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance);
+            new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance), NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance, new SimplArchive.Api.Documents.PersonalRepositoryProvisioner(db, NoOpAuditRecorder.Instance));
 
     // Seeds tenant A: a "Confidential" label (rank 3, watermarked), a custom "Contract" mask defaulting to it, and a
     // root document labelled Confidential + created by jane (clearance 5). Returns the export bytes (permissions on).
