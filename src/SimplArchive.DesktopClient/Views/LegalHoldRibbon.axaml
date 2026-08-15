@@ -1,0 +1,28 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.LegalHoldRibbon"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- Legal holds ribbon (#530, tranche 5). New hold first; release SEPARATED, by decision — it is not a
+         delete, but it removes legal protection from every frozen document, and a consequential action keeps
+         its distance from the button that creates. Greyed when no ACTIVE hold is selected (a released hold
+         offers no release); refresh last. The dialogs need the window as their parent, so both Clicks
+         forward there. -->
+    <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+        <WrapPanel Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="lh-new" Click="OnNewHold"
+                        ToolTip.Tip="{loc:Tr LhNewHold}"><i:Icon Value="mdi-plus" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="lh-release" IsEnabled="{Binding SelectedHoldIsActive}"
+                        Click="OnRelease" ToolTip.Tip="{loc:Tr LhRelease}"><i:Icon Value="mdi-lock-open-outline" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+                <Button Command="{Binding LoadLegalHoldsCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
+            </StackPanel>
+        </WrapPanel>
+    </Border>
+</UserControl>

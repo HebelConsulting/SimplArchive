@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.LegalHoldRow"
+             x:DataType="vm:LegalHoldRowViewModel">
+    <!-- One legal-hold matter (#530, tranche 5): what it IS, and a context menu for what can be done to it.
+         Release is HIDDEN on a released hold — the menu hides what is unavailable, the ribbon greys it
+         (ADR 0554). Opening the menu makes the row the selection first, so it acts on the row it was opened
+         from (ADR 0559 — the window's release handler keys on the selection). -->
+    <StackPanel Orientation="Horizontal" Spacing="8" Background="Transparent">
+        <i:Icon Value="{Binding IconValue}" Foreground="#d9a400" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" />
+        <StackPanel.ContextMenu>
+            <ContextMenu Opening="OnMenuOpening">
+                <MenuItem Header="{loc:Tr LhRelease}" Click="OnRelease" IsVisible="{Binding IsActive}">
+                    <MenuItem.Icon><i:Icon Value="mdi-lock-open-outline" /></MenuItem.Icon>
+                </MenuItem>
+            </ContextMenu>
+        </StackPanel.ContextMenu>
+    </StackPanel>
+</UserControl>

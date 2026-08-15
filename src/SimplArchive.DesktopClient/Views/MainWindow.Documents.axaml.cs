@@ -27,7 +27,7 @@ public partial class MainWindow
         }
     });
 
-    private void OnNewLegalHold(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnNewLegalHold(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && await new LegalHoldDialog().ShowDialog<LegalHoldDialog.Result?>(this) is { } result)
         {
@@ -35,7 +35,7 @@ public partial class MainWindow
         }
     });
 
-    private void OnReleaseLegalHold(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnReleaseLegalHold(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.SelectedLegalHold is not { } hold)
         {

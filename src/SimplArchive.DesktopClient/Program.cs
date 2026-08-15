@@ -614,6 +614,11 @@ internal static class Program
                 viewModel.RecycleBin.PopulateDemoForScreenshot();
                 viewModel.SelectedTab = 4; // Recycle bin tab
             }
+            else if (Environment.GetCommandLineArgs().Contains("--legalholds"))
+            {
+                viewModel.PopulateLegalHoldsDemoForScreenshot();
+                viewModel.SelectedTab = 8; // Legal holds tab
+            }
             else if (Environment.GetCommandLineArgs().Contains("--retention"))
             {
                 viewModel.PopulateRetentionDemoForScreenshot();

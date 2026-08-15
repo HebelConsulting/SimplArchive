@@ -1827,26 +1827,22 @@
             <TabItem ToolTip.Tip="{loc:Tr TabLegalHolds}" IsVisible="{Binding CanLegalHold}">
                 <TabItem.Header><i:Icon Value="mdi-gavel" FontSize="20" /></TabItem.Header>
                 <DockPanel LastChildFill="True" Margin="8">
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,6">
-                        <Button Content="{loc:Tr LhNewHold}" Click="OnNewLegalHold" />
-                        <Button Content="{loc:Tr RibbonRefresh}" Command="{Binding LoadLegalHoldsCommand}" />
-                    </StackPanel>
-                    <Grid ColumnDefinitions="300,*">
+                    <!-- The ribbon is its own control (#530 tranche 5); Release moved into it (and each row's
+                         context menu) from the detail-pane header, by decision. -->
+                    <v:LegalHoldRibbon DockPanel.Dock="Top" />
+                    <Grid ColumnDefinitions="300,*" Margin="0,8,0,0">
                         <ListBox Grid.Column="0" ItemsSource="{Binding LegalHolds}" SelectedItem="{Binding SelectedLegalHold}"
                                  BorderBrush="{DynamicResource WbBorder}" BorderThickness="1">
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:LegalHoldRowViewModel">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <i:Icon Value="{Binding IconValue}" Foreground="#d9a400" VerticalAlignment="Center" />
-                                        <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" />
-                                    </StackPanel>
+                                    <!-- The row and its menu are their own control (#530 tranche 5). -->
+                                    <v:LegalHoldRow />
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
                         <DockPanel Grid.Column="1" Margin="10,0,0,0" LastChildFill="True" IsVisible="{Binding HasSelectedHold}">
                             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
                                 <TextBlock Text="{Binding SelectedLegalHold.Name}" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
-                                <Button Content="{loc:Tr LhRelease}" Click="OnReleaseLegalHold" IsVisible="{Binding SelectedHoldIsActive}" />
                             </StackPanel>
                             <TextBlock DockPanel.Dock="Top" Text="{loc:Tr MwDocuments}" FontWeight="SemiBold" Margin="0,0,0,4" />
                             <ScrollViewer>
@@ -1859,7 +1855,10 @@
                                                         <i:Icon Value="mdi-file-document-outline" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                                                         <TextBlock Text="{Binding DocumentName}" VerticalAlignment="Center" />
                                                     </StackPanel>
-                                                    <Button Grid.Column="1" Content="{loc:Tr UgRemove}" Click="OnRemoveLegalHoldItem" Tag="{Binding}" />
+                                                    <!-- Direct ✕, by decision — a sub-list with exactly one action needs no menu
+                                                         (the U&G group-members precedent). -->
+                                                    <Button Grid.Column="1" Click="OnRemoveLegalHoldItem" Tag="{Binding}" Padding="4,2"
+                                                            ToolTip.Tip="{loc:Tr LhRemoveFromHold}"><i:Icon Value="mdi-close" FontSize="14" /></Button>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
