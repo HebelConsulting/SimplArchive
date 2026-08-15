@@ -4140,4 +4140,13 @@
   <data name="InboxPagesRemoveConfirm" xml:space="preserve">
     <value>{0} page(s) will be deleted from this document. This cannot be undone. Continue?</value>
   </data>
+  <data name="CoBulkCheckedIn" xml:space="preserve">
+    <value>Checked in {0} of {1} document(s).</value>
+  </data>
+  <data name="CoBulkDiscardConfirm" xml:space="preserve">
+    <value>Discard the changes to {0} documents and release their check-outs?</value>
+  </data>
+  <data name="CoBulkDiscarded" xml:space="preserve">
+    <value>Discarded {0} of {1} check-out(s).</value>
+  </data>
 </root>

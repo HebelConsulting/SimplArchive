@@ -4140,4 +4140,13 @@
   <data name="InboxPagesRemoveConfirm" xml:space="preserve">
     <value>{0} pagina/e verranno eliminate da questo documento. L&#x27;operazione non può essere annullata. Continuare?</value>
   </data>
+  <data name="CoBulkCheckedIn" xml:space="preserve">
+    <value>Archiviati {0} di {1} documento/i.</value>
+  </data>
+  <data name="CoBulkDiscardConfirm" xml:space="preserve">
+    <value>Scartare le modifiche a {0} documenti e rilasciare i loro check-out?</value>
+  </data>
+  <data name="CoBulkDiscarded" xml:space="preserve">
+    <value>Scartati {0} di {1} check-out.</value>
+  </data>
 </root>

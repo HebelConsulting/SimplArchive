@@ -4140,4 +4140,13 @@
   <data name="InboxPagesRemoveConfirm" xml:space="preserve">
     <value>{0} Seite(n) werden aus diesem Dokument gelöscht. Das kann nicht rückgängig gemacht werden. Fortfahren?</value>
   </data>
+  <data name="CoBulkCheckedIn" xml:space="preserve">
+    <value>{0} von {1} Dokument(en) eingecheckt.</value>
+  </data>
+  <data name="CoBulkDiscardConfirm" xml:space="preserve">
+    <value>Änderungen an {0} Dokumenten verwerfen und deren Check-outs freigeben?</value>
+  </data>
+  <data name="CoBulkDiscarded" xml:space="preserve">
+    <value>{0} von {1} Check-out(s) verworfen.</value>
+  </data>
 </root>

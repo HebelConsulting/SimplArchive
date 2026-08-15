@@ -4140,4 +4140,13 @@
   <data name="InboxPagesRemoveConfirm" xml:space="preserve">
     <value>Se eliminarán {0} página(s) de este documento. Esto no se puede deshacer. ¿Continuar?</value>
   </data>
+  <data name="CoBulkCheckedIn" xml:space="preserve">
+    <value>Se registraron {0} de {1} documento(s).</value>
+  </data>
+  <data name="CoBulkDiscardConfirm" xml:space="preserve">
+    <value>¿Descartar los cambios de {0} documentos y liberar sus bloqueos?</value>
+  </data>
+  <data name="CoBulkDiscarded" xml:space="preserve">
+    <value>Se descartaron {0} de {1} bloqueo(s).</value>
+  </data>
 </root>

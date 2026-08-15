@@ -1013,7 +1013,8 @@
                              window now, and the wide table this replaced pushed the document NAME off the left
                              edge — the one column nobody can do without. Path and expiry ride under the name;
                              everything else is a tooltip. Same shape as the Inbox list, for the same reason. -->
-                        <ListBox ItemsSource="{Binding Checkout.Items}" SelectedItem="{Binding Checkout.SelectedRow}"
+                        <ListBox x:Name="CheckoutList" ItemsSource="{Binding Checkout.Items}" SelectedItem="{Binding Checkout.SelectedRow}"
+                                 SelectionMode="Multiple" SelectionChanged="OnCheckoutSelectionChanged"
                                  Background="Transparent" BorderThickness="0">
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:CheckoutRowViewModel">

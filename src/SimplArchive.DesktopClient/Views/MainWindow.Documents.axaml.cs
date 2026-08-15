@@ -287,11 +287,59 @@ public partial class MainWindow
         }
     });
 
+    // The Check-out selection, kept on the view-model so ribbon gates + bulk actions see how many rows are
+    // highlighted — SelectedRow alone cannot say (#521, the multi-select piece).
+    private void OnCheckoutSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm)
+        {
+            vm.Checkout.SetSelection(CheckoutList.SelectedItems?.OfType<CheckoutRowViewModel>().ToList() ?? []);
+        }
+    }
+
+    // A row's context menu hands over its own row as the Tag and means THAT row; a ribbon button hands over
+    // nothing and means the whole selection — the same two scopes CheckoutRowFrom resolves for the single-row
+    // actions, extended to a list for the verbs that compose (#521).
+    private IReadOnlyList<CheckoutRowViewModel> CheckoutRowsFrom(object? sender, MainWindowViewModel vm) =>
+        (sender as Control)?.Tag is CheckoutRowViewModel tagged ? [tagged]
+        : vm.Checkout.Selection.Count > 0 ? vm.Checkout.Selection
+        : vm.Checkout.SelectedRow is { } single ? [single]
+        : [];
+
+    // Check in the selection — one document or many; the view-model routes a single row through the single-row
+    // path so its wording stays what it was.
+    internal void OnCheckoutCheckIn(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm)
+        {
+            await vm.Checkout.CheckInSelectionAsync(CheckoutRowsFrom(sender, vm));
+        }
+    });
+
     // Discard a checked-out document's changes (ADR "Document check-out / check-in"; ADR 0513) — confirmed, since it
-    // abandons the working copy in check-out and releases the lock without creating a new version.
+    // abandons the working copy in check-out and releases the lock without creating a new version. For a
+    // multi-selection the confirmation names the COUNT, because "are you sure?" without a scope invites a yes
+    // to a question the user did not read.
     internal void OnCheckoutDiscard(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
-        if (DataContext is MainWindowViewModel vm && CheckoutRowFrom(sender, vm) is { } row
+        if (DataContext is not MainWindowViewModel vm)
+        {
+            return;
+        }
+
+        var rows = CheckoutRowsFrom(sender, vm);
+        if (rows.Count > 1)
+        {
+            var eligible = rows.Count(r => r.CanDiscard);
+            if (await new ConfirmDialog(string.Format(Strings.Get("CoBulkDiscardConfirm"), eligible), "Discard").ShowDialog<bool>(this))
+            {
+                await vm.Checkout.DiscardSelectionAsync(rows);
+            }
+
+            return;
+        }
+
+        if (rows.FirstOrDefault() is { } row
             && await new ConfirmDialog($"Discard the changes to '{row.Name}' and release the check-out?", "Discard").ShowDialog<bool>(this))
         {
             await vm.Checkout.DiscardAsync(row);

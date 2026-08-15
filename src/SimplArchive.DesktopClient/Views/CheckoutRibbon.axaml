@@ -23,15 +23,20 @@
                 <Button AutomationProperties.AutomationId="checkout-edit" IsEnabled="{Binding Checkout.HasSelectedRow}"
                         Command="{Binding Checkout.EditCommand}" CommandParameter="{Binding Checkout.SelectedRow}"
                         ToolTip.Tip="{loc:Tr CoEditTip}"><i:Icon Value="mdi-pencil-outline" FontSize="18" /></Button>
-                <Button AutomationProperties.AutomationId="checkout-compare" IsEnabled="{Binding Checkout.SelectedCanCheckIn}"
+                <!-- Single-subject verbs (one diff has one document), so they gate on a SINGLE modified
+                     selection — while check-in and discard below compose across many (#521). -->
+                <Button AutomationProperties.AutomationId="checkout-compare" IsEnabled="{Binding Checkout.SelectedIsSingleModified}"
                         Click="OnCheckoutCompare" ToolTip.Tip="{loc:Tr CoCompare}"><i:Icon Value="mdi-compare-horizontal" FontSize="18" /></Button>
-                <Button AutomationProperties.AutomationId="checkout-beyondcompare" IsEnabled="{Binding Checkout.SelectedCanCheckIn}"
+                <Button AutomationProperties.AutomationId="checkout-beyondcompare" IsEnabled="{Binding Checkout.SelectedIsSingleModified}"
                         Click="OnCheckoutBeyondCompare" ToolTip.Tip="{loc:Tr CoBeyondCompare}"><i:Icon Value="mdi-compare" FontSize="18" /></Button>
             </StackPanel>
-            <!-- Finish: the two ways a check-out ENDS well — commit the work, or release it unchanged. -->
+            <!-- Finish: the two ways a check-out ENDS well — commit the work, or release it unchanged.
+                 Check in composes across a multi-selection (N check-ins, one summary), so it routes through
+                 the window like discard does, instead of binding a single-row command to SelectedRow — which
+                 with several rows highlighted would silently commit only one of them (#521). -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
                 <Button AutomationProperties.AutomationId="checkout-checkin" IsEnabled="{Binding Checkout.SelectedCanCheckIn}"
-                        Command="{Binding Checkout.CheckInCommand}" CommandParameter="{Binding Checkout.SelectedRow}"
+                        Click="OnCheckoutCheckIn"
                         ToolTip.Tip="{loc:Tr CoCheckIn}"><i:Icon Value="mdi-check" FontSize="18" /></Button>
                 <Button AutomationProperties.AutomationId="checkout-unlock" IsEnabled="{Binding Checkout.SelectedCanUnlock}"
                         Command="{Binding Checkout.UnlockCommand}" CommandParameter="{Binding Checkout.SelectedRow}"

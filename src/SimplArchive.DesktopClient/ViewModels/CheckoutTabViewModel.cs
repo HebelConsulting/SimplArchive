@@ -78,15 +78,45 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     // What the Check-out ribbon gates on (#521). The row's own Can* answer for the SELECTION, so a ribbon
     // button greys out for the same reasons its context-menu twin disappears — the two surfaces never disagree
     // about whether an action is possible, only about which item it means.
-    public bool HasSelectedRow => SelectedRow is not null;
+    //
+    // With multi-select (#521's last piece) the gates split by what the verb MEANS across several documents.
+    // Check in and discard are per-document verbs that compose — "check in the selection" is N check-ins with
+    // one summary — so they gate on ANY selected row allowing them. Edit, compare, unlock and extend are
+    // single-subject verbs (one working copy, one diff, one lease), so they additionally require the selection
+    // to be exactly one: a button that would act on one of three highlighted rows is claiming a scope it does
+    // not have, which is the ADR 0559 shape of lie.
+    public bool HasSelectedRow => Selection.Count == 1;
 
-    public bool SelectedCanCheckIn => SelectedRow?.CanCheckIn == true;
+    public bool SelectedCanCheckIn => Selection.Any(r => r.CanCheckIn);
 
-    public bool SelectedCanDiscard => SelectedRow?.CanDiscard == true;
+    public bool SelectedCanDiscard => Selection.Any(r => r.CanDiscard);
 
-    public bool SelectedCanUnlock => SelectedRow?.CanUnlock == true;
+    public bool SelectedCanUnlock => Selection.Count == 1 && SelectedRow?.CanUnlock == true;
 
-    public bool SelectedCanExtend => SelectedRow?.CanExtend == true;
+    public bool SelectedCanExtend => Selection.Count == 1 && SelectedRow?.CanExtend == true;
+
+    public bool SelectedIsSingleModified => Selection.Count == 1 && SelectedRow?.CanCheckIn == true;
+
+    private IReadOnlyList<CheckoutRowViewModel> _selection = [];
+
+    /// <summary>
+    /// Every selected row, set by the view on SelectionChanged — SelectedRow alone cannot say how many. Falls
+    /// back to the single SelectedRow so a selection made programmatically (tests, the headless screenshot
+    /// renders) gates the ribbon the same way a clicked one does.
+    /// </summary>
+    public IReadOnlyList<CheckoutRowViewModel> Selection =>
+        _selection.Count > 0 ? _selection : SelectedRow is { } one ? [one] : [];
+
+    public void SetSelection(IReadOnlyList<CheckoutRowViewModel> rows)
+    {
+        _selection = rows;
+        OnPropertyChanged(nameof(HasSelectedRow));
+        OnPropertyChanged(nameof(SelectedCanCheckIn));
+        OnPropertyChanged(nameof(SelectedCanDiscard));
+        OnPropertyChanged(nameof(SelectedCanUnlock));
+        OnPropertyChanged(nameof(SelectedCanExtend));
+        OnPropertyChanged(nameof(SelectedIsSingleModified));
+    }
 
     partial void OnSelectedRowChanged(CheckoutRowViewModel? value) => _ = LoadDetailAsync(value);
 
@@ -285,6 +315,100 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     // Discard: abandon the working copy — release the lock (which drops the stash) without a new version. The
     // confirmation dialog lives in the code-behind (data loss).
     public Task DiscardAsync(CheckoutRowViewModel row) => ReleaseAsync(row, discard: true);
+
+    // ---- Bulk (#521's last piece): the ribbon's check-in and discard act on the whole selection. ----------
+    //
+    // No server bulk endpoint exists for check-out, so the client iterates and reports ONE summary in the
+    // established bulk shape ("{ok} of {n}") rather than N status lines. A selected row that cannot take the
+    // verb — an unmodified row under a bulk check-in — is skipped, not failed: the ribbon gate only promises
+    // that SOME row can. And a failure does not stop the loop: the remaining documents are not hostages of the
+    // first bad one, which is the partial-failure story the web's bulk-move path already tells. A single-row
+    // selection routes through the single-row method so its wording and per-error reporting stay exactly what
+    // they were.
+
+    public async Task CheckInSelectionAsync(IReadOnlyList<CheckoutRowViewModel> rows)
+    {
+        if (rows.Count <= 1)
+        {
+            await CheckIn(rows.FirstOrDefault());
+            return;
+        }
+
+        var eligible = rows.Where(r => r.CanCheckIn).ToList();
+        var succeeded = 0;
+        foreach (var row in eligible)
+        {
+            if (await TryCheckInAsync(row))
+            {
+                succeeded++;
+            }
+        }
+
+        Report(string.Format(Strings.Get("CoBulkCheckedIn"), succeeded, eligible.Count));
+        await ReloadAllAsync();
+    }
+
+    public async Task DiscardSelectionAsync(IReadOnlyList<CheckoutRowViewModel> rows)
+    {
+        if (rows.Count <= 1)
+        {
+            if (rows.FirstOrDefault() is { } single)
+            {
+                await DiscardAsync(single);
+            }
+
+            return;
+        }
+
+        var eligible = rows.Where(r => r.CanDiscard).ToList();
+        var succeeded = 0;
+        foreach (var row in eligible)
+        {
+            if (await TryDiscardAsync(row))
+            {
+                succeeded++;
+            }
+        }
+
+        Report(string.Format(Strings.Get("CoBulkDiscarded"), succeeded, eligible.Count));
+        await ReloadAllAsync();
+    }
+
+    private async Task<bool> TryCheckInAsync(CheckoutRowViewModel row)
+    {
+        if (_api is null || row.Item is not { } checkout)
+        {
+            return false;
+        }
+
+        try
+        {
+            await _api.CheckInFromStashAsync(checkout);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private async Task<bool> TryDiscardAsync(CheckoutRowViewModel row)
+    {
+        if (_api is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            await _api.CheckInAsync(row.Id); // DELETE the check-out — releases the lock + clears the stash
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
 
     private async Task ReleaseAsync(CheckoutRowViewModel? row, bool discard)
     {

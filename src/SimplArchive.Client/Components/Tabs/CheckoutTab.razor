@@ -38,7 +38,11 @@
            different SCOPE: the menu acts on its own row, these on the selection. Disabled, not hidden, when
            there is nothing selected. Discard (Cancel check-out) is deliberately LAST and separated: it throws
            the work away, and would otherwise sit beside the button that commits it. *@
-        <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selected is null)"
+        @* Single-subject verbs — download, upload, compare, extend — additionally require the selection to be
+           exactly ONE row: with several highlighted, a button that would act on just one of them claims a
+           scope it does not have (ADR 0559's shape of lie). Check in and Cancel compose across the selection
+           instead: N operations, one summary, the established bulk partial-failure story. *@
+        <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selected is null || _selectedIds.Count > 1)"
                    OnClick="@(() => DownloadFromStashAsync(_selected!))"
                    title="@Strings.Get("CoDownloadStash")" aria-label="@Strings.Get("CoDownloadStash")">
             <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CoDownloadStash")</span>
@@ -54,30 +58,30 @@
            it, and why moving it here is the fix rather than a workaround. *@
         <MudFileUpload T="IBrowserFile" FilesChanged="@(f => UploadToStashAsync(_selected!, f))" Class="d-inline-flex">
             <CustomContent Context="upload">
-                <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selected is null)"
+                <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selected is null || _selectedIds.Count > 1)"
                            OnClick="@(() => upload.OpenFilePickerAsync())"
                            title="@Strings.Get("CoUploadStash")" aria-label="@Strings.Get("CoUploadStash")">
                     <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CoUploadStash")</span>
                 </MudButton>
             </CustomContent>
         </MudFileUpload>
-        <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selected?.IsModified != true)"
+        <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selected?.IsModified != true || _selectedIds.Count > 1)"
                    OnClick="@(() => OpenCompareCheckoutAsync(_selected!))"
                    title="@Strings.Get("CoCompare")" aria-label="@Strings.Get("CoCompare")">
             <MudIcon Icon="@Icons.Material.Filled.Difference" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CoCompare")</span>
         </MudButton>
-        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_selected?.IsModified != true)"
-                   OnClick="@(() => CheckInFromStashAsync(_selected!))"
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(!SelectedRows.Any(r => r.IsModified))"
+                   OnClick="CheckInSelectionAsync"
                    title="@Strings.Get("CoCheckIn")" aria-label="@Strings.Get("CoCheckIn")">
             <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CoCheckIn")</span>
         </MudButton>
-        <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selected?.ExpiresAt is null)"
+        <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selected?.ExpiresAt is null || _selectedIds.Count > 1)"
                    OnClick="@(() => ExtendCheckoutAsync(_selected!))"
                    title="@Strings.Get("CoExtend")" aria-label="@Strings.Get("CoExtend")">
             <MudIcon Icon="@Icons.Material.Filled.MoreTime" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CoExtend")</span>
         </MudButton>
-        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_selected is null)"
-                   OnClick="@(() => CancelCheckoutAsync(_selected!))"
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_selectedIds.Count == 0)"
+                   OnClick="CancelSelectionAsync"
                    title="@Strings.Get("CoCancel")" aria-label="@Strings.Get("CoCancel")">
             <MudIcon Icon="@Icons.Material.Filled.LockOpen" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CoCancel")</span>
         </MudButton>
@@ -102,7 +106,7 @@
             {
                 @* The row is the SUBJECT of the detail panes, so selecting it is what drives them. Same shape as
                    the Inbox list: name over path, the state that matters as a chip, actions in a menu. *@
-                <div class="wb-list-row @(c.Id == _selected?.Id ? "wb-list-row-selected" : "")" @onclick="() => SelectAsync(c)">
+                <div class="wb-list-row @(_selectedIds.Contains(c.Id) ? "wb-list-row-selected" : "")" @onclick="e => OnRowClickAsync(c, e)">
                     <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" />
                     <span style="flex:1 1 auto; min-width:0; overflow:hidden;">
                         <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@c.Name@c.FileExtension</div>
@@ -195,6 +199,51 @@
     private const string WebDavFolder = "Personal/Check-out";
 
     private CheckoutDto? _selected;
+
+    // Native multi-selection, the Repositories/Inbox shape (#521's last piece): Ctrl/Cmd-click toggles a row
+    // into the set, Shift-click takes the range from the anchor, a plain click makes the clicked row the whole
+    // set (and the detail pane's subject). _selected stays the single detail subject; _selectedIds is what the
+    // bulk verbs act on.
+    private readonly HashSet<Guid> _selectedIds = [];
+    private CheckoutDto? _selectionAnchor;
+
+    private IReadOnlyList<CheckoutDto> SelectedRows => Checkouts.Where(c => _selectedIds.Contains(c.Id)).ToList();
+
+    private async Task OnRowClickAsync(CheckoutDto c, Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
+    {
+        if (e.CtrlKey || e.MetaKey)
+        {
+            if (!_selectedIds.Remove(c.Id))
+            {
+                _selectedIds.Add(c.Id);
+            }
+
+            _selectionAnchor = c;
+            return;
+        }
+
+        if (e.ShiftKey && _selectionAnchor is { } anchor)
+        {
+            var order = Checkouts.Select(x => x.Id).ToList();
+            var a = order.IndexOf(anchor.Id);
+            var b = order.IndexOf(c.Id);
+            if (a >= 0 && b >= 0)
+            {
+                for (var i = Math.Min(a, b); i <= Math.Max(a, b); i++)
+                {
+                    _selectedIds.Add(order[i]);
+                }
+
+                return;
+            }
+        }
+
+        _selectedIds.Clear();
+        _selectedIds.Add(c.Id);
+        _selectionAnchor = c;
+        await SelectAsync(c);
+    }
+
     private List<FieldGroup> _indexFields = [];
     private PreviewPane? _preview;
     private (string? Url, bool Converted)? _pendingPreview;
@@ -356,6 +405,93 @@
     }
 
     // Cancel check-out: release the lock without committing (discards any stash server-side).
+    // ---- Bulk (#521's last piece): check in / cancel the whole selection. -----------------------------
+    //
+    // No server bulk endpoint exists for check-out, so the client iterates and reports ONE summary in the
+    // established bulk shape ("{ok} of {n}"), warning on partial failure — and a failure does not stop the
+    // loop, so the remaining documents are not hostages of the first bad one. A single-row selection routes
+    // through the single-row method, keeping its wording and its per-error snackbars exactly what they were.
+    // An unmodified row under a bulk check-in is skipped, not failed: the gate only promises SOME row can.
+
+    private async Task CheckInSelectionAsync()
+    {
+        var eligible = SelectedRows.Where(r => r.IsModified).ToList();
+        if (eligible.Count <= 1)
+        {
+            if (eligible.FirstOrDefault() is { } single)
+            {
+                await CheckInFromStashAsync(single);
+            }
+
+            return;
+        }
+
+        var succeeded = 0;
+        foreach (var row in eligible)
+        {
+            try
+            {
+                var resp = await Http.PostAsync(Href(row, "checkin"), null);
+                if (resp.IsSuccessStatusCode)
+                {
+                    succeeded++;
+                }
+            }
+            catch (Exception)
+            {
+                // counted by omission
+            }
+        }
+
+        Snackbar.Add(string.Format(Strings.Get("CoBulkCheckedIn"), succeeded, eligible.Count),
+            succeeded == eligible.Count ? Severity.Success : Severity.Warning);
+        _selectedIds.Clear();
+        await Refresh.InvokeAsync();
+        await Refresh.InvokeAsync();
+    }
+
+    private async Task CancelSelectionAsync()
+    {
+        var rows = SelectedRows;
+        if (rows.Count <= 1)
+        {
+            if (rows.FirstOrDefault() is { } single)
+            {
+                await CancelCheckoutAsync(single);
+            }
+
+            return;
+        }
+
+        if (!await Confirm(string.Format(Strings.Get("CoBulkDiscardConfirm"), rows.Count), Strings.Get("CoCancelTitle")))
+        {
+            return;
+        }
+
+        var succeeded = 0;
+        foreach (var row in rows)
+        {
+            try
+            {
+                var resp = await Http.DeleteAsync(Href(row, "cancel-checkout"));
+                if (resp.IsSuccessStatusCode)
+                {
+                    succeeded++;
+                }
+            }
+            catch (Exception)
+            {
+                // counted by omission
+            }
+        }
+
+        Snackbar.Add(string.Format(Strings.Get("CoBulkDiscarded"), succeeded, rows.Count),
+            succeeded == rows.Count ? Severity.Success : Severity.Warning);
+        _selectedIds.Clear();
+        await Refresh.InvokeAsync();
+        await Refresh.InvokeAsync();
+    }
+
     private async Task CancelCheckoutAsync(CheckoutDto c)
     {
         if (!await Confirm(string.Format(Strings.Get("CoConfirmCancel"), c.Name), Strings.Get("CoCancelTitle"))) return;
