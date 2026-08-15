@@ -1608,21 +1608,15 @@
                     <TextBlock DockPanel.Dock="Top" Text="{loc:Tr TasksEmpty}"
                                Foreground="{DynamicResource WbFaint}" IsVisible="{Binding !HasTasks}" />
                     <ScrollViewer IsVisible="{Binding HasTasks}">
-                        <ItemsControl ItemsSource="{Binding Tasks}" MaxWidth="820" HorizontalAlignment="Left">
-                            <ItemsControl.ItemTemplate>
+                        <ListBox ItemsSource="{Binding Tasks}" SelectedItem="{Binding SelectedTaskRow}" MaxWidth="820" HorizontalAlignment="Left"
+                                 Background="Transparent" BorderThickness="0">
+                            <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:TaskItemViewModel">
-                                    <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="0,8">
-                                        <Grid ColumnDefinitions="*,90,150,Auto">
-                                            <TextBlock Grid.Column="0" Text="{Binding DocumentName}" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="1" Text="{Binding VersionText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
-                                            <TextBlock Grid.Column="2" Text="{Binding AssignedText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
-                                            <Button Grid.Column="3" Content="{loc:Tr MwOpen}" Padding="10,3"
-                                                    Command="{ReflectionBinding $parent[ItemsControl].DataContext.OpenTaskCommand}" CommandParameter="{Binding}" />
-                                        </Grid>
-                                    </Border>
+                                    <!-- The row and its menu are their own control (#530 tranche 3). -->
+                                    <v:TaskRow />
                                 </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
                     </ScrollViewer>
                 </DockPanel>
             </TabItem>
@@ -1888,45 +1882,36 @@
             <TabItem ToolTip.Tip="{loc:Tr TabRetention}" IsVisible="{Binding CanManageClassification}">
                 <TabItem.Header><i:Icon Value="mdi-calendar-remove-outline" FontSize="20" /></TabItem.Header>
                 <DockPanel LastChildFill="True" Margin="8">
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,6">
+                    <!-- The ribbon is its own control (#530 tranche 2); the tenant's disposition-mode
+                         description is information, not an action, so it stays as a line beneath it. -->
+                    <v:RetentionRibbon DockPanel.Dock="Top" />
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,6,0,6">
                         <TextBlock Text="{loc:Tr MwRetDescAuto}"
                                    Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" TextWrapping="Wrap"
                                    IsVisible="{Binding !RetentionRequiresReview}" />
                         <TextBlock Text="{loc:Tr MwRetDescReview}"
                                    Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" TextWrapping="Wrap"
                                    IsVisible="{Binding RetentionRequiresReview}" />
-                        <Button Content="{loc:Tr RibbonRefresh}" Command="{Binding LoadRetentionScheduleCommand}" />
                     </StackPanel>
                     <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="1">
                         <DockPanel LastChildFill="True">
-                            <Grid DockPanel.Dock="Top" ColumnDefinitions="3*,110,170,150,150" Background="{DynamicResource WbChrome}">
+                            <Grid DockPanel.Dock="Top" ColumnDefinitions="3*,110,170,180" Background="{DynamicResource WbChrome}">
                                 <TextBlock Grid.Column="0" Text="{loc:Tr ColDocument}" FontWeight="SemiBold" Margin="6,4" />
                                 <TextBlock Grid.Column="1" Text="{loc:Tr TabRetention}" FontWeight="SemiBold" Margin="6,4" />
                                 <TextBlock Grid.Column="2" Text="{loc:Tr RetColDisposition}" FontWeight="SemiBold" Margin="6,4" />
                                 <TextBlock Grid.Column="3" Text="{loc:Tr WorkflowStatus}" FontWeight="SemiBold" Margin="6,4" />
-                                <TextBlock Grid.Column="4" Text="{loc:Tr VerColActions}" FontWeight="SemiBold" Margin="6,4" />
                             </Grid>
                             <ScrollViewer>
-                                <ItemsControl ItemsSource="{Binding RetentionItems}">
-                                    <ItemsControl.ItemTemplate>
+                                <ListBox ItemsSource="{Binding RetentionItems}" SelectedItem="{Binding SelectedRetentionRow}"
+                                         Background="Transparent" BorderThickness="0">
+                                    <ListBox.ItemTemplate>
                                         <DataTemplate x:DataType="vm:RetentionRowViewModel">
-                                            <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
-                                                <Grid ColumnDefinitions="3*,110,170,150,150">
-                                                    <TextBlock Grid.Column="0" Text="{Binding DocumentName}" Margin="6,3" TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Grid.Column="1" Text="{Binding Retention}" Margin="6,3" />
-                                                    <TextBlock Grid.Column="2" Text="{Binding DispositionDate}" Margin="6,3" TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Grid.Column="3" Text="{Binding Status}" Margin="6,3" Foreground="{DynamicResource WbMuted}" />
-                                                    <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="4,2">
-                                                        <Button Content="{loc:Tr RetDispose}" Padding="6,2" IsVisible="{Binding CanDispose}"
-                                                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.DisposeRetentionCommand}" CommandParameter="{Binding}" />
-                                                        <Button Content="{loc:Tr RetExtend}" Padding="6,2"
-                                                                Command="{ReflectionBinding $parent[ItemsControl].DataContext.ExtendRetentionCommand}" CommandParameter="{Binding}" />
-                                                    </StackPanel>
-                                                </Grid>
-                                            </Border>
+                                            <!-- The row, its columns and its context menu are their own control
+                                                 (#530 tranche 2); the ribbon acts on the selection. -->
+                                            <v:RetentionRow />
                                         </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
                             </ScrollViewer>
                         </DockPanel>
                     </Border>

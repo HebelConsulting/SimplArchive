@@ -12,7 +12,28 @@
    it offers is a rel the schedule advertised per row rather than a right this client re-derives. *@
 
             <div class="wb-retention" style="height:100%; display:flex; flex-direction:column;">
-                <div class="pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default); display:flex; align-items:center; gap:8px;">
+                @* The toolbar in the Repositories shape (#530 tranche 2): extend first, dispose SEPARATED
+                   (the destructive one), refresh last — icon-only, acting on THE selected row. Single-select
+                   by decision: disposition is a records call made document-by-document. Dispose is greyed
+                   unless the selected row's server offered it (the row menu HIDES the same case, ADR 0554). *@
+                <div class="wb-search-bar pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_retSelected is null)"
+                               OnClick="@(() => ExtendRetentionAsync(_retSelected!))"
+                               title="@Strings.Get("RetExtend")" aria-label="@Strings.Get("RetExtend")">
+                        <MudIcon Icon="@Icons.Material.Filled.MoreTime" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RetExtend")</span>
+                    </MudButton>
+                    <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_retSelected is not { Overdue: true, SuspendedByHold: false })"
+                               OnClick="@(() => DisposeRetentionAsync(_retSelected!))"
+                               title="@Strings.Get("RetDispose")" aria-label="@Strings.Get("RetDispose")">
+                        <MudIcon Icon="@Icons.Material.Filled.AutoDelete" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RetDispose")</span>
+                    </MudButton>
+                    <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" OnClick="LoadRetentionScheduleAsync"
+                               title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
+                        <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
+                    </MudButton>
+                </div>
+                @* The tenant's disposition-mode description is information, not an action — its own line. *@
+                <div class="pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
                         @if (_retentionRequiresReview)
                         {
@@ -23,16 +44,17 @@
                             @((MarkupString)Strings.Get("RetDescAuto"))
                         }
                     </MudText>
-                    <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Text" Size="Size.Small" OnClick="LoadRetentionScheduleAsync" Class="ml-auto">@Strings.Get("RibbonRefresh")</MudButton>
                 </div>
                 <div style="flex:1 1 auto; overflow:auto;">
-                    <MudTable Items="_retentionItems" Dense="true" Hover="true" Bordered="false" Elevation="0">
+                    <MudTable Items="_retentionItems" Dense="true" Hover="true" Bordered="false" Elevation="0" T="RetentionItemDto"
+                              OnRowClick="@((TableRowClickEventArgs<RetentionItemDto> e) => _retSelected = e.Item)"
+                              RowClassFunc="@((row, _) => row == _retSelected ? "wb-list-row-selected" : "")">
                         <HeaderContent>
                             <MudTh>@Strings.Get("ColDocument")</MudTh>
                             <MudTh>@Strings.Get("RetColRetention")</MudTh>
                             <MudTh>@Strings.Get("RetColDisposition")</MudTh>
                             <MudTh>@Strings.Get("RetColStatus")</MudTh>
-                            <MudTh>@Strings.Get("RetColActions")</MudTh>
+                            <MudTh Style="width:1px;"></MudTh>
                         </HeaderContent>
                         <RowTemplate Context="row">
                             <MudTd>@row.DocumentName</MudTd>
@@ -52,12 +74,16 @@
                                     <MudChip T="string" Size="Size.Small" Color="Color.Default">@Strings.Get("RetScheduled")</MudChip>
                                 }
                             </MudTd>
-                            <MudTd>
-                                @if (row.Overdue && !row.SuspendedByHold)
-                                {
-                                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="() => DisposeRetentionAsync(row)">@Strings.Get("RetDispose")</MudButton>
-                                }
-                                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => ExtendRetentionAsync(row)">@Strings.Get("RetExtend")</MudButton>
+                            @* What can be done to THIS row lives in its ⋮ menu — the toolbar's twins act on
+                               the selection (#521's split). Dispose only where the server offered it. *@
+                            <MudTd Style="text-align:right;" @onclick:stopPropagation="true">
+                                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
+                                    @if (row.Overdue && !row.SuspendedByHold)
+                                    {
+                                        <MudMenuItem Icon="@Icons.Material.Filled.AutoDelete" OnClick="() => DisposeRetentionAsync(row)">@Strings.Get("RetDispose")</MudMenuItem>
+                                    }
+                                    <MudMenuItem Icon="@Icons.Material.Filled.MoreTime" OnClick="() => ExtendRetentionAsync(row)">@Strings.Get("RetExtend")</MudMenuItem>
+                                </MudMenu>
                             </MudTd>
                         </RowTemplate>
                     </MudTable>
@@ -102,6 +128,9 @@
         }
         StateHasChanged();
     }
+
+    /// <summary>The row the toolbar acts on (#530 tranche 2) — single-select by decision.</summary>
+    private RetentionItemDto? _retSelected;
 
     private async Task DisposeRetentionAsync(RetentionItemDto row)
     {

@@ -53,7 +53,9 @@ public class WebRetentionDispositionTests
             throw new Xunit.Sdk.XunitException(
                 $"'{docName}' never showed 'Due for disposition'. /api/retention/schedule returned:\n{schedule}", e);
         }
-        await row.GetByRole(AriaRole.Button, new() { Name = "Dispose" }).ClickAsync();
+        // #530: the per-row Dispose button became the row's ⋮ menu entry.
+        await row.Locator("button.mud-icon-button").Last.ClickAsync();
+        await page.Locator(".mud-menu-item").Filter(new() { HasText = "Dispose" }).First.ClickAsync();
         await page.Locator(".mud-dialog").GetByRole(AriaRole.Button, new() { Name = "Dispose" }).ClickAsync();
 
         // It's disposed to the recycle bin — GET now 404s.

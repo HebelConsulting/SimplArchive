@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.RetentionRibbon"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- Retention ribbon (#530, tranche 2). Single-select by decision: disposition is a records call made
+         document-by-document, and the server offers no bulk endpoints here — so the ribbon acts on THE
+         selected row, greyed when there is none or when the server did not offer dispose for it (the row menu
+         hides the same cases). Dispose sits in its own group: it is the destructive one, and it would
+         otherwise sit beside the button that keeps the document longer. -->
+    <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+        <WrapPanel Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="ret-extend" IsEnabled="{Binding HasSelectedRetentionRow}"
+                        Command="{Binding ExtendRetentionCommand}" CommandParameter="{Binding SelectedRetentionRow}"
+                        ToolTip.Tip="{loc:Tr RetExtend}"><i:Icon Value="mdi-clock-plus-outline" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="ret-dispose" IsEnabled="{Binding SelectedRetentionCanDispose}"
+                        Command="{Binding DisposeRetentionCommand}" CommandParameter="{Binding SelectedRetentionRow}"
+                        ToolTip.Tip="{loc:Tr RetDispose}"><i:Icon Value="mdi-delete-clock-outline" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+                <Button Command="{Binding LoadRetentionScheduleCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
+            </StackPanel>
+        </WrapPanel>
+    </Border>
+</UserControl>

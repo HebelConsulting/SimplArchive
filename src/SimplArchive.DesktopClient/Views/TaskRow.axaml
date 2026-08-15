@@ -1,0 +1,26 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.TaskRow"
+             x:DataType="vm:TaskItemViewModel">
+    <!-- One pending task, the Repositories shape (#530, tranche 3): what it IS, and a context menu for what
+         you can do to it. The per-row labeled Open button and its ReflectionBinding reach-around are gone; the
+         ribbon's twin acts on the selection. Restructure only, by decision: approve/reject stay in the detail
+         a task opens into — approving from a list row without seeing the document invites rubber-stamping. -->
+    <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="0,8">
+        <Grid ColumnDefinitions="*,90,150">
+            <TextBlock Grid.Column="0" Text="{Binding DocumentName}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="{Binding VersionText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
+            <TextBlock Grid.Column="2" Text="{Binding AssignedText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
+            <Grid.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="{loc:Tr MwOpen}" Click="OnOpen">
+                        <MenuItem.Icon><i:Icon Value="mdi-open-in-new" /></MenuItem.Icon>
+                    </MenuItem>
+                </ContextMenu>
+            </Grid.ContextMenu>
+        </Grid>
+    </Border>
+</UserControl>
