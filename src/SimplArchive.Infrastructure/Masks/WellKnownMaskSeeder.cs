@@ -27,6 +27,25 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // is named after its file, ADR "Drag-and-drop document upload"), the latter duplicates the real
         // DocumentVersion.DocumentDate issuing date (ADR "System-field search"). See ADR "Drop redundant
         // Short Description / Doc Date mask fields".
+        // The personal-space mask (ADR 0590) — optional fields, because a personal space must exist before
+        // anybody has filled anything in.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.UserFolder, "User Folder",
+        [
+            new FieldSpec("Full name", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Title", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Degree", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Position", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Department", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Company", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Office", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Location", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Abbreviation", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Telephone", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Mobile", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Fax", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Email", FieldDataType.Text, IsRequired: false),
+        ], cancellationToken);
+
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.BasicEntry, "Basic Entry",
         [
             new FieldSpec("Keywords", FieldDataType.Text, IsRequired: false),

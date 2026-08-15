@@ -232,6 +232,18 @@ public sealed class RepositoryImporter
                 {
                     var personal = await _personalRepositories.EnsureAsync(ownerId, tenantId, cancellationToken);
                     docMap[doc.Id] = personal.Id;
+
+                    // The archive's mask travels onto the existing root (ADR 0590). Without this the personal
+                    // repository keeps the Folder mask it was created with while its INDEX VALUES — which follow
+                    // docMap — land on it regardless, leaving field values whose definitions belong to a mask the
+                    // document does not wear. The source system keeps real metadata on a user's home folder
+                    // (telephone, e-mail address), and that is the mask worth carrying.
+                    if (doc.MaskVersionId is { } archiveMaskVersionId
+                        && maskVersionMap.TryGetValue(archiveMaskVersionId, out var targetMaskVersionId))
+                    {
+                        personal.MaskVersionId = targetMaskVersionId;
+                    }
+
                     continue;
                 }
 

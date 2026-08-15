@@ -3,6 +3,7 @@ using SimplArchive.Api.Controllers;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Acl;
 using SimplArchive.Domain.Documents;
+using SimplArchive.Domain.Masks;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Documents;
@@ -56,7 +57,12 @@ public sealed class PersonalRepositoryProvisioner
             ParentId = null,
             Name = PersonalRepositoryName,
             PersonalOfUserId = userId,
-            MaskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken),
+            // Tenant-EXPLICIT (ADR 0590): this method already has the tenant, and resolving the mask through the
+            // ambient one instead made a personal repository come out with no mask whenever the caller had no
+            // current tenant set — the same defect ADR 0582 fixed for a tenant's first repository. Taking it from
+            // the parameter removes the dependency on caller context altogether.
+            MaskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, WellKnownMaskIds.UserFolder, cancellationToken)
+                ?? await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, cancellationToken),
             CreatedByUserId = userId,
             CreatedAt = DateTimeOffset.UtcNow,
         };

@@ -22,10 +22,15 @@ public static class FolderMask
     // PlatformAdministrator drives with no tenant of its own. The tenant filter would match zero rows there
     // (the standing rule for pre-tenant lookups, e.g. TokenController), so it is named-ignored and the tenant
     // supplied explicitly — otherwise a tenant's first repository silently comes out with no mask at all.
-    public static async Task<Guid?> CurrentVersionIdAsync(SimplArchiveDbContext dbContext, Guid tenantId, CancellationToken cancellationToken) =>
+    public static Task<Guid?> CurrentVersionIdAsync(SimplArchiveDbContext dbContext, Guid tenantId, CancellationToken cancellationToken) =>
+        CurrentVersionIdAsync(dbContext, tenantId, WellKnownMaskIds.Folder, cancellationToken);
+
+    /// <summary>Any well-known mask's current version for a given tenant — the personal-space mask included
+    /// (ADR 0590). Returns null when that mask is not seeded, so a caller can fall back rather than fail.</summary>
+    public static async Task<Guid?> CurrentVersionIdAsync(SimplArchiveDbContext dbContext, Guid tenantId, Guid maskId, CancellationToken cancellationToken) =>
         await dbContext.MaskVersions
             .IgnoreQueryFilters(["TenantFilter"])
-            .Where(mv => mv.TenantId == tenantId && mv.MaskId == WellKnownMaskIds.Folder && mv.IsCurrent)
+            .Where(mv => mv.TenantId == tenantId && mv.MaskId == maskId && mv.IsCurrent)
             .Select(mv => (Guid?)mv.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
