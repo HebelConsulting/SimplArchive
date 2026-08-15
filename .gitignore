@@ -107,3 +107,6 @@ src/SimplArchive.DesktopClient/--*
 
 # Local-only connection settings + credentials for the private interop tooling (never committed)
 tools/.local/
+
+# Migration-run logs written by the private interop tooling (rolling JSON, ADR 0586)
+logs/
