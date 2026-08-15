@@ -460,6 +460,13 @@ using (var scope = app.Services.CreateScope())
     // (ADR "Compose demo-data seeding" / 0214; issue #354). No-op unless the Demo:* config is present and the
     // tenant doesn't already exist. The seeding logic lives in DemoDataSeeder (extracted from this file).
     await DemoDataSeeder.SeedIfConfiguredAsync(services, app.Configuration);
+
+    // Env-driven idempotent seed of a second, deliberately EMPTY tenant + its machine principal, as the target for
+    // external-system migration runs (ADR "A seeded migration-target tenant"). No-op unless the Interop:* config
+    // is present and the tenant doesn't already exist. Its point is that the service-account credentials come from
+    // config instead of being minted per stack: a secret is shown once and stored hashed, so recreating the
+    // volumes used to invalidate the tooling's saved credentials and every run died at `invalid_client`.
+    await InteropTenantSeeder.SeedIfConfiguredAsync(services, app.Configuration);
 }
 
 // Configure the HTTP request pipeline.

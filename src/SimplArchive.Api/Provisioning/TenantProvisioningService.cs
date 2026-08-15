@@ -156,7 +156,7 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             TenantId = tenant.Id,
             ParentId = null,
             Name = repositoryName ?? tenant.Name,
-            MaskVersionId = await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken),
+            MaskVersionId = await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, tenant.Id, cancellationToken),
             CreatedByUserId = administrator.Id,
             CreatedAt = DateTimeOffset.UtcNow,
         };

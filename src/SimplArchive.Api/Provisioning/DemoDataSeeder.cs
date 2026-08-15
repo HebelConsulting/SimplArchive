@@ -64,6 +64,15 @@ public static class DemoDataSeeder
         services.GetRequiredService<CurrentTenantAccessor>().TenantId = provisioned.TenantId;
 
         await SeedAsync(services, dbContext, clock, provisioned, demoAdminPassword);
+
+        // The machine principal a migration reads this tenant WITH (ADR 0585). Seeded from configuration for the
+        // same reason as the interop tenant's: a service-account secret is shown once and stored hashed, so a
+        // recreated stack otherwise invalidates the tooling's saved credentials. Added after the sample tree so
+        // its ACL grant lands on a repository that already has content. No-op unless Demo:ServiceAccount:* is set.
+        if (await SeededServiceAccount.AddIfConfiguredAsync(services, dbContext, configuration, "Demo", provisioned))
+        {
+            await dbContext.SaveChangesAsync();
+        }
     }
 
     private static async Task SeedAsync(

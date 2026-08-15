@@ -25,14 +25,17 @@ public class PublicMirrorBoundaryTests
     // run of this test failed on its own source, which is a fair demonstration that the rule has teeth.
     private static readonly string Brand = "e" + "l" + "o";
 
-    // Paths published byte-for-byte to the public repo. Kept in step with WITHHELD in publish/publish-public.sh:
-    // anything not withheld there is published, and therefore in scope here.
-    private static readonly string[] PublishedRoots =
-        ["src", "tests", "charts", "scripts", ".github/workflows"];
-
-    // Two workflow files live under a published root but are themselves withheld by name.
-    private static readonly string[] WithheldFiles =
-        [$".github/workflows/{Brand}xml-tool.yml", ".github/workflows/auto-publish.yml"];
+    // WITHHELD in publish/publish-public.sh, verbatim. Everything else in the tracked tree is published, so the
+    // scan below is "every tracked file MINUS these" rather than a list of directories to look in.
+    //
+    // It used to be that list of directories — src, tests, charts, scripts, .github/workflows — and the omission
+    // was invisible until a `.gitignore` comment naming the brand sailed past this test. Root files (`.gitignore`,
+    // `docker-compose.yaml`, `Dockerfile`, …) are published too, and the publish gate greps the WHOLE staged tree,
+    // so a guard that looks at five directories is not the same rule shifted left; it is a weaker one wearing its
+    // name. Enumerating the tracked tree instead means a newly-added published path is in scope automatically.
+    private static readonly string[] Withheld =
+        ["docs/", "tools/", "publish/", ".idea/", "CLAUDE.md", "README.md", "=",
+         $".github/workflows/{Brand}xml-tool.yml", ".github/workflows/auto-publish.yml", ".github/dependabot.yml"];
 
     private static readonly Regex Forbidden =
         new($@"(\b{Brand}\b)|({Brand}\.com)|({Brand}xml)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -41,40 +44,39 @@ public class PublicMirrorBoundaryTests
     public void No_published_file_names_the_commercial_dms()
     {
         var root = RepoRoot();
-        var withheld = WithheldFiles
-            .Select(f => Path.Combine(root, f.Replace('/', Path.DirectorySeparatorChar)))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
         var offenders = new List<string>();
+        var scanned = 0;
 
-        foreach (var published in PublishedRoots)
+        // The publish step stages `git archive HEAD`, so TRACKED files are exactly what can reach the mirror —
+        // which also keeps build output, packaged artifacts and local scratch out of the scan for free.
+        foreach (var relative in TrackedFiles(root))
         {
-            var dir = Path.Combine(root, published.Replace('/', Path.DirectorySeparatorChar));
-            if (!Directory.Exists(dir))
+            if (Withheld.Any(w => w.EndsWith('/')
+                    ? relative.StartsWith(w, StringComparison.OrdinalIgnoreCase)
+                    : relative.Equals(w, StringComparison.OrdinalIgnoreCase)))
             {
                 continue;
             }
 
-            foreach (var file in Directory.EnumerateFiles(dir, "*.*", SearchOption.AllDirectories))
+            var file = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(file) || IsProbablyBinary(file))
             {
-                if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                    || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
-                    || withheld.Contains(file)
-                    || IsProbablyBinary(file))
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                var lines = File.ReadAllLines(file);
-                for (var i = 0; i < lines.Length; i++)
+            scanned++;
+            var lines = File.ReadAllLines(file);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (Forbidden.IsMatch(lines[i]))
                 {
-                    if (Forbidden.IsMatch(lines[i]))
-                    {
-                        offenders.Add($"  {Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/')}:{i + 1}: {lines[i].Trim()}");
-                    }
+                    offenders.Add($"  {relative}:{i + 1}: {lines[i].Trim()}");
                 }
             }
         }
+
+        // Anti-vacuous: a scan that silently found nothing to look at would pass forever.
+        Assert.True(scanned > 500, $"Only {scanned} published files were scanned — the enumeration is broken.");
 
         Assert.True(offenders.Count == 0,
             "These PUBLISHED files name the commercial DMS, which the public-mirror publish step rejects (ADR 0484). "
@@ -82,6 +84,28 @@ public class PublicMirrorBoundaryTests
             + "docs/ ADRs. Catching this here costs milliseconds; catching it in the publish workflow costs a red "
             + "pipeline on main.\n"
             + string.Join("\n", offenders));
+    }
+
+    // The tracked tree at HEAD-ish — `git ls-files`, the same set `git archive` would stage. A failure to run git
+    // throws rather than skips: this guard exists because the real gate runs late, so a silently-empty local one
+    // is worse than none.
+    private static IEnumerable<string> TrackedFiles(string root)
+    {
+        using var git = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("git", "ls-files")
+        {
+            WorkingDirectory = root,
+            RedirectStandardOutput = true,
+        }) ?? throw new InvalidOperationException("Could not start git to enumerate the tracked tree.");
+
+        var output = git.StandardOutput.ReadToEnd();
+        git.WaitForExit();
+
+        if (git.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"git ls-files failed with exit code {git.ExitCode}.");
+        }
+
+        return output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
     // Cheap stand-in for grep -I: skip anything with a NUL byte in its first block.

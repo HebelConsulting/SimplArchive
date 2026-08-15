@@ -104,3 +104,6 @@ src/SimplArchive.DesktopClient/--*
 # Screenshots and scratch files dropped in ./tmp for a bug report. Same story as the scans above, and it has
 # already happened once: a bug screenshot rode into `main` on a `git add -A` (#507) and had to be removed.
 /tmp/
+
+# Local-only connection settings + credentials for the private interop tooling (never committed)
+tools/.local/

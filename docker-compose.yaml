@@ -68,7 +68,12 @@ services:
     # Explicit ports: the S3 API (the only one the Api/browser use), plus the master/volume/filer/WebDAV
     # endpoints for dev convenience. The volume server is moved off its 8080 default to 9340 to avoid clashing
     # with the Api's host port 8080.
-    command: server -dir=/data -s3 -s3.config=/etc/seaweedfs/s3.json -s3.port=8333 -master.port=9333 -volume.port=9340 -filer.port=8888 -webdav -webdav.port=7333
+    # -volume.max: every per-tenant bucket (ADR 0372) is its own SeaweedFS COLLECTION, and a collection needs its
+    # own volumes. At the default budget the first tenant's collection consumes the volume server's slots and the
+    # SECOND tenant's uploads fail with "No writable volumes and no free volumes left" — surfacing as an S3 500,
+    # i.e. an opaque `Internal Server Error` from any upload, import or seeding into that tenant. 100 is plenty for
+    # a dev machine (volumes are created on demand, so this costs nothing until used).
+    command: server -dir=/data -s3 -s3.config=/etc/seaweedfs/s3.json -s3.port=8333 -master.port=9333 -volume.port=9340 -volume.max=100 -filer.port=8888 -webdav -webdav.port=7333
     volumes:
       - ./scripts/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
       - seaweedfs-data:/data
@@ -417,6 +422,23 @@ services:
       Demo__Administrator__DisplayName: "Demo Admin"
       Demo__Administrator__Password: "SimplDemo2026!"
       Demo__RepositoryName: "Demo Repository"
+      # The machine principal a migration reads this tenant WITH — the source side of the pair below (ADR 0585).
+      Demo__ServiceAccount__Name: "demo-migration"
+      Demo__ServiceAccount__ClientId: "demo-migration"
+      Demo__ServiceAccount__ClientSecret: "dev-demo-secret"
+      # A second, deliberately EMPTY tenant as the target for external-system migration runs, with a machine
+      # principal whose credentials come from HERE rather than being minted per stack. A service-account secret is
+      # shown once and stored hashed, so before this every `docker compose down -v` silently invalidated the
+      # migration tooling's saved credentials and the next run died at `invalid_client`. Dev-only, like every other
+      # credential in this file — the production-readiness gate refuses these settings outside Development.
+      Interop__Tenant__Name: "Interop"
+      Interop__Administrator__Email: "interop@simplarchive.local"
+      Interop__Administrator__DisplayName: "Interop Admin"
+      Interop__Administrator__Password: "SimplDemo2026!"
+      Interop__RepositoryName: "Interop"
+      Interop__ServiceAccount__Name: "interop"
+      Interop__ServiceAccount__ClientId: "interop-migration"
+      Interop__ServiceAccount__ClientSecret: "dev-interop-secret"
 
   # Reverse proxy for LAN testing (ADR "Reverse proxy for LAN testing" + "Proxy S3 object storage for LAN
   # testing"): terminates TLS with a self-signed cert (Caddy's internal CA) and forwards to the app —
