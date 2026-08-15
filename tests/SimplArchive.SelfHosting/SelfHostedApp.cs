@@ -167,6 +167,7 @@ public sealed class SelfHostedApp : IAsyncDisposable
     {
         var repoRoot = RepoRoot();
         var apiCsproj = Path.Combine(repoRoot, "src", "SimplArchive.Api", "SimplArchive.Api.csproj");
+        StageLibvipsNatives(repoRoot);
 
         var psi = new ProcessStartInfo("dotnet")
         {
@@ -260,7 +261,48 @@ public sealed class SelfHostedApp : IAsyncDisposable
         throw new InvalidOperationException($"API did not become ready within 150s:\n{ApiLog()}");
     }
 
-    private string ApiLog()
+    /// <summary>
+    /// Copies this test host's version-matched libvips natives next to the Api's build output, so the Api
+    /// SUBPROCESS can do TIFF renditions. The product deliberately ships only the linux-musl natives its
+    /// Alpine image needs, which means a self-hosted Api on a developer Mac or a glibc CI runner has no
+    /// libvips at all — every TIFF preview/preview-pages request logged a DllNotFoundException and answered
+    /// 204, silently, until #522's sort-thumbnail test became the first to depend on one. The natives come
+    /// from this project's own test-only NetVips.Native references (the accepted, version-pinned exception —
+    /// never a distro libvips, which shipped an incompatible version that crashed the test host), and dlopen's
+    /// first probe is exactly the Api's output directory, which sidesteps macOS stripping DYLD_* for hardened
+    /// binaries. Copy-if-different keeps reruns cheap; bin/ is gitignored, so nothing ships.
+    /// </summary>
+    private static void StageLibvipsNatives(string repoRoot)
+    {
+        var rid = $"{(OperatingSystem.IsMacOS() ? "osx" : "linux")}-{(System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64 ? "arm64" : "x64")}";
+        var source = Path.Combine(AppContext.BaseDirectory, "runtimes", rid, "native");
+        if (!Directory.Exists(source))
+        {
+            return; // an unanticipated platform: the Api runs, TIFF renditions stay 204 — as before
+        }
+
+        var target = Path.Combine(repoRoot, "src", "SimplArchive.Api", "bin", "Debug", "net10.0");
+        if (!Directory.Exists(target))
+        {
+            return; // no build output yet; the dotnet run below would fail anyway with a clearer message
+        }
+
+        foreach (var file in Directory.GetFiles(source))
+        {
+            var destination = Path.Combine(target, Path.GetFileName(file));
+            if (!File.Exists(destination) || new FileInfo(destination).Length != new FileInfo(file).Length)
+            {
+                File.Copy(file, destination, overwrite: true);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Everything the Api subprocess has written so far — public because a test diagnosing a server-side "no
+    /// content" answer needs the server's own account of why (the #522 empty-sort-dialog hunt: a 204 from
+    /// preview-pages carries no reason, but the request log line does).
+    /// </summary>
+    public string ApiLog()
     {
         lock (_apiLog)
         {

@@ -59,16 +59,21 @@ public static class PreviewRenderer
         var width = pageReader.GetPageWidth();
         var height = pageReader.GetPageHeight();
 
-        var bitmap = new WriteableBitmap(new PixelSize(width, height), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Opaque);
-        using (var buffer = bitmap.Lock())
+        // An IMMUTABLE Bitmap via the pixel-data constructor, not a WriteableBitmap: Skia's ResizeBitmap
+        // supports only immutable sources, so a WriteableBitmap here made CreateScaledBitmap throw "Invalid
+        // source bitmap type" for every consumer that scales a page — which is how the sort dialog opened
+        // empty for PDFs while its blanket catch ate the evidence (#522). Nothing ever mutated these pages
+        // after construction, so writability was cost without benefit.
+        var stride = width * 4;
+        var handle = GCHandle.Alloc(raw, GCHandleType.Pinned);
+        try
         {
-            var sourceStride = width * 4;
-            for (var y = 0; y < height; y++)
-            {
-                Marshal.Copy(raw, y * sourceStride, IntPtr.Add(buffer.Address, y * buffer.RowBytes), sourceStride);
-            }
+            return new Bitmap(PixelFormat.Bgra8888, AlphaFormat.Opaque, handle.AddrOfPinnedObject(),
+                new PixelSize(width, height), new Vector(96, 96), stride);
         }
-
-        return bitmap;
+        finally
+        {
+            handle.Free(); // the Bitmap constructor copies the pixels; the source array is not referenced after
+        }
     }
 }

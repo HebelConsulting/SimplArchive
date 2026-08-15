@@ -34,6 +34,10 @@ public class WebPreviewFindTests
         // Wait for the PDF preview's find bar, then find the word → two hits, prev/next cycles.
         var find = page.Locator("input[placeholder*='Find in document']");
         await Expect(find).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 30000 });
+        // Empty until the user types: Value without the @ passed the literal expression text, and the box
+        // shipped reading "State.FindQuery" — the razor-string-parameter trap, caught by no test because
+        // every test only ever TYPED into the field.
+        await Expect(find).ToHaveValueAsync("");
         await find.FillAsync("Kriens");
         await Expect(page.GetByText("1 / 2")).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 15000 });
 

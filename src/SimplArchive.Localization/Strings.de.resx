@@ -4149,4 +4149,13 @@
   <data name="CoBulkDiscarded" xml:space="preserve">
     <value>{0} von {1} Check-out(s) verworfen.</value>
   </data>
+  <data name="InboxSortNoPages" xml:space="preserve">
+    <value>Für dieses Element sind keine Seitenbilder verfügbar.</value>
+  </data>
+  <data name="InboxPageRotateLeft" xml:space="preserve">
+    <value>90° nach links drehen</value>
+  </data>
+  <data name="InboxPageRotateRight" xml:space="preserve">
+    <value>90° nach rechts drehen</value>
+  </data>
 </root>

@@ -24,14 +24,21 @@
    nothing to annotate simply passes neither. *@
 
 <div class="wb-preview @(_fullscreen ? "wb-pv-fullscreen" : "")" style="@Style" data-pane="@DataPane" data-tour="@DataTour">
-    <div style="display:flex; flex-direction:column; flex:1 1 auto; min-width:0;">
+    @* min-height:0 or this column's content-driven minimum wins over the pane's bounds, and a tall document
+       stretches the pane to the document's own height — on the Inbox tab, whose ancestor chain has no
+       overflow backstop, the pages then painted straight over the bottom tab bar. Repositories never showed
+       it only because its pane happens to sit inside an overflow:auto container. *@
+    <div style="display:flex; flex-direction:column; flex:1 1 auto; min-width:0; min-height:0;">
         @* The toolbar shows for a page preview (find + zoom + full-screen) or a text preview (full-screen only). *@
         <div class="wb-pv-findbar" style="@((ShowToolbar && (State.HasPages || State.Kind == "text")) ? "" : "display:none;")">
             @if (State.HasPages)
             {
                 <span class="wb-pv-findgrp">
                     <MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Small" />
-                    <SearchField Value="State.FindQuery" ValueChanged="ApplyFindAsync" Immediate="true"
+                    @* Value needs the @: on a STRING parameter, Value="State.FindQuery" passes the literal
+                       expression TEXT, builds clean, and renders "State.FindQuery" in the box — the exact
+                       razor-string-parameter trap this codebase has hit before. *@
+                    <SearchField Value="@State.FindQuery" ValueChanged="ApplyFindAsync" Immediate="true"
                                  Placeholder="@Strings.Get("FindInDocument")" Style="max-width:220px;" />
                     <span class="mud-text-secondary" style="font-size:.8em; min-width:46px;">@State.Index / @State.Count</span>
                     <MudIconButton Class="wb-pv-find-prev" Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" Disabled="@(State.Count == 0)" OnClick="FindPrevAsync" />

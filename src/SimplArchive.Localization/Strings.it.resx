@@ -4149,4 +4149,13 @@
   <data name="CoBulkDiscarded" xml:space="preserve">
     <value>Scartati {0} di {1} check-out.</value>
   </data>
+  <data name="InboxSortNoPages" xml:space="preserve">
+    <value>Nessuna immagine di pagina disponibile per questo elemento.</value>
+  </data>
+  <data name="InboxPageRotateLeft" xml:space="preserve">
+    <value>Ruota di 90° a sinistra</value>
+  </data>
+  <data name="InboxPageRotateRight" xml:space="preserve">
+    <value>Ruota di 90° a destra</value>
+  </data>
 </root>

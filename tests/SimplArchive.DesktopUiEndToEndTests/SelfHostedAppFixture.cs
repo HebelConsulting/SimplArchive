@@ -21,6 +21,9 @@ public sealed class SelfHostedAppFixture : IAsyncLifetime
     // The self-hosted app's Postgres — exposed so a test can clean up data it seeded.
     public string PostgresConnectionString => _app.PostgresConnectionString;
 
+    /// <summary>The Api subprocess's log so far — for tests diagnosing a server-side answer (see SelfHostedApp.ApiLog).</summary>
+    public string ApiLog() => _app.ApiLog();
+
     public Task InitializeAsync() => _app.StartAsync();
 
     public async Task DisposeAsync() => await _app.DisposeAsync();

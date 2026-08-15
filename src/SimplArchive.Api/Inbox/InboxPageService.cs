@@ -171,6 +171,7 @@ public sealed class InboxPageService(
         string prefix,
         string name,
         IReadOnlyList<int> pageOrder,
+        IReadOnlyDictionary<int, int>? rotations,
         CancellationToken cancellationToken)
     {
         var (format, bytes) = await LoadPagedAsync(prefix, name, cancellationToken);
@@ -185,7 +186,15 @@ public sealed class InboxPageService(
             throw new InboxPageOrderInvalidException(name, pageCount);
         }
 
-        var reordered = PageComposer.Reorder(bytes, format, pageOrder);
+        // Rotations get the order's treatment before anything is written (#522): validate the whole set, then
+        // write once. A rotation of a page that is not being kept, or an angle that is not a quarter turn, is
+        // a caller mistake — never a partial application.
+        if (rotations is not null && rotations.Any(r => !pageOrder.Contains(r.Key) || r.Value is not (90 or 180 or 270)))
+        {
+            throw new InboxPageOrderInvalidException(name, pageCount);
+        }
+
+        var reordered = PageComposer.Reorder(bytes, format, pageOrder, rotations);
         await WriteAsync(prefix + name, reordered, format, cancellationToken);
 
         // The cached preview renditions and text layout now describe the previous page order. Sweeping them (and

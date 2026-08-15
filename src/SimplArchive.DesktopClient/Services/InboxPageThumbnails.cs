@@ -50,7 +50,12 @@ public static class InboxPageThumbnails
         }
         catch (Exception)
         {
-            // A thumbnail is a convenience, and its absence must not take the dialog down with it.
+            // The dialog is pointless without pictures, so the CALLER treats an empty result as "do not open
+            // the dialog" and says so in the status bar — this must not take the whole window down. But it
+            // swallows silently, and that has already cost one shipped bug: the WriteableBitmap scaling crash
+            // (#522) threw for every PDF page and this catch ate all seven, leaving an empty dialog and no
+            // evidence. The --sort-thumbs-test hook exists so the next such failure has somewhere to SHOW
+            // itself; when the desktop gains logging (#499), this is a place that must log.
             return [];
         }
     }

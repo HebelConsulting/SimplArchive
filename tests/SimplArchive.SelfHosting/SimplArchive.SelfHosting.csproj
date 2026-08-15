@@ -7,6 +7,16 @@
   <!-- The single source of truth for booting the real app out-of-process for E2E/manual-capture use (ADR 0502).
        Browser-agnostic: no Playwright reference, so the desktop suite that wraps this stays light. -->
   <ItemGroup>
+    <!-- The native libvips for the platforms the SELF-HOSTED Api subprocess runs on, version-matched to the
+         NetVips managed package (never a distro libvips — issue #496 records the incompatible-version crash).
+         Test-only: the product ships the linux-musl pair its Alpine image needs; these exist so SelfHostedApp
+         can stage a native next to the Api's build output, making TIFF renditions work in the UI/desktop
+         fixtures and the manual capture (#522 found them silently 204ing on every such host). Retires with
+         the rest of the test-only natives when issue #496's trigger fires. -->
+    <PackageReference Include="NetVips.Native.linux-x64" Version="8.18.4" />
+    <PackageReference Include="NetVips.Native.linux-arm64" Version="8.18.4" />
+    <PackageReference Include="NetVips.Native.osx-arm64" Version="8.18.4" />
+    <PackageReference Include="NetVips.Native.osx-x64" Version="8.18.4" />
     <PackageReference Include="AWSSDK.S3" Version="4.0.100.3" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.0.0" />
     <!-- Security-driven transitive pin (ADR 0379 "Security and dependency scanning"): Testcontainers pulls

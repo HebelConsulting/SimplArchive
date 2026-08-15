@@ -37,14 +37,30 @@
                                            OnClick="@(() => Remove(tile))" data-remove="@tile.OriginalNumber" />
                             @if (tile.Image is { Length: > 0 })
                             {
-                                <img src="@tile.Image" style="max-width:100%; max-height:100%;" alt="@tile.OriginalNumber" />
+                                @* The turn shows immediately, or the user cannot tell whether the click
+                                   registered (#522). A quarter-turned portrait must re-fit the box, so the
+                                   constraints swap axes with the turn. *@
+                                <img src="@tile.Image" alt="@tile.OriginalNumber"
+                                     style="@(tile.RotationDegrees is 90 or 270
+                                              ? $"max-width:146px; max-height:126px; transform:rotate({tile.RotationDegrees}deg);"
+                                              : $"max-width:100%; max-height:100%; transform:rotate({tile.RotationDegrees}deg);")" />
                             }
                             else
                             {
                                 <MudText Typo="Typo.h6" Class="mud-text-secondary">@tile.OriginalNumber</MudText>
                             }
                         </div>
-                        <MudText Typo="Typo.caption" Align="Align.Center" Class="mud-text-secondary d-block">@tile.OriginalNumber</MudText>
+                        @* The turn controls sit UNDER the page they turn, one per direction (#522) — the same
+                           per-tile scope as the bin. *@
+                        <div style="display:flex; align-items:center; justify-content:space-between;">
+                            <MudIconButton Icon="@Icons.Material.Filled.RotateLeft" Size="Size.Small"
+                                           title="@Strings.Get("InboxPageRotateLeft")" data-rotate-left="@tile.OriginalNumber"
+                                           OnClick="@(() => RotateLeft(tile))" />
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@tile.OriginalNumber</MudText>
+                            <MudIconButton Icon="@Icons.Material.Filled.RotateRight" Size="Size.Small"
+                                           title="@Strings.Get("InboxPageRotateRight")" data-rotate-right="@tile.OriginalNumber"
+                                           OnClick="@(() => RotateRight(tile))" />
+                        </div>
                     </div>
                 }
             </div>
@@ -83,7 +99,18 @@
     [Parameter]
     public int PageCount { get; set; }
 
-    private sealed record Page(int OriginalNumber, string? Image);
+    private sealed class Page(int originalNumber, string? image)
+    {
+        public int OriginalNumber { get; } = originalNumber;
+
+        public string? Image { get; } = image;
+
+        /// <summary>Clockwise degrees the user turned this page by (#522) — preview state until Apply.</summary>
+        public int RotationDegrees { get; set; }
+    }
+
+    /// <summary>What Apply hands back: the whole arrangement, written by ONE request after the dialog closes.</summary>
+    public sealed record Result(IReadOnlyList<int> Order, IReadOnlyDictionary<int, int> Rotations);
 
     private readonly List<Page> _pages = [];
     private Page? _selected;
@@ -101,6 +128,10 @@
 
         _selected = _pages.FirstOrDefault();
     }
+
+    private void RotateLeft(Page tile) => tile.RotationDegrees = (tile.RotationDegrees + 270) % 360;
+
+    private void RotateRight(Page tile) => tile.RotationDegrees = (tile.RotationDegrees + 90) % 360;
 
     private void MoveEarlier() => Move(-1);
 
@@ -158,6 +189,8 @@
             }
         }
 
-        Dialog.Close(DialogResult.Ok(_pages.Select(p => p.OriginalNumber).ToList()));
+        Dialog.Close(DialogResult.Ok(new Result(
+            _pages.Select(p => p.OriginalNumber).ToList(),
+            _pages.Where(p => p.RotationDegrees != 0).ToDictionary(p => p.OriginalNumber, p => p.RotationDegrees))));
     }
 }

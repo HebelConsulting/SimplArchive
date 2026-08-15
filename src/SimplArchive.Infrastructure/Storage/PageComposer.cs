@@ -1,5 +1,6 @@
 using NetVips;
 using UglyToad.PdfPig;
+using UglyToad.PdfPig.Content;
 using UglyToad.PdfPig.Writer;
 
 namespace SimplArchive.Infrastructure.Storage;
@@ -93,15 +94,64 @@ public static class PageComposer
         };
 
     /// <summary>
-    /// The same pages, in the order given as 1-based page numbers. The order must be a permutation of the
-    /// file's pages — the caller validates that, because "which pages went missing" is a question the UI has
-    /// to answer, not this.
+    /// The same pages, in the order given as 1-based page numbers, each optionally rotated (#522). The order
+    /// must be a permutation of the file's pages and every rotation a multiple of 90 — the caller validates
+    /// both, because "which pages went missing" is a question the UI has to answer, not this.
     /// </summary>
-    public static byte[] Reorder(byte[] bytes, PageFormat format, IReadOnlyList<int> pageOrder)
+    /// <remarks>
+    /// Rotation honours the format's nature, the same split the straightening path draws (ADR 0575): a PDF
+    /// page rotates LOSSLESSLY by composing the /Rotate attribute — re-rasterising to satisfy a rotate would
+    /// silently trade the document's real text for an OCR approximation — while a TIFF page has no /Rotate and
+    /// is re-encoded, the same trade its deskew already makes, chosen here deliberately rather than inherited.
+    /// </remarks>
+    public static byte[] Reorder(byte[] bytes, PageFormat format, IReadOnlyList<int> pageOrder, IReadOnlyDictionary<int, int>? rotations = null)
     {
+        if (format == PageFormat.Pdf)
+        {
+            return ReorderPdf(bytes, pageOrder, rotations);
+        }
+
         var pages = Split(bytes, format);
-        var picked = pageOrder.Select(p => pages[p - 1]).ToList();
+        var picked = pageOrder
+            .Select(p => rotations?.GetValueOrDefault(p) is { } degrees and not 0
+                ? RotateTiffPage(pages[p - 1], degrees)
+                : pages[p - 1])
+            .ToList();
         return Join(picked, format);
+    }
+
+    // One builder over the source document, not split-then-merge: AddPage copies the page's own content
+    // stream and resources, and SetRotation composes with whatever /Rotate the page already carried — a page
+    // that arrived at 180 and is turned 90 more ends at 270, not at 90.
+    private static byte[] ReorderPdf(byte[] bytes, IReadOnlyList<int> pageOrder, IReadOnlyDictionary<int, int>? rotations)
+    {
+        using var document = PdfDocument.Open(bytes);
+        var builder = new PdfDocumentBuilder();
+
+        foreach (var pageNumber in pageOrder)
+        {
+            var copied = builder.AddPage(document, pageNumber);
+            if (rotations?.GetValueOrDefault(pageNumber) is { } degrees and not 0)
+            {
+                var existing = document.GetPage(pageNumber).Rotation.Value;
+                copied.SetRotation(new PageRotationDegrees((existing + degrees % 360 + 360) % 360));
+            }
+        }
+
+        return builder.Build();
+    }
+
+    private static byte[] RotateTiffPage(byte[] pageBytes, int degrees)
+    {
+        using var image = Image.NewFromBuffer(pageBytes);
+        using var rotated = ((degrees % 360 + 360) % 360) switch
+        {
+            90 => image.Rot90(),
+            180 => image.Rot180(),
+            270 => image.Rot270(),
+            _ => image.Copy(),
+        };
+        return rotated.WriteToBuffer(".tif");
     }
 
     /// <summary>

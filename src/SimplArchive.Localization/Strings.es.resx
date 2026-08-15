@@ -4149,4 +4149,13 @@
   <data name="CoBulkDiscarded" xml:space="preserve">
     <value>Se descartaron {0} de {1} bloqueo(s).</value>
   </data>
+  <data name="InboxSortNoPages" xml:space="preserve">
+    <value>No hay imágenes de páginas disponibles para este elemento.</value>
+  </data>
+  <data name="InboxPageRotateLeft" xml:space="preserve">
+    <value>Girar 90° a la izquierda</value>
+  </data>
+  <data name="InboxPageRotateRight" xml:space="preserve">
+    <value>Girar 90° a la derecha</value>
+  </data>
 </root>

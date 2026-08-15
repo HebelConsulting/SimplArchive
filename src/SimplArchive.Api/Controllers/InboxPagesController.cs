@@ -160,7 +160,8 @@ public class InboxPagesController(
             return NotFound();
         }
 
-        await pageService.ReorderAsync(scope.Prefix, name, request.PageOrder ?? [], cancellationToken);
+        var rotations = request.Rotations?.ToDictionary(r => r.Page, r => r.Degrees);
+        await pageService.ReorderAsync(scope.Prefix, name, request.PageOrder ?? [], rotations, cancellationToken);
         return NoContent();
     }
 
@@ -422,6 +423,20 @@ public class InboxPagesController(
     {
         /// <summary>1-based page numbers, each page exactly once — the order the pages should end up in.</summary>
         public List<int>? PageOrder { get; set; }
+
+        /// <summary>Per-page rotations to apply while reordering (#522) — pages not listed keep their turn.</summary>
+        public List<InboxPageRotation>? Rotations { get; set; }
+    }
+
+    // A list of pairs rather than a dictionary: these DTOs round-trip through the XmlSerializer for the
+    // vendor XML media type, and a Dictionary does not.
+    public class InboxPageRotation
+    {
+        /// <summary>The 1-based ORIGINAL page number, matching the entries of PageOrder.</summary>
+        public int Page { get; set; }
+
+        /// <summary>Clockwise degrees: 90, 180 or 270.</summary>
+        public int Degrees { get; set; }
     }
 
     public class InboxJoinRequest

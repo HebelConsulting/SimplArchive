@@ -205,7 +205,7 @@ public sealed partial class InboxItemActionsViewModel : ObservableObject
     }
 
     /// <summary>Rewrites the item's pages in the given order (1-based, each page exactly once).</summary>
-    public async Task SortAsync(InboxItemViewModel item, string sortHref, IReadOnlyList<int> pageOrder)
+    public async Task SortAsync(InboxItemViewModel item, string sortHref, IReadOnlyList<int> pageOrder, IReadOnlyDictionary<int, int>? rotations = null)
     {
         if (_api?.Invoke() is not { } api)
         {
@@ -214,7 +214,7 @@ public sealed partial class InboxItemActionsViewModel : ObservableObject
 
         await RunAsync(async () =>
         {
-            await api.Inbox.SortAsync(sortHref, pageOrder);
+            await api.Inbox.SortAsync(sortHref, pageOrder, rotations);
             Status(string.Format(Strings.Get("StInboxSorted"), item.Name));
         });
     }

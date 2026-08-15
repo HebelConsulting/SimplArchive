@@ -96,4 +96,15 @@ public sealed partial class InboxPageViewModel(int originalNumber, Bitmap? image
     public Bitmap? Image { get; } = image;
 
     public string Label => OriginalNumber.ToString(CultureInfo.CurrentCulture);
+
+    /// <summary>
+    /// Clockwise degrees the user has turned this page by (#522) — client-side preview state until Apply
+    /// writes the whole arrangement in one request, exactly like the order itself.
+    /// </summary>
+    [ObservableProperty]
+    private int _rotationDegrees;
+
+    public void RotateLeft() => RotationDegrees = (RotationDegrees + 270) % 360;
+
+    public void RotateRight() => RotationDegrees = (RotationDegrees + 90) % 360;
 }

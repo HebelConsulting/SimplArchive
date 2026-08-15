@@ -55,6 +55,16 @@ public partial class SortPagesDialog : Window
     /// <summary>The order the pages are currently in, as 1-based original page numbers.</summary>
     public IReadOnlyList<int> CurrentOrder => _pages.Select(p => p.OriginalNumber).ToList();
 
+    /// <summary>The tiles themselves — public so the headless check can drive a turn the way a click does.</summary>
+    public IReadOnlyList<InboxPageViewModel> Pages => _pages;
+
+    /// <summary>The pages the user turned, original page number to clockwise degrees — only actual turns (#522).</summary>
+    public IReadOnlyDictionary<int, int> CurrentRotations =>
+        _pages.Where(p => p.RotationDegrees != 0).ToDictionary(p => p.OriginalNumber, p => p.RotationDegrees);
+
+    /// <summary>What Apply hands back: the whole arrangement, written by ONE request after the dialog closes.</summary>
+    public sealed record Result(IReadOnlyList<int> Order, IReadOnlyDictionary<int, int> Rotations);
+
     /// <summary>Moves the page at <paramref name="index"/> one place earlier. Public so a test can drive it.</summary>
     public void MoveEarlier(int index) => Move(index, -1);
 
@@ -109,6 +119,24 @@ public partial class SortPagesDialog : Window
         }
     }
 
+    // The turn buttons live under the page they turn (#522); the thumbnail rotates immediately via the
+    // tile's LayoutTransform, so the click visibly registered before anything is written.
+    private void OnRotateLeft(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { Tag: InboxPageViewModel page })
+        {
+            page.RotateLeft();
+        }
+    }
+
+    private void OnRotateRight(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { Tag: InboxPageViewModel page })
+        {
+            page.RotateRight();
+        }
+    }
+
     private void UpdateRemovedText()
     {
         RemovedText.IsVisible = _removed > 0;
@@ -130,6 +158,6 @@ public partial class SortPagesDialog : Window
             }
         }
 
-        Close(CurrentOrder);
+        Close(new Result(CurrentOrder, CurrentRotations));
     }
 }

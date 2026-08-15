@@ -288,6 +288,16 @@ internal static class Program
             return;
         }
 
+        // The sort dialog's page pictures against the running Api (#522): `--sort-thumbs-test <token> <name>`,
+        // in SortThumbnailsCheck — headless Avalonia, because the pipeline decodes into real bitmaps.
+        var sortThumbsIndex = Array.IndexOf(args, "--sort-thumbs-test");
+        if (sortThumbsIndex >= 0 && sortThumbsIndex + 3 < args.Length)
+        {
+            DesktopClientOptions.ApiBaseUrl = args[sortThumbsIndex + 3].TrimEnd('/');
+            var ok = SortThumbnailsCheck.RunAsync(args[sortThumbsIndex + 1], args[sortThumbsIndex + 2]);
+            Environment.Exit(ok ? 0 : 1);
+        }
+
         // Preview zoom over the REAL raster path (#480, ADR "Fit the whole page"): `--zoom-test`. Rasterises a
         // portrait A4-ish page through PDFium, hands it to a PreviewViewModel with a pane WIDER than it is tall —
         // the case fit-width cannot serve — and checks the whole model: fit-width is the default, fit-page lands

@@ -247,10 +247,19 @@ public partial class MainWindow : Window
         }
 
         var thumbnails = await InboxPageThumbnails.LoadAsync(api, info);
-        var dialog = new SortPagesDialog(item.Name, thumbnails.Cast<Bitmap?>().ToList());
-        if (await dialog.ShowDialog<IReadOnlyList<int>?>(this) is { } order)
+        if (thumbnails.Count == 0)
         {
-            await vm.InboxActions.SortAsync(item, sortHref, order);
+            // The loader's contract all along — "the caller then keeps the sort affordance hidden rather than
+            // opening a dialog full of blanks" — except the caller didn't, which is what made the scaling
+            // crash (#522) present as an empty dialog instead of as this message.
+            vm.Status = Strings.Get("InboxSortNoPages");
+            return;
+        }
+
+        var dialog = new SortPagesDialog(item.Name, thumbnails.Cast<Bitmap?>().ToList());
+        if (await dialog.ShowDialog<SortPagesDialog.Result?>(this) is { } arrangement)
+        {
+            await vm.InboxActions.SortAsync(item, sortHref, arrangement.Order, arrangement.Rotations);
         }
     });
 

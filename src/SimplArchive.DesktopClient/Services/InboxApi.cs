@@ -226,10 +226,16 @@ public sealed class InboxApi(HttpClient http, SimplArchiveApiClient client)
         return await NamesAsync(response, cancellationToken);
     }
 
-    /// <summary>Rewrites the item's pages in the given order (1-based, each page exactly once).</summary>
-    public async Task SortAsync(string sortHref, IReadOnlyList<int> pageOrder, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Rewrites the item's pages in the given order (1-based, each page exactly once), optionally turning
+    /// individual pages by quarter turns (#522) — one request writes the whole arrangement.
+    /// </summary>
+    public async Task SortAsync(string sortHref, IReadOnlyList<int> pageOrder, IReadOnlyDictionary<int, int>? rotations = null, CancellationToken cancellationToken = default)
     {
-        using var response = await http.PostAsJsonAsync(sortHref.TrimStart('/'), new { pageOrder }, cancellationToken);
+        object body = rotations is { Count: > 0 }
+            ? new { pageOrder, rotations = rotations.Select(r => new { page = r.Key, degrees = r.Value }).ToList() }
+            : new { pageOrder };
+        using var response = await http.PostAsJsonAsync(sortHref.TrimStart('/'), body, cancellationToken);
         await SimplArchiveApiClient.ThrowIfProblemAsync(response, Strings.Get("ApiErrGeneric"), cancellationToken);
     }
 

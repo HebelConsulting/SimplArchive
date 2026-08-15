@@ -24,7 +24,16 @@
                             <StackPanel Width="130" Margin="4" Spacing="4">
                                 <Panel>
                                     <Border Background="White" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" Height="150">
-                                        <Image Source="{Binding Image}" Stretch="Uniform" />
+                                        <!-- LayoutTransform, not RenderTransform: the rotated page must be
+                                             RE-FIT into the tile (a quarter-turned portrait becomes landscape),
+                                             and a render transform rotates the already-laid-out pixels so the
+                                             corners clip (#522). -->
+                                        <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <LayoutTransformControl.LayoutTransform>
+                                                <RotateTransform Angle="{Binding RotationDegrees}" />
+                                            </LayoutTransformControl.LayoutTransform>
+                                            <Image Source="{Binding Image}" Stretch="Uniform" MaxWidth="126" MaxHeight="146" />
+                                        </LayoutTransformControl>
                                     </Border>
                                     <!-- The bin sits ON the page it removes, top-right, rather than in the
                                          toolbar: a delete that acts on "the selection" is one the user has to
@@ -33,8 +42,17 @@
                                             HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0"
                                             Padding="4,2"><i:Icon Value="mdi-delete-outline" FontSize="12" /></Button>
                                 </Panel>
-                                <TextBlock Text="{Binding Label}" HorizontalAlignment="Center"
-                                           Foreground="{DynamicResource WbMuted}" FontSize="11" />
+                                <!-- The turn controls sit UNDER the page they turn, one per direction (#522) —
+                                     the same per-tile scope as the bin, and the thumbnail turns immediately, or
+                                     the user cannot tell whether the click registered. -->
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Left" Click="OnRotateLeft" Tag="{Binding}" Padding="4,2"
+                                            ToolTip.Tip="{loc:Tr InboxPageRotateLeft}"><i:Icon Value="mdi-rotate-left" FontSize="12" /></Button>
+                                    <Button DockPanel.Dock="Right" Click="OnRotateRight" Tag="{Binding}" Padding="4,2"
+                                            ToolTip.Tip="{loc:Tr InboxPageRotateRight}"><i:Icon Value="mdi-rotate-right" FontSize="12" /></Button>
+                                    <TextBlock Text="{Binding Label}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource WbMuted}" FontSize="11" />
+                                </DockPanel>
                             </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>

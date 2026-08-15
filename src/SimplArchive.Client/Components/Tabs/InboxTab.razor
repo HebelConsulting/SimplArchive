@@ -961,14 +961,22 @@
         };
 
         var dialog = await DialogService.ShowAsync<Dialogs.SortPagesDialog>(Strings.Get("InboxSortTitle"), parameters);
-        if (await dialog.Result is not { Canceled: false, Data: List<int> order })
+        if (await dialog.Result is not { Canceled: false, Data: Dialogs.SortPagesDialog.Result arrangement })
         {
             return;
         }
 
         await RunPageOperationAsync(async () =>
         {
-            var response = await Http.PostAsJsonAsync(sortHref, new { pageOrder = order });
+            // One request writes the whole arrangement — order and turns together (#522).
+            object body = arrangement.Rotations.Count > 0
+                ? new
+                {
+                    pageOrder = arrangement.Order,
+                    rotations = arrangement.Rotations.Select(r => new { page = r.Key, degrees = r.Value }).ToList(),
+                }
+                : new { pageOrder = arrangement.Order };
+            var response = await Http.PostAsJsonAsync(sortHref, body);
             await ThrowIfRefusedAsync(response);
             _inboxStatus = string.Format(Strings.Get("StInboxSorted"), item.Name);
         });

@@ -213,6 +213,106 @@ public class InboxPageOperationsTests
         return document.GetPages().Select(p => (int)Math.Round(p.Width)).ToList();
     }
 
+    // ---- Rotation (#522): the sort request may turn individual pages while reordering. ------------------
+
+    // A PDF page rotates LOSSLESSLY — the /Rotate attribute composes, the content stream is untouched — so
+    // the widths that identify pages still read back unchanged, and turning an already-turned page adds up.
+    [Fact]
+    public async Task Rotating_a_pdf_page_composes_the_rotate_attribute_and_touches_nothing_else()
+    {
+        var (client, _) = await SignedInUserAsync();
+        var name = await StageAsync(client, Pdf(300, 400));
+
+        var pages = await FollowAsync(client, await ItemLinksAsync(client, name), "pages");
+        var sort = Rel(pages, "sort");
+
+        (await client.PostAsJsonAsync(sort, new
+        {
+            pageOrder = new[] { 2, 1 },
+            rotations = new[] { new { page = 2, degrees = 90 } },
+        })).EnsureSuccessStatusCode();
+
+        // PdfPig reads Width ROTATION-AWARE: the 400x800 page turned 90 now reads 800 — which is itself
+        // proof the /Rotate landed, while the unrotated sibling's 300 proves the reorder put it second.
+        Assert.Equal([800, 300], await PageWidthsAsync(client, name));
+        Assert.Equal([90, 0], await PageRotationsAsync(client, name));
+
+        // Turn the same (now first) page again: 90 + 90 composes to 180 rather than resetting.
+        var again = await FollowAsync(client, await ItemLinksAsync(client, name), "pages");
+        (await client.PostAsJsonAsync(Rel(again, "sort"), new
+        {
+            pageOrder = new[] { 1, 2 },
+            rotations = new[] { new { page = 1, degrees = 90 } },
+        })).EnsureSuccessStatusCode();
+
+        Assert.Equal([180, 0], await PageRotationsAsync(client, name));
+        Assert.Equal([400, 300], await PageWidthsAsync(client, name)); // 180 restores the portrait reading
+    }
+
+    // A TIFF page has no /Rotate, so rotation re-encodes it — the same trade its deskew already makes. A
+    // quarter turn must swap the page's dimensions, and the other page must keep its own.
+    [Fact]
+    public async Task Rotating_a_tiff_page_swaps_its_dimensions()
+    {
+        var (client, _) = await SignedInUserAsync();
+        var name = await StageAsync(client, Tiff((300, 500), (400, 500)), ".tif");
+
+        var pages = await FollowAsync(client, await ItemLinksAsync(client, name), "pages");
+        (await client.PostAsJsonAsync(Rel(pages, "sort"), new
+        {
+            pageOrder = new[] { 1, 2 },
+            rotations = new[] { new { page = 1, degrees = 90 } },
+        })).EnsureSuccessStatusCode();
+
+        // Joined TIFF pages share a canvas (the join pads to the largest), so the rotated page's 500x300 is
+        // padded to the un-rotated sibling's 400x500 → the common canvas is 500x500. What proves the turn is
+        // the canvas WIDTH: without the rotation it would be max(300, 400) = 400; the turn makes it 500.
+        var download = (await ItemLinksAsync(client, name)).Single(l => l.Rel == "download").Href;
+        using var storage = new HttpClient();
+        var bytes = await storage.GetByteArrayAsync(download);
+        using var image = NetVips.Image.NewFromBuffer(bytes);
+        Assert.Equal(500, image.Width);
+    }
+
+    [Fact]
+    public async Task A_rotation_that_is_not_a_quarter_turn_or_names_a_dropped_page_is_refused()
+    {
+        var (client, _) = await SignedInUserAsync();
+        var name = await StageAsync(client, Pdf(300, 400));
+
+        var pages = await FollowAsync(client, await ItemLinksAsync(client, name), "pages");
+        var sort = Rel(pages, "sort");
+
+        var crooked = await client.PostAsJsonAsync(sort, new
+        {
+            pageOrder = new[] { 1, 2 },
+            rotations = new[] { new { page = 1, degrees = 45 } },
+        });
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, crooked.StatusCode);
+
+        var dropped = await client.PostAsJsonAsync(sort, new
+        {
+            pageOrder = new[] { 1 },
+            rotations = new[] { new { page = 2, degrees = 90 } },
+        });
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, dropped.StatusCode);
+
+        // Refused before anything was written — both pages still there, unrotated.
+        Assert.Equal([300, 400], await PageWidthsAsync(client, name));
+        Assert.Equal([0, 0], await PageRotationsAsync(client, name));
+    }
+
+    private static async Task<List<int>> PageRotationsAsync(HttpClient client, string name)
+    {
+        var download = (await ItemLinksAsync(client, name)).Single(l => l.Rel == "download").Href;
+
+        using var storage = new HttpClient();
+        var bytes = await storage.GetByteArrayAsync(download);
+
+        using var document = PdfDocument.Open(bytes);
+        return document.GetPages().Select(p => p.Rotation.Value).ToList();
+    }
+
     private static byte[] Pdf(params int[] pageWidths)
     {
         var builder = new PdfDocumentBuilder();
@@ -222,5 +322,29 @@ public class InboxPageOperationsTests
         }
 
         return builder.Build();
+    }
+
+    // A multi-page TIFF with per-page dimensions — NetVips writes pages as one tall strip + a page height,
+    // and mixed sizes are padded to the largest (the same behaviour PageComposer's join documents).
+    private static byte[] Tiff(params (int Width, int Height)[] pages)
+    {
+        var images = pages.Select(p => (NetVips.Image.Black(p.Width, p.Height) + 255).Cast(NetVips.Enums.BandFormat.Uchar)).ToArray();
+        try
+        {
+            var width = images.Max(i => i.Width);
+            var height = images.Max(i => i.Height);
+            var normalised = images
+                .Select(i => i.Width == width && i.Height == height ? i : i.Gravity(NetVips.Enums.CompassDirection.Centre, width, height))
+                .ToArray();
+            using var joined = NetVips.Image.Arrayjoin(normalised, across: 1);
+            return joined.WriteToBuffer(".tif", new NetVips.VOption { { "page_height", height } });
+        }
+        finally
+        {
+            foreach (var image in images)
+            {
+                image.Dispose();
+            }
+        }
     }
 }
