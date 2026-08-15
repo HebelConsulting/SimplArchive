@@ -2999,11 +2999,15 @@
     [JSInvokable]
     public async Task OnInboxUploadsCompleteAsync(int count)
     {
-        _uploading = false;
         if (count > 0)
         {
             Snackbar.Add(string.Format(Strings.Get("StUploadedToInbox"), count), Severity.Success);
         }
+
+        // Same signal as the Inbox tab's own drop — the ingest pipeline runs there and nowhere else on this
+        // path, so a file dropped on the tree node would otherwise wait for the sweep worker.
+        await InboxUploads.SignalProcessedAsync();
+        _uploading = false;
 
         // The files landed in the inbox, which the tree does not show — the tree lists FOLDERS, and Inbox is a
         // launcher for the tab where staging and filing actually happen. So the drop opens that tab: without it

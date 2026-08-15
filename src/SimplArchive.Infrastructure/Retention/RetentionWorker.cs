@@ -1,37 +1,41 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SimplArchive.Application.Abstractions;
 
 namespace SimplArchive.Infrastructure.Retention;
 
 // Periodically auto-disposes documents whose retention has elapsed (ADR "Retention policies
 // (auto-disposition)"), off the request path. Registered unconditionally; the sweep is a cheap no-op when no
-// document is expired.
+// document is expired. The schedule comes from RetentionSweepOptions — see there for why a host must be able
+// to control it.
 public sealed class RetentionWorker : BackgroundService
 {
-    private static readonly TimeSpan Interval = TimeSpan.FromHours(6);
-    private static readonly TimeSpan InitialDelay = TimeSpan.FromMinutes(3);
+    private readonly TimeSpan _interval;
+    private readonly TimeSpan _initialDelay;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<RetentionWorker> _logger;
 
-    public RetentionWorker(IServiceScopeFactory scopeFactory, ILogger<RetentionWorker> logger)
+    public RetentionWorker(IServiceScopeFactory scopeFactory, IOptions<RetentionSweepOptions> options, ILogger<RetentionWorker> logger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _interval = options.Value.Interval;
+        _initialDelay = options.Value.InitialDelay;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("{Worker} started (interval {Interval}).", nameof(RetentionWorker), Interval);
+        _logger.LogInformation("{Worker} started (interval {Interval}).", nameof(RetentionWorker), _interval);
         try
         {
-            await Task.Delay(InitialDelay, stoppingToken);
+            await Task.Delay(_initialDelay, stoppingToken);
             while (!stoppingToken.IsCancellationRequested)
             {
                 await SweepAsync(stoppingToken);
-                await Task.Delay(Interval, stoppingToken);
+                await Task.Delay(_interval, stoppingToken);
             }
         }
         catch (OperationCanceledException)

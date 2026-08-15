@@ -30,10 +30,13 @@
             </Button.Flyout>
         </Button>
         <Button ToolTip.Tip="{loc:Tr AppbarNotifications}" Background="Transparent" BorderThickness="0" Padding="4" Click="OnBellClick">
-            <Panel Width="24" Height="22">
-                <i:Icon Value="mdi-bell-outline" Foreground="{DynamicResource WbMuted}" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <!-- The panel is SIZED for the badge rather than the badge overhanging it (#466 follow-up bugfix):
+                 a negative outer margin pushed the count outside this fixed-size panel, and the panel clipped
+                 exactly the overhang — the badge's right edge. Same fix as the tab counters. -->
+            <Panel Width="32" Height="24">
+                <i:Icon Value="mdi-bell-outline" Foreground="{DynamicResource WbMuted}" FontSize="20" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" />
                 <Border Background="#e53935" CornerRadius="8" MinWidth="15" Height="15" HorizontalAlignment="Right" VerticalAlignment="Top"
-                        Margin="0,-4,-6,0" IsVisible="{Binding HasUnreadNotifications}">
+                        IsVisible="{Binding HasUnreadNotifications}">
                     <TextBlock Text="{Binding UnreadNotificationCount}" Foreground="White" FontSize="10" Margin="3,0" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
             </Panel>

@@ -74,50 +74,6 @@ public class PatchCodeTests
         Assert.Equal(0.80, total, 0.01);
     }
 
-    [Fact]
-    public void The_sample_batch_has_its_separators_where_it_says_it_does()
-    {
-        using var batch = PdfDocument.Open(PatchCodeSampleBatch.CreatePdf());
-
-        Assert.Equal(PatchCodeSampleBatch.PageCount, batch.NumberOfPages);
-        Assert.Equal([2, 5], PatchCodeSampleBatch.SeparatorPages);
-
-        // A separator page is the sheet: bars and no text. A document page is the opposite.
-        foreach (var page in Enumerable.Range(1, batch.NumberOfPages))
-        {
-            var hasText = batch.GetPage(page).Letters.Count > 0;
-            Assert.Equal(!PatchCodeSampleBatch.SeparatorPages.Contains(page), hasText);
-        }
-    }
-
-    /// <summary>
-    /// One page really is upside-down and one really is crooked — the reason the sample is a fixture and not a
-    /// picture. Straightening runs before detection and does two different things (<c>--rotate-pages</c> for a
-    /// half turn, <c>--deskew</c> for a sub-degree tilt); a sample of upright pages exercises neither.
-    /// </summary>
-    [Fact]
-    public void The_sample_batch_really_is_tilted_where_it_claims_to_be()
-    {
-        using var batch = PdfDocument.Open(PatchCodeSampleBatch.CreatePdf());
-
-        Assert.All(batch.GetPage(1).Letters, l => Assert.Equal(TextOrientation.Horizontal, l.TextOrientation));
-        Assert.All(batch.GetPage(4).Letters, l => Assert.Equal(TextOrientation.Rotate180, l.TextOrientation));
-
-        // A 3.5 degree tilt is not one of PdfPig's named orientations, which is exactly what "crooked" means.
-        Assert.All(batch.GetPage(6).Letters, l => Assert.Equal(TextOrientation.Other, l.TextOrientation));
-    }
-
-    /// <summary>Cutting the sample at its separators gives back the three documents that went into it.</summary>
-    [Fact]
-    public void Cutting_at_the_separator_pages_yields_the_documents_between_them()
-    {
-        var parts = PageComposer.CutAt(
-            PatchCodeSampleBatch.CreatePdf(), PageComposer.PageFormat.Pdf, PatchCodeSampleBatch.SeparatorPages);
-
-        Assert.Equal(3, parts.Count);
-        Assert.Equal([1, 2, 1], parts.Select(p => PageComposer.CountPages(p, PageComposer.PageFormat.Pdf)));
-    }
-
     /// <summary>
     /// The shapes a real stack produces: a sheet at the very front, two back to back where a document was
     /// pulled out at the last moment, and one at the very back. None of them may become an empty document.

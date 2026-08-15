@@ -39,6 +39,12 @@
   <data name="EnvProduction" xml:space="preserve">
     <value>Produzione</value>
   </data>
+  <data name="InboxRotateAutoTip" xml:space="preserve">
+    <value>Raddrizza le pagine arrivate capovolte quando entrano nella posta in arrivo. Per .tif e .pdf. I documenti firmati non vengono mai toccati.</value>
+  </data>
+  <data name="InboxDeskewAutoTipTiff" xml:space="preserve">
+    <value>Raddrizza le scansioni storte quando entrano nella posta in arrivo. Solo per .tif — su un .pdf sostituirebbe il testo reale con un'approssimazione OCR. I documenti firmati non vengono mai toccati.</value>
+  </data>
   <data name="LogonLogin" xml:space="preserve">
     <value>Accedi</value>
   </data>

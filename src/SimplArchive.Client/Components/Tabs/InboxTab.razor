@@ -105,10 +105,14 @@
         }
         @* The sticky preferences, held DOWN while on — the desktop's ribbon toggles, in this tab's toolbar
            (ADR 0511). Server-side per user, because the Worker's sweep reads them for WebDAV arrivals. *@
+        <MudToggleIconButton Toggled="_rotateAutomatically" ToggledChanged="SetRotateAutomaticallyAsync"
+                             Icon="@Icons.Material.Outlined.RotateRight" ToggledIcon="@Icons.Material.Filled.RotateRight"
+                             Color="Color.Default" ToggledColor="Color.Primary" Class="ml-2"
+                             title="@Strings.Get("InboxRotateAutoTip")" />
         <MudToggleIconButton Toggled="_deskewAutomatically" ToggledChanged="SetDeskewAutomaticallyAsync"
                              Icon="@Icons.Material.Outlined.AutoFixHigh" ToggledIcon="@Icons.Material.Filled.AutoFixHigh"
-                             Color="Color.Default" ToggledColor="Color.Primary" Class="ml-2"
-                             title="@Strings.Get("InboxDeskewAutoTip")" />
+                             Color="Color.Default" ToggledColor="Color.Primary" Class="ml-1"
+                             title="@Strings.Get("InboxDeskewAutoTipTiff")" />
         <MudToggleIconButton Toggled="_cutAtPatchCodesAutomatically" ToggledChanged="SetCutAtPatchCodesAutomaticallyAsync"
                              Icon="@Icons.Material.Outlined.ContentCut" ToggledIcon="@Icons.Material.Filled.ContentCut"
                              Color="Color.Default" ToggledColor="Color.Primary" Class="ml-1"
@@ -399,6 +403,7 @@
         {
             var me = await Http.GetFromJsonAsync<MeResponse>(await ApiRoot.RequireAsync("me"));
             _deskewAutomatically = me?.DeskewInboxUploads ?? true;
+            _rotateAutomatically = me?.RotateInboxUploads ?? true;
             _cutAtPatchCodesAutomatically = me?.CutInboxUploadsAtPatchCodes ?? true;
         }
         catch (Exception)
@@ -512,12 +517,17 @@
     [JSInvokable]
     public async Task OnInboxUploadsCompleteAsync(int count)
     {
-        _inboxBusy = false;
         if (count > 0)
         {
             Snackbar.Add(string.Format(Strings.Get("StUploadedToInbox"), count), Severity.Success);
         }
 
+        // Signal ingest BEFORE dropping the busy state and reloading: deskew and the patch-code cut run in
+        // that call, so reloading first would show the un-straightened, un-split file and then change it
+        // under the user — or, before this was wired at all, not until the sweep worker's five-minute poll.
+        await InboxUploads.SignalProcessedAsync();
+
+        _inboxBusy = false;
         await LoadInboxAsync();
     }
 
@@ -713,6 +723,7 @@
     }
 
     private bool _deskewAutomatically = true;
+    private bool _rotateAutomatically = true;
 
     private bool _cutAtPatchCodesAutomatically = true;
 
@@ -899,6 +910,9 @@
     private Task SetDeskewAutomaticallyAsync(bool enabled) =>
         SetPreferenceAsync("deskewPreference", enabled, _deskewAutomatically, value => _deskewAutomatically = value);
 
+    private Task SetRotateAutomaticallyAsync(bool enabled) =>
+        SetPreferenceAsync("rotatePreference", enabled, _rotateAutomatically, value => _rotateAutomatically = value);
+
     private Task SetCutAtPatchCodesAutomaticallyAsync(bool enabled) =>
         SetPreferenceAsync("patchCodePreference", enabled, _cutAtPatchCodesAutomatically, value => _cutAtPatchCodesAutomatically = value);
 
@@ -925,6 +939,8 @@
     private record MeResponse
     {
         public bool DeskewInboxUploads { get; set; }
+
+        public bool RotateInboxUploads { get; set; }
 
         public bool CutInboxUploadsAtPatchCodes { get; set; }
 

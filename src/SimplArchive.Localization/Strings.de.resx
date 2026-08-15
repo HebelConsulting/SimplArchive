@@ -39,6 +39,12 @@
   <data name="EnvProduction" xml:space="preserve">
     <value>Produktion</value>
   </data>
+  <data name="InboxRotateAutoTip" xml:space="preserve">
+    <value>Auf dem Kopf stehende Seiten beim Eintreffen im Posteingang richtig drehen. Für .tif und .pdf. Signierte Dokumente bleiben unberührt.</value>
+  </data>
+  <data name="InboxDeskewAutoTipTiff" xml:space="preserve">
+    <value>Schief eingescannte Seiten beim Eintreffen im Posteingang begradigen. Nur für .tif — bei .pdf würde der echte Text durch eine OCR-Näherung ersetzt. Signierte Dokumente bleiben unberührt.</value>
+  </data>
   <data name="LogonLogin" xml:space="preserve">
     <value>Anmelden</value>
   </data>

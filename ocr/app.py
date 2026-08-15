@@ -40,6 +40,7 @@ async def ocr(
     lang: str = Query("eng+deu+fra+ita"),
     kind: str = Query("tiff"),
     deskew: bool = Query(False),
+    rotate: bool = Query(False),
 ):
     data = await file.read()
     is_pdf = kind == "pdf"
@@ -54,23 +55,31 @@ async def ocr(
         mode = "--skip-text" if is_pdf else "--force-ocr"
         args = ["ocrmypdf", mode, "--language", lang, "--output-type", "pdf", "--image-dpi", "300"]
 
-        # Straightening (#491): --deskew is Leptonica's sub-degree correction, --rotate-pages is Tesseract's
-        # orientation detection for a page that is 90 or 180 degrees out. They fix different things and a
-        # scanner produces both, so they travel together.
+        # Straightening (#491) is TWO corrections, and they are asked for separately because they cost
+        # differently (#492 follow-up):
         #
-        # Free here in a way it is nowhere else: this path already rasterises every page, so straightening adds
-        # no conversion that was not happening anyway — and it IMPROVES the OCR in the same pass, since
-        # Tesseract reads straight text better. Both flags are incompatible with --redo-ocr, which is why the
-        # modes above stay --force-ocr / --skip-text.
-        if deskew:
-            args += ["--deskew", "--rotate-pages"]
+        #   --rotate-pages  Tesseract's orientation detection for a page 90 or 180 degrees out. On a PDF this
+        #                   only sets the page's /Rotate attribute, so it is LOSSLESS — no rasterising, no
+        #                   re-encoding, the original text survives. That is why it may run on PDFs at all.
+        #   --deskew        Leptonica's sub-degree correction. It CANNOT be applied without re-rendering the
+        #                   page, which is why the caller only ever asks for it on a TIFF: doing it to a
+        #                   digital-born PDF would trade real text for an OCR approximation.
+        #
+        # They used to travel together behind one flag, and the TIFF-only gate that deskew needs was silently
+        # inherited by rotation, which needs no such thing.
+        if rotate:
+            args += ["--rotate-pages"]
 
-            # --optimize 3 only on this path, and only because this path already re-encodes: straightening
-            # cannot happen without rasterising, so the pixels are being rewritten regardless. Measured on a
-            # real colour scan: 2.2 MB source -> 10 MB at the default level 1, 2.0 MB at level 3. Level 3 is
-            # LOSSY, which is a deliberate trade the caller has made by asking for straightening at all — and
-            # it is why a digitally signed document never reaches this code (the pipeline refuses it outright,
-            # since any re-encoding voids the signature).
+        if deskew:
+            args += ["--deskew"]
+
+            # --optimize 3 belongs to DESKEW alone, and only because deskew already re-encodes: it cannot
+            # happen without rasterising, so the pixels are being rewritten regardless. Measured on a real
+            # colour scan: 2.2 MB source -> 10 MB at the default level 1, 2.0 MB at level 3. Level 3 is LOSSY,
+            # a deliberate trade the caller made by asking for deskew — and it is why a digitally signed
+            # document never reaches this code (the pipeline refuses it outright, since any re-encoding voids
+            # the signature). Rotation must NOT pull this in: it would turn a lossless operation into a lossy
+            # one for no reason.
             args += ["--optimize", "3"]
 
         args += [src, dst]

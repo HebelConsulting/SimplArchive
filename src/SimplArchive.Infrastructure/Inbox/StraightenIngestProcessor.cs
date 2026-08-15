@@ -22,8 +22,10 @@ namespace SimplArchive.Infrastructure.Inbox;
 /// </para>
 /// <list type="bullet">
 /// <item>The user turned it off (<c>User.DeskewInboxUploads</c>).</item>
-/// <item>The file is not a TIFF. A digital-born PDF has nothing to straighten, and re-rasterising it would
-/// lose its real text to an OCR approximation — a strictly worse document.</item>
+/// <item>Neither correction was asked for. They are TWO settings, because they cost differently.</item>
+/// <item>DESKEW on anything but a TIFF. Sub-degree correction cannot be applied without re-rendering the page,
+/// and doing that to a digital-born PDF trades real text for an OCR approximation — a strictly worse
+/// document.</item>
 /// <item>The TIFF does not look like a scan (<see cref="TiffTraits"/>). OCRmyPDF only emits PDF, so processing
 /// changes the format whether or not anything was corrected; for a photograph that is a conversion which gains
 /// nothing.</item>
@@ -33,43 +35,61 @@ namespace SimplArchive.Infrastructure.Inbox;
 /// convenience, and losing it must never cost the user their file.
 /// </para>
 /// </remarks>
-public sealed class DeskewIngestProcessor(
+public sealed class StraightenIngestProcessor(
     SimplArchiveDbContext dbContext,
     ISearchablePdfConverter converter) : IInboxIngestProcessor
 {
-    public string Name => "deskew";
+    public string Name => "straighten";
 
     public async Task<InboxProcessed?> TryProcessAsync(InboxIngestContext context, CancellationToken cancellationToken)
     {
-        if (PageComposer.FormatOf(context.Name) != PageComposer.PageFormat.Tiff)
+        var format = PageComposer.FormatOf(context.Name);
+        var isTiff = format == PageComposer.PageFormat.Tiff;
+        var kind = format switch
+        {
+            PageComposer.PageFormat.Tiff => SearchablePdfSourceKind.Tiff,
+            PageComposer.PageFormat.Pdf => SearchablePdfSourceKind.Pdf,
+            _ => (SearchablePdfSourceKind?)null,
+        };
+
+        if (kind is not { } sourceKind)
         {
             return null;
         }
 
-        // The preference is the USER's, and the sweep reads it for items that arrived over WebDAV where no
-        // client was involved — which is why it is a column and not a client-side setting.
+        // The preferences are the USER's, and the sweep reads them for items that arrived over WebDAV where no
+        // client was involved — which is why they are columns and not client-side settings.
         var wanted = await dbContext.Users
             .IgnoreQueryFilters(["TenantFilter"])
             .Where(u => u.Id == context.UserId)
-            .Select(u => (bool?)u.DeskewInboxUploads)
+            .Select(u => new { u.RotateInboxUploads, u.DeskewInboxUploads })
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (wanted != true)
+        // Rotation may run on either format; deskew only on a TIFF, for the reason in the remarks above.
+        var rotate = wanted?.RotateInboxUploads == true;
+        var deskew = wanted?.DeskewInboxUploads == true && isTiff;
+
+        if (!rotate && !deskew)
         {
             return null;
         }
 
-        var pageCount = PageComposer.CountPages(context.Bytes, PageComposer.PageFormat.Tiff);
-        if (!TiffTraits.LooksLikeAScannedDocument(context.Bytes, pageCount))
+        // A photograph is not a scan, so straightening it is a conversion that gains nothing. The trait test is
+        // about TIFFs; a PDF that reached the inbox is a document by construction.
+        if (isTiff && !TiffTraits.LooksLikeAScannedDocument(context.Bytes, PageComposer.CountPages(context.Bytes, PageComposer.PageFormat.Tiff)))
         {
             return null;
         }
 
+        // ONE call, however many corrections were asked for. Two processors would be worse than wasteful: the
+        // first would turn a TIFF into a PDF, and the second would then decline it for being a PDF — so a TIFF
+        // would silently lose its deskew the moment rotation was also enabled.
         var straightened = await converter.ConvertToSearchablePdfAsync(
             context.Bytes,
-            SearchablePdfSourceKind.Tiff,
+            sourceKind,
             OcrLanguagesFor(),
-            deskew: true,
+            deskew: deskew,
+            rotate: rotate,
             cancellationToken);
 
         return straightened is null ? null : new InboxProcessed(straightened, ".pdf", "application/pdf");

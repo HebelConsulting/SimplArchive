@@ -133,6 +133,14 @@ public static class DemoDataSeeder
         // Multi-file the invoice into its Business-Years month — a shortcut in 2026 / 03 March (ADR "…move and reference").
         await AddReferenceAsync(dbContext, tenantId, march2026.Id, invoice.Id, adminId, now);
 
+        // The seed's only MULTI-PAGE document (#492). Everything else here is a single page, which left preview
+        // paging, page reordering and the page-count column with nothing to work on — and left the patch-code
+        // sample batch unable to tell "cut at the separators" from "split every page".
+        await AddDocumentAsync(dbContext, objectStorage, assembly, tenantId, acmeCorp.Id,
+            "Maintenance agreement WV-2026-118", adminId, now, basicEntryVersion.Id,
+            "DemoMaintenanceAgreement.pdf", ".pdf", "application/pdf",
+            new DateOnly(2026, 3, 20), finalizer);
+
         var offer = await AddDocumentAsync(dbContext, objectStorage, assembly, tenantId, acmeCorp.Id,
             "Offer 2026-014", adminId, now, basicEntryVersion.Id, "DemoOfferV1.pdf", ".pdf", "application/pdf",
             new DateOnly(2026, 1, 14), finalizer, "Initial draft sent to the customer.");

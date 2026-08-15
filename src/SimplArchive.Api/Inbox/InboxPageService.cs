@@ -222,8 +222,17 @@ public sealed class InboxPageService(
             throw new InboxPagesNotSupportedException(name);
         }
 
+        // Deskew only on a TIFF, rotation on either — the same rule the automatic path follows, and for the
+        // same reason: sub-degree correction cannot happen without re-rendering, so asking for it on a PDF
+        // would trade the document's real text for an OCR approximation. This call used to pass deskew:true
+        // for both, which meant the MANUAL button did to a PDF exactly what the automatic path refuses.
         var straightened = await converter.ConvertToSearchablePdfAsync(
-            bytes, sourceKind, OcrLanguages, deskew: true, cancellationToken);
+            bytes,
+            sourceKind,
+            OcrLanguages,
+            deskew: sourceKind == SearchablePdfSourceKind.Tiff,
+            rotate: true,
+            cancellationToken);
 
         if (straightened is null)
         {

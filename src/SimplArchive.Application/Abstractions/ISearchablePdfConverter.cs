@@ -21,5 +21,5 @@ public interface ISearchablePdfConverter
     // deskew (#491) additionally straightens the pages: Leptonica's sub-degree correction plus Tesseract's
     // orientation detection. A parameter on this call rather than a second client, because it is one more flag
     // on a request this already makes — and nearly free, since the pages are being rasterised either way.
-    Task<byte[]?> ConvertToSearchablePdfAsync(byte[] sourceBytes, SearchablePdfSourceKind kind, string languages, bool deskew = false, CancellationToken cancellationToken = default);
+    Task<byte[]?> ConvertToSearchablePdfAsync(byte[] sourceBytes, SearchablePdfSourceKind kind, string languages, bool deskew = false, bool rotate = false, CancellationToken cancellationToken = default);
 }

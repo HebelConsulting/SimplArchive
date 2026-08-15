@@ -12,8 +12,12 @@ namespace SimplArchive.UnitTests;
 //
 // DocumentsController left the list with the PR that added the guard (2,613 → 838, ADR 0571); the tail —
 // WebDavMiddleware (1,762 → 964), MainWindow.axaml.cs (1,945 → 967) and HighlightOverlay (1,227 → 995) —
-// followed one PR later (ADR 0572). What remains is the two desktop giants, each its own multi-session
-// program: measure, split by responsibility, then delete the entry.
+// followed one PR later (ADR 0572). The three barely-over Api controllers and Program.cs left on 2026-08-14
+// (issue #466, closed that day), which is when the owner also interviewed on everything remaining. What the
+// list holds now is exactly those decisions: the two desktop giants — MainWindowViewModel (per-tab
+// view-model tranches, then re-interview at the measured floor, #517) and SimplArchiveApiClient (real
+// per-area clients sharing one auth/HTTP core, planned together with #443, #518) — and MainWindow.axaml,
+// where the owner DECIDED markup counts: a UserControl per tab down to <1000 (#519).
 //
 // One caveat ADR 0572 records: MainWindow's CLASS still spans ~1,575 lines across its three partial files —
 // the per-feature partial split for view-glue was the user-approved shape, so the file-level ceiling is what
@@ -35,9 +39,6 @@ public class OverLimitFileCeilingTests
         // top bar). Both had gained a responsibility per feature while living here; chrome and a ribbon are
         // things, not regions.
         ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 2_330,
-        // Lowered from 1,253 by ADR 0578: the icon hooks moved into IconWriter, which is the class that
-        // knows where icons go. Program.cs is a switchboard; it had started keeping the wiring too.
-        ["src/SimplArchive.DesktopClient/Program.cs"] = 1_248,
     };
 
     public static TheoryData<string> Files => [.. Ceilings.Keys];

@@ -2461,7 +2461,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             try
             {
-                await _api.UploadToInboxAsync(name, bytes);
+                await _api.Inbox.UploadAsync(name, bytes);
                 uploaded++;
             }
             catch (Exception ex)
@@ -6041,6 +6041,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         UserEmail = "demo@simplarchive.local";
         CanCreateFolder = true;
         IsTenantAdmin = true;
+        // An unread notification, so the bell badge is IN the demo renders. It clipped on the right for months
+        // and no screenshot could have shown it, because no captured state ever had an unread count.
+        UnreadNotificationCount = 2;
         Breadcrumbs.Add(new BreadcrumbViewModel { Name = "Repositories", FolderId = null, ShowSeparator = false });
         Breadcrumbs.Add(new BreadcrumbViewModel { Name = "Demo Repository", FolderId = Guid.NewGuid(), ShowSeparator = true });
         // Mirror the real tree's top-level nodes: a Personal repository (ADR 0370) and, for a tenant admin, the

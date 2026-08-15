@@ -26,9 +26,12 @@
                  one-off action. A toggle that stays down is the affordance asked for — it says what
                  the system will keep doing, where a menu item says only what it did once. -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <ToggleButton AutomationProperties.AutomationId="inbox-rotate-auto"
+                              IsChecked="{Binding InboxActions.RotateAutomatically}"
+                              Click="OnInboxRotateAutoToggled" ToolTip.Tip="{loc:Tr InboxRotateAutoTip}"><i:Icon Value="mdi-rotate-right" FontSize="18" /></ToggleButton>
                 <ToggleButton AutomationProperties.AutomationId="inbox-deskew-auto"
                               IsChecked="{Binding InboxActions.DeskewAutomatically}"
-                              Click="OnInboxDeskewAutoToggled" ToolTip.Tip="{loc:Tr InboxDeskewAutoTip}"><i:Icon Value="mdi-image-auto-adjust" FontSize="18" /></ToggleButton>
+                              Click="OnInboxDeskewAutoToggled" ToolTip.Tip="{loc:Tr InboxDeskewAutoTipTiff}"><i:Icon Value="mdi-image-auto-adjust" FontSize="18" /></ToggleButton>
                 <Button AutomationProperties.AutomationId="inbox-deskew" IsEnabled="{Binding InboxActions.CanDeskew}"
                         Click="OnInboxDeskew" ToolTip.Tip="{loc:Tr InboxDeskewNow}"><i:Icon Value="mdi-angle-acute" FontSize="18" /></Button>
             </StackPanel>

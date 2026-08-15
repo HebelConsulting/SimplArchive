@@ -44,7 +44,8 @@ public sealed class ReviewerHasPendingReviewsException(string message) : Excepti
 // "Cross-platform desktop fat client (Avalonia)" and "Desktop workbench UI".
 public sealed class SimplArchiveApiClient
 {
-    private static readonly HttpClient Anonymous = new();
+    // internal: InboxApi PUTs bytes to a presigned URL too, since the inbox calls moved there (#443).
+    internal static readonly HttpClient Anonymous = new();
     private readonly HttpClient _http;
     private InboxApi? _inbox;
 
@@ -839,15 +840,6 @@ public sealed class SimplArchiveApiClient
     {
         var body = new { name = stagedName, documentDate, maskId, fields = fields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.Values }), ocrLanguages = ocrLanguages is { Count: > 0 } o ? o : null };
         (await _http.PutAsJsonAsync(RequireHref(item, "mask"), body, cancellationToken)).EnsureSuccessStatusCode();
-    }
-
-    // Uploads a local file into the server inbox: POST for a presigned URL, then PUT the bytes to it.
-    public async Task UploadToInboxAsync(string fileName, byte[] bytes, CancellationToken cancellationToken = default)
-    {
-        var response = await (await _http.PostAsJsonAsync(await RootHrefAsync("inbox", cancellationToken), new { fileName }, cancellationToken)).Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        var uploadUrl = response.GetProperty("uploadUrl").GetString()!;
-        using var content = new ByteArrayContent(bytes);
-        (await Anonymous.PutAsync(uploadUrl, content, cancellationToken)).EnsureSuccessStatusCode();
     }
 
     /// <summary>
@@ -3143,7 +3135,8 @@ public sealed class SimplArchiveApiClient
 
     // The href a resource advertises for a rel, or null when it doesn't offer one. A missing rel is meaningful —
     // it means "not available here" — so callers branch on null rather than composing a URL (ADR 0543).
-    private static string? RelHref(JsonElement resource, string rel)
+    // internal: InboxApi follows rels too, since the inbox calls moved there (#443 direction).
+    internal static string? RelHref(JsonElement resource, string rel)
     {
         if (!resource.TryGetProperty("links", out var links) || links.ValueKind != JsonValueKind.Array)
         {

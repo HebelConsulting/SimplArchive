@@ -39,6 +39,12 @@
   <data name="EnvProduction" xml:space="preserve">
     <value>Producción</value>
   </data>
+  <data name="InboxRotateAutoTip" xml:space="preserve">
+    <value>Gira las páginas que llegaron al revés al entrar en su bandeja de entrada. Para .tif y .pdf. Los documentos firmados nunca se modifican.</value>
+  </data>
+  <data name="InboxDeskewAutoTipTiff" xml:space="preserve">
+    <value>Endereza los escaneos torcidos al entrar en su bandeja de entrada. Solo para .tif: en un .pdf sustituiría el texto real por una aproximación de OCR. Los documentos firmados nunca se modifican.</value>
+  </data>
   <data name="LogonLogin" xml:space="preserve">
     <value>Iniciar sesión</value>
   </data>

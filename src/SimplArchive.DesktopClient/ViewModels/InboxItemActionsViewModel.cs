@@ -87,6 +87,16 @@ public sealed partial class InboxItemActionsViewModel : ObservableObject
     [ObservableProperty] private bool _deskewAutomatically = true;
 
     /// <summary>
+    /// Turn a page that arrived 90 or 180 degrees round the right way up, as it arrives (#492).
+    /// </summary>
+    /// <remarks>
+    /// Its own toggle beside straightening, not the same one: rotation on a PDF is only the page's /Rotate
+    /// attribute and so is lossless, which is why it may run on PDFs at all — while deskew has to re-render
+    /// the page and therefore declines them. One switch could not honestly describe both.
+    /// </remarks>
+    [ObservableProperty] private bool _rotateAutomatically = true;
+
+    /// <summary>
     /// Whether an arriving batch scan is cut into one item per document at its separator sheets (#492) — the
     /// second ribbon toggle, and a sibling of the one above in every respect.
     /// </summary>
@@ -269,6 +279,7 @@ public sealed partial class InboxItemActionsViewModel : ObservableObject
         {
             var preferences = await api.Inbox.GetPreferencesAsync();
             DeskewAutomatically = preferences.Deskew;
+            RotateAutomatically = preferences.Rotate;
             CutAtPatchCodesAutomatically = preferences.CutAtPatchCodes;
         }
     }
@@ -280,6 +291,14 @@ public sealed partial class InboxItemActionsViewModel : ObservableObject
             DeskewAutomatically,
             value => DeskewAutomatically = value,
             (api, on) => api.Inbox.SetDeskewPreferenceAsync(on));
+
+    /// <summary>Writes the rotate toggle through, on the same terms.</summary>
+    public Task SetRotateAutomaticallyAsync(bool enabled) =>
+        SetPreferenceAsync(
+            enabled,
+            RotateAutomatically,
+            value => RotateAutomatically = value,
+            (api, on) => api.Inbox.SetRotatePreferenceAsync(on));
 
     /// <summary>Writes the cut-at-separators toggle through, on the same terms.</summary>
     public Task SetCutAtPatchCodesAutomaticallyAsync(bool enabled) =>

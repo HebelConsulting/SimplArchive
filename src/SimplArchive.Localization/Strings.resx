@@ -39,6 +39,12 @@
   <data name="EnvProduction" xml:space="preserve">
     <value>Production</value>
   </data>
+  <data name="InboxRotateAutoTip" xml:space="preserve">
+    <value>Turn pages that arrived upside-down the right way round, as they arrive in your inbox. Works for .tif and .pdf. Signed documents are never touched.</value>
+  </data>
+  <data name="InboxDeskewAutoTipTiff" xml:space="preserve">
+    <value>Straighten crooked scans as they arrive in your inbox. Only for .tif — straightening a .pdf would replace its real text with an OCR approximation. Signed documents are never touched.</value>
+  </data>
   <data name="LogonLogin" xml:space="preserve">
     <value>Log in</value>
   </data>

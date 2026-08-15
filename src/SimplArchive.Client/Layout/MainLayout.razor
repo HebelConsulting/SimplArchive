@@ -50,12 +50,12 @@
     /* The one spot of brand in the chrome — the desktop's 10px accent square, same size, same place. */
     .wb-mark { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 3px; background: var(--sa-accent); }
     .wb-brand { font-size: 1.0625rem; font-weight: 600; letter-spacing: -.01em; }
-    /* The unread badge is absolutely positioned 12px ABOVE the icon's top edge (MudBlazor's overlap rule,
-       bottom: calc(100% - 12px)). The bar is 56px and the icon button is centred at 40px, so there are only
-       8px of clearance — the badge crossed the top of .wb-shell, which clips it because the shell must keep
-       overflow:hidden or the whole page scrolls. Pull the badge down so it sits inside the bar.
-       Pre-existing; the light chrome merely made a clipped red dot obvious where purple hid it. */
-    .wb-appbar .mud-badge.mud-badge-top { bottom: calc(100% - 20px); }
+    /* The unread badge is absolutely positioned above its wrapper (MudBlazor's overlap rule,
+       bottom: calc(100% - 12px)) — and the wrapper is the 24px ICON, not the 40px button, so both the first
+       fix (20px) and the default left part of the ~16px badge above .wb-shell's clip line. 24px puts the whole
+       badge below the wrapper's top: fully visible, overlapping the bell's upper edge, which is the standard
+       badge look anyway. The shell must keep overflow:hidden or the whole page scrolls, so the badge moves. */
+    .wb-appbar .mud-badge.mud-badge-top { bottom: calc(100% - 24px); }
     .wb-spacer { flex: 1 1 auto; }
     .wb-user { color: var(--sa-text-secondary); font-size: .875rem; }
     .wb-userbox { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 2px 4px; border-radius: 6px; }

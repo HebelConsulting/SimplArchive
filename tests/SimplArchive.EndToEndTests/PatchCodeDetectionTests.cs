@@ -5,6 +5,7 @@ using System.Text.Json;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Images;
+using SimplArchive.Api.Inbox;
 using SimplArchive.Infrastructure.Storage;
 
 namespace SimplArchive.EndToEndTests;
@@ -99,7 +100,9 @@ public class PatchCodeDetectionTests : IAsyncLifetime
 
         var (pageCount, patchPages) = await DetectAsync(PageComposer.Join(documents, PageComposer.PageFormat.Pdf));
 
-        Assert.Equal(4, pageCount);
+        // Derived, not a literal: the batch's shape is stated once on the fixture, and a literal here breaks
+        // every time a page is added to it — which is exactly what happened when the blank duplex back arrived.
+        Assert.Equal(PatchCodeSampleBatch.PageCount - PatchCodeSampleBatch.SeparatorPages.Count, pageCount);
         Assert.Empty(patchPages);
     }
 

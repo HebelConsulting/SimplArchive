@@ -36,6 +36,8 @@ public partial class InboxRibbon : UserControl
 
     private void OnInboxJoin(object? sender, RoutedEventArgs e) => Window()?.OnInboxJoin(sender, e);
 
+    private void OnInboxRotateAutoToggled(object? sender, RoutedEventArgs e) => Window()?.OnInboxRotateAutoToggled(sender, e);
+
     private void OnInboxDeskewAutoToggled(object? sender, RoutedEventArgs e) => Window()?.OnInboxDeskewAutoToggled(sender, e);
 
     private void OnInboxDeskew(object? sender, RoutedEventArgs e) => Window()?.OnInboxDeskew(sender, e);

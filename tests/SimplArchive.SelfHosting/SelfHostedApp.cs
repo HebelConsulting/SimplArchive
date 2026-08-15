@@ -185,6 +185,13 @@ public sealed class SelfHostedApp : IAsyncDisposable
             ["ASPNETCORE_ENVIRONMENT"] = "Development",
             ["ConnectionStrings__Default"] = _postgres.GetConnectionString(),
             ["App__ApplyMigrationsAtStartup"] = "true",
+            // The retention sweep's first run must land beyond any test leg's lifetime. Its default
+            // app-start+3min fired mid-leg on CI (a leg runs ~5–6 min there) and silently disposed a test's
+            // overdue-at-birth document between its API setup and its first UI assertion — four consecutive
+            // CI failures that never reproduced locally, because a local leg finishes in ~2.5 min. A test
+            // that wants the sweep exercises IRetentionService.SweepAsync directly; no test wants it firing
+            // on a wall clock it cannot see.
+            ["Retention__InitialDelay"] = "02:00:00",
             ["App__BaseUrl"] = BaseUrl, // blazor-client redirect URIs must match the served origin for login
             // Hermetic in-memory OpenIddict keys — the dev-cert store fails in a headless CI runner environment
             // (ADR "Continuous integration"); ephemeral keys need no store.

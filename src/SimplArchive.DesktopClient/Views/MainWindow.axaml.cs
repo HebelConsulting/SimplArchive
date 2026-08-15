@@ -246,6 +246,14 @@ public partial class MainWindow : Window
         }
     });
 
+    internal void OnInboxRotateAutoToggled(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && sender is ToggleButton { IsChecked: { } enabled })
+        {
+            await vm.InboxActions.SetRotateAutomaticallyAsync(enabled);
+        }
+    });
+
     internal void OnInboxDeskewAutoToggled(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && sender is ToggleButton { IsChecked: { } enabled })

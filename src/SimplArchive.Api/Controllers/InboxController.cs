@@ -259,6 +259,7 @@ public class InboxController : ControllerBase
         // The printable Patch 3 separator sheet, and a sample batch made with it (ADR 0577).
         new Link("patchCodeSheet", "/api/inbox/patch-code-sheet", "GET"),
         new Link("patchCodeSample", "/api/inbox/patch-code-sample", "GET"),
+        new Link("patchCodeSampleScan", "/api/inbox/patch-code-sample-scan", "GET"),
     ];
 
     // Preview renditions + the text-layout sidecar are cached next to the item (`<stem>.preview.*`,
@@ -457,7 +458,16 @@ public class InboxController : ControllerBase
         {
             Name = name,
             UploadUrl = uploadUrl,
-            Links = [new Link("self", "/api/inbox", "GET")],
+            Links =
+            [
+                new Link("self", "/api/inbox", "GET"),
+                // What the client MUST call once its PUT completes: the ingest pipeline — deskew, patch-code
+                // cutting — runs there and nowhere else on this path. Without this rel the endpoint existed and
+                // worked but no conforming client could reach it (ADR 0543: an action no resource links to is
+                // unreachable, and therefore incomplete), so every upload silently waited up to five minutes
+                // for InboxIngestSweepWorker's fallback poll — which is the WebDAV safety net, not the design.
+                new Link("processed", ItemHref(name, "processed", group, user), "POST"),
+            ],
         });
     }
 

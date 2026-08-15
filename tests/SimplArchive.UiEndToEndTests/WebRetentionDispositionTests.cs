@@ -39,7 +39,20 @@ public class WebRetentionDispositionTests
 
         // The overdue document's row shows a Dispose action; click it and confirm.
         var row = page.Locator("tr").Filter(new() { HasText = docName });
-        await Expect(row.GetByText("Due for disposition")).ToBeVisibleAsync();
+        try
+        {
+            await Expect(row.GetByText("Due for disposition")).ToBeVisibleAsync();
+        }
+        catch (PlaywrightException e)
+        {
+            // "Row not visible" carries no data, and this assertion has failed CI-only (3/3) while never
+            // failing locally (0/5) with no theory surviving contact with the evidence — so on failure the
+            // test reports the ground truth the screenshot-less CI cannot show: what the schedule endpoint
+            // actually returned for this document at that moment.
+            var schedule = await http.GetStringAsync("/api/retention/schedule");
+            throw new Xunit.Sdk.XunitException(
+                $"'{docName}' never showed 'Due for disposition'. /api/retention/schedule returned:\n{schedule}", e);
+        }
         await row.GetByRole(AriaRole.Button, new() { Name = "Dispose" }).ClickAsync();
         await page.Locator(".mud-dialog").GetByRole(AriaRole.Button, new() { Name = "Dispose" }).ClickAsync();
 

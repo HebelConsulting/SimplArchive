@@ -113,6 +113,14 @@ public class User : ITenantScoped
     // it on INSERT, so a user created with `false` would silently be written as `true`.
     public bool DeskewInboxUploads { get; set; } = true;
 
+    // Correct a page that arrived 90 or 180 degrees round. A SEPARATE setting from deskew above, because the
+    // two cost differently: rotation on a PDF is only the page's /Rotate attribute, so it is lossless and may
+    // run on PDFs as well as TIFFs, while deskew cannot happen without re-rendering. They used to share one
+    // flag, and the TIFF-only gate deskew needs was silently inherited by rotation, which needs no such thing.
+    //
+    // Same reasons as its siblings for being per-user, stored here, and carrying no HasDefaultValue.
+    public bool RotateInboxUploads { get; set; } = true;
+
     // Cut an arriving batch scan into one item per document, at the Patch 3 separator sheets between them
     // (#492, ADR 0577). A sibling of the flag above in every respect — same reason it is per-user, same reason
     // it is stored here rather than in a client, and the same reason it carries no HasDefaultValue.

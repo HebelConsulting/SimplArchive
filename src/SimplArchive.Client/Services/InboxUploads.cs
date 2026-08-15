@@ -11,6 +11,11 @@ namespace SimplArchive.Client.Services;
 /// </remarks>
 public sealed class InboxUploads(HttpClient http, ApiRoot apiRoot)
 {
+    // The `processed` address of each file whose PUT is in flight, in upload order. Held here rather than in
+    // the two components for the same reason the POST is: one implementation of the protocol, or the second
+    // caller gets a subtly different one.
+    private readonly List<string> _pendingProcessed = [];
+
     /// <summary>
     /// A presigned PUT for one file, or <c>null</c> when the inbox refused it. Null rather than an exception
     /// because the caller is a JS-invoked upload loop that reports per-file failures and continues with the
@@ -21,7 +26,17 @@ public sealed class InboxUploads(HttpClient http, ApiRoot apiRoot)
         try
         {
             var response = await http.PostAsJsonAsync(await apiRoot.RequireAsync("inbox"), new { fileName });
-            return (await response.Content.ReadFromJsonAsync<UploadInboxResponse>())?.UploadUrl;
+            var target = await response.Content.ReadFromJsonAsync<UploadInboxResponse>();
+
+            // Remember where to signal completion. A server that does not advertise the rel simply gets no
+            // signal — the sweep worker still catches the file (ADR 0543: a missing rel means "not available
+            // here", never a composed URL).
+            if (target?.Href("processed") is { } processed)
+            {
+                _pendingProcessed.Add(processed);
+            }
+
+            return target?.UploadUrl;
         }
         catch (Exception)
         {
@@ -29,8 +44,47 @@ public sealed class InboxUploads(HttpClient http, ApiRoot apiRoot)
         }
     }
 
+    /// <summary>
+    /// Tells the server each uploaded file has arrived, so the ingest pipeline runs NOW.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the "client-signalled path" <c>InboxIngestSweepWorker</c>'s own comment describes — and it was
+    /// never wired, because the rel that reaches it was not advertised. The endpoint existed and worked, so
+    /// nothing failed; uploads simply waited up to the sweep's five-minute poll for their deskew and their
+    /// patch-code cut, which read as "the split documents do not show up" and "the crooked page was not
+    /// straightened". One missing link, two bug reports.
+    /// </para>
+    /// <para>
+    /// Deliberately awaited rather than fired and forgotten: the pipeline runs synchronously and returns the
+    /// resulting names, so the caller can reload once and show the split items. Failures are swallowed per
+    /// file for the same reason the target POST is — the sweep remains the safety net, and one bad file must
+    /// not abandon the rest.
+    /// </para>
+    /// </remarks>
+    public async Task SignalProcessedAsync()
+    {
+        foreach (var href in _pendingProcessed)
+        {
+            try
+            {
+                await http.PostAsJsonAsync(href, new { });
+            }
+            catch (Exception)
+            {
+                // The sweep worker will pick it up.
+            }
+        }
+
+        _pendingProcessed.Clear();
+    }
+
     public sealed record UploadInboxResponse
     {
         public string UploadUrl { get; set; } = "";
+
+        public List<SimplArchive.Client.Hypermedia.LinkResponse> Links { get; set; } = [];
+
+        public string? Href(string rel) => SimplArchive.Client.Hypermedia.Links.Href(Links, rel);
     }
 }

@@ -281,10 +281,34 @@ public class InboxPagesController(
     [AllowAnonymous]
     [HttpGet("patch-code-sample")]
     public IActionResult PatchCodeSample() =>
-        File(PatchCodeSampleBatch.CreatePdf(), "application/pdf", "SimplArchive-Patch3-Sample-Batch.pdf");
+        File(Inbox.PatchCodeSampleBatch.CreatePdf(), "application/pdf", "SimplArchive-Patch3-Sample-Batch.pdf");
 
     [HttpHead("patch-code-sample")]
     public IActionResult PatchCodeSampleHead() => NoContent();
+
+    /// <summary>
+    /// The same batch as a SCAN — a bilevel multi-page TIFF, which is what a document scanner actually
+    /// produces (#492).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It exists because the PDF sample cannot demonstrate everything: <b>deskew declines a PDF</b>, since it
+    /// cannot correct a sub-degree tilt without re-rendering the page and trading real text for an OCR
+    /// approximation. So the PDF sample carries no crooked page — a sample must not show a feature that cannot
+    /// act on it — and this one does.
+    /// </para>
+    /// <para>
+    /// Checked in rather than composed per request: building it means rasterising PDFs, and the Api image has
+    /// no rasteriser. Regenerate with <c>scripts/generate-scan-sample.sh</c>, which reproduces it byte for byte.
+    /// </para>
+    /// </remarks>
+    [AllowAnonymous]
+    [HttpGet("patch-code-sample-scan")]
+    public IActionResult PatchCodeSampleScan() =>
+        File(Inbox.PatchCodeSampleBatch.CreateTiff(), "image/tiff", "SimplArchive-Patch3-Sample-Scan.tif");
+
+    [HttpHead("patch-code-sample-scan")]
+    public IActionResult PatchCodeSampleScanHead() => NoContent();
 
     /// <summary>
     /// Cuts a batch scan into one item per document, at the Patch 3 separator sheets between them (#492).

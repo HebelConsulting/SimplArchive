@@ -68,6 +68,7 @@ public static class DependencyInjection
         services.AddScoped<IStorageQuotaService, Storage.StorageQuotaService>();
         services.AddScoped<ILegalHoldService, LegalHolds.LegalHoldService>();
         services.AddScoped<IRetentionService, Retention.RetentionService>();
+        services.AddOptions<Retention.RetentionSweepOptions>().Bind(configuration.GetSection("Retention"));
         services.AddHostedService<Retention.RetentionWorker>();
         services.AddScoped<IStaleCheckoutService, Checkout.StaleCheckoutService>();
         services.AddHostedService<Checkout.StaleCheckoutWorker>();
@@ -76,7 +77,7 @@ public static class DependencyInjection
         // run before patch-code detection (#492), because a patch code is horizontal bars read by a projection
         // profile and two degrees of rotation flattens it. Adding a processor here is choosing where in the
         // sequence it runs, which is why they are listed rather than discovered.
-        services.AddScoped<Inbox.IInboxIngestProcessor, Inbox.DeskewIngestProcessor>();
+        services.AddScoped<Inbox.IInboxIngestProcessor, Inbox.StraightenIngestProcessor>();
         services.AddScoped<Inbox.IInboxIngestProcessor, Inbox.PatchCodeIngestProcessor>();
         services.AddScoped<Inbox.InboxIngestPipeline>();
         services.AddHostedService<Inbox.InboxIngestSweepWorker>();

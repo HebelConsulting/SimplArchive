@@ -123,7 +123,7 @@ public sealed class InboxApi(HttpClient http, SimplArchiveApiClient client)
     }
 
     /// <summary>The inbox ribbon's two standing preferences, as the "me" resource reports them.</summary>
-    public sealed record InboxPreferences(bool Deskew, bool CutAtPatchCodes);
+    public sealed record InboxPreferences(bool Deskew, bool CutAtPatchCodes, bool Rotate);
 
     /// <summary>
     /// Both preferences from <b>one</b> read of "me" (ADR 0557). Defaults to on when the resource cannot be
@@ -135,11 +135,11 @@ public sealed class InboxApi(HttpClient http, SimplArchiveApiClient client)
         try
         {
             var me = await http.GetFromJsonAsync<JsonElement>(await client.RootHrefAsync("me", cancellationToken), cancellationToken);
-            return new InboxPreferences(IsOn(me, "deskewInboxUploads"), IsOn(me, "cutInboxUploadsAtPatchCodes"));
+            return new InboxPreferences(IsOn(me, "deskewInboxUploads"), IsOn(me, "cutInboxUploadsAtPatchCodes"), IsOn(me, "rotateInboxUploads"));
         }
         catch (Exception)
         {
-            return new InboxPreferences(true, true);
+            return new InboxPreferences(true, true, true);
         }
 
         static bool IsOn(JsonElement me, string property) =>
@@ -149,6 +149,32 @@ public sealed class InboxApi(HttpClient http, SimplArchiveApiClient client)
     /// <summary>Turns automatic straightening on or off (#491).</summary>
     public Task SetDeskewPreferenceAsync(bool enabled, CancellationToken cancellationToken = default) =>
         SetPreferenceAsync("deskewPreference", enabled, cancellationToken);
+
+    // Uploads a local file into the server inbox: POST for a presigned URL, PUT the bytes to it, then FOLLOW
+    // the response's `processed` rel so the ingest pipeline — deskew, patch-code cutting — runs now.
+    //
+    // That last step was missing entirely, in both clients: the endpoint existed and worked, but no resource
+    // advertised the rel that reaches it (ADR 0543), so every upload waited up to InboxIngestSweepWorker's
+    // five-minute poll. The visible symptoms were "the split documents do not show up" and "the crooked page
+    // was not straightened" — one missing link, two bug reports.
+    public async Task UploadAsync(string fileName, byte[] bytes, CancellationToken cancellationToken = default)
+    {
+        var response = await (await http.PostAsJsonAsync(await client.RootHrefAsync("inbox", cancellationToken), new { fileName }, cancellationToken)).Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        var uploadUrl = response.GetProperty("uploadUrl").GetString()!;
+        using var content = new ByteArrayContent(bytes);
+        (await SimplArchiveApiClient.Anonymous.PutAsync(uploadUrl, content, cancellationToken)).EnsureSuccessStatusCode();
+
+        // A server that does not advertise it gets no signal, and the sweep still catches the file — a missing
+        // rel means "not available here", never a composed URL.
+        if (SimplArchiveApiClient.RelHref(response, "processed") is { } processed)
+        {
+            (await http.PostAsJsonAsync(processed, new { }, cancellationToken)).EnsureSuccessStatusCode();
+        }
+    }
+
+    /// <summary>Turns automatic rotation of upside-down pages on or off (#492).</summary>
+    public Task SetRotatePreferenceAsync(bool enabled, CancellationToken cancellationToken = default) =>
+        SetPreferenceAsync("rotatePreference", enabled, cancellationToken);
 
     /// <summary>Turns automatic cutting at separator sheets on or off (#492).</summary>
     public Task SetPatchCodePreferenceAsync(bool enabled, CancellationToken cancellationToken = default) =>

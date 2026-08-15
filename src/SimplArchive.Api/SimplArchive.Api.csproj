@@ -17,6 +17,18 @@
          assembly and work in the container. Regenerate from the .typ sources with Typst. The invoice is
          "Invoice 2025-001"; the offer's two revisions are versions 1 + 2 of "Offer 2026-014" (for Compare). -->
     <EmbeddedResource Include="DemoData/sample-invoice.pdf" LogicalName="DemoInvoice.pdf" />
+    <!-- The seed's only MULTI-PAGE document (#492). The patch-code sample batch needs one: with every
+         document single-page, "cut at the separator sheets" and "split every page" give the same answer and
+         the fixture stops testing the feature. It also fills a real gap — nothing else in the seed had a
+         second page for preview paging or page reordering to work with. -->
+    <EmbeddedResource Include="DemoData/maintenance-agreement.pdf" LogicalName="DemoMaintenanceAgreement.pdf" />
+    <!-- The same batch as a SCAN (#492): seven 200-dpi bilevel G4 pages rasterised from the documents above,
+         separators at 2 and 6, page 4 fed in upside-down, page 5 the blank duplex back, page 7 crooked by 3.5
+         degrees. G4 because that is what a document scanner emits — and it is 78 KB against 906 KB grayscale.
+         Checked in rather than generated per request because building it needs a PDF rasteriser, which is
+         precisely what the Api image does not have. Verified against the real detector: patchPages [2, 6].
+         Regenerate with scripts/generate-scan-sample.sh. -->
+    <EmbeddedResource Include="DemoData/patch-code-sample-batch.tif" LogicalName="DemoPatchCodeSampleBatch.tif" />
     <EmbeddedResource Include="DemoData/sample-offer-v1.pdf" LogicalName="DemoOfferV1.pdf" />
     <EmbeddedResource Include="DemoData/sample-offer-v2.pdf" LogicalName="DemoOfferV2.pdf" />
     <!-- Richer demo tree (ADR 0214, issue #354): Business Years / Contracts / General folders with varied file
