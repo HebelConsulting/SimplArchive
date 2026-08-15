@@ -1,0 +1,27 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.PrincipalRow"
+             x:DataType="vm:PrincipalRowViewModel">
+    <!-- One principal (#530, tranche 4): what it IS — user or group, and its name — plus a context menu for
+         what can be done to it. Delete sits below a separator: destructive keeps its distance in a menu too
+         (the RecycleBinRow shape). Right-clicking a row first makes it THE selection, so the menu acts on the
+         row it was opened from, never on a previously selected principal (ADR 0559). -->
+    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2" Background="Transparent">
+        <i:Icon Value="{Binding IconValue}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" />
+        <StackPanel.ContextMenu>
+            <ContextMenu Opening="OnMenuOpening">
+                <MenuItem Header="{loc:Tr UgCopy}" Click="OnCopy">
+                    <MenuItem.Icon><i:Icon Value="mdi-content-copy" /></MenuItem.Icon>
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="{loc:Tr UgDelete}" Click="OnDelete">
+                    <MenuItem.Icon><i:Icon Value="mdi-delete" /></MenuItem.Icon>
+                </MenuItem>
+            </ContextMenu>
+        </StackPanel.ContextMenu>
+    </StackPanel>
+</UserControl>

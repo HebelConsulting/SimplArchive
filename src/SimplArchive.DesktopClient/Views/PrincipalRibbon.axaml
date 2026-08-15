@@ -1,0 +1,48 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.PrincipalRibbon"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- Users & groups ribbon (#530, tranche 4) — the Repositories shape replacing the mini-toolbar that sat
+         inside the principal-list column. One + with a flyout, by decision: user and group creation are one
+         affordance, not two competing buttons. Copy next (it creates too, but from the selection, so it is
+         greyed without one); delete SEPARATED — destructive never sits beside the buttons that create; the
+         service-account manager is HIDDEN without the right (ADR 0543); refresh last. The dialogs need the
+         window as their parent, so every Click forwards there. -->
+    <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+        <WrapPanel Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="ug-new" ToolTip.Tip="{loc:Tr UgNew}">
+                    <i:Icon Value="mdi-plus" FontSize="18" />
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuItem Header="{loc:Tr UgNewUser}" Click="OnNewUser">
+                                <MenuItem.Icon><i:Icon Value="mdi-account-plus" /></MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="{loc:Tr UgNewGroup}" Click="OnNewGroup">
+                                <MenuItem.Icon><i:Icon Value="mdi-account-multiple-plus" /></MenuItem.Icon>
+                            </MenuItem>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="ug-copy" IsEnabled="{Binding HasSelectedPrincipal}"
+                        Click="OnCopy" ToolTip.Tip="{loc:Tr UgCopy}"><i:Icon Value="mdi-content-copy" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="ug-delete" IsEnabled="{Binding HasSelectedPrincipal}"
+                        Click="OnDelete" ToolTip.Tip="{loc:Tr UgDelete}"><i:Icon Value="mdi-delete" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4" IsVisible="{Binding CanManageServiceAccounts}">
+                <Button AutomationProperties.AutomationId="ug-service-accounts"
+                        Click="OnManageServiceAccounts" ToolTip.Tip="{loc:Tr SaManage}"><i:Icon Value="mdi-api" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+                <Button Command="{Binding RefreshPrincipalsCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
+            </StackPanel>
+        </WrapPanel>
+    </Border>
+</UserControl>

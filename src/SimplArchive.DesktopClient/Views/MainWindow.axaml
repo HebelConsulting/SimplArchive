@@ -1634,36 +1634,19 @@
                  CanManageUsers holder (whoami). Combined principal list | assignable rights matrix. -->
             <TabItem ToolTip.Tip="{loc:Tr TabUsersGroups}" IsVisible="{Binding CanManageUsers}">
                 <TabItem.Header><i:Icon Value="mdi-account-cog" FontSize="20" /></TabItem.Header>
-                <Grid ColumnDefinitions="300,*">
-                    <DockPanel Grid.Column="0" LastChildFill="True">
-                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="2" Margin="6"
-                                    Background="{DynamicResource WbChrome}">
-                            <Button ToolTip.Tip="{loc:Tr UgNew}" Padding="6,2">
-                                <i:Icon Value="mdi-plus" />
-                                <Button.Flyout>
-                                    <MenuFlyout>
-                                        <MenuItem Header="{loc:Tr UgNewUser}" Click="OnNewUser" />
-                                        <MenuItem Header="{loc:Tr UgNewGroup}" Click="OnNewGroup" />
-                                    </MenuFlyout>
-                                </Button.Flyout>
-                            </Button>
-                            <Button ToolTip.Tip="{loc:Tr UgCopy}" Padding="6,2" Click="OnCopyPrincipal" IsEnabled="{Binding HasSelectedPrincipal}"><i:Icon Value="mdi-content-copy" /></Button>
-                            <Button ToolTip.Tip="{loc:Tr UgDelete}" Padding="6,2" Click="OnDeletePrincipal" IsEnabled="{Binding HasSelectedPrincipal}"><i:Icon Value="mdi-delete" /></Button>
-                            <Button ToolTip.Tip="{loc:Tr RibbonRefresh}" Padding="6,2" Command="{Binding RefreshPrincipalsCommand}"><i:Icon Value="mdi-refresh" /></Button>
-                            <!-- Service accounts (machine-to-machine) — ADR 0534, gated on CanManageServiceAccounts. -->
-                            <Button ToolTip.Tip="{loc:Tr SaManage}" Padding="6,2" Click="OnManageServiceAccounts" IsVisible="{Binding CanManageServiceAccounts}"><i:Icon Value="mdi-api" /></Button>
-                        </StackPanel>
-                        <ListBox ItemsSource="{Binding Principals}" SelectedItem="{Binding SelectedPrincipal}">
+                <DockPanel LastChildFill="True">
+                    <!-- The ribbon is its own control, spanning the tab like every converted tab's
+                         (#530 tranche 4) — it replaces the mini-toolbar that sat inside the list column. -->
+                    <v:PrincipalRibbon DockPanel.Dock="Top" />
+                    <Grid ColumnDefinitions="300,*">
+                        <ListBox Grid.Column="0" ItemsSource="{Binding Principals}" SelectedItem="{Binding SelectedPrincipal}">
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:PrincipalRowViewModel">
-                                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2">
-                                        <i:Icon Value="{Binding IconValue}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                                        <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" />
-                                    </StackPanel>
+                                    <!-- The row and its menu are their own control (#530 tranche 4). -->
+                                    <v:PrincipalRow />
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                    </DockPanel>
                     <Border Grid.Column="1" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0">
                         <Panel>
                             <TextBlock IsVisible="{Binding !HasSelectedPrincipal}" Text="{loc:Tr UgSelectPrincipal}"
@@ -1761,7 +1744,8 @@
                             </DockPanel>
                         </Panel>
                     </Border>
-                </Grid>
+                    </Grid>
+                </DockPanel>
             </TabItem>
 
             <!-- Audit log (ADR "Desktop audit viewer") — visible only for a CanViewAuditLog holder. -->

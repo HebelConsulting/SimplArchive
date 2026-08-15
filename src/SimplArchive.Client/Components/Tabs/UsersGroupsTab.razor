@@ -16,22 +16,50 @@
 
 @* Users & groups administration (ADR "Users & groups administration tab"): a combined
    principal list on the left, the assignable system-rights matrix on the right. *@
-<div class="wb-ug">
-    <div class="wb-ug-list">
-        <div class="wb-ug-toolbar">
-            <MudMenu Icon="@Icons.Material.Filled.Add" Size="Size.Small" Dense="true" title="@Strings.Get("UgNew")">
+<div style="flex:1 1 auto; min-height:0; display:flex; flex-direction:column;">
+    @* The toolbar in the Repositories shape (#530 tranche 4), spanning the tab like every converted tab's:
+       one + with a New user/New group flyout (by decision — creation is one affordance, not two competing
+       buttons), copy greyed without a selection, delete SEPARATED as the destructive one (and no error
+       accent — in a control group the appearance meaning state can't also mean emphasis, ADR 0581), the
+       service-account manager HIDDEN without the right (ADR 0543), refresh last. The class keeps its old
+       name: the tests address this toolbar by it, and the first three buttons keep their old positions. *@
+    <div class="wb-ug-toolbar wb-search-bar pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="@(e => _newMenu.OpenMenuAsync(e))"
+                   title="@Strings.Get("UgNew")" aria-label="@Strings.Get("UgNew")">
+            <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("UgNew")</span>
+        </MudButton>
+        @* MudMenu's ActivatorContent auto-open is unreliable for a custom activator (the MainLayout
+           precedent), so the + button above opens it explicitly and the menu's own activator is hidden. *@
+        <MudMenu @ref="_newMenu" Dense="true" AnchorOrigin="Origin.BottomLeft">
+            <ActivatorContent><span style="display:none;"></span></ActivatorContent>
+            <ChildContent>
                 <MudMenuItem Icon="@Icons.Material.Filled.Person" OnClick="() => NewPrincipalAsync(false)">@Strings.Get("UgNewUser")</MudMenuItem>
                 <MudMenuItem Icon="@Icons.Material.Filled.Group" OnClick="() => NewPrincipalAsync(true)">@Strings.Get("UgNewGroup")</MudMenuItem>
-            </MudMenu>
-            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Disabled="@(_selectedPrincipal is null)" OnClick="CopyPrincipalAsync" title="@Strings.Get("UgCopy")" />
-            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Disabled="@(_selectedPrincipal is null)" OnClick="DeletePrincipalAsync" title="@Strings.Get("UgDelete")" />
-            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadPrincipalsAsync" title="@Strings.Get("RibbonRefresh")" />
-            @* Service accounts (machine-to-machine) management — ADR 0534, gated on CanManageServiceAccounts. *@
-            @if (CanManageServiceAccounts)
-            {
-                <MudIconButton Icon="@Icons.Material.Filled.Api" Size="Size.Small" OnClick="OpenServiceAccountsAsync" title="@Strings.Get("SaManage")" />
-            }
-        </div>
+            </ChildContent>
+        </MudMenu>
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_selectedPrincipal is null)" OnClick="CopyPrincipalAsync"
+                   title="@Strings.Get("UgCopy")" aria-label="@Strings.Get("UgCopy")">
+            <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("UgCopy")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_selectedPrincipal is null)" OnClick="DeletePrincipalAsync"
+                   title="@Strings.Get("UgDelete")" aria-label="@Strings.Get("UgDelete")">
+            <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("UgDelete")</span>
+        </MudButton>
+        @* Service accounts (machine-to-machine) management — ADR 0534, gated on CanManageServiceAccounts. *@
+        @if (CanManageServiceAccounts)
+        {
+            <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" OnClick="OpenServiceAccountsAsync"
+                       title="@Strings.Get("SaManage")" aria-label="@Strings.Get("SaManage")">
+                <MudIcon Icon="@Icons.Material.Filled.Api" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("SaManage")</span>
+            </MudButton>
+        }
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" OnClick="LoadPrincipalsAsync"
+                   title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
+            <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
+        </MudButton>
+    </div>
+<div class="wb-ug">
+    <div class="wb-ug-list">
         <div class="wb-ug-rows">
             @foreach (var p in _principals)
             {
@@ -42,6 +70,15 @@
                     {
                         <span class="mud-text-secondary" style="font-size:.75em;">@Strings.Get("UgInactive")</span>
                     }
+                    @* What can be done to THIS row lives in its ⋮ menu — the toolbar's twins act on the
+                       selection (#521's split). Selecting first makes the menu's subject and the selection
+                       the same row before either action reads it (ADR 0559). *@
+                    <span @onclick:stopPropagation="true">
+                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
+                            <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy" OnClick="async () => { await SelectPrincipalAsync(p); await CopyPrincipalAsync(); }">@Strings.Get("UgCopy")</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="async () => { await SelectPrincipalAsync(p); await DeletePrincipalAsync(); }">@Strings.Get("UgDelete")</MudMenuItem>
+                        </MudMenu>
+                    </span>
                 </div>
             }
         </div>
@@ -160,8 +197,12 @@
         }
     </div>
 </div>
+</div>
 
 @code {
+
+    /// <summary>The + button's flyout, opened explicitly (its own activator is hidden).</summary>
+    private MudMenu _newMenu = null!;
 
     /// <summary>Gates the service-accounts button; the server enforces the right regardless.</summary>
     [Parameter]

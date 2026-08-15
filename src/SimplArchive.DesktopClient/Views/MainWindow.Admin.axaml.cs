@@ -16,9 +16,9 @@ public partial class MainWindow
 {
     // Users & groups admin (ADR "Users & groups administration tab") — the New/Copy dialogs and the Delete
     // confirm live in the view; the VM does the Api work.
-    private void OnNewUser(object? sender, RoutedEventArgs e) => Safe.Fire(() => NewPrincipalAsync(false));
+    internal void OnNewUser(object? sender, RoutedEventArgs e) => Safe.Fire(() => NewPrincipalAsync(false));
 
-    private void OnNewGroup(object? sender, RoutedEventArgs e) => Safe.Fire(() => NewPrincipalAsync(true));
+    internal void OnNewGroup(object? sender, RoutedEventArgs e) => Safe.Fire(() => NewPrincipalAsync(true));
 
     private async Task NewPrincipalAsync(bool isGroup)
     {
@@ -35,7 +35,7 @@ public partial class MainWindow
     }
 
     // Copy = the New dialog pre-filled from the selection; the created principal gets the source's rights.
-    private void OnCopyPrincipal(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnCopyPrincipal(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.SelectedPrincipal is not { } p)
         {
@@ -50,7 +50,7 @@ public partial class MainWindow
         }
     });
 
-    private void OnDeletePrincipal(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnDeletePrincipal(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.SelectedPrincipal is not { } p)
         {
@@ -83,7 +83,7 @@ public partial class MainWindow
 
     // Service accounts (machine-to-machine, ADR 0534) — a self-contained manager window that talks to the API
     // via the shared client; gated on CanManageServiceAccounts (the server enforces it on every call too).
-    private void OnManageServiceAccounts(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnManageServiceAccounts(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel { Api: { } api })
         {
