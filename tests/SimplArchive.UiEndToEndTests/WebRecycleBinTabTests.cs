@@ -54,8 +54,10 @@ public class WebRecycleBinTabTests
         await Expect(dialog.GetByRole(AriaRole.Button, new() { Name = "OK" })).ToBeEnabledAsync();
         await dialog.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
 
-        // Hard-delete the specific item from its row → it's gone from the bin.
-        await binRow.GetByRole(AriaRole.Button).Last.ClickAsync();
+        // Hard-delete the specific item from its row's ⋮ menu (#530: per-row buttons became the menu) →
+        // it's gone from the bin.
+        await binRow.Locator("button.mud-icon-button").Last.ClickAsync();
+        await page.Locator(".mud-menu-item").Filter(new() { HasText = "Hard-delete" }).First.ClickAsync();
         await Expect(bin.Locator("tr").Filter(new() { HasText = name })).Not.ToBeVisibleAsync();
     }
 
@@ -89,18 +91,22 @@ public class WebRecycleBinTabTests
             await Expect(list.GetByText(name)).Not.ToBeVisibleAsync();
         }
 
-        // Recycle bin tab → check both rows, then "Restore selected".
+        // Recycle bin tab → Ctrl-click both rows into the native multi-selection (#530: the checkbox column
+        // is the TOUCH affordance and is hidden on a hover-capable pointer device, which Playwright's Chrome
+        // is). A synthetic click carrying ctrlKey — real-input modifier clicks do not reach Blazor.
         await page.Locator(".wb-tab[aria-label=\"Recycle bin\"]").First.ClickAsync();
         var bin = page.Locator(".wb-recyclebin");
         await Expect(bin).ToBeVisibleAsync();
+        var ctrl = new Dictionary<string, object> { ["ctrlKey"] = true, ["bubbles"] = true };
         foreach (var name in names)
         {
             var binRow = bin.Locator("tr").Filter(new() { HasText = name });
             await Expect(binRow).ToBeVisibleAsync();
-            await binRow.GetByRole(AriaRole.Checkbox).First.ClickAsync();
+            await binRow.DispatchEventAsync("click", ctrl);
         }
 
-        await bin.GetByText(new System.Text.RegularExpressions.Regex("Restore selected")).ClickAsync();
+        // The toolbar's restore is icon-only; its tooltip carries the counted label.
+        await bin.Locator("[aria-label^='Restore selected']").First.ClickAsync();
 
         // Both leave the recycle bin and are back in the repository.
         foreach (var name in names)
@@ -141,14 +147,15 @@ public class WebRecycleBinTabTests
         await page.Locator(".wb-tab[aria-label=\"Recycle bin\"]").First.ClickAsync();
         var bin = page.Locator(".wb-recyclebin");
         await Expect(bin).ToBeVisibleAsync();
+        var ctrl = new Dictionary<string, object> { ["ctrlKey"] = true, ["bubbles"] = true };
         foreach (var name in names)
         {
             var binRow = bin.Locator("tr").Filter(new() { HasText = name });
             await Expect(binRow).ToBeVisibleAsync();
-            await binRow.GetByRole(AriaRole.Checkbox).First.ClickAsync();
+            await binRow.DispatchEventAsync("click", ctrl); // #530: native multi-select; checkboxes are touch-only
         }
 
-        await bin.GetByText(new System.Text.RegularExpressions.Regex("Purge selected")).ClickAsync();
+        await bin.Locator("[aria-label^='Purge selected']").First.ClickAsync();
         var dialog = page.Locator(".mud-dialog");
         await dialog.Locator("input").First.FillAsync("I AGREE");
         await dialog.GetByRole(AriaRole.Button, new() { Name = "OK" }).ClickAsync();

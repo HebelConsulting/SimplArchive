@@ -1,0 +1,34 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.RecycleBinRibbon"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- Recycle bin ribbon (#530 tranche 1) — the Repositories shape replacing a labeled header bar. The
+         selected-item group first; the DESTRUCTIVE pair icon-only in its own group, separated from restore
+         (destructive never sits beside the button that commits work — the Check-out discard precedent), both
+         still behind their I-AGREE dialogs; refresh last. Greyed when merely nothing is selected; hard-delete
+         is HIDDEN for a non-admin, because a right the caller does not hold is not advertised (ADR 0543).
+         Tooltips carry the counted labels, since an icon-only button has nowhere else to say how many. -->
+    <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+        <WrapPanel Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="rb-restore" IsEnabled="{Binding RecycleBin.HasCheckedItems}"
+                        Command="{Binding RecycleBin.RestoreSelectedCommand}"
+                        ToolTip.Tip="{Binding RecycleBin.RestoreSelectedLabel}"><i:Icon Value="mdi-restore" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4" IsVisible="{Binding RecycleBin.IsTenantAdmin}">
+                <Button AutomationProperties.AutomationId="rb-purge" IsEnabled="{Binding RecycleBin.CanPurgeSelected}"
+                        Click="OnPurgeSelected"
+                        ToolTip.Tip="{Binding RecycleBin.PurgeSelectedLabel}"><i:Icon Value="mdi-delete-forever" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="rb-empty" IsEnabled="{Binding RecycleBin.HasItems}"
+                        Click="OnHardDeleteAll"
+                        ToolTip.Tip="{loc:Tr RbHardDeleteAll}"><i:Icon Value="mdi-delete-sweep" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+                <Button Command="{Binding RecycleBin.RefreshCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
+            </StackPanel>
+        </WrapPanel>
+    </Border>
+</UserControl>

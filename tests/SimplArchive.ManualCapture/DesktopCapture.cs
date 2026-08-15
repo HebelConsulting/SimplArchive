@@ -26,6 +26,7 @@ public static class DesktopCapture
             {
                 DesktopWindow.Logon => new[] { "--logon-screenshot", outPath },
                 DesktopWindow.Servers => ["--servers-screenshot", outPath],
+                DesktopWindow.SortDialog => ["--sortdialog-screenshot", outPath, Path.Combine(repoRoot, screen.Pdf!)],
                 _ => ["--screenshot", outPath, "--demo", .. screen.Flags, .. pdfArg],
             };
 

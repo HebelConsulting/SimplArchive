@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.RecycleBinRow"
+             x:DataType="vm:RecycleBinRowViewModel">
+    <!-- One deleted entry, drawn the way the Repositories tab draws a row (#530, tranche 1): what it IS —
+         name, where it lived, when and by whom it was deleted — and a context menu for what you can do to it.
+         The two per-row buttons (restore, hard-delete) that used to reach the view-model through
+         ReflectionBinding $parent[ListBox] are gone: a menu entry acts on the row it was opened from, and the
+         ribbon's twins act on the selection (ADR 0559 — never on pane state).
+
+         The checkbox column and select-all went with them: the list multi-selects natively (Ctrl/Shift), the
+         way Repositories, Inbox and Check-out already do on the desktop. The menu HIDES what is unavailable
+         (hard delete for a non-admin) while the ribbon GREYS it — the #521 split. -->
+    <Grid ColumnDefinitions="*,*,130,120" Margin="0,2">
+        <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        <TextBlock Grid.Column="1" Text="{Binding Path}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" />
+        <TextBlock Grid.Column="2" Text="{Binding DeletedAtText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+        <TextBlock Grid.Column="3" Text="{Binding DeletedBy}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" FontSize="12" TextTrimming="CharacterEllipsis" />
+
+        <Grid.ContextMenu>
+            <ContextMenu>
+                <MenuItem Header="{loc:Tr RbRestore}" Click="OnRestore">
+                    <MenuItem.Icon><i:Icon Value="mdi-restore" /></MenuItem.Icon>
+                </MenuItem>
+                <!-- Hard delete is separated AND admin-only: hidden rather than greyed, because a right the
+                     caller does not hold is not advertised (ADR 0543/0554). -->
+                <Separator IsVisible="{Binding IsTenantAdmin}" />
+                <MenuItem Header="{loc:Tr MwDeletePermanently}" Click="OnHardDelete" IsVisible="{Binding IsTenantAdmin}">
+                    <MenuItem.Icon><i:Icon Value="mdi-delete-forever" /></MenuItem.Icon>
+                </MenuItem>
+            </ContextMenu>
+        </Grid.ContextMenu>
+    </Grid>
+</UserControl>

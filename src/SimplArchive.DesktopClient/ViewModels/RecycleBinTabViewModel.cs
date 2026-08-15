@@ -93,7 +93,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
             _binLinks = bin.Links;
             foreach (var item in bin.Items)
             {
-                var row = new RecycleBinRowViewModel
+                Items.Add(new RecycleBinRowViewModel
                 {
                     Entry = item,
                     Id = item.Id,
@@ -101,15 +101,11 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
                     Path = item.Path,
                     DeletedAt = item.DeletedAt,
                     DeletedBy = item.DeletedBy,
-                };
-                row.PropertyChanged += OnRowCheckedChanged;
-                Items.Add(row);
+                    IsTenantAdmin = IsTenantAdmin, // gates the row menu's hard-delete (#530)
+                });
             }
 
-            _suppressCheckReconcile = true;
-            SelectAll = false;
-            _suppressCheckReconcile = false;
-            OnCheckedChanged();
+            SetSelection([]); // a reload invalidates whatever was highlighted
             OnPropertyChanged(nameof(HasItems));
             Status = Items.Count == 0 ? "The recycle bin is empty." : string.Format(Strings.Get("StDeletedItems"), Items.Count);
         }
@@ -220,53 +216,35 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
         }
     }
 
-    // ---- Bulk restore (ADR "Bulk restore from the recycle bin") / bulk purge ("Bulk purge of selected …") ----
-    public int CheckedCount => Items.Count(i => i.IsChecked);
-    public bool HasCheckedItems => Items.Any(i => i.IsChecked);
+    // ---- Bulk restore / bulk purge, over the native multi-SELECTION (#530 tranche 1). --------------------
+    //
+    // The checked-set column and its select-all reconcile machinery are gone: the list multi-selects the way
+    // Repositories, Inbox and Check-out already do, the view pushes the selection here, and the ribbon's bulk
+    // buttons act on it. Falls back to the single SelectedItem so a programmatic selection (tests, the
+    // headless screenshot) gates identically — the CheckoutTabViewModel recipe.
+    private IReadOnlyList<RecycleBinRowViewModel> _selection = [];
+
+    public IReadOnlyList<RecycleBinRowViewModel> Selection =>
+        _selection.Count > 0 ? _selection : SelectedItem is { } one ? [one] : [];
+
+    public void SetSelection(IReadOnlyList<RecycleBinRowViewModel> rows)
+    {
+        _selection = rows;
+        OnPropertyChanged(nameof(CheckedCount));
+        OnPropertyChanged(nameof(HasCheckedItems));
+        OnPropertyChanged(nameof(RestoreSelectedLabel));
+        OnPropertyChanged(nameof(CanPurgeSelected));
+        OnPropertyChanged(nameof(PurgeSelectedLabel));
+    }
+
+    public int CheckedCount => Selection.Count;
+    public bool HasCheckedItems => Selection.Count > 0;
     public string RestoreSelectedLabel => $"Restore selected ({CheckedCount})";
     // Bulk purge is tenant-admin-only (a permanent deletion), gated behind the same "I AGREE" dialog.
     public bool CanPurgeSelected => HasCheckedItems && IsTenantAdmin;
     public string PurgeSelectedLabel => $"Purge selected ({CheckedCount})";
 
     partial void OnIsTenantAdminChanged(bool value) => OnPropertyChanged(nameof(CanPurgeSelected));
-
-    // A header "select all" — set drives every row; a null-op reentrancy guard while a single row toggles.
-    [ObservableProperty] private bool _selectAll;
-    private bool _suppressCheckReconcile;
-
-    partial void OnSelectAllChanged(bool value)
-    {
-        if (_suppressCheckReconcile)
-        {
-            return;
-        }
-
-        foreach (var row in Items)
-        {
-            row.IsChecked = value;
-        }
-    }
-
-    private void OnRowCheckedChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(RecycleBinRowViewModel.IsChecked))
-        {
-            OnCheckedChanged();
-        }
-    }
-
-    private void OnCheckedChanged()
-    {
-        OnPropertyChanged(nameof(CheckedCount));
-        OnPropertyChanged(nameof(HasCheckedItems));
-        OnPropertyChanged(nameof(RestoreSelectedLabel));
-        OnPropertyChanged(nameof(CanPurgeSelected));
-        OnPropertyChanged(nameof(PurgeSelectedLabel));
-        // Reflect the aggregate state on the header checkbox without re-driving the rows.
-        _suppressCheckReconcile = true;
-        SelectAll = Items.Count > 0 && Items.All(i => i.IsChecked);
-        _suppressCheckReconcile = false;
-    }
 
     [RelayCommand]
     private async Task RestoreSelected()
@@ -276,7 +254,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
             return;
         }
 
-        var ids = Items.Where(i => i.IsChecked).Select(i => i.Id).ToList();
+        var ids = Selection.Select(i => i.Id).ToList();
         if (ids.Count == 0)
         {
             return;
@@ -303,7 +281,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
             return;
         }
 
-        var ids = Items.Where(i => i.IsChecked).Select(i => i.Id).ToList();
+        var ids = Selection.Select(i => i.Id).ToList();
         if (ids.Count == 0)
         {
             return;
@@ -385,8 +363,8 @@ public sealed partial class RecycleBinRowViewModel : ObservableObject
     public required DateTimeOffset DeletedAt { get; init; }
     public required string DeletedBy { get; init; }
 
-    // Multi-select for bulk restore (ADR "Bulk restore from the recycle bin").
-    [ObservableProperty] private bool _isChecked;
+    /// <summary>Whether the caller may hard-delete — set at row construction; gates the row menu's entry (#530).</summary>
+    public bool IsTenantAdmin { get; init; }
 
     public string DeletedAtText => DeletedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
 }

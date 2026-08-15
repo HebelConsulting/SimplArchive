@@ -179,6 +179,66 @@ list actually has, and no date can.
 #pair("screenshots/web-inbox.png", "screenshots/desktop-inbox.png",
   [The Inbox: staged items waiting to be classified and filed, in the web (left) and desktop (right) clients.])
 
+== Tidying a scan before filing
+
+A scan rarely arrives filing-ready: a batch holds several documents, a page went through the feeder sideways, a
+blank back rode along. The Inbox is where all of that is put right — *before* filing, because a staged item can
+be reshaped freely, while a filed document's pages are part of the record. Every operation here works on `.pdf`
+and multi-page `.tif` files; anything else simply does not offer them.
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt + luma(80%),
+  inset: 6pt,
+  [*Operation*], [*What it does*],
+  [*Split into pages*#idx("Split into pages")], [One new item per page. The original is kept, so a split that
+   turns out wrong is undone by deleting its output — a scan can be the only copy of a piece of paper.],
+  [*Sort & rotate pages*#idx("Sort pages")#idx("Rotate pages")], [Opens the page dialog below: put the pages in
+   order, delete a page with the bin on its tile, and turn a page with the *⟲ ⟳* buttons under it. Nothing is
+   written until *Apply order* — one save for the whole arrangement, and *Cancel* discards everything.],
+  [*Join items*#idx("Join items")], [Several staged items become one, in the order you chose them. The sources
+   are kept.],
+  [*Cut at separator sheets*#idx("Separator sheets")], [Cuts a batch into one item per document at the printed
+   separator sheets between them (see below).],
+)
+
+#shot("screenshots/desktop-sort-rotate.png",
+  [The *Sort & rotate pages* dialog on the sample batch: page 4 went through the scanner upside-down and has
+   been turned a quarter so far — one more press of its *⟳* button puts it upright. The bin on each tile
+   deletes that page; nothing is saved until *Apply order*.])
+
+*Rotation does not damage a PDF.* Turning a PDF page only records the new orientation — the page's real,
+searchable text is untouched. A `.tif` page has no such notion and is re-encoded when turned, the same trade its
+straightening makes.
+
+*Separator sheets.* For a stack of paper documents, print the *separator sheet* (the printer button in the
+Inbox toolbar), lay one between each document, and feed the whole pile through the scanner in one go. *Cut at
+separator sheets* then produces one item per document and discards the sheets themselves. Sample files to try
+this with — a batch as the scanner would produce it, and the sheet — are served by your own installation under
+`/download/samples/`.
+
+*The automatic toggles.* Three sticky switches in the Inbox toolbar act on every *arriving* upload — including
+files saved into the Inbox folder of the mounted network drive:
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt + luma(80%),
+  inset: 6pt,
+  [*Toggle*], [*What it does to an arriving scan*],
+  [*Auto-rotate*#idx("Auto-rotate")], [Turns pages that arrived upside-down or sideways the right way round.
+   Works for `.pdf` and `.tif`.],
+  [*Auto-straighten*#idx("Auto-straighten (deskew)")], [Corrects the slight skew of a crooked scan. Only for
+   `.tif`: straightening re-renders the pages, and doing that to a PDF would replace its real text with a
+   recognised approximation.],
+  [*Cut at separator sheets*], [Applies the separator cut to every arriving batch, so a scanner that feeds
+   straight into the Inbox needs no manual step at all.],
+)
+
+#note[
+  *Digitally signed documents are never touched.* Every page operation would break the signature, so on a
+  signed item none is offered and the automatic steps skip it — the refusal is the feature.
+]
+
 #shot("screenshots/web-version-compare.png",
   [*Compare versions*: an inline diff of two revisions of a document — added lines marked with `+`, removed lines
    with `-` — so a change between versions is easy to see.])

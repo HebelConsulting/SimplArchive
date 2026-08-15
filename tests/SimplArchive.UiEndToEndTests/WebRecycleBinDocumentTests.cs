@@ -44,7 +44,9 @@ public class WebRecycleBinDocumentTests
         var bin = page.Locator(".wb-recyclebin");
         var docRow = bin.Locator("tr").Filter(new() { HasText = name });
         await Expect(docRow).ToBeVisibleAsync();
-        await docRow.GetByRole(AriaRole.Button, new() { Name = "Restore" }).ClickAsync();
+        // #530: the per-row Restore button became the row's ⋮ menu entry.
+        await docRow.Locator("button.mud-icon-button").Last.ClickAsync();
+        await page.Locator(".mud-menu-item").Filter(new() { HasText = "Restore" }).First.ClickAsync();
         await Expect(bin.Locator("tr").Filter(new() { HasText = name })).Not.ToBeVisibleAsync();
     }
 }

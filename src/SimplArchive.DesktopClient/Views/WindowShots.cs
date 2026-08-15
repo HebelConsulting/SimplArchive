@@ -39,6 +39,33 @@ public static class WindowShots
             return true;
         }
 
+        // Headless render of the sort & rotate dialog over a REAL multi-page PDF (#522, manual figure #527):
+        // `--sortdialog-screenshot <out.png> <pdf>`. The sample's mis-rotated page 4 is turned a quarter
+        // right first, so the figure shows the feature rather than a grid of upright tiles — and rendering
+        // through PreviewRenderer means the same PDFium path the product uses is what produced the pictures.
+        var sortShotIndex = Array.IndexOf(args, "--sortdialog-screenshot");
+        if (sortShotIndex >= 0 && sortShotIndex + 2 < args.Length)
+        {
+            AppBuilder.Configure<App>()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia()
+                .WithInterFont()
+                .SetupWithoutStarting();
+            var pages = Services.PreviewRenderer.RenderPdfPages(File.ReadAllBytes(args[sortShotIndex + 2]));
+            var sortDialog = new SortPagesDialog(Path.GetFileName(args[sortShotIndex + 2]), pages.Cast<Avalonia.Media.Imaging.Bitmap?>().ToList());
+            // The sample batch's page 4 is the deliberately mis-rotated one — show it mid-fix, a quarter
+            // turn from upright, so the figure carries both the problem and the remedy.
+            if (sortDialog.Pages.Count > 3)
+            {
+                sortDialog.Pages[3].RotateRight();
+            }
+
+            sortDialog.Show();
+            Dispatcher.UIThread.RunJobs();
+            sortDialog.CaptureRenderedFrame()?.Save(args[sortShotIndex + 1]);
+            return true;
+        }
+
         // Headless render of the move/reference drop dialog — catches XAML/icon load crashes:
         // `--dropdialog-screenshot <out.png>`.
         var dropShotIndex = Array.IndexOf(args, "--dropdialog-screenshot");

@@ -15,6 +15,7 @@ public enum DesktopWindow
     Main,      // --screenshot <out> --demo <flags>
     Logon,     // --logon-screenshot <out>
     Servers,   // --servers-screenshot <out>
+    SortDialog, // --sortdialog-screenshot <out> <pdf> — the sort & rotate dialog over the sample batch (#527)
 }
 
 // A web screen: after login, click the bottom tab whose label matches `Tab` (null = the default workbench, or the
@@ -38,6 +39,9 @@ public static class Screens
         new("tenant", ["--tenant"]),
         new("checkout", ["--checkout"]),
         new("server-manager", [], DesktopWindow.Servers),
+        // The sort & rotate dialog over the checked-in sample batch — its mis-rotated page 4 shown mid-fix,
+        // which is the figure the manual's page-operations section stands on (#527).
+        new("sort-rotate", [], DesktopWindow.SortDialog, Pdf: "src/SimplArchive.Api/wwwroot/download/samples/SimplArchive-Patch3-Sample-Batch.pdf"),
     ];
 
     // Web — the Blazor workbench. Tab labels match the bottom tab bar (.wb-tab). The demo admin holds every right,

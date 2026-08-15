@@ -68,11 +68,9 @@ public class DesktopRecycleBinTests
         vm.SetApi(api);
         await vm.LoadAsync();
 
-        // Check A + B (leave C), then Restore selected → 2 restored.
-        foreach (var name in new[] { names[0], names[1] })
-        {
-            vm.Items.Single(i => i.Name == name).IsChecked = true;
-        }
+        // Select A + B (leave C) — the native multi-selection, pushed the way the view pushes it (#530) —
+        // then Restore selected → 2 restored.
+        vm.SetSelection(vm.Items.Where(i => i.Name == names[0] || i.Name == names[1]).ToList());
         Assert.Equal(2, vm.CheckedCount);
         await vm.RestoreSelectedCommand.ExecuteAsync(null);
         await vm.LoadAsync();
@@ -100,7 +98,7 @@ public class DesktopRecycleBinTests
         var vm = new RecycleBinTabViewModel { IsTenantAdmin = true };
         vm.SetApi(api);
         await vm.LoadAsync();
-        foreach (var name in names) vm.Items.Single(i => i.Name == name).IsChecked = true;
+        vm.SetSelection(vm.Items.Where(i => names.Contains(i.Name)).ToList());
         Assert.True(vm.CanPurgeSelected);
 
         // Purge selected (the code-behind's "I AGREE" gate is bypassed in the test — call the VM method directly).

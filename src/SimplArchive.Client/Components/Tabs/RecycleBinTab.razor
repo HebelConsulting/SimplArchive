@@ -17,40 +17,60 @@
 <div class="wb-recyclebin" style="height:100%; display:flex; min-height:0;">
     @* Left: the list of deleted items. *@
     <div style="flex:1.5 1 0; min-width:0; display:flex; flex-direction:column; border-right:1px solid var(--mud-palette-lines-default);">
-        <div class="pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default); display:flex; align-items:center; gap:8px;">
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("RbDeletedItems")</MudText>
-            @if (_rbChecked.Count > 0)
+        @* The toolbar in the Repositories shape (#530 tranche 1): restore first (selection-scoped, the
+           counted label rides in the tooltip), the DESTRUCTIVE pair icon-only in its own group SEPARATED from
+           it — destructive never sits beside the button that commits work — and refresh last. Admin-only
+           actions are HIDDEN, not greyed (a right the caller does not hold is not advertised, ADR 0543);
+           merely-nothing-selected only disables. The buttons stay flat: no toggles here, but the one-shape
+           rule (ADR 0576/0581) is why the filled/outlined accents went. *@
+        <div class="wb-search-bar pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+            <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_rbChecked.Count == 0)" OnClick="RestoreSelectedAsync"
+                       title="@string.Format(Strings.Get("RbRestoreSelected"), _rbChecked.Count)"
+                       aria-label="@string.Format(Strings.Get("RbRestoreSelected"), _rbChecked.Count)">
+                <MudIcon Icon="@Icons.Material.Filled.RestoreFromTrash" Size="Size.Small" /><span class="wb-rib-label">@string.Format(Strings.Get("RbRestoreSelected"), _rbChecked.Count)</span>
+            </MudButton>
+            @if (IsTenantAdmin)
             {
-                <MudButton Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small" StartIcon="@Icons.Material.Filled.RestoreFromTrash" OnClick="RestoreSelectedAsync" Class="ml-auto">@string.Format(Strings.Get("RbRestoreSelected"), _rbChecked.Count)</MudButton>
-                @if (IsTenantAdmin)
-                {
-                    <MudButton Color="Color.Error" Variant="Variant.Filled" Size="Size.Small" StartIcon="@Icons.Material.Filled.DeleteForever" OnClick="PurgeSelectedAsync">@string.Format(Strings.Get("RbPurgeSelected"), _rbChecked.Count)</MudButton>
-                }
+                <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_rbChecked.Count == 0)" OnClick="PurgeSelectedAsync"
+                           title="@string.Format(Strings.Get("RbPurgeSelected"), _rbChecked.Count)"
+                           aria-label="@string.Format(Strings.Get("RbPurgeSelected"), _rbChecked.Count)">
+                    <MudIcon Icon="@Icons.Material.Filled.DeleteForever" Size="Size.Small" /><span class="wb-rib-label">@string.Format(Strings.Get("RbPurgeSelected"), _rbChecked.Count)</span>
+                </MudButton>
+                <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_recycleBinItems.Count == 0)" OnClick="HardDeleteAllAsync"
+                           title="@Strings.Get("RbHardDeleteAll")" aria-label="@Strings.Get("RbHardDeleteAll")">
+                    <MudIcon Icon="@Icons.Material.Filled.DeleteSweep" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RbHardDeleteAll")</span>
+                </MudButton>
             }
-            <MudButton StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Text" Size="Size.Small" OnClick="LoadRecycleBinAsync" Class="@(_rbChecked.Count > 0 ? "" : "ml-auto")">@Strings.Get("RibbonRefresh")</MudButton>
-            @if (IsTenantAdmin && _recycleBinItems.Count > 0)
-            {
-                <MudButton Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.DeleteSweep" OnClick="HardDeleteAllAsync">@Strings.Get("RbHardDeleteAll")</MudButton>
-            }
+            <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" OnClick="LoadRecycleBinAsync"
+                       title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
+                <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
+            </MudButton>
         </div>
         <div style="flex:1 1 auto; overflow:auto;">
-            <MudTable Items="_recycleBinItems" Dense="true" Hover="true" Bordered="false" Elevation="0" T="RecycleBinItem" OnRowClick="@((TableRowClickEventArgs<RecycleBinItem> e) => e.Item is { } item ? SelectRecycleBinItemAsync(item) : Task.CompletedTask)">
+            <MudTable Items="_recycleBinItems" Dense="true" Hover="true" Bordered="false" Elevation="0" T="RecycleBinItem" OnRowClick="@((TableRowClickEventArgs<RecycleBinItem> e) => e.Item is { } item ? OnRowClickAsync(item, e.MouseEventArgs) : Task.CompletedTask)">
                 <HeaderContent>
-                    <MudTh Style="width:1px;"><MudCheckBox T="bool" Value="@AllRbChecked" ValueChanged="ToggleAllRbChecked" Dense="true" /></MudTh>
-                    <MudTh>@Strings.Get("Name")</MudTh><MudTh>@Strings.Get("RbColPath")</MudTh><MudTh>@Strings.Get("RbColDeleted")</MudTh><MudTh>@Strings.Get("RbColDeletedBy")</MudTh><MudTh Style="text-align:right;">@Strings.Get("RbColActions")</MudTh>
+                    @* The checkbox column is the TOUCH affordance only (#530): a hover-capable pointer device
+                       multi-selects natively — Ctrl/Cmd-click toggles, Shift-click ranges — the Inbox recipe.
+                       No select-all: touch keeps per-row boxes, pointer gets Ctrl-click. *@
+                    <MudTh Style="width:1px;" Class="wb-touch-only"></MudTh>
+                    <MudTh>@Strings.Get("Name")</MudTh><MudTh>@Strings.Get("RbColPath")</MudTh><MudTh>@Strings.Get("RbColDeleted")</MudTh><MudTh>@Strings.Get("RbColDeletedBy")</MudTh><MudTh Style="width:1px;"></MudTh>
                 </HeaderContent>
                 <RowTemplate Context="row">
-                    <MudTd @onclick:stopPropagation="true"><MudCheckBox T="bool" Value="@_rbChecked.Contains(row.Id)" ValueChanged="@(v => ToggleRbChecked(row.Id, v))" Dense="true" /></MudTd>
-                    <MudTd>@row.Name</MudTd>
+                    <MudTd Class="wb-touch-only" @onclick:stopPropagation="true"><MudCheckBox T="bool" Value="@_rbChecked.Contains(row.Id)" ValueChanged="@(v => ToggleRbChecked(row.Id, v))" Dense="true" /></MudTd>
+                    <MudTd Class="@(_rbChecked.Contains(row.Id) ? "wb-list-row-selected" : "")">@row.Name</MudTd>
                     <MudTd Class="mud-text-secondary">@row.Path</MudTd>
                     <MudTd>@row.DeletedAt.ToLocalTime().ToString("g")</MudTd>
                     <MudTd>@row.DeletedBy</MudTd>
-                    <MudTd Style="text-align:right; white-space:nowrap;">
-                        <MudIconButton Icon="@Icons.Material.Filled.RestoreFromTrash" Size="Size.Small" OnClick="@(() => RestoreRecycleBinItemAsync(row))" title="@Strings.Get("RbRestore")" />
-                        @if (IsTenantAdmin)
-                        {
-                            <MudIconButton Icon="@Icons.Material.Filled.DeleteForever" Color="Color.Error" Size="Size.Small" OnClick="@(() => HardDeleteRecycleBinItemAsync(row))" title="@Strings.Get("RbHardDelete")" />
-                        }
+                    @* What you can do to THIS row lives in its ⋮ menu — the same actions the toolbar offers for
+                       the selection, differing only in scope (#521's split). Hard delete stays admin-HIDDEN. *@
+                    <MudTd Style="text-align:right; white-space:nowrap;" @onclick:stopPropagation="true">
+                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
+                            <MudMenuItem Icon="@Icons.Material.Filled.RestoreFromTrash" OnClick="() => RestoreRecycleBinItemAsync(row)">@Strings.Get("RbRestore")</MudMenuItem>
+                            @if (IsTenantAdmin)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.DeleteForever" OnClick="() => HardDeleteRecycleBinItemAsync(row)">@Strings.Get("RbHardDelete")</MudMenuItem>
+                            }
+                        </MudMenu>
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -239,18 +259,52 @@
     }
 
     // ---- Bulk restore (ADR "Bulk restore from the recycle bin") ----
-    private bool AllRbChecked => _recycleBinItems.Count > 0 && _rbChecked.Count == _recycleBinItems.Count;
+    // Native multi-selection over the checked set — the Inbox recipe (#530): Ctrl/Cmd-click toggles,
+    // Shift-click ranges from the anchor, a plain click makes the clicked row the whole set AND the detail
+    // subject. "Selected" and "checked" are one thing; the touch-only checkbox column is a second way in.
+    private Guid? _rbAnchor;
+
+    private async Task OnRowClickAsync(RecycleBinItem item, Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
+    {
+        if (e.CtrlKey || e.MetaKey)
+        {
+            if (!_rbChecked.Remove(item.Id))
+            {
+                _rbChecked.Add(item.Id);
+            }
+
+            _rbAnchor = item.Id;
+            return;
+        }
+
+        if (e.ShiftKey && _rbAnchor is { } anchor)
+        {
+            var order = _recycleBinItems.Select(x => x.Id).ToList();
+            var a = order.IndexOf(anchor);
+            var b = order.IndexOf(item.Id);
+            if (a >= 0 && b >= 0)
+            {
+                for (var i = Math.Min(a, b); i <= Math.Max(a, b); i++)
+                {
+                    _rbChecked.Add(order[i]);
+                }
+
+                return;
+            }
+        }
+
+        _rbChecked.Clear();
+        _rbChecked.Add(item.Id);
+        _rbAnchor = item.Id;
+        await SelectRecycleBinItemAsync(item);
+    }
 
     private void ToggleRbChecked(Guid id, bool value)
     {
         if (value) _rbChecked.Add(id); else _rbChecked.Remove(id);
     }
 
-    private void ToggleAllRbChecked(bool value)
-    {
-        _rbChecked.Clear();
-        if (value) foreach (var i in _recycleBinItems) _rbChecked.Add(i.Id);
-    }
+
 
     private async Task RestoreSelectedAsync()
     {

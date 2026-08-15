@@ -346,9 +346,37 @@ public partial class MainWindow
         }
     });
 
+    // The Recycle bin selection, kept on the view-model so the ribbon's bulk buttons see how many rows are
+    // highlighted (#530 tranche 1 — the Check-out recipe).
+    private void OnRecycleBinSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm)
+        {
+            vm.RecycleBin.SetSelection(RecycleBinList.SelectedItems?.OfType<RecycleBinRowViewModel>().ToList() ?? []);
+        }
+    }
+
+    // Restore / hard-delete ONE recycle-bin row, addressed from the row's context menu via its Tag (#530
+    // tranche 1 — the CheckoutRow recipe; the ribbon's selection-scoped twins arrive with the ribbon).
+    internal void OnRecycleBinRestore(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && (sender as Control)?.Tag is RecycleBinRowViewModel row)
+        {
+            await vm.RecycleBin.RestoreCommand.ExecuteAsync(row);
+        }
+    });
+
+    internal void OnRecycleBinHardDelete(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && (sender as Control)?.Tag is RecycleBinRowViewModel row)
+        {
+            await vm.RecycleBin.HardDeleteCommand.ExecuteAsync(row);
+        }
+    });
+
     // Empty the whole recycle bin — gated behind the "I AGREE" confirmation dialog (ADR "Desktop recycle bin
     // parity"). The per-row hard-delete needs no confirmation; this one is destructive across everything.
-    private void OnRecycleBinHardDeleteAll(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnRecycleBinHardDeleteAll(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && await new HardDeleteAllDialog().ShowDialog<bool>(this))
         {
@@ -357,7 +385,7 @@ public partial class MainWindow
     });
 
     // Bulk purge of the checked items (ADR "Bulk purge of selected recycle-bin items") — same "I AGREE" gate.
-    private void OnRecycleBinPurgeSelected(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnRecycleBinPurgeSelected(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && await new HardDeleteAllDialog().ShowDialog<bool>(this))
         {
