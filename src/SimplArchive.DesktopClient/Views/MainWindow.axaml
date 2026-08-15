@@ -2119,7 +2119,16 @@
                 <TabItem.Header><i:Icon Value="mdi-view-dashboard-outline" FontSize="20" /></TabItem.Header>
                 <ScrollViewer Margin="14">
                     <StackPanel Spacing="6" MaxWidth="640" HorizontalAlignment="Left">
-                        <TextBlock Text="{loc:Tr TabMyWork}" FontSize="16" FontWeight="SemiBold" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{loc:Tr TabMyWork}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <!-- The header stays, by decision (#530 tranche 7) — a dashboard keeps its title;
+                                 only refresh takes the ribbon-button look (Border.ribbon scopes the ghost
+                                 style), and the desktop GAINS it: the web had one, this tab did not
+                                 (ADR 0511 parity). -->
+                            <Border Classes="ribbon">
+                                <Button Command="{Binding RefreshMyWorkCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
+                            </Border>
+                        </StackPanel>
 
                         <TextBlock Text="{loc:Tr MyWorkReminders}" FontWeight="SemiBold" Margin="0,8,0,2" />
                         <TextBlock Text="{loc:Tr MyWorkNothingDue}" Foreground="{DynamicResource WbMuted}" IsVisible="{Binding !DashboardReminders.Count}" />

@@ -9,9 +9,14 @@
             @* Personal dashboard (ADR "My work dashboard"): overdue + due-soon reminders, followed
                documents, and review tasks — three stacked sections, each item navigating to its document. *@
             <div class="wb-mywork pa-4" style="overflow:auto;">
+                @* The header stays, by decision (#530 tranche 7) — a dashboard keeps its title; only refresh
+                   takes the ribbon-button style (and its hardcoded title becomes the localized one). *@
                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                     <MudText Typo="Typo.h6">@Strings.Get("MyWorkHeader")</MudText>
-                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="LoadMyWorkAsync" title="Refresh" />
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="LoadMyWorkAsync"
+                               title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
+                        <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
+                    </MudButton>
                 </div>
 
                 <MudText Typo="Typo.subtitle2" Class="mt-2">@Strings.Get("MyWorkReminders")</MudText>

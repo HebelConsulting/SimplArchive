@@ -82,4 +82,8 @@ public sealed partial class MainWindowViewModel
         TagCatalogAdmin.Add(new TagCatalogRow(new Services.SimplArchiveApiClient.TagCatalogItem(Guid.NewGuid(), "urgent", null)));
         SelectedTagRow = TagCatalogAdmin[0];
     }
+
+    /// <summary>The My work dashboard's refresh (#530, tranche 7) — the web tab had one, this tab did not.</summary>
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private Task RefreshMyWork() => LoadMyWorkAsync();
 }
