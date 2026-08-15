@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.TaskRibbon"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- Tasks ribbon (#530, tranche 3). Restructure only, by decision: approve/reject stay in the workflow
+         detail a task opens into, so the ribbon is Open — acting on THE selected row, greyed when there is
+         none — and refresh. -->
+    <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+        <WrapPanel Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="task-open" IsEnabled="{Binding HasSelectedTaskRow}"
+                        Command="{Binding OpenTaskCommand}" CommandParameter="{Binding SelectedTaskRow}"
+                        ToolTip.Tip="{loc:Tr MwOpen}"><i:Icon Value="mdi-open-in-new" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+                <Button Command="{Binding RefreshTasksCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
+            </StackPanel>
+        </WrapPanel>
+    </Border>
+</UserControl>

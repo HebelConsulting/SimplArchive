@@ -11,9 +11,9 @@
          a task opens into — approving from a list row without seeing the document invites rubber-stamping. -->
     <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="0,8">
         <Grid ColumnDefinitions="*,90,150">
-            <TextBlock Grid.Column="0" Text="{Binding DocumentName}" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="1" Text="{Binding VersionText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
-            <TextBlock Grid.Column="2" Text="{Binding AssignedText}" VerticalAlignment="Center" Foreground="{DynamicResource WbMuted}" />
+            <TextBlock Grid.Column="0" Text="{Binding DocumentName}" VerticalAlignment="Center" Margin="6,0" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="1" Text="{Binding VersionText}" VerticalAlignment="Center" Margin="6,0" Foreground="{DynamicResource WbMuted}" />
+            <TextBlock Grid.Column="2" Text="{Binding AssignedText}" VerticalAlignment="Center" Margin="6,0" Foreground="{DynamicResource WbMuted}" />
             <Grid.ContextMenu>
                 <ContextMenu>
                     <MenuItem Header="{loc:Tr MwOpen}" Click="OnOpen">

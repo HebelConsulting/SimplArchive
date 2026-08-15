@@ -27,8 +27,11 @@ public class WebWorkflowTests
         await Expect(page.GetByText("Invoice 2026-003").First).ToBeVisibleAsync();
         await Expect(page.Locator(".wb-tasks").GetByText("Overdue").First).ToBeVisibleAsync();
 
-        // The task's Open navigates to the document (Repositories tab, doc selected).
-        await page.GetByRole(AriaRole.Button, new() { Name = "Open" }).First.ClickAsync();
+        // The task's Open navigates to the document (Repositories tab, doc selected) — from the row's
+        // ⋮ menu since the per-row labeled button moved there (#530 tranche 3).
+        var taskRow = page.Locator(".wb-tasks tr").Filter(new() { HasText = "Invoice 2026-003" }).First;
+        await taskRow.Locator("button.mud-icon-button").Last.ClickAsync();
+        await page.Locator(".mud-menu-item").Filter(new() { HasText = "Open" }).First.ClickAsync();
 
         // Open the workflow on demand from the ribbon → a separate dialog window.
         await page.GetByRole(AriaRole.Button, new() { Name = "Start workflow" }).ClickAsync();

@@ -1600,24 +1600,33 @@
                         </Border>
                     </Panel>
                 </TabItem.Header>
-                <DockPanel Margin="16" LastChildFill="True">
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
-                        <TextBlock Text="{loc:Tr TasksHeader}" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center" />
-                        <Button Command="{Binding RefreshTasksCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}" Padding="6,2"><i:Icon Value="mdi-refresh" /></Button>
-                    </StackPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="{loc:Tr TasksEmpty}"
+                <DockPanel LastChildFill="True" Margin="8">
+                    <!-- The ribbon in the Repositories shape (#530 tranche 3); the "My review tasks" text
+                         header it replaces said what the tab strip already says. -->
+                    <v:TaskRibbon DockPanel.Dock="Top" />
+                    <TextBlock DockPanel.Dock="Top" Text="{loc:Tr TasksEmpty}" Margin="0,8"
                                Foreground="{DynamicResource WbFaint}" IsVisible="{Binding !HasTasks}" />
-                    <ScrollViewer IsVisible="{Binding HasTasks}">
-                        <ListBox ItemsSource="{Binding Tasks}" SelectedItem="{Binding SelectedTaskRow}" MaxWidth="820" HorizontalAlignment="Left"
-                                 Background="Transparent" BorderThickness="0">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="vm:TaskItemViewModel">
-                                    <!-- The row and its menu are their own control (#530 tranche 3). -->
-                                    <v:TaskRow />
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </ScrollViewer>
+                    <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" Margin="0,8,0,0"
+                            MaxWidth="820" HorizontalAlignment="Left" VerticalAlignment="Top" IsVisible="{Binding HasTasks}">
+                        <DockPanel LastChildFill="True">
+                            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,90,150" Background="{DynamicResource WbChrome}">
+                                <TextBlock Grid.Column="0" Text="{loc:Tr ColDocument}" FontWeight="SemiBold" Margin="6,4" />
+                                <TextBlock Grid.Column="1" Text="{loc:Tr VerColVersion}" FontWeight="SemiBold" Margin="6,4" />
+                                <TextBlock Grid.Column="2" Text="{loc:Tr ColAssigned}" FontWeight="SemiBold" Margin="6,4" />
+                            </Grid>
+                            <ScrollViewer>
+                                <ListBox ItemsSource="{Binding Tasks}" SelectedItem="{Binding SelectedTaskRow}"
+                                         Background="Transparent" BorderThickness="0">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:TaskItemViewModel">
+                                            <!-- The row and its menu are their own control (#530 tranche 3). -->
+                                            <v:TaskRow />
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
                 </DockPanel>
             </TabItem>
 

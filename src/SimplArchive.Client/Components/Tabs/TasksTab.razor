@@ -5,50 +5,71 @@
    would be a request spent learning something already in memory (ADR 0557). Opening one navigates the
    Repositories tab, which only the shell can do. *@
 
-@* Pending workflow review tasks assigned to me (ADR "Workflow / document state model"). *@
-<div class="wb-tasks pa-4" style="overflow:auto;">
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-        <MudText Typo="Typo.h6">@Strings.Get("TasksHeader")</MudText>
-        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="@(() => Refresh.InvokeAsync())" title="Refresh" />
+<div class="wb-tasks" style="height:100%; display:flex; flex-direction:column;">
+    @* The toolbar in the Repositories shape (#530 tranche 3). Restructure only, by decision: approve/reject
+       stay in the workflow detail a task opens into — approving from a list row without seeing the document
+       invites rubber-stamping. So: Open acting on THE selected row, greyed when there is none, and refresh. *@
+    <div class="wb-search-bar pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+        <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selected is null)"
+                   OnClick="@(() => OpenRequested.InvokeAsync(_selected!))"
+                   title="@Strings.Get("RibbonOpen")" aria-label="@Strings.Get("RibbonOpen")">
+            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonOpen")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" OnClick="@(() => Refresh.InvokeAsync())"
+                   title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
+            <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
+        </MudButton>
     </div>
-    @if (Tasks.Count == 0)
-    {
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("TasksEmpty")</MudText>
-    }
-    else
-    {
-        <MudSimpleTable Dense="true" Hover="true" Bordered="false" Style="max-width:860px;">
-            <thead><tr><th>@Strings.Get("ColDocument")</th><th>@Strings.Get("VerColVersion")</th><th>@Strings.Get("ColAssigned")</th><th>@Strings.Get("ColDue")</th><th></th></tr></thead>
-            <tbody>
-                @foreach (var t in Tasks)
-                {
-                    <tr>
-                        <td>@t.DocumentName</td>
-                        <td>@(t.VersionNumber is { } n ? $"v{n}" : "—")</td>
-                        <td>@t.AssignedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
-                        <td>
-                            @if (t.DueAt is { } due)
+    <div style="flex:1 1 auto; overflow:auto;">
+        @if (Tasks.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="pa-3 mud-text-secondary">@Strings.Get("TasksEmpty")</MudText>
+        }
+        else
+        {
+            <MudTable Items="Tasks" Dense="true" Hover="true" Bordered="false" Elevation="0" T="TaskItem"
+                      Style="max-width:860px;"
+                      OnRowClick="@((TableRowClickEventArgs<TaskItem> e) => _selected = e.Item)"
+                      RowClassFunc="@((row, _) => row == _selected ? "wb-list-row-selected" : "")">
+                <HeaderContent>
+                    <MudTh>@Strings.Get("ColDocument")</MudTh>
+                    <MudTh>@Strings.Get("VerColVersion")</MudTh>
+                    <MudTh>@Strings.Get("ColAssigned")</MudTh>
+                    <MudTh>@Strings.Get("ColDue")</MudTh>
+                    <MudTh Style="width:1px;"></MudTh>
+                </HeaderContent>
+                <RowTemplate Context="row">
+                    <MudTd>@row.DocumentName</MudTd>
+                    <MudTd>@(row.VersionNumber is { } n ? $"v{n}" : "—")</MudTd>
+                    <MudTd>@row.AssignedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                    <MudTd>
+                        @if (row.DueAt is { } due)
+                        {
+                            @if (row.IsOverdue)
                             {
-                                @if (t.IsOverdue)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">@string.Format(Strings.Get("WorkflowOverdue"), due.LocalDateTime.ToString("yyyy-MM-dd"))</MudChip>
-                                }
-                                else
-                                {
-                                    <span>@due.LocalDateTime.ToString("yyyy-MM-dd")</span>
-                                }
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">@string.Format(Strings.Get("WorkflowOverdue"), due.LocalDateTime.ToString("yyyy-MM-dd"))</MudChip>
                             }
                             else
                             {
-                                <span class="mud-text-secondary">—</span>
+                                <span>@due.LocalDateTime.ToString("yyyy-MM-dd")</span>
                             }
-                        </td>
-                        <td><MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => OpenRequested.InvokeAsync(t)">@Strings.Get("RibbonOpen")</MudButton></td>
-                    </tr>
-                }
-            </tbody>
-        </MudSimpleTable>
-    }
+                        }
+                        else
+                        {
+                            <span class="mud-text-secondary">—</span>
+                        }
+                    </MudTd>
+                    @* What can be done to THIS row lives in its ⋮ menu — the toolbar's twin acts on the
+                       selection (#521's split). *@
+                    <MudTd Style="text-align:right;" @onclick:stopPropagation="true">
+                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
+                            <MudMenuItem Icon="@Icons.Material.Filled.OpenInNew" OnClick="() => OpenRequested.InvokeAsync(row)">@Strings.Get("RibbonOpen")</MudMenuItem>
+                        </MudMenu>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </div>
 </div>
 
 @code {
@@ -63,4 +84,7 @@
     /// <summary>Open the task's document — a switch to the Repositories tab, so the shell performs it.</summary>
     [Parameter]
     public EventCallback<TaskItem> OpenRequested { get; set; }
+
+    /// <summary>The row the toolbar acts on (#530 tranche 3) — single-select by decision.</summary>
+    private TaskItem? _selected;
 }
