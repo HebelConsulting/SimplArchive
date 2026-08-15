@@ -16,6 +16,39 @@
          reshape it there, and check it in as a new version. -->
     <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
         <WrapPanel Orientation="Horizontal">
+            <!-- Working copy: what you do WITH the file while you hold it. Both compare affordances sit here
+                 (ADR 0518) — the in-app diff, and the user's own Beyond Compare, which shows whether or not
+                 the tool is installed because that is how anyone discovers it exists. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="checkout-edit" IsEnabled="{Binding Checkout.HasSelectedRow}"
+                        Command="{Binding Checkout.EditCommand}" CommandParameter="{Binding Checkout.SelectedRow}"
+                        ToolTip.Tip="{loc:Tr CoEditTip}"><i:Icon Value="mdi-pencil-outline" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="checkout-compare" IsEnabled="{Binding Checkout.SelectedCanCheckIn}"
+                        Click="OnCheckoutCompare" ToolTip.Tip="{loc:Tr CoCompare}"><i:Icon Value="mdi-compare-horizontal" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="checkout-beyondcompare" IsEnabled="{Binding Checkout.SelectedCanCheckIn}"
+                        Click="OnCheckoutBeyondCompare" ToolTip.Tip="{loc:Tr CoBeyondCompare}"><i:Icon Value="mdi-compare" FontSize="18" /></Button>
+            </StackPanel>
+            <!-- Finish: the two ways a check-out ENDS well — commit the work, or release it unchanged. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="checkout-checkin" IsEnabled="{Binding Checkout.SelectedCanCheckIn}"
+                        Command="{Binding Checkout.CheckInCommand}" CommandParameter="{Binding Checkout.SelectedRow}"
+                        ToolTip.Tip="{loc:Tr CoCheckIn}"><i:Icon Value="mdi-check" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="checkout-unlock" IsEnabled="{Binding Checkout.SelectedCanUnlock}"
+                        Command="{Binding Checkout.UnlockCommand}" CommandParameter="{Binding Checkout.SelectedRow}"
+                        ToolTip.Tip="{loc:Tr MwUnlock}"><i:Icon Value="mdi-lock-open-variant-outline" FontSize="18" /></Button>
+            </StackPanel>
+            <!-- Lease: how long you keep holding it. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="checkout-extend" IsEnabled="{Binding Checkout.SelectedCanExtend}"
+                        Command="{Binding Checkout.ExtendCommand}" CommandParameter="{Binding Checkout.SelectedRow}"
+                        ToolTip.Tip="{loc:Tr MwExtendCheckoutTip}"><i:Icon Value="mdi-clock-plus-outline" FontSize="18" /></Button>
+            </StackPanel>
+            <!-- Discard, ALONE. It ends the check-out too, but by throwing the work away — and it would
+                 otherwise sit next to the button that commits it, which is the worst adjacency in this tab. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="checkout-discard" IsEnabled="{Binding Checkout.SelectedCanDiscard}"
+                        Click="OnCheckoutDiscard" ToolTip.Tip="{loc:Tr MwDiscard}"><i:Icon Value="mdi-delete-outline" FontSize="18" /></Button>
+            </StackPanel>
             <!-- Item group: what to do with the list as a whole. -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
                 <Button AutomationProperties.AutomationId="checkout-refresh" Command="{Binding Checkout.RefreshCommand}"

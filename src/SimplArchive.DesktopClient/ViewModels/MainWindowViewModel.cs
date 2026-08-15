@@ -2050,7 +2050,22 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private LocalFolders? _localFolders;
     public ObservableCollection<InboxItemViewModel> ServerInbox { get; } = [];
 
-    [ObservableProperty] private InboxItemViewModel? _selectedServerInboxItem;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedInboxItem))]
+    [NotifyPropertyChangedFor(nameof(CanSendSelectedInboxItem))]
+    [NotifyPropertyChangedFor(nameof(CanClaimSelectedInboxItem))]
+    private InboxItemViewModel? _selectedServerInboxItem;
+
+    // What the Inbox ribbon's selected-item group is gated on (#521). Greyed rather than hidden when there is
+    // no selection: the button is available to this user, it simply has nothing to act on yet, and hiding it
+    // would make the ribbon reflow under the cursor as the selection changes (the Repositories tab's rule).
+    public bool HasSelectedInboxItem => SelectedServerInboxItem is not null;
+
+    /// <summary>"Send to…" is for your OWN item; somebody else's is claimed instead (ADR 0532).</summary>
+    public bool CanSendSelectedInboxItem => SelectedServerInboxItem?.IsOwn == true;
+
+    /// <summary>And the mirror: a group or other-user item is the one you can move to your own inbox.</summary>
+    public bool CanClaimSelectedInboxItem => SelectedServerInboxItem is { IsOwn: false };
     [ObservableProperty] private string _inboxStatus = "";
 
     // After login: resolve the tenant/user display names and create the local ~/SimplArchive/{Tenant}/{User}/

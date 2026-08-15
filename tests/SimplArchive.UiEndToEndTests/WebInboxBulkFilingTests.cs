@@ -4,7 +4,7 @@ using static Microsoft.Playwright.Assertions;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// A UI flow (ADR 0290): checkbox-select 2+ inbox items and "File N items" into a picked folder via the bulk
+// A UI flow (ADR 0290): multi-select 2+ inbox items and "File N items" into a picked folder via the bulk
 // filing dialog — all selected items leave the inbox and appear as documents in that folder.
 [Collection(UiCollection.Name)]
 [Trait("Area", "ui-2")]
@@ -33,9 +33,13 @@ public class WebInboxBulkFilingTests
         await Expect(rowA).ToBeVisibleAsync();
         await Expect(rowB).ToBeVisibleAsync();
 
-        // Check both → the "File 2 items" bulk button appears.
-        await rowA.Locator(".mud-checkbox").First.ClickAsync();
-        await rowB.Locator(".mud-checkbox").First.ClickAsync();
+        // Select both → the "File 2 items" bulk button appears. Ctrl-click, not the checkbox: the checkbox
+        // column is the TOUCH affordance and is hidden on a hover-capable pointer device, which is what a
+        // Playwright-driven Chrome is. A synthetic click carrying ctrlKey, because Playwright's real-input
+        // modifier click does not reach Blazor's MouseEventArgs (the same trick WebBulkActionsTests uses).
+        var ctrl = new Dictionary<string, object> { ["ctrlKey"] = true, ["bubbles"] = true };
+        await rowA.DispatchEventAsync("click", ctrl);
+        await rowB.DispatchEventAsync("click", ctrl);
         await page.GetByRole(AriaRole.Button, new() { Name = "File 2 items" }).ClickAsync();
 
         // Bulk dialog defaults to folder-pick (nothing selected on Repositories) → pick the repo → File.

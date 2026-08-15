@@ -1,0 +1,75 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:v="using:SimplArchive.DesktopClient.Views"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.CheckoutRow"
+             x:DataType="vm:CheckoutRowViewModel">
+    <!-- One checked-out document, drawn the way the Repositories tab draws a row (#521): what it IS, and a
+         context menu for what you can do to it. Seven action buttons used to sit on every row — the widest
+         cluster in the product, and the reason the document NAME was being squeezed off the left edge.
+
+         The menu hides what is unavailable; the ribbon greys it. A menu is built for one row when it opens, so
+         hiding keeps it short; a ribbon is permanently on screen, and hiding would move buttons under the
+         cursor as the selection changes. -->
+    <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,3">
+        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
+            <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Text="{Binding Path}" Foreground="{DynamicResource WbFaint}" FontSize="11" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <!-- Modified is the whole reason to look at this list, so it is a chip rather than a word in a column:
+             it is what the eye should find first. -->
+        <Border Grid.Column="1" IsVisible="{Binding IsModified}" Background="{DynamicResource WbAccent}" CornerRadius="3"
+                Padding="5,1" Margin="0,0,8,0" VerticalAlignment="Center">
+            <TextBlock Text="{loc:Tr CoModified}" FontSize="10" Foreground="{DynamicResource WbOnAccent}" />
+        </Border>
+        <TextBlock Grid.Column="1" IsVisible="{Binding !IsModified}" Text="{Binding StatusText}"
+                   Foreground="{DynamicResource WbFaint}" FontSize="11" Margin="0,0,8,0" VerticalAlignment="Center" />
+
+        <!-- A check-out nobody asked for says so, or it reads as a bug: the user saved a file on the mounted
+             drive and the document silently became theirs (ADR 0562). The tooltip names the client that did it. -->
+        <Border Grid.Column="2" IsVisible="{Binding IsImplicit}" ToolTip.Tip="{Binding ImplicitTooltip}"
+                Background="{DynamicResource WbAccentTint}" BorderBrush="{DynamicResource WbAccent}" BorderThickness="1" CornerRadius="9"
+                Padding="6,1" Margin="0,0,8,0" VerticalAlignment="Center">
+            <TextBlock Text="{loc:Tr CoAuto}" FontSize="10" Foreground="{DynamicResource WbAccentText}" />
+        </Border>
+
+        <!-- Only a definite yes: an unexamined version says nothing (#491). -->
+        <v:SignedBadge Grid.Column="3" IsVisible="{Binding ShowSignedBadge}" />
+
+        <Grid.ContextMenu>
+            <ContextMenu>
+                <MenuItem Header="{loc:Tr CoEditTip}" Click="OnEdit">
+                    <MenuItem.Icon><i:Icon Value="mdi-pencil-outline" /></MenuItem.Icon>
+                </MenuItem>
+                <!-- Both compare affordances, for a MODIFIED document: the in-app unified diff, and the user's
+                     own Beyond Compare. The second shows whether or not the tool is installed (ADR 0518) —
+                     without an install it leads to the vendor, which is how anyone discovers it exists. -->
+                <MenuItem Header="{loc:Tr CoCompare}" Click="OnCompare" IsVisible="{Binding CanCheckIn}">
+                    <MenuItem.Icon><i:Icon Value="mdi-compare-horizontal" /></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="{loc:Tr CoBeyondCompare}" Click="OnBeyondCompare" IsVisible="{Binding CanCheckIn}">
+                    <MenuItem.Icon><i:Icon Value="mdi-compare" /></MenuItem.Icon>
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="{loc:Tr CoCheckIn}" Click="OnCheckIn" IsVisible="{Binding CanCheckIn}">
+                    <MenuItem.Icon><i:Icon Value="mdi-check" /></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="{loc:Tr MwUnlock}" Click="OnUnlock" IsVisible="{Binding CanUnlock}">
+                    <MenuItem.Icon><i:Icon Value="mdi-lock-open-variant-outline" /></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="{loc:Tr MwExtendCheckoutTip}" Click="OnExtend" IsVisible="{Binding CanExtend}">
+                    <MenuItem.Icon><i:Icon Value="mdi-clock-plus-outline" /></MenuItem.Icon>
+                </MenuItem>
+                <!-- Discard is separated by a rule, here as in the ribbon: it is the one that throws work away,
+                     and it sits next to the one that commits it. -->
+                <Separator />
+                <MenuItem Header="{loc:Tr MwDiscard}" Click="OnDiscard" IsVisible="{Binding CanDiscard}">
+                    <MenuItem.Icon><i:Icon Value="mdi-delete-outline" /></MenuItem.Icon>
+                </MenuItem>
+            </ContextMenu>
+        </Grid.ContextMenu>
+    </Grid>
+</UserControl>

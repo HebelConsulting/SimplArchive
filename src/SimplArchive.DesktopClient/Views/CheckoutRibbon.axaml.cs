@@ -23,6 +23,13 @@ public partial class CheckoutRibbon : UserControl
 {
     public CheckoutRibbon() => AvaloniaXamlLoader.Load(this);
 
+    // No Tag: the window's handlers fall back to the selection, which is exactly the ribbon's scope (#521).
+    private void OnCheckoutCompare(object? sender, RoutedEventArgs e) => Window()?.OnCheckoutCompare(sender, e);
+
+    private void OnCheckoutBeyondCompare(object? sender, RoutedEventArgs e) => Window()?.OnCheckoutBeyondCompare(sender, e);
+
+    private void OnCheckoutDiscard(object? sender, RoutedEventArgs e) => Window()?.OnCheckoutDiscard(sender, e);
+
     private void OnWebDavTabButton(object? sender, RoutedEventArgs e) => Window()?.OnWebDavTabButton(sender, e);
 
     // Null in the headless screenshot renders, which host panes without a window — so the forwarder tolerates it

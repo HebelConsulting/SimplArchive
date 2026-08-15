@@ -95,10 +95,16 @@ public partial class MainWindow
 
     // Compare a checked-out document's working copy against its current version (ADR 0517) — inline unified diff +
     // an optional Beyond Compare launch. Shown only on modified rows (the row's Tag carries the CheckoutRowViewModel).
-    private void OnCheckoutCompare(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    // The Check-out twin of InboxItemFrom (#521): a context menu hands over its own row as the Tag, a ribbon
+    // button hands over nothing and means the SELECTION. One expression, so the two surfaces cannot drift into
+    // disagreeing about which document they act on — and neither consults the detail pane (ADR 0559).
+    private static CheckoutRowViewModel? CheckoutRowFrom(object? sender, MainWindowViewModel vm) =>
+        (sender as Control)?.Tag as CheckoutRowViewModel ?? vm.Checkout.SelectedRow;
+
+    internal void OnCheckoutCompare(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api ||
-            (sender as Control)?.Tag is not CheckoutRowViewModel { Item: { } checkout } row)
+            CheckoutRowFrom(sender, vm) is not CheckoutRowViewModel { Item: { } checkout } row)
         {
             return;
         }
@@ -111,10 +117,10 @@ public partial class MainWindow
     // "Beyond Compare …" straight from the row — the same comparison the dialog offers, without opening the
     // dialog first to reach it. A user who works this way wants the external tool, not the inline diff, and
     // making them pass through the diff to get to it is a step that exists only because of how it was built.
-    private void OnCheckoutBeyondCompare(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnCheckoutBeyondCompare(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel { Api: { } api } vm ||
-            (sender as Control)?.Tag is not CheckoutRowViewModel row)
+            CheckoutRowFrom(sender, vm) is not CheckoutRowViewModel row)
         {
             return;
         }
@@ -223,7 +229,7 @@ public partial class MainWindow
         }
     });
 
-    private void OnInboxOpen(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnInboxOpen(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && InboxItemFrom(sender) is { } item)
         {
@@ -233,7 +239,7 @@ public partial class MainWindow
     });
 
     // File a server-inbox item into a folder chosen from the picker.
-    private void OnInboxFile(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnInboxFile(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || InboxItemFrom(sender) is not { } item ||
             vm.CreateFolderPickerViewModel() is not { } picker)
@@ -283,9 +289,9 @@ public partial class MainWindow
 
     // Discard a checked-out document's changes (ADR "Document check-out / check-in"; ADR 0513) — confirmed, since it
     // abandons the working copy in check-out and releases the lock without creating a new version.
-    private void OnCheckoutDiscard(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnCheckoutDiscard(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
-        if (DataContext is MainWindowViewModel vm && sender is Button { Tag: CheckoutRowViewModel row }
+        if (DataContext is MainWindowViewModel vm && CheckoutRowFrom(sender, vm) is { } row
             && await new ConfirmDialog($"Discard the changes to '{row.Name}' and release the check-out?", "Discard").ShowDialog<bool>(this))
         {
             await vm.Checkout.DiscardAsync(row);

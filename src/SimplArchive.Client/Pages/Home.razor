@@ -389,6 +389,11 @@
     <Authorized>
         <div class="wb" @ref="_dropRoot">
             @* ---- Ribbon (Repositories tab) ---- *@
+            @* The shell's ribbon belongs to the Repositories tab, which is the only one that fills it. Every
+               other tab carries its own toolbar, and this used to render above it saying "No actions
+               available." — an empty bar contradicting the full one directly beneath it (#521). *@
+            @if (_activeTab == Tab.Repositories)
+            {
             <div class="wb-ribbon">
                 @* Ribbon buttons (#305): icon-only on hover-capable computers with the label in a `title` tooltip +
                    `aria-label`; touch keeps the visible .wb-rib-label. Matches the desktop client + the #298 tabs
@@ -452,11 +457,8 @@
                         <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="ml-2" />
                     }
                 }
-                else
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("NoActions")</MudText>
-                }
             </div>
+            }
 
             @* ---- Tab content ---- *@
             @if (_activeTab == Tab.Repositories)

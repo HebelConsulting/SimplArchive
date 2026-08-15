@@ -57,7 +57,9 @@ public class WebInboxSendTests
         await Expect(page.Locator(".wb-list-row").Filter(new() { HasText = name })).Not.ToBeVisibleAsync();
 
         // ...and the admin (CanManageInboxes) opens the recipient's inbox via the user-picker and sees it there.
-        await page.Locator(".wb-search-bar .mud-select .mud-input-control").First.ClickAsync();
+        // The picker lives in .wb-inbox-filters, below the action bar and above the list it filters (#521) —
+        // it used to sit in .wb-search-bar, where its height set every button's beside it.
+        await page.Locator(".wb-inbox-filters .mud-select .mud-input-control").First.ClickAsync();
         await page.Locator(".mud-list-item").Filter(new() { HasText = recipient }).First.ClickAsync();
         await Expect(page.Locator(".wb-list-row").Filter(new() { HasText = name })).ToBeVisibleAsync();
     }

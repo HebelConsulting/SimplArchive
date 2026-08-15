@@ -132,6 +132,19 @@ h1:focus {
 .wb-rib-btn .wb-rib-label { margin-left: 6px; }
 
 @media (hover: hover) and (pointer: fine) {
-    .wb-rib-btn { min-width: 0; }
     .wb-rib-btn .wb-rib-label { display: none; }
+
+    /* With the label gone the button is nothing but its icon, so it takes the icon's own footprint: a 26px
+       circle — exactly the MudIconButton the toggles beside it already are. Left as a 30×28 rounded rect it
+       sat next to those circles as a visibly different KIND of button, which is what "some buttons are still
+       old style" was: not a size difference (every glyph is 20px) but two shapes in one row. A toolbar is one
+       row of one button.
+
+       Only under this query: on touch the label is visible, and a labelled control is a pill, not a circle. */
+    .wb-rib-btn { min-width: 0; width: 26px; height: 26px; padding: 0; border-radius: 50%; }
+
+    /* Affordances that exist only because touch has no modifier keys — a list's multi-select checkbox column.
+       On a device that can Ctrl-click, the list multi-selects natively and the column is a second way to do
+       one thing, taking width from every row to say so. Same query, same reason as the labels above. */
+    .wb-touch-only { display: none; }
 }

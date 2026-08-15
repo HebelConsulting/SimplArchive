@@ -12,6 +12,27 @@
          inbox action is in one place instead of two. -->
     <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
         <WrapPanel Orientation="Horizontal">
+            <!-- Selected-item group, FIRST (#521): what you can do to the row you picked, before the groups
+                 that act on batches. These are the same four actions the row's context menu offers — the two
+                 surfaces differ in SCOPE, not in content: a menu entry acts on the row it was opened from, a
+                 ribbon button on the current selection. Both address their target directly rather than from
+                 whatever the detail pane last finished loading (ADR 0559).
+
+                 Greyed rather than hidden when nothing is selected, which is the Repositories ribbon's rule:
+                 a right you do not hold is not advertised, but a button that merely has nothing to act on yet
+                 stays put, so the ribbon does not reflow under the cursor as the selection changes. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="inbox-open" IsEnabled="{Binding HasSelectedInboxItem}"
+                        Click="OnInboxOpen" ToolTip.Tip="{x:Static vm:MainWindowViewModel.OpenTip}"><i:Icon Value="mdi-open-in-new" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="inbox-send" IsEnabled="{Binding CanSendSelectedInboxItem}"
+                        Click="OnInboxSend" ToolTip.Tip="{loc:Tr InboxSendTitle}"><i:Icon Value="mdi-send-outline" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="inbox-claim" IsEnabled="{Binding CanClaimSelectedInboxItem}"
+                        Click="OnInboxMoveToMine" ToolTip.Tip="{loc:Tr InboxClaimToMine}"><i:Icon Value="mdi-inbox-arrow-down-outline" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="inbox-file" IsEnabled="{Binding HasSelectedInboxItem}"
+                        Click="OnInboxFile" ToolTip.Tip="{loc:Tr MwFileIntoFolder}"><i:Icon Value="mdi-file-move-outline" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="inbox-delete" IsEnabled="{Binding HasSelectedInboxItem}"
+                        Click="OnInboxDelete" ToolTip.Tip="{loc:Tr UgDelete}"><i:Icon Value="mdi-delete-outline" FontSize="18" /></Button>
+            </StackPanel>
             <!-- Pages group: what is INSIDE a staged scan (#487). Each is disabled until the server
                  says it can succeed — a one-page file offers no split or sort (ADR 0554). -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
@@ -48,9 +69,19 @@
                 <Button AutomationProperties.AutomationId="inbox-patch-sheet"
                         Click="OnInboxPatchSheet" ToolTip.Tip="{loc:Tr InboxPatchSheetTip}"><i:Icon Value="mdi-printer" FontSize="18" /></Button>
             </StackPanel>
-            <!-- Item group: what to do with the staged file as a whole. -->
+            <!-- Item group: what to do with the staged file as a whole, and what the list is showing.
+                 "Show group inboxes" was a labelled CheckBox in a filter row under the ribbon; it is an on/off
+                 that changes this view, which is what a held-down toggle says and what its neighbours here
+                 already are (#521 — the web arrived at this first, and ADR 0511 says promote it rather than
+                 leave the two split). Its companion user-picker stays below: a picker chooses a value out of a
+                 list as long as the tenant has users, and cannot be a button.
+                 No Click handler — OnInboxIncludeGroupsChanged already reloads on the property. -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
                 <Button IsEnabled="{Binding CanFileMultiple}" Click="OnInboxFileMultiple" ToolTip.Tip="{loc:Tr MwFileSelectedTip}"><i:Icon Value="mdi-file-move-outline" FontSize="18" /></Button>
+                <ToggleButton AutomationProperties.AutomationId="inbox-show-groups"
+                              IsChecked="{Binding InboxIncludeGroups}"
+                              IsEnabled="{Binding !InboxViewUserId, FallbackValue=True}"
+                              ToolTip.Tip="{loc:Tr InboxShowGroups}"><i:Icon Value="mdi-account-group-outline" FontSize="18" /></ToggleButton>
                 <Button Command="{Binding RefreshInboxCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
             </StackPanel>
             <!-- General group: one WebDAV button that does the next useful thing — set up, mount, or

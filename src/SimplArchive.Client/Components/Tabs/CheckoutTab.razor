@@ -34,6 +34,54 @@
        so reshaping its pages is a records question, not a clerical one — ADR 0575 confined the page algebra to
        the Inbox. Someone who needs it drags the file into the Inbox, reshapes it there, and checks it in. *@
     <div class="wb-search-bar">
+        @* Selected-item groups, first — the desktop's shape (#521, ADR 0511). Same actions as the row's ⋮ menu,
+           different SCOPE: the menu acts on its own row, these on the selection. Disabled, not hidden, when
+           there is nothing selected. Discard (Cancel check-out) is deliberately LAST and separated: it throws
+           the work away, and would otherwise sit beside the button that commits it. *@
+        <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selected is null)"
+                   OnClick="@(() => DownloadFromStashAsync(_selected!))"
+                   title="@Strings.Get("CoDownloadStash")" aria-label="@Strings.Get("CoDownloadStash")">
+            <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CoDownloadStash")</span>
+        </MudButton>
+        @* Upload to stash sits beside Download from stash, because the two are one round trip: download, edit
+           outside the browser, upload the result back. It used to hang below the selected row as a labelled
+           button — the only action in this tab that was neither on the row's ⋮ menu nor in the bar, so it read
+           as a different kind of thing than the actions it sits between (#521). It is selection-scoped like its
+           neighbours, and disabled the same way.
+
+           It stays a MudFileUpload rather than becoming a menu entry because a file picker opened from inside a
+           menu closes the menu before the dialog appears — which is also why the row's ⋮ menu does not offer
+           it, and why moving it here is the fix rather than a workaround. *@
+        <MudFileUpload T="IBrowserFile" FilesChanged="@(f => UploadToStashAsync(_selected!, f))" Class="d-inline-flex">
+            <CustomContent Context="upload">
+                <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selected is null)"
+                           OnClick="@(() => upload.OpenFilePickerAsync())"
+                           title="@Strings.Get("CoUploadStash")" aria-label="@Strings.Get("CoUploadStash")">
+                    <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CoUploadStash")</span>
+                </MudButton>
+            </CustomContent>
+        </MudFileUpload>
+        <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selected?.IsModified != true)"
+                   OnClick="@(() => OpenCompareCheckoutAsync(_selected!))"
+                   title="@Strings.Get("CoCompare")" aria-label="@Strings.Get("CoCompare")">
+            <MudIcon Icon="@Icons.Material.Filled.Difference" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CoCompare")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_selected?.IsModified != true)"
+                   OnClick="@(() => CheckInFromStashAsync(_selected!))"
+                   title="@Strings.Get("CoCheckIn")" aria-label="@Strings.Get("CoCheckIn")">
+            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CoCheckIn")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selected?.ExpiresAt is null)"
+                   OnClick="@(() => ExtendCheckoutAsync(_selected!))"
+                   title="@Strings.Get("CoExtend")" aria-label="@Strings.Get("CoExtend")">
+            <MudIcon Icon="@Icons.Material.Filled.MoreTime" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CoExtend")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_selected is null)"
+                   OnClick="@(() => CancelCheckoutAsync(_selected!))"
+                   title="@Strings.Get("CoCancel")" aria-label="@Strings.Get("CoCancel")">
+            <MudIcon Icon="@Icons.Material.Filled.LockOpen" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CoCancel")</span>
+        </MudButton>
+
         <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="() => Refresh.InvokeAsync()"
                    title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
             <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
@@ -100,18 +148,6 @@
                         </MudMenu>
                     </div>
                 </div>
-                @if (c.Id == _selected?.Id)
-                {
-                    @* Upload lives outside the menu: MudFileUpload needs its own trigger, and a file picker
-                       inside a menu closes the menu before the dialog opens. *@
-                    <div style="padding:2px 12px 8px 34px;">
-                        <MudFileUpload T="IBrowserFile" FilesChanged="@(f => UploadToStashAsync(c, f))" Class="d-inline">
-                            <CustomContent Context="upload">
-                                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.CloudUpload" OnClick="@(() => upload.OpenFilePickerAsync())">@Strings.Get("CoUploadStash")</MudButton>
-                            </CustomContent>
-                        </MudFileUpload>
-                    </div>
-                }
             }
         </div>
 

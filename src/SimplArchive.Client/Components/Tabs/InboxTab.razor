@@ -19,12 +19,25 @@
    Two facts arrive as parameters rather than being re-fetched (ADR 0557): whether the caller may triage other
    people's inboxes, and which folder the Repositories tree has selected, which pre-fills the filing target. *@
 
+@* Only this tab has a filter row, so its rule lives here rather than in the shell, which may only shrink
+   (ADR 0558). Bottom-aligned because the switch and the select have different label geometry and would
+   otherwise sit at different heights. *@
+<style>
+    .wb-inbox-filters { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 16px; padding: 2px 2px 8px; }
+    /* Both filters size to themselves: a MudSelect's root is a block, so in a flex row it otherwise grows to
+       the full width of the list and reads as an input you are meant to type a whole line into. */
+    .wb-inbox-filters > * { flex: 0 0 auto; }
+    .wb-inbox-filters .mud-select { width: 240px; }
+</style>
+
 @* Per-user S3-backed inbox (ADR "S3-backed inbox") — staged files to file into a repository. *@
 <div class="wb-search">
     <div class="wb-search-bar">
-        @* Upload keeps its filled accent — it is the tab's primary action, and losing the label must not also
-           lose the emphasis that says "start here". *@
-        <MudButton Class="wb-rib-btn" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+        @* Flat, like every other button here. It used to carry a filled accent to say "start here", which was
+           unambiguous while it was a rounded rect with a label — but in a row of circles whose toggles show ON
+           as filled primary, a filled circle says "pressed", not "primary". The tab already says where to
+           start: this is the first button, and the list below it is a drop-zone that says so in words. *@
+        <MudButton Class="wb-rib-btn" Size="Size.Small"
                    HtmlTag="label" for="inbox-file-input"
                    title="@Strings.Get("InboxUpload")" aria-label="@Strings.Get("InboxUpload")">
             <MudIcon Icon="@Icons.Material.Filled.Upload" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("InboxUpload")</span>
@@ -38,33 +51,57 @@
                    title="@Strings.Get("InboxCopyDav")" aria-label="@Strings.Get("InboxCopyDav")">
             <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("InboxCopyDav")</span>
         </MudButton>
-        @* Own-items-only by default; the switch reveals my group inboxes (ADR 0532). Disabled while
-           viewing another user's inbox — the two selectors are mutually exclusive. *@
-        <MudSwitch T="bool" Value="_inboxIncludeGroups" ValueChanged="ToggleInboxGroupsAsync" Color="Color.Primary"
-                   Class="ml-3" Disabled="@(_inboxViewUserId is not null)" Label="@Strings.Get("InboxShowGroups")" />
-        @if (CanManageInboxes)
+        @* Own-items-only by default; held DOWN it reveals my group inboxes (ADR 0532). A toggle rather than the
+           switch it used to be: it is a sticky on/off that belongs beside the other actions on this view, and a
+           switch with a written label set the height of every button next to it. Disabled while viewing another
+           user's inbox — the two selectors are mutually exclusive. *@
+        <MudToggleIconButton Toggled="_inboxIncludeGroups" ToggledChanged="ToggleInboxGroupsAsync" Size="Size.Small"
+                             Icon="@Icons.Material.Outlined.Groups" ToggledIcon="@Icons.Material.Filled.Groups"
+                             Color="Color.Default" ToggledColor="Color.Primary" Class="ml-1"
+                             Disabled="@(_inboxViewUserId is not null)"
+                             title="@Strings.Get("InboxShowGroups")" />
+        @* Selected-item group, FIRST — the desktop's shape (#521, ADR 0511). The same actions the row's ⋮ menu
+           offers, differing only in SCOPE: the menu acts on the row it was opened from, these on the current
+           selection. Disabled rather than hidden when nothing is selected, which is the Repositories ribbon's
+           rule: a right you do not hold is not advertised, but a button that merely has nothing to act on yet
+           stays put, so the bar does not reflow under the cursor. *@
+        @* ONE file button, and its scope is the checked set. There used to be two — a "File to folder…" acting
+           on the single selection and a "File N items" that appeared beside it once two rows were checked —
+           which put two buttons carrying the same glyph next to each other, differing only in a scope the user
+           could not see. Now that a plain click makes the clicked row the whole checked set, "the selection"
+           and "what is checked" are the same thing, so one button says it: it files what is highlighted,
+           however many that is, and the tooltip carries the count when there is more than one. *@
+        <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" Disabled="@(_inboxChecked.Count == 0)"
+                   OnClick="FileCheckedAsync" title="@FileCheckedLabel" aria-label="@FileCheckedLabel">
+            <MudIcon Icon="@Icons.Material.Filled.DriveFileMove" Size="Size.Small" /><span class="wb-rib-label">@FileCheckedLabel</span>
+        </MudButton>
+        @if (_selectedInboxItem?.IsOwn != false)
         {
-            @* CanManageInboxes: open any user's inbox for triage; "My inbox" resets to own. *@
-            <MudSelect T="Guid?" Value="_inboxViewUserId" ValueChanged="ViewUserInboxAsync" Dense="true"
-                       Margin="Margin.Dense" Variant="Variant.Outlined" Class="ml-3" Style="min-width:210px;"
-                       Label="@Strings.Get("InboxUserPicker")">
-                <MudSelectItem T="Guid?" Value="@((Guid?)null)">@Strings.Get("InboxMine")</MudSelectItem>
-                @foreach (var u in _inboxUsers)
-                {
-                    <MudSelectItem T="Guid?" Value="@((Guid?)u.Id)">@u.Name</MudSelectItem>
-                }
-            </MudSelect>
-        }
-        @if (_inboxChecked.Count >= 2)
-        {
-            @* The label carries a COUNT, so the tooltip carries the same formatted string rather than a bare
-               verb: hiding the label must not hide how many things are about to move. *@
-            <MudButton Class="wb-rib-btn ml-2" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="FileMultipleAsync"
-                       title="@string.Format(Strings.Get("InboxFileN"), _inboxChecked.Count)"
-                       aria-label="@string.Format(Strings.Get("InboxFileN"), _inboxChecked.Count)">
-                <MudIcon Icon="@Icons.Material.Filled.DriveFileMove" Size="Size.Small" /><span class="wb-rib-label">@string.Format(Strings.Get("InboxFileN"), _inboxChecked.Count)</span>
+            <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selectedInboxItem is null)"
+                       OnClick="@(() => SendInboxItemAsync(_selectedInboxItem!))"
+                       title="@Strings.Get("InboxSendTitle")" aria-label="@Strings.Get("InboxSendTitle")">
+                <MudIcon Icon="@Icons.Material.Filled.Send" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("InboxSendTitle")</span>
             </MudButton>
         }
+        else
+        {
+            <MudButton Class="wb-rib-btn ml-1" Size="Size.Small"
+                       OnClick="@(() => MoveToMyInboxAsync(_selectedInboxItem!))"
+                       title="@Strings.Get("InboxClaimToMine")" aria-label="@Strings.Get("InboxClaimToMine")">
+                <MudIcon Icon="@Icons.Material.Filled.MoveToInbox" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("InboxClaimToMine")</span>
+            </MudButton>
+        }
+        <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selectedInboxItem is null)"
+                   OnClick="@(() => DownloadInboxItemAsync(_selectedInboxItem!))"
+                   title="@Strings.Get("Download")" aria-label="@Strings.Get("Download")">
+            <MudIcon Icon="@Icons.Material.Filled.Download" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("Download")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selectedInboxItem is null)"
+                   OnClick="@(() => DeleteInboxItemAsync(_selectedInboxItem!))"
+                   title="@Strings.Get("RibbonDelete")" aria-label="@Strings.Get("RibbonDelete")">
+            <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonDelete")</span>
+        </MudButton>
+
         @* Page operations (#487, ADR 0575), matching the desktop ribbon's group. Each appears only when the
            server said it can succeed: one checked item with more than one page for split/sort, two or more for
            join. A missing rel means "not available to you, here, now" (ADR 0543/0554). *@
@@ -104,16 +141,21 @@
             </MudButton>
         }
         @* The sticky preferences, held DOWN while on — the desktop's ribbon toggles, in this tab's toolbar
-           (ADR 0511). Server-side per user, because the Worker's sweep reads them for WebDAV arrivals. *@
-        <MudToggleIconButton Toggled="_rotateAutomatically" ToggledChanged="SetRotateAutomaticallyAsync"
+           (ADR 0511). Server-side per user, because the Worker's sweep reads them for WebDAV arrivals.
+
+           Size.Small on every one of these: an icon button defaults to Medium (a 24px glyph in a 48px button)
+           while a Size.Small MudButton is a 20px glyph in a 28px one — mixing the two made this bar 52px tall
+           against the Repositories ribbon's 41px, which reads as "the Inbox has bigger icons". A toolbar is one
+           row of one size. *@
+        <MudToggleIconButton Toggled="_rotateAutomatically" ToggledChanged="SetRotateAutomaticallyAsync" Size="Size.Small"
                              Icon="@Icons.Material.Outlined.RotateRight" ToggledIcon="@Icons.Material.Filled.RotateRight"
                              Color="Color.Default" ToggledColor="Color.Primary" Class="ml-2"
                              title="@Strings.Get("InboxRotateAutoTip")" />
-        <MudToggleIconButton Toggled="_deskewAutomatically" ToggledChanged="SetDeskewAutomaticallyAsync"
+        <MudToggleIconButton Toggled="_deskewAutomatically" ToggledChanged="SetDeskewAutomaticallyAsync" Size="Size.Small"
                              Icon="@Icons.Material.Outlined.AutoFixHigh" ToggledIcon="@Icons.Material.Filled.AutoFixHigh"
                              Color="Color.Default" ToggledColor="Color.Primary" Class="ml-1"
                              title="@Strings.Get("InboxDeskewAutoTipTiff")" />
-        <MudToggleIconButton Toggled="_cutAtPatchCodesAutomatically" ToggledChanged="SetCutAtPatchCodesAutomaticallyAsync"
+        <MudToggleIconButton Toggled="_cutAtPatchCodesAutomatically" ToggledChanged="SetCutAtPatchCodesAutomaticallyAsync" Size="Size.Small"
                              Icon="@Icons.Material.Outlined.ContentCut" ToggledIcon="@Icons.Material.Filled.ContentCut"
                              Color="Color.Default" ToggledColor="Color.Primary" Class="ml-1"
                              title="@Strings.Get("InboxPatchAutoTip")" />
@@ -121,7 +163,7 @@
         {
             @* A plain link, because the browser already knows how to show a PDF and then print it — a fetch
                into a blob would take that away and give nothing back. *@
-            <MudIconButton Href="@sheetHref" Target="_blank" Icon="@Icons.Material.Filled.Print" Class="ml-1"
+            <MudIconButton Href="@sheetHref" Target="_blank" Icon="@Icons.Material.Filled.Print" Class="ml-1" Size="Size.Small"
                            title="@Strings.Get("InboxPatchSheetTip")" />
         }
         @if (_inboxBusy)
@@ -130,6 +172,26 @@
         }
     </div>
     <div class="wb-search-status">@_inboxStatus</div>
+    @if (CanManageInboxes)
+    {
+        @* The one filter that cannot be a button: it picks a value out of a list, and the list is as long as
+           the tenant has users. So it sits BELOW the action bar and directly above the list it filters — where
+           the desktop already puts it (ADR 0511) — rather than setting the bar's height for every button beside
+           it. Its companion, "show group inboxes", is an on/off and went to the bar as a toggle.
+
+           CanManageInboxes: open any user's inbox for triage; "My inbox" resets to own. *@
+        <div class="wb-inbox-filters">
+            <MudSelect T="Guid?" Value="_inboxViewUserId" ValueChanged="ViewUserInboxAsync" Dense="true"
+                       Margin="Margin.Dense" Variant="Variant.Outlined"
+                       Label="@Strings.Get("InboxUserPicker")">
+                <MudSelectItem T="Guid?" Value="@((Guid?)null)">@Strings.Get("InboxMine")</MudSelectItem>
+                @foreach (var u in _inboxUsers)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)u.Id)">@u.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+    }
     <div style="display:flex; flex:1 1 auto; min-height:0;">
         @* Drop-zone: dropping OS files anywhere on this list uploads them straight into the inbox
            (ADR "Inbox file-list drop-zone"). *@
@@ -137,8 +199,14 @@
             <div class="wb-inbox-drophint"><MudIcon Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Small" /> @Strings.Get("InboxDropHint")</div>
             @foreach (var item in _inboxItems)
             {
-                <div class="wb-list-row @(item == _selectedInboxItem ? "wb-list-row-selected" : "")" @onclick="() => SelectInboxItemAsync(item)">
-                    <div @onclick:stopPropagation="true">
+                <div class="wb-list-row @(item == _selectedInboxItem || _inboxChecked.Contains(item) ? "wb-list-row-selected" : "")" @onclick="e => OnInboxRowClickAsync(item, e)">
+                    @* The checkbox is the TOUCH affordance only. On a device with a hover and a fine pointer
+                       the list multi-selects natively — Ctrl/Cmd-click toggles a row in, Shift-click takes a
+                       range — which is what the Repositories list has always done, and what anyone who selects
+                       files in their own OS expects. Touch has neither modifier keys nor a right-click, so
+                       there the checkbox IS the affordance; the same input-device query that decides whether a
+                       toolbar shows labels decides this (ADR 0491). *@
+                    <div class="wb-touch-only" @onclick:stopPropagation="true">
                         <MudCheckBox T="bool" Value="_inboxChecked.Contains(item)" ValueChanged="@(v => ToggleInboxCheck(item, v))" Dense="true" Size="Size.Small" />
                     </div>
                     <MudIcon Icon="@(item.GroupId is not null ? Icons.Material.Filled.Group : item.UserId is not null ? Icons.Material.Filled.Person : Icons.Material.Filled.InsertDriveFile)" Size="Size.Small" />
@@ -693,9 +761,79 @@
 
     private readonly HashSet<InboxItem> _inboxChecked = [];
 
+    // The row the next Shift-click ranges from. Set by every click that establishes a position — a plain
+    // single-select and a Ctrl-click both do; a Shift-click extends and leaves it where it was, so shifting
+    // twice grows the same range instead of walking the anchor along behind the cursor.
+    private InboxItem? _inboxAnchor;
+
+    // Native multi-selection, the same shape the Repositories list uses (ADR "Bulk actions on selected
+    // documents"): Ctrl/Cmd-click toggles a row into the checked set, Shift-click takes the range from the
+    // anchor, and a plain click clears the set and single-selects. The checked set is what the page operations
+    // and "file N items" already act on, so this is the pointer-device way to build it — the checkbox column
+    // stays for touch, where there are no modifier keys.
+    private async Task OnInboxRowClickAsync(InboxItem item, Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
+    {
+        if (e.CtrlKey || e.MetaKey)
+        {
+            if (!_inboxChecked.Remove(item))
+            {
+                _inboxChecked.Add(item);
+            }
+
+            _inboxAnchor = item;
+            await LoadPagesAsync();
+            return;
+        }
+
+        if (e.ShiftKey && _inboxAnchor is { } anchor)
+        {
+            var a = _inboxItems.IndexOf(anchor);
+            var b = _inboxItems.IndexOf(item);
+            if (a >= 0 && b >= 0)
+            {
+                for (var i = Math.Min(a, b); i <= Math.Max(a, b); i++)
+                {
+                    _inboxChecked.Add(_inboxItems[i]);
+                }
+
+                await LoadPagesAsync();
+                return;
+            }
+        }
+
+        // A plain click makes this row the whole selection — it does not merely EMPTY the checked set. The page
+        // operations (split, sort, straighten, cut) each need exactly one checked item, so a click that cleared
+        // the set would take them off the toolbar on every pointer device: you would have to tick a hidden
+        // checkbox to get them back. "Selected" and "checked" are one thing here; the checkbox column, where it
+        // shows, is a second way to reach the same set.
+        _inboxChecked.Clear();
+        _inboxChecked.Add(item);
+        _inboxAnchor = item;
+        await SelectInboxItemAsync(item);
+        await LoadPagesAsync();
+    }
+
+    // One button, one scope. The count is in the name whenever there is more than one thing to move, because
+    // the label is hidden on a pointer device and the tooltip is then the only place it can say how many.
+    private string FileCheckedLabel => _inboxChecked.Count > 1
+        ? string.Format(Strings.Get("InboxFileN"), _inboxChecked.Count)
+        : Strings.Get("InboxFileToFolder");
+
+    // Exactly one checked item takes the single-item dialog (it names the file); more take the bulk one. Both
+    // read the CHECKED set rather than _selectedInboxItem: after Ctrl-clicking a row back out, the detail pane
+    // still shows whatever it last loaded, and filing what the pane shows rather than what is highlighted is
+    // the mistake ADR 0559 is about.
+    private Task FileCheckedAsync() => _inboxChecked.Count switch
+    {
+        0 => Task.CompletedTask,
+        1 => FileInboxItemAsync(_inboxChecked.Single()),
+        _ => FileMultipleAsync(),
+    };
+
     private void ToggleInboxCheck(InboxItem item, bool on)
     {
         if (on) { _inboxChecked.Add(item); } else { _inboxChecked.Remove(item); }
+        _inboxAnchor = item;
         _ = LoadPagesAsync();
     }
 

@@ -179,8 +179,16 @@ public partial class MainWindow : Window
 
     // ---- Inbox (ADR "S3-backed inbox", phase 2) -------------------------------------------------------
 
-    private static InboxItemViewModel? InboxItemFrom(object? sender) =>
-        (sender as Control)?.Tag as InboxItemViewModel;
+    // The one seam where the two surfaces differ (#521). A row's context menu carries the row as its Tag and
+    // acts on THAT; a ribbon button carries none and acts on the current SELECTION. Both take their target
+    // here and now — never from what the detail pane last finished loading, which is how permissions once got
+    // granted against the wrong document (ADR 0559).
+    //
+    // Every handler already went through this helper, so the ribbon's five buttons needed no new code path:
+    // the distinction lives in one expression rather than being re-decided per action.
+    private InboxItemViewModel? InboxItemFrom(object? sender) =>
+        (sender as Control)?.Tag as InboxItemViewModel
+        ?? ServerInboxList.SelectedItem as InboxItemViewModel;
 
 
 
@@ -342,7 +350,7 @@ public partial class MainWindow : Window
 
 
 
-    private void OnInboxDelete(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnInboxDelete(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || InboxItemFrom(sender) is not { } item)
         {
@@ -356,7 +364,7 @@ public partial class MainWindow : Window
     });
 
     // "Send to…" (ADR 0532): hand an own item to a chosen group or user via the picker dialog.
-    private void OnInboxSend(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnInboxSend(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || InboxItemFrom(sender) is not { } item)
         {
@@ -371,7 +379,7 @@ public partial class MainWindow : Window
     });
 
     // "Move to my inbox" (ADR 0532): claim a group / other-user item into my own inbox.
-    private void OnInboxMoveToMine(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnInboxMoveToMine(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && InboxItemFrom(sender) is { } item)
         {

@@ -30,6 +30,16 @@ public partial class InboxRibbon : UserControl
 {
     public InboxRibbon() => AvaloniaXamlLoader.Load(this);
 
+    private void OnInboxOpen(object? sender, RoutedEventArgs e) => Window()?.OnInboxOpen(sender, e);
+
+    private void OnInboxSend(object? sender, RoutedEventArgs e) => Window()?.OnInboxSend(sender, e);
+
+    private void OnInboxMoveToMine(object? sender, RoutedEventArgs e) => Window()?.OnInboxMoveToMine(sender, e);
+
+    private void OnInboxFile(object? sender, RoutedEventArgs e) => Window()?.OnInboxFile(sender, e);
+
+    private void OnInboxDelete(object? sender, RoutedEventArgs e) => Window()?.OnInboxDelete(sender, e);
+
     private void OnInboxSplit(object? sender, RoutedEventArgs e) => Window()?.OnInboxSplit(sender, e);
 
     private void OnInboxSortPages(object? sender, RoutedEventArgs e) => Window()?.OnInboxSortPages(sender, e);

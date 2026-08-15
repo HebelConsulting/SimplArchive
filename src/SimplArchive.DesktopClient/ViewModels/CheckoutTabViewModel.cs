@@ -67,7 +67,26 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     private void TogglePreview() => PreviewCollapsed = !PreviewCollapsed;
 
     /// <summary>The row whose working copy the detail panes describe.</summary>
-    [ObservableProperty] private CheckoutRowViewModel? _selectedRow;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedRow))]
+    [NotifyPropertyChangedFor(nameof(SelectedCanCheckIn))]
+    [NotifyPropertyChangedFor(nameof(SelectedCanDiscard))]
+    [NotifyPropertyChangedFor(nameof(SelectedCanUnlock))]
+    [NotifyPropertyChangedFor(nameof(SelectedCanExtend))]
+    private CheckoutRowViewModel? _selectedRow;
+
+    // What the Check-out ribbon gates on (#521). The row's own Can* answer for the SELECTION, so a ribbon
+    // button greys out for the same reasons its context-menu twin disappears — the two surfaces never disagree
+    // about whether an action is possible, only about which item it means.
+    public bool HasSelectedRow => SelectedRow is not null;
+
+    public bool SelectedCanCheckIn => SelectedRow?.CanCheckIn == true;
+
+    public bool SelectedCanDiscard => SelectedRow?.CanDiscard == true;
+
+    public bool SelectedCanUnlock => SelectedRow?.CanUnlock == true;
+
+    public bool SelectedCanExtend => SelectedRow?.CanExtend == true;
 
     partial void OnSelectedRowChanged(CheckoutRowViewModel? value) => _ = LoadDetailAsync(value);
 
