@@ -529,7 +529,13 @@ app.UseBlazorFrameworkFiles();
 // because static files serve the first match and the shipped icon is already in wwwroot.
 app.UseCustomFavicon();
 
-app.UseStaticFiles();
+// llms.txt and the tour script are UTF-8 prose read by browsers and agents; without an explicit charset the
+// default text/plain and text/markdown mappings let the client guess, and the guess renders em-dashes as
+// mojibake (found by actually performing the tour, #530-adjacent). Everything else keeps the stock mapping.
+var staticContentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+staticContentTypes.Mappings[".txt"] = "text/plain; charset=utf-8";
+staticContentTypes.Mappings[".md"] = "text/markdown; charset=utf-8";
+app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = staticContentTypes });
 
 // Public desktop-client download area (ADR 0490): make ONLY /download browsable so a visitor can click through to
 // clients/<os>/ and grab the build that matches this API. The win/linux archives are baked into the image by the

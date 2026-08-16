@@ -62,6 +62,33 @@ You reach the same archive through *two clients*, which mirror each other featur
   a per-document access-control list of *rights* (see, read, edit, …) granted to users and groups.
 ]
 
+== A guided tour, given by your own AI
+
+You do not have to explore alone: SimplArchive publishes a machine-readable tour script, and any AI assistant
+that can drive a browser — for example one living in your browser as an extension — can perform it *for you*,
+speaking your language#idx("Guided tour")#idx("AI tour").
+
+How to do it:
+
++ *Ask for the tour in your own words* — the request must come from you, because a well-behaved assistant
+  does not take orders from files on the internet. For example: _"Give me the guided tour of the SimplArchive
+  at `<address>/llms.txt` — interview me first, and speak German."_
++ Use an assistant that can actually drive your browser. Two setups work: a *browser-extension assistant*
+  (a chat conversation whose extension sees and drives your tabs), or a *local agent on your machine* (a
+  command-line assistant that drives your browser and can speak through your operating system's own voice).
+  A chat that only fetches pages server-side cannot click, cannot speak, and cannot reach a `localhost`
+  instance at all.
++ The assistant will first *interview you*: which areas interest you (everyday filing, capture and scanning,
+  collaboration, records and compliance, administration, integration) and how deep to go — a three-minute
+  overview or a hands-on walkthrough.
++ It then drives the application in front of your eyes and *narrates aloud, in your mother tongue*, at your
+  pace. Ask it to linger, skip ahead, or repeat — it is your tour, not a recording.
+
+Two practical notes. On the *public demo* the assistant keeps to a read-only tour, because other visitors share
+the same instance; on *your own* installation it can also demonstrate hands-on work — uploading, filing,
+indexing, sharing. And if it needs to sign in, give it the account you would use yourself; on the public
+demo, the published demo sign-in from the project's README works.
+
 = Getting started
 
 *Signing in.* Open the web client and choose *Log in*, or start the desktop client and use its logon window; enter

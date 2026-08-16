@@ -11,9 +11,11 @@ interest, not focused on the part you care about. That is the half your own agen
 
 **Anchors.** Every step names an element by an anchor name — `pane-list`. These are a deliberate, stable
 contract: the interface around them may be reorganised freely, the anchor names may not change without changing
-this file. Do **not** anchor on CSS classes, element structure, or visible text. Visible text is translated
-(English, German, Italian, Spanish), so any assertion on it is only valid in one locale — which is precisely the
-audience this tour is not for.
+this file. Do **not** anchor on CSS classes, element structure, visible text, or **position** — never "the seventh
+tab": several tabs render only for users holding the matching right, so the visible set and every position in it
+change with who is signed in. Visible text is translated (English, German, Italian, Spanish), so any assertion
+on it is only valid in one locale — which is precisely the audience this tour is not for. The anchor name is the
+only stable coordinate; if you find yourself counting icons in a screenshot, stop and query the anchor instead.
 
 **One name, two surfaces.** The same anchor name identifies the same thing in either client, because the web and
 desktop clients are one surface with two front ends, not two products. How you find it differs:
@@ -25,6 +27,11 @@ desktop clients are one surface with two front ends, not two products. How you f
 
 So a step written once serves both. Read the anchor name, then look it up the way your surface exposes it.
 
+**If the instance is older than this script.** The public demo lags releases; an anchor this file names
+may simply not exist there yet. When an `expect` fails, check one anchor from step 1 first — if even
+`pane-tree` is absent, the instance predates the tour: say that plainly and stop, rather than improvising a
+tour over an interface this script does not describe.
+
 **Assertions.** Each `expect` is machine-readable and language-independent — an anchor being present, a count,
 or a tab being active — and never a piece of visible text. How you read a count or an active state depends on
 your surface: in the browser the anchored element carries `data-tour-rows` / `data-tour-roots` and
@@ -32,8 +39,13 @@ your surface: in the browser the anchored element carries `data-tour-rows` / `da
 selection. If an `expect` does not hold, the tour is out of date — say so rather than improvising, and please
 open an issue.
 
-**Narration.** The `say` lines are beats, not a script to read verbatim. Rephrase for your audience. Say less to
-someone impatient; say more about permissions to an administrator.
+**Narration.** The `say` lines are beats, not a script to read verbatim — and they are meant to be **spoken
+aloud, in your user's mother tongue**, while you drive: this tour's whole reason to exist is the audio guide we
+cannot record for every language and every audience. Rephrase for yours. Say less to someone impatient; say more
+about permissions to an administrator. And speak — every OS you could be running on has a voice: `say` on
+macOS, `System.Speech`/`Windows.Media.SpeechSynthesis` via a PowerShell one-liner on Windows, `spd-say` or
+`espeak-ng` on Linux, and the Web Speech API (`speechSynthesis.speak(...)`) right inside the browser you are
+already driving. Pick whichever your environment reaches; the point is that the narration is heard.
 
 **Tooling is yours.** Nothing here names a browser driver, a recorder or an editor. Those change; the product's
 structure is what we can promise to keep true.
@@ -140,8 +152,9 @@ anchor: `tab-bar`
 goal: show the breadth without leaving the shell
 expect: `tab-audit` exists and `tab-search` exists
 say: >
-  Search, tasks, the recycle bin, legal holds, retention, the audit trail — each is a tab on the same workbench.
-  Nothing here is a separate application bolted on.
+  Search, tasks, the recycle bin, legal holds, retention, tags, tenant administration, the audit trail — each
+  is a tab on the same workbench, and every tab speaks the same grammar: an icon ribbon acting on the selected
+  row, and each row's own actions in its context menu. Nothing here is a separate application bolted on.
 ```
 
 ### Step 7 — The audit trail
@@ -252,7 +265,8 @@ action: open `tab-audit`
 goal: end on the record of what the tour itself just did
 expect: `tab-audit` is active
 say: >
-  Everything you just did is in here — the folder, the upload, the metadata, the grant. Not as a side effect you
-  could switch off, but as an append-only, hash-chained record. Ending here is the point: the parts that make a
+  Everything you just did is in here — the folder, the upload, the metadata, the grant. Even administration is
+  recorded as intent: a tenant-settings change writes an event scoped to the settings group that changed. Not a
+  side effect you could switch off, but an append-only, hash-chained record. Ending here is the point: the parts that make a
   document system trustworthy are the ones you only notice when you go looking.
 ```

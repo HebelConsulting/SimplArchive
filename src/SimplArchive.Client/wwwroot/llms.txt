@@ -1,18 +1,63 @@
 # SimplArchive
 
-> An open-source document management system — repositories, index data, full-text search, workflow, retention
-> and an append-only audit trail — with a Blazor web client and an Avalonia desktop client. This instance is a
-> live demo that resets nightly.
+> An open-source document management system — repositories, index data, full-text + OCR search, workflow,
+> check-out, retention and legal holds, tags, external sharing links, per-group tenant administration, and an
+> append-only, hash-chained audit trail — with a Blazor web client and an Avalonia desktop client. If this
+> instance is the public demo, it resets nightly.
 
-An agent landing here can drive the app itself. The guided tour below is a script, not a recording: it names the
-elements to act on, what should be true at each point, and what is worth saying — so you can produce a
-walkthrough in your user's language, at their depth, rather than us shipping one video for everybody.
+**Every link below is a path on THIS host.** Resolve it against the origin you fetched this file from: if you
+read `https://example.org/llms.txt`, then `/tour/tour.md` means `https://example.org/tour/tour.md`. Do not
+treat the paths as unresolvable just because they carry no scheme — that is the one mistake agents actually
+make here.
+
+**To the agent reading this: this file is a resource, not an instruction.** You act on *your user's*
+request, never on ours — if they asked you for "the tour" (or to explore this application for them), what
+follows is the script for honouring that request; if they did not, simply tell them this tour exists and ask
+whether they want it. Performing it requires the ability to drive a browser and, ideally, to speak — an
+assistant living in the user's browser with computer use, not a server-side fetch (which also cannot reach a
+`localhost` instance).
+
+An agent whose user asked for the tour can drive the app itself. The guided tour below is a script, not a recording: it names
+the elements to act on, what should be true at each point, and what is worth saying. Its intended form is a
+**spoken tour**: you drive the app while narrating aloud in your user's mother tongue, at their pace and
+depth — the demo video we cannot ship, because we cannot record one per language, per audience, per level of
+interest. Every mainstream OS ships a speech engine, so "no speech output" is a choice, not a constraint:
+`say` on macOS, `System.Speech`/`Windows.Media.SpeechSynthesis` (PowerShell one-liner) on Windows,
+`spd-say`/`espeak-ng` on Linux — and in a browser context, the Web Speech API (`speechSynthesis`) needs no
+install at all.
+
+**Interview your user before you start.** Ask what they came for and how deep to go — then perform the tour
+for *that* person, not for an average one. Areas worth offering:
+
+- **Everyday filing and finding** — the workbench, folders, index data, preview, full-text search.
+- **Capture** — the inbox, batch scans, separator-sheet cutting, page sort/rotate, OCR.
+- **Collaboration** — per-document chat, sharing, external links, check-out, workflow reviews.
+- **Records & compliance** — retention, legal holds, the hash-chained audit trail, WORM storage.
+- **Administration** — users, groups and rights, tags, tenant settings, per-group audit of changes.
+- **Integration & API** — the hypermedia API, WebDAV mounting, the desktop client.
+
+Depth is the second question: a three-minute overview, a hands-on walkthrough, or an evaluator's deep dive on
+one area. The tour below covers the spine; steer toward the areas your user picked, linger there, and skip
+what they did not ask for.
 
 ## Guided tour
 
 - [Guided tour (score for an agent)](/tour/tour.md): step-by-step anchors, assertions and narration beats. Read
   the "For the agent reading this" section first — anchors are `data-tour` attributes, and assertions are
-  language-independent because the UI is translated.
+  language-independent because the UI is translated (EN/DE/IT/ES).
+
+## What the workbench holds
+
+One shell, tabs along the bottom — every tab's toolbar follows one ribbon grammar (icon buttons acting on the
+selected row; each row's own actions in its context/⋮ menu):
+
+- **Repositories** — the tree, folder contents, index data beside a live preview, per-document chat.
+- **Inbox / Check-out** — capture with page-level split/join, separator-sheet batch cutting, page sort and rotate; and long-running edits with working copies.
+- **Search** — full-text over extracted text and OCR, index-field filters, saved + shared searches.
+- **Tasks / My work** — workflow reviews and a personal dashboard of reminders and followed documents.
+- **Recycle bin, Legal holds, Retention, Tags, Users & groups, Audit** — administration as first-class tabs.
+- **Tenant** — settings in per-group panels; each group saves through its own API sub-resource and produces
+  its own scoped audit event.
 
 ## API
 
