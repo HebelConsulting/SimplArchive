@@ -29,7 +29,7 @@ public class OverLimitFileCeilingTests
     private static readonly Dictionary<string, int> Ceilings = new()
     {
         ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_990,
-        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 4_166,
+        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 3_919,
 
         // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).

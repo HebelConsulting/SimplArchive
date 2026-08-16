@@ -30,9 +30,9 @@ public class DesktopSearchWorkbenchTests
         var repo = (await api.GetRepositoriesAsync()).First(r => r.Name == $"{word}-repo");
         var docId = await UploadAsync(api, repo.Id, $"doc-{suffix}", word);
 
-        await PollAsync(async () => (await api.SearchAsync(word)).Any(r => r.Id == docId), "the document is indexed");
+        await PollAsync(async () => (await api.Search.SearchAsync(word)).Any(r => r.Id == docId), "the document is indexed");
 
-        var results = await api.SearchAsync(word);
+        var results = await api.Search.SearchAsync(word);
 
         var doc = results.Single(r => r.Id == docId);
         Assert.False(doc.IsFolder);
@@ -75,24 +75,24 @@ public class DesktopSearchWorkbenchTests
         await PollAsync(
             async () =>
             {
-                var ids = (await api.SearchAsync(word)).Select(r => r.Id).ToHashSet();
+                var ids = (await api.Search.SearchAsync(word)).Select(r => r.Id).ToHashSet();
                 if (!(ids.Contains(a) && ids.Contains(b)))
                 {
                     return false;
                 }
 
-                var byMaskA = await api.SearchWithFacetsAsync($"q={word}&system[documentType][in]={Uri.EscapeDataString(maskA.Name)}");
+                var byMaskA = await api.Search.SearchWithFacetsAsync($"q={word}&system[documentType][in]={Uri.EscapeDataString(maskA.Name)}");
                 return byMaskA.Results.Count == 1;
             },
             "both documents indexed and their masks re-indexed");
 
         // Narrowed by a document-type facet: one of the two.
-        var narrowed = await api.SearchWithFacetsAsync($"q={word}&system[documentType][in]={Uri.EscapeDataString(maskA.Name)}");
+        var narrowed = await api.Search.SearchWithFacetsAsync($"q={word}&system[documentType][in]={Uri.EscapeDataString(maskA.Name)}");
         Assert.Single(narrowed.Results);
 
         // Unnarrowed — what a reset must get you back to. Before #462 the reset dropped the refinement panel and
         // left this drill-down in place, so the user stayed on the narrowed set with nothing on screen to say why.
-        var reset = await api.SearchWithFacetsAsync($"q={word}");
+        var reset = await api.Search.SearchWithFacetsAsync($"q={word}");
         Assert.Equal(2, reset.Results.Count);
     }
 

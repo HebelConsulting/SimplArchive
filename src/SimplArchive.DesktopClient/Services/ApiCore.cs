@@ -85,6 +85,50 @@ public sealed class ApiCore
         return links;
     }
 
+    /// <summary>
+    /// Loads every page of a cursor-paginated listing (ADR 0207): follows the envelope's `next` rel until
+    /// exhausted, parsing <paramref name="arrayProperty"/>'s items with <paramref name="parse"/>.
+    /// </summary>
+    public async Task<List<T>> LoadPagedAsync<T>(string url, string arrayProperty, Func<JsonElement, T> parse, CancellationToken cancellationToken,
+        Action<JsonElement>? onPage = null)
+    {
+        var items = new List<T>();
+        string? next = url;
+
+        while (next is not null)
+        {
+            var page = await Http.GetFromJsonAsync<JsonElement>(next, cancellationToken);
+            onPage?.Invoke(page);
+            if (page.TryGetProperty(arrayProperty, out var array))
+            {
+                items.AddRange(array.EnumerateArray().Select(parse));
+            }
+
+            next = FindLink(page, "next");
+        }
+
+        return items;
+    }
+
+    /// <summary>The resource's advertised href for <paramref name="rel"/>, or null.</summary>
+    public static string? FindLink(JsonElement resource, string rel)
+    {
+        if (!resource.TryGetProperty("links", out var links))
+        {
+            return null;
+        }
+
+        foreach (var link in links.EnumerateArray())
+        {
+            if (link.GetProperty("rel").GetString() == rel)
+            {
+                return link.GetProperty("href").GetString();
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>The row's advertised links, or null when it carries none.</summary>
     public static IReadOnlyDictionary<string, string>? ParseLinks(JsonElement item) =>
         SimplArchiveApiClient.ParseLinks(item);

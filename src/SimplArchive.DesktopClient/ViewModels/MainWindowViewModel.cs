@@ -2976,7 +2976,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var fields = await _api.GetSearchFieldsAsync();
+            var fields = await _api.Search.GetSearchFieldsAsync();
             _availableFieldNames = fields.Select(f => f.Name).ToList();
             _fieldTypes = fields.ToDictionary(f => f.Name, f => f.DataType);
             OnPropertyChanged(nameof(CanAddFieldFilter));
@@ -3143,7 +3143,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SearchStatus = Strings.Get("StSearching");
         try
         {
-            var page = await _api.SearchWithFacetsAsync(queryParams);
+            var page = await _api.Search.SearchWithFacetsAsync(queryParams);
             SearchResults.Clear();
             foreach (var result in page.Results)
             {
@@ -3191,7 +3191,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     // ---- Saved searches (ADR "Saved searches") ------------------------------------------------------
-    public ObservableCollection<SimplArchiveApiClient.SavedSearchInfo> SavedSearches { get; } = [];
+    public ObservableCollection<SearchClient.SavedSearchInfo> SavedSearches { get; } = [];
     [ObservableProperty][NotifyPropertyChangedFor(nameof(CanSaveSearch))] private string _lastSearchQueryString = "";
     public bool CanSaveSearch => !string.IsNullOrEmpty(LastSearchQueryString);
 
@@ -3208,7 +3208,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         try
         {
             SavedSearches.Clear();
-            foreach (var s in await _api.GetSavedSearchesAsync())
+            foreach (var s in await _api.Search.GetSavedSearchesAsync())
             {
                 SavedSearches.Add(s);
             }
@@ -3234,7 +3234,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.SaveSearchAsync(name.Trim(), LastSearchQueryString);
+            await _api.Search.SaveSearchAsync(name.Trim(), LastSearchQueryString);
             Status = Strings.Get("StSearchSaved");
             await LoadSavedSearchesAsync();
         }
@@ -3245,7 +3245,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task RunSavedSearch(SimplArchiveApiClient.SavedSearchInfo? s)
+    private async Task RunSavedSearch(SearchClient.SavedSearchInfo? s)
     {
         if (s is null)
         {
@@ -3259,14 +3259,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task DeleteSavedSearch(SimplArchiveApiClient.SavedSearchInfo? s)
+    private async Task DeleteSavedSearch(SearchClient.SavedSearchInfo? s)
     {
         if (_api is null || s is null)
         {
             return;
         }
 
-        try { await _api.DeleteSavedSearchAsync(s); } catch (Exception) { }
+        try { await _api.Search.DeleteSavedSearchAsync(s); } catch (Exception) { }
         await LoadSavedSearchesAsync();
     }
 
@@ -3276,7 +3276,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // Open the scope dialog for my own saved search (ADR "Scoped saved-search sharing") — loads the picker
     // targets + current grants, then owner-only PUTs the chosen scope + principals.
     [RelayCommand]
-    private async Task ShareSavedSearch(SimplArchiveApiClient.SavedSearchInfo? s)
+    private async Task ShareSavedSearch(SearchClient.SavedSearchInfo? s)
     {
         if (_api is null || s is null || !s.IsMine || ShowShareSavedSearchDialog is null)
         {
@@ -3285,9 +3285,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var targets = await _api.GetShareTargetsAsync();
+            var targets = await _api.Search.GetShareTargetsAsync();
             var current = s.ShareScope == 2
-                ? (await _api.GetSavedSearchSharesAsync(s)).Select(g => $"{g.PrincipalType}:{g.PrincipalId}").ToHashSet()
+                ? (await _api.Search.GetSavedSearchSharesAsync(s)).Select(g => $"{g.PrincipalType}:{g.PrincipalId}").ToHashSet()
                 : [];
             var options = targets.Select(t => new ShareSavedSearchViewModel.PrincipalOption(
                 t.Type, t.Id, t.Type == "group" ? $"{t.Name} (group)" : t.Name, current.Contains($"{t.Type}:{t.Id}")));
@@ -3298,7 +3298,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 return;
             }
 
-            await _api.SetSavedSearchShareAsync(s, dialogVm.Scope, dialogVm.SelectedPrincipals);
+            await _api.Search.SetSavedSearchShareAsync(s, dialogVm.Scope, dialogVm.SelectedPrincipals);
             Status = dialogVm.Scope switch { 1 => $"Shared '{s.Name}' with everyone.", 2 => $"Shared '{s.Name}' with specific people.", _ => $"'{s.Name}' is now private." };
         }
         catch (Exception e)
@@ -3348,7 +3348,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty] private bool _hasFacetTags;
     [ObservableProperty] private bool _hasFacetSensitivity;
 
-    private static void PopulateFacets(ObservableCollection<FacetBucketViewModel> target, IReadOnlyList<SimplArchiveApiClient.SearchFacetBucket> buckets, HashSet<string> selected)
+    private static void PopulateFacets(ObservableCollection<FacetBucketViewModel> target, IReadOnlyList<SearchClient.SearchFacetBucket> buckets, HashSet<string> selected)
     {
         target.Clear();
         foreach (var b in buckets)

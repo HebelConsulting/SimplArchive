@@ -49,6 +49,7 @@ public sealed class SimplArchiveApiClient
     private readonly HttpClient _http;
     private InboxApi? _inbox;
     private CheckoutClient? _checkout;
+    private SearchClient? _search;
 
     public SimplArchiveApiClient(string accessToken)
     {
@@ -61,6 +62,9 @@ public sealed class SimplArchiveApiClient
 
     /// <summary>The check-out area (#443 tranche 1).</summary>
     public CheckoutClient Checkout => _checkout ??= new CheckoutClient(Core);
+
+    /// <summary>The search area (#443 tranche 3).</summary>
+    public SearchClient Search => _search ??= new SearchClient(Core);
 
     // This client's bearer token — used as the RFC 8693 subject_token to start impersonation (ADR "User
     // impersonation").
@@ -120,13 +124,6 @@ public sealed class SimplArchiveApiClient
     // The references-of-an-item view: the document's real primary location (null when it's a repository root or
     // the caller can't see the parent) plus the folders that reference it (ADR 0506).
     public sealed record ReferencesView(ReferencingFolder? Primary, IReadOnlyList<ReferencingFolder> Folders);
-
-    // A metadata-search hit — see ADR "Metadata search (first slice)". ParentId is the item's home folder
-    // (null = a repository root), for navigating to it.
-    // VersionsHref is the address the HIT advertised (#462) — the row carries its own addresses, so previewing a
-    // result follows what the listing handed over instead of resolving the document again (ADR 0555/0557). Null
-    // for a folder, which advertises no `versions` because it has nothing to preview.
-    public sealed record SearchResult(Guid Id, string Name, bool IsFolder, Guid? ParentId, string Path, string Highlight, string? VersionsHref = null, IReadOnlyDictionary<string, string>? Links = null);
 
     public sealed record IndexField(string FieldName, IReadOnlyList<string> Values);
 
@@ -2075,220 +2072,6 @@ public sealed class SimplArchiveApiClient
         response.EnsureSuccessStatusCode();
     }
 
-    // Free-text metadata search across the tenant (names + index-field values) — see ADR "Metadata search
-    // (first slice)". Follows the next links to load all pages.
-    public async Task<List<SearchResult>> SearchAsync(string query, CancellationToken cancellationToken = default) =>
-        await LoadPagedAsync($"{await RootHrefAsync("search", cancellationToken)}?q={Uri.EscapeDataString(query)}", "results", ParseSearchResult, cancellationToken);
-
-    // Runs a search from a pre-assembled query string (q + repositoryId + system[..]/fields[..] filters) —
-    // see ADR "Search-refinement UI".
-    public async Task<List<SearchResult>> SearchWithFiltersAsync(string queryString, CancellationToken cancellationToken = default) =>
-        await LoadPagedAsync($"{await RootHrefAsync("search", cancellationToken)}?{queryString}", "results", ParseSearchResult, cancellationToken);
-
-    // Search facets (ADR "Search facets") — document type / created-by / year counts to drill down by.
-    public sealed record SearchFacetBucket(string Value, long Count);
-    public sealed record SearchFieldFacet(string Name, IReadOnlyList<SearchFacetBucket> Buckets);
-    public sealed record SearchFacets(IReadOnlyList<SearchFacetBucket> DocumentTypes, IReadOnlyList<SearchFacetBucket> CreatedBy, IReadOnlyList<SearchFacetBucket> Years, IReadOnlyList<SearchFacetBucket> Tags, IReadOnlyList<SearchFacetBucket> FileTypes, IReadOnlyList<SearchFacetBucket> SensitivityLabels, IReadOnlyList<SearchFieldFacet> Fields);
-    public sealed record SearchResults(IReadOnlyList<SearchResult> Results, SearchFacets Facets);
-
-    // Like SearchWithFiltersAsync but also returns the facet counts (from the first page — they're the same
-    // across pages), for the refinement panel.
-    public async Task<SearchResults> SearchWithFacetsAsync(string queryString, CancellationToken cancellationToken = default)
-    {
-        var results = new List<SearchResult>();
-        var facets = new SearchFacets([], [], [], [], [], [], []);
-        string? next = $"{await RootHrefAsync("search", cancellationToken)}?{queryString}";
-        var first = true;
-        while (next is not null)
-        {
-            var page = await _http.GetFromJsonAsync<JsonElement>(next, cancellationToken);
-            if (page.TryGetProperty("results", out var array))
-            {
-                results.AddRange(array.EnumerateArray().Select(ParseSearchResult));
-            }
-
-            if (first)
-            {
-                facets = ParseFacets(page);
-                first = false;
-            }
-
-            next = FindLink(page, "next");
-        }
-
-        return new SearchResults(results, facets);
-    }
-
-    private static SearchFacets ParseFacets(JsonElement page)
-    {
-        if (!page.TryGetProperty("facets", out var f) || f.ValueKind != JsonValueKind.Object)
-        {
-            return new SearchFacets([], [], [], [], [], [], []);
-        }
-
-        static IReadOnlyList<SearchFacetBucket> BucketsOf(JsonElement arr)
-        {
-            var list = new List<SearchFacetBucket>();
-            if (arr.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var b in arr.EnumerateArray())
-                {
-                    list.Add(new SearchFacetBucket(b.GetProperty("value").GetString() ?? "", b.GetProperty("count").GetInt64()));
-                }
-            }
-
-            return list;
-        }
-
-        static IReadOnlyList<SearchFacetBucket> Buckets(JsonElement facets, string group) =>
-            facets.TryGetProperty(group, out var arr) ? BucketsOf(arr) : [];
-
-        var fields = new List<SearchFieldFacet>();
-        if (f.TryGetProperty("fields", out var fieldArr) && fieldArr.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var ff in fieldArr.EnumerateArray())
-            {
-                fields.Add(new SearchFieldFacet(
-                    ff.GetProperty("name").GetString() ?? "",
-                    ff.TryGetProperty("buckets", out var b) ? BucketsOf(b) : []));
-            }
-        }
-
-        return new SearchFacets(Buckets(f, "documentTypes"), Buckets(f, "createdBy"), Buckets(f, "years"), Buckets(f, "tags"), Buckets(f, "fileTypes"), Buckets(f, "sensitivityLabels"), fields);
-    }
-
-    // ---- Saved searches (ADR "Saved searches") ------------------------------------------------------
-
-    // ShareScope: 0 = Private, 1 = Everyone, 2 = Specific (ADR "Scoped saved-search sharing").
-    // Only the OWNER's rows advertise self/delete/shares, so a search shared with you carries none of them.
-    public sealed record SavedSearchInfo(Guid Id, string Name, string QueryString, int ShareScope, bool IsMine, string OwnerName,
-        IReadOnlyDictionary<string, string>? Links = null)
-    {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
-
-        public bool IsEveryone => ShareScope == 1;
-        public bool IsSpecific => ShareScope == 2;
-    }
-
-    public sealed record ShareTargetInfo(string Type, Guid Id, string Name);
-    public sealed record ShareGrantInfo(string PrincipalType, Guid PrincipalId);
-
-    public async Task<List<SavedSearchInfo>> GetSavedSearchesAsync(CancellationToken cancellationToken = default)
-    {
-        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("savedSearches", cancellationToken), cancellationToken);
-        var list = new List<SavedSearchInfo>();
-        if (json.TryGetProperty("savedSearches", out var arr))
-        {
-            foreach (var s in arr.EnumerateArray())
-            {
-                list.Add(new SavedSearchInfo(
-                    s.GetProperty("id").GetGuid(),
-                    s.GetProperty("name").GetString() ?? "",
-                    s.GetProperty("queryString").GetString() ?? "",
-                    s.TryGetProperty("shareScope", out var sc) ? sc.GetInt32() : 0,
-                    !s.TryGetProperty("isMine", out var mine) || mine.ValueKind != JsonValueKind.False,
-                    s.TryGetProperty("ownerName", out var on) ? on.GetString() ?? "" : "",
-                    ParseLinks(s)));
-            }
-        }
-
-        return list;
-    }
-
-    // The picker options (active users + groups) for the share dialog.
-    public async Task<List<ShareTargetInfo>> GetShareTargetsAsync(CancellationToken cancellationToken = default)
-    {
-        // `share-targets` is advertised by the saved-searches collection — the dialog that needs it opens from
-        // that list, so the read is one the screen has effectively already paid for.
-        var collection = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("savedSearches", cancellationToken), cancellationToken);
-        var targetsHref = ParseLinks(collection) is { } collectionLinks && collectionLinks.TryGetValue("share-targets", out var t)
-            ? t
-            : throw new InvalidOperationException("Saved searches advertised no 'share-targets' rel (ADR 0543).");
-
-        var json = await _http.GetFromJsonAsync<JsonElement>(targetsHref, cancellationToken);
-        var list = new List<ShareTargetInfo>();
-        if (json.TryGetProperty("users", out var users))
-        {
-            foreach (var u in users.EnumerateArray())
-            {
-                list.Add(new ShareTargetInfo("user", u.GetProperty("id").GetGuid(), u.GetProperty("displayName").GetString() ?? ""));
-            }
-        }
-
-        if (json.TryGetProperty("groups", out var groups))
-        {
-            foreach (var g in groups.EnumerateArray())
-            {
-                list.Add(new ShareTargetInfo("group", g.GetProperty("id").GetGuid(), g.GetProperty("name").GetString() ?? ""));
-            }
-        }
-
-        return list;
-    }
-
-    // The current specific-principal grants on my search (owner-only).
-    public async Task<List<ShareGrantInfo>> GetSavedSearchSharesAsync(SavedSearchInfo search, CancellationToken cancellationToken = default)
-    {
-        var json = await _http.GetFromJsonAsync<JsonElement>(RequireHref(search, "shares"), cancellationToken);
-        var list = new List<ShareGrantInfo>();
-        if (json.TryGetProperty("shares", out var arr))
-        {
-            foreach (var g in arr.EnumerateArray())
-            {
-                list.Add(new ShareGrantInfo(g.GetProperty("principalType").GetString() ?? "", g.GetProperty("principalId").GetGuid()));
-            }
-        }
-
-        return list;
-    }
-
-    public async Task SaveSearchAsync(string name, string queryString, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsJsonAsync(await RootHrefAsync("savedSearches", cancellationToken), new { name, queryString }, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            throw new ApiActionException("You already have a saved search with that name.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    // Set the scope + specific-principal grants on my own saved search (ADR "Scoped saved-search sharing") —
-    // owner-only PUT. shares carries the ("user"|"group", id) principals (only applied when scope == Specific).
-    public async Task SetSavedSearchShareAsync(SavedSearchInfo search, int shareScope, IReadOnlyList<(string Type, Guid Id)> shares, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PutAsJsonAsync(
-            RequireHref(search, "self"),
-            new { name = search.Name, queryString = search.QueryString, shareScope, shares = shares.Select(s => new { type = s.Type, id = s.Id }) },
-            cancellationToken);
-        response.EnsureSuccessStatusCode();
-    }
-
-    public async Task DeleteSavedSearchAsync(SavedSearchInfo search, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.DeleteAsync(RequireHref(search, "delete"), cancellationToken);
-        response.EnsureSuccessStatusCode();
-    }
-
-    // The tenant's distinct index-field names + types, for the refinement UI's field picker.
-    public sealed record SearchField(string Name, int DataType);
-
-    public async Task<IReadOnlyList<SearchField>> GetSearchFieldsAsync(CancellationToken cancellationToken = default)
-    {
-        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("searchFields", cancellationToken), cancellationToken);
-        var fields = new List<SearchField>();
-        if (json.TryGetProperty("fields", out var array))
-        {
-            foreach (var f in array.EnumerateArray())
-            {
-                fields.Add(new SearchField(
-                    f.GetProperty("name").GetString() ?? "",
-                    f.TryGetProperty("dataType", out var dataType) ? dataType.GetInt32() : 0));
-            }
-        }
-
-        return fields;
-    }
 
     // Moves (reparents) an item into another folder. Requires If-Match (like rename/delete), fetched via a
     // HEAD. 400 = into its own subtree, 403 = no permission (CanMove/CanCreateSubItems), 409 = name clash.
@@ -2683,26 +2466,8 @@ public sealed class SimplArchiveApiClient
         return (bytes, response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream");
     }
 
-    private async Task<List<T>> LoadPagedAsync<T>(string url, string arrayProperty, Func<JsonElement, T> parse, CancellationToken cancellationToken,
-        Action<JsonElement>? onPage = null)
-    {
-        var items = new List<T>();
-        string? next = url;
-
-        while (next is not null)
-        {
-            var page = await _http.GetFromJsonAsync<JsonElement>(next, cancellationToken);
-            onPage?.Invoke(page);
-            if (page.TryGetProperty(arrayProperty, out var array))
-            {
-                items.AddRange(array.EnumerateArray().Select(parse));
-            }
-
-            next = FindLink(page, "next");
-        }
-
-        return items;
-    }
+    private Task<List<T>> LoadPagedAsync<T>(string url, string arrayProperty, Func<JsonElement, T> parse, CancellationToken cancellationToken,
+        Action<JsonElement>? onPage = null) => Core.LoadPagedAsync(url, arrayProperty, parse, cancellationToken, onPage);
 
     private static Node ParseNode(JsonElement item) => new(
         item.GetProperty("id").GetGuid(),
@@ -2749,62 +2514,6 @@ public sealed class SimplArchiveApiClient
         return map.Count == 0 ? null : map;
     }
 
-    private static SearchResult ParseSearchResult(JsonElement item) => new(
-        item.GetProperty("id").GetGuid(),
-        item.GetProperty("name").GetString() ?? "",
-        item.TryGetProperty("isFolder", out var f) && f.GetBoolean(),
-        item.TryGetProperty("parentId", out var p) && p.ValueKind != JsonValueKind.Null ? p.GetGuid() : null,
-        item.TryGetProperty("path", out var path) ? path.GetString() ?? "" : "",
-        item.TryGetProperty("highlight", out var hl) ? hl.GetString() ?? "" : "",
-        FindLink(item, "versions"),
-        ParseLinks(item));
-
-    private static ReferencingFolder ParseReferencingFolder(JsonElement item) => new(
-        item.GetProperty("id").GetGuid(),
-        item.GetProperty("name").GetString() ?? "",
-        item.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "");
-
-    private static Reference ParseReference(JsonElement item) => new(
-        item.GetProperty("referenceId").GetGuid(),
-        item.GetProperty("id").GetGuid(),
-        item.GetProperty("name").GetString() ?? "",
-        item.TryGetProperty("hasChildren", out var hc) && hc.GetBoolean(),
-        item.TryGetProperty("hasVersions", out var hv) && hv.GetBoolean(),
-        item.TryGetProperty("hasSubfolders", out var hs) && hs.GetBoolean(),
-        item.TryGetProperty("hasReferences", out var hr) && hr.GetBoolean(),
-        item.TryGetProperty("realParentId", out var rp) && rp.ValueKind != JsonValueKind.Null ? rp.GetGuid() : null,
-        RelHref(item, "delete"));
-
-    private static RecycleBinItem ParseRecycleBinItem(JsonElement item) => new(
-        item.GetProperty("id").GetGuid(),
-        item.GetProperty("name").GetString() ?? "",
-        item.GetProperty("deletedAt").GetDateTimeOffset(),
-        ParseLinks(item));
-
-    private static Comment ParseComment(JsonElement item) => new(
-        item.GetProperty("id").GetGuid(),
-        item.TryGetProperty("parentMessageId", out var p) && p.ValueKind != JsonValueKind.Null ? p.GetGuid() : null,
-        item.GetProperty("body").GetString() ?? "",
-        item.TryGetProperty("authorName", out var a) ? a.GetString() ?? "" : "",
-        item.GetProperty("createdAt").GetDateTimeOffset(),
-        RelHref(item, "author-card"),
-        item.TryGetProperty("kind", out var k) ? k.GetInt32() : 0,
-        item.TryGetProperty("versionNumber", out var vn) && vn.ValueKind != JsonValueKind.Null ? vn.GetInt32() : null,
-        item.TryGetProperty("versionComment", out var vc) && vc.ValueKind != JsonValueKind.Null ? vc.GetString() : null,
-        item.TryGetProperty("versionCommentKind", out var vck) && vck.ValueKind != JsonValueKind.Null ? vck.GetInt32() : null,
-        ParseMentions(item));
-
-    private static IReadOnlyList<Mention> ParseMentions(JsonElement item)
-    {
-        if (!item.TryGetProperty("mentions", out var mentions) || mentions.ValueKind != JsonValueKind.Array)
-        {
-            return [];
-        }
-
-        return [.. mentions.EnumerateArray().Select(m => new Mention(
-            m.GetProperty("userId").GetGuid(),
-            m.TryGetProperty("displayName", out var n) ? n.GetString() ?? "" : ""))];
-    }
 
     // The href a resource advertises for a rel, or null when it doesn't offer one. A missing rel is meaningful —
     // it means "not available here" — so callers branch on null rather than composing a URL (ADR 0543).
@@ -3316,10 +3025,6 @@ public sealed class SimplArchiveApiClient
     private static string RequireHref(TagCatalogItem tag, string rel) =>
         tag.Href(rel)
         ?? throw new InvalidOperationException($"The tag '{tag.Name}' advertised no '{rel}' rel (ADR 0543/0555).");
-
-    private static string RequireHref(SavedSearchInfo search, string rel) =>
-        search.Href(rel)
-        ?? throw new InvalidOperationException($"The saved search advertised no '{rel}' rel — it is not yours to change (ADR 0543/0555).");
 
     private static string RequireHref(ServiceAccountInfo account, string rel) =>
         account.Href(rel)
@@ -4145,6 +3850,54 @@ public sealed class SimplArchiveApiClient
 
     internal static string? StrOrNull(JsonElement e, string name) =>
         e.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
+
+    private static ReferencingFolder ParseReferencingFolder(JsonElement item) => new(
+        item.GetProperty("id").GetGuid(),
+        item.GetProperty("name").GetString() ?? "",
+        item.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "");
+
+    private static Reference ParseReference(JsonElement item) => new(
+        item.GetProperty("referenceId").GetGuid(),
+        item.GetProperty("id").GetGuid(),
+        item.GetProperty("name").GetString() ?? "",
+        item.TryGetProperty("hasChildren", out var hc) && hc.GetBoolean(),
+        item.TryGetProperty("hasVersions", out var hv) && hv.GetBoolean(),
+        item.TryGetProperty("hasSubfolders", out var hs) && hs.GetBoolean(),
+        item.TryGetProperty("hasReferences", out var hr) && hr.GetBoolean(),
+        item.TryGetProperty("realParentId", out var rp) && rp.ValueKind != JsonValueKind.Null ? rp.GetGuid() : null,
+        RelHref(item, "delete"));
+
+    private static RecycleBinItem ParseRecycleBinItem(JsonElement item) => new(
+        item.GetProperty("id").GetGuid(),
+        item.GetProperty("name").GetString() ?? "",
+        item.GetProperty("deletedAt").GetDateTimeOffset(),
+        ParseLinks(item));
+
+    private static Comment ParseComment(JsonElement item) => new(
+        item.GetProperty("id").GetGuid(),
+        item.TryGetProperty("parentMessageId", out var p) && p.ValueKind != JsonValueKind.Null ? p.GetGuid() : null,
+        item.GetProperty("body").GetString() ?? "",
+        item.TryGetProperty("authorName", out var a) ? a.GetString() ?? "" : "",
+        item.GetProperty("createdAt").GetDateTimeOffset(),
+        RelHref(item, "author-card"),
+        item.TryGetProperty("kind", out var k) ? k.GetInt32() : 0,
+        item.TryGetProperty("versionNumber", out var vn) && vn.ValueKind != JsonValueKind.Null ? vn.GetInt32() : null,
+        item.TryGetProperty("versionComment", out var vc) && vc.ValueKind != JsonValueKind.Null ? vc.GetString() : null,
+        item.TryGetProperty("versionCommentKind", out var vck) && vck.ValueKind != JsonValueKind.Null ? vck.GetInt32() : null,
+        ParseMentions(item));
+
+    private static IReadOnlyList<Mention> ParseMentions(JsonElement item)
+    {
+        if (!item.TryGetProperty("mentions", out var mentions) || mentions.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return [.. mentions.EnumerateArray().Select(m => new Mention(
+            m.GetProperty("userId").GetGuid(),
+            m.TryGetProperty("displayName", out var n) ? n.GetString() ?? "" : ""))];
+    }
+
 
     private static string? FindLink(JsonElement resource, string rel)
     {

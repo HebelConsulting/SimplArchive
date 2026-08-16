@@ -21,17 +21,17 @@ public class DesktopSavedSearchesTests
         var name = $"dt-saved-{suffix}";
         var query = $"q=inv{suffix}&system[documentType][eq]=Invoice";
 
-        await api.SaveSearchAsync(name, query);
+        await api.Search.SaveSearchAsync(name, query);
 
-        var saved = (await api.GetSavedSearchesAsync()).Single(s => s.Name == name);
+        var saved = (await api.Search.GetSavedSearchesAsync()).Single(s => s.Name == name);
         Assert.Equal(query, saved.QueryString);
 
         // A duplicate name is rejected.
-        await Assert.ThrowsAsync<ApiActionException>(() => api.SaveSearchAsync(name, "q=other"));
+        await Assert.ThrowsAsync<ApiActionException>(() => api.Search.SaveSearchAsync(name, "q=other"));
 
         // Delete → gone.
-        await api.DeleteSavedSearchAsync(saved);
-        Assert.DoesNotContain(await api.GetSavedSearchesAsync(), s => s.Id == saved.Id);
+        await api.Search.DeleteSavedSearchAsync(saved);
+        Assert.DoesNotContain(await api.Search.GetSavedSearchesAsync(), s => s.Id == saved.Id);
     }
 
     [Fact]
@@ -41,28 +41,28 @@ public class DesktopSavedSearchesTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
         var name = $"dt-share-{Guid.NewGuid().ToString("N")[..8]}";
 
-        await api.SaveSearchAsync(name, "q=shared");
-        var saved = (await api.GetSavedSearchesAsync()).Single(s => s.Name == name);
+        await api.Search.SaveSearchAsync(name, "q=shared");
+        var saved = (await api.Search.GetSavedSearchesAsync()).Single(s => s.Name == name);
         Assert.True(saved.IsMine);
         Assert.Equal(0, saved.ShareScope); // Private by default
 
         // Share with everyone (scope 1) (ADR "Scoped saved-search sharing").
-        await api.SetSavedSearchShareAsync(saved, 1, []);
-        Assert.Equal(1, (await api.GetSavedSearchesAsync()).Single(s => s.Id == saved.Id).ShareScope);
+        await api.Search.SetSavedSearchShareAsync(saved, 1, []);
+        Assert.Equal(1, (await api.Search.GetSavedSearchesAsync()).Single(s => s.Id == saved.Id).ShareScope);
 
         // Narrow to specific: the share-targets picker lists real principals; share with the first user.
-        var targets = await api.GetShareTargetsAsync();
+        var targets = await api.Search.GetShareTargetsAsync();
         var aUser = targets.First(t => t.Type == "user");
-        await api.SetSavedSearchShareAsync(saved, 2, [(aUser.Type, aUser.Id)]);
-        Assert.Equal(2, (await api.GetSavedSearchesAsync()).Single(s => s.Id == saved.Id).ShareScope);
-        var grants = await api.GetSavedSearchSharesAsync(saved);
+        await api.Search.SetSavedSearchShareAsync(saved, 2, [(aUser.Type, aUser.Id)]);
+        Assert.Equal(2, (await api.Search.GetSavedSearchesAsync()).Single(s => s.Id == saved.Id).ShareScope);
+        var grants = await api.Search.GetSavedSearchSharesAsync(saved);
         Assert.Equal(aUser.Id, Assert.Single(grants).PrincipalId);
 
         // Back to private (scope 0) — the specific grants are cleared.
-        await api.SetSavedSearchShareAsync(saved, 0, []);
-        Assert.Equal(0, (await api.GetSavedSearchesAsync()).Single(s => s.Id == saved.Id).ShareScope);
-        Assert.Empty(await api.GetSavedSearchSharesAsync(saved));
+        await api.Search.SetSavedSearchShareAsync(saved, 0, []);
+        Assert.Equal(0, (await api.Search.GetSavedSearchesAsync()).Single(s => s.Id == saved.Id).ShareScope);
+        Assert.Empty(await api.Search.GetSavedSearchSharesAsync(saved));
 
-        await api.DeleteSavedSearchAsync(saved);
+        await api.Search.DeleteSavedSearchAsync(saved);
     }
 }

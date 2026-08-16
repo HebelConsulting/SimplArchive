@@ -863,7 +863,7 @@ internal static class Program
     {
         var api = new Services.SimplArchiveApiClient(accessToken);
         Console.WriteLine($"searching for '{query}'…");
-        var results = await api.SearchAsync(query);
+        var results = await api.Search.SearchAsync(query);
         Console.WriteLine($"{results.Count} result(s):");
         foreach (var result in results)
         {

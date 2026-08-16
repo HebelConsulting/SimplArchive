@@ -38,7 +38,7 @@ public class DesktopSearchFacetsTests
         // default mask, inflating maskA's count (a real flake: expected 2, actual 3).
         await PollAsync(async () =>
         {
-            var facets = await api.SearchWithFacetsAsync($"q={word}");
+            var facets = await api.Search.SearchWithFacetsAsync($"q={word}");
             var ids = facets.Results.Select(r => r.Id).ToHashSet();
             if (!(ids.Contains(a1) && ids.Contains(a2) && ids.Contains(b1)))
             {
@@ -50,13 +50,13 @@ public class DesktopSearchFacetsTests
             return aCount == 2 && bCount == 1;
         });
 
-        var page = await api.SearchWithFacetsAsync($"q={word}");
+        var page = await api.Search.SearchWithFacetsAsync($"q={word}");
         Assert.Equal(2, page.Facets.DocumentTypes.Single(f => f.Value == maskA.Name).Count);
         Assert.Equal(1, page.Facets.DocumentTypes.Single(f => f.Value == maskB.Name).Count);
         Assert.NotEmpty(page.Facets.Years);
 
         // Drill down by document type → only the two maskA documents.
-        var drilled = (await api.SearchWithFacetsAsync($"q={word}&system[documentType][eq]={Uri.EscapeDataString(maskA.Name)}")).Results.Select(r => r.Id).ToHashSet();
+        var drilled = (await api.Search.SearchWithFacetsAsync($"q={word}&system[documentType][eq]={Uri.EscapeDataString(maskA.Name)}")).Results.Select(r => r.Id).ToHashSet();
         Assert.Contains(a1, drilled);
         Assert.Contains(a2, drilled);
         Assert.DoesNotContain(b1, drilled);
@@ -65,11 +65,11 @@ public class DesktopSearchFacetsTests
         Assert.Equal(3, page.Facets.FileTypes.Single(f => f.Value == "txt").Count);
 
         // Post-filter faceting: after selecting maskA, its OWN dimension stays open (maskB still shows).
-        var afterA = await api.SearchWithFacetsAsync($"q={word}&system[documentType][in]={Uri.EscapeDataString(maskA.Name)}");
+        var afterA = await api.Search.SearchWithFacetsAsync($"q={word}&system[documentType][in]={Uri.EscapeDataString(maskA.Name)}");
         Assert.Contains(afterA.Facets.DocumentTypes, f => f.Value == maskB.Name);
 
         // Multi-select OR within a dimension → both types' documents.
-        var both = (await api.SearchWithFacetsAsync($"q={word}&system[documentType][in]={Uri.EscapeDataString(maskA.Name)},{Uri.EscapeDataString(maskB.Name)}")).Results.Select(r => r.Id).ToHashSet();
+        var both = (await api.Search.SearchWithFacetsAsync($"q={word}&system[documentType][in]={Uri.EscapeDataString(maskA.Name)},{Uri.EscapeDataString(maskB.Name)}")).Results.Select(r => r.Id).ToHashSet();
         Assert.Contains(a1, both);
         Assert.Contains(b1, both);
     }
