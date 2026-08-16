@@ -14,13 +14,13 @@ public partial class SendToInboxDialog : Window
 {
     // Kept in ItemsSource order so the selected index maps back to a target (the combobox shows label strings —
     // a private display type can't back a compiled XAML binding).
-    private readonly IReadOnlyList<SimplArchiveApiClient.InboxTargetInfo> _targets;
+    private readonly IReadOnlyList<InboxApi.InboxTargetInfo> _targets;
 
     public SendToInboxDialog() : this("", [])
     {
     }
 
-    public SendToInboxDialog(string itemName, IReadOnlyList<SimplArchiveApiClient.InboxTargetInfo> targets)
+    public SendToInboxDialog(string itemName, IReadOnlyList<InboxApi.InboxTargetInfo> targets)
     {
         InitializeComponent();
         _targets = targets;

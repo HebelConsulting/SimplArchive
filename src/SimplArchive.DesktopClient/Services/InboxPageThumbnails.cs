@@ -39,7 +39,7 @@ public static class InboxPageThumbnails
     /// </summary>
     public static async Task<IReadOnlyList<Bitmap>> LoadAsync(
         SimplArchiveApiClient api,
-        SimplArchiveApiClient.InboxItemInfo item,
+        InboxApi.InboxItemInfo item,
         CancellationToken cancellationToken = default)
     {
         try
@@ -61,7 +61,7 @@ public static class InboxPageThumbnails
     }
 
     private static async Task<IReadOnlyList<Bitmap>> FromPdfAsync(
-        SimplArchiveApiClient.InboxItemInfo item,
+        InboxApi.InboxItemInfo item,
         CancellationToken cancellationToken)
     {
         using var http = new HttpClient();
@@ -71,12 +71,12 @@ public static class InboxPageThumbnails
 
     private static async Task<IReadOnlyList<Bitmap>> FromPreviewPagesAsync(
         SimplArchiveApiClient api,
-        SimplArchiveApiClient.InboxItemInfo item,
+        InboxApi.InboxItemInfo item,
         CancellationToken cancellationToken)
     {
         // Follow the item's own preview rel, then the preview-pages rel IT advertises — never a composed path
         // (ADR 0543), and one read per resource rather than one per page (ADR 0557).
-        var preview = await api.GetInboxPreviewAsync(item, cancellationToken);
+        var preview = await api.Inbox.GetInboxPreviewAsync(item, cancellationToken);
         if (preview.PreviewPagesUrl is not { } pagesUrl
             || await api.GetPreviewPagesAsync(pagesUrl, cancellationToken) is not { } urls)
         {

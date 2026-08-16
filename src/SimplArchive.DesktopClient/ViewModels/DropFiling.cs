@@ -40,7 +40,7 @@ public sealed class DropFiling(SimplArchiveApiClient api)
         {
             try
             {
-                await api.CopyDocumentToInboxAsync(id);
+                await api.Inbox.CopyDocumentToInboxAsync(id);
                 copied++;
             }
             catch (Exception)

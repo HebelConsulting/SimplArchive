@@ -2334,7 +2334,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             if (CanManageInboxes && InboxUsers.Count == 0)
             {
                 InboxUsers.Add(new InboxUserPickerItem(null, Strings.Get("InboxMine")));
-                foreach (var u in await _api.GetInboxUsersAsync())
+                foreach (var u in await _api.Inbox.GetInboxUsersAsync())
                 {
                     InboxUsers.Add(new InboxUserPickerItem(u.Id, u.Name));
                 }
@@ -2539,7 +2539,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await InboxPreview.RenderAsync(await _api.GetInboxPreviewAsync(value.Item!));
+            await InboxPreview.RenderAsync(await _api.Inbox.GetInboxPreviewAsync(value.Item!));
             if (!InboxIsEmail)
             {
                 await LoadInboxMaskAsync(value.Item!);
@@ -2553,7 +2553,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    private async Task LoadInboxMaskAsync(SimplArchiveApiClient.InboxItemInfo item)
+    private async Task LoadInboxMaskAsync(InboxApi.InboxItemInfo item)
     {
         _loadingInboxMask = true;
         try
@@ -2566,7 +2566,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
 
             var name = item.Name;
-            var draft = await _api.GetInboxMaskAsync(item);
+            var draft = await _api.Inbox.GetInboxMaskAsync(item);
             _inboxDraftValues = draft.Fields.ToDictionary(f => f.FieldDefinitionId, f => f.Values);
             InboxName = string.IsNullOrEmpty(draft.Name) ? Path.GetFileNameWithoutExtension(name) : draft.Name;
             InboxDocumentDate = DateTime.TryParse(draft.DocumentDate, out var d) ? d.Date : null;
@@ -2639,7 +2639,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             var stagedName = string.IsNullOrWhiteSpace(InboxName) ? null : InboxName.Trim();
             var docDate = InboxDocumentDate?.ToString("yyyy-MM-dd");
             var ocr = InboxStgScannable && _inboxStgOcrCodes.Count > 0 ? _inboxStgOcrCodes : null;
-            await _api.SetInboxMaskAsync(item.Item!, stagedName, docDate, maskId, fields, ocr);
+            await _api.Inbox.SetInboxMaskAsync(item.Item!, stagedName, docDate, maskId, fields, ocr);
             item.HasMask = maskId is not null || fields.Any(f => f.Item2.Count > 0) || stagedName is not null || docDate is not null || ocr is not null;
             Status = Strings.Get("StMaskSaved");
         }
@@ -2714,7 +2714,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.FileInboxItemAsync(item.Item!, folderId, comment);
+            await _api.Inbox.FileInboxItemAsync(item.Item!, folderId, comment);
             Status = string.Format(Strings.Get("StFiled"), item.Name);
             await RefreshInboxAsync();
         }
@@ -2734,7 +2734,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.FileInboxItemAsVersionAsync(item.Item!, documentId, comment);
+            await _api.Inbox.FileInboxItemAsVersionAsync(item.Item!, documentId, comment);
             Status = string.Format(Strings.Get("StFiledVersion"), item.Name);
             await RefreshInboxAsync();
 
@@ -2771,7 +2771,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             try
             {
-                await _api.FileInboxItemAsync(item.Item!, folderId, comment);
+                await _api.Inbox.FileInboxItemAsync(item.Item!, folderId, comment);
                 filed++;
             }
             catch (Exception)
@@ -6663,7 +6663,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var present = ServerInbox.Any(i => i.Name == name);
         if (ServerInbox.FirstOrDefault(i => i.Name == name) is { } uploaded)
         {
-            await _api!.DeleteInboxItemAsync(uploaded.Item!);
+            await _api!.Inbox.DeleteInboxItemAsync(uploaded.Item!);
         }
 
         return present;
@@ -6698,7 +6698,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         if ((await _api.Inbox.ListAsync(user: recipient.Id)).Items.FirstOrDefault(i => i.Name == name) is { } handedOver)
         {
-            await _api.DeleteInboxItemAsync(handedOver);
+            await _api.Inbox.DeleteInboxItemAsync(handedOver);
         }
 
         await _api.DeleteUserAsync(recipient);

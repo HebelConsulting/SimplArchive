@@ -134,25 +134,25 @@ public sealed partial class InboxItemActionsViewModel : ObservableObject
             return;
         }
 
-        await api.DeleteInboxItemAsync(item.Item!);
+        await api.Inbox.DeleteInboxItemAsync(item.Item!);
         await RefreshAsync();
     }
 
     // The "Send to…" destinations for the dialog (ADR 0532): the caller's groups followed by the other users.
-    public async Task<IReadOnlyList<SimplArchiveApiClient.InboxTargetInfo>> GetSendTargetsAsync()
+    public async Task<IReadOnlyList<InboxApi.InboxTargetInfo>> GetSendTargetsAsync()
     {
         if (_api?.Invoke() is not { } api)
         {
             return [];
         }
 
-        var groups = await api.GetInboxGroupsAsync();
-        var users = await api.GetInboxUsersAsync();
+        var groups = await api.Inbox.GetInboxGroupsAsync();
+        var users = await api.Inbox.GetInboxUsersAsync();
         return groups.Concat(users).ToList();
     }
 
     // Sends an own item into a chosen group or user's inbox (ADR 0532), then refreshes.
-    public async Task SendAsync(InboxItemViewModel item, SimplArchiveApiClient.InboxTargetInfo target)
+    public async Task SendAsync(InboxItemViewModel item, InboxApi.InboxTargetInfo target)
     {
         if (_api?.Invoke() is not { } api)
         {
@@ -161,7 +161,7 @@ public sealed partial class InboxItemActionsViewModel : ObservableObject
 
         await RunAsync(async () =>
         {
-            await api.MoveInboxItemAsync(item.MoveUrl, target.IsGroup ? target.Id : null, target.IsGroup ? null : target.Id);
+            await api.Inbox.MoveInboxItemAsync(item.MoveUrl, target.IsGroup ? target.Id : null, target.IsGroup ? null : target.Id);
             Status(string.Format(Strings.Get("StMoved"), item.Name));
         });
     }
@@ -176,7 +176,7 @@ public sealed partial class InboxItemActionsViewModel : ObservableObject
 
         await RunAsync(async () =>
         {
-            await api.MoveInboxItemAsync(item.MoveUrl, null, me);
+            await api.Inbox.MoveInboxItemAsync(item.MoveUrl, null, me);
             Status(string.Format(Strings.Get("StMoved"), item.Name));
         });
     }

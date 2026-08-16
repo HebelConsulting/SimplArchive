@@ -397,7 +397,7 @@ public partial class MainWindow : Window
         }
 
         var targets = await vm.InboxActions.GetSendTargetsAsync();
-        if (await new SendToInboxDialog(item.Name, targets).ShowDialog<SimplArchiveApiClient.InboxTargetInfo?>(this) is { } target)
+        if (await new SendToInboxDialog(item.Name, targets).ShowDialog<InboxApi.InboxTargetInfo?>(this) is { } target)
         {
             await vm.InboxActions.SendAsync(item, target);
         }

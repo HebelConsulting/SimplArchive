@@ -252,32 +252,6 @@ public sealed class SimplArchiveApiClient
     // Links are the addresses the listing advertised for THIS item — preview, mask, file, move and its own
     // deletion — each already carrying the right source prefix for a group or another user's inbox, which is
     // exactly the part the client used to rebuild by hand (ADR 0543/0555, issue #416).
-    public sealed record InboxItemInfo(string Name, long Size, string DownloadUrl, bool HasMask,
-        Guid? GroupId = null, string? GroupName = null, Guid? UserId = null, string? UserName = null, string MoveUrl = "",
-        IReadOnlyDictionary<string, string>? Links = null, bool Signed = false)
-    {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
-
-        // Own items (no group/user source) get "Send to…"; a group/other-user item gets "Move to my inbox".
-        public bool IsOwn => GroupId is null && UserId is null;
-
-        // Appended to the name-based item endpoints (preview / mask) so they resolve against the right source
-        // prefix; empty for own items.
-        public string SourceQuery => GroupId is { } g ? $"?group={g}" : UserId is { } u ? $"?user={u}" : "";
-
-        // The `GroupName` / `UserName` shown as a source chip; null for own items.
-        public string? SourceLabel => GroupName ?? UserName;
-    }
-
-    // A destination for the "Send to…" dialog (ADR 0532) — a group the caller belongs to, or another tenant user.
-    public sealed record InboxTargetInfo(Guid Id, string Name, bool IsGroup);
-
-    // A staged mask/index-data draft for an inbox item (the `{name}.mask.json` sidecar content). Name +
-    // DocumentDate ("yyyy-MM-dd") are the staged system fields (ADR "Staged Name + Document date on inbox items").
-    public sealed record InboxMaskDraft(string? Name, string? DocumentDate, Guid? MaskId, IReadOnlyList<InboxMaskFieldValue> Fields, IReadOnlyList<string> OcrLanguages);
-
-    public sealed record InboxMaskFieldValue(Guid FieldDefinitionId, IReadOnlyList<string> Values);
-
     // A reference (shortcut) filed in a folder — see ADR "Desktop drag-and-drop move and reference".
     // TargetId/Name/HasVersions/HasSubfolders describe the referenced item; ReferenceId identifies the
     // shortcut row (for delete); RealParentId is the target's real home folder (for "Go to …").
@@ -745,161 +719,9 @@ public sealed class SimplArchiveApiClient
     }
 
     /// <summary>The inbox's own api surface (ADR 0575) — its listing and its page operations.</summary>
-    public InboxApi Inbox => _inbox ??= new InboxApi(_http, this);
+    public InboxApi Inbox => _inbox ??= new InboxApi(Core);
 
     // The caller's effective group inboxes (ADR 0532) — the "Send to a group" choices.
-    public async Task<IReadOnlyList<InboxTargetInfo>> GetInboxGroupsAsync(CancellationToken cancellationToken = default) =>
-        await GetInboxTargetsAsync(await RootHrefAsync("inboxGroups", cancellationToken), "groups", isGroup: true, cancellationToken);
-
-    // The other active tenant users (ADR 0532) — the "Send to a user" choices, and the admin user-picker list.
-    public async Task<IReadOnlyList<InboxTargetInfo>> GetInboxUsersAsync(CancellationToken cancellationToken = default) =>
-        await GetInboxTargetsAsync(await RootHrefAsync("inboxUsers", cancellationToken), "users", isGroup: false, cancellationToken);
-
-    private async Task<IReadOnlyList<InboxTargetInfo>> GetInboxTargetsAsync(string url, string arrayProp, bool isGroup, CancellationToken cancellationToken)
-    {
-        var json = await _http.GetFromJsonAsync<JsonElement>(url, cancellationToken);
-        var targets = new List<InboxTargetInfo>();
-        if (json.TryGetProperty(arrayProp, out var array) && array.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var t in array.EnumerateArray())
-            {
-                targets.Add(new InboxTargetInfo(t.GetProperty("id").GetGuid(), t.GetProperty("name").GetString() ?? "", isGroup));
-            }
-        }
-
-        return targets;
-    }
-
-    // Moves an inbox item into another inbox (ADR 0532): exactly one target — a group or a user. moveUrl is the
-    // item's server-built move action (its source `?group=`/`?user=` already baked in).
-    public async Task MoveInboxItemAsync(string moveUrl, Guid? targetGroupId, Guid? targetUserId, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsJsonAsync(moveUrl, new { targetGroupId, targetUserId }, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to move that item there.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    // The inbox item's preview (renditions on the object key) — same Preview shape as a document's, so it feeds
-    // the same rendering + hit-overlay pipeline. 204 (no preview available) yields an all-null Preview.
-    public async Task<Preview> GetInboxPreviewAsync(InboxItemInfo item, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.GetAsync(RequireHref(item, "preview"), cancellationToken);
-        if (response.StatusCode == HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
-        {
-            return new Preview(null, false, null, null, null, "");
-        }
-
-        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        string? Link(string rel) => json.TryGetProperty("links", out var links)
-            ? links.EnumerateArray().Where(l => l.GetProperty("rel").GetString() == rel).Select(l => l.GetProperty("href").GetString()).FirstOrDefault()
-            : null;
-
-        return new Preview(
-            json.TryGetProperty("previewUrl", out var pu) ? pu.GetString() : null,
-            json.TryGetProperty("previewConverted", out var pc) && pc.GetBoolean(),
-            DownloadUrl: null,
-            Link("text-layout"),
-            Link("preview-pages"),
-            System.IO.Path.GetExtension(item.Name));
-    }
-
-    // Reads an inbox item's staged mask/index-data draft (the `{name}.mask.json` sidecar); MaskId null = none.
-    public async Task<InboxMaskDraft> GetInboxMaskAsync(InboxItemInfo item, CancellationToken cancellationToken = default)
-    {
-        var json = await _http.GetFromJsonAsync<JsonElement>(RequireHref(item, "mask"), cancellationToken);
-        return ParseInboxMaskDraft(json);
-    }
-
-    // Parses the `{maskId, fields:[{fieldDefinitionId, values}]}` draft shape (the server response and the local
-    // sidecar file share it, so a moved item carries its staged mask both ways).
-    public static InboxMaskDraft ParseInboxMaskDraft(JsonElement json)
-    {
-        var name = json.TryGetProperty("name", out var nm) && nm.ValueKind == JsonValueKind.String ? nm.GetString() : null;
-        var docDate = json.TryGetProperty("documentDate", out var dd) && dd.ValueKind == JsonValueKind.String ? dd.GetString() : null;
-        var maskId = json.TryGetProperty("maskId", out var mid) && mid.ValueKind == JsonValueKind.String ? mid.GetGuid() : (Guid?)null;
-        var fields = new List<InboxMaskFieldValue>();
-        if (json.TryGetProperty("fields", out var fieldArray) && fieldArray.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var f in fieldArray.EnumerateArray())
-            {
-                var values = f.TryGetProperty("values", out var v) && v.ValueKind == JsonValueKind.Array
-                    ? v.EnumerateArray().Select(e => e.GetString() ?? "").ToList()
-                    : [];
-                fields.Add(new InboxMaskFieldValue(f.GetProperty("fieldDefinitionId").GetGuid(), values));
-            }
-        }
-
-        var ocrLanguages = json.TryGetProperty("ocrLanguages", out var oc) && oc.ValueKind == JsonValueKind.Array
-            ? oc.EnumerateArray().Select(e => e.GetString() ?? "").Where(s => s.Length > 0).ToList()
-            : [];
-        return new InboxMaskDraft(name, docDate, maskId, fields, ocrLanguages);
-    }
-
-    // Writes (or, when nothing is staged, clears) an inbox item's staged mask/index-data draft. Name +
-    // documentDate ("yyyy-MM-dd", or null) are the staged system fields.
-    public async Task SetInboxMaskAsync(InboxItemInfo item, string? stagedName, string? documentDate, Guid? maskId,
-        IEnumerable<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> fields, IReadOnlyList<string>? ocrLanguages = null, CancellationToken cancellationToken = default)
-    {
-        var body = new { name = stagedName, documentDate, maskId, fields = fields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.Values }), ocrLanguages = ocrLanguages is { Count: > 0 } o ? o : null };
-        (await _http.PutAsJsonAsync(RequireHref(item, "mask"), body, cancellationToken)).EnsureSuccessStatusCode();
-    }
-
-    /// <summary>
-    /// Copies a repository document into the caller's inbox as a template, carrying its mask and index values
-    /// (#467). The copy happens server-side, so no bytes travel through the client.
-    /// </summary>
-    /// <remarks>
-    /// Reached by FOLLOWING the inbox listing's <c>from-document</c> rel rather than composing the path — the
-    /// desktop client's burn-down is finished and its one named exception is elsewhere (ADR 0543, #443).
-    /// </remarks>
-    public async Task CopyDocumentToInboxAsync(Guid documentId, CancellationToken cancellationToken = default)
-    {
-        var inbox = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("inbox", cancellationToken), cancellationToken);
-        var href = inbox.GetProperty("links").EnumerateArray()
-            .FirstOrDefault(l => l.GetProperty("rel").GetString() == "from-document")
-            .GetProperty("href").GetString()
-            ?? throw new ApiActionException("The inbox did not offer a template copy here.");
-
-        using var response = await _http.PostAsJsonAsync(href, new { documentId }, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            throw new ApiActionException("Your inbox already holds an item with that name, or the document has no version to copy.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    public async Task FileInboxItemAsync(InboxItemInfo item, Guid folderId, string? comment = null, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsJsonAsync(RequireHref(item, "file"), new { folderId, comment }, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to file into that folder.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    // Files the inbox item as a new version of an existing document (ADR "Context-aware inbox filing dialog").
-    public async Task FileInboxItemAsVersionAsync(InboxItemInfo item, Guid documentId, string? comment = null, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsJsonAsync(RequireHref(item, "file"), new { documentId, comment }, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to add a version to that document.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    // The item's OWN address, which the listing advertises as `self` with DELETE as its method.
-    public Task DeleteInboxItemAsync(InboxItemInfo item, CancellationToken cancellationToken = default) =>
-        _http.DeleteAsync(RequireHref(item, "self"), cancellationToken);
-
     public async Task<string> GetDocumentNameAsync(Guid documentId, CancellationToken cancellationToken = default) =>
         (await GetDocumentDetailAsync(documentId, cancellationToken)).Name;
 
@@ -3470,10 +3292,6 @@ public sealed class SimplArchiveApiClient
     private static string RequireHref(IAdvertisesLinks row, string rel) =>
         row.Href(rel)
         ?? throw new InvalidOperationException($"The row '{row.Name}' advertised no '{rel}' rel (ADR 0543/0555).");
-
-    private static string RequireHref(InboxItemInfo item, string rel) =>
-        item.Href(rel)
-        ?? throw new InvalidOperationException($"The inbox item '{item.Name}' advertised no '{rel}' rel (ADR 0543/0555).");
 
     private static string RequireHref(LegalHoldInfo hold, string rel) =>
         hold.Href(rel)
