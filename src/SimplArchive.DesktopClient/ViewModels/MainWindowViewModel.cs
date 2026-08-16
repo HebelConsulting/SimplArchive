@@ -3436,6 +3436,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // all and existed only for the double-click handler to read.
     partial void OnSelectedSearchResultChanged(SearchResultViewModel? value) => Safe.Fire(async () =>
     {
+        OnPropertyChanged(nameof(HasSelectedSearchResult)); // greys the toolbar's Go to (#530 tranche 8)
         if (_api is null || value is null || value.IsFolder || value.VersionsHref is not { } versionsHref)
         {
             // A folder has nothing to preview, and clearing beats leaving the previous document's page sitting

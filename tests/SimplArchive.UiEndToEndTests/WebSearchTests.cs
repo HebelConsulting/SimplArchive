@@ -27,9 +27,10 @@ public class WebSearchTests
 
         var result = page.Locator(".wb-search-results .wb-list-row").Filter(new() { HasText = "Invoice 2026-003" });
         await Expect(result).ToBeVisibleAsync();
-        // The row's "Go to" button, not the row itself: since #462 a plain click SELECTS the result and previews
-        // it in the tab, so navigating moved to an affordance of its own.
-        await result.First.GetByRole(AriaRole.Button, new() { Name = "Go to document" }).ClickAsync();
+        // Select the row (a plain click SELECTS and previews, #462), then the TOOLBAR's Go to — the visible
+        // route since #530 tranche 8 moved the per-row button into the touch-only ⋮ menu.
+        await result.First.ClickAsync();
+        await page.Locator(".wb-search-bar").GetByRole(AriaRole.Button, new() { Name = "Go to document" }).ClickAsync();
 
         // Navigates to the Repositories tab and selects the document — its name shows in the detail pane (the
         // preview is a pdf.js canvas for the seeded invoice PDF, so assert on the index detail, not preview text).
@@ -60,7 +61,8 @@ public class WebSearchTests
 
         var result = page.Locator(".wb-search-results .wb-list-row").Filter(new() { HasText = "Invoice 2026-003" });
         await Expect(result).ToBeVisibleAsync();
-        await result.First.GetByRole(AriaRole.Button, new() { Name = "Go to document" }).ClickAsync();
+        await result.First.ClickAsync(); // select — the toolbar's Go to acts on the selection (#530 tranche 8)
+        await page.Locator(".wb-search-bar").GetByRole(AriaRole.Button, new() { Name = "Go to document" }).ClickAsync();
 
         await Expect(page.Locator(".wb-tab-active")).ToHaveAttributeAsync("aria-label", "Repositories");
         await Expect(page.Locator(".wb-pv-page").First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 30000 });

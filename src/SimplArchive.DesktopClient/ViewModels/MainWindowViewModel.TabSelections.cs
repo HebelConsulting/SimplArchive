@@ -86,4 +86,7 @@ public sealed partial class MainWindowViewModel
     /// <summary>The My work dashboard's refresh (#530, tranche 7) — the web tab had one, this tab did not.</summary>
     [CommunityToolkit.Mvvm.Input.RelayCommand]
     private Task RefreshMyWork() => LoadMyWorkAsync();
+
+    /// <summary>Greys the Search toolbar's Go to (#530, tranche 8); raised by OnSelectedSearchResultChanged.</summary>
+    public bool HasSelectedSearchResult => SelectedSearchResult is not null;
 }

@@ -475,4 +475,23 @@ public partial class MainWindow
             : string.Format(Strings.Get("MwWebDavMountFailed"), result.Error);
         await vm.RefreshWebDavStateAsync();
     }
+
+    // Context-menu twins of the Search toolbar's document group (#530 tranche 8), addressed from the row the
+    // menu was opened from via its DataContext (ADR 0559): Preview makes the row THE selection — the selection
+    // is what loads the pane — and Go to jumps to the document's location on the Repositories tab.
+    internal void OnSearchResultPreview(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm && (sender as Control)?.DataContext is SearchResultViewModel row)
+        {
+            vm.SelectedSearchResult = row;
+        }
+    }
+
+    internal void OnSearchResultGoTo(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel vm && (sender as Control)?.DataContext is SearchResultViewModel row)
+        {
+            await vm.OpenSearchResultAsync(row);
+        }
+    });
 }

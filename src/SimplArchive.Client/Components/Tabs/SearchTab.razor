@@ -67,9 +67,22 @@
                 <MudSelectItem T="Guid?" Value="@((Guid?)repo.Id)">@repo.Name</MudSelectItem>
             }
         </MudSelect>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RunSearchAsync" Class="ml-2">@Strings.Get("SearchBtn")</MudButton>
-        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.BookmarkAdd" OnClick="SaveCurrentSearchAsync"
-                   Disabled="@string.IsNullOrEmpty(S.LastQueryString)" Class="ml-2">@Strings.Get("Save")</MudButton>
+        @* Search + Save as an icon-only ribbon-styled pair right of the field, by decision (#530 tranche 8 —
+           the filled-primary Search was also the accent-fill ADR 0581 warns about); the separated DOCUMENT
+           group's Go to acts on the selected result — single click previews, double-click jumps, and this is
+           the visible route (the per-row button moved here). *@
+        <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="RunSearchAsync"
+                   title="@Strings.Get("SearchBtn")" aria-label="@Strings.Get("SearchBtn")">
+            <MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("SearchBtn")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="SaveCurrentSearchAsync" Disabled="@string.IsNullOrEmpty(S.LastQueryString)"
+                   title="@Strings.Get("Save")" aria-label="@Strings.Get("Save")">
+            <MudIcon Icon="@Icons.Material.Filled.BookmarkAdd" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("Save")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(S.SelectedHit is null)" OnClick="@(() => OpenHitAsync(S.SelectedHit!))"
+                   title="@Strings.Get("SearchGoToDocument")" aria-label="@Strings.Get("SearchGoToDocument")">
+            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("SearchGoToDocument")</span>
+        </MudButton>
         @if (_searching)
         {
             <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="ml-2" />
@@ -213,19 +226,19 @@
                         }
                         <div class="wb-search-path">@hit.Path</div>
                     </div>
-                    @* The discoverable way to leave the tab. Double-click does the same for people who expect
-                       the tree's gesture, but a gesture cannot be the only route — it is invisible, and touch
-                       has no double-click (ADR 0511).
+                    @* On a hover device the toolbar's Go to + double-click cover leaving the tab, so the
+                       per-row button is gone (#530 tranche 8, by decision). Touch has no double-click and no
+                       hover, so IT keeps a visible route: the touch-only ⋮ with Preview and Go to (the
+                       tranche-1 checkbox precedent — an input-device query, never a width breakpoint).
 
-                       Wrapped in a span carrying the stopPropagation: the directive needs a DOM @onclick on the
-                       SAME element, and MudIconButton's OnClick is a component parameter, not one. Without it
-                       the click would also select the row underneath — harmless-looking, but it would fire a
-                       preview fetch for a row the user is leaving. *@
-                    <span @onclick="NoOp" @onclick:stopPropagation="true">
-                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small"
-                                       title="@Strings.Get("SearchGoToDocument")"
-                                       aria-label="@Strings.Get("SearchGoToDocument")"
-                                       OnClick="() => OpenHitAsync(hit)" />
+                       Wrapped in a span carrying the stopPropagation: the directive needs a DOM @onclick on
+                       the SAME element. Without it the tap would also select the row underneath, firing a
+                       preview fetch for a row the user may be leaving. *@
+                    <span class="wb-touch-only" @onclick="NoOp" @onclick:stopPropagation="true">
+                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
+                            <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => SelectHitAsync(hit)">@Strings.Get("MwPreview")</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Filled.OpenInNew" OnClick="() => OpenHitAsync(hit)">@Strings.Get("SearchGoToDocument")</MudMenuItem>
+                        </MudMenu>
                     </span>
                 </div>
             }
