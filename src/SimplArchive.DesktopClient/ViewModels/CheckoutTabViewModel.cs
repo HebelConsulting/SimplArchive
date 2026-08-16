@@ -178,7 +178,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
 
         try
         {
-            var preview = await _api.GetCheckoutPreviewAsync(item);
+            var preview = await _api.Checkout.GetCheckoutPreviewAsync(item);
             if (preview is null)
             {
                 // No working copy saved yet, or a format with no browser-viewable form. Both are ordinary.
@@ -219,7 +219,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
         SelectedRow = null;
         try
         {
-            foreach (var item in await _api.GetCheckoutsAsync())
+            foreach (var item in await _api.Checkout.GetCheckoutsAsync())
             {
                 Items.Add(new CheckoutRowViewModel
                 {
@@ -293,7 +293,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
 
         try
         {
-            await _api.CheckInFromStashAsync(checkout);
+            await _api.Checkout.CheckInFromStashAsync(checkout);
             Report($"Checked in '{row.Name}'.");
             await ReloadAllAsync();
         }
@@ -319,7 +319,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
 
         try
         {
-            await _api.ExtendCheckoutAsync(checkout);
+            await _api.Checkout.ExtendCheckoutAsync(checkout);
             Report($"Extended the check-out of '{row.Name}'.");
             await ReloadAllAsync();
         }
@@ -408,7 +408,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
 
         try
         {
-            await _api.CheckInFromStashAsync(checkout);
+            await _api.Checkout.CheckInFromStashAsync(checkout);
             return true;
         }
         catch (Exception)
@@ -426,7 +426,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
 
         try
         {
-            await _api.CheckInAsync(row.Id); // DELETE the check-out — releases the lock + clears the stash
+            await _api.Checkout.CheckInAsync(row.Item!); // DELETE the check-out — releases the lock + clears the stash
             return true;
         }
         catch (Exception)
@@ -444,7 +444,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
 
         try
         {
-            await _api.CheckInAsync(row.Id); // DELETE the check-out — releases the lock + clears the stash server-side
+            await _api.Checkout.CheckInAsync(row.Item!); // DELETE the check-out — releases the lock + clears the stash server-side
             Report(discard ? $"Discarded the check-out of '{row.Name}'." : $"Released '{row.Name}'.");
             await ReloadAllAsync();
         }
@@ -490,7 +490,7 @@ public sealed class CheckoutRowViewModel
 
     // The row the server sent — check-in / extend / compare follow the addresses IT advertised (ADR 0543/0555).
     // Nullable because the designer-preview rows below are synthetic and reach no server; every real row has it.
-    public SimplArchive.DesktopClient.Services.SimplArchiveApiClient.CheckoutItem? Item { get; init; }
+    public SimplArchive.DesktopClient.Services.CheckoutClient.CheckoutItem? Item { get; init; }
     public required string Name { get; init; }
     public required string Path { get; init; }
     public required string FileExtension { get; init; }

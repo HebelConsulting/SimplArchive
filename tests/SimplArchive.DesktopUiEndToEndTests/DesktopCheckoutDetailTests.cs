@@ -28,28 +28,28 @@ public class DesktopCheckoutDetailTests
         var api = await ApiAsync();
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var docId = await api.UploadFileAsync(repo.Id, $"wc-{Guid.NewGuid():N}.txt", Encoding.UTF8.GetBytes("ARCHIVED BODY"));
-        await api.CheckOutAsync(docId);
+        await api.Checkout.CheckOutViaDocumentAsync(await TestRels.DocumentSelfAsync(api, repo, docId));
 
         // Nothing saved yet: the row advertises no `preview` rel, and asking anyway yields nothing rather than
         // falling back to the archived version — which would be the wrong document shown confidently.
-        var before = (await api.GetCheckoutsAsync()).Single(c => c.Id == docId);
+        var before = (await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == docId);
         Assert.Null(before.Href("preview"));
-        Assert.Null(await api.GetCheckoutPreviewAsync(before));
+        Assert.Null(await api.Checkout.GetCheckoutPreviewAsync(before));
 
         await SaveWorkingCopyAsync(api, docId, "FIRST EDIT");
-        var first = (await api.GetCheckoutsAsync()).Single(c => c.Id == docId);
+        var first = (await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == docId);
         Assert.NotNull(first.Href("preview"));
-        Assert.Contains("FIRST EDIT", await FetchAsync(await api.GetCheckoutPreviewAsync(first)));
+        Assert.Contains("FIRST EDIT", await FetchAsync(await api.Checkout.GetCheckoutPreviewAsync(first)));
 
         // Saving again must move the preview with it. The rendition cache is keyed on the source PATH and the
         // stash is rewritten under a stable key, so this is the case that silently served a stale picture.
         await SaveWorkingCopyAsync(api, docId, "SECOND EDIT");
-        var second = (await api.GetCheckoutsAsync()).Single(c => c.Id == docId);
-        var body = await FetchAsync(await api.GetCheckoutPreviewAsync(second));
+        var second = (await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == docId);
+        var body = await FetchAsync(await api.Checkout.GetCheckoutPreviewAsync(second));
         Assert.Contains("SECOND EDIT", body);
         Assert.DoesNotContain("FIRST EDIT", body);
 
-        await api.CheckInAsync(docId); // releases the lock (DELETE checkout), leaving the fixture clean
+        await api.Checkout.CheckInViaDocumentAsync(await TestRels.DocumentSelfAsync(api, repo, docId)); // releases the lock (DELETE checkout), leaving the fixture clean
     }
 
     private static async Task<string> FetchAsync(SimplArchiveApiClient.Preview? preview)
@@ -61,7 +61,7 @@ public class DesktopCheckoutDetailTests
 
     private static async Task SaveWorkingCopyAsync(SimplArchiveApiClient api, Guid docId, string content)
     {
-        var checkout = (await api.GetCheckoutsAsync()).Single(c => c.Id == docId);
-        await api.SaveWorkingCopyAsync(checkout, Encoding.UTF8.GetBytes(content));
+        var checkout = (await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == docId);
+        await api.Checkout.SaveWorkingCopyAsync(checkout, Encoding.UTF8.GetBytes(content));
     }
 }

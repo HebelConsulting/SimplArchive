@@ -27,7 +27,7 @@ public class DesktopCheckoutTests
         await api.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("original content"));
         var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
 
-        await api.CheckOutAsync(doc.Id);
+        await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
 
         var vm = new CheckoutTabViewModel();
         vm.Setup(api);
@@ -41,7 +41,7 @@ public class DesktopCheckoutTests
         Assert.EndsWith(".txt", row.DisplayName);
 
         // Edit via the cloud stash (what a WebDAV save does) → the tab reports Modified + offers Check in.
-        await api.SaveWorkingCopyAsync((await api.GetCheckoutsAsync()).Single(c => c.Id == doc.Id), Encoding.UTF8.GetBytes("edited via webdav"));
+        await api.Checkout.SaveWorkingCopyAsync((await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == doc.Id), Encoding.UTF8.GetBytes("edited via webdav"));
         await vm.LoadAsync();
         row = vm.Items.Single(i => i.Id == doc.Id);
         Assert.True(row.IsModified);
@@ -69,7 +69,7 @@ public class DesktopCheckoutTests
         await api.UploadFileAsync(repo.Id, fileName, pdf);
         var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
 
-        await api.CheckOutAsync(doc.Id);
+        await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
 
         // The row advertises `pages` (extension-based), which is what gates the row menu; the resource's own
         // answer (7 pages, sort offered) is what gates the ribbon (ADR 0593).
@@ -84,13 +84,13 @@ public class DesktopCheckoutTests
 
         // Keep the last two pages, reversed — ONE request writes the stash; the archive is untouched until check-in.
         await api.Inbox.SortAsync(pages!.SortHref!, [7, 6]);
-        var item = (await api.GetCheckoutsAsync()).Single(c => c.Id == doc.Id);
+        var item = (await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == doc.Id);
         Assert.True(item.HasStash);
         Assert.True(item.IsModified);
         Assert.Equal(2, (await api.Inbox.GetAsync(item.Href("pages")!))!.PageCount);
         Assert.Equal(pdf, await api.DownloadCurrentVersionAsync(doc.Id));
 
-        await api.CheckInAsync(doc.Id); // release + drop the stash — leaves the shared fixture clean
+        await api.Checkout.CheckInViaDocumentAsync(doc.Href("self")); // release + drop the stash — leaves the shared fixture clean
     }
 
     [Fact]
@@ -104,8 +104,8 @@ public class DesktopCheckoutTests
         await api.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("line one\nline two\nline three\n"));
         var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
 
-        await api.CheckOutAsync(doc.Id);
-        await api.SaveWorkingCopyAsync((await api.GetCheckoutsAsync()).Single(c => c.Id == doc.Id), Encoding.UTF8.GetBytes("line one\nline two CHANGED\nline three\n"));
+        await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
+        await api.Checkout.SaveWorkingCopyAsync((await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == doc.Id), Encoding.UTF8.GetBytes("line one\nline two CHANGED\nline three\n"));
 
         // Load the row (it carries StashDownloadUrl) and drive the compare VM exactly as the dialog does.
         var tab = new CheckoutTabViewModel();
@@ -132,7 +132,7 @@ public class DesktopCheckoutTests
         var fileName = $"un-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("v1"));
         var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
-        await api.CheckOutAsync(doc.Id);
+        await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
 
         var vm = new CheckoutTabViewModel();
         vm.Setup(api);
@@ -143,7 +143,7 @@ public class DesktopCheckoutTests
         // Unlock releases the lock without creating a version.
         await vm.UnlockCommand.ExecuteAsync(row);
         Assert.DoesNotContain(vm.Items, i => i.Id == doc.Id);
-        Assert.DoesNotContain(await api.GetCheckoutsAsync(), c => c.Id == doc.Id);
+        Assert.DoesNotContain(await api.Checkout.GetCheckoutsAsync(), c => c.Id == doc.Id);
     }
 
     [Fact]
@@ -156,13 +156,13 @@ public class DesktopCheckoutTests
         var fileName = $"ext-{Guid.NewGuid():N}.txt";
         await api.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("v1"));
         var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
-        await api.CheckOutAsync(doc.Id);
+        await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
 
         // Extend (self-service, ADR "Self-service check-out extension") — no throw, and the lock is retained.
-        await api.ExtendCheckoutAsync((await api.GetCheckoutsAsync()).Single(c => c.Id == doc.Id));
-        Assert.Contains(await api.GetCheckoutsAsync(), c => c.Id == doc.Id);
+        await api.Checkout.ExtendCheckoutAsync((await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == doc.Id));
+        Assert.Contains(await api.Checkout.GetCheckoutsAsync(), c => c.Id == doc.Id);
 
         // Clean up: release the lock.
-        await api.CheckInAsync(doc.Id);
+        await api.Checkout.CheckInViaDocumentAsync(doc.Href("self"));
     }
 }

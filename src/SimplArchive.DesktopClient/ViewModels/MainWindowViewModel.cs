@@ -2206,7 +2206,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Status = string.Format(Strings.Get("StCheckingOut"), item.Name);
         try
         {
-            await _api.CheckOutAsync(item.Id);
+            await _api.Checkout.CheckOutViaDocumentAsync(item.Href("self"));
             // The lock is acquired server-side; editing happens via the WebDAV mount (ADR 0513) — no local copy.
             Status = string.Format(Strings.Get("StCheckedOut"), item.Name);
             await RefreshAfterCheckoutChangeAsync();
@@ -2231,7 +2231,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.CheckInAsync(item.Id); // force-release (override)
+            await _api.Checkout.CheckInViaDocumentAsync(item.Href("self")); // force-release (override)
             Status = string.Format(Strings.Get("StReleasedCheckout"), item.Name);
             await RefreshAfterCheckoutChangeAsync();
         }
@@ -2456,7 +2456,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         _dropFiling ??= new DropFiling(api);
-        var items = Checkout.Items.Select(r => r.Item).OfType<SimplArchiveApiClient.CheckoutItem>().ToList();
+        var items = Checkout.Items.Select(r => r.Item).OfType<CheckoutClient.CheckoutItem>().ToList();
         if (await _dropFiling.StashAsync(files, items, message => Status = message) > 0)
         {
             await Checkout.LoadAsync();

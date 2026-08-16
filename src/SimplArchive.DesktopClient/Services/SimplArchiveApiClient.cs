@@ -45,20 +45,26 @@ public sealed class ReviewerHasPendingReviewsException(string message) : Excepti
 public sealed class SimplArchiveApiClient
 {
     // internal: InboxApi PUTs bytes to a presigned URL too, since the inbox calls moved there (#443).
-    internal static readonly HttpClient Anonymous = new();
+    internal static HttpClient Anonymous => ApiCore.Anonymous;
     private readonly HttpClient _http;
     private InboxApi? _inbox;
+    private CheckoutClient? _checkout;
 
     public SimplArchiveApiClient(string accessToken)
     {
-        AccessToken = accessToken;
-        _http = new HttpClient { BaseAddress = new Uri(DesktopClientOptions.ApiBaseUrl) };
-        _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        Core = new ApiCore(accessToken);
+        _http = Core.Http;
     }
+
+    /// <summary>The shared authenticated HTTP core every per-area client rides on (#443).</summary>
+    public ApiCore Core { get; }
+
+    /// <summary>The check-out area (#443 tranche 1).</summary>
+    public CheckoutClient Checkout => _checkout ??= new CheckoutClient(Core);
 
     // This client's bearer token — used as the RFC 8693 subject_token to start impersonation (ADR "User
     // impersonation").
-    public string AccessToken { get; }
+    public string AccessToken => Core.AccessToken;
 
     // Exchanges an admin's access token for an impersonation token representing the target user (ADR "User
     // impersonation"); null if the exchange is refused (e.g. the target is an admin).
@@ -2666,160 +2672,6 @@ public sealed class SimplArchiveApiClient
     /// Follows the row's own `preview` rel (ADRs 0543/0555). The rel is absent until a working copy has been
     /// saved, and its absence means exactly that — there is nothing to preview — so it is not an error.
     /// </remarks>
-    public async Task<Preview?> GetCheckoutPreviewAsync(CheckoutItem checkout, CancellationToken cancellationToken = default)
-    {
-        if (checkout.Href("preview") is not { } href)
-        {
-            return null;
-        }
-
-        using var response = await _http.GetAsync(href, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-
-        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-
-        // No text layout / pages / annotations: those belong to an archived VERSION, and a working copy is not
-        // one yet. The preview is the picture, nothing more.
-        return new Preview(
-            json.GetProperty("previewUrl").GetString(),
-            json.TryGetProperty("previewConverted", out var c) && c.ValueKind == JsonValueKind.True,
-            null, null, null, checkout.FileExtension);
-    }
-
-    // ---- Check-out / check-in (ADR "Document check-out / check-in") -----------------------------------
-
-    // A held check-out, carrying the addresses its own row advertised (ADR 0543/0555): `checkin`,
-    // `working-copy`, `extend` and — only when there is a stash to diff — `compare`.
-    // ImplicitAgent: the client that took this lock without the user asking — a save-by-rename edit over the
-    // WebDAV mount (ADR 0562); null for an explicit check-out. Client-supplied text: display it, never act on it.
-    public sealed record CheckoutItem(Guid Id, string Name, string Path, string Sha256, string FileExtension, bool HasStash, bool IsModified, string? StashDownloadUrl, DateTimeOffset? ExpiresAt, IReadOnlyDictionary<string, string>? Links = null, string? ImplicitAgent = null, bool? IsSigned = null, string? DownloadUrl = null)
-    {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
-    }
-
-    // Acquire the exclusive edit lock. 409 = already held by someone else; 403 = no permission / not a User.
-    public async Task CheckOutAsync(Guid documentId, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PutAsync(await DocumentRelAsync(documentId, "checkout", cancellationToken), null, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            throw new ApiActionException("This document is already checked out by another user.");
-        }
-
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to check out this document.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    // Release the lock — used for check-in / unlock / discard (the holder) and override (a CanOverrideCheckout
-    // holder force-releasing someone else's). Idempotent when not checked out.
-    public async Task CheckInAsync(Guid documentId, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.DeleteAsync(await DocumentRelAsync(documentId, "cancel-checkout", cancellationToken), cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to release this check-out.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    // Stash-based check-in (ADR 0513): the server promotes the cloud stash (the WebDAV-edited working copy) to a new
-    // confirmed version and releases the lock — the desktop no longer uploads a local file. Holder-only; 400 if
-    // there's no stash to check in (nothing changed).
-    public async Task CheckInFromStashAsync(CheckoutItem checkout, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsJsonAsync(RequireHref(checkout, "checkin"), new { }, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to check in this document.");
-        }
-
-        if (response.StatusCode == HttpStatusCode.BadRequest)
-        {
-            throw new ApiActionException("There are no changes to check in.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    // "Extend my check-out" (ADR "Self-service check-out extension") — resets the auto-release idle timer. The
-    // holder or a CanOverrideCheckout admin; 409 if the document isn't checked out.
-    public async Task ExtendCheckoutAsync(CheckoutItem checkout, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsync(RequireHref(checkout, "extend"), null, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to extend this check-out.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    // The caller's currently checked-out documents (tenant-wide), each with the current version's SHA-256.
-    public async Task<List<CheckoutItem>> GetCheckoutsAsync(CancellationToken cancellationToken = default)
-    {
-        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("checkouts", cancellationToken), cancellationToken);
-        var items = new List<CheckoutItem>();
-        if (json.TryGetProperty("items", out var arr))
-        {
-            foreach (var i in arr.EnumerateArray())
-            {
-                items.Add(new CheckoutItem(
-                    i.GetProperty("id").GetGuid(), i.GetProperty("name").GetString() ?? "",
-                    i.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "",
-                    i.TryGetProperty("sha256", out var s) ? s.GetString() ?? "" : "",
-                    i.TryGetProperty("fileExtension", out var fe) ? fe.GetString() ?? "" : "",
-                    i.TryGetProperty("hasStash", out var hst) && hst.ValueKind == JsonValueKind.True,
-                    i.TryGetProperty("isModified", out var im) && im.ValueKind == JsonValueKind.True,
-                    i.TryGetProperty("stashDownloadUrl", out var sdu) && sdu.ValueKind == JsonValueKind.String ? sdu.GetString() : null,
-                    i.TryGetProperty("expiresAt", out var ea) && ea.ValueKind == JsonValueKind.String ? ea.GetDateTimeOffset() : null,
-                    ParseLinks(i),
-                    i.TryGetProperty("implicitAgent", out var ia) && ia.ValueKind == JsonValueKind.String ? ia.GetString() : null,
-                    // Tri-state: absent means never examined (#491), which is not the same as "not signed".
-                    i.TryGetProperty("isSigned", out var sg) && sg.ValueKind is JsonValueKind.True or JsonValueKind.False
-                        ? sg.GetBoolean()
-                        : null,
-                    StrOrNull(i, "downloadUrl")));
-            }
-        }
-
-        return items;
-    }
-
-    // "Save to cloud" — uploads the in-progress working copy to the S3 stash so it survives logout/close and is
-    // re-downloaded on next login (ADR "Check-out working-copy stash + exit guard"). Holder-only server-side.
-    public async Task SaveWorkingCopyAsync(CheckoutItem checkout, byte[] bytes, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsJsonAsync(RequireHref(checkout, "working-copy"), new { }, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't hold the check-out on this document.");
-        }
-
-        response.EnsureSuccessStatusCode();
-        var uploadUrl = (await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken)).GetProperty("uploadUrl").GetString()!;
-
-        using var content = new ByteArrayContent(bytes);
-        content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-        using var upload = await Anonymous.PutAsync(uploadUrl, content, cancellationToken);
-        upload.EnsureSuccessStatusCode();
-    }
-
-    // Downloads the cloud working-copy stash bytes (restoring in-progress edits on login).
-    public async Task<byte[]> DownloadStashAsync(string stashDownloadUrl, CancellationToken cancellationToken = default)
-    {
-        var (bytes, _) = await DownloadAsync(stashDownloadUrl, cancellationToken);
-        return bytes;
-    }
-
-    // Downloads the current confirmed version's bytes (for writing to the local checkout working copy).
     public async Task<byte[]> DownloadCurrentVersionAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
         var preview = await GetPreviewAsync(documentId, cancellationToken);
@@ -2835,13 +2687,21 @@ public sealed class SimplArchiveApiClient
     // ---- Version comparison (ADR "Document version comparison") ----
     // A version row, carrying the links its own row advertised — `restore` and `document-date` are followed
     // from here rather than rebuilt from a document id and a version id (ADR 0543/0555).
+
     public sealed record VersionInfo(Guid Id, int? VersionNumber, string Status, string FileExtension, string? DownloadUrl,
         string DocumentDate = "", DateTimeOffset CreatedAt = default, string CreatedByName = "", bool IsCurrent = false,
         string? Comment = null, IReadOnlyDictionary<string, string>? Links = null, string? WorkflowStatus = null)
     {
         public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
     }
+
     public sealed record DiffLineInfo(int Op, string Text);
+
+
+
+    // Inline unified diff of a checked-out document's current version vs its working copy in check-out (ADR 0517).
+    // Holder-only; Available=false when there's no working-copy stash or a side has no extractable text.
+
     public sealed record VersionComparison(bool Available, List<DiffLineInfo> Lines);
 
     // Restores (rolls back to) an earlier version (ADR "Version restore") — creates a new current version from
@@ -2926,22 +2786,6 @@ public sealed class SimplArchiveApiClient
         return new VersionComparison(json.TryGetProperty("available", out var a) && a.ValueKind == JsonValueKind.True, lines);
     }
 
-    // Inline unified diff of a checked-out document's current version vs its working copy in check-out (ADR 0517).
-    // Holder-only; Available=false when there's no working-copy stash or a side has no extractable text.
-    public async Task<VersionComparison> GetCheckoutComparisonAsync(CheckoutItem checkout, CancellationToken cancellationToken = default)
-    {
-        var json = await _http.GetFromJsonAsync<JsonElement>(RequireHref(checkout, "compare"), cancellationToken);
-        var lines = new List<DiffLineInfo>();
-        if (json.TryGetProperty("lines", out var arr))
-        {
-            foreach (var l in arr.EnumerateArray())
-            {
-                lines.Add(new DiffLineInfo(l.GetProperty("op").GetInt32(), l.GetProperty("text").GetString() ?? ""));
-            }
-        }
-
-        return new VersionComparison(json.TryGetProperty("available", out var a) && a.ValueKind == JsonValueKind.True, lines);
-    }
 
     // A specific version's bytes (via its presigned download URL) — used to stage both versions to temp files for
     // an external diff tool (Beyond Compare).
@@ -3165,8 +3009,6 @@ public sealed class SimplArchiveApiClient
     // The root document, fetched once per client instance. Cached because the root is a constant for a session:
     // re-reading it before every call would turn one request into two, which is the usual reason a codebase
     // abandons hypermedia and goes back to composing paths (issue #416).
-    private IReadOnlyDictionary<string, string>? _rootLinks;
-    private readonly SemaphoreSlim _rootGate = new(1, 1);
 
     // The caller's own "me" resource, cached for the same reason as the root. Everything about the signed-in
     // account hangs off it — password, photo, MFA, passkeys, WebDAV password, personal repository, notification
@@ -3234,25 +3076,8 @@ public sealed class SimplArchiveApiClient
     /// The href for a root-level rel. Throws when the server does not advertise it — for the collections a screen
     /// is built around, a null would surface as an empty list ("you have no tags") rather than as a fault.
     /// </summary>
-    public async Task<string> RootHrefAsync(string rel, CancellationToken cancellationToken = default)
-    {
-        if (_rootLinks is null)
-        {
-            await _rootGate.WaitAsync(cancellationToken);
-            try
-            {
-                _rootLinks ??= await GetRootLinksAsync(cancellationToken);
-            }
-            finally
-            {
-                _rootGate.Release();
-            }
-        }
-
-        return _rootLinks.TryGetValue(rel, out var href)
-            ? href
-            : throw new InvalidOperationException($"The API root does not advertise the '{rel}' rel.");
-    }
+    public Task<string> RootHrefAsync(string rel, CancellationToken cancellationToken = default) =>
+        Core.RootHrefAsync(rel, cancellationToken);
 
     // The API root's link relations — the ONE URL a client is allowed to know (ADR 0543); everything else is
     // discovered from here. Note "api" carries no slash, so it is not a composed resource path.
@@ -3653,10 +3478,6 @@ public sealed class SimplArchiveApiClient
     private static string RequireHref(LegalHoldInfo hold, string rel) =>
         hold.Href(rel)
         ?? throw new InvalidOperationException($"The legal hold '{hold.Name}' advertised no '{rel}' rel — a RELEASED hold offers neither release nor add-item (ADR 0543/0555).");
-
-    private static string RequireHref(CheckoutItem checkout, string rel) =>
-        checkout.Href(rel)
-        ?? throw new InvalidOperationException($"The check-out on '{checkout.Name}' advertised no '{rel}' rel — `compare` is absent with no stash to diff (ADR 0543/0555).");
 
     private static string RequireHref(NotificationInfo notification, string rel) =>
         notification.Href(rel)
@@ -4504,7 +4325,7 @@ public sealed class SimplArchiveApiClient
             r.TryGetProperty("clearanceRank", out var cr) && cr.ValueKind == JsonValueKind.Number ? cr.GetInt32() : 0);
     }
 
-    private static string? StrOrNull(JsonElement e, string name) =>
+    internal static string? StrOrNull(JsonElement e, string name) =>
         e.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
 
     private static string? FindLink(JsonElement resource, string rel)

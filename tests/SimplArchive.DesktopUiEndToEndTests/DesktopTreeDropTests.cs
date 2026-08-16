@@ -75,8 +75,8 @@ public class DesktopTreeDropTests
         // a test that cannot fail for the reason it names is not testing that reason.
         var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var otherId = await api.UploadFileAsync(repo.Id, $"other-{Guid.NewGuid():N}.txt", Encoding.UTF8.GetBytes("v1"));
-        await api.CheckOutAsync(otherId);
-        var checkouts = await api.GetCheckoutsAsync();
+        await api.Checkout.CheckOutViaDocumentAsync(await TestRels.DocumentSelfAsync(api, repo, otherId));
+        var checkouts = await api.Checkout.GetCheckoutsAsync();
         Assert.NotEmpty(checkouts);
 
         // The drop must SAY it did nothing. Silence here is exactly how the reminder bug (#420) stayed hidden
@@ -99,9 +99,9 @@ public class DesktopTreeDropTests
 
         var name = $"stash-{Guid.NewGuid():N}.txt";
         var docId = await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("v1"));
-        await api.CheckOutAsync(docId);
+        await api.Checkout.CheckOutViaDocumentAsync(await TestRels.DocumentSelfAsync(api, repo, docId));
 
-        var checkouts = await api.GetCheckoutsAsync();
+        var checkouts = await api.Checkout.GetCheckoutsAsync();
         var mine = checkouts.Single(c => c.Id == docId);
 
         // The round trip: downloaded, edited offline, dragged back. The FILENAME is what says which document it
@@ -113,6 +113,6 @@ public class DesktopTreeDropTests
             messages.Add);
 
         Assert.Equal(1, stashed);
-        Assert.True((await api.GetCheckoutsAsync()).Single(c => c.Id == docId).HasStash);
+        Assert.True((await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == docId).HasStash);
     }
 }

@@ -25,7 +25,7 @@ public sealed partial class CompareCheckoutViewModel : ObservableObject
 
     public ObservableCollection<DiffLineViewModel> Lines { get; } = [];
 
-    public async Task SetupAsync(SimplArchiveApiClient api, SimplArchiveApiClient.CheckoutItem checkout, string documentName, string fileExtension, string? stashDownloadUrl)
+    public async Task SetupAsync(SimplArchiveApiClient api, CheckoutClient.CheckoutItem checkout, string documentName, string fileExtension, string? stashDownloadUrl)
     {
         _api = api;
         _documentId = checkout.Id;
@@ -38,7 +38,7 @@ public sealed partial class CompareCheckoutViewModel : ObservableObject
         Status = Strings.Get("StComparing");
         try
         {
-            var cmp = await api.GetCheckoutComparisonAsync(checkout);
+            var cmp = await api.Checkout.GetCheckoutComparisonAsync(checkout);
             if (!cmp.Available)
             {
                 NotAvailable = true;

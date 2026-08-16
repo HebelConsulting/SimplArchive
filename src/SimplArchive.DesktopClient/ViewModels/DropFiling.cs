@@ -67,7 +67,7 @@ public sealed class DropFiling(SimplArchiveApiClient api)
     /// </remarks>
     public async Task<int> StashAsync(
         IReadOnlyList<(string Name, byte[] Bytes)> files,
-        IReadOnlyList<SimplArchiveApiClient.CheckoutItem> checkouts,
+        IReadOnlyList<CheckoutClient.CheckoutItem> checkouts,
         Action<string> report)
     {
         var stashed = 0;
@@ -83,7 +83,7 @@ public sealed class DropFiling(SimplArchiveApiClient api)
 
             try
             {
-                await api.SaveWorkingCopyAsync(match, bytes);
+                await api.Checkout.SaveWorkingCopyAsync(match, bytes);
                 stashed++;
             }
             catch (Exception ex)

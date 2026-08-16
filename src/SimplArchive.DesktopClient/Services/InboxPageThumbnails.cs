@@ -101,7 +101,7 @@ public static class InboxPageThumbnails
     /// still carries its page number, which is enough to rotate a known-upside-down scan.
     /// </summary>
     public static async Task<IReadOnlyList<Bitmap?>> LoadForCheckoutAsync(
-        SimplArchiveApiClient.CheckoutItem item,
+        CheckoutClient.CheckoutItem item,
         int pageCount,
         CancellationToken cancellationToken = default)
     {

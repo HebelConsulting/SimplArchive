@@ -31,8 +31,8 @@ public class DesktopCheckoutBulkTests
             await api.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("original"));
             var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
             ids.Add(doc.Id);
-            await api.CheckOutAsync(doc.Id);
-            await api.SaveWorkingCopyAsync((await api.GetCheckoutsAsync()).Single(c => c.Id == doc.Id), Encoding.UTF8.GetBytes("edited"));
+            await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
+            await api.Checkout.SaveWorkingCopyAsync((await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == doc.Id), Encoding.UTF8.GetBytes("edited"));
         }
 
         var vm = new CheckoutTabViewModel();
@@ -89,8 +89,8 @@ public class DesktopCheckoutBulkTests
             await api.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("original"));
             var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
             ids.Add(doc.Id);
-            await api.CheckOutAsync(doc.Id);
-            await api.SaveWorkingCopyAsync((await api.GetCheckoutsAsync()).Single(c => c.Id == doc.Id), Encoding.UTF8.GetBytes("edited"));
+            await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
+            await api.Checkout.SaveWorkingCopyAsync((await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == doc.Id), Encoding.UTF8.GetBytes("edited"));
         }
 
         var vm = new CheckoutTabViewModel();
