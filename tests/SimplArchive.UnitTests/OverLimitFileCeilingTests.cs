@@ -38,7 +38,7 @@ public class OverLimitFileCeilingTests
         // 2,464 -> 2,427 (ADR 0577: the Inbox ribbon became its own control) -> 2,330 (ADR 0578: so did the
         // top bar). Both had gained a responsibility per feature while living here; chrome and a ribbon are
         // things, not regions.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 2_330,
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 2_032,
     };
 
     public static TheoryData<string> Files => [.. Ceilings.Keys];

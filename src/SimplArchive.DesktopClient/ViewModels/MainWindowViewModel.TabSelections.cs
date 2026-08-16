@@ -1,3 +1,5 @@
+using SimplArchive.Localization;
+
 namespace SimplArchive.DesktopClient.ViewModels;
 
 // The #530 tab selections + their screenshot populate, split out on arrival: MainWindowViewModel is on the
@@ -116,5 +118,96 @@ public sealed partial class MainWindowViewModel
     {
         await SaveRetention();
         AuditRetentionEditing = false;
+    }
+
+    // ---- Tenant settings, per group (#530 tranche 10, ADR "Per-group tenant settings") --------------------
+    // ONE group edits at a time; each group's Save PUTs exactly its own fields via the api-client's generic
+    // SaveTenantSettingsGroupAsync, following the settings-<group> rel of the last-READ settings.
+
+    /// <summary>The settings resource as last read — its links carry the writable sub-resources.</summary>
+    public Services.SimplArchiveApiClient.TenantSettingsInfo? LastTenantSettings { get; private set; }
+
+    // ApplyTenantSettings (the big partial) is the one writer; a method rather than a public setter keeps it so.
+    partial void OnTenantEditingGroupChanged(string? value)
+    {
+        OnPropertyChanged(nameof(IsEditingTenantGeneral));
+        OnPropertyChanged(nameof(IsEditingTenantCapture));
+        OnPropertyChanged(nameof(IsEditingTenantSecurity));
+        OnPropertyChanged(nameof(IsEditingTenantRecords));
+        OnPropertyChanged(nameof(IsEditingTenantCheckout));
+        OnPropertyChanged(nameof(IsEditingTenantStorage));
+        OnPropertyChanged(nameof(IsEditingTenantExternalLinks));
+        OnPropertyChanged(nameof(IsEditingTenantAuditStreaming));
+        OnPropertyChanged(nameof(NoTenantGroupEditing));
+    }
+
+    /// <summary>The ONE group in edit mode, by its rel suffix — null when everything is read-only.</summary>
+    [CommunityToolkit.Mvvm.ComponentModel.ObservableProperty]
+    private string? _tenantEditingGroup;
+
+    public bool IsEditingTenantGeneral => TenantEditingGroup == "general";
+    public bool IsEditingTenantCapture => TenantEditingGroup == "capture";
+    public bool IsEditingTenantSecurity => TenantEditingGroup == "security";
+    public bool IsEditingTenantRecords => TenantEditingGroup == "records";
+    public bool IsEditingTenantCheckout => TenantEditingGroup == "checkout";
+    public bool IsEditingTenantStorage => TenantEditingGroup == "storage";
+    public bool IsEditingTenantExternalLinks => TenantEditingGroup == "external-links";
+    public bool IsEditingTenantAuditStreaming => TenantEditingGroup == "audit-streaming";
+
+    /// <summary>Hides the OTHER pencils while one group edits — starting a second edit would discard the first.</summary>
+    public bool NoTenantGroupEditing => TenantEditingGroup is null;
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void BeginTenantGroupEdit(string group) => TenantEditingGroup = group;
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private Task CancelTenantGroupEdit() => LoadTenantSettingsAsync(); // resync from the server + leaves edit mode
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private async Task SaveTenantGroupEdit(string group)
+    {
+        if (_api is null || LastTenantSettings is not { } settings)
+        {
+            return;
+        }
+
+        object body = group switch
+        {
+            "general" => new { name = TenantName.Trim() },
+            "capture" => new
+            {
+                // Preserve the catalog order for the "+"-joined default (a stable OCR priority).
+                defaultOcrLanguages = _ocrCatalog.Count > 0
+                    ? string.Join('+', _ocrCatalog.Select(l => l.Code).Where(c => _tenantStagedOcrCodes.Contains(c)))
+                    : string.Join('+', _tenantStagedOcrCodes),
+                restrictTagsToCatalog = TenantRestrictTagsToCatalog,
+            },
+            "security" => new { requireMfa = TenantRequireMfa, allowPasskeyLogin = TenantAllowPasskeyLogin, enforceClearance = TenantEnforceClearance },
+            "records" => new { auditRetentionDays = TenantAuditRetentionDays, wormLockMode = TenantWormLockModeIndex, requireDispositionReview = TenantRequireDispositionReview },
+            "checkout" => new { checkoutTtlDays = TenantCheckoutTtlDays, checkoutWarningDays = TenantCheckoutWarningDays },
+            "storage" => new
+            {
+                storageQuotaBytes = TenantStorageQuotaMb is { } mb ? (long?)((long)mb * 1024 * 1024) : null,
+                incompleteUploadCleanupDays = TenantIncompleteUploadCleanupDays,
+            },
+            "external-links" => new { allowExternalLinks = TenantAllowExternalLinks, externalLinkMaxDays = TenantExternalLinkMaxDays, externalLinkDefaultAccesses = TenantExternalLinkDefaultAccesses, showExternalLinkUrl = TenantShowExternalLinkUrl },
+            "audit-streaming" => new
+            {
+                auditWebhookUrl = string.IsNullOrWhiteSpace(TenantAuditWebhookUrl) ? null : TenantAuditWebhookUrl.Trim(),
+                auditWebhookSecret = string.IsNullOrWhiteSpace(TenantAuditWebhookSecret) ? null : TenantAuditWebhookSecret,
+            },
+            _ => throw new InvalidOperationException($"Unknown settings group '{group}'."),
+        };
+
+        try
+        {
+            ApplyTenantSettings(await _api.SaveTenantSettingsGroupAsync(settings, group, body));
+            TenantEditingGroup = null;
+            Status = Strings.Get("StTenantSaved");
+        }
+        catch (Services.ApiActionException ex)
+        {
+            Status = ex.Message;
+        }
     }
 }

@@ -25,18 +25,24 @@ public class AuditSettingsFilingPersonalTests
         await _factory.GrantTenantAdminAsync(email);
         using var admin = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, password));
 
-        // Change name + retention + require-MFA.
-        var newName = $"Renamed {Guid.NewGuid():N}";
-        await TestJson.Put(admin, "/api/tenant-settings", new { name = newName, defaultOcrLanguages = "eng", auditRetentionDays = 90, checkoutTtlDays = 0, wormLockMode = 0, requireMfa = true });
+        // Change retention (records group) and require-MFA (security group) — two group PUTs, two events
+        // (#530 tranche 10): the trail reads as intent, one scoped action per group.
+        await TestJson.Put(admin, "/api/tenant-settings/records", new { auditRetentionDays = 90, wormLockMode = 0, requireDispositionReview = false });
+        await TestJson.Put(admin, "/api/tenant-settings/security", new { requireMfa = true, allowPasskeyLogin = false, enforceClearance = false });
 
-        // The audit log carries a Tenant.SettingsUpdated event with a field-level before→after summary.
-        var events = (await TestJson.Get(admin, "/api/audit-events?action=Tenant.SettingsUpdated")).GetProperty("events").EnumerateArray().ToList();
-        Assert.NotEmpty(events);
-        var details = events[0].GetProperty("details").GetString()!;
+        // Each group's audit event carries a field-level before→after summary scoped to ITS fields.
+        var recordsEvents = (await TestJson.Get(admin, "/api/audit-events?action=Tenant.SettingsRecordsUpdated")).GetProperty("events").EnumerateArray().ToList();
+        Assert.NotEmpty(recordsEvents);
+        var details = recordsEvents[0].GetProperty("details").GetString()!;
         Assert.Contains("Audit retention days 365→90", details);
+        Assert.DoesNotContain("Require MFA", details); // the security change is NOT in the records event
+
+        var securityEvents = (await TestJson.Get(admin, "/api/audit-events?action=Tenant.SettingsSecurityUpdated")).GetProperty("events").EnumerateArray().ToList();
+        Assert.NotEmpty(securityEvents);
+        details = securityEvents[0].GetProperty("details").GetString()!;
         Assert.Contains("Require MFA off→on", details);
         // The webhook secret's value is never in the log.
-        Assert.DoesNotContain("secret", details, StringComparison.OrdinalIgnoreCase); // no webhook change in this PUT
+        Assert.DoesNotContain("secret", details, StringComparison.OrdinalIgnoreCase); // no webhook change here
     }
 
     [Fact]

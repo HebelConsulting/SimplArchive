@@ -1844,7 +1844,8 @@ public sealed class SimplArchiveApiClient
 
     // ---- Tenant-admin settings (ADR "Tenant-admin settings tab") -----------------------------------
 
-    public sealed record TenantSettingsInfo(Guid Id, string Name, string Status, DateTimeOffset CreatedAt, string DefaultOcrLanguages, int AuditRetentionDays, int CheckoutTtlDays, int CheckoutWarningDays, int WormLockMode, bool RequireMfa, bool AllowPasskeyLogin, bool RequireDispositionReview, bool RestrictTagsToCatalog, bool EnforceClearance, bool AllowExternalLinks, int ExternalLinkMaxDays, int ExternalLinkDefaultAccesses, bool ShowExternalLinkUrl, long? StorageQuotaBytes, long StorageUsedBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool AuditWebhookConfigured, int AuditWebhookConsecutiveFailures, DateTimeOffset? AuditWebhookLastSuccessAt, DateTimeOffset? AuditWebhookLastFailureAt, DateTimeOffset? AuditWebhookNextAttemptAt, string? AuditWebhookLastError);
+    public sealed record TenantSettingsInfo(Guid Id, string Name, string Status, DateTimeOffset CreatedAt, string DefaultOcrLanguages, int AuditRetentionDays, int CheckoutTtlDays, int CheckoutWarningDays, int WormLockMode, bool RequireMfa, bool AllowPasskeyLogin, bool RequireDispositionReview, bool RestrictTagsToCatalog, bool EnforceClearance, bool AllowExternalLinks, int ExternalLinkMaxDays, int ExternalLinkDefaultAccesses, bool ShowExternalLinkUrl, long? StorageQuotaBytes, long StorageUsedBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool AuditWebhookConfigured, int AuditWebhookConsecutiveFailures, DateTimeOffset? AuditWebhookLastSuccessAt, DateTimeOffset? AuditWebhookLastFailureAt, DateTimeOffset? AuditWebhookNextAttemptAt, string? AuditWebhookLastError,
+        IReadOnlyDictionary<string, string>? Links = null);
 
     private static DateTimeOffset? OptDate(JsonElement j, string name) =>
         j.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetDateTimeOffset() : null;
@@ -1877,7 +1878,8 @@ public sealed class SimplArchiveApiClient
         OptDate(j, "auditWebhookLastSuccessAt"),
         OptDate(j, "auditWebhookLastFailureAt"),
         OptDate(j, "auditWebhookNextAttemptAt"),
-        j.TryGetProperty("auditWebhookLastError", out var le) && le.ValueKind == JsonValueKind.String ? le.GetString() : null);
+        j.TryGetProperty("auditWebhookLastError", out var le) && le.ValueKind == JsonValueKind.String ? le.GetString() : null,
+        ParseLinks(j));
 
     public async Task<TenantSettingsInfo> GetTenantSettingsAsync(CancellationToken cancellationToken = default)
     {
@@ -1936,9 +1938,14 @@ public sealed class SimplArchiveApiClient
     // alone. The external-link settings are therefore REQUIRED parameters rather than optional ones: when they
     // were simply missing here, a desktop admin saving any unrelated tenant setting silently switched external
     // links off AND set both caps to 0. An optional default would recreate exactly that bug at the next caller.
-    public async Task<TenantSettingsInfo> SetTenantSettingsAsync(string name, string defaultOcrLanguages, int auditRetentionDays, int checkoutTtlDays, int checkoutWarningDays, int wormLockMode, bool requireMfa, bool allowPasskeyLogin, bool requireDispositionReview, bool restrictTagsToCatalog, bool enforceClearance, bool allowExternalLinks, int externalLinkMaxDays, int externalLinkDefaultAccesses, bool showExternalLinkUrl, long? storageQuotaBytes, int incompleteUploadCleanupDays, string? auditWebhookUrl, string? auditWebhookSecret, CancellationToken cancellationToken = default)
+    // ONE generic per-group save (#530 tranche 10, ADR "Per-group tenant settings"): the caller passes the
+    // already-read settings (whose links carry the writable sub-resources) plus the group's rel suffix and its
+    // payload. Follows the advertised settings-<group> rel (ADR 0543) — a missing rel means "not offered".
+    public async Task<TenantSettingsInfo> SaveTenantSettingsGroupAsync(TenantSettingsInfo settings, string group, object body, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.PutAsJsonAsync(await RootHrefAsync("tenantSettings", cancellationToken), new { name, defaultOcrLanguages, auditRetentionDays, checkoutTtlDays, checkoutWarningDays, wormLockMode, requireMfa, allowPasskeyLogin, requireDispositionReview, restrictTagsToCatalog, enforceClearance, allowExternalLinks, externalLinkMaxDays, externalLinkDefaultAccesses, showExternalLinkUrl, storageQuotaBytes, incompleteUploadCleanupDays, auditWebhookUrl, auditWebhookSecret }, cancellationToken);
+        var href = settings.Links?.GetValueOrDefault($"settings-{group}")
+            ?? throw new ApiActionException("The server offered no way to edit these settings.");
+        using var response = await _http.PutAsJsonAsync(href, body, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException("Another active tenant already uses this name.");
@@ -1946,7 +1953,7 @@ public sealed class SimplArchiveApiClient
 
         if (response.StatusCode == HttpStatusCode.BadRequest)
         {
-            throw new ApiActionException("Check the name, OCR languages, retention value and the webhook URL/secret.");
+            throw new ApiActionException("Check the entered values (name, OCR languages, retention, webhook URL/secret).");
         }
 
         if (response.StatusCode == HttpStatusCode.Forbidden)

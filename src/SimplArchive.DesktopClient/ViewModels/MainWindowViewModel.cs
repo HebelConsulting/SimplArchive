@@ -902,7 +902,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         HasExportRight = false;
         HasImportRight = false;
         TenantSettingsLoaded = false;
-        TenantEditing = false;
+        TenantEditingGroup = null;
         Notifications.Clear();
         UnreadNotificationCount = 0;
         SavedSearches.Clear();
@@ -4332,7 +4332,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // Read-only until Edit; Save/Cancel in edit mode. Gated on IsTenantAdmin (the tab's IsVisible).
     [ObservableProperty][NotifyPropertyChangedFor(nameof(HasTenantSettings))] private bool _tenantSettingsLoaded;
 
-    [ObservableProperty] private bool _tenantEditing;
     [ObservableProperty] private string _tenantName = "";
     [ObservableProperty] private int _tenantAuditRetentionDays;
     [ObservableProperty] private int _tenantCheckoutTtlDays;
@@ -4409,7 +4408,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             var s = await _api.GetTenantSettingsAsync();
             ApplyTenantSettings(s);
-            TenantEditing = false;
+            TenantEditingGroup = null;
             TenantSettingsLoaded = true;
             if (_ocrCatalog.Count == 0)
             {
@@ -4425,6 +4424,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private void ApplyTenantSettings(SimplArchiveApiClient.TenantSettingsInfo s)
     {
+        LastTenantSettings = s; // group saves follow this resource's settings-<group> rels (ADR 0543)
         TenantName = s.Name;
         TenantAuditRetentionDays = s.AuditRetentionDays;
         TenantCheckoutTtlDays = s.CheckoutTtlDays;
@@ -4538,40 +4538,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
         catch (Exception)
         {
             Status = Strings.Get("StErrTestEvent");
-        }
-    }
-
-    [RelayCommand]
-    private void BeginTenantEdit() => TenantEditing = true;
-
-    [RelayCommand]
-    private async Task CancelTenantEdit() => await LoadTenantSettingsAsync();
-
-    [RelayCommand]
-    private async Task SaveTenantSettings()
-    {
-        if (_api is null)
-        {
-            return;
-        }
-
-        // Preserve the catalog order for the "+"-joined default (a stable OCR priority).
-        var ocr = _ocrCatalog.Count > 0
-            ? string.Join('+', _ocrCatalog.Select(l => l.Code).Where(c => _tenantStagedOcrCodes.Contains(c)))
-            : string.Join('+', _tenantStagedOcrCodes);
-        try
-        {
-            var webhookUrl = string.IsNullOrWhiteSpace(TenantAuditWebhookUrl) ? null : TenantAuditWebhookUrl.Trim();
-            var webhookSecret = string.IsNullOrWhiteSpace(TenantAuditWebhookSecret) ? null : TenantAuditWebhookSecret;
-            long? storageQuotaBytes = TenantStorageQuotaMb is { } mb ? (long)mb * 1024 * 1024 : null;
-            var s = await _api.SetTenantSettingsAsync(TenantName.Trim(), ocr, TenantAuditRetentionDays, TenantCheckoutTtlDays, TenantCheckoutWarningDays, TenantWormLockModeIndex, TenantRequireMfa, TenantAllowPasskeyLogin, TenantRequireDispositionReview, TenantRestrictTagsToCatalog, TenantEnforceClearance, TenantAllowExternalLinks, TenantExternalLinkMaxDays, TenantExternalLinkDefaultAccesses, TenantShowExternalLinkUrl, storageQuotaBytes, TenantIncompleteUploadCleanupDays, webhookUrl, webhookSecret);
-            ApplyTenantSettings(s);
-            TenantEditing = false;
-            Status = Strings.Get("StTenantSaved");
-        }
-        catch (ApiActionException ex)
-        {
-            Status = ex.Message;
         }
     }
 

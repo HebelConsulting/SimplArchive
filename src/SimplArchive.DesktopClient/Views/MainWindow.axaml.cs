@@ -443,7 +443,7 @@ public partial class MainWindow : Window
 
     // Tenant-admin tab: New repository — prompt for a name, then create a root-level document (ADR "Tenant-admin
     // settings tab"). Reuses the name-prompt dialog with a repository-specific title/label.
-    private void OnNewRepository(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnNewRepository(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
@@ -459,7 +459,7 @@ public partial class MainWindow : Window
 
     // Tenant-admin tab: edit the default OCR languages via the shared ordered picker (ADR "Tenant-admin
     // settings tab"), staging the result into the pane; the pane's Save persists it.
-    private void OnEditTenantOcrLanguages(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnEditTenantOcrLanguages(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
@@ -482,7 +482,7 @@ public partial class MainWindow : Window
 
     // Convert existing TIFFs (tenant-admin ribbon button): confirm with the pending count, then trigger the
     // backfill (ADR "Backfill searchable PDFs for existing TIFFs").
-    private void OnConvertExistingTiffs(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnConvertExistingTiffs(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
@@ -651,7 +651,7 @@ public partial class MainWindow : Window
         await vm.ReloadTasksAsync();
     });
 
-    private void OnManageSensitivityLabels(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnManageSensitivityLabels(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.CreateSensitivityLabelsViewModel() is not { } labels)
         {

@@ -27,7 +27,7 @@ public class StorageQuotaTests
 
         // Set a 1000-byte quota (keep the tenant's existing name).
         var name = (await TestJson.Get(admin, "/api/tenant-settings")).GetProperty("name").GetString();
-        await TestJson.Put(admin, "/api/tenant-settings", new { name, defaultOcrLanguages = "eng", auditRetentionDays = 365, storageQuotaBytes = 1000 });
+        await TestJson.Put(admin, "/api/tenant-settings/storage", new { storageQuotaBytes = 1000, incompleteUploadCleanupDays = 0 });
 
         // The service account (CanManageRepositories) creates the repository; the tenant admin (IsTenantAdmin ACL
         // bypass) then uploads into it and purges — IsTenantAdmin doesn't imply CanManageRepositories.

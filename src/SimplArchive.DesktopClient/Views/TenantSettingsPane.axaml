@@ -1,0 +1,207 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:SimplArchive.DesktopClient.Views"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.TenantSettingsPane"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- The Tenant tab's body (#530 tranche 10, ADR "Per-group tenant settings"), its own control on arrival.
+         The decided shape: ribbon (its own control), then the REFERENCE card first — you see what you are
+         administering before how it is configured — then one group per settings category, each read-only with
+         its own pencil; Save/Cancel appear in the header row the pencil started the edit in (ADR 0550), the
+         OTHER pencils hide while one group edits, and a group's Save PUTs exactly its own fields. The old
+         tab-wide Edit/Save/Cancel row is gone. -->
+    <DockPanel LastChildFill="True">
+        <v:TenantRibbon DockPanel.Dock="Top" />
+        <ScrollViewer Margin="12">
+            <StackPanel Spacing="10" MaxWidth="560" HorizontalAlignment="Left">
+                <!-- The tenant's detail information first, by decision — the reference card. -->
+                <TextBlock Text="{loc:Tr TenantReference}" FontWeight="SemiBold" Foreground="{DynamicResource WbMuted}" />
+                <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr TenantIdLabel}" Foreground="{DynamicResource WbMuted}" Margin="0,2" />
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding TenantId}" Margin="0,2" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr WorkflowStatus}" Foreground="{DynamicResource WbMuted}" Margin="0,2" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TenantStatus}" Margin="0,2" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr SysCreated}" Foreground="{DynamicResource WbMuted}" Margin="0,2" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding TenantCreated}" Margin="0,2" />
+                </Grid>
+
+                <StackPanel Spacing="4" IsVisible="{Binding HasTenantSettings}">
+                    <!-- ==== General ============================================================== -->
+                    <v:TenantGroupHeader Title="{loc:Tr TenantGroupGeneral}" Group="general"
+                                         IsEditing="{Binding IsEditingTenantGeneral}" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{loc:Tr TenantNameLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantNameInfo}" />
+                    </StackPanel>
+                    <TextBox Text="{Binding TenantName}" IsEnabled="{Binding IsEditingTenantGeneral}" />
+
+                    <!-- ==== Documents & capture ================================================== -->
+                    <v:TenantGroupHeader Title="{loc:Tr TenantGroupCapture}" Group="capture"
+                                         IsEditing="{Binding IsEditingTenantCapture}" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{loc:Tr TenantOcrLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantOcrInfo}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding TenantOcrDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                        <Button Content="{loc:Tr MwEditEllipsis}" Click="OnEditOcrLanguages" IsVisible="{Binding IsEditingTenantCapture}" ToolTip.Tip="{loc:Tr MwChooseOcr}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,0">
+                        <CheckBox IsChecked="{Binding TenantRestrictTagsToCatalog}" IsEnabled="{Binding IsEditingTenantCapture}" Content="{loc:Tr TenantRestrictTags}" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantRestrictTagsInfo}" />
+                    </StackPanel>
+
+                    <!-- ==== Security & sign-in =================================================== -->
+                    <v:TenantGroupHeader Title="{loc:Tr TenantGroupSecurity}" Group="security"
+                                         IsEditing="{Binding IsEditingTenantSecurity}" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <CheckBox IsChecked="{Binding TenantRequireMfa}" IsEnabled="{Binding IsEditingTenantSecurity}" Content="{loc:Tr TenantRequireMfa}" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantRequireMfaInfo}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <CheckBox IsChecked="{Binding TenantAllowPasskeyLogin}" IsEnabled="{Binding IsEditingTenantSecurity}" Content="{loc:Tr TenantAllowPasskey}" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantAllowPasskeyInfo}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <CheckBox IsChecked="{Binding TenantEnforceClearance}" IsEnabled="{Binding IsEditingTenantSecurity}" Content="{loc:Tr TenantEnforceClearance}" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr MwEnforceClearanceTip}" />
+                    </StackPanel>
+
+                    <!-- ==== Records & compliance ================================================= -->
+                    <v:TenantGroupHeader Title="{loc:Tr TenantGroupRecords}" Group="records"
+                                         IsEditing="{Binding IsEditingTenantRecords}" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{loc:Tr TenantAuditRetLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantAuditRetInfo}" />
+                    </StackPanel>
+                    <NumericUpDown Value="{Binding TenantAuditRetentionDays}" Minimum="0" Increment="1" FormatString="0"
+                                   IsEnabled="{Binding IsEditingTenantRecords}" HorizontalAlignment="Left" Width="160" />
+                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,0">
+                        <TextBlock Text="{loc:Tr TenantWormLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantWormInfo}" />
+                    </StackPanel>
+                    <ComboBox SelectedIndex="{Binding TenantWormLockModeIndex}" IsEnabled="{Binding IsEditingTenantRecords}" HorizontalAlignment="Left" Width="200">
+                        <ComboBoxItem>Governance</ComboBoxItem>
+                        <ComboBoxItem>Compliance</ComboBoxItem>
+                    </ComboBox>
+                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,0">
+                        <CheckBox IsChecked="{Binding TenantRequireDispositionReview}" IsEnabled="{Binding IsEditingTenantRecords}" Content="{loc:Tr TenantRequireDisposition}" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr MwRequireDispositionTip}" />
+                    </StackPanel>
+
+                    <!-- ==== Check-out ============================================================ -->
+                    <v:TenantGroupHeader Title="{loc:Tr TenantGroupCheckout}" Group="checkout"
+                                         IsEditing="{Binding IsEditingTenantCheckout}" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{loc:Tr TenantCoTtlLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantCoTtlInfo}" />
+                    </StackPanel>
+                    <NumericUpDown Value="{Binding TenantCheckoutTtlDays}" Minimum="0" Increment="1" FormatString="0"
+                                   IsEnabled="{Binding IsEditingTenantCheckout}" HorizontalAlignment="Left" Width="160" />
+                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,0">
+                        <TextBlock Text="{loc:Tr TenantCoWarnLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantCoWarnInfo}" />
+                    </StackPanel>
+                    <NumericUpDown Value="{Binding TenantCheckoutWarningDays}" Minimum="0" Increment="1" FormatString="0"
+                                   IsEnabled="{Binding IsEditingTenantCheckout}" HorizontalAlignment="Left" Width="160" />
+
+                    <!-- ==== Storage ============================================================== -->
+                    <v:TenantGroupHeader Title="{loc:Tr TenantGroupStorage}" Group="storage"
+                                         IsEditing="{Binding IsEditingTenantStorage}" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{loc:Tr TenantQuotaLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantQuotaInfo}" />
+                    </StackPanel>
+                    <NumericUpDown Value="{Binding TenantStorageQuotaMb}" Minimum="0" Increment="50" FormatString="0"
+                                   IsEnabled="{Binding IsEditingTenantStorage}" HorizontalAlignment="Left" Width="200" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                        <TextBlock Text="{Binding TenantStorageUsage}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                        <Border Background="#c0392b" CornerRadius="9" Padding="8,1" Margin="8,0,0,0" VerticalAlignment="Center"
+                                IsVisible="{Binding TenantStorageWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <TextBlock Text="{Binding TenantStorageWarning}" Foreground="White" FontSize="12" />
+                        </Border>
+                        <Button Content="{loc:Tr TenantRecompute}" Command="{Binding RecomputeStorageCommand}" Padding="8,2"
+                                ToolTip.Tip="{loc:Tr MwRecomputeTip}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,0">
+                        <TextBlock Text="{loc:Tr TenantUploadCleanupLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantUploadCleanupInfo}" />
+                    </StackPanel>
+                    <NumericUpDown Value="{Binding TenantIncompleteUploadCleanupDays}" Minimum="0" Increment="1" FormatString="0"
+                                   IsEnabled="{Binding IsEditingTenantStorage}" HorizontalAlignment="Left" Width="200" />
+
+                    <!-- ==== External links (ADR 0546) ============================================ -->
+                    <v:TenantGroupHeader Title="{loc:Tr TenantGroupExternalLinks}" Group="external-links"
+                                         IsEditing="{Binding IsEditingTenantExternalLinks}" />
+                    <!-- The info text says the thing that surprises people: the switch is read every time a
+                         link is USED, so turning it off immediately stops links already out there. -->
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <CheckBox IsChecked="{Binding TenantAllowExternalLinks}" IsEnabled="{Binding IsEditingTenantExternalLinks}" Content="{loc:Tr TenantAllowExternalLinks}" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantAllowExternalLinksInfo}" />
+                    </StackPanel>
+                    <!-- The caps are meaningless while the feature is off, so they appear with it. -->
+                    <StackPanel Margin="24,6,0,0" Spacing="6" IsVisible="{Binding TenantAllowExternalLinks}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{loc:Tr TenantExtLinkMaxDays}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Width="220" />
+                            <NumericUpDown Value="{Binding TenantExternalLinkMaxDays}" IsEnabled="{Binding IsEditingTenantExternalLinks}"
+                                           Minimum="1" Maximum="3650" Increment="1" FormatString="0" Width="120" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{loc:Tr TenantExtLinkDefaultAccesses}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Width="220" />
+                            <NumericUpDown Value="{Binding TenantExternalLinkDefaultAccesses}" IsEnabled="{Binding IsEditingTenantExternalLinks}"
+                                           Minimum="1" Maximum="1000" Increment="1" FormatString="0" Width="120" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <CheckBox IsChecked="{Binding TenantShowExternalLinkUrl}" IsEnabled="{Binding IsEditingTenantExternalLinks}"
+                                      Content="{loc:Tr TenantShowExternalLinkUrl}" />
+                            <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                    ToolTip.Tip="{loc:Tr TenantShowExternalLinkUrlInfo}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- ==== Audit streaming (SIEM) =============================================== -->
+                    <v:TenantGroupHeader Title="{loc:Tr TenantGroupAuditStreaming}" Group="audit-streaming"
+                                         IsEditing="{Binding IsEditingTenantAuditStreaming}" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{loc:Tr TenantWebhookUrlLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantWebhookUrlInfo}" />
+                    </StackPanel>
+                    <TextBox Text="{Binding TenantAuditWebhookUrl}" IsEnabled="{Binding IsEditingTenantAuditStreaming}" Watermark="https://siem.example.com/ingest" />
+                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,0" IsVisible="{Binding IsEditingTenantAuditStreaming}">
+                        <TextBlock Text="{loc:Tr TenantSecretLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+                        <i:Icon Value="mdi-information-outline" FontSize="14" Foreground="{DynamicResource WbFaint}" VerticalAlignment="Center" Cursor="Help"
+                                ToolTip.Tip="{loc:Tr TenantSecretInfo}" />
+                    </StackPanel>
+                    <TextBox Text="{Binding TenantAuditWebhookSecret}" PasswordChar="•" IsVisible="{Binding IsEditingTenantAuditStreaming}"
+                             Watermark="{Binding TenantWebhookSecretWatermark}" />
+                    <TextBlock Margin="0,4,0,0" Foreground="{DynamicResource WbMuted}" IsVisible="{Binding !IsEditingTenantAuditStreaming}"
+                               Text="{Binding TenantWebhookSecretStatus}" />
+                    <!-- Read-only delivery health (ADR "Audit webhook delivery retry/backoff"). Green when healthy, amber when failing. -->
+                    <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" IsVisible="{Binding TenantWebhookHealthVisible}"
+                               Text="{Binding TenantWebhookHealth}"
+                               Foreground="{Binding TenantWebhookHealthBrush}" />
+                    <Button Content="{loc:Tr TenantSendTest}" Command="{Binding TestWebhookCommand}" Padding="8,2" Margin="0,6,0,0"
+                            IsVisible="{Binding TenantWebhookConfigured}"
+                            ToolTip.Tip="{loc:Tr MwTestWebhookTip}" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

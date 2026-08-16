@@ -6,41 +6,55 @@
 @inject SimplArchive.Client.Services.ApiRoot ApiRoot
 @inject SimplArchive.Client.Services.OcrLanguageCatalog OcrLanguages
 
-@* The Tenant-admin settings tab (ADR "Tenant-admin settings tab"), extracted from Home.razor per ADR 0558.
+@* The Tenant-admin settings tab (ADR "Tenant-admin settings tab" + "Per-group tenant settings", #530
+   tranche 10), extracted from Home.razor per ADR 0558.
 
-   Self-service tenant configuration: retention, MFA policy, OCR defaults, quotas and the rest, read-only until
-   Edit. Two ribbon-style actions beside the header stay with the shell and arrive as callbacks, because both
-   reach state this tab does not own — creating a repository refreshes the tree, and editing the sensitivity
-   labels refreshes the detail pane's picker. *@
-
-@* Tenant-admin self-service settings (ADR "Tenant-admin settings tab"): read-only until Edit,
-   then Save/Cancel. Plus a New repository button. Gated on isTenantAdmin. *@
-<div class="wb-tenant pa-4" style="overflow:auto; max-width:720px;">
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
-        <MudText Typo="Typo.h6">@Strings.Get("TenantHeader")</MudText>
-        @if (!_tenantEditing)
-        {
-            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Edit" OnClick="BeginTenantEdit" Disabled="@(_tenant is null)">@Strings.Get("Edit")</MudButton>
-        }
-        else
-        {
-            <MudButton Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveTenantSettingsAsync">@Strings.Get("Save")</MudButton>
-            <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Close" OnClick="CancelTenantEdit">@Strings.Get("Cancel")</MudButton>
-        }
-        <MudSpacer />
-        <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Shield" OnClick="@(() => ManageSensitivityLabels.InvokeAsync())">@Strings.Get("TenantSensitivityLabels")</MudButton>
-        <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.CreateNewFolder" OnClick="@(() => NewRepository.InvokeAsync())">@Strings.Get("TenantNewRepository")</MudButton>
+   The decided shape: a toolbar with the three tab-level launchers; the tenant's REFERENCE card first — you see
+   what you are administering before how it is configured; then one group per settings category, each read-only
+   with its own pencil → Save/Cancel in the same header row (ADR 0550). A group's Save PUTs exactly its own
+   fields to the settings-<group> rel the server advertised, and produces its own scoped audit event — the old
+   tab-wide Edit and the full-settings PUT are gone. The three launchers stay with the shell and arrive as
+   callbacks, because each reaches state this tab does not own. *@
+<div class="wb-tenant-wrap" style="flex:1 1 auto; min-height:0; display:flex; flex-direction:column;">
+    <div class="wb-search-bar pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="@(() => ManageSensitivityLabels.InvokeAsync())"
+                   title="@Strings.Get("TenantSensitivityLabels")" aria-label="@Strings.Get("TenantSensitivityLabels")">
+            <MudIcon Icon="@Icons.Material.Filled.Shield" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("TenantSensitivityLabels")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="@(() => NewRepository.InvokeAsync())"
+                   title="@Strings.Get("TenantNewRepository")" aria-label="@Strings.Get("TenantNewRepository")">
+            <MudIcon Icon="@Icons.Material.Filled.CreateNewFolder" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("TenantNewRepository")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" OnClick="@(() => ConvertScans.InvokeAsync())"
+                   title="@Strings.Get("RibbonConvertScans")" aria-label="@Strings.Get("RibbonConvertScans")">
+            <MudIcon Icon="@Icons.Material.Filled.PictureAsPdf" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonConvertScans")</span>
+        </MudButton>
     </div>
+    <div class="wb-tenant pa-4" style="flex:1 1 auto; overflow:auto; max-width:720px;">
     @if (_tenant is not null)
     {
-        <div class="wb-setting-row mb-3">
-            <MudTextField T="string" Label="@Strings.Get("TenantNameLabel")" @bind-Value="_tenantEdit.Name" Disabled="@(!_tenantEditing)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
+        @* The tenant's detail information first, by decision — the reference card. *@
+        <MudText Typo="Typo.subtitle2" Class="mb-1 mud-text-secondary">@Strings.Get("TenantReference")</MudText>
+        <MudSimpleTable Dense="true" Bordered="false" Elevation="0" Class="mb-4">
+            <tbody>
+                <tr><td class="mud-text-secondary" style="width:140px;">@Strings.Get("TenantIdLabel")</td><td>@_tenant.Id</td></tr>
+                <tr><td class="mud-text-secondary">@Strings.Get("TenantStatusLabel")</td><td>@_tenant.Status</td></tr>
+                <tr><td class="mud-text-secondary">@Strings.Get("TenantCreatedLabel")</td><td>@_tenant.CreatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td></tr>
+            </tbody>
+        </MudSimpleTable>
+
+        @* ---- General ------------------------------------------------------------------------------ *@
+        @GroupHeader("general", Strings.Get("TenantGroupGeneral"))
+        <div class="wb-setting-row mb-4">
+            <MudTextField T="string" Label="@Strings.Get("TenantNameLabel")" @bind-Value="_tenantEdit.Name" Disabled="@(!Editing("general"))" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
             <InfoButton Text="@(Strings.Get("TenantNameInfo"))" />
         </div>
 
+        @* ---- Documents & capture ------------------------------------------------------------------ *@
+        @GroupHeader("capture", Strings.Get("TenantGroupCapture"))
         <div class="wb-setting-row mb-3">
             <MudSelect T="string" Label="@Strings.Get("TenantOcrLabel")" MultiSelection="true" @bind-SelectedValues="_tenantEditOcr"
-                       Disabled="@(!_tenantEditing)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1"
+                       Disabled="@(!Editing("capture"))" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1"
                        MultiSelectionTextFunc="@(v => string.Join(", ", v))">
                 @foreach (var lang in _ocrCatalog)
                 {
@@ -49,40 +63,72 @@
             </MudSelect>
             <InfoButton Text="@(Strings.Get("TenantOcrInfo"))" />
         </div>
+        <div class="wb-setting-row mb-4">
+            <MudSwitch T="bool" @bind-Value="_tenantEdit.RestrictTagsToCatalog" Disabled="@(!Editing("capture"))" Color="Color.Primary" Class="flex-grow-1"
+                       Label="@Strings.Get("TenantRestrictTags")" />
+            <InfoButton Text="@(Strings.Get("TenantRestrictTagsInfo"))" />
+        </div>
 
+        @* ---- Security & sign-in ------------------------------------------------------------------- *@
+        @GroupHeader("security", Strings.Get("TenantGroupSecurity"))
+        <div class="wb-setting-row mb-3">
+            <MudSwitch T="bool" @bind-Value="_tenantEdit.RequireMfa" Disabled="@(!Editing("security"))" Color="Color.Primary" Class="flex-grow-1"
+                       Label="@Strings.Get("TenantRequireMfa")" />
+            <InfoButton Text="@(Strings.Get("TenantRequireMfaInfo"))" />
+        </div>
+        <div class="wb-setting-row mb-3">
+            <MudSwitch T="bool" @bind-Value="_tenantEdit.AllowPasskeyLogin" Disabled="@(!Editing("security"))" Color="Color.Primary" Class="flex-grow-1"
+                       Label="@Strings.Get("TenantAllowPasskey")" />
+            <InfoButton Text="@(Strings.Get("TenantAllowPasskeyInfo"))" />
+        </div>
+        <div class="wb-setting-row mb-4">
+            <MudSwitch T="bool" @bind-Value="_tenantEdit.EnforceClearance" Disabled="@(!Editing("security"))" Color="Color.Primary" Class="flex-grow-1"
+                       Label="@Strings.Get("TenantEnforceClearance")" />
+            <InfoButton Text="@(Strings.Get("TenantEnforceClearanceInfo"))" />
+        </div>
+
+        @* ---- Records & compliance ----------------------------------------------------------------- *@
+        @GroupHeader("records", Strings.Get("TenantGroupRecords"))
         <div class="wb-setting-row mb-3">
             <MudNumericField T="int" Label="@Strings.Get("TenantAuditRetLabel")" @bind-Value="_tenantEdit.AuditRetentionDays"
-                             Disabled="@(!_tenantEditing)" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
+                             Disabled="@(!Editing("records"))" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
             <InfoButton Text="@(Strings.Get("TenantAuditRetInfo"))" />
         </div>
-
         <div class="wb-setting-row mb-3">
-            <MudNumericField T="int" Label="@Strings.Get("TenantCoTtlLabel")" @bind-Value="_tenantEdit.CheckoutTtlDays"
-                             Disabled="@(!_tenantEditing)" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
-            <InfoButton Text="@(Strings.Get("TenantCoTtlInfo"))" />
-        </div>
-
-        <div class="wb-setting-row mb-3">
-            <MudNumericField T="int" Label="@Strings.Get("TenantCoWarnLabel")" @bind-Value="_tenantEdit.CheckoutWarningDays"
-                             Disabled="@(!_tenantEditing)" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
-            <InfoButton Text="@(Strings.Get("TenantCoWarnInfo"))" />
-        </div>
-
-        <div class="wb-setting-row mb-4">
             <MudSelect T="int" Label="@Strings.Get("TenantWormLabel")" @bind-Value="_tenantEdit.WormLockMode"
-                       Disabled="@(!_tenantEditing)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1">
+                       Disabled="@(!Editing("records"))" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1">
                 <MudSelectItem T="int" Value="0">@Strings.Get("TenantWormGovernance")</MudSelectItem>
                 <MudSelectItem T="int" Value="1">@Strings.Get("TenantWormCompliance")</MudSelectItem>
             </MudSelect>
             <InfoButton Text="@(Strings.Get("TenantWormInfo"))" />
         </div>
+        <div class="wb-setting-row mb-4">
+            <MudSwitch T="bool" @bind-Value="_tenantEdit.RequireDispositionReview" Disabled="@(!Editing("records"))" Color="Color.Primary" Class="flex-grow-1"
+                       Label="@Strings.Get("TenantRequireDisposition")" />
+            <InfoButton Text="@(Strings.Get("TenantRequireDispositionInfo"))" />
+        </div>
 
+        @* ---- Check-out ---------------------------------------------------------------------------- *@
+        @GroupHeader("checkout", Strings.Get("TenantGroupCheckout"))
+        <div class="wb-setting-row mb-3">
+            <MudNumericField T="int" Label="@Strings.Get("TenantCoTtlLabel")" @bind-Value="_tenantEdit.CheckoutTtlDays"
+                             Disabled="@(!Editing("checkout"))" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
+            <InfoButton Text="@(Strings.Get("TenantCoTtlInfo"))" />
+        </div>
+        <div class="wb-setting-row mb-4">
+            <MudNumericField T="int" Label="@Strings.Get("TenantCoWarnLabel")" @bind-Value="_tenantEdit.CheckoutWarningDays"
+                             Disabled="@(!Editing("checkout"))" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
+            <InfoButton Text="@(Strings.Get("TenantCoWarnInfo"))" />
+        </div>
+
+        @* ---- Storage ------------------------------------------------------------------------------ *@
+        @GroupHeader("storage", Strings.Get("TenantGroupStorage"))
         <div class="wb-setting-row mb-1">
             <MudNumericField T="int?" Label="@Strings.Get("TenantQuotaLabel")" @bind-Value="_tenantEdit.StorageQuotaMb"
-                             Disabled="@(!_tenantEditing)" Min="0" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
+                             Disabled="@(!Editing("storage"))" Min="0" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
             <InfoButton Text="@(Strings.Get("TenantQuotaInfo"))" />
         </div>
-        <div class="wb-setting-row mb-4" style="align-items:center; gap:8px;">
+        <div class="wb-setting-row mb-3" style="align-items:center; gap:8px;">
             <MudText Typo="Typo.body2" Class="mud-text-secondary flex-grow-1">
                 @string.Format(Strings.Get("TenantUsed"), FormatBytes(_tenant.StorageUsedBytes))@(_tenant.StorageQuotaBytes is { } q ? string.Format(Strings.Get("TenantUsedOf"), FormatBytes(q), StoragePercent()) : Strings.Get("TenantNoLimit"))
                 @if (StorageLevel() == 1)
@@ -97,48 +143,16 @@
             <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Refresh" OnClick="RecomputeStorageAsync">@Strings.Get("TenantRecompute")</MudButton>
             <InfoButton Text="@(Strings.Get("TenantRecomputeInfo"))" />
         </div>
-
         <div class="wb-setting-row mb-4">
             <MudNumericField T="int" Label="@Strings.Get("TenantUploadCleanupLabel")" @bind-Value="_tenantEdit.IncompleteUploadCleanupDays"
-                             Disabled="@(!_tenantEditing)" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
+                             Disabled="@(!Editing("storage"))" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
             <InfoButton Text="@(Strings.Get("TenantUploadCleanupInfo"))" />
         </div>
 
-        <div class="wb-setting-row mb-4">
-            <MudSwitch T="bool" @bind-Value="_tenantEdit.RequireMfa" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
-                       Label="@Strings.Get("TenantRequireMfa")" />
-            <InfoButton Text="@(Strings.Get("TenantRequireMfaInfo"))" />
-        </div>
-
-        <div class="wb-setting-row mb-4">
-            <MudSwitch T="bool" @bind-Value="_tenantEdit.AllowPasskeyLogin" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
-                       Label="@Strings.Get("TenantAllowPasskey")" />
-            <InfoButton Text="@(Strings.Get("TenantAllowPasskeyInfo"))" />
-        </div>
-
-        <div class="wb-setting-row mb-4">
-            <MudSwitch T="bool" @bind-Value="_tenantEdit.RequireDispositionReview" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
-                       Label="@Strings.Get("TenantRequireDisposition")" />
-            <InfoButton Text="@(Strings.Get("TenantRequireDispositionInfo"))" />
-        </div>
-
-        <div class="wb-setting-row mb-4">
-            <MudSwitch T="bool" @bind-Value="_tenantEdit.RestrictTagsToCatalog" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
-                       Label="@Strings.Get("TenantRestrictTags")" />
-            <InfoButton Text="@(Strings.Get("TenantRestrictTagsInfo"))" />
-        </div>
-
-        <div class="wb-setting-row mb-4">
-            <MudSwitch T="bool" @bind-Value="_tenantEdit.EnforceClearance" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
-                       Label="@Strings.Get("TenantEnforceClearance")" />
-            <InfoButton Text="@(Strings.Get("TenantEnforceClearanceInfo"))" />
-        </div>
-
-        @* External links (ADR 0546). Off by default: this is the switch that opens an
-           unauthenticated way for documents to leave the tenant, so it is opted into rather than
-           inherited. The caps only matter once it is on, hence the nesting. *@
+        @* ---- External links (ADR 0546) ------------------------------------------------------------ *@
+        @GroupHeader("external-links", Strings.Get("TenantGroupExternalLinks"))
         <div class="wb-setting-row mb-2">
-            <MudSwitch T="bool" @bind-Value="_tenantEdit.AllowExternalLinks" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
+            <MudSwitch T="bool" @bind-Value="_tenantEdit.AllowExternalLinks" Disabled="@(!Editing("external-links"))" Color="Color.Primary" Class="flex-grow-1"
                        Label="@Strings.Get("TenantAllowExternalLinks")" />
             <InfoButton Text="@(Strings.Get("TenantAllowExternalLinksInfo"))" />
         </div>
@@ -146,28 +160,30 @@
         {
             <div class="wb-setting-row mb-2">
                 <MudNumericField T="int" @bind-Value="_tenantEdit.ExternalLinkMaxDays" Min="1" Max="3650"
-                                 Label="@Strings.Get("TenantExtLinkMaxDays")" Disabled="@(!_tenantEditing)"
+                                 Label="@Strings.Get("TenantExtLinkMaxDays")" Disabled="@(!Editing("external-links"))"
                                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
             </div>
             <div class="wb-setting-row mb-2">
                 <MudNumericField T="int" @bind-Value="_tenantEdit.ExternalLinkDefaultAccesses" Min="1" Max="1000"
-                                 Label="@Strings.Get("TenantExtLinkDefaultAccesses")" Disabled="@(!_tenantEditing)"
+                                 Label="@Strings.Get("TenantExtLinkDefaultAccesses")" Disabled="@(!Editing("external-links"))"
                                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1" />
             </div>
             <div class="wb-setting-row mb-4">
-                <MudSwitch T="bool" @bind-Value="_tenantEdit.ShowExternalLinkUrl" Disabled="@(!_tenantEditing)" Color="Color.Primary" Class="flex-grow-1"
+                <MudSwitch T="bool" @bind-Value="_tenantEdit.ShowExternalLinkUrl" Disabled="@(!Editing("external-links"))" Color="Color.Primary" Class="flex-grow-1"
                            Label="@Strings.Get("TenantShowExternalLinkUrl")" />
                 <InfoButton Text="@(Strings.Get("TenantShowExternalLinkUrlInfo"))" />
             </div>
         }
 
+        @* ---- Audit streaming (SIEM) --------------------------------------------------------------- *@
+        @GroupHeader("audit-streaming", Strings.Get("TenantGroupAuditStreaming"))
         <div class="wb-setting-row mb-2">
             <MudTextField T="string" Label="@Strings.Get("TenantWebhookUrlLabel")" @bind-Value="_tenantEdit.AuditWebhookUrl"
-                          Disabled="@(!_tenantEditing)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1"
+                          Disabled="@(!Editing("audit-streaming"))" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-grow-1"
                           Placeholder="https://siem.example.com/ingest" />
             <InfoButton Text="@(Strings.Get("TenantWebhookUrlInfo"))" />
         </div>
-        @if (_tenantEditing)
+        @if (Editing("audit-streaming"))
         {
             <div class="wb-setting-row mb-2">
                 <MudTextField T="string" Label="@(_tenant.AuditWebhookConfigured ? Strings.Get("TenantSecretLabelKeep") : Strings.Get("TenantSecretLabel"))"
@@ -206,17 +222,8 @@
                 </div>
             }
         }
-
-        <MudDivider Class="mb-3" />
-        <MudText Typo="Typo.subtitle2" Class="mb-1 mud-text-secondary">@Strings.Get("TenantReference")</MudText>
-        <MudSimpleTable Dense="true" Bordered="false" Elevation="0">
-            <tbody>
-                <tr><td class="mud-text-secondary" style="width:140px;">@Strings.Get("TenantIdLabel")</td><td>@_tenant.Id</td></tr>
-                <tr><td class="mud-text-secondary">@Strings.Get("TenantStatusLabel")</td><td>@_tenant.Status</td></tr>
-                <tr><td class="mud-text-secondary">@Strings.Get("TenantCreatedLabel")</td><td>@_tenant.CreatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td></tr>
-            </tbody>
-        </MudSimpleTable>
     }
+    </div>
 </div>
 
 @code {
@@ -228,7 +235,13 @@
     [Parameter]
     public EventCallback ManageSensitivityLabels { get; set; }
 
-    // The tenant resource's own advertised addresses, captured when its settings are read (ADR 0557).
+    /// <summary>Batch-convert existing TIFF scans (#530 tranche 10 — moved here from the Repositories ribbon,
+    /// matching the desktop); the shell owns the flow and its progress reporting.</summary>
+    [Parameter]
+    public EventCallback ConvertScans { get; set; }
+
+    // The tenant resource's own advertised addresses, captured when its settings are read (ADR 0557):
+    // the maintenance actions plus one settings-<group> rel per editable group.
     private IReadOnlyDictionary<string, string>? _tenantLinks;
 
     private IReadOnlyList<OcrLanguageOption> _ocrCatalog = [];
@@ -240,16 +253,55 @@
         _ocrCatalog = await OcrLanguages.GetAsync();
     }
 
-
-    // A small info "button" (hover tooltip) shown next to a setting that needs explanation.
     private TenantSettingsDto? _tenant;
     private TenantSettingsEdit _tenantEdit = new();
     private IReadOnlyCollection<string> _tenantEditOcr = new HashSet<string>();
-    private bool _tenantEditing;
+
+    /// <summary>The ONE group in edit mode, by its rel suffix — null when everything is read-only
+    /// (#530 tranche 10: per-group pencils, ADR 0550).</summary>
+    private string? _editingGroup;
+
+    private bool Editing(string group) => _editingGroup == group;
+
+    // The group header: title + pencil (read-only) or title + Save/Cancel (editing) — the transition's
+    // actions live where the pencil was, in the same row (ADR 0550), and the OTHER groups' pencils hide
+    // while one group edits: starting a second edit would silently discard the first. A RenderFragment
+    // method rather than a component, because it closes over this tab's state.
+    private RenderFragment GroupHeader(string group, string title) => __builder =>
+    {
+        <div class="wb-tenant-group-head" style="display:flex; align-items:center; gap:8px; margin:10px 0 6px;">
+            <MudText Typo="Typo.subtitle2">@title</MudText>
+            @if (Editing(group))
+            {
+                <MudButton Size="Size.Small" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="() => SaveGroupAsync(group)">@Strings.Get("Save")</MudButton>
+                <MudButton Size="Size.Small" StartIcon="@Icons.Material.Filled.Close" OnClick="CancelGroupEdit">@Strings.Get("Cancel")</MudButton>
+            }
+            else if (_editingGroup is null)
+            {
+                <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="() => BeginGroupEdit(group)"
+                           title="@Strings.Get("Edit")" aria-label="@Strings.Get("Edit")">
+                    <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("Edit")</span>
+                </MudButton>
+            }
+        </div>
+    };
+
+    private void BeginGroupEdit(string group)
+    {
+        if (_tenant is null) return;
+        SyncTenantEditFromTenant(); // discard any other group's in-flight edits
+        _editingGroup = group;
+    }
+
+    private void CancelGroupEdit()
+    {
+        SyncTenantEditFromTenant();
+        _editingGroup = null;
+    }
 
     private async Task LoadTenantSettingsAsync()
     {
-        _tenantEditing = false;
+        _editingGroup = null;
         try
         {
             _tenant = await Http.GetFromJsonAsync<TenantSettingsDto>(await ApiRoot.RequireAsync("tenantSettings"));
@@ -267,7 +319,7 @@
     }
 
     // The read-only view and the edit form share the _tenantEdit binding, so it mirrors _tenant except while
-    // the user is actively editing (BeginTenantEdit → Save/Cancel).
+    // the user is actively editing one group (BeginGroupEdit → Save/Cancel).
     private void SyncTenantEditFromTenant()
     {
         if (_tenant is null) return;
@@ -275,34 +327,45 @@
         _tenantEditOcr = new HashSet<string>(_tenant.DefaultOcrLanguages.Split('+', StringSplitOptions.RemoveEmptyEntries));
     }
 
-    private void BeginTenantEdit()
+    // One save per group (#530 tranche 10): PUT exactly the group's fields to the rel the server advertised.
+    private async Task SaveGroupAsync(string group)
     {
-        if (_tenant is null) return;
-        SyncTenantEditFromTenant();
-        _tenantEditing = true;
-    }
+        if (_tenantLinks?.GetValueOrDefault($"settings-{group}") is not { } href) { return; }
 
-    private void CancelTenantEdit()
-    {
-        SyncTenantEditFromTenant(); // discard in-flight edits back to the persisted values
-        _tenantEditing = false;
-    }
+        object body = group switch
+        {
+            "general" => new { name = _tenantEdit.Name },
+            "capture" => new
+            {
+                // Preserve the catalog order for the "+"-joined default (a stable priority).
+                defaultOcrLanguages = string.Join('+', _ocrCatalog.Select(l => l.Code).Where(c => _tenantEditOcr.Contains(c))),
+                restrictTagsToCatalog = _tenantEdit.RestrictTagsToCatalog,
+            },
+            "security" => new { requireMfa = _tenantEdit.RequireMfa, allowPasskeyLogin = _tenantEdit.AllowPasskeyLogin, enforceClearance = _tenantEdit.EnforceClearance },
+            "records" => new { auditRetentionDays = _tenantEdit.AuditRetentionDays, wormLockMode = _tenantEdit.WormLockMode, requireDispositionReview = _tenantEdit.RequireDispositionReview },
+            "checkout" => new { checkoutTtlDays = _tenantEdit.CheckoutTtlDays, checkoutWarningDays = _tenantEdit.CheckoutWarningDays },
+            "storage" => new
+            {
+                storageQuotaBytes = _tenantEdit.StorageQuotaMb is { } mb ? (long?)((long)mb * 1024 * 1024) : null,
+                incompleteUploadCleanupDays = _tenantEdit.IncompleteUploadCleanupDays,
+            },
+            "external-links" => new { allowExternalLinks = _tenantEdit.AllowExternalLinks, externalLinkMaxDays = _tenantEdit.ExternalLinkMaxDays, externalLinkDefaultAccesses = _tenantEdit.ExternalLinkDefaultAccesses, showExternalLinkUrl = _tenantEdit.ShowExternalLinkUrl },
+            "audit-streaming" => new
+            {
+                auditWebhookUrl = string.IsNullOrWhiteSpace(_tenantEdit.AuditWebhookUrl) ? null : _tenantEdit.AuditWebhookUrl.Trim(),
+                auditWebhookSecret = string.IsNullOrWhiteSpace(_tenantEdit.AuditWebhookSecret) ? null : _tenantEdit.AuditWebhookSecret,
+            },
+            _ => throw new InvalidOperationException($"Unknown settings group '{group}'."),
+        };
 
-    private async Task SaveTenantSettingsAsync()
-    {
-        // Preserve the catalog order for the "+"-joined default (a stable priority).
-        var ocr = string.Join('+', _ocrCatalog.Select(l => l.Code).Where(c => _tenantEditOcr.Contains(c)));
-        var webhookUrl = string.IsNullOrWhiteSpace(_tenantEdit.AuditWebhookUrl) ? null : _tenantEdit.AuditWebhookUrl.Trim();
-        var webhookSecret = string.IsNullOrWhiteSpace(_tenantEdit.AuditWebhookSecret) ? null : _tenantEdit.AuditWebhookSecret;
-        long? storageQuotaBytes = _tenantEdit.StorageQuotaMb is { } mb ? (long)mb * 1024 * 1024 : null;
-        var body = new { name = _tenantEdit.Name, defaultOcrLanguages = ocr, auditRetentionDays = _tenantEdit.AuditRetentionDays, checkoutTtlDays = _tenantEdit.CheckoutTtlDays, checkoutWarningDays = _tenantEdit.CheckoutWarningDays, wormLockMode = _tenantEdit.WormLockMode, requireMfa = _tenantEdit.RequireMfa, allowPasskeyLogin = _tenantEdit.AllowPasskeyLogin, requireDispositionReview = _tenantEdit.RequireDispositionReview, restrictTagsToCatalog = _tenantEdit.RestrictTagsToCatalog, enforceClearance = _tenantEdit.EnforceClearance, allowExternalLinks = _tenantEdit.AllowExternalLinks, showExternalLinkUrl = _tenantEdit.ShowExternalLinkUrl, externalLinkMaxDays = _tenantEdit.ExternalLinkMaxDays, externalLinkDefaultAccesses = _tenantEdit.ExternalLinkDefaultAccesses, storageQuotaBytes, incompleteUploadCleanupDays = _tenantEdit.IncompleteUploadCleanupDays, auditWebhookUrl = webhookUrl, auditWebhookSecret = webhookSecret };
-        var resp = await Http.PutAsJsonAsync(await ApiRoot.RequireAsync("tenantSettings"), body);
+        var resp = await Http.PutAsJsonAsync(href, body);
         if (resp.StatusCode == System.Net.HttpStatusCode.Conflict) { Snackbar.Add(Strings.Get("StTenantNameTaken"), Severity.Warning); return; }
         if (resp.StatusCode == System.Net.HttpStatusCode.BadRequest) { Snackbar.Add(Strings.Get("StTenantCheckFields"), Severity.Warning); return; }
         if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrSaveSettings"), Severity.Error); return; }
         _tenant = await resp.Content.ReadFromJsonAsync<TenantSettingsDto>();
+        _tenantLinks = Links.RelMap(_tenant?.Links);
         SyncTenantEditFromTenant();
-        _tenantEditing = false;
+        _editingGroup = null;
         Snackbar.Add(Strings.Get("StTenantSaved"), Severity.Success);
     }
 
@@ -327,17 +390,15 @@
         var resp = await Http.PostAsync(recomputeHref, null);
         if (!resp.IsSuccessStatusCode) { Snackbar.Add(Strings.Get("StErrRecompute"), Severity.Error); return; }
         _tenant = await resp.Content.ReadFromJsonAsync<TenantSettingsDto>();
-        if (!_tenantEditing) SyncTenantEditFromTenant();
+        _tenantLinks = Links.RelMap(_tenant?.Links);
+        if (_editingGroup is null) SyncTenantEditFromTenant();
         Snackbar.Add(Strings.Get("StStorageRecomputed"), Severity.Success);
     }
 
-    // Manage the tenant's configurable sensitivity labels (ADR "Configurable sensitivity labels + upload
-    // defaults"); reload the picker list on close so a detail-pane edit sees any changes.
-
-
     private record TenantSettingsDto
     {
-        // The settings resource advertises its own maintenance actions (issue #416).
+        // The settings resource advertises its maintenance actions plus one settings-<group> rel per
+        // editable group (issue #416 / #530 tranche 10).
         public List<LinkResponse> Links { get; set; } = [];
 
         // External links (ADR 0546) — the tenant master switch plus its two caps.
@@ -410,5 +471,4 @@
     // server's 80%/95% warning thresholds (0 = below, 1 = approaching, 2 = almost full).
     private int StoragePercent() => _tenant?.StorageQuotaBytes is { } q && q > 0 ? (int)(_tenant.StorageUsedBytes * 100 / q) : 0;
     private int StorageLevel() { var p = StoragePercent(); return p >= 95 ? 2 : p >= 80 ? 1 : 0; }
-
 }

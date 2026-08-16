@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.TenantGroupHeader"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- One settings-group header (#530 tranche 10): title + pencil while read-only, title + Save/Cancel
+         while THIS group edits — the transition's actions live in the row the pencil started it in
+         (ADR 0550). The pencil hides while ANY group edits (starting a second edit would silently discard
+         the first); Save/Cancel keep their labels — they are form buttons, not ribbon buttons. ONE control
+         for the eight groups; Group/Title/IsEditing carry what differs. -->
+    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,12,0,2">
+        <TextBlock x:Name="TitleBlock" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <Border Classes="ribbon" IsVisible="{Binding NoTenantGroupEditing}">
+            <Button x:Name="PencilButton" Command="{Binding BeginTenantGroupEditCommand}"
+                    ToolTip.Tip="{loc:Tr Edit}"><i:Icon Value="mdi-pencil" FontSize="16" /></Button>
+        </Border>
+        <StackPanel x:Name="CommitPanel" Orientation="Horizontal" Spacing="6">
+            <Button x:Name="SaveButton" Content="{loc:Tr Save}" Command="{Binding SaveTenantGroupEditCommand}" />
+            <Button Content="{loc:Tr Cancel}" Command="{Binding CancelTenantGroupEditCommand}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

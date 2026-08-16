@@ -101,12 +101,14 @@ public class DesktopExternalLinksTests
         }
     }
 
-    // Everything except the one flag is carried through unchanged: the endpoint is a full replacement, so
-    // omitting a field here would quietly rewrite the shared tenant for every other test in this collection.
+    // The external-links GROUP is saved whole (its own full replacement), and nothing else is touched —
+    // exactly what the per-group split (#530 tranche 10) exists for: no other setting can be rewritten here.
     private static Task SetExternalLinksAsync(SimplArchiveApiClient api, SimplArchiveApiClient.TenantSettingsInfo before, bool allow) =>
-        api.SetTenantSettingsAsync(before.Name, before.DefaultOcrLanguages, before.AuditRetentionDays, before.CheckoutTtlDays,
-            before.CheckoutWarningDays, before.WormLockMode, before.RequireMfa, before.AllowPasskeyLogin,
-            before.RequireDispositionReview, before.RestrictTagsToCatalog, before.EnforceClearance,
-            allow, before.ExternalLinkMaxDays, before.ExternalLinkDefaultAccesses, before.ShowExternalLinkUrl,
-            before.StorageQuotaBytes, before.IncompleteUploadCleanupDays, null, null);
+        api.SaveTenantSettingsGroupAsync(before, "external-links", new
+        {
+            allowExternalLinks = allow,
+            externalLinkMaxDays = before.ExternalLinkMaxDays,
+            externalLinkDefaultAccesses = before.ExternalLinkDefaultAccesses,
+            showExternalLinkUrl = before.ShowExternalLinkUrl,
+        });
 }

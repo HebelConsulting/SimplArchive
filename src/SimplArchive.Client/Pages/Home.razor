@@ -433,12 +433,6 @@
                             <MudIcon Icon="@Icons.Material.Filled.Link" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("ExtLinkMyLinks")</span>
                         </MudButton>
                     }
-                    @if (_isTenantAdmin)
-                    {
-                        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="RunTiffBackfillAsync" title="@Strings.Get("RibbonConvertScans")" aria-label="@Strings.Get("RibbonConvertScans")">
-                            <MudIcon Icon="@Icons.Material.Filled.PictureAsPdf" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonConvertScans")</span>
-                        </MudButton>
-                    }
                     @if (_canExport)
                     {
                         <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedFolder is null)" OnClick="OpenExportDialogAsync" title="@Strings.Get("HomeExport")" aria-label="@Strings.Get("HomeExport")">
@@ -751,7 +745,7 @@
             {
                 @* Both actions reach state this tab does not own — the tree, and the detail pane's
                    sensitivity picker — so they stay with the shell (ADR 0558). *@
-                <TenantTab NewRepository="NewRepositoryAsync" ManageSensitivityLabels="OpenSensitivityLabelsAsync" />
+                <TenantTab NewRepository="NewRepositoryAsync" ManageSensitivityLabels="OpenSensitivityLabelsAsync" ConvertScans="RunTiffBackfillAsync" />
             }
             else if (_activeTab == Tab.Tags)
             {

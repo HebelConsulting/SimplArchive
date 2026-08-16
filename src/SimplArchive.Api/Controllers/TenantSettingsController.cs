@@ -102,33 +102,63 @@ public class TenantSettingsController : ControllerBase
         public string? AuditWebhookLastError { get; set; }
     }
 
-    public class UpdateTenantSettingsRequest
+    // One request class per settings group (#530 tranche 10, ADR "Per-group tenant settings"): each PUT is a
+    // full replacement OF ITS GROUP, so a group's audit event carries exactly the intent that was edited.
+    // Plain mutable classes with parameterless ctors — the XmlSerializer needs that shape.
+    public class UpdateGeneralSettingsRequest
     {
         public string Name { get; set; } = "";
+    }
+
+    public class UpdateCaptureSettingsRequest
+    {
         public string DefaultOcrLanguages { get; set; } = "";
-        public int AuditRetentionDays { get; set; }
-        public int CheckoutTtlDays { get; set; }
-        public int CheckoutWarningDays { get; set; }
-        public WormLockMode WormLockMode { get; set; }
+        public bool RestrictTagsToCatalog { get; set; }
+    }
+
+    public class UpdateSecuritySettingsRequest
+    {
         public bool RequireMfa { get; set; }
         public bool AllowPasskeyLogin { get; set; }
+        // Data-classification clearance enforcement (ADR "Sensitivity clearance enforcement").
+        public bool EnforceClearance { get; set; }
+    }
+
+    public class UpdateRecordsSettingsRequest
+    {
+        public int AuditRetentionDays { get; set; }
+        public WormLockMode WormLockMode { get; set; }
         public bool RequireDispositionReview { get; set; }
-        // External links (ADR 0546). AllowExternalLinks is the tenant's master switch for sharing a document with
-        // people who have no account — read at ACCESS time, so turning it off stops links already in the wild.
+    }
+
+    public class UpdateCheckoutSettingsRequest
+    {
+        public int CheckoutTtlDays { get; set; }
+        public int CheckoutWarningDays { get; set; }
+    }
+
+    public class UpdateStorageSettingsRequest
+    {
+        // Per-tenant storage quota in bytes; null = unlimited (ADR "Per-tenant storage quota").
+        public long? StorageQuotaBytes { get; set; }
+        // Abort incomplete multipart uploads after this many days; 0 = disabled (ADR "Per-tenant bucket policy knobs").
+        public int IncompleteUploadCleanupDays { get; set; }
+    }
+
+    public class UpdateExternalLinkSettingsRequest
+    {
+        // AllowExternalLinks is the tenant's master switch for sharing a document with people who have no
+        // account — read at ACCESS time, so turning it off stops links already in the wild (ADR 0546).
         public bool AllowExternalLinks { get; set; }
         public int ExternalLinkMaxDays { get; set; }
         public int ExternalLinkDefaultAccesses { get; set; }
 
         /// <summary>Whether an existing link's URL may be revealed again after creation (issue #412).</summary>
         public bool ShowExternalLinkUrl { get; set; }
+    }
 
-        public bool RestrictTagsToCatalog { get; set; }
-        // Data-classification clearance enforcement (ADR "Sensitivity clearance enforcement").
-        public bool EnforceClearance { get; set; }
-        // Per-tenant storage quota in bytes; null = unlimited (ADR "Per-tenant storage quota").
-        public long? StorageQuotaBytes { get; set; }
-        // Abort incomplete multipart uploads after this many days; 0 = disabled (ADR "Per-tenant bucket policy knobs").
-        public int IncompleteUploadCleanupDays { get; set; }
+    public class UpdateAuditStreamingSettingsRequest
+    {
         public string? AuditWebhookUrl { get; set; }
         // Write-only: a non-empty value (re)sets the signing secret; null/empty keeps the existing one.
         public string? AuditWebhookSecret { get; set; }
@@ -154,8 +184,16 @@ public class TenantSettingsController : ControllerBase
     public async Task<IActionResult> Head(CancellationToken cancellationToken) =>
         await IsTenantAdminAsync(cancellationToken) ? NoContent() : Forbid();
 
-    [HttpPut]
-    public async Task<IActionResult> Update([FromBody] UpdateTenantSettingsRequest request, CancellationToken cancellationToken)
+    // The shared update pipeline every group PUT runs through (#530 tranche 10): admin gate → load → snapshot →
+    // the group's own validate+apply lambda → save → the group's audit event with field-level before→after
+    // changes (a no-op PUT records nothing — no audit noise). ONE implementation, eight callers: the groups
+    // differ only in what they validate and assign, which is exactly what the lambda carries.
+    private async Task<IActionResult> UpdateGroupAsync(
+        string auditAction,
+        Func<Tenant, Task> applyAsync,
+        CancellationToken cancellationToken,
+        bool nameConflictPossible = false,
+        bool secretProvided = false)
     {
         if (!await IsTenantAdminAsync(cancellationToken))
         {
@@ -172,105 +210,15 @@ public class TenantSettingsController : ControllerBase
         // changes (ADR "Audit tenant-settings, inbox filing + personal-repository creation"). The webhook secret
         // itself is never captured — only whether one is set — so it can't leak into the audit log.
         var before = SettingsSnapshot.From(tenant);
+        var lifecycleBefore = tenant.IncompleteUploadCleanupDays;
 
-        if (string.IsNullOrWhiteSpace(request.Name))
-        {
-            throw new TenantNameRequiredException();
-        }
-
-        if (request.AuditRetentionDays < 0)
-        {
-            throw new InvalidRetentionException();
-        }
-
-        if (request.CheckoutTtlDays < 0)
-        {
-            throw new InvalidCheckoutTtlException();
-        }
-
-        if (request.CheckoutWarningDays < 0)
-        {
-            throw new InvalidCheckoutWarningException();
-        }
-
-        if (!Enum.IsDefined(request.WormLockMode))
-        {
-            throw new InvalidWormModeException();
-        }
-
-        if (request.StorageQuotaBytes is < 0)
-        {
-            throw new InvalidStorageQuotaException();
-        }
-
-        if (request.IncompleteUploadCleanupDays < 0)
-        {
-            throw new InvalidUploadCleanupException();
-        }
-
-        // OCR languages: a "+"-joined selection of the supported catalog codes; empty falls back to the default.
-        var ocr = string.IsNullOrWhiteSpace(request.DefaultOcrLanguages) ? OcrLanguages.Default : request.DefaultOcrLanguages.Trim();
-        var known = OcrLanguages.Supported.Select(l => l.Code).ToHashSet(StringComparer.Ordinal);
-        var codes = ocr.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (codes.Length == 0)
-        {
-            throw UnknownOcrLanguageException.Required();
-        }
-
-        if (codes.FirstOrDefault(c => !known.Contains(c)) is { } unknown)
-        {
-            throw UnknownOcrLanguageException.Unsupported(unknown);
-        }
-
-        // Audit webhook (ADR "Audit webhook streaming"): validate + set the URL; the secret is encrypted at rest.
-        var webhookUrl = string.IsNullOrWhiteSpace(request.AuditWebhookUrl) ? null : request.AuditWebhookUrl.Trim();
-        if (webhookUrl is not null && !(Uri.TryCreate(webhookUrl, UriKind.Absolute, out var wu) && (wu.Scheme == Uri.UriSchemeHttp || wu.Scheme == Uri.UriSchemeHttps)))
-        {
-            throw new InvalidWebhookUrlException();
-        }
-
-        if (webhookUrl is null)
-        {
-            tenant.AuditWebhookUrl = null;
-            tenant.AuditWebhookSecret = null; // clearing the URL clears the secret
-        }
-        else
-        {
-            tenant.AuditWebhookUrl = webhookUrl;
-            if (!string.IsNullOrEmpty(request.AuditWebhookSecret))
-            {
-                tenant.AuditWebhookSecret = await _transit.EncryptAsync(request.AuditWebhookSecret);
-            }
-            else if (tenant.AuditWebhookSecret is null)
-            {
-                throw new WebhookSecretRequiredException();
-            }
-        }
-
-        tenant.Name = request.Name.Trim();
-        tenant.DefaultOcrLanguages = string.Join('+', codes);
-        tenant.AuditRetentionDays = request.AuditRetentionDays;
-        tenant.CheckoutTtlDays = request.CheckoutTtlDays;
-        tenant.CheckoutWarningDays = request.CheckoutWarningDays;
-        tenant.WormLockMode = request.WormLockMode;
-        tenant.RequireMfa = request.RequireMfa;
-        tenant.AllowPasskeyLogin = request.AllowPasskeyLogin;
-        tenant.RestrictTagsToCatalog = request.RestrictTagsToCatalog;
-        tenant.RequireDispositionReview = request.RequireDispositionReview;
-        tenant.EnforceClearance = request.EnforceClearance;
-        tenant.AllowExternalLinks = request.AllowExternalLinks;
-        tenant.ExternalLinkMaxDays = request.ExternalLinkMaxDays;
-        tenant.ExternalLinkDefaultAccesses = request.ExternalLinkDefaultAccesses;
-        tenant.ShowExternalLinkUrl = request.ShowExternalLinkUrl;
-        tenant.StorageQuotaBytes = request.StorageQuotaBytes; // null = unlimited
-        var lifecycleChanged = tenant.IncompleteUploadCleanupDays != request.IncompleteUploadCleanupDays;
-        tenant.IncompleteUploadCleanupDays = request.IncompleteUploadCleanupDays;
+        await applyAsync(tenant);
 
         try
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException) when (nameConflictPossible)
         {
             // Tenant.Name's partial unique index among Active tenants (ADR "Tenant name uniqueness").
             throw TenantNameConflictException.OnRename();
@@ -278,7 +226,7 @@ public class TenantSettingsController : ControllerBase
 
         // Re-apply the bucket lifecycle policy when it changed (ADR "Per-tenant bucket policy knobs"). Best-effort:
         // a lifecycle failure on a non-lifecycle backend must not fail the settings save.
-        if (lifecycleChanged && _currentTenantAccessor.TenantId is { } lifecycleTenantId)
+        if (tenant.IncompleteUploadCleanupDays != lifecycleBefore && _currentTenantAccessor.TenantId is { } lifecycleTenantId)
         {
             try
             {
@@ -290,16 +238,159 @@ public class TenantSettingsController : ControllerBase
             }
         }
 
-        // Audit the change with a field-level before→after summary (ADR "Audit tenant-settings, inbox filing +
-        // personal-repository creation"). A no-op PUT (nothing actually changed) isn't recorded — no audit noise.
-        var changes = SettingsSnapshot.Diff(before, SettingsSnapshot.From(tenant), secretProvided: !string.IsNullOrEmpty(request.AuditWebhookSecret));
+        var changes = SettingsSnapshot.Diff(before, SettingsSnapshot.From(tenant), secretProvided);
         if (changes.Count > 0)
         {
-            await _audit.RecordAsync(AuditActions.TenantSettingsUpdated, "Tenant", tenant.Id, tenant.Name, string.Join("; ", changes), cancellationToken: cancellationToken);
+            await _audit.RecordAsync(auditAction, "Tenant", tenant.Id, tenant.Name, string.Join("; ", changes), cancellationToken: cancellationToken);
         }
 
         return Ok(ToResource(tenant));
     }
+
+    [HttpPut("general")]
+    public Task<IActionResult> UpdateGeneral([FromBody] UpdateGeneralSettingsRequest request, CancellationToken cancellationToken) =>
+        UpdateGroupAsync(AuditActions.TenantSettingsGeneralUpdated, tenant =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                throw new TenantNameRequiredException();
+            }
+
+            tenant.Name = request.Name.Trim();
+            return Task.CompletedTask;
+        }, cancellationToken, nameConflictPossible: true);
+
+    [HttpPut("capture")]
+    public Task<IActionResult> UpdateCapture([FromBody] UpdateCaptureSettingsRequest request, CancellationToken cancellationToken) =>
+        UpdateGroupAsync(AuditActions.TenantSettingsCaptureUpdated, tenant =>
+        {
+            // OCR languages: a "+"-joined selection of the supported catalog codes; empty falls back to the default.
+            var ocr = string.IsNullOrWhiteSpace(request.DefaultOcrLanguages) ? OcrLanguages.Default : request.DefaultOcrLanguages.Trim();
+            var known = OcrLanguages.Supported.Select(l => l.Code).ToHashSet(StringComparer.Ordinal);
+            var codes = ocr.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (codes.Length == 0)
+            {
+                throw UnknownOcrLanguageException.Required();
+            }
+
+            if (codes.FirstOrDefault(c => !known.Contains(c)) is { } unknown)
+            {
+                throw UnknownOcrLanguageException.Unsupported(unknown);
+            }
+
+            tenant.DefaultOcrLanguages = string.Join('+', codes);
+            tenant.RestrictTagsToCatalog = request.RestrictTagsToCatalog;
+            return Task.CompletedTask;
+        }, cancellationToken);
+
+    [HttpPut("security")]
+    public Task<IActionResult> UpdateSecurity([FromBody] UpdateSecuritySettingsRequest request, CancellationToken cancellationToken) =>
+        UpdateGroupAsync(AuditActions.TenantSettingsSecurityUpdated, tenant =>
+        {
+            tenant.RequireMfa = request.RequireMfa;
+            tenant.AllowPasskeyLogin = request.AllowPasskeyLogin;
+            tenant.EnforceClearance = request.EnforceClearance;
+            return Task.CompletedTask;
+        }, cancellationToken);
+
+    [HttpPut("records")]
+    public Task<IActionResult> UpdateRecords([FromBody] UpdateRecordsSettingsRequest request, CancellationToken cancellationToken) =>
+        UpdateGroupAsync(AuditActions.TenantSettingsRecordsUpdated, tenant =>
+        {
+            if (request.AuditRetentionDays < 0)
+            {
+                throw new InvalidRetentionException();
+            }
+
+            if (!Enum.IsDefined(request.WormLockMode))
+            {
+                throw new InvalidWormModeException();
+            }
+
+            tenant.AuditRetentionDays = request.AuditRetentionDays;
+            tenant.WormLockMode = request.WormLockMode;
+            tenant.RequireDispositionReview = request.RequireDispositionReview;
+            return Task.CompletedTask;
+        }, cancellationToken);
+
+    [HttpPut("checkout")]
+    public Task<IActionResult> UpdateCheckout([FromBody] UpdateCheckoutSettingsRequest request, CancellationToken cancellationToken) =>
+        UpdateGroupAsync(AuditActions.TenantSettingsCheckoutUpdated, tenant =>
+        {
+            if (request.CheckoutTtlDays < 0)
+            {
+                throw new InvalidCheckoutTtlException();
+            }
+
+            if (request.CheckoutWarningDays < 0)
+            {
+                throw new InvalidCheckoutWarningException();
+            }
+
+            tenant.CheckoutTtlDays = request.CheckoutTtlDays;
+            tenant.CheckoutWarningDays = request.CheckoutWarningDays;
+            return Task.CompletedTask;
+        }, cancellationToken);
+
+    [HttpPut("storage")]
+    public Task<IActionResult> UpdateStorage([FromBody] UpdateStorageSettingsRequest request, CancellationToken cancellationToken) =>
+        UpdateGroupAsync(AuditActions.TenantSettingsStorageUpdated, tenant =>
+        {
+            if (request.StorageQuotaBytes is < 0)
+            {
+                throw new InvalidStorageQuotaException();
+            }
+
+            if (request.IncompleteUploadCleanupDays < 0)
+            {
+                throw new InvalidUploadCleanupException();
+            }
+
+            tenant.StorageQuotaBytes = request.StorageQuotaBytes; // null = unlimited
+            tenant.IncompleteUploadCleanupDays = request.IncompleteUploadCleanupDays;
+            return Task.CompletedTask;
+        }, cancellationToken);
+
+    [HttpPut("external-links")]
+    public Task<IActionResult> UpdateExternalLinks([FromBody] UpdateExternalLinkSettingsRequest request, CancellationToken cancellationToken) =>
+        UpdateGroupAsync(AuditActions.TenantSettingsExternalLinksUpdated, tenant =>
+        {
+            tenant.AllowExternalLinks = request.AllowExternalLinks;
+            tenant.ExternalLinkMaxDays = request.ExternalLinkMaxDays;
+            tenant.ExternalLinkDefaultAccesses = request.ExternalLinkDefaultAccesses;
+            tenant.ShowExternalLinkUrl = request.ShowExternalLinkUrl;
+            return Task.CompletedTask;
+        }, cancellationToken);
+
+    [HttpPut("audit-streaming")]
+    public Task<IActionResult> UpdateAuditStreaming([FromBody] UpdateAuditStreamingSettingsRequest request, CancellationToken cancellationToken) =>
+        UpdateGroupAsync(AuditActions.TenantSettingsAuditStreamingUpdated, async tenant =>
+        {
+            // Audit webhook (ADR "Audit webhook streaming"): validate + set the URL; the secret is encrypted at rest.
+            var webhookUrl = string.IsNullOrWhiteSpace(request.AuditWebhookUrl) ? null : request.AuditWebhookUrl.Trim();
+            if (webhookUrl is not null && !(Uri.TryCreate(webhookUrl, UriKind.Absolute, out var wu) && (wu.Scheme == Uri.UriSchemeHttp || wu.Scheme == Uri.UriSchemeHttps)))
+            {
+                throw new InvalidWebhookUrlException();
+            }
+
+            if (webhookUrl is null)
+            {
+                tenant.AuditWebhookUrl = null;
+                tenant.AuditWebhookSecret = null; // clearing the URL clears the secret
+            }
+            else
+            {
+                tenant.AuditWebhookUrl = webhookUrl;
+                if (!string.IsNullOrEmpty(request.AuditWebhookSecret))
+                {
+                    tenant.AuditWebhookSecret = await _transit.EncryptAsync(request.AuditWebhookSecret);
+                }
+                else if (tenant.AuditWebhookSecret is null)
+                {
+                    throw new WebhookSecretRequiredException();
+                }
+            }
+        }, cancellationToken, secretProvided: !string.IsNullOrEmpty(request.AuditWebhookSecret));
 
     // A snapshot of the auditable settings — everything the PUT can change except the webhook secret's *value*
     // (only whether one is set is captured, so the secret can never leak into the audit log).
@@ -500,6 +591,17 @@ public class TenantSettingsController : ControllerBase
         Links =
         [
             new Link("self", "/api/tenant-settings", "GET"),
+            // One writable sub-resource per settings group (#530 tranche 10, ADR "Per-group tenant settings"):
+            // a group's Save PUTs exactly its own fields and produces its own audit event. The rel names, not
+            // the paths, are the compatibility surface (ADR 0543).
+            new Link("settings-general", "/api/tenant-settings/general", "PUT"),
+            new Link("settings-capture", "/api/tenant-settings/capture", "PUT"),
+            new Link("settings-security", "/api/tenant-settings/security", "PUT"),
+            new Link("settings-records", "/api/tenant-settings/records", "PUT"),
+            new Link("settings-checkout", "/api/tenant-settings/checkout", "PUT"),
+            new Link("settings-storage", "/api/tenant-settings/storage", "PUT"),
+            new Link("settings-external-links", "/api/tenant-settings/external-links", "PUT"),
+            new Link("settings-audit-streaming", "/api/tenant-settings/audit-streaming", "PUT"),
             // Maintenance actions on these settings, advertised where the client already is (issue #416):
             // recompute the storage figure shown here, and send a test delivery to the configured webhook.
             new Link("recompute-storage", "/api/tenant-settings/recompute-storage", "POST"),

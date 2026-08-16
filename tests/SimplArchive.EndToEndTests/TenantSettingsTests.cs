@@ -3,9 +3,11 @@ using System.Net.Http.Json;
 
 namespace SimplArchive.EndToEndTests;
 
-// End-to-end over the real API + Postgres, exercising the tenant-admin settings surface (ADR "Tenant-admin
-// settings tab"): a tenant admin reads + updates the editable Tenant columns; a non-admin is refused; invalid
-// OCR languages are rejected.
+// End-to-end over the real API + Postgres, exercising the tenant-admin settings surface (ADRs "Tenant-admin
+// settings tab" + "Per-group tenant settings", #530 tranche 10): a tenant admin reads the settings and updates
+// them GROUP BY GROUP via the settings-<group> sub-resources; a non-admin is refused; invalid values are
+// rejected per group. Each group PUT is a full replacement of ITS GROUP only — the other groups keep their
+// values, which is the point of the split and is asserted below.
 [Collection(E2ECollection.Name)]
 public class TenantSettingsTests
 {
@@ -14,7 +16,7 @@ public class TenantSettingsTests
     public TenantSettingsTests(E2EApiFactory factory) => _factory = factory;
 
     [Fact]
-    public async Task Tenant_admin_reads_and_updates_settings_others_are_refused()
+    public async Task Tenant_admin_reads_and_updates_settings_per_group_others_are_refused()
     {
         var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
 
@@ -31,7 +33,8 @@ public class TenantSettingsTests
         // A non-admin can't read or write the settings.
         Assert.Equal(HttpStatusCode.Forbidden, (await plain.GetAsync("/api/tenant-settings")).StatusCode);
 
-        // The admin reads the current settings (seeded defaults).
+        // The admin reads the current settings (seeded defaults) — and the resource advertises one writable
+        // sub-resource per group (ADR 0543: the rels are how a client reaches them).
         var settings = await TestJson.Get(admin, "/api/tenant-settings");
         Assert.Equal(tenantId, settings.GetProperty("id").GetGuid());
         Assert.Equal("Active", settings.GetProperty("status").GetString());
@@ -39,6 +42,11 @@ public class TenantSettingsTests
         Assert.Equal(0, settings.GetProperty("checkoutTtlDays").GetInt32()); // disabled by default
         Assert.Equal(0, settings.GetProperty("wormLockMode").GetInt32()); // Governance by default
         Assert.False(settings.GetProperty("requireMfa").GetBoolean()); // opt-in, off by default
+        var rels = settings.GetProperty("links").EnumerateArray().Select(l => l.GetProperty("rel").GetString()).ToList();
+        foreach (var group in new[] { "general", "capture", "security", "records", "checkout", "storage", "external-links", "audit-streaming" })
+        {
+            Assert.Contains($"settings-{group}", rels);
+        }
 
         // External links (ADR 0546): OFF by default, with the caps present so the tenant UI has something to
         // render the moment it is switched on. The default matters — an existing tenant must not gain an
@@ -48,37 +56,42 @@ public class TenantSettingsTests
         Assert.Equal(5, settings.GetProperty("externalLinkDefaultAccesses").GetInt32());
         Assert.False(string.IsNullOrEmpty(settings.GetProperty("defaultOcrLanguages").GetString()));
 
-        // Update name + OCR languages + retention + check-out TTL + WORM mode (1 = Compliance) + require-MFA.
+        // Update group by group: name (general), OCR (capture), retention + WORM (records), TTL (checkout),
+        // require-MFA (security). Each PUT touches ONLY its group.
         var newName = $"Renamed {Guid.NewGuid():N}";
-        var updated = await TestJson.Put(admin, "/api/tenant-settings", new { name = newName, defaultOcrLanguages = "eng+spa", auditRetentionDays = 90, checkoutTtlDays = 14, wormLockMode = 1, requireMfa = true });
+        var updated = await TestJson.Put(admin, "/api/tenant-settings/general", new { name = newName });
         Assert.Equal(newName, updated.GetProperty("name").GetString());
+
+        updated = await TestJson.Put(admin, "/api/tenant-settings/capture", new { defaultOcrLanguages = "eng+spa", restrictTagsToCatalog = false });
         Assert.Equal("eng+spa", updated.GetProperty("defaultOcrLanguages").GetString());
 
-        // The external-link switch and its caps round-trip through the same PUT, so an administrator can actually
-        // turn the feature on — without this the flags default to false and nothing in the product can set them.
-        var shared = await TestJson.Put(admin, "/api/tenant-settings", new
+        updated = await TestJson.Put(admin, "/api/tenant-settings/records", new { auditRetentionDays = 90, wormLockMode = 1, requireDispositionReview = false });
+        Assert.Equal(90, updated.GetProperty("auditRetentionDays").GetInt32());
+        Assert.Equal(1, updated.GetProperty("wormLockMode").GetInt32());
+
+        updated = await TestJson.Put(admin, "/api/tenant-settings/checkout", new { checkoutTtlDays = 14, checkoutWarningDays = 1 });
+        Assert.Equal(14, updated.GetProperty("checkoutTtlDays").GetInt32());
+
+        updated = await TestJson.Put(admin, "/api/tenant-settings/security", new { requireMfa = true, allowPasskeyLogin = false, enforceClearance = false });
+        Assert.True(updated.GetProperty("requireMfa").GetBoolean());
+        // A group PUT replaces only ITS group — the name and records values set above survived it.
+        Assert.Equal(newName, updated.GetProperty("name").GetString());
+        Assert.Equal(90, updated.GetProperty("auditRetentionDays").GetInt32());
+
+        // The external-link switch and its caps live in their own group, so an administrator can turn the
+        // feature on without re-stating any other setting.
+        var shared = await TestJson.Put(admin, "/api/tenant-settings/external-links", new
         {
-            name = newName,
-            defaultOcrLanguages = "eng+spa",
-            auditRetentionDays = 90,
-            checkoutTtlDays = 14,
-            // Carried through deliberately: PUT is a FULL replacement (ADR 0003 prefers it over PATCH), so
-            // omitting these would reset them and break the assertions that follow.
-            wormLockMode = 1,
-            requireMfa = true,
             allowExternalLinks = true,
             externalLinkMaxDays = 30,
             externalLinkDefaultAccesses = 2,
+            showExternalLinkUrl = false,
         });
         Assert.True(shared.GetProperty("allowExternalLinks").GetBoolean());
         Assert.Equal(30, shared.GetProperty("externalLinkMaxDays").GetInt32());
         Assert.Equal(2, shared.GetProperty("externalLinkDefaultAccesses").GetInt32());
-        Assert.Equal(90, updated.GetProperty("auditRetentionDays").GetInt32());
-        Assert.Equal(14, updated.GetProperty("checkoutTtlDays").GetInt32());
-        Assert.Equal(1, updated.GetProperty("wormLockMode").GetInt32());
-        Assert.True(updated.GetProperty("requireMfa").GetBoolean());
 
-        // The change persisted.
+        // The changes persisted.
         var reread = await TestJson.Get(admin, "/api/tenant-settings");
         Assert.Equal(newName, reread.GetProperty("name").GetString());
         Assert.Equal(14, reread.GetProperty("checkoutTtlDays").GetInt32());
@@ -86,15 +99,20 @@ public class TenantSettingsTests
         Assert.True(reread.GetProperty("requireMfa").GetBoolean());
 
         // Turn require-MFA back off so it doesn't affect the shared demo tenant used elsewhere.
-        await TestJson.Put(admin, "/api/tenant-settings", new { name = newName, defaultOcrLanguages = "eng+spa", auditRetentionDays = 90, checkoutTtlDays = 14, wormLockMode = 1, requireMfa = false });
+        await TestJson.Put(admin, "/api/tenant-settings/security", new { requireMfa = false, allowPasskeyLogin = false, enforceClearance = false });
 
-        // An unsupported OCR code is rejected; a negative retention / check-out TTL is rejected.
-        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync("/api/tenant-settings", new { name = newName, defaultOcrLanguages = "eng+zzz", auditRetentionDays = 90, checkoutTtlDays = 14 })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync("/api/tenant-settings", new { name = newName, defaultOcrLanguages = "eng", auditRetentionDays = -1, checkoutTtlDays = 14 })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync("/api/tenant-settings", new { name = newName, defaultOcrLanguages = "eng", auditRetentionDays = 90, checkoutTtlDays = -1 })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync("/api/tenant-settings", new { name = newName, defaultOcrLanguages = "eng", auditRetentionDays = 90, checkoutTtlDays = 14, wormLockMode = 99 })).StatusCode);
+        // Per-group validation: an unsupported OCR code, a negative retention / check-out TTL, an unknown
+        // WORM mode — each rejected by the group that owns the field.
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync("/api/tenant-settings/capture", new { defaultOcrLanguages = "eng+zzz", restrictTagsToCatalog = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync("/api/tenant-settings/records", new { auditRetentionDays = -1, wormLockMode = 0, requireDispositionReview = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync("/api/tenant-settings/checkout", new { checkoutTtlDays = -1, checkoutWarningDays = 0 })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync("/api/tenant-settings/records", new { auditRetentionDays = 90, wormLockMode = 99, requireDispositionReview = false })).StatusCode);
 
-        // A non-admin can't write.
-        Assert.Equal(HttpStatusCode.Forbidden, (await plain.PutAsJsonAsync("/api/tenant-settings", new { name = "hijack", defaultOcrLanguages = "eng", auditRetentionDays = 10, checkoutTtlDays = 5 })).StatusCode);
+        // A missing name is rejected; an empty general PUT can't blank the tenant.
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync("/api/tenant-settings/general", new { name = "" })).StatusCode);
+
+        // A non-admin can't write any group.
+        Assert.Equal(HttpStatusCode.Forbidden, (await plain.PutAsJsonAsync("/api/tenant-settings/general", new { name = "hijack" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await plain.PutAsJsonAsync("/api/tenant-settings/security", new { requireMfa = false, allowPasskeyLogin = false, enforceClearance = false })).StatusCode);
     }
 }

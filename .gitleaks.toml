@@ -33,4 +33,7 @@ regexes = [
   '''dev-root-token-id=root''',
   '''storageadmin''',
   '''SimplDemo2026!''',
+  # The E2E/desktop tests' throwaway webhook signing secret (AuditWebhookTestDeliveryTests /
+  # DesktopTenantSettingsTests) — it signs test deliveries to a loopback listener and nothing else.
+  '''s3cr3t-signing-key''',
 ]

@@ -1,0 +1,25 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.TenantRibbon"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- Tenant ribbon (#530, tranche 10, by decision): the three tab-level launchers — sensitivity labels,
+         new repository, convert scans — leave the header/body for the ribbon. All three open windows/dialogs
+         that need the window as their parent, so every Click forwards there. -->
+    <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+        <WrapPanel Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="tenant-labels" Click="OnManageSensitivityLabels"
+                        ToolTip.Tip="{loc:Tr TenantSensitivityLabels}"><i:Icon Value="mdi-shield-outline" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="tenant-new-repo" Click="OnNewRepository"
+                        ToolTip.Tip="{loc:Tr TenantNewRepository}"><i:Icon Value="mdi-folder-plus-outline" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+                <Button AutomationProperties.AutomationId="tenant-convert-scans" Click="OnConvertScans"
+                        ToolTip.Tip="{loc:Tr MwConvertScansTip}"><i:Icon Value="mdi-file-pdf-box" FontSize="18" /></Button>
+            </StackPanel>
+        </WrapPanel>
+    </Border>
+</UserControl>

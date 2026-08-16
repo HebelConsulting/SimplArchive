@@ -1710,6 +1710,30 @@
   <data name="TenantDeliveryInfo" xml:space="preserve">
     <value>Wie der SIEM-Webhook zustellt. Bei Fehlern wiederholt der Server mit exponentiellem Backoff (bis zu ~stündlich) und heilt sich selbst, wenn der Endpunkt sich erholt; ein Erfolg setzt den Zähler zurück. Keine Ereignisse gehen verloren — nicht zugestellte Ereignisse werden am Prüfpunkt gehalten.</value>
   </data>
+  <data name="TenantGroupGeneral" xml:space="preserve">
+    <value>Allgemein</value>
+  </data>
+  <data name="TenantGroupCapture" xml:space="preserve">
+    <value>Dokumente &amp; Erfassung</value>
+  </data>
+  <data name="TenantGroupSecurity" xml:space="preserve">
+    <value>Sicherheit &amp; Anmeldung</value>
+  </data>
+  <data name="TenantGroupRecords" xml:space="preserve">
+    <value>Aufbewahrung &amp; Compliance</value>
+  </data>
+  <data name="TenantGroupCheckout" xml:space="preserve">
+    <value>Check-out</value>
+  </data>
+  <data name="TenantGroupStorage" xml:space="preserve">
+    <value>Speicher</value>
+  </data>
+  <data name="TenantGroupExternalLinks" xml:space="preserve">
+    <value>Externe Links</value>
+  </data>
+  <data name="TenantGroupAuditStreaming" xml:space="preserve">
+    <value>Audit-Streaming (SIEM)</value>
+  </data>
   <data name="TenantReference" xml:space="preserve">
     <value>Referenz</value>
   </data>

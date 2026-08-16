@@ -126,9 +126,18 @@ public static class AuditActions
     public const string ServiceAccountRevoked = "ServiceAccount.Revoked";
 
     public const string TenantCreated = "Tenant.Created";
-    // A tenant admin changed the tenant's self-service settings (ADR "Audit tenant-settings, inbox filing +
-    // personal-repository creation") — the details carry the field-level before→after changes (secret redacted).
-    public const string TenantSettingsUpdated = "Tenant.SettingsUpdated";
+
+    // A tenant admin changed ONE GROUP of the tenant's self-service settings (#530 tranche 10, per-group
+    // sub-resources) — the details carry the field-level before→after changes (webhook secret redacted). One
+    // action per group, so the trail reads as intent ("changed check-out policy") rather than "saved settings".
+    public const string TenantSettingsGeneralUpdated = "Tenant.SettingsGeneralUpdated";
+    public const string TenantSettingsCaptureUpdated = "Tenant.SettingsCaptureUpdated";
+    public const string TenantSettingsSecurityUpdated = "Tenant.SettingsSecurityUpdated";
+    public const string TenantSettingsRecordsUpdated = "Tenant.SettingsRecordsUpdated";
+    public const string TenantSettingsCheckoutUpdated = "Tenant.SettingsCheckoutUpdated";
+    public const string TenantSettingsStorageUpdated = "Tenant.SettingsStorageUpdated";
+    public const string TenantSettingsExternalLinksUpdated = "Tenant.SettingsExternalLinksUpdated";
+    public const string TenantSettingsAuditStreamingUpdated = "Tenant.SettingsAuditStreamingUpdated";
 
     // A tenant admin listed the tenant's users' personal spaces (ADR "Tenant-admin Administration → Users view")
     // — admin access to private spaces is recorded, not silent.

@@ -3,9 +3,10 @@ using static Microsoft.Playwright.Assertions;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// A UI flow (ADR "Tenant-admin settings tab"): the demo admin (a tenant admin) sees the Tenant tab, which shows
-// the tenant settings read-only; clicking Edit makes the fields editable and Save persists. Kept read-only-ish
-// (no destructive change committed here) so the shared demo tenant stays clean for the rest of the suite.
+// A UI flow (ADRs "Tenant-admin settings tab" + "Per-group tenant settings", #530 tranche 10): the demo admin
+// sees the Tenant tab — reference card first, then the settings in groups, each read-only with its own pencil;
+// a group's pencil makes ONLY that group editable (Save/Cancel in its header row, the other pencils hidden).
+// Kept read-only-ish (no destructive change committed here) so the shared demo tenant stays clean.
 [Collection(UiCollection.Name)]
 [Trait("Area", "ui-3")]
 public class WebTenantSettingsTests
@@ -15,53 +16,57 @@ public class WebTenantSettingsTests
     public WebTenantSettingsTests(SelfHostedAppFixture app) => _app = app;
 
     [Fact]
-    public async Task Tenant_tab_shows_settings_and_edit_toggles_editability()
+    public async Task Tenant_tab_shows_reference_first_groups_and_per_group_edit()
     {
         var page = await Ui.LoginAsync(_app);
 
         await page.Locator(".wb-tab[aria-label=\"Tenant\"]").First.ClickAsync();
         await Expect(page.Locator(".wb-tenant")).ToBeVisibleAsync();
 
-        var view = page.Locator(".wb-tenant");
-        await Expect(view.GetByText("Tenant settings")).ToBeVisibleAsync();
-        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "New repository" })).ToBeVisibleAsync();
+        // The toolbar carries the three launchers (#530 tranche 10 — Convert scans moved here from the
+        // Repositories ribbon); the reference card is the FIRST thing in the body.
+        var wrap = page.Locator(".wb-tenant-wrap");
+        await Expect(wrap.GetByRole(AriaRole.Button, new() { Name = "New repository" })).ToBeVisibleAsync();
+        await Expect(wrap.GetByRole(AriaRole.Button, new() { Name = "Convert scans" })).ToBeVisibleAsync();
 
-        // Each explainable setting carries an info button (hover tooltip). Name, OCR, audit retention,
-        // check-out auto-release, check-out expiry warning, WORM lock mode, storage quota, the storage Recompute
-        // action, incomplete-upload cleanup, require-MFA, allow-passkey-login, require-disposition-review,
-        // restrict-tags-to-catalog, enforce-clearance, allow-external-links, show-external-link-url, and the audit
-        // webhook URL → seventeen (the webhook secret + delivery-health buttons render only in edit mode / when a
-        // webhook is configured, so aren't counted here). ADR "Sensitivity clearance enforcement" added the
-        // enforce-clearance one; ADR 0546 the allow-external-links one; ADR 0553 the show-external-link-url one.
-        //
-        // NOTE — this count now DEPENDS on external links being switched on for the tenant. The two numeric caps
-        // carry no info button, so that used to be irrelevant; show-external-link-url has one AND is nested behind
-        // the allow-external-links switch, so a tenant with the feature off would show sixteen. It holds here
-        // because the demo seed enables external links (ADR 0214) and nothing in this suite turns them off — if
-        // a future test toggles that switch, this assertion becomes order-dependent and should move to asserting
-        // the individual buttons rather than a total.
+        var view = page.Locator(".wb-tenant");
+        await Expect(view.GetByText("Reference").First).ToBeVisibleAsync();
+        await Expect(view.GetByText("Tenant ID")).ToBeVisibleAsync();
+
+        // The eight decided groups render, in order.
+        foreach (var group in new[] { "General", "Documents & capture", "Security & sign-in", "Records & compliance", "Check-out", "Storage", "External links", "Audit streaming (SIEM)" })
+        {
+            await Expect(view.Locator(".wb-tenant-group-head").Filter(new() { HasText = group })).ToBeVisibleAsync();
+        }
+
+        // Each explainable setting carries an info button (hover tooltip) — the same seventeen as before the
+        // regrouping (the webhook secret + delivery-health buttons render only in edit mode / when a webhook
+        // is configured). The count still DEPENDS on external links being on for the demo tenant (ADR 0214).
         await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Explanation" })).ToHaveCountAsync(17);
 
         // The storage-usage line (ADR "Per-tenant storage quota") shows how much is used vs the limit.
         await Expect(view.GetByText("Used:")).ToBeVisibleAsync();
 
-        // Read-only until Edit: Save/Cancel are hidden, Edit is shown.
+        // Read-only everywhere: eight pencils, no Save/Cancel.
+        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Edit" })).ToHaveCountAsync(8);
         await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Save" })).ToBeHiddenAsync();
 
-        // Edit → Save + Cancel appear.
-        await view.GetByRole(AriaRole.Button, new() { Name = "Edit" }).ClickAsync();
-        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Save" })).ToBeVisibleAsync();
-        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Cancel" })).ToBeVisibleAsync();
+        // A group's pencil → Save/Cancel appear IN ITS HEADER ROW, and the other pencils hide (starting a
+        // second edit would silently discard the first).
+        var general = view.Locator(".wb-tenant-group-head").Filter(new() { HasText = "General" }).First;
+        await general.GetByRole(AriaRole.Button, new() { Name = "Edit" }).ClickAsync();
+        await Expect(general.GetByRole(AriaRole.Button, new() { Name = "Save" })).ToBeVisibleAsync();
+        await Expect(general.GetByRole(AriaRole.Button, new() { Name = "Cancel" })).ToBeVisibleAsync();
+        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Edit" })).ToHaveCountAsync(0);
 
-        // Cancel discards without persisting anything and returns to read-only.
-        await view.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
-        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Edit" })).ToBeVisibleAsync();
+        // Cancel discards without persisting anything and returns every pencil.
+        await general.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
+        await Expect(view.GetByRole(AriaRole.Button, new() { Name = "Edit" })).ToHaveCountAsync(8);
     }
 
-    // The reported bug: fields must be genuinely non-editable until Edit (disabled/greyed), including the
-    // switches (MudSwitch's ReadOnly didn't actually block toggling) — and become editable in edit mode.
+    // Per-group editability: a group's pencil enables ITS fields and nobody else's — the point of the split.
     [Fact]
-    public async Task Fields_are_disabled_until_edit()
+    public async Task Fields_are_disabled_until_their_groups_edit()
     {
         var page = await Ui.LoginAsync(_app);
 
@@ -69,28 +74,34 @@ public class WebTenantSettingsTests
         var view = page.Locator(".wb-tenant");
         await Expect(view).ToBeVisibleAsync();
 
-        // A representative text field (the tenant name, first setting row) and the previously-buggy switch
-        // (require two-factor) are both disabled before Edit…
         var nameInput = view.Locator(".wb-setting-row").First.Locator("input");
         var mfaSwitch = view.Locator(".wb-setting-row").Filter(new() { HasText = "Require two-factor authentication" }).Locator("input");
         await Expect(nameInput).ToBeDisabledAsync();
         await Expect(mfaSwitch).ToBeDisabledAsync();
 
-        // …and enabled after Edit.
-        await view.GetByRole(AriaRole.Button, new() { Name = "Edit" }).ClickAsync();
+        // General's pencil enables the name — and NOT the security switch.
+        var general = view.Locator(".wb-tenant-group-head").Filter(new() { HasText = "General" }).First;
+        await general.GetByRole(AriaRole.Button, new() { Name = "Edit" }).ClickAsync();
         await Expect(nameInput).ToBeEnabledAsync();
-        await Expect(mfaSwitch).ToBeEnabledAsync();
+        await Expect(mfaSwitch).ToBeDisabledAsync();
+        await general.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
 
-        // Cancel returns them to disabled (and persists nothing, keeping the shared demo tenant clean).
-        await view.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
+        // Security's pencil enables the switch — and NOT the name.
+        var security = view.Locator(".wb-tenant-group-head").Filter(new() { HasText = "Security & sign-in" }).First;
+        await security.GetByRole(AriaRole.Button, new() { Name = "Edit" }).ClickAsync();
+        await Expect(mfaSwitch).ToBeEnabledAsync();
+        await Expect(nameInput).ToBeDisabledAsync();
+
+        // Cancel returns everything to disabled (and persists nothing).
+        await security.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
         await Expect(nameInput).ToBeDisabledAsync();
         await Expect(mfaSwitch).ToBeDisabledAsync();
     }
 
-    // ADR "Sensitivity clearance enforcement": the Tenant tab exposes the Enforce-clearance switch, disabled
-    // until Edit. Left OFF (Cancel) so the shared demo tenant isn't put into clearance-enforced mode.
+    // ADR "Sensitivity clearance enforcement": the Enforce-clearance switch lives in the Security group,
+    // disabled until that group edits. Left OFF (Cancel) so the shared demo tenant stays unenforced.
     [Fact]
-    public async Task Enforce_clearance_switch_renders_and_is_disabled_until_edit()
+    public async Task Enforce_clearance_switch_renders_and_is_disabled_until_its_groups_edit()
     {
         var page = await Ui.LoginAsync(_app);
 
@@ -101,10 +112,11 @@ public class WebTenantSettingsTests
         var clearanceSwitch = view.Locator(".wb-setting-row").Filter(new() { HasText = "Enforce sensitivity clearance" }).Locator("input");
         await Expect(clearanceSwitch).ToBeDisabledAsync();
 
-        await view.GetByRole(AriaRole.Button, new() { Name = "Edit" }).ClickAsync();
+        var security = view.Locator(".wb-tenant-group-head").Filter(new() { HasText = "Security & sign-in" }).First;
+        await security.GetByRole(AriaRole.Button, new() { Name = "Edit" }).ClickAsync();
         await Expect(clearanceSwitch).ToBeEnabledAsync();
 
-        await view.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
+        await security.GetByRole(AriaRole.Button, new() { Name = "Cancel" }).ClickAsync();
         await Expect(clearanceSwitch).ToBeDisabledAsync();
     }
 }

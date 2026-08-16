@@ -38,11 +38,8 @@ public class AuditWebhookTestDeliveryTests
         listener.Start();
         var captured = CaptureOneAsync(listener);
 
-        await TestJson.Put(admin, "/api/tenant-settings", new
+        await TestJson.Put(admin, "/api/tenant-settings/audit-streaming", new
         {
-            name,
-            defaultOcrLanguages = "eng",
-            auditRetentionDays = 365,
             auditWebhookUrl = $"http://localhost:{port}/ingest",
             auditWebhookSecret = signingSecret,
         });

@@ -33,7 +33,7 @@ public class PerTenantBucketPolicyTests
 
         // Set the lifecycle setting, then confirm the bucket carries the abort-incomplete-multipart rule.
         var name = (await TestJson.Get(admin, "/api/tenant-settings")).GetProperty("name").GetString();
-        await TestJson.Put(admin, "/api/tenant-settings", new { name, defaultOcrLanguages = "eng", auditRetentionDays = 365, incompleteUploadCleanupDays = 9 });
+        await TestJson.Put(admin, "/api/tenant-settings/storage", new { storageQuotaBytes = (long?)null, incompleteUploadCleanupDays = 9 });
         Assert.Equal(9, (await TestJson.Get(admin, "/api/tenant-settings")).GetProperty("incompleteUploadCleanupDays").GetInt32());
 
         var lifecycle = await s3.GetLifecycleConfigurationAsync(bucket);
@@ -41,7 +41,7 @@ public class PerTenantBucketPolicyTests
         Assert.Equal(9, rule.AbortIncompleteMultipartUpload.DaysAfterInitiation);
 
         // Setting it to 0 removes the lifecycle configuration (a missing config may 404, depending on the backend).
-        await TestJson.Put(admin, "/api/tenant-settings", new { name, defaultOcrLanguages = "eng", auditRetentionDays = 365, incompleteUploadCleanupDays = 0 });
+        await TestJson.Put(admin, "/api/tenant-settings/storage", new { storageQuotaBytes = (long?)null, incompleteUploadCleanupDays = 0 });
         try
         {
             var cleared = await s3.GetLifecycleConfigurationAsync(bucket);
