@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.AuditRibbon"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- Audit ribbon (#530, tranche 9, by decision — superseding the old text-only audit bar): export first,
+         then the verify pair, then purge SEPARATED — it deletes aged events, and destructive keeps its
+         distance — and HIDDEN for a non-admin (ADR 0543). Apply/Clear stay with the filter form below; the
+         export and purge dialogs need the window as their parent, so those Clicks forward there. -->
+    <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+        <WrapPanel Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="audit-export" Click="OnExport"
+                        ToolTip.Tip="{loc:Tr AuditExport}"><i:Icon Value="mdi-export" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="audit-verify" Command="{Binding VerifyAuditCommand}"
+                        ToolTip.Tip="{loc:Tr AuditVerify}"><i:Icon Value="mdi-check-decagram-outline" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="audit-verify-worm" Command="{Binding VerifyWormCommand}"
+                        ToolTip.Tip="{loc:Tr AuditVerifyWorm}"><i:Icon Value="mdi-database-check-outline" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4" IsVisible="{Binding IsTenantAdmin}">
+                <Button AutomationProperties.AutomationId="audit-purge" Click="OnPurge"
+                        ToolTip.Tip="{loc:Tr AuditPurgeNow}"><i:Icon Value="mdi-delete-sweep" FontSize="18" /></Button>
+            </StackPanel>
+            <!-- Verify outcomes are feedback, not actions — they ride beside the buttons that produced them. -->
+            <Border IsVisible="{Binding AuditVerifyShown}" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="9" Padding="9,2" Margin="0,0,8,4" VerticalAlignment="Center">
+                <TextBlock Text="{Binding AuditVerifyStatus}" FontSize="12" />
+            </Border>
+            <Border IsVisible="{Binding WormVerifyShown}" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="9" Padding="9,2" Margin="0,0,0,4" VerticalAlignment="Center">
+                <TextBlock Text="{Binding WormVerifyStatus}" FontSize="12" />
+            </Border>
+        </WrapPanel>
+    </Border>
+</UserControl>

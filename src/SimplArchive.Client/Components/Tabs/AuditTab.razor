@@ -18,44 +18,67 @@
             @* Audit log viewer (ADR "Audit trail (first slice)"): a filter bar over a newest-first table
                of security-sensitive events, cursor-paginated via a "Load more" button. *@
             <div class="wb-audit">
-                <div class="wb-audit-filters">
-                    <SearchField @bind-Value="_auditActionFilter" Label="@Strings.Get("AuditActionLabel")"
-                                 Placeholder="@Strings.Get("AuditActionPlaceholder")" Style="max-width:220px;" />
-                    <MudDatePicker @bind-Date="_auditFrom" Label="@Strings.Get("AuditFrom")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:170px;" />
-                    <MudDatePicker @bind-Date="_auditTo" Label="@Strings.Get("AuditTo")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:170px;" />
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="RunAuditSearchAsync">@Strings.Get("AuditApply")</MudButton>
-                    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Clear" OnClick="ClearAuditFiltersAsync">@Strings.Get("AuditClear")</MudButton>
-                    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportAuditAsync" Class="ml-auto">@Strings.Get("AuditExport")</MudButton>
-                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.VerifiedUser" OnClick="VerifyAuditChainAsync" Disabled="_auditVerifying">@Strings.Get("AuditVerify")</MudButton>
+                @* The toolbar in the Repositories shape (#530 tranche 9, by decision — superseding the old
+                   text-only bar): export, the verify pair, purge SEPARATED and HIDDEN for a non-admin
+                   (ADR 0543). The verify chips are feedback, not actions — they ride beside the buttons that
+                   produced them. Apply/Clear stay with the filter form below. *@
+                <div class="wb-search-bar pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default); flex-wrap:wrap;">
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="ExportAuditAsync"
+                               title="@Strings.Get("AuditExport")" aria-label="@Strings.Get("AuditExport")">
+                        <MudIcon Icon="@Icons.Material.Filled.Download" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("AuditExport")</span>
+                    </MudButton>
+                    <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" OnClick="VerifyAuditChainAsync" Disabled="_auditVerifying"
+                               title="@Strings.Get("AuditVerify")" aria-label="@Strings.Get("AuditVerify")">
+                        <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("AuditVerify")</span>
+                    </MudButton>
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="VerifyWormSegmentsAsync" Disabled="_wormVerifying"
+                               title="@Strings.Get("AuditVerifyWorm")" aria-label="@Strings.Get("AuditVerifyWorm")">
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("AuditVerifyWorm")</span>
+                    </MudButton>
+                    @if (IsTenantAdmin)
+                    {
+                        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" OnClick="PurgeAuditAsync" Disabled="_auditRetentionBusy"
+                                   title="@Strings.Get("AuditPurgeNow")" aria-label="@Strings.Get("AuditPurgeNow")">
+                            <MudIcon Icon="@Icons.Material.Filled.DeleteSweep" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("AuditPurgeNow")</span>
+                        </MudButton>
+                    }
                     @if (_auditVerifyResult is { } vr)
                     {
-                        <MudChip T="string" Size="Size.Small" Color="@(vr.Valid ? Color.Success : Color.Error)" Icon="@(vr.Valid ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.GppBad)">
+                        <MudChip T="string" Size="Size.Small" Class="ml-3" Color="@(vr.Valid ? Color.Success : Color.Error)" Icon="@(vr.Valid ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.GppBad)">
                             @(vr.Valid ? string.Format(Strings.Get("AuditChainIntact"), vr.CheckedCount) : string.Format(Strings.Get("AuditTampered"), vr.BrokenAtSequence))
                         </MudChip>
                     }
-                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Lock" OnClick="VerifyWormSegmentsAsync" Disabled="_wormVerifying">@Strings.Get("AuditVerifyWorm")</MudButton>
                     @if (_wormVerifyResult is { } wv)
                     {
-                        <MudChip T="string" Size="Size.Small" Color="@(wv.Valid ? Color.Success : Color.Error)" Icon="@(wv.Valid ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.GppBad)">
+                        <MudChip T="string" Size="Size.Small" Class="ml-1" Color="@(wv.Valid ? Color.Success : Color.Error)" Icon="@(wv.Valid ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.GppBad)">
                             @(wv.Valid ? string.Format(Strings.Get("AuditWormIntact"), wv.CheckedCount, wv.SegmentCount) : string.Format(Strings.Get("AuditWormBroken"), wv.Reason, wv.BrokenAtSequence))
                         </MudChip>
                     }
                 </div>
+                @* Retention first, by decision: read-only with a pencil; Save/Cancel appear in the same row the
+                   pencil started the edit in (ADR 0550). Purge moved to the toolbar. *@
                 @if (_auditRetention is { } rt)
                 {
                     <div class="wb-audit-retention">
                         <MudIcon Icon="@Icons.Material.Filled.AutoDelete" Size="Size.Small" />
-                        @if (IsTenantAdmin)
+                        @if (!_auditRetentionEditing)
+                        {
+                            <span class="mud-text-secondary" style="font-size:.85em;">@Strings.Get("AuditRetentionLabel") @(rt.RetentionDays == 0 ? Strings.Get("AuditKeepForever") : string.Format(Strings.Get("AuditDays"), rt.RetentionDays))</span>
+                            @if (IsTenantAdmin)
+                            {
+                                <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="BeginRetentionEdit"
+                                           title="@Strings.Get("Edit")" aria-label="@Strings.Get("Edit")">
+                                    <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("Edit")</span>
+                                </MudButton>
+                            }
+                        }
+                        else
                         {
                             <span>@Strings.Get("AuditRetentionLabel")</span>
                             <MudNumericField T="int" @bind-Value="_auditRetentionDaysEdit" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:110px;" />
                             <span class="mud-text-secondary" style="font-size:.8em;">@Strings.Get("AuditRetentionDaysHint")</span>
-                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SaveRetentionAsync" Disabled="_auditRetentionBusy">@Strings.Get("Save")</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.DeleteSweep" OnClick="PurgeAuditAsync" Disabled="_auditRetentionBusy">@Strings.Get("AuditPurgeNow")</MudButton>
-                        }
-                        else
-                        {
-                            <span class="mud-text-secondary" style="font-size:.85em;">@Strings.Get("AuditRetentionLabel") @(rt.RetentionDays == 0 ? Strings.Get("AuditKeepForever") : string.Format(Strings.Get("AuditDays"), rt.RetentionDays))</span>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SaveRetentionEditAsync" Disabled="_auditRetentionBusy">@Strings.Get("Save")</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => _auditRetentionEditing = false)">@Strings.Get("Cancel")</MudButton>
                         }
                         @if (rt.ChainStartSequence > 0)
                         {
@@ -63,6 +86,21 @@
                         }
                     </div>
                 }
+                <div class="wb-audit-filters">
+                    <SearchField @bind-Value="_auditActionFilter" Label="@Strings.Get("AuditActionLabel")"
+                                 Placeholder="@Strings.Get("AuditActionPlaceholder")" Style="max-width:220px;" />
+                    <MudDatePicker @bind-Date="_auditFrom" Label="@Strings.Get("AuditFrom")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:170px;" />
+                    <MudDatePicker @bind-Date="_auditTo" Label="@Strings.Get("AuditTo")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:170px;" />
+                    @* Apply/Clear wear the ribbon-button style, by decision (#530 tranche 9). *@
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="RunAuditSearchAsync"
+                               title="@Strings.Get("AuditApply")" aria-label="@Strings.Get("AuditApply")">
+                        <MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("AuditApply")</span>
+                    </MudButton>
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="ClearAuditFiltersAsync"
+                               title="@Strings.Get("AuditClear")" aria-label="@Strings.Get("AuditClear")">
+                        <MudIcon Icon="@Icons.Material.Filled.Clear" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("AuditClear")</span>
+                    </MudButton>
+                </div>
                 <div class="wb-audit-rows">
                     @if (_auditLoading && _auditEvents.Count == 0)
                     {
@@ -196,6 +234,21 @@
         {
             _auditRetention = null;
         }
+    }
+
+    /// <summary>The retention row's edit state (#530 tranche 9): read-only with a pencil (ADR 0550).</summary>
+    private bool _auditRetentionEditing;
+
+    private void BeginRetentionEdit()
+    {
+        _auditRetentionDaysEdit = _auditRetention?.RetentionDays ?? 0;
+        _auditRetentionEditing = true;
+    }
+
+    private async Task SaveRetentionEditAsync()
+    {
+        await SaveRetentionAsync();
+        _auditRetentionEditing = false;
     }
 
     private async Task SaveRetentionAsync()

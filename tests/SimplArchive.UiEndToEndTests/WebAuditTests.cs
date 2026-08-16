@@ -35,11 +35,12 @@ public class WebAuditTests
 
         // Verify integrity → the tenant's hash chain is intact.
         await page.GetByRole(AriaRole.Button, new() { Name = "Verify integrity" }).ClickAsync();
-        await Expect(page.Locator(".wb-audit-filters").GetByText("Chain intact")).ToBeVisibleAsync();
+        // The verify chips ride in the TOOLBAR beside the buttons that produced them (#530 tranche 9).
+        await Expect(page.Locator(".wb-audit .wb-search-bar").GetByText("Chain intact")).ToBeVisibleAsync();
 
         // Verify WORM → the sealed segments verify against the DB (ADR "Audit WORM segment verify").
         await page.GetByRole(AriaRole.Button, new() { Name = "Verify WORM" }).ClickAsync();
-        await Expect(page.Locator(".wb-audit-filters").GetByText("WORM sealed intact")).ToBeVisibleAsync();
+        await Expect(page.Locator(".wb-audit .wb-search-bar").GetByText("WORM sealed intact")).ToBeVisibleAsync();
 
         // Export → the browser downloads an .ndjson file (ADR "Audit trail export").
         var download = await page.RunAndWaitForDownloadAsync(async () =>
@@ -50,7 +51,8 @@ public class WebAuditTests
         // demo events are fresh, so nothing is old enough and the purge reports 0 (non-destructive).
         var retentionBar = page.Locator(".wb-audit-retention");
         await Expect(retentionBar.GetByText("Retention:")).ToBeVisibleAsync();
-        await retentionBar.GetByRole(AriaRole.Button, new() { Name = "Purge now" }).ClickAsync();
+        // Purge moved from the retention bar to the toolbar (#530 tranche 9); same accessible name.
+        await page.GetByRole(AriaRole.Button, new() { Name = "Purge now" }).ClickAsync();
         await page.Locator(".mud-dialog").GetByRole(AriaRole.Button, new() { Name = "Purge", Exact = true }).ClickAsync();
         await Expect(page.GetByText("Purged 0 event(s).")).ToBeVisibleAsync();
     }

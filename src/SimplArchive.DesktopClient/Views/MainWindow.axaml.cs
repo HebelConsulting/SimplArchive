@@ -591,7 +591,7 @@ public partial class MainWindow : Window
     });
 
     // Export the audit log (Audit tab) as NDJSON to a chosen file (ADR "Audit trail export").
-    private void OnAuditExport(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnAuditExport(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
@@ -623,7 +623,7 @@ public partial class MainWindow : Window
 
     // Purge aged audit events (tenant-admin, Audit tab): confirm, then run the purge (ADR "Desktop audit
     // viewer" over "Audit trail retention and purge").
-    private void OnAuditPurge(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnAuditPurge(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
