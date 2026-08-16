@@ -5096,7 +5096,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var list = await _api.GetNotificationsAsync();
+            var list = await _api.Notifications.GetNotificationsAsync();
             Notifications.Clear();
             foreach (var n in list.Items)
             {
@@ -5162,7 +5162,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        try { await _api.MarkAllNotificationsReadAsync(readAllHref); } catch (Exception) { }
+        try { await _api.Notifications.MarkAllNotificationsReadAsync(readAllHref); } catch (Exception) { }
         foreach (var n in Notifications) n.IsRead = true;
         UnreadNotificationCount = 0;
     }
@@ -5178,7 +5178,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         if (_api is not null && !n.IsRead)
         {
-            try { await _api.MarkNotificationReadAsync(n.Notification); } catch (Exception) { }
+            try { await _api.Notifications.MarkNotificationReadAsync(n.Notification); } catch (Exception) { }
             n.IsRead = true;
             if (UnreadNotificationCount > 0) UnreadNotificationCount--;
         }
@@ -5206,7 +5206,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         try
         {
             Tasks.Clear();
-            foreach (var t in await _api.GetTasksAsync())
+            foreach (var t in await _api.Workflow.GetTasksAsync())
             {
                 Tasks.Add(new TaskItemViewModel
                 {
@@ -5327,7 +5327,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     // ---- My work dashboard (ADR "My work dashboard") ------------------------------------------------------
-    public ObservableCollection<SimplArchiveApiClient.DashReminderInfo> DashboardReminders { get; } = [];
+    public ObservableCollection<RemindersClient.DashReminderInfo> DashboardReminders { get; } = [];
     public ObservableCollection<SimplArchiveApiClient.DashFollowedInfo> DashboardFollowing { get; } = [];
 
     private async Task LoadMyWorkAsync()
@@ -5338,7 +5338,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         DashboardReminders.Clear();
-        foreach (var r in await api.GetDashboardRemindersAsync())
+        foreach (var r in await api.Reminders.GetDashboardRemindersAsync())
         {
             DashboardReminders.Add(r);
         }
@@ -5353,7 +5353,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task OpenDashboardReminder(SimplArchiveApiClient.DashReminderInfo? row)
+    private async Task OpenDashboardReminder(RemindersClient.DashReminderInfo? row)
     {
         if (row is null)
         {
@@ -5430,7 +5430,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // Sensitivity watermark on the preview (ADR "Document watermarking") — when the label's watermark flag is set.
         Preview.WatermarkText = _detailSensitivityWatermark ? $"{_detailSensitivityName} · {UserDisplayName}" : "";
         // Whether the current user follows this document (ADR "Document subscriptions").
-        try { DetailSubscribed = await _api.GetSubscriptionAsync(DetailHref("subscription")); } catch (Exception) { DetailSubscribed = false; }
+        try { DetailSubscribed = await _api.Reminders.GetSubscriptionAsync(DetailHref("subscription")); } catch (Exception) { DetailSubscribed = false; }
 
         // Free-form tags (ADR "Document tags").
         DetailTags.Clear();

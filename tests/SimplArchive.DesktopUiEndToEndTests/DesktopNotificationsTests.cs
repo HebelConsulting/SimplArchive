@@ -35,19 +35,19 @@ public class DesktopNotificationsTests
 
         // Submit the document to the reviewer → a ReviewAssigned notification for them.
         var wf = await admin.GetWorkflowAsync(doc.Id);
-        await admin.PostWorkflowActionAsync(wf!.Links["submit"], new { reviewerId = reviewerId.Id });
+        await admin.Workflow.PostWorkflowActionAsync(wf!.Links["submit"], new { reviewerId = reviewerId.Id });
 
         // The reviewer reads their inbox: the notification carries the document + its parent folder.
         var reviewer = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl, email, password));
-        var list = await reviewer.GetNotificationsAsync();
+        var list = await reviewer.Notifications.GetNotificationsAsync();
         Assert.True(list.UnreadCount >= 1);
         var n = list.Items.First(x => x.DocumentId == doc.Id);
         Assert.Equal(repo.Id, n.DocumentParentId);
         Assert.False(n.IsRead);
 
         // Marking it read drops the unread count.
-        await reviewer.MarkNotificationReadAsync(n);
-        var after = await reviewer.GetNotificationsAsync();
+        await reviewer.Notifications.MarkNotificationReadAsync(n);
+        var after = await reviewer.Notifications.GetNotificationsAsync();
         Assert.True(after.Items.First(x => x.Id == n.Id).IsRead);
         Assert.Equal(list.UnreadCount - 1, after.UnreadCount);
     }

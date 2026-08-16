@@ -51,6 +51,10 @@ public sealed class SimplArchiveApiClient
     private CheckoutClient? _checkout;
     private SearchClient? _search;
     private AdminClient? _admin;
+    private WorkflowClient? _workflow;
+    private NotificationsClient? _notifications;
+    private RemindersClient? _reminders;
+    private AnnotationsClient? _annotations;
 
     public SimplArchiveApiClient(string accessToken)
     {
@@ -69,6 +73,18 @@ public sealed class SimplArchiveApiClient
 
     /// <summary>The administration area (#443 tranche 4).</summary>
     public AdminClient Admin => _admin ??= new AdminClient(Core);
+
+    /// <summary>The workflow area (#443 tranche 5).</summary>
+    public WorkflowClient Workflow => _workflow ??= new WorkflowClient(Core);
+
+    /// <summary>The notifications area (#443 tranche 5).</summary>
+    public NotificationsClient Notifications => _notifications ??= new NotificationsClient(Core);
+
+    /// <summary>The reminders & subscriptions area (#443 tranche 5).</summary>
+    public RemindersClient Reminders => _reminders ??= new RemindersClient(Core);
+
+    /// <summary>The annotations area (#443 tranche 5).</summary>
+    public AnnotationsClient Annotations => _annotations ??= new AnnotationsClient(Core);
 
     // This client's bearer token — used as the RFC 8693 subject_token to start impersonation (ADR "User
     // impersonation").
@@ -160,11 +176,6 @@ public sealed class SimplArchiveApiClient
     // within each page (top-left origin); the client scales them to the rendered page size.
     public sealed record TextLayoutBox(string Text, double X, double Y, double Width, double Height);
 
-    // A sticky note / positional annotation (ADR "Document annotations"). Etag is the optimistic-concurrency
-    // token to send back as If-Match on edit/delete; CanEdit/CanDelete are the server's per-caller hints.
-    // Points is the normalized "x,y x,y …" (each 0..1) poly-line for a Freehand (kind 7), null otherwise (ADR 0525).
-    public sealed record AnnotationInfo(Guid Id, int PageIndex, int Kind, double PositionX, double PositionY, double? Width, double? Height, string Text, string Color, string AuthorName, string Etag, bool CanEdit, bool CanDelete, string? Points = null);
-
     public sealed record TextLayoutPageInfo(IReadOnlyList<TextLayoutBox> Words);
 
     public sealed record TextLayoutInfo(IReadOnlyList<TextLayoutPageInfo> Pages);
@@ -222,18 +233,6 @@ public sealed class SimplArchiveApiClient
     public sealed record Reference(
         Guid ReferenceId, Guid TargetId, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, Guid? RealParentId,
         string? DeleteHref = null);
-
-    // The approval workflow on a version (ADR "Workflow / document state model", 0009). Status is the
-    // WorkflowStatus int; Links maps each valid-transition rel (submit/approve/reject/release) to its href.
-    public sealed record WorkflowInfo(
-        int Status, string StatusName, string? AssignedToName,
-        IReadOnlyList<WorkflowTransitionInfo> History, IReadOnlyDictionary<string, string> Links);
-
-    public sealed record WorkflowTransitionInfo(string ToStatusName, string? AssignedToName, string? PerformedByName, string? RejectionReason);
-
-    // A pending review task assigned to the caller (backs the Tasks tab).
-    public sealed record TaskInfo(Guid DocumentId, Guid? ParentId, Guid VersionId, string DocumentName, int? VersionNumber, DateTimeOffset AssignedAt, IReadOnlyDictionary<string, string>? Links = null, DateTimeOffset? DueAt = null);
-
     // A user option for the reviewer picker.
     // RemoveHref is set only where the option came from a collection whose rows advertise a removal address —
     // a group's members; it is null for pickers such as reminder targets (issue #416).
@@ -1142,6 +1141,65 @@ public sealed class SimplArchiveApiClient
     // (ADR 0555); until then, centralising it is what makes that final step a one-line change.
     private static string DocumentAddress(Guid documentId) => $"api/documents/{documentId}";
 
+    // The latest confirmed version's workflow (null if the document has no confirmed version).
+    public async Task<WorkflowClient.WorkflowInfo?> GetWorkflowAsync(Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "versions", cancellationToken), cancellationToken);
+        if (!response.TryGetProperty("versions", out var versions))
+        {
+            return null;
+        }
+
+        JsonElement? latest = null;
+        var number = -1;
+        foreach (var v in versions.EnumerateArray())
+        {
+            if (v.GetProperty("status").GetString() != "Confirmed")
+            {
+                continue;
+            }
+
+            var n = v.TryGetProperty("versionNumber", out var vn) && vn.ValueKind == JsonValueKind.Number ? vn.GetInt32() : 0;
+            if (n >= number)
+            {
+                number = n;
+                latest = v;
+            }
+        }
+
+        if (latest is not { } cur || ApiCore.FindLink(cur, "workflow") is not { } wfLink)
+        {
+            return null;
+        }
+
+        var json = await _http.GetFromJsonAsync<JsonElement>(wfLink.TrimStart('/'), cancellationToken);
+        var links = new Dictionary<string, string>();
+        if (json.TryGetProperty("links", out var ls))
+        {
+            foreach (var l in ls.EnumerateArray())
+            {
+                links[l.GetProperty("rel").GetString() ?? ""] = l.GetProperty("href").GetString() ?? "";
+            }
+        }
+
+        var history = new List<WorkflowClient.WorkflowTransitionInfo>();
+        if (json.TryGetProperty("history", out var hs))
+        {
+            foreach (var h in hs.EnumerateArray())
+            {
+                history.Add(new WorkflowClient.WorkflowTransitionInfo(
+                    h.GetProperty("toStatusName").GetString() ?? "",
+                    SimplArchiveApiClient.StrOrNull(h, "assignedToName"), SimplArchiveApiClient.StrOrNull(h, "performedByName"), SimplArchiveApiClient.StrOrNull(h, "rejectionReason")));
+            }
+        }
+
+        return new WorkflowClient.WorkflowInfo(
+            json.GetProperty("status").GetInt32(),
+            json.GetProperty("statusName").GetString() ?? "",
+            SimplArchiveApiClient.StrOrNull(json, "assignedToName"), history, links);
+    }
+
+
     // For a caller that holds an ID and no resource: FETCH the document and return the named rel. One round
     // trip, then follow — never a composed sub-resource path.
     //
@@ -1157,12 +1215,12 @@ public sealed class SimplArchiveApiClient
     }
 
     public async Task<bool> GetSubscriptionAsync(Guid documentId, CancellationToken cancellationToken = default) =>
-        await GetSubscriptionAsync(await DocumentRelAsync(documentId, "subscription", cancellationToken), cancellationToken);
+        await Reminders.GetSubscriptionAsync(await DocumentRelAsync(documentId, "subscription", cancellationToken), cancellationToken);
 
     public async Task SetSubscriptionAsync(Guid documentId, bool subscribe, CancellationToken cancellationToken = default) =>
-        await SetSubscriptionAsync(await DocumentRelAsync(documentId, "subscription", cancellationToken), subscribe, cancellationToken);
+        await Reminders.SetSubscriptionAsync(await DocumentRelAsync(documentId, "subscription", cancellationToken), subscribe, cancellationToken);
 
-    public async Task<IReadOnlyList<ReminderInfo>> GetRemindersAsync(Guid documentId, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<RemindersClient.ReminderInfo>> GetRemindersAsync(Guid documentId, CancellationToken cancellationToken = default) =>
         (await GetRemindersViewAsync(documentId, cancellationToken)).Reminders;
 
     /// <summary>
@@ -1171,70 +1229,15 @@ public sealed class SimplArchiveApiClient
     /// fetching the document twice and the collection twice, which is how following rels turns into four
     /// requests where there used to be two (ADR 0543, issue #416).
     /// </summary>
-    public async Task<(IReadOnlyList<ReminderInfo> Reminders, string TargetsHref)> GetRemindersViewAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<(IReadOnlyList<RemindersClient.ReminderInfo> Reminders, string TargetsHref)> GetRemindersViewAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
         var collection = await _http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "reminders", cancellationToken), cancellationToken);
-        return (ParseReminders(collection), RequireRel(collection, "targets", $"The reminders collection for {documentId}"));
+        return (RemindersClient.ParseReminders(collection), RequireRel(collection, "targets", $"The reminders collection for {documentId}"));
     }
 
     public async Task CreateReminderAsync(Guid documentId, DateTimeOffset remindAt, string? note, int recurrence, Guid? targetUserId, CancellationToken cancellationToken = default) =>
-        await CreateReminderAsync(await DocumentRelAsync(documentId, "reminders", cancellationToken), remindAt, note, recurrence, targetUserId, cancellationToken);
-
-    // Takes the advertised href (detail.Href("subscription")) — one address, read/followed/unfollowed.
-    public async Task<bool> GetSubscriptionAsync(string subscriptionHref, CancellationToken cancellationToken = default)
-    {
-        var json = await _http.GetFromJsonAsync<JsonElement>(subscriptionHref, cancellationToken);
-        return json.TryGetProperty("subscribed", out var s) && s.ValueKind == JsonValueKind.True;
-    }
-
-    // Follow (subscribe = true) or unfollow (false) the document.
-    public async Task SetSubscriptionAsync(string subscriptionHref, bool subscribe, CancellationToken cancellationToken = default)
-    {
-        using var response = subscribe
-            ? await _http.PutAsync(subscriptionHref, null, cancellationToken)
-            : await _http.DeleteAsync(subscriptionHref, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new ApiActionException($"Could not update your subscription ({(int)response.StatusCode}).");
-        }
-    }
-
-    // A document reminder (Wiedervorlage, ADR "Document reminders"). Carries its own links, so cancelling one
-    // follows the `cancel` rel the row advertised rather than rebuilding a path from two ids (ADR 0543/0555).
-    public sealed record ReminderInfo(Guid Id, DateTimeOffset RemindAt, string? Note, int Recurrence, string RecurrenceName, string TargetName, IReadOnlyDictionary<string, string>? Links = null)
-    {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
-    }
-
-    // Dashboard rows (ADR "My work dashboard"): a due-soon reminder / a followed document, each with the
-    // document + its parent folder for click-through.
-    public sealed record DashReminderInfo(Guid DocumentId, Guid? ParentId, string DocumentName, DateTimeOffset RemindAt, string? Note, int Recurrence, string RecurrenceName, bool Overdue, IReadOnlyDictionary<string, string>? Links = null);
+        await Reminders.CreateReminderAsync(await DocumentRelAsync(documentId, "reminders", cancellationToken), remindAt, note, recurrence, targetUserId, cancellationToken);
     public sealed record DashFollowedInfo(Guid DocumentId, Guid? ParentId, string DocumentName, IReadOnlyDictionary<string, string>? Links = null);
-
-    // The caller's overdue + due-soon reminders across all documents (the dashboard's Reminders section).
-    public async Task<IReadOnlyList<DashReminderInfo>> GetDashboardRemindersAsync(CancellationToken cancellationToken = default)
-    {
-        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("reminders", cancellationToken), cancellationToken);
-        var list = new List<DashReminderInfo>();
-        if (json.TryGetProperty("reminders", out var arr))
-        {
-            foreach (var r in arr.EnumerateArray())
-            {
-                list.Add(new DashReminderInfo(
-                    r.GetProperty("documentId").GetGuid(),
-                    r.TryGetProperty("parentId", out var p) && p.ValueKind == JsonValueKind.String ? p.GetGuid() : null,
-                    r.GetProperty("documentName").GetString() ?? "",
-                    r.GetProperty("remindAt").GetDateTimeOffset(),
-                    r.TryGetProperty("note", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null,
-                    r.GetProperty("recurrence").GetInt32(),
-                    r.TryGetProperty("recurrenceName", out var rn) ? rn.GetString() ?? "" : "",
-                    r.TryGetProperty("overdue", out var o) && o.ValueKind == JsonValueKind.True,
-                    ParseLinks(r)));
-            }
-        }
-
-        return list;
-    }
 
     // The documents the caller follows (the dashboard's Following section).
     public async Task<IReadOnlyList<DashFollowedInfo>> GetDashboardFollowingAsync(CancellationToken cancellationToken = default)
@@ -1254,74 +1257,6 @@ public sealed class SimplArchiveApiClient
         }
 
         return list;
-    }
-
-    // Active tenant users the caller can target a reminder at (the picker).
-    //
-    // The picker belongs to the reminders COLLECTION, which is what advertises `targets` — hanging "/targets"
-    // off the reminders href would be composing a URL out of one the server happened to give us, which is the
-    // same mistake in nicer clothing (ADR 0543). Callers that also want the reminders should take both from
-    // GetRemindersViewAsync and pass the href here, so the collection is read once rather than twice.
-    public async Task<IReadOnlyList<UserOptionInfo>> GetReminderTargetsAsync(string targetsHref, CancellationToken cancellationToken = default)
-    {
-        var json = await _http.GetFromJsonAsync<JsonElement>(targetsHref, cancellationToken);
-        var list = new List<UserOptionInfo>();
-        if (json.TryGetProperty("targets", out var targets))
-        {
-            foreach (var u in targets.EnumerateArray())
-            {
-                list.Add(new UserOptionInfo(u.GetProperty("id").GetGuid(), u.GetProperty("displayName").GetString() ?? ""));
-            }
-        }
-
-        return list;
-    }
-
-    // The caller's pending reminders on the document (set by or targeted at them).
-    // Takes the advertised href (detail.Href("reminders")).
-    public async Task<IReadOnlyList<ReminderInfo>> GetRemindersAsync(string remindersHref, CancellationToken cancellationToken = default) =>
-        ParseReminders(await _http.GetFromJsonAsync<JsonElement>(remindersHref, cancellationToken));
-
-    private static List<ReminderInfo> ParseReminders(JsonElement json)
-    {
-        var list = new List<ReminderInfo>();
-        if (json.TryGetProperty("reminders", out var reminders))
-        {
-            foreach (var r in reminders.EnumerateArray())
-            {
-                list.Add(new ReminderInfo(
-                    r.GetProperty("id").GetGuid(),
-                    r.GetProperty("remindAt").GetDateTimeOffset(),
-                    r.TryGetProperty("note", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null,
-                    r.GetProperty("recurrence").GetInt32(),
-                    r.TryGetProperty("recurrenceName", out var rn) ? rn.GetString() ?? "" : "",
-                    r.TryGetProperty("targetName", out var tn) ? tn.GetString() ?? "" : "",
-                    ParseLinks(r)));
-            }
-        }
-
-        return list;
-    }
-
-    // Sets a reminder; targetUserId null = the caller. Returns nothing on success, throws on a rejected request.
-    public async Task CreateReminderAsync(string remindersHref, DateTimeOffset remindAt, string? note, int recurrence, Guid? targetUserId, CancellationToken cancellationToken = default)
-    {
-        var body = new { remindAt, note, recurrence, targetUserId };
-        using var response = await _http.PostAsJsonAsync(remindersHref, body, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new ApiActionException($"Could not set the reminder ({(int)response.StatusCode}).");
-        }
-    }
-
-    /// <summary>Cancels the reminder at the address its own row advertised (ADR 0555).</summary>
-    public async Task CancelReminderAsync(ReminderInfo reminder, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.DeleteAsync(RequireHref(reminder, "cancel"), cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new ApiActionException($"Could not cancel the reminder ({(int)response.StatusCode}).");
-        }
     }
 
     // Sets a version's document (issuing) date ("yyyy-MM-dd") at the address the version row advertised.
@@ -1366,82 +1301,6 @@ public sealed class SimplArchiveApiClient
         var converted = confirmed.TryGetProperty("previewConverted", out var pc) && pc.GetBoolean();
         var extension = confirmed.TryGetProperty("fileExtension", out var fe) ? fe.GetString() ?? "" : "";
         return new Preview(FindLink(confirmed, "preview"), converted, FindLink(confirmed, "download"), FindLink(confirmed, "text-layout"), FindLink(confirmed, "preview-pages"), extension, FindLink(confirmed, "annotations"));
-    }
-
-    // --- Sticky notes / annotations (ADR "Document annotations") ----------------------------------------
-
-    // The annotation list + whether the caller may create a note here (CanAnnotate, ADR "CanAnnotate right").
-    public sealed record AnnotationList(IReadOnlyList<AnnotationInfo> Items, bool CanCreate);
-
-    public async Task<AnnotationList> GetAnnotationsAsync(string annotationsUrl, CancellationToken cancellationToken = default)
-    {
-        var json = await _http.GetFromJsonAsync<JsonElement>(annotationsUrl.TrimStart('/'), cancellationToken);
-        var result = new List<AnnotationInfo>();
-        if (json.TryGetProperty("annotations", out var arr))
-        {
-            foreach (var a in arr.EnumerateArray())
-            {
-                result.Add(new AnnotationInfo(
-                    a.GetProperty("id").GetGuid(),
-                    a.GetProperty("pageIndex").GetInt32(),
-                    a.TryGetProperty("kind", out var k) ? k.GetInt32() : 0,
-                    a.GetProperty("positionX").GetDouble(),
-                    a.GetProperty("positionY").GetDouble(),
-                    a.TryGetProperty("width", out var w) && w.ValueKind == JsonValueKind.Number ? w.GetDouble() : null,
-                    a.TryGetProperty("height", out var h) && h.ValueKind == JsonValueKind.Number ? h.GetDouble() : null,
-                    a.GetProperty("text").GetString() ?? "",
-                    a.GetProperty("color").GetString() ?? "#FFEB3B",
-                    a.TryGetProperty("authorName", out var an) ? an.GetString() ?? "" : "",
-                    a.TryGetProperty("etag", out var et) ? et.GetString() ?? "" : "",
-                    a.TryGetProperty("canEdit", out var ce) && ce.GetBoolean(),
-                    a.TryGetProperty("canDelete", out var cd) && cd.GetBoolean(),
-                    a.TryGetProperty("points", out var pts) && pts.ValueKind == JsonValueKind.String ? pts.GetString() : null));
-            }
-        }
-
-        return new AnnotationList(result, json.TryGetProperty("canCreate", out var cc) && cc.GetBoolean());
-    }
-
-    public async Task CreateAnnotationAsync(string annotationsUrl, int pageIndex, double x, double y, string text, string color, CancellationToken cancellationToken = default)
-        => await CreateAnnotationAsync(annotationsUrl, pageIndex, 0, x, y, null, null, text, color, cancellationToken: cancellationToken);
-
-    // Create a note (kind 0) or a markup shape (kind 1/2/3 with width/height; 4/5/6 stamp/strike/text-box; 7
-    // freehand with points) — ADRs "Annotation markup" / 0525.
-    public async Task CreateAnnotationAsync(string annotationsUrl, int pageIndex, int kind, double x, double y, double? width, double? height, string text, string color, string? points = null, CancellationToken cancellationToken = default)
-    {
-        var response = await _http.PostAsJsonAsync(annotationsUrl.TrimStart('/'), new { pageIndex, kind, positionX = x, positionY = y, width, height, text, color, points }, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new ApiActionException("Could not add the markup.");
-        }
-    }
-
-    public async Task UpdateAnnotationAsync(string annotationsUrl, Guid id, int pageIndex, double x, double y, string text, string color, string etag, CancellationToken cancellationToken = default)
-        => await UpdateAnnotationAsync(annotationsUrl, id, pageIndex, x, y, null, null, text, color, etag, cancellationToken);
-
-    public async Task UpdateAnnotationAsync(string annotationsUrl, Guid id, int pageIndex, double x, double y, double? width, double? height, string text, string color, string etag, CancellationToken cancellationToken = default)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"{annotationsUrl.TrimStart('/')}/{id}")
-        {
-            Content = JsonContent.Create(new { pageIndex, positionX = x, positionY = y, width, height, text, color }),
-        };
-        request.Headers.TryAddWithoutValidation("If-Match", $"\"{etag}\"");
-        using var response = await _http.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new ApiActionException("Could not save the note.");
-        }
-    }
-
-    public async Task DeleteAnnotationAsync(string annotationsUrl, Guid id, string etag, CancellationToken cancellationToken = default)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Delete, $"{annotationsUrl.TrimStart('/')}/{id}");
-        request.Headers.TryAddWithoutValidation("If-Match", $"\"{etag}\"");
-        using var response = await _http.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new ApiActionException("Could not delete the note.");
-        }
     }
 
     // Ordered per-page image URLs for a multi-page TIFF (ADR "Multi-page TIFF preview pages"); null (204) for
@@ -2605,113 +2464,6 @@ public sealed class SimplArchiveApiClient
         return (card, photo);
     }
 
-    // ---- Workflow + tasks (ADR "Workflow / document state model", 0009) -----------------------------------
-
-    public async Task<IReadOnlyList<TaskInfo>> GetTasksAsync(CancellationToken cancellationToken = default)
-    {
-        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("tasks", cancellationToken), cancellationToken);
-        var list = new List<TaskInfo>();
-        if (json.TryGetProperty("tasks", out var tasks))
-        {
-            foreach (var t in tasks.EnumerateArray())
-            {
-                list.Add(new TaskInfo(
-                    t.GetProperty("documentId").GetGuid(),
-                    t.TryGetProperty("parentId", out var p) && p.ValueKind == JsonValueKind.String ? p.GetGuid() : null,
-                    t.GetProperty("versionId").GetGuid(),
-                    t.GetProperty("documentName").GetString() ?? "",
-                    t.TryGetProperty("versionNumber", out var vn) && vn.ValueKind == JsonValueKind.Number ? vn.GetInt32() : null,
-                    t.TryGetProperty("assignedAt", out var a) ? a.GetDateTimeOffset() : default,
-                    ParseLinks(t), t.TryGetProperty("dueAt", out var du) && du.ValueKind == JsonValueKind.String ? du.GetDateTimeOffset() : null));
-            }
-        }
-
-        return list;
-    }
-
-    // The latest confirmed version's workflow (null if the document has no confirmed version).
-    public async Task<WorkflowInfo?> GetWorkflowAsync(Guid documentId, CancellationToken cancellationToken = default)
-    {
-        var response = await _http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "versions", cancellationToken), cancellationToken);
-        if (!response.TryGetProperty("versions", out var versions))
-        {
-            return null;
-        }
-
-        JsonElement? latest = null;
-        var number = -1;
-        foreach (var v in versions.EnumerateArray())
-        {
-            if (v.GetProperty("status").GetString() != "Confirmed")
-            {
-                continue;
-            }
-
-            var n = v.TryGetProperty("versionNumber", out var vn) && vn.ValueKind == JsonValueKind.Number ? vn.GetInt32() : 0;
-            if (n >= number)
-            {
-                number = n;
-                latest = v;
-            }
-        }
-
-        if (latest is not { } cur || FindLink(cur, "workflow") is not { } wfLink)
-        {
-            return null;
-        }
-
-        var json = await _http.GetFromJsonAsync<JsonElement>(wfLink.TrimStart('/'), cancellationToken);
-        var links = new Dictionary<string, string>();
-        if (json.TryGetProperty("links", out var ls))
-        {
-            foreach (var l in ls.EnumerateArray())
-            {
-                links[l.GetProperty("rel").GetString() ?? ""] = l.GetProperty("href").GetString() ?? "";
-            }
-        }
-
-        var history = new List<WorkflowTransitionInfo>();
-        if (json.TryGetProperty("history", out var hs))
-        {
-            foreach (var h in hs.EnumerateArray())
-            {
-                history.Add(new WorkflowTransitionInfo(
-                    h.GetProperty("toStatusName").GetString() ?? "",
-                    StrOrNull(h, "assignedToName"), StrOrNull(h, "performedByName"), StrOrNull(h, "rejectionReason")));
-            }
-        }
-
-        return new WorkflowInfo(
-            json.GetProperty("status").GetInt32(),
-            json.GetProperty("statusName").GetString() ?? "",
-            StrOrNull(json, "assignedToName"), history, links);
-    }
-
-    // POSTs a workflow transition action (the href comes from WorkflowInfo.Links). Throws ApiActionException
-    // with the server's Problem-Details detail on a rejected transition (409/400/403).
-    public async Task PostWorkflowActionAsync(string href, object? body, CancellationToken cancellationToken = default)
-    {
-        using var response = body is null
-            ? await _http.PostAsync(href.TrimStart('/'), null, cancellationToken)
-            : await _http.PostAsJsonAsync(href.TrimStart('/'), body, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var detail = ApiErrorText.For(null);
-            try
-            {
-                var problem = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-                if (problem.TryGetProperty("errorCode", out var c) && c.GetString() is { Length: > 0 } code)
-                {
-                    detail = ApiErrorText.For(code);
-                }
-            }
-            catch (Exception) { /* keep the generic localised message */ }
-
-            throw new ApiActionException(detail);
-        }
-    }
-
     // The candidate reviewers for submitting a document into the workflow (ADR "Workflow assignable-reviewers
     // endpoint") — a light per-document catalog any editor can read, no CanManageUsers needed. Returns empty on
     // no access (e.g. the caller lacks CanEditContent).
@@ -2752,10 +2504,6 @@ public sealed class SimplArchiveApiClient
         hold.Href(rel)
         ?? throw new InvalidOperationException($"The legal hold '{hold.Name}' advertised no '{rel}' rel — a RELEASED hold offers neither release nor add-item (ADR 0543/0555).");
 
-    private static string RequireHref(NotificationInfo notification, string rel) =>
-        notification.Href(rel)
-        ?? throw new InvalidOperationException($"The notification row advertised no '{rel}' rel (ADR 0543/0555).");
-
     private static string RequireHref(RetentionItemInfo item, string rel) =>
         item.Href(rel)
         ?? throw new InvalidOperationException($"'{item.DocumentName}' advertised no '{rel}' rel — a hold or a required review withholds it (ADR 0543/0555).");
@@ -2763,10 +2511,6 @@ public sealed class SimplArchiveApiClient
     private static string RequireHref(VersionInfo version, string rel) =>
         version.Href(rel)
         ?? throw new InvalidOperationException($"Version {version.VersionNumber} advertised no '{rel}' rel — only a confirmed version offers one (ADR 0543/0555).");
-
-    private static string RequireHref(ReminderInfo reminder, string rel) =>
-        reminder.Href(rel)
-        ?? throw new InvalidOperationException($"The reminder row advertised no '{rel}' rel (ADR 0543/0555).");
 
     private static string RequireHref(TagCatalogItem tag, string rel) =>
         tag.Href(rel)
@@ -2914,60 +2658,6 @@ public sealed class SimplArchiveApiClient
     {
         var body = new { preferences = preferences.Select(p => new { type = p.Type, emailEnabled = p.EmailEnabled }) };
         using var response = await _http.PutAsJsonAsync(await MeHrefAsync("notificationPreferences", cancellationToken), body, cancellationToken);
-        response.EnsureSuccessStatusCode();
-    }
-
-    // ---- In-app notifications viewer (ADR "Notification viewer + click-through") ---------------------
-
-    // A notification row, carrying its own `read` address (ADR 0543/0555) — an already-read one advertises
-    // none, so "can this be marked read" is the server's answer rather than an IsRead flag re-interpreted here.
-    public sealed record NotificationInfo(Guid Id, string Type, string Title, string Body, Guid? DocumentId, Guid? DocumentParentId, DateTimeOffset CreatedAt, bool IsRead, int EventCount = 1, IReadOnlyDictionary<string, string>? Links = null)
-    {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
-    }
-
-    // ReadAllHref is the collection's own `read-all`; null when the server did not offer it.
-    public sealed record NotificationList(IReadOnlyList<NotificationInfo> Items, int UnreadCount, string? ReadAllHref = null);
-
-    public async Task<NotificationList> GetNotificationsAsync(CancellationToken cancellationToken = default)
-    {
-        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("notifications", cancellationToken), cancellationToken);
-        var items = new List<NotificationInfo>();
-        if (json.TryGetProperty("notifications", out var arr))
-        {
-            foreach (var n in arr.EnumerateArray())
-            {
-                items.Add(new NotificationInfo(
-                    n.GetProperty("id").GetGuid(),
-                    n.GetProperty("type").GetString() ?? "",
-                    n.GetProperty("title").GetString() ?? "",
-                    n.GetProperty("body").GetString() ?? "",
-                    n.TryGetProperty("documentId", out var d) && d.ValueKind != JsonValueKind.Null ? d.GetGuid() : null,
-                    n.TryGetProperty("documentParentId", out var p) && p.ValueKind != JsonValueKind.Null ? p.GetGuid() : null,
-                    n.GetProperty("createdAt").GetDateTimeOffset(),
-                    n.TryGetProperty("isRead", out var r) && r.ValueKind == JsonValueKind.True,
-                    n.TryGetProperty("eventCount", out var ec) && ec.ValueKind == JsonValueKind.Number ? ec.GetInt32() : 1,
-                    ParseLinks(n)));
-            }
-        }
-
-        return new NotificationList(
-            items,
-            json.TryGetProperty("unreadCount", out var uc) ? uc.GetInt32() : 0,
-            ParseLinks(json) is { } links && links.TryGetValue("read-all", out var readAll) ? readAll : null);
-    }
-
-    /// <summary>Marks one notification read at the address its own row advertised (ADR 0555).</summary>
-    public async Task MarkNotificationReadAsync(NotificationInfo notification, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsync(RequireHref(notification, "read"), null, cancellationToken);
-        response.EnsureSuccessStatusCode();
-    }
-
-    /// <summary>Marks everything read at the collection's own `read-all` address (ADR 0555).</summary>
-    public async Task MarkAllNotificationsReadAsync(string readAllHref, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsync(readAllHref, null, cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 

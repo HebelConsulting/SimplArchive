@@ -928,18 +928,18 @@ internal static class Program
         var wf = await api.GetWorkflowAsync(doc.Id);
         Console.WriteLine($"initial: {wf?.StatusName} | links: {string.Join(",", wf?.Links.Keys ?? [])}");
 
-        await api.PostWorkflowActionAsync(wf!.Links["submit"], new { reviewerId = me.UserId });
+        await api.Workflow.PostWorkflowActionAsync(wf!.Links["submit"], new { reviewerId = me.UserId });
         wf = await api.GetWorkflowAsync(doc.Id);
         Console.WriteLine($"after submit: {wf?.StatusName} | assignedTo: {wf?.AssignedToName} | links: {string.Join(",", wf?.Links.Keys ?? [])}");
 
-        var tasks = await api.GetTasksAsync();
+        var tasks = await api.Workflow.GetTasksAsync();
         Console.WriteLine($"tasks: {tasks.Count} -> {string.Join(",", tasks.Select(t => $"{t.DocumentName}/v{t.VersionNumber}"))}");
 
-        await api.PostWorkflowActionAsync(wf!.Links["approve"], null);
+        await api.Workflow.PostWorkflowActionAsync(wf!.Links["approve"], null);
         wf = await api.GetWorkflowAsync(doc.Id);
         Console.WriteLine($"after approve: {wf?.StatusName} | links: {string.Join(",", wf?.Links.Keys ?? [])}");
 
-        await api.PostWorkflowActionAsync(wf!.Links["release"], null);
+        await api.Workflow.PostWorkflowActionAsync(wf!.Links["release"], null);
         wf = await api.GetWorkflowAsync(doc.Id);
         Console.WriteLine($"after release: {wf?.StatusName}");
         Console.WriteLine("history:");

@@ -37,7 +37,7 @@ public partial class ReminderDialogViewModel : ObservableObject
 
     // The target picker: "Myself" (Id = Empty) first, then the tenant's active users.
     public ObservableCollection<SimplArchiveApiClient.UserOptionInfo> Targets { get; } = [];
-    public ObservableCollection<SimplArchiveApiClient.ReminderInfo> Reminders { get; } = [];
+    public ObservableCollection<RemindersClient.ReminderInfo> Reminders { get; } = [];
 
     // The reminders collection is read FIRST because it carries both halves of this dialog: the rows, and the
     // address of the target picker. Loading the picker separately would read the document and the collection
@@ -71,7 +71,7 @@ public partial class ReminderDialogViewModel : ObservableObject
 
         try
         {
-            foreach (var t in await _api.GetReminderTargetsAsync(targetsHref))
+            foreach (var t in await _api.Reminders.GetReminderTargetsAsync(targetsHref))
             {
                 Targets.Add(t);
             }
@@ -124,11 +124,11 @@ public partial class ReminderDialogViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task CancelReminderAsync(SimplArchiveApiClient.ReminderInfo reminder)
+    private async Task CancelReminderAsync(RemindersClient.ReminderInfo reminder)
     {
         try
         {
-            await _api.CancelReminderAsync(reminder);
+            await _api.Reminders.CancelReminderAsync(reminder);
             await ReloadRemindersAsync();
         }
         catch (ApiActionException e)

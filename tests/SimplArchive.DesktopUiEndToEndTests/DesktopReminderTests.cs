@@ -25,7 +25,7 @@ public class DesktopReminderTests
         var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
         // The target catalog includes at least the demo admin.
-        Assert.NotEmpty(await api.GetReminderTargetsAsync((await api.GetRemindersViewAsync(doc.Id)).TargetsHref));
+        Assert.NotEmpty(await api.Reminders.GetReminderTargetsAsync((await api.GetRemindersViewAsync(doc.Id)).TargetsHref));
 
         Assert.Empty(await api.GetRemindersAsync(doc.Id));
 
@@ -40,7 +40,7 @@ public class DesktopReminderTests
         await Assert.ThrowsAsync<ApiActionException>(() => api.CreateReminderAsync(doc.Id, DateTimeOffset.UtcNow.AddMinutes(-5), null, 0, null));
 
         // Cancel → the list is empty again.
-        await api.CancelReminderAsync(mine);
+        await api.Reminders.CancelReminderAsync(mine);
         Assert.Empty(await api.GetRemindersAsync(doc.Id));
     }
 }

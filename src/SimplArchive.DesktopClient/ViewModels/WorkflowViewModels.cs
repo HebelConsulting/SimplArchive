@@ -49,7 +49,7 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
         RejectReason = "";
         SelectedReviewer = null;
 
-        SimplArchiveApiClient.WorkflowInfo? wf;
+        WorkflowClient.WorkflowInfo? wf;
         try
         {
             wf = await _api.GetWorkflowAsync(_documentId);
@@ -133,7 +133,7 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
         Busy = true;
         try
         {
-            await _api.PostWorkflowActionAsync(href, body);
+            await _api.Workflow.PostWorkflowActionAsync(href, body);
             Changed = true;
             await LoadAsync();
             Status = string.Format(Strings.Get("StWorkflowStatus"), StatusName);

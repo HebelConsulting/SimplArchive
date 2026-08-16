@@ -7,7 +7,7 @@ namespace SimplArchive.DesktopClient.ViewModels;
 // click can un-bold it in place; DocumentId/DocumentParentId drive click-through navigation.
 public sealed partial class NotificationRowViewModel : ObservableObject
 {
-    public NotificationRowViewModel(SimplArchiveApiClient.NotificationInfo n)
+    public NotificationRowViewModel(NotificationsClient.NotificationInfo n)
     {
         Notification = n;
         Id = n.Id;
@@ -21,7 +21,7 @@ public sealed partial class NotificationRowViewModel : ObservableObject
     }
 
     // The row the server sent — "mark read" follows its own `read` address (ADR 0543/0555).
-    public SimplArchiveApiClient.NotificationInfo Notification { get; }
+    public NotificationsClient.NotificationInfo Notification { get; }
 
     public Guid Id { get; }
     public string Title { get; }

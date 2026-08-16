@@ -207,7 +207,7 @@ public sealed partial class PreviewViewModel : ObservableObject
     public sealed record AnnotationDialogResult(string Action, string Text, string Color);
 
     private string? _annotationsUrl;
-    private IReadOnlyList<SimplArchiveApiClient.AnnotationInfo> _annotations = [];
+    private IReadOnlyList<AnnotationsClient.AnnotationInfo> _annotations = [];
 
     [ObservableProperty] private bool _annotationsAvailable;
     // Whether the caller has CanAnnotate (ADR "CanAnnotate right") — gates the Add-note button; viewing needs only read.
@@ -261,7 +261,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         {
             // Create the note with a default size (kind 0 + width/height) so it renders as an always-visible box
             // (ADR "Post-it note boxes"); the overlay grows the height to fit the text and the user can resize it.
-            await Api.CreateAnnotationAsync(_annotationsUrl, placement.PageIndex, 0, placement.X, placement.Y, 0.22, 0.06, result.Text, result.Color);
+            await Api.Annotations.CreateAnnotationAsync(_annotationsUrl, placement.PageIndex, 0, placement.X, placement.Y, 0.22, 0.06, result.Text, result.Color);
             await LoadAnnotationsAsync();
         }
         catch (Exception e)
@@ -289,11 +289,11 @@ public sealed partial class PreviewViewModel : ObservableObject
         {
             if (result.Action == "delete")
             {
-                await Api.DeleteAnnotationAsync(_annotationsUrl, note.Id, note.Etag);
+                await Api.Annotations.DeleteAnnotationAsync(_annotationsUrl, note.Id, note.Etag);
             }
             else if (result.Action == "save")
             {
-                await Api.UpdateAnnotationAsync(_annotationsUrl, note.Id, note.PageIndex, note.PositionX, note.PositionY, note.Width, note.Height, result.Text, result.Color, note.Etag);
+                await Api.Annotations.UpdateAnnotationAsync(_annotationsUrl, note.Id, note.PageIndex, note.PositionX, note.PositionY, note.Width, note.Height, result.Text, result.Color, note.Etag);
             }
             else
             {
@@ -327,7 +327,7 @@ public sealed partial class PreviewViewModel : ObservableObject
 
         try
         {
-            await Api.UpdateAnnotationAsync(_annotationsUrl, note.Id, note.PageIndex, move.X, move.Y, note.Width, note.Height, note.Text, note.Color, note.Etag);
+            await Api.Annotations.UpdateAnnotationAsync(_annotationsUrl, note.Id, note.PageIndex, move.X, move.Y, note.Width, note.Height, note.Text, note.Color, note.Etag);
         }
         catch (Exception e)
         {
@@ -355,7 +355,7 @@ public sealed partial class PreviewViewModel : ObservableObject
 
         try
         {
-            await Api.UpdateAnnotationAsync(_annotationsUrl, note.Id, note.PageIndex, note.PositionX, note.PositionY, resize.Width, resize.Height, note.Text, note.Color, note.Etag);
+            await Api.Annotations.UpdateAnnotationAsync(_annotationsUrl, note.Id, note.PageIndex, note.PositionX, note.PositionY, resize.Width, resize.Height, note.Text, note.Color, note.Etag);
         }
         catch (Exception e)
         {
@@ -396,7 +396,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         {
             foreach (var a in targets)
             {
-                await Api.UpdateAnnotationAsync(_annotationsUrl, a.Id, a.PageIndex, a.PositionX, a.PositionY, a.Width, a.Height, a.Text, color, a.Etag);
+                await Api.Annotations.UpdateAnnotationAsync(_annotationsUrl, a.Id, a.PageIndex, a.PositionX, a.PositionY, a.Width, a.Height, a.Text, color, a.Etag);
             }
         }
         catch (Exception e)
@@ -444,7 +444,7 @@ public sealed partial class PreviewViewModel : ObservableObject
 
         try
         {
-            await Api.CreateAnnotationAsync(_annotationsUrl, draw.PageIndex, draw.Kind, draw.X, draw.Y, draw.W, draw.H, "", AnnotationColor);
+            await Api.Annotations.CreateAnnotationAsync(_annotationsUrl, draw.PageIndex, draw.Kind, draw.X, draw.Y, draw.W, draw.H, "", AnnotationColor);
             await LoadAnnotationsAsync();
         }
         catch (Exception e)
@@ -461,7 +461,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         {
             try
             {
-                var list = await Api.GetAnnotationsAsync(_annotationsUrl);
+                var list = await Api.Annotations.GetAnnotationsAsync(_annotationsUrl);
                 _annotations = list.Items;
                 CanAddNote = list.CanCreate; // CanAnnotate (ADR "CanAnnotate right")
             }
@@ -486,7 +486,7 @@ public sealed partial class PreviewViewModel : ObservableObject
     // annotations (pasted as offset duplicates on the same page). Selection is client-only; a selected id that
     // no longer exists after a reload is dropped by PushNotesToPages/UpdateSelectionState.
     private readonly HashSet<Guid> _selectedAnnotationIds = [];
-    private readonly List<SimplArchiveApiClient.AnnotationInfo> _annotationClipboard = [];
+    private readonly List<AnnotationsClient.AnnotationInfo> _annotationClipboard = [];
 
     [ObservableProperty][NotifyPropertyChangedFor(nameof(ShowAnnotationColorPalette))] private bool _hasSelectedAnnotations;
     [ObservableProperty] private bool _hasClipboardAnnotations;
@@ -584,7 +584,7 @@ public sealed partial class PreviewViewModel : ObservableObject
             {
                 var nx = Math.Clamp(a.PositionX + move.Dx, 0, 1);
                 var ny = Math.Clamp(a.PositionY + move.Dy, 0, 1);
-                await Api.UpdateAnnotationAsync(_annotationsUrl, a.Id, a.PageIndex, nx, ny, a.Width, a.Height, a.Text, a.Color, a.Etag);
+                await Api.Annotations.UpdateAnnotationAsync(_annotationsUrl, a.Id, a.PageIndex, nx, ny, a.Width, a.Height, a.Text, a.Color, a.Etag);
             }
         }
         catch (Exception e)
@@ -609,7 +609,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         {
             foreach (var a in targets)
             {
-                await Api.DeleteAnnotationAsync(_annotationsUrl, a.Id, a.Etag);
+                await Api.Annotations.DeleteAnnotationAsync(_annotationsUrl, a.Id, a.Etag);
             }
         }
         catch (Exception e)
@@ -654,7 +654,7 @@ public sealed partial class PreviewViewModel : ObservableObject
                 // Freehand (kind 7) has no box extent — carry its poly-line points instead of a width/height.
                 var w = a.Kind == 7 ? (double?)null : a.Width ?? (a.Kind == 0 ? 0.22 : 0.1);
                 var h = a.Kind == 7 ? (double?)null : a.Height ?? (a.Kind == 0 ? 0.06 : 0.05);
-                await Api.CreateAnnotationAsync(_annotationsUrl, a.PageIndex, a.Kind, nx, ny, w, h, a.Text, a.Color, a.Points);
+                await Api.Annotations.CreateAnnotationAsync(_annotationsUrl, a.PageIndex, a.Kind, nx, ny, w, h, a.Text, a.Color, a.Points);
             }
         }
         catch (Exception e)

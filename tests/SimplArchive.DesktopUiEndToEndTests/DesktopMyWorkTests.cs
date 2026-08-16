@@ -28,7 +28,7 @@ public class DesktopMyWorkTests
         await api.CreateReminderAsync(doc.Id, DateTimeOffset.UtcNow.AddDays(1), "Dashboard check", recurrence: 0, targetUserId: null);
         await api.SetSubscriptionAsync(doc.Id, subscribe: true);
 
-        var reminders = await api.GetDashboardRemindersAsync();
+        var reminders = await api.Reminders.GetDashboardRemindersAsync();
         Assert.Contains(reminders, r => r.DocumentId == doc.Id && r.ParentId == repo.Id && r.Note == "Dashboard check");
 
         var following = await api.GetDashboardFollowingAsync();

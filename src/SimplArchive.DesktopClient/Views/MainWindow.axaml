@@ -1921,7 +1921,7 @@
                         <TextBlock Text="{loc:Tr MyWorkNothingDue}" Foreground="{DynamicResource WbMuted}" IsVisible="{Binding !DashboardReminders.Count}" />
                         <ItemsControl ItemsSource="{Binding DashboardReminders}">
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="svc:SimplArchiveApiClient+DashReminderInfo">
+                                <DataTemplate x:DataType="svc:RemindersClient+DashReminderInfo">
                                     <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Padding="2"
                                             Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).OpenDashboardReminderCommand}" CommandParameter="{Binding}">
                                         <StackPanel Orientation="Horizontal" Spacing="8">

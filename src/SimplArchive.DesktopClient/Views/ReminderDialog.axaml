@@ -14,7 +14,7 @@
         <!-- Pending reminders (set by / targeted at the caller), each cancellable. Empty → nothing renders. -->
         <ItemsControl ItemsSource="{Binding Reminders}">
             <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="svc:SimplArchiveApiClient+ReminderInfo">
+                <DataTemplate x:DataType="svc:RemindersClient+ReminderInfo">
                     <Grid ColumnDefinitions="*,Auto" Margin="0,2">
                         <StackPanel Grid.Column="0">
                             <TextBlock Text="{Binding RemindAt, StringFormat='{}{0:g}'}" FontSize="12" />
