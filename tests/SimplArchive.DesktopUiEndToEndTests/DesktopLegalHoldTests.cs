@@ -21,10 +21,10 @@ public class DesktopLegalHoldTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
-        var repo = (await api.GetRepositoriesAsync())[0];
+        var repo = (await api.Documents.GetRepositoriesAsync())[0];
         var folderName = $"Hold {suffix}";
-        await api.CreateFolderAsync(repo.Id, folderName);
-        var folder = (await api.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == folderName);
+        await api.Documents.CreateFolderAsync(repo.Id, folderName);
+        var folder = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == folderName);
 
         // Place a hold covering the folder; it shows on the hold + the folder reports it.
         var hold = await api.CreateLegalHoldAsync($"Matter {suffix}", "test");
@@ -33,11 +33,11 @@ public class DesktopLegalHoldTests
         Assert.Contains(fetched.Items, i => i.DocumentId == folder.Id);
 
         // Frozen: deletion is refused (409 → the client throws).
-        await Assert.ThrowsAnyAsync<Exception>(() => api.DeleteAsync(folder.Id));
+        await Assert.ThrowsAnyAsync<Exception>(() => api.Documents.DeleteAsync(folder.Id));
 
         // Release → the hold is no longer active and the folder can be deleted.
         await api.ReleaseLegalHoldAsync(hold);
         Assert.False((await api.GetLegalHoldAsync(hold)).IsActive);
-        await api.DeleteAsync(folder.Id); // succeeds now (also cleans up)
+        await api.Documents.DeleteAsync(folder.Id); // succeeds now (also cleans up)
     }
 }

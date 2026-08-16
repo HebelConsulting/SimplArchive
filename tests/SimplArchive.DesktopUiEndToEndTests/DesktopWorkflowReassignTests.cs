@@ -24,10 +24,10 @@ public class DesktopWorkflowReassignTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
         // A repository with one confirmed-version document.
-        await client.CreateRepositoryAsync($"dt-wf-{suffix}");
-        var repo = (await client.GetRepositoriesAsync()).First(r => r.Name == $"dt-wf-{suffix}");
-        await client.UploadFileAsync(repo.Id, $"dt-wf-{suffix}.txt", Encoding.UTF8.GetBytes("reassign me"));
-        var doc = (await client.GetChildrenAsync(repo.Href("children"))).First(c => c.HasVersions);
+        await client.Documents.CreateRepositoryAsync($"dt-wf-{suffix}");
+        var repo = (await client.Documents.GetRepositoriesAsync()).First(r => r.Name == $"dt-wf-{suffix}");
+        await client.Documents.UploadFileAsync(repo.Id, $"dt-wf-{suffix}.txt", Encoding.UTF8.GetBytes("reassign me"));
+        var doc = (await client.Documents.GetChildrenAsync(repo.Href("children"))).First(c => c.HasVersions);
 
         // Two reviewers — tenant admins so they can read the content (valid reviewer targets).
         var u1 = await client.Admin.CreateUserAsync($"dt-r1-{suffix}@example.test", $"Reviewer One {suffix}");
@@ -36,16 +36,16 @@ public class DesktopWorkflowReassignTests
         await client.Admin.SetRightsAsync(u2, TenantAdmin);
 
         // Submit to U1.
-        var wf = await client.GetWorkflowAsync(doc.Id);
+        var wf = await client.Documents.GetWorkflowAsync(doc.Id);
         Assert.NotNull(wf);
         await client.Workflow.PostWorkflowActionAsync(wf!.Links["submit"], new { reviewerId = u1.Id });
 
         // The reassign link is now offered (the demo admin is an editor); reassign to U2.
-        wf = await client.GetWorkflowAsync(doc.Id);
+        wf = await client.Documents.GetWorkflowAsync(doc.Id);
         Assert.True(wf!.Links.ContainsKey("reassign"));
         await client.Workflow.PostWorkflowActionAsync(wf.Links["reassign"], new { reviewerId = u2.Id });
 
-        wf = await client.GetWorkflowAsync(doc.Id);
+        wf = await client.Documents.GetWorkflowAsync(doc.Id);
         Assert.Equal("In Review", wf!.StatusName);
         Assert.Equal($"Reviewer Two {suffix}", wf.AssignedToName);
 
@@ -54,7 +54,7 @@ public class DesktopWorkflowReassignTests
 
         // Handing the review back to U1 deactivates U2 and moves the task.
         await client.Admin.DeleteUserAsync(u2, u1.Id);
-        wf = await client.GetWorkflowAsync(doc.Id);
+        wf = await client.Documents.GetWorkflowAsync(doc.Id);
         Assert.Equal($"Reviewer One {suffix}", wf!.AssignedToName);
         Assert.False((await client.Admin.GetUsersAsync()).Single(u => u.Id == u2.Id).IsActive);
     }

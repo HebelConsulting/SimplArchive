@@ -40,14 +40,14 @@ public class DesktopPersonalRepositoryTests
         Assert.NotEqual(aliceRepo.Id, bobRepo!.Id);
 
         // Alice files a private folder into her personal repository.
-        await alice.CreateFolderAsync(aliceRepo.Id, "alice-private-" + suffix);
-        Assert.Contains(await alice.GetChildrenAsync(aliceRepo.Href("children")), c => c.Name == "alice-private-" + suffix);
+        await alice.Documents.CreateFolderAsync(aliceRepo.Id, "alice-private-" + suffix);
+        Assert.Contains(await alice.Documents.GetChildrenAsync(aliceRepo.Href("children")), c => c.Name == "alice-private-" + suffix);
 
         // Bob can't list Alice's personal repository (no ACL grant → the API denies it).
-        await Assert.ThrowsAsync<HttpRequestException>(() => bob.GetChildrenAsync(aliceRepo.Href("children")));
+        await Assert.ThrowsAsync<HttpRequestException>(() => bob.Documents.GetChildrenAsync(aliceRepo.Href("children")));
 
         // Neither personal repository appears in the other user's shared repository list.
-        Assert.DoesNotContain(await bob.GetRepositoriesAsync(), r => r.Id == aliceRepo.Id);
-        Assert.DoesNotContain(await alice.GetRepositoriesAsync(), r => r.Id == bobRepo.Id);
+        Assert.DoesNotContain(await bob.Documents.GetRepositoriesAsync(), r => r.Id == aliceRepo.Id);
+        Assert.DoesNotContain(await alice.Documents.GetRepositoriesAsync(), r => r.Id == bobRepo.Id);
     }
 }

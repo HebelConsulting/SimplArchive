@@ -36,8 +36,8 @@ public class DesktopRealtimeNotificationsTests
         await realtime.StartAsync();
 
         // The admin creates a repo and grants the recipient access → an AccessGranted notification, pushed live.
-        await admin.CreateRepositoryAsync($"rt-{suffix}");
-        var repo = (await admin.GetRepositoriesAsync()).First(r => r.Name == $"rt-{suffix}");
+        await admin.Documents.CreateRepositoryAsync($"rt-{suffix}");
+        var repo = (await admin.Documents.GetRepositoriesAsync()).First(r => r.Name == $"rt-{suffix}");
         using var http = new HttpClient { BaseAddress = new Uri(_app.BaseUrl) };
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
         (await http.PutAsJsonAsync($"api/documents/{repo.Id}/acl-entries/users/{userId.Id}", new { canSee = true, canReadContent = true })).EnsureSuccessStatusCode();

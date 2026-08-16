@@ -19,28 +19,28 @@ public class DesktopReminderTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"rem-{Guid.NewGuid():N}.txt";
-        await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("remind me"));
-        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+        await api.Documents.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("remind me"));
+        var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
         // The target catalog includes at least the demo admin.
-        Assert.NotEmpty(await api.Reminders.GetReminderTargetsAsync((await api.GetRemindersViewAsync(doc.Id)).TargetsHref));
+        Assert.NotEmpty(await api.Reminders.GetReminderTargetsAsync((await api.Documents.GetRemindersViewAsync(doc.Id)).TargetsHref));
 
-        Assert.Empty(await api.GetRemindersAsync(doc.Id));
+        Assert.Empty(await api.Documents.GetRemindersAsync(doc.Id));
 
         // Set a weekly reminder for myself (target null) with a note.
-        await api.CreateReminderAsync(doc.Id, DateTimeOffset.UtcNow.AddDays(3), "Follow up", recurrence: 2, targetUserId: null);
-        var reminders = await api.GetRemindersAsync(doc.Id);
+        await api.Documents.CreateReminderAsync(doc.Id, DateTimeOffset.UtcNow.AddDays(3), "Follow up", recurrence: 2, targetUserId: null);
+        var reminders = await api.Documents.GetRemindersAsync(doc.Id);
         var mine = Assert.Single(reminders);
         Assert.Equal("Follow up", mine.Note);
         Assert.Equal(2, mine.Recurrence);
 
         // A past due date is rejected.
-        await Assert.ThrowsAsync<ApiActionException>(() => api.CreateReminderAsync(doc.Id, DateTimeOffset.UtcNow.AddMinutes(-5), null, 0, null));
+        await Assert.ThrowsAsync<ApiActionException>(() => api.Documents.CreateReminderAsync(doc.Id, DateTimeOffset.UtcNow.AddMinutes(-5), null, 0, null));
 
         // Cancel → the list is empty again.
         await api.Reminders.CancelReminderAsync(mine);
-        Assert.Empty(await api.GetRemindersAsync(doc.Id));
+        Assert.Empty(await api.Documents.GetRemindersAsync(doc.Id));
     }
 }

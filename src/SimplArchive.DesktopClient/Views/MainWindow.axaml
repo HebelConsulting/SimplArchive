@@ -623,7 +623,7 @@
                                                 <ItemsControl ItemsSource="{Binding MentionCandidates}"
                                                               IsVisible="{Binding HasMentionCandidates}">
                                                     <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="svc:SimplArchiveApiClient+MentionableUser">
+                                                        <DataTemplate x:DataType="svc:DocumentsClient+MentionableUser">
                                                             <Button Classes="mention" HorizontalAlignment="Stretch" Padding="6,3" FontSize="12"
                                                                     Background="Transparent" BorderThickness="0"
                                                                     HorizontalContentAlignment="Left" Content="{Binding DisplayName}"

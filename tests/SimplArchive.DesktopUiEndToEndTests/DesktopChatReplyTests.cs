@@ -23,17 +23,17 @@ public class DesktopChatReplyTests
 
         // A folder is a Document (ADR 0200), so it carries a chat thread like any other — which keeps this test
         // free of an upload it does not need.
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"chat-{Guid.NewGuid():N}";
-        await api.CreateFolderAsync(repo.Id, name);
-        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
+        await api.Documents.CreateFolderAsync(repo.Id, name);
+        var folder = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
 
-        await api.PostCommentAsync(folder.Id, "Is this the final layout?", parentCommentId: null);
-        var top = (await api.GetCommentsAsync(folder.Id)).Single(c => c.Body == "Is this the final layout?");
+        await api.Documents.PostCommentAsync(folder.Id, "Is this the final layout?", parentCommentId: null);
+        var top = (await api.Documents.GetCommentsAsync(folder.Id)).Single(c => c.Body == "Is this the final layout?");
 
-        await api.PostCommentAsync(folder.Id, "Yes, signed off yesterday.", parentCommentId: top.Id);
+        await api.Documents.PostCommentAsync(folder.Id, "Yes, signed off yesterday.", parentCommentId: top.Id);
 
-        var thread = await api.GetCommentsAsync(folder.Id);
+        var thread = await api.Documents.GetCommentsAsync(folder.Id);
         var reply = thread.Single(c => c.Body == "Yes, signed off yesterday.");
 
         Assert.Equal(top.Id, reply.ParentMessageId);

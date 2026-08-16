@@ -81,8 +81,8 @@ public class DesktopTenantSettingsTests
 
         // A tenant admin can create a new root repository.
         var repoName = $"Desktop repo {Guid.NewGuid():N}";
-        await api.CreateRepositoryAsync(repoName);
-        var repos = await api.GetRepositoriesAsync();
+        await api.Documents.CreateRepositoryAsync(repoName);
+        var repos = await api.Documents.GetRepositoriesAsync();
         Assert.Contains(repos, r => r.Name == repoName);
     }
 }

@@ -52,7 +52,7 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
         WorkflowClient.WorkflowInfo? wf;
         try
         {
-            wf = await _api.GetWorkflowAsync(_documentId);
+            wf = await _api.Documents.GetWorkflowAsync(_documentId);
         }
         catch (Exception e)
         {
@@ -89,7 +89,7 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
         // (ADR "Workflow assignable-reviewers endpoint"), no CanManageUsers needed.
         if ((CanSubmit || CanReassign) && Reviewers.Count == 0)
         {
-            foreach (var u in await _api.GetAssignableReviewersAsync(_documentId))
+            foreach (var u in await _api.Documents.GetAssignableReviewersAsync(_documentId))
             {
                 Reviewers.Add(u);
             }

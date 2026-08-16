@@ -9,6 +9,6 @@ namespace SimplArchive.UiEndToEndTests;
 /// </summary>
 internal static class TestRels
 {
-    public static async Task<string> DocumentSelfAsync(SimplArchiveApiClient api, SimplArchiveApiClient.Node repo, Guid documentId) =>
-        (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Id == documentId).Href("self");
+    public static async Task<string> DocumentSelfAsync(SimplArchiveApiClient api, Node repo, Guid documentId) =>
+        (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Id == documentId).Href("self");
 }

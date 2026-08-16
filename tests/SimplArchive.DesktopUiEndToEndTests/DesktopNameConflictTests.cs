@@ -47,7 +47,7 @@ public class DesktopNameConflictTests
 
         // One document, now two versions — not a second document, and not a silent no-op.
         var stem = Path.GetFileNameWithoutExtension(fileName);
-        var children = (await api.GetFolderContentsAsync(childrenHref)).Children;
+        var children = (await api.Documents.GetFolderContentsAsync(childrenHref)).Children;
         var row = Assert.Single(children, c => c.Name == stem);
         var versions = await api.GetVersionsAsync(row.Href("versions"));
         Assert.Equal(2, versions.Count);
@@ -78,7 +78,7 @@ public class DesktopNameConflictTests
 
         // The offered name is free in that folder, so accepting it leaves BOTH documents standing.
         Assert.Equal($"{stem} (2)", suggested);
-        var children = (await api.GetFolderContentsAsync(childrenHref)).Children;
+        var children = (await api.Documents.GetFolderContentsAsync(childrenHref)).Children;
         Assert.Single(children, c => c.Name == stem);
         Assert.Single(children, c => c.Name == $"{stem} (2)");
     }
@@ -97,7 +97,7 @@ public class DesktopNameConflictTests
         Assert.False(filed);
 
         // Cancelling must not be a quiet version-bump either: the document is still on its first version.
-        var children = (await api.GetFolderContentsAsync(childrenHref)).Children;
+        var children = (await api.Documents.GetFolderContentsAsync(childrenHref)).Children;
         var row = Assert.Single(children, c => c.Name == stem);
         Assert.Single(await api.GetVersionsAsync(row.Href("versions")));
     }
@@ -110,7 +110,7 @@ public class DesktopNameConflictTests
         // Sibling names are unique across folders AND documents, so a file can collide with a FOLDER. Offering
         // "file it as a new version of that" would post a version to the folder and turn it into a document.
         var folderName = $"nc-sub-{Guid.NewGuid():N}";
-        await api.CreateFolderAsync(folderId, folderName);
+        await api.Documents.CreateFolderAsync(folderId, folderName);
 
         UploadConflictResolver.NameConflictRequest? prompt = null;
         var filed = await new UploadConflictResolver(api).ResolveAsync(
@@ -127,7 +127,7 @@ public class DesktopNameConflictTests
         Assert.False(prompt!.CanFileAsVersion);
 
         // The folder is still a folder — it has no versions of its own — and the file landed beside it.
-        var children = (await api.GetFolderContentsAsync(childrenHref)).Children;
+        var children = (await api.Documents.GetFolderContentsAsync(childrenHref)).Children;
         Assert.False(Assert.Single(children, c => c.Name == folderName).HasVersions);
         Assert.Single(children, c => c.Name == $"{folderName} (2)");
     }
@@ -137,19 +137,19 @@ public class DesktopNameConflictTests
     private async Task<(SimplArchiveApiClient Api, Guid FolderId, string ChildrenHref, string FileName)> ArrangeCollisionAsync()
     {
         var api = await ApiAsync();
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
 
         var folderName = $"nc-{Guid.NewGuid():N}";
-        await api.CreateFolderAsync(repo.Id, folderName);
+        await api.Documents.CreateFolderAsync(repo.Id, folderName);
 
         // The new folder's own children address comes from the row the repository listing now advertises
         // (ADR 0555) rather than being rebuilt from its id.
-        var repoChildrenHref = (await api.GetDocumentLinksAsync(repo.Id))["children"];
-        var folderRow = (await api.GetFolderContentsAsync(repoChildrenHref)).Children.Single(c => c.Name == folderName);
+        var repoChildrenHref = (await api.Documents.GetDocumentLinksAsync(repo.Id))["children"];
+        var folderRow = (await api.Documents.GetFolderContentsAsync(repoChildrenHref)).Children.Single(c => c.Name == folderName);
         var childrenHref = folderRow.Href("children");
 
         var fileName = $"invoice-{Guid.NewGuid():N}.txt";
-        await api.UploadFileAsync(childrenHref, fileName, Encoding.UTF8.GetBytes("first revision"));
+        await api.Documents.UploadFileAsync(childrenHref, fileName, Encoding.UTF8.GetBytes("first revision"));
         return (api, folderRow.Id, childrenHref, fileName);
     }
 }

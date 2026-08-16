@@ -27,12 +27,12 @@ public class DesktopListingRelsTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
         // A repository row — the entry point to the tree, which had only `self` until #416.
-        var repo = (await api.GetRepositoriesAsync())[0];
+        var repo = (await api.Documents.GetRepositoriesAsync())[0];
         Assert.NotNull(repo.Links);
         Assert.Equal($"api/documents/{repo.Id}/children", repo.Href("children"));
 
         // A child row — every node the tree and the contents list are built from.
-        var children = await api.GetChildrenAsync(repo.Href("children"));
+        var children = await api.Documents.GetChildrenAsync(repo.Href("children"));
         Assert.NotEmpty(children);
         foreach (var rel in new[] { "children", "versions", "mask", "index-data", "chat" })
         {

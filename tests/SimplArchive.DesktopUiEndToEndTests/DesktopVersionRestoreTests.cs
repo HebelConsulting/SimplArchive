@@ -20,14 +20,14 @@ public class DesktopVersionRestoreTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"restore-{Guid.NewGuid():N}.txt";
         var contentA = $"A-{Guid.NewGuid():N}";
-        await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes(contentA));
-        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+        await api.Documents.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes(contentA));
+        var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
         // A second version of the same document, with different content.
-        await api.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes($"B-{Guid.NewGuid():N}"), ".txt");
+        await api.Documents.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes($"B-{Guid.NewGuid():N}"), ".txt");
 
         var versions = await api.GetVersionsAsync(doc.Href("versions"));
         Assert.Equal(2, versions.Count);
@@ -46,7 +46,7 @@ public class DesktopVersionRestoreTests
         Assert.Equal(contentA, Encoding.UTF8.GetString(bytes));
 
         // Uploading a new version takes over as current.
-        await api.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes($"C-{Guid.NewGuid():N}"), ".txt");
+        await api.Documents.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes($"C-{Guid.NewGuid():N}"), ".txt");
         var final = await api.GetVersionsAsync(doc.Href("versions"));
         Assert.Equal(3, final.Count);
         Assert.Equal(3, final.Single(v => v.IsCurrent).VersionNumber);

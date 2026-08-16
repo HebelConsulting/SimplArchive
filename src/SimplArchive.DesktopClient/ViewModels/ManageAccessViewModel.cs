@@ -18,7 +18,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
 {
     private SimplArchiveApiClient? _api;
     private Guid _documentId;
-    private List<SimplArchiveApiClient.GrantablePrincipalInfo> _principals = [];
+    private List<DocumentsClient.GrantablePrincipalInfo> _principals = [];
 
     [ObservableProperty] private string _documentName = "";
     [ObservableProperty] private bool _loading = true;
@@ -74,7 +74,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
         EffectiveLoading = true;
         try
         {
-            var info = await _api.GetEffectiveAccessAsync(_documentId);
+            var info = await _api.Documents.GetEffectiveAccessAsync(_documentId);
             EffectiveInheritedFrom = info.InheritedFrom ?? "";
             Effective.Clear();
             foreach (var e in info.Entries.OrderBy(e => e.Type).ThenBy(e => e.Name))
@@ -114,7 +114,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
     private Guid _editingPrincipalId;
 
     // The entry being edited — carried so Save writes at the address that row advertised (ADR 0555).
-    private SimplArchiveApiClient.AclEntryInfo? _editingEntry;
+    private AclEntryInfo? _editingEntry;
 
     // The nine rights as bindable checkboxes.
     [ObservableProperty] private bool _canSee;
@@ -165,7 +165,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
         LoadFailed = false;
         try
         {
-            var info = await _api!.GetAclAsync(_documentId);
+            var info = await _api!.Documents.GetAclAsync(_documentId);
             Forbidden = info.Forbidden;
             if (Forbidden)
             {
@@ -261,7 +261,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
 
         try
         {
-            await _api.SetInheritanceAsync(InheritanceHref!, breaking);
+            await _api.Documents.SetInheritanceAsync(InheritanceHref!, breaking);
             Editing = false;
             await ReloadAsync();
         }
@@ -294,7 +294,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
 
         // A new grant writes at the principal row's `grant`; an edit at the entry row's `edit`. Either way the
         // address comes from the row, never from the two ids beside it (ADR 0543/0555).
-        SimplArchiveApiClient.IAdvertisesLinks? target = IsNew ? SelectedPrincipal?.Principal : _editingEntry;
+        IAdvertisesLinks? target = IsNew ? SelectedPrincipal?.Principal : _editingEntry;
         if (target is null)
         {
             return;
@@ -331,7 +331,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
 
         try
         {
-            await _api.RevokeAclEntryAsync(row.Entry);
+            await _api.Documents.RevokeAclEntryAsync(row.Entry);
             if (!IsNew && _editingPrincipalType == row.PrincipalType && _editingPrincipalId == row.PrincipalId)
             {
                 Editing = false;
@@ -346,10 +346,10 @@ public sealed partial class ManageAccessViewModel : ObservableObject
 
     // ---- rights helpers ----
 
-    private SimplArchiveApiClient.AclRights Current() => new(
+    private AclRights Current() => new(
         CanSee, CanReadContent, CanEditContent, CanEditIndexData, CanCreateSubItems, CanDelete, CanMove, CanAnnotate, CanManagePermissions);
 
-    private void Load(SimplArchiveApiClient.AclRights r)
+    private void Load(AclRights r)
     {
         CanSee = r.CanSee;
         CanReadContent = r.CanReadContent;
@@ -365,11 +365,11 @@ public sealed partial class ManageAccessViewModel : ObservableObject
     private bool AnyRight() =>
         CanSee || CanReadContent || CanEditContent || CanEditIndexData || CanCreateSubItems || CanDelete || CanMove || CanAnnotate || CanManagePermissions;
 
-    private static SimplArchiveApiClient.AclRights ViewerBundle() => new(true, true, false, false, false, false, false, false, false);
-    private static SimplArchiveApiClient.AclRights EditorBundle() => new(true, true, true, true, true, false, true, true, false);
-    private static SimplArchiveApiClient.AclRights ManagerBundle() => new(true, true, true, true, true, true, true, true, true);
+    private static AclRights ViewerBundle() => new(true, true, false, false, false, false, false, false, false);
+    private static AclRights EditorBundle() => new(true, true, true, true, true, false, true, true, false);
+    private static AclRights ManagerBundle() => new(true, true, true, true, true, true, true, true, true);
 
-    public static string PresetLabelKey(SimplArchiveApiClient.AclRights r) =>
+    public static string PresetLabelKey(AclRights r) =>
         r == ViewerBundle() ? "MaRoleViewer"
         : r == EditorBundle() ? "MaRoleEditor"
         : r == ManagerBundle() ? "MaRoleManager"
@@ -392,12 +392,12 @@ public sealed partial class ManageAccessViewModel : ObservableObject
 // One selectable grantable principal in the "Add access" picker.
 // Principal is the catalogue row the server sent — a new grant writes at the `grant` address it advertised
 // (ADR 0543/0555), never at one rebuilt from Type + Id.
-public sealed record GranteeOption(string Type, Guid Id, string Name, SimplArchiveApiClient.GrantablePrincipalInfo Principal);
+public sealed record GranteeOption(string Type, Guid Id, string Name, DocumentsClient.GrantablePrincipalInfo Principal);
 
 // One row in the read-only effective-access view (a resolved user, a granted group, or a service account).
 public sealed class EffectiveRowViewModel
 {
-    public EffectiveRowViewModel(SimplArchiveApiClient.EffectiveAccessEntryInfo e)
+    public EffectiveRowViewModel(DocumentsClient.EffectiveAccessEntryInfo e)
     {
         Name = e.Name;
         TypeLabel = ManageAccessViewModel.TypeLabel(e.Type);
@@ -424,9 +424,9 @@ public sealed partial class AclRowViewModel : ObservableObject
     private readonly ManageAccessViewModel _parent;
 
     // Entry is the row the server sent — edit/remove follow the addresses it advertised (ADR 0543/0555).
-    public SimplArchiveApiClient.AclEntryInfo Entry { get; }
+    public AclEntryInfo Entry { get; }
 
-    public AclRowViewModel(SimplArchiveApiClient.AclEntryInfo entry, string principalType, Guid principalId, string principalLabel, string typeLabel, SimplArchiveApiClient.AclRights rights, ManageAccessViewModel parent)
+    public AclRowViewModel(AclEntryInfo entry, string principalType, Guid principalId, string principalLabel, string typeLabel, AclRights rights, ManageAccessViewModel parent)
     {
         Entry = entry;
         PrincipalType = principalType;
@@ -441,7 +441,7 @@ public sealed partial class AclRowViewModel : ObservableObject
     public Guid PrincipalId { get; }
     public string PrincipalLabel { get; }
     public string TypeLabel { get; }
-    public SimplArchiveApiClient.AclRights Rights { get; }
+    public AclRights Rights { get; }
 
     public string RoleLabel => Strings.Get(ManageAccessViewModel.PresetLabelKey(Rights));
 

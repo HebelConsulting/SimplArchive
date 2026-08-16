@@ -20,17 +20,17 @@ public class DesktopListColumnsTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var folderName = $"cols-{Guid.NewGuid():N}";
-        await api.CreateFolderAsync(repo.Id, folderName);
-        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == folderName);
+        await api.Documents.CreateFolderAsync(repo.Id, folderName);
+        var folder = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == folderName);
 
         var docName = $"coldoc-{Guid.NewGuid():N}.txt";
-        await api.UploadFileAsync(folder.Id, docName, Encoding.UTF8.GetBytes(new string('y', 2048)));
-        var doc = (await api.GetChildrenAsync(folder.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
-        await api.SetTagsAsync((await api.GetDocumentDetailAsync(doc.Id)).Href("tags"), ["Red"]);
+        await api.Documents.UploadFileAsync(folder.Id, docName, Encoding.UTF8.GetBytes(new string('y', 2048)));
+        var doc = (await api.Documents.GetChildrenAsync(folder.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
+        await api.Documents.SetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Id)).Href("tags"), ["Red"]);
 
-        var node = (await api.GetChildrenAsync(folder.Href("children"))).Single(n => n.Id == doc.Id);
+        var node = (await api.Documents.GetChildrenAsync(folder.Href("children"))).Single(n => n.Id == doc.Id);
         Assert.Equal("Basic Entry", node.DocumentType);   // auto-classified mask name
         Assert.Equal(2048, node.SizeBytes);
         Assert.NotNull(node.DocumentDate);

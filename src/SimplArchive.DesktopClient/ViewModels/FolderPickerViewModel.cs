@@ -89,7 +89,7 @@ public sealed partial class FolderPickerViewModel : ObservableObject
     public async Task LoadAsync()
     {
         Roots.Clear();
-        foreach (var repository in await _api.GetRepositoriesAsync())
+        foreach (var repository in await _api.Documents.GetRepositoriesAsync())
         {
             Roots.Add(new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadChildrenAsync));
         }
@@ -97,7 +97,7 @@ public sealed partial class FolderPickerViewModel : ObservableObject
 
     private async Task<IEnumerable<TreeNodeViewModel>> LoadChildrenAsync(TreeNodeViewModel node)
     {
-        var children = await _api.GetChildrenAsync(node.Href("children"));
+        var children = await _api.Documents.GetChildrenAsync(node.Href("children"));
         return children
             .Where(c => !c.HasVersions) // folders only
             .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadChildrenAsync, links: c.Links));

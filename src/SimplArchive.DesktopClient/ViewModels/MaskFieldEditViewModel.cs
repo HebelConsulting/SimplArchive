@@ -7,7 +7,7 @@ namespace SimplArchive.DesktopClient.ViewModels;
 // Mask is the catalogue row the server sent, carried so reading the mask's fields follows the address it
 // advertised (ADR 0543/0555). Null for the "(No mask)" entry and for the designer-preview rows, which reach
 // no server — every real, selectable mask has it.
-public sealed record MaskChoiceViewModel(Guid? MaskId, string Name, SimplArchive.DesktopClient.Services.SimplArchiveApiClient.MaskOptionInfo? Mask = null)
+public sealed record MaskChoiceViewModel(Guid? MaskId, string Name, SimplArchive.DesktopClient.Services.DocumentsClient.MaskOptionInfo? Mask = null)
 {
     public override string ToString() => Name;
 }
@@ -35,7 +35,7 @@ public sealed partial class MaskFieldEditViewModel : ObservableObject
     public bool IsSingleLine => !IsDate && !IsBoolean && !IsMultiSelect;
     public string Label => IsRequired ? $"{Name} *" : Name;
 
-    public static MaskFieldEditViewModel Create(SimplArchiveApiClient.MaskFieldInfo definition, IReadOnlyList<string> values)
+    public static MaskFieldEditViewModel Create(DocumentsClient.MaskFieldInfo definition, IReadOnlyList<string> values)
     {
         var field = new MaskFieldEditViewModel
         {

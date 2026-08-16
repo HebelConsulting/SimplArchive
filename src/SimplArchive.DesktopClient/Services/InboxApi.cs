@@ -170,7 +170,7 @@ public sealed class InboxApi(ApiCore core)
 
         // A server that does not advertise it gets no signal, and the sweep still catches the file — a missing
         // rel means "not available here", never a composed URL.
-        if (SimplArchiveApiClient.RelHref(response, "processed") is { } processed)
+        if (ApiCore.RelHref(response, "processed") is { } processed)
         {
             (await core.Http.PostAsJsonAsync(processed, new { }, cancellationToken)).EnsureSuccessStatusCode();
         }

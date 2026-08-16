@@ -47,7 +47,7 @@ public static class DragOutStager
 
     private static async Task<string> StageDocumentAsync(SimplArchiveApiClient api, Guid documentId, string stem, string dir, CancellationToken ct)
     {
-        var preview = await api.GetPreviewAsync(documentId, ct);
+        var preview = await api.Documents.GetPreviewAsync(documentId, ct);
         if (preview.DownloadUrl is null)
         {
             throw new InvalidOperationException("The document has no downloadable version.");
@@ -74,7 +74,7 @@ public static class DragOutStager
     // folder recurses one level deeper; a leaf document is written as an entry named `<stem><ext>`.
     private static async Task AddFolderAsync(SimplArchiveApiClient api, Guid folderId, string prefix, ZipArchive zip, CancellationToken ct)
     {
-        foreach (var child in await api.GetChildrenAsync(folderId, ct))
+        foreach (var child in await api.Documents.GetChildrenAsync(folderId, ct))
         {
             var name = Sanitize(child.Name);
             if (!child.HasVersions)
@@ -85,7 +85,7 @@ public static class DragOutStager
 
             try
             {
-                var preview = await api.GetPreviewAsync(child.Id, ct);
+                var preview = await api.Documents.GetPreviewAsync(child.Id, ct);
                 if (preview.DownloadUrl is null)
                 {
                     continue;

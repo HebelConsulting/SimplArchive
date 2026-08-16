@@ -20,20 +20,20 @@ public class DesktopDocumentTagsTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"tags-{Guid.NewGuid():N}.txt";
-        await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("tagged"));
-        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+        await api.Documents.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("tagged"));
+        var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
-        Assert.Empty(await api.GetTagsAsync((await api.GetDocumentDetailAsync(doc.Id)).Href("tags"))); // none by default
+        Assert.Empty(await api.Documents.GetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Id)).Href("tags"))); // none by default
 
         var unique = $"dt{Guid.NewGuid():N}"[..10];
         // Mixed case + a duplicate + blank → normalized (trimmed lowercase), deduped, sorted.
-        var stored = await api.SetTagsAsync((await api.GetDocumentDetailAsync(doc.Id)).Href("tags"), [$"  {unique.ToUpperInvariant()} ", "Contract", unique, ""]);
+        var stored = await api.Documents.SetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Id)).Href("tags"), [$"  {unique.ToUpperInvariant()} ", "Contract", unique, ""]);
         Assert.Equal(new[] { "contract", unique }, stored);
-        Assert.Equal(new[] { "contract", unique }, await api.GetTagsAsync((await api.GetDocumentDetailAsync(doc.Id)).Href("tags")));
+        Assert.Equal(new[] { "contract", unique }, await api.Documents.GetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Id)).Href("tags")));
 
-        var catalog = await api.GetTagCatalogAsync();
+        var catalog = await api.Documents.GetTagCatalogAsync();
         Assert.Contains(unique, catalog);
         Assert.Contains("contract", catalog);
     }

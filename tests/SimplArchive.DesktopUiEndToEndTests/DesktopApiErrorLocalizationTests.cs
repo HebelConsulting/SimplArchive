@@ -35,10 +35,10 @@ public class DesktopApiErrorLocalizationTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
         // A throwaway folder, frozen by a hold the demo admin may place (CanLegalHold via the demo seed).
-        var repo = (await api.GetRepositoriesAsync())[0];
+        var repo = (await api.Documents.GetRepositoriesAsync())[0];
         var folderName = $"i18n-{suffix}";
-        await api.CreateFolderAsync(repo.Id, folderName);
-        var folder = (await api.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == folderName);
+        await api.Documents.CreateFolderAsync(repo.Id, folderName);
+        var folder = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == folderName);
         var hold = await api.CreateLegalHoldAsync($"Matter {suffix}", "localisation guard");
         await api.AddLegalHoldItemAsync(hold, folder.Id);
 
@@ -51,7 +51,7 @@ public class DesktopApiErrorLocalizationTests
             CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("de");
 
             var error = await Assert.ThrowsAsync<ApiActionException>(
-                () => api.SetIndexDataAsync(folder.Id, []));
+                () => api.Documents.SetIndexDataAsync(folder.Id, []));
 
             Assert.Equal(
                 "Dieses Dokument unterliegt einem Legal Hold und kann nicht geändert werden.",
@@ -69,7 +69,7 @@ public class DesktopApiErrorLocalizationTests
         {
             CultureInfo.CurrentUICulture = original;
             await api.ReleaseLegalHoldAsync(hold);
-            await api.DeleteAsync(folder.Id);
+            await api.Documents.DeleteAsync(folder.Id);
         }
     }
 }

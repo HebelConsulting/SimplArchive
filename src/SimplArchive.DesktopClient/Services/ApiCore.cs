@@ -176,4 +176,41 @@ public sealed class ApiCore
 
         response.EnsureSuccessStatusCode();
     }
+
+
+
+    // The href a resource advertises for a rel, or null when it doesn't offer one. A missing rel is meaningful —
+    // it means "not available here" — so callers branch on null rather than composing a URL (ADR 0543).
+    // internal: InboxApi follows rels too, since the inbox calls moved there (#443 direction).
+    public static string? RelHref(JsonElement resource, string rel)
+    {
+        if (!resource.TryGetProperty("links", out var links) || links.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var link in links.EnumerateArray())
+        {
+            if (link.TryGetProperty("rel", out var r) && r.GetString() == rel
+                && link.TryGetProperty("href", out var h) && h.GetString() is { Length: > 0 } href)
+            {
+                return href.TrimStart('/');
+            }
+        }
+
+        return null;
+    }
+
+    // Follows a rel off a resource the client just READ or just CREATED — the case where the address is already
+    // in hand and only needs picking up, as opposed to DocumentRelAsync's "I hold an id, fetch the resource".
+    public static string RequireRel(JsonElement resource, string rel, string what) =>
+        ApiCore.ParseLinks(resource) is { } links && links.TryGetValue(rel, out var href)
+            ? href
+            : throw new InvalidOperationException($"{what} advertised no '{rel}' rel (ADR 0543).");
+
+    public static string RequireHref(IAdvertisesLinks row, string rel) =>
+        row.Href(rel)
+        ?? throw new InvalidOperationException($"The row '{row.Name}' advertised no '{rel}' rel (ADR 0543/0555).");
+
+
 }

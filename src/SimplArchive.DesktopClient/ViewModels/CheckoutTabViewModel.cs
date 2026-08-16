@@ -162,7 +162,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
         // metadata of its own. The preview is the half that must come from the working copy.
         try
         {
-            foreach (var field in await _api.GetIndexDataAsync(row.Id))
+            foreach (var field in await _api.Documents.GetIndexDataAsync(row.Id))
             {
                 IndexFields.Add(new IndexFieldViewModel
                 {

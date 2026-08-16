@@ -26,8 +26,8 @@ public class DesktopCheckoutDetailTests
     public async Task The_preview_is_of_the_working_copy_and_follows_each_save()
     {
         var api = await ApiAsync();
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
-        var docId = await api.UploadFileAsync(repo.Id, $"wc-{Guid.NewGuid():N}.txt", Encoding.UTF8.GetBytes("ARCHIVED BODY"));
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var docId = await api.Documents.UploadFileAsync(repo.Id, $"wc-{Guid.NewGuid():N}.txt", Encoding.UTF8.GetBytes("ARCHIVED BODY"));
         await api.Checkout.CheckOutViaDocumentAsync(await TestRels.DocumentSelfAsync(api, repo, docId));
 
         // Nothing saved yet: the row advertises no `preview` rel, and asking anyway yields nothing rather than

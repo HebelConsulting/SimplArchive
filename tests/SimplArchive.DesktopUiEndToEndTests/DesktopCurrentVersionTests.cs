@@ -20,21 +20,21 @@ public class DesktopCurrentVersionTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var folderName = $"curver-{Guid.NewGuid():N}";
-        await api.CreateFolderAsync(repo.Id, folderName);
-        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == folderName);
+        await api.Documents.CreateFolderAsync(repo.Id, folderName);
+        var folder = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == folderName);
 
         var docName = $"curverdoc-{Guid.NewGuid():N}.txt";
-        await api.UploadFileAsync(folder.Id, docName, Encoding.UTF8.GetBytes("v1"));
-        var doc = (await api.GetChildrenAsync(folder.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
+        await api.Documents.UploadFileAsync(folder.Id, docName, Encoding.UTF8.GetBytes("v1"));
+        var doc = (await api.Documents.GetChildrenAsync(folder.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
 
-        var v1 = await api.GetSystemFieldsAsync(doc.Id);
+        var v1 = await api.Documents.GetSystemFieldsAsync(doc.Id);
         Assert.NotNull(v1);
         Assert.Equal(1, v1!.CurrentVersionNumber);
 
-        await api.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes("v2"), ".txt");
-        var v2 = await api.GetSystemFieldsAsync(doc.Id);
+        await api.Documents.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes("v2"), ".txt");
+        var v2 = await api.Documents.GetSystemFieldsAsync(doc.Id);
         Assert.Equal(2, v2!.CurrentVersionNumber);
     }
 }

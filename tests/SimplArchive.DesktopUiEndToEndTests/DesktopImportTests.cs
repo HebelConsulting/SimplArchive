@@ -20,22 +20,22 @@ public class DesktopImportTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
         var repoName = $"Desktop import {Guid.NewGuid():N}";
-        await api.CreateRepositoryAsync(repoName);
-        var repoId = (await api.GetRepositoriesAsync()).Single(r => r.Name == repoName).Id;
-        await api.UploadFileAsync(repoId, "report.txt", System.Text.Encoding.UTF8.GetBytes($"import-{Guid.NewGuid():N}"));
+        await api.Documents.CreateRepositoryAsync(repoName);
+        var repoId = (await api.Documents.GetRepositoriesAsync()).Single(r => r.Name == repoName).Id;
+        await api.Documents.UploadFileAsync(repoId, "report.txt", System.Text.Encoding.UTF8.GetBytes($"import-{Guid.NewGuid():N}"));
 
-        var zip = await api.ExportRepositoryAsync(repoId, new SimplArchiveApiClient.RepositoryExportOptions(false, null, null, null, null, null));
+        var zip = await api.Documents.ExportRepositoryAsync(repoId, new DocumentsClient.RepositoryExportOptions(false, null, null, null, null, null));
 
         // Import as a new repository (targetFolderId == null). The root name collides with the original, so it's
         // auto-renamed ("… (imported)").
-        var result = await api.ImportRepositoryAsync(null, zip);
+        var result = await api.Documents.ImportRepositoryAsync(null, zip);
         Assert.StartsWith(repoName, result.RootName);
         Assert.True(result.Documents >= 1);
         Assert.Equal(1, result.Versions);
         Assert.NotEqual(repoId, result.RootId);
 
         // The imported repository is now listed alongside the original (auto-renamed since the name collides).
-        var repos = await api.GetRepositoriesAsync();
+        var repos = await api.Documents.GetRepositoriesAsync();
         Assert.Contains(repos, r => r.Id == result.RootId);
     }
 }

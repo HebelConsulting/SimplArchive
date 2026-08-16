@@ -20,11 +20,11 @@ public class DesktopVersionComparisonTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var fileName = $"cmp-{Guid.NewGuid():N}.txt";
-        await api.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("one\ntwo\nthree\n"));
-        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
-        await api.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes("one\nTWO edited\nthree\nfour\n"), ".txt");
+        await api.Documents.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("one\ntwo\nthree\n"));
+        var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
+        await api.Documents.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes("one\nTWO edited\nthree\nfour\n"), ".txt");
 
         var versions = await api.GetVersionsAsync(doc.Href("versions"));
         Assert.Equal(2, versions.Count); // both confirmed, newest first
@@ -32,7 +32,7 @@ public class DesktopVersionComparisonTests
 
         // The listing carries the confirmed-version count that gates the "Compare versions" action (ADR
         // "Compare-versions gating + default") — 2 here, so the action is enabled.
-        Assert.Equal(2, (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Id == doc.Id).VersionCount);
+        Assert.Equal(2, (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Id == doc.Id).VersionCount);
 
         // The version collection advertises ONE compare address; the pair travels as query parameters.
         var (_, compareHref) = await api.GetVersionsWithLinksAsync(doc.Href("versions"));

@@ -21,21 +21,21 @@ public class DesktopDragOutTests
     {
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
 
         // A standalone document.
         var docName = $"dragout-{Guid.NewGuid():N}.txt";
         var docBytes = Encoding.UTF8.GetBytes($"doc-{Guid.NewGuid():N}");
-        var docId = await api.UploadFileAsync(repo.Id, docName, docBytes);
+        var docId = await api.Documents.UploadFileAsync(repo.Id, docName, docBytes);
         var docStem = Path.GetFileNameWithoutExtension(docName); // Document.Name is a bare stem (ADR 0277)
 
         // A folder with one document inside.
         var folderName = $"dragfolder-{Guid.NewGuid():N}";
-        await api.CreateFolderAsync(repo.Id, folderName);
-        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == folderName);
+        await api.Documents.CreateFolderAsync(repo.Id, folderName);
+        var folder = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == folderName);
         var childName = $"child-{Guid.NewGuid():N}.txt";
         var childBytes = Encoding.UTF8.GetBytes($"child-{Guid.NewGuid():N}");
-        await api.UploadFileAsync(folder.Id, childName, childBytes);
+        await api.Documents.UploadFileAsync(folder.Id, childName, childBytes);
         var childStem = Path.GetFileNameWithoutExtension(childName);
 
         // Stage both for a drag-out.

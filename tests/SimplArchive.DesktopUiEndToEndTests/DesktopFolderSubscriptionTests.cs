@@ -19,17 +19,17 @@ public class DesktopFolderSubscriptionTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"watched-{Guid.NewGuid():N}";
-        await api.CreateFolderAsync(repo.Id, name);
-        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
+        await api.Documents.CreateFolderAsync(repo.Id, name);
+        var folder = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
 
-        Assert.False(await api.GetSubscriptionAsync(folder.Id)); // not following by default
+        Assert.False(await api.Documents.GetSubscriptionAsync(folder.Id)); // not following by default
 
-        await api.SetSubscriptionAsync(folder.Id, subscribe: true);
-        Assert.True(await api.GetSubscriptionAsync(folder.Id));
+        await api.Documents.SetSubscriptionAsync(folder.Id, subscribe: true);
+        Assert.True(await api.Documents.GetSubscriptionAsync(folder.Id));
 
-        await api.SetSubscriptionAsync(folder.Id, subscribe: false);
-        Assert.False(await api.GetSubscriptionAsync(folder.Id));
+        await api.Documents.SetSubscriptionAsync(folder.Id, subscribe: false);
+        Assert.False(await api.Documents.GetSubscriptionAsync(folder.Id));
     }
 }

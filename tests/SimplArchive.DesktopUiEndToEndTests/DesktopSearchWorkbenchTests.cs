@@ -26,8 +26,8 @@ public class DesktopSearchWorkbenchTests
 
         // The repository name carries the word too, so ONE search returns both a document and a folder and the
         // two branches are compared against the same response rather than two searches.
-        await api.CreateRepositoryAsync($"{word}-repo");
-        var repo = (await api.GetRepositoriesAsync()).First(r => r.Name == $"{word}-repo");
+        await api.Documents.CreateRepositoryAsync($"{word}-repo");
+        var repo = (await api.Documents.GetRepositoriesAsync()).First(r => r.Name == $"{word}-repo");
         var docId = await UploadAsync(api, repo.Id, $"doc-{suffix}", word);
 
         await PollAsync(async () => (await api.Search.SearchAsync(word)).Any(r => r.Id == docId), "the document is indexed");
@@ -58,12 +58,12 @@ public class DesktopSearchWorkbenchTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var word = $"resetfacet{suffix}";
 
-        var masks = await api.GetMasksAsync();
+        var masks = await api.Documents.GetMasksAsync();
         var maskA = masks[0];
         var maskB = masks.First(m => m.Id != maskA.Id);
 
-        await api.CreateRepositoryAsync($"reset-{suffix}");
-        var repo = (await api.GetRepositoriesAsync()).First(r => r.Name == $"reset-{suffix}");
+        await api.Documents.CreateRepositoryAsync($"reset-{suffix}");
+        var repo = (await api.Documents.GetRepositoriesAsync()).First(r => r.Name == $"reset-{suffix}");
         var a = await UploadClassifiedAsync(api, repo.Id, $"a-{suffix}", word, maskA.Id);
         var b = await UploadClassifiedAsync(api, repo.Id, $"b-{suffix}", word, maskB.Id);
 
@@ -98,14 +98,14 @@ public class DesktopSearchWorkbenchTests
 
     private static async Task<Guid> UploadAsync(SimplArchiveApiClient api, Guid repoId, string name, string content)
     {
-        await api.UploadFileAsync(repoId, $"{name}.txt", Encoding.UTF8.GetBytes($"body {content} end"));
-        return (await api.GetChildrenAsync(repoId)).First(c => c.Name == name).Id;
+        await api.Documents.UploadFileAsync(repoId, $"{name}.txt", Encoding.UTF8.GetBytes($"body {content} end"));
+        return (await api.Documents.GetChildrenAsync(repoId)).First(c => c.Name == name).Id;
     }
 
     private static async Task<Guid> UploadClassifiedAsync(SimplArchiveApiClient api, Guid repoId, string name, string content, Guid maskId)
     {
         var docId = await UploadAsync(api, repoId, name, content);
-        await api.SetMaskAsync(docId, maskId);
+        await api.Documents.SetMaskAsync(docId, maskId);
         return docId;
     }
 

@@ -23,13 +23,13 @@ public class DesktopCheckoutBulkTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var names = new[] { $"cobulk-{Guid.NewGuid():N}.txt", $"cobulk-{Guid.NewGuid():N}.txt" };
         var ids = new List<Guid>();
         foreach (var fileName in names)
         {
-            await api.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("original"));
-            var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
+            await api.Documents.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("original"));
+            var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
             ids.Add(doc.Id);
             await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
             await api.Checkout.SaveWorkingCopyAsync((await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == doc.Id), Encoding.UTF8.GetBytes("edited"));
@@ -81,13 +81,13 @@ public class DesktopCheckoutBulkTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var ids = new List<Guid>();
         for (var i = 0; i < 2; i++)
         {
             var fileName = $"codisc-{Guid.NewGuid():N}.txt";
-            await api.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("original"));
-            var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
+            await api.Documents.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("original"));
+            var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
             ids.Add(doc.Id);
             await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
             await api.Checkout.SaveWorkingCopyAsync((await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == doc.Id), Encoding.UTF8.GetBytes("edited"));

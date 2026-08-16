@@ -39,7 +39,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     public int? VersionCommentKind { get; init; }
 
     // The names behind the body's "@[id]" tokens (issue #383).
-    public IReadOnlyList<SimplArchiveApiClient.Mention> Mentions { get; init; } = [];
+    public IReadOnlyList<Mention> Mentions { get; init; } = [];
 
     // The body with its mention tokens replaced by names. Unlike the web client — which wraps each mention in its
     // own coloured element — the desktop renders it as flat text, for the same toolkit reason SystemSentence

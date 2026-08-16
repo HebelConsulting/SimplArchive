@@ -21,7 +21,7 @@ public partial class ExportDialog : Window
     private void OnOk(object? sender, RoutedEventArgs e)
     {
         var createdBy = (CreatedByBox.Text ?? "").Trim();
-        Close(new SimplArchiveApiClient.RepositoryExportOptions(
+        Close(new DocumentsClient.RepositoryExportOptions(
             ActiveOnly: ActiveVersionRadio.IsChecked == true,
             DocumentDateFrom: ToDateOnly(DocDateFrom.SelectedDate),
             DocumentDateTo: ToDateOnly(DocDateTo.SelectedDate),

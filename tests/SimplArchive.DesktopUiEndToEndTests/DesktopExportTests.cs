@@ -23,14 +23,14 @@ public class DesktopExportTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
         var repoName = $"Desktop export {Guid.NewGuid():N}";
-        await api.CreateRepositoryAsync(repoName);
-        var repoId = (await api.GetRepositoriesAsync()).Single(r => r.Name == repoName).Id;
+        await api.Documents.CreateRepositoryAsync(repoName);
+        var repoId = (await api.Documents.GetRepositoriesAsync()).Single(r => r.Name == repoName).Id;
 
         var payload = Encoding.UTF8.GetBytes($"desktop-export-{Guid.NewGuid():N}");
-        await api.UploadFileAsync(repoId, "report.txt", payload);
+        await api.Documents.UploadFileAsync(repoId, "report.txt", payload);
 
-        var options = new SimplArchiveApiClient.RepositoryExportOptions(ActiveOnly: false, null, null, null, null, null);
-        var zipBytes = await api.ExportRepositoryAsync(repoId, options);
+        var options = new DocumentsClient.RepositoryExportOptions(ActiveOnly: false, null, null, null, null, null);
+        var zipBytes = await api.Documents.ExportRepositoryAsync(repoId, options);
 
         using var archive = new ZipArchive(new MemoryStream(zipBytes), ZipArchiveMode.Read);
 

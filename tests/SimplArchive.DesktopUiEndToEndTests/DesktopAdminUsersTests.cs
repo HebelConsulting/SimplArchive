@@ -32,7 +32,7 @@ public class DesktopAdminUsersTests
         Assert.Contains(repos, r => r.RepositoryId == userRepo!.Id && r.UserId == userId.Id);
 
         // The admin can browse into it (empty, but reachable via the ACL bypass).
-        var children = await admin.GetChildrenAsync(userRepo!.Id);
+        var children = await admin.Documents.GetChildrenAsync(userRepo!.Id);
         Assert.NotNull(children);
     }
 }

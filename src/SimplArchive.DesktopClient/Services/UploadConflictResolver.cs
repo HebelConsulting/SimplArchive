@@ -54,7 +54,7 @@ public sealed class UploadConflictResolver(SimplArchiveApiClient api)
     {
         var stem = Path.GetFileNameWithoutExtension(fileName);
         var extension = Path.GetExtension(fileName);
-        var conflict = await api.DescribeNameConflictAsync(childrenHref, stem, cancellationToken);
+        var conflict = await api.Documents.DescribeNameConflictAsync(childrenHref, stem, cancellationToken);
 
         // Sibling names are unique across folders AND documents, so the name can be held by a FOLDER. Adding a
         // version to one would turn it into a document, so that choice is only offered against a real document.
@@ -71,7 +71,7 @@ public sealed class UploadConflictResolver(SimplArchiveApiClient api)
     }
 
     private async Task<bool> AsNewVersionAsync(
-        SimplArchiveApiClient.Node? existing,
+        Node? existing,
         string fileName,
         string extension,
         byte[] bytes,
@@ -95,7 +95,7 @@ public sealed class UploadConflictResolver(SimplArchiveApiClient api)
             return false;
         }
 
-        await api.UploadNewVersionAsync(versionsHref, bytes, extension, comment, cancellationToken);
+        await api.Documents.UploadNewVersionAsync(versionsHref, bytes, extension, comment, cancellationToken);
         return true;
     }
 
@@ -109,7 +109,7 @@ public sealed class UploadConflictResolver(SimplArchiveApiClient api)
     {
         try
         {
-            await api.UploadFileAsync(childrenHref, fileName, bytes, comment, cancellationToken);
+            await api.Documents.UploadFileAsync(childrenHref, fileName, bytes, comment, cancellationToken);
             return true;
         }
         catch (DocumentNameTakenException)

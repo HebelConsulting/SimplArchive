@@ -26,8 +26,8 @@ public partial class DuplicateUploadDialog : Window
 
     private void OnReference(object? sender, RoutedEventArgs e)
     {
-        var target = DuplicatesList.SelectedItem as SimplArchiveApiClient.DuplicateInfo
-                     ?? (DuplicatesList.ItemsSource as System.Collections.IEnumerable)?.Cast<SimplArchiveApiClient.DuplicateInfo>().FirstOrDefault();
+        var target = DuplicatesList.SelectedItem as DocumentsClient.DuplicateInfo
+                     ?? (DuplicatesList.ItemsSource as System.Collections.IEnumerable)?.Cast<DocumentsClient.DuplicateInfo>().FirstOrDefault();
         Close(target is null ? null : new MainWindowViewModel.DuplicatePromptResult("reference", target.Id));
     }
 

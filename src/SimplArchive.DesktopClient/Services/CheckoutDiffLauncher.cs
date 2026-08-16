@@ -43,7 +43,7 @@ public static class CheckoutDiffLauncher
         try
         {
             // Left: the current confirmed version (what the server diffs against). Right: the working-copy stash.
-            var current = await StageAsync(await api.DownloadCurrentVersionAsync(documentId), "current", fileExtension);
+            var current = await StageAsync(await api.Documents.DownloadCurrentVersionAsync(documentId), "current", fileExtension);
             var working = await StageAsync(await api.Checkout.DownloadStashAsync(stashDownloadUrl), "working", fileExtension);
             return BeyondCompare.Launch(current, working) ? string.Empty : Strings.Get("StErrBeyondCompareLaunch");
         }

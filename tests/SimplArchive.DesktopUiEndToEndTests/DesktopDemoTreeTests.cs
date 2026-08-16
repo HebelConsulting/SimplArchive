@@ -19,14 +19,14 @@ public class DesktopDemoTreeTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var repo = (await api.GetRepositoriesAsync()).Single(r => r.Name == "Demo Repository");
-        var topLevel = (await api.GetChildrenAsync(repo.Href("children"))).Select(n => n.Name).ToList();
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(r => r.Name == "Demo Repository");
+        var topLevel = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Select(n => n.Name).ToList();
         Assert.Contains("Business Years", topLevel);
         Assert.Contains("Contracts", topLevel);
         Assert.Contains("General", topLevel);
 
-        async Task<SimplArchiveApiClient.Node> ChildAsync(Guid parentId, string name) =>
-            (await api.GetChildrenAsync(parentId)).Single(n => n.Name == name);
+        async Task<Node> ChildAsync(Guid parentId, string name) =>
+            (await api.Documents.GetChildrenAsync(parentId)).Single(n => n.Name == name);
 
         // Business Years / 2026 / 03 March holds the chocolate-gift invoice with TWO versions (Compare-versions).
         var businessYears = await ChildAsync(repo.Id, "Business Years");

@@ -22,12 +22,12 @@ public class DesktopSearchFacetsTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var word = $"dtfacet{suffix}";
 
-        var masks = await api.GetMasksAsync();
+        var masks = await api.Documents.GetMasksAsync();
         var maskA = masks[0];
         var maskB = masks.First(m => m.Id != maskA.Id);
 
-        await api.CreateRepositoryAsync($"dt-facets-{suffix}");
-        var repo = (await api.GetRepositoriesAsync()).First(r => r.Name == $"dt-facets-{suffix}");
+        await api.Documents.CreateRepositoryAsync($"dt-facets-{suffix}");
+        var repo = (await api.Documents.GetRepositoriesAsync()).First(r => r.Name == $"dt-facets-{suffix}");
         var a1 = await UploadClassifiedAsync(api, repo.Id, $"a1-{suffix}", word, maskA.Id);
         var a2 = await UploadClassifiedAsync(api, repo.Id, $"a2-{suffix}", word, maskA.Id);
         var b1 = await UploadClassifiedAsync(api, repo.Id, $"b1-{suffix}", word, maskB.Id);
@@ -76,9 +76,9 @@ public class DesktopSearchFacetsTests
 
     private static async Task<Guid> UploadClassifiedAsync(SimplArchiveApiClient api, Guid repoId, string name, string content, Guid maskId)
     {
-        await api.UploadFileAsync(repoId, $"{name}.txt", Encoding.UTF8.GetBytes(content));
-        var doc = (await api.GetChildrenAsync(repoId)).First(c => c.Name == name);
-        await api.SetMaskAsync(doc.Id, maskId);
+        await api.Documents.UploadFileAsync(repoId, $"{name}.txt", Encoding.UTF8.GetBytes(content));
+        var doc = (await api.Documents.GetChildrenAsync(repoId)).First(c => c.Name == name);
+        await api.Documents.SetMaskAsync(doc.Id, maskId);
         return doc.Id;
     }
 

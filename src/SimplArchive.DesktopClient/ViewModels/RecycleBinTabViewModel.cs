@@ -135,15 +135,15 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
         try
         {
             // These read endpoints serve soft-deleted documents (ADR "Recycle bin tab") — read-only inspection.
-            var mask = await _api.GetMaskAsync(value.Id);
+            var mask = await _api.Documents.GetMaskAsync(value.Id);
             MaskLine = mask.Name is null ? "No mask" : $"Mask: {mask.Name}" + (mask.VersionNumber is { } v ? $" · version {v}" : "");
 
-            foreach (var field in await _api.GetIndexDataAsync(value.Id))
+            foreach (var field in await _api.Documents.GetIndexDataAsync(value.Id))
             {
                 IndexFields.Add(new IndexFieldViewModel { FieldName = field.FieldName, Values = string.Join(", ", field.Values) });
             }
 
-            var fields = await _api.GetSystemFieldsAsync(value.Id);
+            var fields = await _api.Documents.GetSystemFieldsAsync(value.Id);
             SysName = value.Name;
             SysCreated = fields is null ? "" : fields.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
             SysCreatedBy = fields?.CreatedByName ?? "";
@@ -151,7 +151,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
             SysDocumentDate = fields?.DocumentDate ?? "";
             SysOcrLanguages = fields?.OcrLanguages ?? "";
 
-            await Preview.RenderAsync(await _api.GetPreviewAsync(value.Id));
+            await Preview.RenderAsync(await _api.Documents.GetPreviewAsync(value.Id));
             await LoadCommentsAsync(value.Id);
         }
         catch (Exception e)
@@ -162,7 +162,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
     private async Task LoadCommentsAsync(Guid documentId)
     {
-        var comments = await _api!.GetCommentsAsync(documentId);
+        var comments = await _api!.Documents.GetCommentsAsync(documentId);
         var byId = comments.ToDictionary(
             c => c.Id,
             c => new ChatMessageViewModel { Id = c.Id, AuthorName = c.AuthorName, Body = c.Body, CreatedAt = c.CreatedAt, AuthorCardHref = c.AuthorCardHref, Kind = c.Kind, VersionNumber = c.VersionNumber, VersionComment = c.VersionComment, VersionCommentKind = c.VersionCommentKind });
@@ -206,7 +206,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
         try
         {
-            await _api.RestoreAsync(item.Entry!);
+            await _api.Documents.RestoreAsync(item.Entry!);
             Report($"Restored '{item.Name}'.");
             await LoadAsync();
         }
@@ -310,7 +310,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
         try
         {
-            await _api.PurgeAsync(item.Entry!);
+            await _api.Documents.PurgeAsync(item.Entry!);
             Report($"Permanently deleted '{item.Name}'.");
             await LoadAsync();
         }

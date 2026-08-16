@@ -22,10 +22,10 @@ public class DesktopNotificationsTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
         // A repository + a confirmed-version document.
-        await admin.CreateRepositoryAsync($"dt-notif-{suffix}");
-        var repo = (await admin.GetRepositoriesAsync()).First(r => r.Name == $"dt-notif-{suffix}");
-        await admin.UploadFileAsync(repo.Id, $"notif-{suffix}.txt", Encoding.UTF8.GetBytes("hi"));
-        var doc = (await admin.GetChildrenAsync(repo.Href("children"))).First(c => c.HasVersions);
+        await admin.Documents.CreateRepositoryAsync($"dt-notif-{suffix}");
+        var repo = (await admin.Documents.GetRepositoriesAsync()).First(r => r.Name == $"dt-notif-{suffix}");
+        await admin.Documents.UploadFileAsync(repo.Id, $"notif-{suffix}.txt", Encoding.UTF8.GetBytes("hi"));
+        var doc = (await admin.Documents.GetChildrenAsync(repo.Href("children"))).First(c => c.HasVersions);
 
         // A fresh reviewer (tenant admin so they can read the content), with a password to log in.
         var email = $"dt-reviewer-{suffix}@example.test";
@@ -34,7 +34,7 @@ public class DesktopNotificationsTests
         var password = await admin.Admin.ResetUserPasswordAsync(reviewerId);
 
         // Submit the document to the reviewer → a ReviewAssigned notification for them.
-        var wf = await admin.GetWorkflowAsync(doc.Id);
+        var wf = await admin.Documents.GetWorkflowAsync(doc.Id);
         await admin.Workflow.PostWorkflowActionAsync(wf!.Links["submit"], new { reviewerId = reviewerId.Id });
 
         // The reviewer reads their inbox: the notification carries the document + its parent folder.

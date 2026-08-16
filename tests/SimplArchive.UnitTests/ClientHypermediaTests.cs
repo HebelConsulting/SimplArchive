@@ -53,7 +53,9 @@ public partial class ClientHypermediaTests
     {
         ["src/SimplArchive.Client/Services/ApiRoot.cs"] = 1,
         ["src/SimplArchive.Client/Services/BrowseService.cs"] = 1,
-        ["src/SimplArchive.DesktopClient/Services/SimplArchiveApiClient.cs"] = 1,
+        // Moved with the documents area in the #443 finale: DocumentsClient now owns every consumer of the
+        // exception, which is what makes retiring it a single-file endgame instead of a cross-file hunt.
+        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1,
     };
 
     [Fact]

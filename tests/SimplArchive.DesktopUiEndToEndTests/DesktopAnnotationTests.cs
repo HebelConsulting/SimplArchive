@@ -22,11 +22,11 @@ public class DesktopAnnotationTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
-        var repo = (await api.GetRepositoriesAsync())[0];
-        await api.UploadFileAsync(repo.Id, $"noted-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
-        var doc = (await api.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"noted-{suffix}");
+        var repo = (await api.Documents.GetRepositoriesAsync())[0];
+        await api.Documents.UploadFileAsync(repo.Id, $"noted-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
+        var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"noted-{suffix}");
 
-        var preview = await api.GetPreviewAsync(doc.Id);
+        var preview = await api.Documents.GetPreviewAsync(doc.Id);
         Assert.NotNull(preview.AnnotationsUrl);
         var url = preview.AnnotationsUrl!;
 
@@ -54,7 +54,7 @@ public class DesktopAnnotationTests
         Assert.Empty((await api.Annotations.GetAnnotationsAsync(url)).Items);
 
         // Clean up the throwaway document.
-        await api.DeleteAsync(doc.Id);
+        await api.Documents.DeleteAsync(doc.Id);
     }
 
     [Fact]
@@ -64,10 +64,10 @@ public class DesktopAnnotationTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
-        var repo = (await api.GetRepositoriesAsync())[0];
-        await api.UploadFileAsync(repo.Id, $"sized-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
-        var doc = (await api.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"sized-{suffix}");
-        var url = (await api.GetPreviewAsync(doc.Id)).AnnotationsUrl!;
+        var repo = (await api.Documents.GetRepositoriesAsync())[0];
+        await api.Documents.UploadFileAsync(repo.Id, $"sized-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
+        var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"sized-{suffix}");
+        var url = (await api.Documents.GetPreviewAsync(doc.Id)).AnnotationsUrl!;
 
         // A note is created as a sized box (kind 0 + width/height) so it renders as an always-visible box
         // (ADR "Post-it note boxes").
@@ -86,7 +86,7 @@ public class DesktopAnnotationTests
         Assert.Equal("Sized note", resized.Text);
 
         await api.Annotations.DeleteAnnotationAsync(url, resized.Id, resized.Etag);
-        await api.DeleteAsync(doc.Id);
+        await api.Documents.DeleteAsync(doc.Id);
     }
 
     [Fact]
@@ -96,10 +96,10 @@ public class DesktopAnnotationTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
-        var repo = (await api.GetRepositoriesAsync())[0];
-        await api.UploadFileAsync(repo.Id, $"multi-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
-        var doc = (await api.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"multi-{suffix}");
-        var url = (await api.GetPreviewAsync(doc.Id)).AnnotationsUrl!;
+        var repo = (await api.Documents.GetRepositoriesAsync())[0];
+        await api.Documents.UploadFileAsync(repo.Id, $"multi-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
+        var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"multi-{suffix}");
+        var url = (await api.Documents.GetPreviewAsync(doc.Id)).AnnotationsUrl!;
 
         // Two notes + a highlight on page 0.
         await api.Annotations.CreateAnnotationAsync(url, 0, 0, 0.2, 0.2, 0.2, 0.06, "note one", "#FFEB3B");
@@ -137,7 +137,7 @@ public class DesktopAnnotationTests
         Assert.DoesNotContain(afterDelete, a => a.Id == noteOne.Id || a.Id == noteTwo.Id);
         Assert.False(vm.HasSelectedAnnotations);
 
-        await api.DeleteAsync(doc.Id);
+        await api.Documents.DeleteAsync(doc.Id);
     }
 
     [Fact]
@@ -147,10 +147,10 @@ public class DesktopAnnotationTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
-        var repo = (await api.GetRepositoriesAsync())[0];
-        await api.UploadFileAsync(repo.Id, $"hl-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
-        var doc = (await api.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"hl-{suffix}");
-        var url = (await api.GetPreviewAsync(doc.Id)).AnnotationsUrl!;
+        var repo = (await api.Documents.GetRepositoriesAsync())[0];
+        await api.Documents.UploadFileAsync(repo.Id, $"hl-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
+        var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"hl-{suffix}");
+        var url = (await api.Documents.GetPreviewAsync(doc.Id)).AnnotationsUrl!;
 
         // A highlight (kind 1) drawn in the default colour.
         await api.Annotations.CreateAnnotationAsync(url, 0, 1, 0.1, 0.2, 0.3, 0.05, "", "#FFEB3B");
@@ -179,7 +179,7 @@ public class DesktopAnnotationTests
         Assert.Equal(0.4, resized.PositionX, 3); // position preserved
 
         await api.Annotations.DeleteAnnotationAsync(url, resized.Id, resized.Etag);
-        await api.DeleteAsync(doc.Id);
+        await api.Documents.DeleteAsync(doc.Id);
     }
 
     [Fact]
@@ -189,10 +189,10 @@ public class DesktopAnnotationTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
-        var repo = (await api.GetRepositoriesAsync())[0];
-        await api.UploadFileAsync(repo.Id, $"tool-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
-        var doc = (await api.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"tool-{suffix}");
-        var url = (await api.GetPreviewAsync(doc.Id)).AnnotationsUrl!;
+        var repo = (await api.Documents.GetRepositoriesAsync())[0];
+        await api.Documents.UploadFileAsync(repo.Id, $"tool-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
+        var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"tool-{suffix}");
+        var url = (await api.Documents.GetPreviewAsync(doc.Id)).AnnotationsUrl!;
 
         var vm = new PreviewViewModel { Api = api };
         await vm.LoadAnnotationsForTestAsync(url);
@@ -204,7 +204,7 @@ public class DesktopAnnotationTests
         Assert.Equal(0, vm.AnnotationTool);                        // reset after one draw
         Assert.Equal(1, Assert.Single((await api.Annotations.GetAnnotationsAsync(url)).Items).Kind);
 
-        await api.DeleteAsync(doc.Id);
+        await api.Documents.DeleteAsync(doc.Id);
     }
 
     [Fact]
@@ -214,10 +214,10 @@ public class DesktopAnnotationTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
-        var repo = (await api.GetRepositoriesAsync())[0];
-        await api.UploadFileAsync(repo.Id, $"markup-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
-        var doc = (await api.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"markup-{suffix}");
-        var url = (await api.GetPreviewAsync(doc.Id)).AnnotationsUrl!;
+        var repo = (await api.Documents.GetRepositoriesAsync())[0];
+        await api.Documents.UploadFileAsync(repo.Id, $"markup-{suffix}.txt", Encoding.UTF8.GetBytes("some content"));
+        var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(n => n.Name == $"markup-{suffix}");
+        var url = (await api.Documents.GetPreviewAsync(doc.Id)).AnnotationsUrl!;
 
         // A highlight box (kind 1) carries a width/height and no text.
         await api.Annotations.CreateAnnotationAsync(url, 0, 1, 0.1, 0.2, 0.3, 0.05, "", "#FFEB3B");
@@ -235,6 +235,6 @@ public class DesktopAnnotationTests
 
         await api.Annotations.DeleteAnnotationAsync(url, recoloured.Id, recoloured.Etag);
         Assert.Empty((await api.Annotations.GetAnnotationsAsync(url)).Items);
-        await api.DeleteAsync(doc.Id);
+        await api.Documents.DeleteAsync(doc.Id);
     }
 }

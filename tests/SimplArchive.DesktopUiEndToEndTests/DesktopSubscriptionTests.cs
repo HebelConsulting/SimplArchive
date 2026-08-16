@@ -19,21 +19,21 @@ public class DesktopSubscriptionTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"sub-{Guid.NewGuid():N}.txt";
-        await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("follow me"));
-        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+        await api.Documents.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("follow me"));
+        var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
-        Assert.False(await api.GetSubscriptionAsync(doc.Id)); // not following by default
+        Assert.False(await api.Documents.GetSubscriptionAsync(doc.Id)); // not following by default
 
-        await api.SetSubscriptionAsync(doc.Id, subscribe: true);
-        Assert.True(await api.GetSubscriptionAsync(doc.Id));
+        await api.Documents.SetSubscriptionAsync(doc.Id, subscribe: true);
+        Assert.True(await api.Documents.GetSubscriptionAsync(doc.Id));
 
         // Idempotent: following again stays true.
-        await api.SetSubscriptionAsync(doc.Id, subscribe: true);
-        Assert.True(await api.GetSubscriptionAsync(doc.Id));
+        await api.Documents.SetSubscriptionAsync(doc.Id, subscribe: true);
+        Assert.True(await api.Documents.GetSubscriptionAsync(doc.Id));
 
-        await api.SetSubscriptionAsync(doc.Id, subscribe: false);
-        Assert.False(await api.GetSubscriptionAsync(doc.Id));
+        await api.Documents.SetSubscriptionAsync(doc.Id, subscribe: false);
+        Assert.False(await api.Documents.GetSubscriptionAsync(doc.Id));
     }
 }

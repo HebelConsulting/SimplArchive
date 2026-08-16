@@ -27,10 +27,10 @@ public class DesktopTreeDropTests
     public async Task A_document_dropped_on_the_inbox_arrives_as_a_template_with_its_index_data()
     {
         var api = await ApiAsync();
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
 
         var docName = $"tpl-{Guid.NewGuid():N}.txt";
-        var docId = await api.UploadFileAsync(repo.Id, docName, Encoding.UTF8.GetBytes("template body"));
+        var docId = await api.Documents.UploadFileAsync(repo.Id, docName, Encoding.UTF8.GetBytes("template body"));
 
         var messages = new List<string>();
         var copied = await new DropFiling(api).CopyToInboxAsync([docId], messages.Add);
@@ -52,8 +52,8 @@ public class DesktopTreeDropTests
     public async Task A_second_copy_of_the_same_document_is_reported_rather_than_overwriting()
     {
         var api = await ApiAsync();
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
-        var docId = await api.UploadFileAsync(repo.Id, $"dup-{Guid.NewGuid():N}.txt", Encoding.UTF8.GetBytes("x"));
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var docId = await api.Documents.UploadFileAsync(repo.Id, $"dup-{Guid.NewGuid():N}.txt", Encoding.UTF8.GetBytes("x"));
 
         var filing = new DropFiling(api);
         var messages = new List<string>();
@@ -73,8 +73,8 @@ public class DesktopTreeDropTests
         // A NON-EMPTY checkout list whose names do not match, so this exercises the matching itself. An earlier
         // version passed an empty list, which would have passed even with the predicate replaced by `true` —
         // a test that cannot fail for the reason it names is not testing that reason.
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
-        var otherId = await api.UploadFileAsync(repo.Id, $"other-{Guid.NewGuid():N}.txt", Encoding.UTF8.GetBytes("v1"));
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var otherId = await api.Documents.UploadFileAsync(repo.Id, $"other-{Guid.NewGuid():N}.txt", Encoding.UTF8.GetBytes("v1"));
         await api.Checkout.CheckOutViaDocumentAsync(await TestRels.DocumentSelfAsync(api, repo, otherId));
         var checkouts = await api.Checkout.GetCheckoutsAsync();
         Assert.NotEmpty(checkouts);
@@ -95,10 +95,10 @@ public class DesktopTreeDropTests
     public async Task An_edited_file_named_for_a_checked_out_document_becomes_its_working_copy()
     {
         var api = await ApiAsync();
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
 
         var name = $"stash-{Guid.NewGuid():N}.txt";
-        var docId = await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("v1"));
+        var docId = await api.Documents.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("v1"));
         await api.Checkout.CheckOutViaDocumentAsync(await TestRels.DocumentSelfAsync(api, repo, docId));
 
         var checkouts = await api.Checkout.GetCheckoutsAsync();

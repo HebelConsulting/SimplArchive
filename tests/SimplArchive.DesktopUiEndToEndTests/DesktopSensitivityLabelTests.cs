@@ -25,23 +25,23 @@ public class DesktopSensitivityLabelTests
         var confidential = catalog.Items.Single(l => l.Name == "Confidential");
         Assert.True(confidential.Watermark);
 
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"sens-{Guid.NewGuid():N}.txt";
-        await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("classified"));
-        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+        await api.Documents.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("classified"));
+        var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
-        Assert.Null((await api.GetDocumentSensitivityAsync(doc.Id)).LabelId); // None by default
+        Assert.Null((await api.Documents.GetDocumentSensitivityAsync(doc.Id)).LabelId); // None by default
 
-        await api.SetSensitivityAsync(doc.Id, confidential.Id);
-        var s = await api.GetDocumentSensitivityAsync(doc.Id);
+        await api.Documents.SetSensitivityAsync(doc.Id, confidential.Id);
+        var s = await api.Documents.GetDocumentSensitivityAsync(doc.Id);
         Assert.Equal(confidential.Id, s.LabelId);
         Assert.Equal("Confidential", s.Name);
         Assert.True(s.Watermark);
 
-        await Assert.ThrowsAsync<ApiActionException>(() => api.SetSensitivityAsync(doc.Id, Guid.NewGuid())); // unknown id → 400
+        await Assert.ThrowsAsync<ApiActionException>(() => api.Documents.SetSensitivityAsync(doc.Id, Guid.NewGuid())); // unknown id → 400
 
         // The child listing carries the label name/colour so the row can show a badge.
-        var listed = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Id == doc.Id);
+        var listed = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Id == doc.Id);
         Assert.Equal("Confidential", listed.SensitivityLabelName);
     }
 }

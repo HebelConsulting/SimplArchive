@@ -79,9 +79,9 @@ public sealed partial class MainWindowViewModel
         IsLoggedIn = true;
         IsTenantAdmin = true;
         TagCatalogAdmin.Clear();
-        TagCatalogAdmin.Add(new TagCatalogRow(new Services.SimplArchiveApiClient.TagCatalogItem(Guid.NewGuid(), "contract", "#2e7d32")));
-        TagCatalogAdmin.Add(new TagCatalogRow(new Services.SimplArchiveApiClient.TagCatalogItem(Guid.NewGuid(), "invoice", "#1565c0")));
-        TagCatalogAdmin.Add(new TagCatalogRow(new Services.SimplArchiveApiClient.TagCatalogItem(Guid.NewGuid(), "urgent", null)));
+        TagCatalogAdmin.Add(new TagCatalogRow(new Services.DocumentsClient.TagCatalogItem(Guid.NewGuid(), "contract", "#2e7d32")));
+        TagCatalogAdmin.Add(new TagCatalogRow(new Services.DocumentsClient.TagCatalogItem(Guid.NewGuid(), "invoice", "#1565c0")));
+        TagCatalogAdmin.Add(new TagCatalogRow(new Services.DocumentsClient.TagCatalogItem(Guid.NewGuid(), "urgent", null)));
         SelectedTagRow = TagCatalogAdmin[0];
     }
 

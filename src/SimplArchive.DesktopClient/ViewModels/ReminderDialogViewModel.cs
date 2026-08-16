@@ -52,7 +52,7 @@ public partial class ReminderDialogViewModel : ObservableObject
         Reminders.Clear();
         try
         {
-            var (reminders, href) = await _api.GetRemindersViewAsync(_documentId);
+            var (reminders, href) = await _api.Documents.GetRemindersViewAsync(_documentId);
             targetsHref = href;
             foreach (var r in reminders)
             {
@@ -89,7 +89,7 @@ public partial class ReminderDialogViewModel : ObservableObject
         Reminders.Clear();
         try
         {
-            foreach (var r in await _api.GetRemindersAsync(_documentId))
+            foreach (var r in await _api.Documents.GetRemindersAsync(_documentId))
             {
                 Reminders.Add(r);
             }
@@ -112,7 +112,7 @@ public partial class ReminderDialogViewModel : ObservableObject
         {
             var when = new DateTimeOffset(date.Date + (ReminderTime ?? TimeSpan.Zero), date.Offset);
             var targetId = SelectedTarget is { } t && t.Id != Guid.Empty ? t.Id : (Guid?)null;
-            await _api.CreateReminderAsync(_documentId, when, string.IsNullOrWhiteSpace(Note) ? null : Note, RecurrenceIndex, targetId);
+            await _api.Documents.CreateReminderAsync(_documentId, when, string.IsNullOrWhiteSpace(Note) ? null : Note, RecurrenceIndex, targetId);
             Note = "";
             Status = Strings.Get("StReminderSet");
             await ReloadRemindersAsync();

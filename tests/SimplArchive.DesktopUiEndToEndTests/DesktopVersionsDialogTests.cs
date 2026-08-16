@@ -22,11 +22,11 @@ public class DesktopVersionsDialogTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"vers-{Guid.NewGuid():N}.txt";
-        await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("one\n"));
-        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
-        await api.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes("two\n"), ".txt");
+        await api.Documents.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("one\n"));
+        var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+        await api.Documents.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes("two\n"), ".txt");
 
         var vm = new VersionsViewModel();
         await vm.SetupAsync(api, doc.Id, doc.Name, doc.Href("versions"));

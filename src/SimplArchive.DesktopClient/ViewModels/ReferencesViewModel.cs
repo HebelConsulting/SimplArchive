@@ -41,7 +41,7 @@ public sealed partial class ReferencesViewModel : ObservableObject
         Items.Clear();
         try
         {
-            var view = await _api.GetReferencesViewAsync(ItemId);
+            var view = await _api.Documents.GetReferencesViewAsync(ItemId);
             PrimaryLocation = view.Primary is { } p
                 ? new ReferencingFolderViewModel { Id = p.Id, Name = p.Name, Path = p.Path }
                 : null;

@@ -21,20 +21,20 @@ public class DesktopExternalLinksTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"share-{Guid.NewGuid():N}";
-        await api.CreateFolderAsync(repo.Id, name);
-        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
+        await api.Documents.CreateFolderAsync(repo.Id, name);
+        var folder = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
 
-        var detail = await api.GetDocumentDetailAsync(folder.Id);
+        var detail = await api.Documents.GetDocumentDetailAsync(folder.Id);
 
         Assert.Equal(name, detail.Name);
         Assert.NotNull(detail.Sensitivity);
 
         // The two older accessors are now views onto the same read, so they must keep agreeing with it — that
         // equivalence is the whole reason it was safe to collapse them.
-        Assert.Equal(detail.Name, await api.GetDocumentNameAsync(folder.Id));
-        Assert.Equal(detail.Sensitivity.LabelId, (await api.GetDocumentSensitivityAsync(folder.Id)).LabelId);
+        Assert.Equal(detail.Name, await api.Documents.GetDocumentNameAsync(folder.Id));
+        Assert.Equal(detail.Sensitivity.LabelId, (await api.Documents.GetDocumentSensitivityAsync(folder.Id)).LabelId);
     }
 
     // The affordance is driven ENTIRELY by whether the server advertised the rel — never by the client assuming a
@@ -51,19 +51,19 @@ public class DesktopExternalLinksTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"rel-{Guid.NewGuid():N}.txt";
-        await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("shareable"));
-        var document = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
+        await api.Documents.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("shareable"));
+        var document = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
         var before = await api.Admin.GetTenantSettingsAsync();
         try
         {
             await SetExternalLinksAsync(api, before, allow: false);
-            Assert.Null((await api.GetDocumentDetailAsync(document.Id)).ExternalLinksHref);
+            Assert.Null((await api.Documents.GetDocumentDetailAsync(document.Id)).ExternalLinksHref);
 
             await SetExternalLinksAsync(api, before, allow: true);
-            var href = (await api.GetDocumentDetailAsync(document.Id)).ExternalLinksHref;
+            var href = (await api.Documents.GetDocumentDetailAsync(document.Id)).ExternalLinksHref;
             Assert.NotNull(href);
             Assert.Contains(document.Id.ToString(), href, StringComparison.OrdinalIgnoreCase);
         }
@@ -84,16 +84,16 @@ public class DesktopExternalLinksTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"nofolder-{Guid.NewGuid():N}";
-        await api.CreateFolderAsync(repo.Id, name);
-        var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
+        await api.Documents.CreateFolderAsync(repo.Id, name);
+        var folder = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
 
         var before = await api.Admin.GetTenantSettingsAsync();
         try
         {
             await SetExternalLinksAsync(api, before, allow: true);
-            Assert.Null((await api.GetDocumentDetailAsync(folder.Id)).ExternalLinksHref);
+            Assert.Null((await api.Documents.GetDocumentDetailAsync(folder.Id)).ExternalLinksHref);
         }
         finally
         {
