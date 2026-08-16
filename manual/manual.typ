@@ -522,7 +522,9 @@ Sharing outward is the one action that leaves the system, so it is gated twice a
 = Workflow & records
 
 *Approval workflow.*#idx("Approval workflow") Submit a document for review and it moves through a fixed state machine —
-Draft → In Review → Approved / Rejected → Released. Reviewers act on their *Tasks* tab#idx("Tasks"); reviews can be reassigned,
+Draft → In Review → Approved / Rejected → Released. Reviewers act on their *Tasks* tab#idx("Tasks") — sortable
+by any column (a click on a header; the default puts the nearest deadline on top, overdue in red first) and
+narrowable through the visible filter row: document and version text, plus an *Overdue only* switch. Reviews can be reassigned,
 and overdue reviews escalate.
 
 *Records management.* A *legal hold*#idx("Legal hold") freezes documents so they cannot be changed or deleted. *Retention*#idx("Retention") policies
