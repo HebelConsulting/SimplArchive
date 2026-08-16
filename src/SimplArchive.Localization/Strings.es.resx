@@ -4113,6 +4113,12 @@
   <data name="InboxDeleteManyConfirm" xml:space="preserve">
     <value>¿Eliminar {0} elementos de su bandeja de entrada?</value>
   </data>
+  <data name="FilterHint" xml:space="preserve">
+    <value>Filtrar…</value>
+  </data>
+  <data name="OverdueOnly" xml:space="preserve">
+    <value>Solo vencidas</value>
+  </data>
   <data name="ApiErrInboxNoPatchCodes" xml:space="preserve">
     <value>No se encontraron hojas separadoras en este escaneo, así que no hay nada que cortar. Compruebe que las hojas estaban en la pila y pasaron lo bastante rectas.</value>
   </data>

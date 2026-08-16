@@ -162,8 +162,12 @@ public sealed class TaskItemViewModel
     public int? VersionNumber { get; init; }
     public DateTimeOffset AssignedAt { get; init; }
 
+    public DateTimeOffset? DueAt { get; init; }
+
     public string VersionText => VersionNumber is { } n ? $"v{n}" : "—";
     public string AssignedText => AssignedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+    public string DueText => DueAt is { } due ? due.LocalDateTime.ToString("yyyy-MM-dd") : "—";
+    public bool IsOverdue => DueAt is { } d && DateTimeOffset.Now > d;
 }
 
 // A row in the workflow history (a single transition, pre-formatted for display).

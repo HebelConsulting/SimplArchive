@@ -5216,10 +5216,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     DocumentName = t.DocumentName,
                     VersionNumber = t.VersionNumber,
                     AssignedAt = t.AssignedAt,
+                    DueAt = t.DueAt,
                 });
             }
 
             TaskCount = Tasks.Count;
+            RebuildVisibleTasks();
         }
         catch (Exception)
         {
@@ -6142,9 +6144,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         PopulateDemoForScreenshot();
 
-        Tasks.Add(new TaskItemViewModel { DocumentId = Guid.NewGuid(), DocumentName = "Q3 Invoice.pdf", VersionNumber = 2, AssignedAt = ScreenshotClock.AddHours(-3) });
-        Tasks.Add(new TaskItemViewModel { DocumentId = Guid.NewGuid(), DocumentName = "Vendor Contract.docx", VersionNumber = 1, AssignedAt = ScreenshotClock.AddDays(-1) });
+        Tasks.Add(new TaskItemViewModel { DocumentId = Guid.NewGuid(), DocumentName = "Q3 Invoice.pdf", VersionNumber = 2, AssignedAt = ScreenshotClock.AddHours(-3), DueAt = ScreenshotClock.AddDays(-1) });
+        Tasks.Add(new TaskItemViewModel { DocumentId = Guid.NewGuid(), DocumentName = "Vendor Contract.docx", VersionNumber = 1, AssignedAt = ScreenshotClock.AddDays(-1), DueAt = ScreenshotClock.AddDays(3) });
         TaskCount = Tasks.Count;
+        RebuildVisibleTasks();
     }
 
     // Populates the pane edit mode (a document selected, Edit pressed) for the headless screenshot — the whole

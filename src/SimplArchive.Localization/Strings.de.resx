@@ -4113,6 +4113,12 @@
   <data name="InboxDeleteManyConfirm" xml:space="preserve">
     <value>{0} Elemente aus Ihrer Eingangsbox löschen?</value>
   </data>
+  <data name="FilterHint" xml:space="preserve">
+    <value>Filtern…</value>
+  </data>
+  <data name="OverdueOnly" xml:space="preserve">
+    <value>Nur überfällige</value>
+  </data>
   <data name="ApiErrInboxNoPatchCodes" xml:space="preserve">
     <value>In diesem Scan wurden keine Trennblätter gefunden, es gibt also nichts zu schneiden. Prüfen Sie, ob die Blätter im Stapel lagen und gerade genug eingezogen wurden.</value>
   </data>

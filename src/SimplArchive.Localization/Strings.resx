@@ -4113,6 +4113,12 @@
   <data name="InboxDeleteManyConfirm" xml:space="preserve">
     <value>Delete {0} items from your inbox?</value>
   </data>
+  <data name="FilterHint" xml:space="preserve">
+    <value>Filter…</value>
+  </data>
+  <data name="OverdueOnly" xml:space="preserve">
+    <value>Overdue only</value>
+  </data>
   <data name="ApiErrInboxNoPatchCodes" xml:space="preserve">
     <value>No separator sheets were found in this scan, so there is nothing to cut it into. Check that the sheets were in the stack and came through straight enough to read.</value>
   </data>

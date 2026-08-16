@@ -10,7 +10,7 @@
          ribbon's twin acts on the selection. Restructure only, by decision: approve/reject stay in the detail
          a task opens into — approving from a list row without seeing the document invites rubber-stamping. -->
     <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="0,8">
-        <Grid ColumnDefinitions="*,110,90,150">
+        <Grid ColumnDefinitions="*,110,70,130,130">
             <TextBlock Grid.Column="0" Text="{Binding DocumentName}" VerticalAlignment="Center" Margin="6,0" TextTrimming="CharacterEllipsis" />
             <!-- Constant by construction — a task IS a review assigned to you — but SAID (review finding). -->
             <Border Grid.Column="1" Background="{DynamicResource WbChrome}" CornerRadius="9" Padding="8,1" Margin="6,0" HorizontalAlignment="Left" VerticalAlignment="Center">
@@ -18,6 +18,11 @@
             </Border>
             <TextBlock Grid.Column="2" Text="{Binding VersionText}" VerticalAlignment="Center" Margin="6,0" Foreground="{DynamicResource WbMuted}" />
             <TextBlock Grid.Column="3" Text="{Binding AssignedText}" VerticalAlignment="Center" Margin="6,0" Foreground="{DynamicResource WbMuted}" />
+            <!-- Overdue is the row's loudest fact — red, not muted (#550 brings the web's Due column here). -->
+            <Panel Grid.Column="4" VerticalAlignment="Center" Margin="6,0">
+                <TextBlock Text="{Binding DueText}" Foreground="{DynamicResource WbMuted}" IsVisible="{Binding !IsOverdue}" />
+                <TextBlock Text="{Binding DueText}" Foreground="#e53935" FontWeight="SemiBold" IsVisible="{Binding IsOverdue}" />
+            </Panel>
             <Grid.ContextMenu>
                 <ContextMenu>
                     <MenuItem Header="{loc:Tr MwOpen}" Click="OnOpen">

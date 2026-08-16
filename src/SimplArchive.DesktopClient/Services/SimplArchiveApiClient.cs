@@ -290,7 +290,7 @@ public sealed class SimplArchiveApiClient
     public sealed record WorkflowTransitionInfo(string ToStatusName, string? AssignedToName, string? PerformedByName, string? RejectionReason);
 
     // A pending review task assigned to the caller (backs the Tasks tab).
-    public sealed record TaskInfo(Guid DocumentId, Guid? ParentId, Guid VersionId, string DocumentName, int? VersionNumber, DateTimeOffset AssignedAt, IReadOnlyDictionary<string, string>? Links = null);
+    public sealed record TaskInfo(Guid DocumentId, Guid? ParentId, Guid VersionId, string DocumentName, int? VersionNumber, DateTimeOffset AssignedAt, IReadOnlyDictionary<string, string>? Links = null, DateTimeOffset? DueAt = null);
 
     // A user option for the reviewer picker.
     // RemoveHref is set only where the option came from a collection whose rows advertise a removal address —
@@ -3474,7 +3474,7 @@ public sealed class SimplArchiveApiClient
                     t.GetProperty("documentName").GetString() ?? "",
                     t.TryGetProperty("versionNumber", out var vn) && vn.ValueKind == JsonValueKind.Number ? vn.GetInt32() : null,
                     t.TryGetProperty("assignedAt", out var a) ? a.GetDateTimeOffset() : default,
-                    ParseLinks(t)));
+                    ParseLinks(t), t.TryGetProperty("dueAt", out var du) && du.ValueKind == JsonValueKind.String ? du.GetDateTimeOffset() : null));
             }
         }
 

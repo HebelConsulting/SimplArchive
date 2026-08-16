@@ -1609,28 +1609,8 @@
                     <v:TaskRibbon DockPanel.Dock="Top" />
                     <TextBlock DockPanel.Dock="Top" Text="{loc:Tr TasksEmpty}" Margin="0,8"
                                Foreground="{DynamicResource WbFaint}" IsVisible="{Binding !HasTasks}" />
-                    <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" Margin="0,8,0,0"
-                            MaxWidth="820" HorizontalAlignment="Left" VerticalAlignment="Top" IsVisible="{Binding HasTasks}">
-                        <DockPanel LastChildFill="True">
-                            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,110,90,150" Background="{DynamicResource WbChrome}">
-                                <TextBlock Grid.Column="0" Text="{loc:Tr ColDocument}" FontWeight="SemiBold" Margin="6,4" />
-                                <TextBlock Grid.Column="1" Text="{loc:Tr WorkflowStatus}" FontWeight="SemiBold" Margin="6,4" />
-                                <TextBlock Grid.Column="2" Text="{loc:Tr VerColVersion}" FontWeight="SemiBold" Margin="6,4" />
-                                <TextBlock Grid.Column="3" Text="{loc:Tr ColAssigned}" FontWeight="SemiBold" Margin="6,4" />
-                            </Grid>
-                            <ScrollViewer>
-                                <ListBox ItemsSource="{Binding Tasks}" SelectedItem="{Binding SelectedTaskRow}"
-                                         Background="Transparent" BorderThickness="0">
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:TaskItemViewModel">
-                                            <!-- The row and its menu are their own control (#530 tranche 3). -->
-                                            <v:TaskRow />
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
-                            </ScrollViewer>
-                        </DockPanel>
-                    </Border>
+                    <!-- The list (headers + filter row + rows) is its own control (#550, the #519 direction). -->
+                    <v:TasksList IsVisible="{Binding HasTasks}" />
                 </DockPanel>
             </TabItem>
 

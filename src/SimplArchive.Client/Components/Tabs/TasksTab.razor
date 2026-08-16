@@ -27,17 +27,29 @@
         }
         else
         {
-            <MudTable Items="Tasks" Dense="true" Hover="true" Bordered="false" Elevation="0" T="TaskItem"
+            <MudTable Items="FilteredTasks" Dense="true" Hover="true" Bordered="false" Elevation="0" T="TaskItem"
                       Style="max-width:860px;"
                       OnRowClick="@((TableRowClickEventArgs<TaskItem> e) => _selected = e.Item)"
                       RowClassFunc="@((row, _) => row == _selected ? "wb-list-row-selected" : "")">
                 <HeaderContent>
-                    <MudTh>@Strings.Get("ColDocument")</MudTh>
+                    @* Sortable data columns (#550); Status stays plain — a task IS a review, the chip is
+                       invariant. Default sort is due-first (overdue on top, no-due-date last): what a task
+                       list is for. *@
+                    <MudTh><MudTableSortLabel T="TaskItem" SortBy="@(t => t.DocumentName)">@Strings.Get("ColDocument")</MudTableSortLabel></MudTh>
                     <MudTh>@Strings.Get("WorkflowStatus")</MudTh>
-                    <MudTh>@Strings.Get("VerColVersion")</MudTh>
-                    <MudTh>@Strings.Get("ColAssigned")</MudTh>
-                    <MudTh>@Strings.Get("ColDue")</MudTh>
+                    <MudTh><MudTableSortLabel T="TaskItem" SortBy="@(t => t.VersionNumber ?? int.MinValue)">@Strings.Get("VerColVersion")</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="TaskItem" SortBy="@(t => t.AssignedAt)">@Strings.Get("ColAssigned")</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="TaskItem" InitialDirection="SortDirection.Ascending" SortBy="@(t => t.DueAt ?? DateTimeOffset.MaxValue)">@Strings.Get("ColDue")</MudTableSortLabel></MudTh>
                     <MudTh Style="width:1px;"></MudTh>
+                    @* The filter row is VISIBLE, not behind a menu (ADR 0550/#550). *@
+                    <MudTHeadRow Class="wb-task-filters">
+                        <MudTh><MudTextField T="string" @bind-Value="_filterDocument" Immediate="true" Placeholder="@Strings.Get("FilterHint")" Margin="Margin.Dense" Variant="Variant.Outlined" /></MudTh>
+                        <MudTh></MudTh>
+                        <MudTh><MudTextField T="string" @bind-Value="_filterVersion" Immediate="true" Placeholder="@Strings.Get("FilterHint")" Margin="Margin.Dense" Variant="Variant.Outlined" /></MudTh>
+                        <MudTh></MudTh>
+                        <MudTh><MudCheckBox T="bool" @bind-Value="_filterOverdueOnly" Dense="true" Size="Size.Small" Label="@Strings.Get("OverdueOnly")" /></MudTh>
+                        <MudTh></MudTh>
+                    </MudTHeadRow>
                 </HeaderContent>
                 <RowTemplate Context="row">
                     <MudTd>@row.DocumentName</MudTd>
@@ -78,6 +90,17 @@
 </div>
 
 @code {
+    // The visible filter row's state (#550): client-side over the loaded page, like the sort — the tasks
+    // API's cursor order is untouched.
+    private string _filterDocument = string.Empty;
+    private string _filterVersion = string.Empty;
+    private bool _filterOverdueOnly;
+
+    private IEnumerable<TaskItem> FilteredTasks => Tasks.Where(t =>
+        (string.IsNullOrWhiteSpace(_filterDocument) || t.DocumentName.Contains(_filterDocument.Trim(), StringComparison.CurrentCultureIgnoreCase))
+        && (string.IsNullOrWhiteSpace(_filterVersion) || (t.VersionNumber is { } n ? $"v{n}" : "—").Contains(_filterVersion.Trim(), StringComparison.CurrentCultureIgnoreCase))
+        && (!_filterOverdueOnly || t.IsOverdue));
+
     /// <summary>The caller's open review tasks, owned by the shell and read by three surfaces.</summary>
     [Parameter]
     public List<TaskItem> Tasks { get; set; } = [];
