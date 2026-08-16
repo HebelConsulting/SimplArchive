@@ -93,7 +93,7 @@ public class InboxPageOperationsTests
     // ADR 0554: an action that cannot succeed is not advertised. These are the two shapes where that bites — a
     // format with no page sequence at all, and a file that has pages but only one.
     [Fact]
-    public async Task A_file_with_no_pages_to_operate_on_advertises_no_page_operations()
+    public async Task A_file_with_no_pages_advertises_nothing_and_a_single_page_still_offers_sort()
     {
         var (client, _) = await SignedInUserAsync();
 
@@ -104,10 +104,12 @@ public class InboxPageOperationsTests
         var pages = await FollowAsync(client, await ItemLinksAsync(client, single), "pages");
         Assert.Equal(1, pages.GetProperty("pageCount").GetInt32());
 
+        // A single page can't be split — but it CAN be rotated, and rotation rides the sort request, so a
+        // one-page file advertises `sort` (#549: an upside-down one-page scan is exactly the rotate case).
         var rels = pages.GetProperty("links").EnumerateArray()
             .Select(l => l.GetProperty("rel").GetString()).ToList();
         Assert.DoesNotContain("split", rels);
-        Assert.DoesNotContain("sort", rels);
+        Assert.Contains("sort", rels);
     }
 
     // Leaving a page OUT of the order deletes it — how the sort dialog's bin button removes a blank back or a

@@ -33,6 +33,7 @@
                       RowClassFunc="@((row, _) => row == _selected ? "wb-list-row-selected" : "")">
                 <HeaderContent>
                     <MudTh>@Strings.Get("ColDocument")</MudTh>
+                    <MudTh>@Strings.Get("WorkflowStatus")</MudTh>
                     <MudTh>@Strings.Get("VerColVersion")</MudTh>
                     <MudTh>@Strings.Get("ColAssigned")</MudTh>
                     <MudTh>@Strings.Get("ColDue")</MudTh>
@@ -40,6 +41,10 @@
                 </HeaderContent>
                 <RowTemplate Context="row">
                     <MudTd>@row.DocumentName</MudTd>
+                    @* Constant by construction — the tasks API lists exactly the reviews assigned to you
+                       (Status == InReview) — but SAID, because "which state is this in?" was not obvious
+                       (review finding). If the tab ever lists more than reviews, this becomes per-row data. *@
+                    <MudTd><MudChip T="string" Size="Size.Small" Color="Color.Warning">@Strings.Get("WfStateInReview")</MudChip></MudTd>
                     <MudTd>@(row.VersionNumber is { } n ? $"v{n}" : "—")</MudTd>
                     <MudTd>@row.AssignedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</MudTd>
                     <MudTd>

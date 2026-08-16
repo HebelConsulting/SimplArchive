@@ -40,6 +40,27 @@ public static class PageComposer
         _ => PageFormat.None,
     };
 
+    public static string ContentTypeOf(PageFormat format) => format switch
+    {
+        PageFormat.Pdf => "application/pdf",
+        PageFormat.Tiff => "image/tiff",
+        _ => "application/octet-stream",
+    };
+
+    /// <summary>
+    /// Whether a requested page order (+ rotations) is applicable to a document of <paramref name="pageCount"/>
+    /// pages. A subset is allowed (the omitted pages are deleted); a duplicate, an out-of-range page, or an
+    /// empty order is not — those are the shapes that mean the caller has made a mistake rather than a choice.
+    /// A rotation of a page that is not being kept, or an angle that is not a quarter turn, is likewise a
+    /// mistake — never a partial application. Shared by every surface offering page surgery (inbox, check-out
+    /// working copy), so the rule cannot drift between them.
+    /// </summary>
+    public static bool IsValidOrder(int pageCount, IReadOnlyList<int> pageOrder, IReadOnlyDictionary<int, int>? rotations) =>
+        pageOrder.Count > 0 && pageOrder.Count <= pageCount
+        && pageOrder.Distinct().Count() == pageOrder.Count
+        && pageOrder.All(p => p >= 1 && p <= pageCount)
+        && (rotations is null || rotations.All(r => pageOrder.Contains(r.Key) && r.Value is 90 or 180 or 270));
+
     /// <summary>
     /// How many pages the file holds. 0 when the bytes cannot be read as the format at all — the caller turns
     /// that into "not offered" rather than a failed operation the user only discovers after clicking.

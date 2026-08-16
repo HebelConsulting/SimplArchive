@@ -41,6 +41,9 @@ public record LegalHoldItemDto
 
     public string DocumentName { get; set; } = "";
 
+    /// <summary>The document's home folder (null for a repository root) — what Go to navigates by.</summary>
+    public Guid? ParentId { get; set; }
+
     /// <summary>Carries <c>remove</c> while the hold is active. The doc comment promised this long before the
     /// property existed, and the tab composed the path instead (#416).</summary>
     public List<LinkResponse> Links { get; set; } = [];

@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.LegalHoldItemRow"
+             x:DataType="vm:LegalHoldItemRowViewModel">
+    <!-- One document a hold covers (review finding): what it IS, and a context menu for what can be done to
+         it — Go to jumps to the document in Repositories (the search affordance), and remove-from-hold is
+         HIDDEN when the pairing advertised no `remove` (a released hold's items are history, ADR 0543/0554),
+         with a divider keeping go-to and un-freeze apart. This replaces the direct ✕ — that decision keyed on
+         the sub-list having exactly one action, which stopped being true here. Opening the menu makes the row
+         the selection first (the LegalHoldRow recipe, ADR 0559). -->
+    <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="0,4" Background="Transparent">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <i:Icon Value="mdi-file-document-outline" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding DocumentName}" VerticalAlignment="Center" />
+        </StackPanel>
+        <Border.ContextMenu>
+            <ContextMenu Opening="OnMenuOpening">
+                <MenuItem Header="{loc:Tr SearchGoToDocument}" Click="OnGoTo">
+                    <MenuItem.Icon><i:Icon Value="mdi-open-in-new" /></MenuItem.Icon>
+                </MenuItem>
+                <Separator IsVisible="{Binding CanRemove}" />
+                <MenuItem Header="{loc:Tr LhRemoveFromHold}" Click="OnRemove" IsVisible="{Binding CanRemove}">
+                    <MenuItem.Icon><i:Icon Value="mdi-close" /></MenuItem.Icon>
+                </MenuItem>
+            </ContextMenu>
+        </Border.ContextMenu>
+    </Border>
+</UserControl>

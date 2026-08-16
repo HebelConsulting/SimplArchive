@@ -303,6 +303,13 @@ public class CheckoutsController : ControllerBase
                     .. hasStash
                         ? new[] { new Link("preview", $"/api/checkouts/{d.Id}/preview", "GET") }
                         : [],
+                    // Rotate/Sort on the WORKING COPY (ADR 0593) — advertised from the extension only, like
+                    // the inbox listing (ADR 0575): the pages resource itself answers what can actually be
+                    // done, so a signed or empty working copy withholds `sort` there rather than 400ing here.
+                    .. version is not null
+                       && Infrastructure.Storage.PageComposer.FormatOf(version.ObjectKey) != Infrastructure.Storage.PageComposer.PageFormat.None
+                        ? new[] { new Link("pages", $"/api/checkouts/{d.Id}/working-copy/pages", "GET") }
+                        : [],
                 ],
             });
         }
@@ -361,28 +368,19 @@ public class CheckoutsController : ControllerBase
     }
 
     // The stash key + current version for a check-out THIS caller holds, or the response to return instead.
-    // Shared by the two preview actions so the holder-only rule is stated once.
+    // The holder-only rule itself lives on HeldCheckout, shared with the working-copy page operations
+    // (CheckoutPagesController) so it is stated once (the InboxScopeResolver precedent, ADR 0575).
     private async Task<(string StashKey, DocumentVersion? Version, IActionResult? Refusal)> ResolveHeldCheckoutAsync(
         Guid documentId, CancellationToken cancellationToken)
     {
-        if (_currentUserAccessor.UserId is not { } userId || _currentTenantAccessor.TenantId is not { } tenantId)
+        var held = await Checkouts.HeldCheckout.ResolveAsync(
+            _dbContext, _currentUserAccessor.UserId, _currentTenantAccessor.TenantId, documentId, cancellationToken);
+        return held.Refusal switch
         {
-            return (string.Empty, null, Forbid());
-        }
-
-        var document = await _dbContext.Documents.SingleOrDefaultAsync(d => d.Id == documentId, cancellationToken);
-        if (document is null)
-        {
-            return (string.Empty, null, NotFound());
-        }
-
-        if (document.CheckedOutByUserId != userId)
-        {
-            return (string.Empty, null, Forbid()); // only the lock holder may see their own working copy
-        }
-
-        var version = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, documentId, document.CurrentVersionId, cancellationToken);
-        return (StashKey(tenantId, userId, documentId), version, null);
+            Checkouts.HeldCheckout.Refusal.Forbidden => (string.Empty, null, Forbid()),
+            Checkouts.HeldCheckout.Refusal.NotFound => (string.Empty, null, NotFound()),
+            _ => (held.StashKey, held.Version, null),
+        };
     }
 
     // "Save to cloud" — a presigned PUT to the working-copy stash, so in-progress edits survive logout/close and

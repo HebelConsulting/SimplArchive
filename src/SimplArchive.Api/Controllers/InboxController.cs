@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Documents;
+using SimplArchive.Infrastructure.Inbox;
 using SimplArchive.Api.Errors;
 using SimplArchive.Api.Errors.Exceptions.Inbox;
 using SimplArchive.Api.Errors.Exceptions.Documents;
@@ -902,13 +903,27 @@ public class InboxController : ControllerBase
             await _objectStorageClient.CopyObjectAsync(sidecarKey, targetPrefix + SidecarName(name), cancellationToken);
         }
 
+        // The ingest marker + signature flag describe the ITEM's history, not its location — they travel with
+        // it, or the target inbox's sweep would put an already-straightened file through the pipeline again.
+        foreach (var suffix in new[] { InboxIngestPipeline.MarkerSuffix, InboxIngestPipeline.SignedSuffix })
+        {
+            var markerKey = sourcePrefix + name + suffix;
+            if (await _objectStorageClient.ExistsAsync(markerKey, cancellationToken))
+            {
+                await _objectStorageClient.CopyObjectAsync(markerKey, targetPrefix + name + suffix, cancellationToken);
+            }
+        }
+
         await _objectStorageClient.DeleteObjectAsync(sourceKey, cancellationToken);
         await PurgeItemArtifactsAsync(sourcePrefix, name, cancellationToken);
         return NoContent();
     }
 
-    // Sweeps an item's derived objects when it leaves the inbox: its `{name}.mask.json` staging sidecar plus
-    // every cached preview/text-layout artifact sharing its stem (`<stem>.preview.*`, `<stem>.textlayout.json`).
+    // Sweeps an item's derived objects when it leaves the inbox: its `{name}.mask.json` staging sidecar, every
+    // cached preview/text-layout artifact sharing its stem (`<stem>.preview.*`, `<stem>.textlayout.json`), and
+    // the ingest marker + signature flag. The marker matters most: leaving `{name}.ingest.json` behind made a
+    // RE-UPLOAD under the same name skip the whole pipeline — no straighten, no cut — in a 4 ms no-op that
+    // looked exactly like "ingest is broken" (review finding, 2026-08-16).
     private async Task PurgeItemArtifactsAsync(string prefix, string name, CancellationToken cancellationToken)
     {
         var lastDot = name.LastIndexOf('.');
@@ -919,7 +934,9 @@ public class InboxController : ControllerBase
             var candidate = storageObject.Key[prefix.Length..];
             var isArtifact = candidate == SidecarName(name)
                 || candidate.StartsWith($"{stem}.preview.", StringComparison.OrdinalIgnoreCase)
-                || candidate.Equals($"{stem}.textlayout.json", StringComparison.OrdinalIgnoreCase);
+                || candidate.Equals($"{stem}.textlayout.json", StringComparison.OrdinalIgnoreCase)
+                || candidate.Equals($"{name}{InboxIngestPipeline.MarkerSuffix}", StringComparison.OrdinalIgnoreCase)
+                || candidate.Equals($"{name}{InboxIngestPipeline.SignedSuffix}", StringComparison.OrdinalIgnoreCase);
             if (isArtifact)
             {
                 await _objectStorageClient.DeleteObjectAsync(storageObject.Key, cancellationToken);

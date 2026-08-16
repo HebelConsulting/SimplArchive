@@ -52,10 +52,36 @@
 </style>
 
 <div class="wb-search">
+    @* The ribbon in the Repositories shape (review round after #530, superseding tranche 8's
+       buttons-beside-the-field): [search, save] as the general group, the DOCUMENT group's Go to separated,
+       acting on the selected result — single click previews, double-click jumps. The query field + repository
+       selector live in their own row below. *@
     <div class="wb-search-bar">
-        @* The × clears the TEXT only, leaving the filters and facets in place, which is the narrow job. "Reset"
-           below is the one that clears everything (#462). Shared component since #503 — the × was here already,
-           but it dropped the caret, so clearing then typing took a second click. *@
+        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="RunSearchAsync"
+                   title="@Strings.Get("SearchBtn")" aria-label="@Strings.Get("SearchBtn")">
+            <MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("SearchBtn")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="SaveCurrentSearchAsync" Disabled="@string.IsNullOrEmpty(S.LastQueryString)"
+                   title="@Strings.Get("Save")" aria-label="@Strings.Get("Save")">
+            <MudIcon Icon="@Icons.Material.Filled.BookmarkAdd" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("Save")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" OnClick="ResetCriteriaAsync"
+                   title="@Strings.Get("ResetSearchCriteria")" aria-label="@Strings.Get("ResetSearchCriteria")">
+            <MudIcon Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("ResetSearchCriteria")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(S.SelectedHit is null)" OnClick="@(() => OpenHitAsync(S.SelectedHit!))"
+                   title="@Strings.Get("SearchGoToDocument")" aria-label="@Strings.Get("SearchGoToDocument")">
+            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("SearchGoToDocument")</span>
+        </MudButton>
+        @if (_searching)
+        {
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="ml-2" />
+        }
+    </div>
+
+    @* The query row: field + repository selector, below the ribbon (the × clears the TEXT only; "Reset search
+       criteria" in the filters is the one that clears everything — #462/#503). *@
+    <div class="wb-search-query pa-2" style="display:flex; align-items:center; border-bottom:1px solid var(--mud-palette-lines-default);">
         <SearchField @bind-Value="S.Query" Immediate="true" OnKeyDown="OnSearchKeyDown" Style="flex:1 1 auto;"
                      Placeholder="@Strings.Get("SearchPlaceholder")"
                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
@@ -67,26 +93,6 @@
                 <MudSelectItem T="Guid?" Value="@((Guid?)repo.Id)">@repo.Name</MudSelectItem>
             }
         </MudSelect>
-        @* Search + Save as an icon-only ribbon-styled pair right of the field, by decision (#530 tranche 8 —
-           the filled-primary Search was also the accent-fill ADR 0581 warns about); the separated DOCUMENT
-           group's Go to acts on the selected result — single click previews, double-click jumps, and this is
-           the visible route (the per-row button moved here). *@
-        <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="RunSearchAsync"
-                   title="@Strings.Get("SearchBtn")" aria-label="@Strings.Get("SearchBtn")">
-            <MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("SearchBtn")</span>
-        </MudButton>
-        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="SaveCurrentSearchAsync" Disabled="@string.IsNullOrEmpty(S.LastQueryString)"
-                   title="@Strings.Get("Save")" aria-label="@Strings.Get("Save")">
-            <MudIcon Icon="@Icons.Material.Filled.BookmarkAdd" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("Save")</span>
-        </MudButton>
-        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(S.SelectedHit is null)" OnClick="@(() => OpenHitAsync(S.SelectedHit!))"
-                   title="@Strings.Get("SearchGoToDocument")" aria-label="@Strings.Get("SearchGoToDocument")">
-            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("SearchGoToDocument")</span>
-        </MudButton>
-        @if (_searching)
-        {
-            <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="ml-2" />
-        }
     </div>
 
     @if (_savedSearches.Count > 0)
@@ -185,7 +191,7 @@
                 @* Clears EVERYTHING the user entered — text, refinement filters and facet drill-downs. The old
                    "Clear filters" left the facets applied, so results stayed narrowed by drill-downs that were
                    no longer shown anywhere in the form (#462). *@
-                <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.RestartAlt" OnClick="ResetCriteriaAsync">@Strings.Get("ResetSearchCriteria")</MudButton>
+
             </div>
         </div>
     }

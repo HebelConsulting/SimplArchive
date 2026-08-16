@@ -67,6 +67,10 @@ public class LegalHoldsController : ControllerBase
     {
         public Guid DocumentId { get; set; }
         public string DocumentName { get; set; } = "";
+
+        // The document's home folder (null for a repository root) — lets the client jump to it in the tree
+        // (the SearchResultResource precedent).
+        public Guid? ParentId { get; set; }
     }
 
     public class LegalHoldsListResource : HypermediaResource
@@ -297,7 +301,7 @@ public class LegalHoldsController : ControllerBase
                      where i.LegalHoldId == holdId
                      join d in _dbContext.Documents on i.DocumentId equals d.Id
                      orderby d.Name
-                     select new LegalHoldItemResource { DocumentId = d.Id, DocumentName = d.Name }).ToListAsync(cancellationToken)
+                     select new LegalHoldItemResource { DocumentId = d.Id, DocumentName = d.Name, ParentId = d.ParentId }).ToListAsync(cancellationToken)
             : [];
 
         // A covered document's own `remove` address (issue #416). It is the ITEM that knows both ends of the

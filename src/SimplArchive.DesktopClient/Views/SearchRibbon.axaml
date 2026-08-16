@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.SearchRibbon"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- Search ribbon (review round after #530, superseding tranche 8's buttons-beside-the-field): a real
+         ribbon row like every other tab — [search, save] as the general group, the DOCUMENT group's Go to
+         separated, acting on the selected result. The query field + repository selector live in their own
+         row below. All three bind to the view-model; no window forwarding needed. -->
+    <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+        <WrapPanel Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="search-run" Command="{Binding SearchCommand}"
+                        ToolTip.Tip="{loc:Tr TabSearch}"><i:Icon Value="mdi-magnify" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="search-save" Command="{Binding SaveCurrentSearchCommand}" IsEnabled="{Binding CanSaveSearch}"
+                        ToolTip.Tip="{loc:Tr MwSaveSearch}"><i:Icon Value="mdi-bookmark-plus-outline" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="search-reset" Command="{Binding ResetSearchCriteriaCommand}"
+                        ToolTip.Tip="{loc:Tr ResetSearchCriteria}"><i:Icon Value="mdi-restart" FontSize="18" /></Button>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+                <Button AutomationProperties.AutomationId="search-goto" IsEnabled="{Binding HasSelectedSearchResult}"
+                        Command="{Binding OpenSearchResultCommand}" CommandParameter="{Binding SelectedSearchResult}"
+                        ToolTip.Tip="{loc:Tr SearchGoToDocument}"><i:Icon Value="mdi-open-in-new" FontSize="18" /></Button>
+            </StackPanel>
+        </WrapPanel>
+    </Border>
+</UserControl>

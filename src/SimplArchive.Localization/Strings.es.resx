@@ -4051,7 +4051,7 @@
     <value>¿Dividir &#x27;{0}&#x27; en sus {1} páginas? El original se conserva.</value>
   </data>
   <data name="InboxSortTitle" xml:space="preserve">
-    <value>Ordenar páginas</value>
+    <value>Rotar/Ordenar</value>
   </data>
   <data name="InboxSortPrompt" xml:space="preserve">
     <value>Coloca las {1} páginas de &#x27;{0}&#x27; en el orden que quieras. Selecciona una página y muévela.</value>
@@ -4106,6 +4106,12 @@
   </data>
   <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
     <value>El orden de páginas debe incluir cada página exactamente una vez.</value>
+  </data>
+  <data name="ApiErrWorkingCopySigned" xml:space="preserve">
+    <value>La copia de trabajo está firmada digitalmente; cambiar sus páginas invalidaría la firma.</value>
+  </data>
+  <data name="InboxDeleteManyConfirm" xml:space="preserve">
+    <value>¿Eliminar {0} elementos de su bandeja de entrada?</value>
   </data>
   <data name="ApiErrInboxNoPatchCodes" xml:space="preserve">
     <value>No se encontraron hojas separadoras en este escaneo, así que no hay nada que cortar. Compruebe que las hojas estaban en la pila y pasaron lo bastante rectas.</value>
@@ -4181,5 +4187,41 @@
   </data>
   <data name="InboxPageRotateRight" xml:space="preserve">
     <value>Girar 90° a la derecha</value>
+  </data>
+  <data name="StErrInboxProcessing" xml:space="preserve">
+    <value>Carga guardada, pero el procesamiento (enderezado / corte por hojas separadoras) no pudo iniciarse — actualice y revise el elemento.</value>
+  </data>
+  <data name="WfStateDraft" xml:space="preserve">
+    <value>Borrador</value>
+  </data>
+  <data name="WfStateInReview" xml:space="preserve">
+    <value>En revisión</value>
+  </data>
+  <data name="WfStateApproved" xml:space="preserve">
+    <value>Aprobado</value>
+  </data>
+  <data name="WfStateRejected" xml:space="preserve">
+    <value>Rechazado</value>
+  </data>
+  <data name="WfStateReleased" xml:space="preserve">
+    <value>Publicado</value>
+  </data>
+  <data name="RibbonManageWorkflow" xml:space="preserve">
+    <value>Gestionar flujo de trabajo</value>
+  </data>
+  <data name="RibbonViewWorkflow" xml:space="preserve">
+    <value>Ver flujo de trabajo</value>
+  </data>
+  <data name="CtxManageWorkflow" xml:space="preserve">
+    <value>Gestionar flujo de trabajo…</value>
+  </data>
+  <data name="CtxViewWorkflow" xml:space="preserve">
+    <value>Ver flujo de trabajo…</value>
+  </data>
+  <data name="CtxWorkflow" xml:space="preserve">
+    <value>Flujo de trabajo…</value>
+  </data>
+  <data name="WfNotStarted" xml:space="preserve">
+    <value>no iniciado</value>
   </data>
 </root>

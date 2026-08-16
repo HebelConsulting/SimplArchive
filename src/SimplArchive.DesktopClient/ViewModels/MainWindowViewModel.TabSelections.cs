@@ -89,6 +89,31 @@ public sealed partial class MainWindowViewModel
     [CommunityToolkit.Mvvm.Input.RelayCommand]
     private Task RefreshMyWork() => LoadMyWorkAsync();
 
+    /// <summary>The current version's workflow state (raw enum name), null when none was started — labels
+    /// the workflow affordance by state (review decision: Start / Manage / View) without following the rel.</summary>
+    [CommunityToolkit.Mvvm.ComponentModel.ObservableProperty]
+    [CommunityToolkit.Mvvm.ComponentModel.NotifyPropertyChangedFor(nameof(WorkflowStateDisplay))]
+    [CommunityToolkit.Mvvm.ComponentModel.NotifyPropertyChangedFor(nameof(WorkflowButtonLabel))]
+    private string? _sysWorkflowStatus;
+
+    public string WorkflowStateDisplay => SysWorkflowStatus switch
+    {
+        null or "" => Strings.Get("WfNotStarted"),
+        "Draft" => Strings.Get("WfStateDraft"),
+        "InReview" => Strings.Get("WfStateInReview"),
+        "Approved" => Strings.Get("WfStateApproved"),
+        "Rejected" => Strings.Get("WfStateRejected"),
+        "Released" => Strings.Get("WfStateReleased"),
+        var other => other,
+    };
+
+    public string WorkflowButtonLabel => SysWorkflowStatus switch
+    {
+        null or "" => Strings.Get("CtxStartWorkflow"),
+        "Released" => Strings.Get("CtxViewWorkflow"),
+        _ => Strings.Get("CtxManageWorkflow"),
+    };
+
     /// <summary>Greys the Search toolbar's Go to (#530, tranche 8); raised by OnSelectedSearchResultChanged.</summary>
     public bool HasSelectedSearchResult => SelectedSearchResult is not null;
 

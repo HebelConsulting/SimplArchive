@@ -12,6 +12,7 @@ as a new document version. Kept deliberately minimal — all the real work is OC
 """
 import glob
 import os
+import re
 import subprocess
 import tempfile
 
@@ -27,6 +28,51 @@ app = FastAPI()
 # What patch-code detection rasterises at. Well over the ~40 px a 0.08 in narrow bar needs to be measurable,
 # and far under what a 600 dpi colour scan would cost to hold in memory a page at a time.
 PATCH_DPI = 150
+
+# Below this Tesseract-OSD confidence an orientation verdict is ignored. OCRmyPDF's own default (14) sits
+# ABOVE what OSD reports for a genuinely upside-down page of a real 1-bit office scan (~11.6 measured on the
+# shipped sample batch), which silently disabled rotation for every upload. Upright pages report angle 0 and
+# are never touched, and a failed OSD (blank/sparse page) is angle 0 confidence 0 — so this only guards
+# against a CONFIDENT-but-wrong non-zero verdict, and 2 is enough.
+ROTATE_CONFIDENCE = 2.0
+
+
+def _rotate_pdf_pages(src: str, work: str) -> None:
+    """Straighten 90/180/270-degree pages of a PDF in place, losslessly (issue: review 2026-08-16).
+
+    OCRmyPDF's --rotate-pages cannot do this here: in --skip-text mode it skips ALL processing — the
+    orientation pass included — on any page that already carries a text layer, and the PDFs this endpoint
+    receives are scanned batches whose content pages usually do (a prior OCR, a mixed batch). So the sidecar
+    asks Tesseract's OSD per page itself — on a Ghostscript raster, which applies the existing /Rotate, so a
+    correction composes — and applies the turns with qpdf, which only rewrites the /Rotate attribute.
+    """
+    npages = subprocess.run(["qpdf", "--show-npages", src], capture_output=True)
+    if npages.returncode != 0:
+        return
+
+    corrections = []
+    for page in range(1, int(npages.stdout.strip() or 0) + 1):
+        png = os.path.join(work, f"osd_{page}.png")
+        raster = subprocess.run(
+            ["gs", "-dQUIET", "-dSAFER", "-dBATCH", "-dNOPAUSE", "-sDEVICE=pnggray",
+             f"-dFirstPage={page}", f"-dLastPage={page}", "-r150", "-o", png, "-f", src],
+            capture_output=True)
+        if raster.returncode != 0:
+            continue
+
+        osd = subprocess.run(["tesseract", "-l", "osd", "--psm", "0", png, "stdout"], capture_output=True).stdout
+        angle = re.search(rb"Orientation in degrees: (\d+)", osd)
+        confidence = re.search(rb"Orientation confidence: ([\d.]+)", osd)
+        if angle and confidence and int(angle.group(1)) % 360 != 0 and float(confidence.group(1)) >= ROTATE_CONFIDENCE:
+            corrections.append((page, int(angle.group(1)) % 360))
+
+    if corrections:
+        dst = os.path.join(work, "rotated.pdf")
+        # --warning-exit-0: qpdf exits 3 for recoverable input warnings (real scans trip these), which
+        # would otherwise read as failure and silently discard the correction.
+        args = ["qpdf", "--warning-exit-0", src, dst] + [f"--rotate=+{angle}:{page}" for page, angle in corrections]
+        if subprocess.run(args, capture_output=True).returncode == 0 and os.path.exists(dst):
+            os.replace(dst, src)
 
 
 @app.get("/health")
@@ -51,8 +97,11 @@ async def ocr(
             handle.write(data)
 
         # tiff → --force-ocr (rasterize the pure image); pdf → --skip-text (OCR image pages, keep the images).
+        # EXCEPT a pdf with deskew requested: the caller only asks for that on a PDF it detected as a SCAN,
+        # and --skip-text would skip the correction on every page that already carries a text layer — the
+        # same skip that broke rotation — so the scan is re-rendered like a TIFF.
         # --image-dpi 300: fallback resolution when the source carries none.
-        mode = "--skip-text" if is_pdf else "--force-ocr"
+        mode = "--skip-text" if is_pdf and not deskew else "--force-ocr"
         args = ["ocrmypdf", mode, "--language", lang, "--output-type", "pdf", "--image-dpi", "300"]
 
         # Straightening (#491) is TWO corrections, and they are asked for separately because they cost
@@ -67,8 +116,15 @@ async def ocr(
         #
         # They used to travel together behind one flag, and the TIFF-only gate that deskew needs was silently
         # inherited by rotation, which needs no such thing.
-        if rotate:
-            args += ["--rotate-pages"]
+        if rotate and is_pdf and not deskew:
+            # NOT --rotate-pages: in --skip-text mode it skips the orientation pass on any page that
+            # already carries text (see _rotate_pdf_pages), which is most pages of most PDFs sent here.
+            # (With deskew the mode is --force-ocr, where OCRmyPDF's own pass works — the branch below.)
+            _rotate_pdf_pages(src, work)
+        elif rotate:
+            # TIFF goes through --force-ocr (a full re-render), where OCRmyPDF's own pass works — but its
+            # default confidence threshold does not (see ROTATE_CONFIDENCE).
+            args += ["--rotate-pages", "--rotate-pages-threshold", str(ROTATE_CONFIDENCE)]
 
         if deskew:
             args += ["--deskew"]

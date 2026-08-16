@@ -64,4 +64,43 @@ public class InboxUploadSignalsIngestTests
 
         Assert.All(written, w => Assert.Contains(w, listed));
     }
+
+    // Deleting an item must take its exactly-once ingest marker with it: the marker left behind made a
+    // RE-UPLOAD under the same name skip the whole pipeline (no straighten, no cut) in a silent no-op —
+    // found live when a corrected test batch "failed completely" (review, 2026-08-16).
+    [Fact]
+    public async Task Deleting_an_item_clears_its_ingest_marker_so_a_same_name_reupload_is_processed_again()
+    {
+        var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
+        var email = $"ingest-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "u-1234", "Ingester", canManageRepositories: true);
+        var client = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "u-1234"));
+
+        var name = $"again-{Guid.NewGuid():N}.pdf";
+        using var storage = new HttpClient();
+
+        async Task<List<string>> UploadAndProcessAsync()
+        {
+            var upload = await TestJson.Post(client, "/api/inbox", new { fileName = name });
+            (await storage.PutAsync(upload.GetProperty("uploadUrl").GetString()!,
+                new ByteArrayContent(PatchCodeSampleBatch.CreatePdf()))).EnsureSuccessStatusCode();
+            var processed = upload.GetProperty("links").EnumerateArray()
+                .Single(l => l.GetProperty("rel").GetString() == "processed").GetProperty("href").GetString()!;
+            return (await TestJson.Post(client, processed, new { }))
+                .GetProperty("names").EnumerateArray().Select(n => n.GetString()!).ToList();
+        }
+
+        var first = await UploadAndProcessAsync();
+        Assert.NotEmpty(first);
+
+        // Delete every item the first round produced (the pipeline may have renamed/cut), then re-upload
+        // under the SAME name. An empty `names` on the second round is the stale-marker bug.
+        foreach (var item in (await TestJson.Get(client, "/api/inbox")).GetProperty("items").EnumerateArray()
+                     .Select(i => i.GetProperty("name").GetString()!).Where(n => n.StartsWith(name[..8])).ToList())
+        {
+            (await client.DeleteAsync($"/api/inbox/{Uri.EscapeDataString(item)}")).EnsureSuccessStatusCode();
+        }
+
+        Assert.NotEmpty(await UploadAndProcessAsync());
+    }
 }

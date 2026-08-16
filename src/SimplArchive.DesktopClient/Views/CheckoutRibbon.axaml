@@ -29,6 +29,10 @@
                         Click="OnCheckoutCompare" ToolTip.Tip="{loc:Tr CoCompare}"><i:Icon Value="mdi-compare-horizontal" FontSize="18" /></Button>
                 <Button AutomationProperties.AutomationId="checkout-beyondcompare" IsEnabled="{Binding Checkout.SelectedIsSingleModified}"
                         Click="OnCheckoutBeyondCompare" ToolTip.Tip="{loc:Tr CoBeyondCompare}"><i:Icon Value="mdi-compare" FontSize="18" /></Button>
+                <!-- Rotate/Sort the WORKING COPY (ADR 0593) — greyed until the selected row's pages resource
+                     offered `sort` (a signed or non-paged working copy never does, ADR 0543/0554). -->
+                <Button AutomationProperties.AutomationId="checkout-sort" IsEnabled="{Binding Checkout.SelectedCanSortPages}"
+                        Click="OnCheckoutSortPages" ToolTip.Tip="{loc:Tr InboxSortTitle}"><i:Icon Value="mdi-sort" FontSize="18" /></Button>
             </StackPanel>
             <!-- Finish: the two ways a check-out ENDS well — commit the work, or release it unchanged.
                  Check in composes across a multi-selection (N check-ins, one summary), so it routes through

@@ -61,6 +61,15 @@
                 @if (Detail.SysHasVersion)
                 {
                 <tr><td>@Strings.Get("SysFileExtension")</td><td class="wb-sys-muted">@Detail.SysFileExtension</td></tr>
+                @* The workflow's state, readable at a glance, with the state-labelled affordance beside it
+                   (review decision: Start when none, Manage while active, View once Released). *@
+                <tr>
+                    <td>@Strings.Get("WorkflowStatus")</td>
+                    <td>
+                        <span class="@(Detail.SysWorkflowStatus is null ? "wb-sys-muted" : "")">@Detail.WorkflowStateName</span>
+                        <MudButton Size="Size.Small" Variant="Variant.Text" Class="ml-2" OnClick="@(() => OpenWorkflow.InvokeAsync())">@Detail.WorkflowButtonLabel</MudButton>
+                    </td>
+                </tr>
                 <tr>
                     <td>@Strings.Get("VerColDocDate")</td>
                     <td>
@@ -256,6 +265,10 @@
 </div>
 
 @code {
+    /// <summary>Open the workflow dialog for the shown document — the shell owns the dialog.</summary>
+    [Parameter]
+    public EventCallback OpenWorkflow { get; set; }
+
     /// <summary>Whether the pane is in edit mode — which swaps the header's actions (ADR 0550).</summary>
     /// <remarks>
     /// Read from <see cref="DetailState"/> rather than taken as a parameter: the pane is disposed on a tab

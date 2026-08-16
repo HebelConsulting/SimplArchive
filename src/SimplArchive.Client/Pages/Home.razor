@@ -114,7 +114,11 @@
     .wb-ocr-chip-on { background: var(--mud-palette-primary); color: var(--mud-palette-primary-text); border-color: var(--mud-palette-primary); }
     .wb-detail-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
     .wb-detail-bottom { flex: 1 1 auto; min-height: 0; display: flex; }
-    .wb-preview { flex: 1 1 auto; min-width: 0; display: flex; position: relative; }
+    /* min-height:0, or a tall document's content minimum beats the pane's bounds and paints over the tab
+       bar wherever the ancestor chain lacks an overflow backstop — Search showed it (review finding); the
+       Inbox had the same bug fixed one level deeper; Repositories only survives inside an overflow:auto
+       container. This is the systemic version of that fix. */
+    .wb-preview { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; position: relative; }
     .wb-preview iframe { width: 100%; height: 100%; border: 0; }
     /* pdf.js / image preview with search hit-overlay + click-to-copy (ADRs 0268/0269/0282). */
     /* touch-action: allow native single-finger pan/scroll but suppress the browser's own pinch-zoom, so preview.js'
@@ -411,8 +415,8 @@
                     <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedItem is null)" OnClick="() => OpenVersionsAsync(_selectedItem!)" title="@Strings.Get("RibbonVersions")" aria-label="@Strings.Get("RibbonVersions")">
                         <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonVersions")</span>
                     </MudButton>
-                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedItem is null)" OnClick="() => OpenWorkflowAsync(_selectedItem!)" title="@Strings.Get("RibbonStartWorkflow")" aria-label="@Strings.Get("RibbonStartWorkflow")">
-                        <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonStartWorkflow")</span>
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedItem is null)" OnClick="() => OpenWorkflowAsync(_selectedItem!)" title="@Detail.WorkflowRibbonLabel" aria-label="@Detail.WorkflowRibbonLabel">
+                        <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Small" /><span class="wb-rib-label">@Detail.WorkflowRibbonLabel</span>
                     </MudButton>
                     <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="RefreshAsync" title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
                         <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
@@ -591,7 +595,7 @@
                             }
                             @if (!node.IsFolder)
                             {
-                                <MudMenuItem Icon="@Icons.Material.Filled.AccountTree" OnClick="() => OpenWorkflowAsync(node)">@Strings.Get("CtxStartWorkflow")</MudMenuItem>
+                                <MudMenuItem Icon="@Icons.Material.Filled.AccountTree" OnClick="() => OpenWorkflowAsync(node)">@Strings.Get("CtxWorkflow")</MudMenuItem>
                             }
                             @if (!node.IsReference)
                             {
@@ -628,7 +632,7 @@
                            and ⌘S stays a desktop affordance where it works properly. *@
                         @* The index-data pane (ADR 0558). The pane owns the read/edit SWAP — ADR 0550 makes
                            that a property of the transition — while the actions themselves stay the shell's. *@
-                        <IndexDataPane Save="SaveDetailAsync" Cancel="@(() => Editor.Cancel())" OpenCompareVersions="OpenCompareVersionsAsync"
+                        <IndexDataPane Save="SaveDetailAsync" Cancel="@(() => Editor.Cancel())" OpenWorkflow="@(() => OpenWorkflowAsync(_selectedItem!))" OpenCompareVersions="OpenCompareVersionsAsync"
                                        KeyDown="OnDetailKeyDown" EditMaskChanged="@((Guid? m) => Editor.ChangeMaskAsync(m))"
                                        ToggleOcrCode="@((string c) => Editor.ToggleOcr(c))" SearchByTag="SearchByTagAsync">
                             <ReadActions>
@@ -773,7 +777,7 @@
             }
             else if (_activeTab == Tab.LegalHolds)
             {
-                <LegalHoldsTab HoldsChanged="RefreshOpenFolderAsync" />
+                <LegalHoldsTab HoldsChanged="RefreshOpenFolderAsync" OnOpenDocument="OpenHeldDocumentAsync" />
             }
             else if (_activeTab == Tab.Retention)
             {
@@ -1999,6 +2003,7 @@
 
         Detail.IsEditing = false;
         Detail.SysHasVersion = false;
+        Detail.SysWorkflowStatus = null;
         Detail.SysCurrentVersionId = Guid.Empty;
         Detail.SysDocumentDateHref = null; // an address must not outlive its subject (ADR 0559)
         Detail.SysCurrentVersion = null;
@@ -2133,6 +2138,7 @@
         var tiff = confirmed.Where(v => IsTiff(v.ObjectKey)).OrderByDescending(v => v.VersionNumber ?? 0).FirstOrDefault();
 
         Detail.SysHasVersion = true;
+        Detail.SysWorkflowStatus = current.WorkflowStatus;
         Detail.SysCurrentVersionId = current.Id;
         Detail.SysDocumentDateHref = Links.Href(current.Links, "document-date");
         Detail.SysCurrentVersion = current.VersionNumber;
@@ -2724,6 +2730,10 @@
         _pendingSearchTag = tag;
         await SetTab(Tab.Search);
     }
+
+    // The Legal holds tab's Go to (review finding) — the search jump, addressed by the item's ParentId.
+    private Task OpenHeldDocumentAsync(LegalHoldItemDto item) =>
+        item.ParentId is { } parentId ? NavigateToFolderAsync(parentId, item.DocumentId) : NavigateToFolderAsync(item.DocumentId);
 
     private async Task OpenSearchResultAsync(SearchHit hit)
     {

@@ -42,6 +42,8 @@ public partial class CheckoutRow : UserControl
 
     private void OnBeyondCompare(object? sender, RoutedEventArgs e) => Forward(w => w.OnCheckoutBeyondCompare(Tagged(), e));
 
+    private void OnSortPages(object? sender, RoutedEventArgs e) => Forward(w => w.OnCheckoutSortPages(Tagged(), e));
+
     private void OnDiscard(object? sender, RoutedEventArgs e) => Forward(w => w.OnCheckoutDiscard(Tagged(), e));
 
     // The window's handlers read their target from the sender's Tag, and a MenuItem's own Tag is empty — so

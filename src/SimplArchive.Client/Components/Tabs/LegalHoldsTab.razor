@@ -24,6 +24,13 @@
                                title="@Strings.Get("LhRelease")" aria-label="@Strings.Get("LhRelease")">
                         <MudIcon Icon="@Icons.Material.Filled.LockOpen" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("LhRelease")</span>
                     </MudButton>
+                    @* The DOCUMENT group (review finding): Go to jumps to the selected held document in
+                       Repositories — the Search tab's affordance, acting on the item selection here. *@
+                    <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(_selectedHoldItem is null)"
+                               OnClick="@(() => OnOpenDocument.InvokeAsync(_selectedHoldItem!))"
+                               title="@Strings.Get("SearchGoToDocument")" aria-label="@Strings.Get("SearchGoToDocument")">
+                        <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("SearchGoToDocument")</span>
+                    </MudButton>
                     <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" OnClick="LoadLegalHoldsAsync"
                                title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
                         <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
@@ -70,16 +77,25 @@
                             <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1">@string.Format(Strings.Get("LhDocuments"), sel.Items.Count)</MudText>
                             @foreach (var it in sel.Items)
                             {
-                                <div class="wb-list-row">
+                                <div class="wb-list-row @(ReferenceEquals(it, _selectedHoldItem) ? "wb-list-row-selected" : "")"
+                                     @onclick="() => _selectedHoldItem = it" @ondblclick="() => OnOpenDocument.InvokeAsync(it)">
                                     <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" />
                                     <span style="flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@it.DocumentName</span>
-                                    @* Gated on the REL, not on a client-side IsActive flag: the server already
-                                       withholds `remove` for a released hold, and re-deriving that here is a second
-                                       copy of the rule that can disagree with the first (ADR 0543). *@
-                                    @if (Links.Href(it.Links, "remove") is not null)
-                                    {
-                                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="() => RemoveHoldItemAsync(it)" title="@Strings.Get("LhRemoveFromHold")" />
-                                    }
+                                    @* What can be done to THIS row lives in its ⋮ menu (#521's split): Go to
+                                       always; remove gated on the REL, not a client-side IsActive flag — the
+                                       server already withholds `remove` for a released hold, and re-deriving
+                                       that here is a second copy of the rule that can disagree with the first
+                                       (ADR 0543). A divider keeps go-to and un-freeze apart (review decision). *@
+                                    <span @onclick:stopPropagation="true">
+                                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
+                                            <MudMenuItem Icon="@Icons.Material.Filled.OpenInNew" OnClick="() => OnOpenDocument.InvokeAsync(it)">@Strings.Get("SearchGoToDocument")</MudMenuItem>
+                                            @if (Links.Href(it.Links, "remove") is not null)
+                                            {
+                                                <MudDivider />
+                                                <MudMenuItem Icon="@Icons.Material.Filled.Close" OnClick="() => RemoveHoldItemAsync(it)">@Strings.Get("LhRemoveFromHold")</MudMenuItem>
+                                            }
+                                        </MudMenu>
+                                    </span>
                                 </div>
                             }
                         }
@@ -105,12 +121,17 @@
     [Parameter]
     public EventCallback HoldsChanged { get; set; }
 
+    /// <summary>Go to the held document in Repositories — navigation is the shell's (ADR 0558).</summary>
+    [Parameter]
+    public EventCallback<LegalHoldItemDto> OnOpenDocument { get; set; }
+
     // The tab loads itself; SetTab's LegalHolds branch is deleted rather than relocated (ADR 0558).
     protected override async Task OnInitializedAsync() => await LoadLegalHoldsAsync();
 
     // ---- Legal holds (ADR "Legal hold & retention enforcement") --------------------------------------
     private readonly List<LegalHoldDto> _legalHolds = new();
     private LegalHoldDto? _selectedHold;
+    private LegalHoldItemDto? _selectedHoldItem;
 
     private async Task LoadLegalHoldsAsync()
     {
@@ -143,6 +164,7 @@
         {
             _selectedHold = hold;
         }
+        _selectedHoldItem = null; // the items were re-fetched — a held-over selection is a stale subject (ADR 0559)
         StateHasChanged();
     }
 

@@ -5,9 +5,10 @@ namespace SimplArchive.UiEndToEndTests;
 
 // A UI flow (ADR 0298 + "Workflow start on demand" + "Workflow escalation / SLA reminders"): the seeded demo
 // document is In Review, self-assigned to the admin, with a past due date (overdue). Its review shows on the
-// Tasks tab with an overdue badge; the workflow is opened on demand via the ribbon "Start workflow" button,
-// which opens a separate window where the assigned reviewer Approves then Releases it. (This is the only test
-// that mutates the demo document's workflow state; nothing else asserts on it.)
+// Tasks tab with an overdue badge; the workflow is opened on demand via the ribbon workflow button — whose
+// label reflects the document's state (Start/Manage/View), so for the In-Review demo doc it reads "Manage
+// workflow" — and opens a separate window where the assigned reviewer Approves then Releases it. (This is the
+// only test that mutates the demo document's workflow state; nothing else asserts on it.)
 [Collection(UiCollection.Name)]
 [Trait("Area", "ui-2")]
 public class WebWorkflowTests
@@ -27,14 +28,21 @@ public class WebWorkflowTests
         await Expect(page.GetByText("Invoice 2026-003").First).ToBeVisibleAsync();
         await Expect(page.Locator(".wb-tasks").GetByText("Overdue").First).ToBeVisibleAsync();
 
+        // Every task row carries the In Review status chip (constant by construction — the tasks API only
+        // lists reviews — but said, so the state is visible on the tab).
+        await Expect(page.Locator(".wb-tasks").GetByText("In Review").First).ToBeVisibleAsync();
+
         // The task's Open navigates to the document (Repositories tab, doc selected) — from the row's
         // ⋮ menu since the per-row labeled button moved there (#530 tranche 3).
         var taskRow = page.Locator(".wb-tasks tr").Filter(new() { HasText = "Invoice 2026-003" }).First;
         await taskRow.Locator("button.mud-icon-button").Last.ClickAsync();
         await page.Locator(".mud-menu-item").Filter(new() { HasText = "Open" }).First.ClickAsync();
 
-        // Open the workflow on demand from the ribbon → a separate dialog window.
-        await page.GetByRole(AriaRole.Button, new() { Name = "Start workflow" }).ClickAsync();
+        // The detail pane's Status row states the workflow state, and the ribbon button's label is
+        // state-aware — In Review → "Manage workflow". Open the workflow from the ribbon → a dialog.
+        await Expect(page.Locator(".wb-index").GetByText("In Review").First).ToBeVisibleAsync();
+        // Exact: the detail pane's own button says "Manage workflow…" and would otherwise match too.
+        await page.GetByRole(AriaRole.Button, new() { Name = "Manage workflow", Exact = true }).ClickAsync();
 
         var dialog = page.Locator(".mud-dialog");
         await Expect(dialog.Locator(".mud-chip").Filter(new() { HasText = "In Review" })).ToBeVisibleAsync();

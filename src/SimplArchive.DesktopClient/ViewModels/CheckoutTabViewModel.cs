@@ -97,6 +97,17 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
 
     public bool SelectedIsSingleModified => Selection.Count == 1 && SelectedRow?.CanCheckIn == true;
 
+    /// <summary>
+    /// What the selected row's WORKING COPY offers (ADR 0593) — the pages resource's own answer, loaded with
+    /// the detail. The listing's `pages` rel only says the extension might have pages; this says what can
+    /// actually be done (a signed or empty working copy withholds `sort`).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedCanSortPages))]
+    private InboxApi.PagesInfo? _pages;
+
+    public bool SelectedCanSortPages => Selection.Count == 1 && Pages is { CanSort: true };
+
     private IReadOnlyList<CheckoutRowViewModel> _selection = [];
 
     /// <summary>
@@ -116,6 +127,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedCanUnlock));
         OnPropertyChanged(nameof(SelectedCanExtend));
         OnPropertyChanged(nameof(SelectedIsSingleModified));
+        OnPropertyChanged(nameof(SelectedCanSortPages));
     }
 
     partial void OnSelectedRowChanged(CheckoutRowViewModel? value) => _ = LoadDetailAsync(value);
@@ -123,11 +135,24 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     private async Task LoadDetailAsync(CheckoutRowViewModel? row)
     {
         IndexFields.Clear();
+        Pages = null; // an affordance must not outlive its subject (ADR 0559)
         if (_api is null || row?.Item is not { } item)
         {
             DetailTitle = "";
             Preview.Reset(Strings.Get("SelectDocDetail"));
             return;
+        }
+
+        if (item.Href("pages") is { } pagesHref)
+        {
+            try
+            {
+                Pages = await _api.Inbox.GetAsync(pagesHref);
+            }
+            catch (Exception)
+            {
+                // The pages resource is an affordance, not the point of selecting — losing it greys the button.
+            }
         }
 
         DetailTitle = row.DisplayName;
@@ -479,6 +504,10 @@ public sealed class CheckoutRowViewModel
     public string? ImplicitAgent { get; init; }
 
     public bool IsImplicit => !string.IsNullOrEmpty(ImplicitAgent);
+
+    // The row advertised a pages resource (extension-based, ADR 0593) — what Rotate/Sort in the row menu keys
+    // on; the definitive can-sort answer is the resource's own, read at click time.
+    public bool CanSortPages => Item?.Href("pages") is not null;
 
     // The current version's content carries a digital signature (#491), examined at finalize. TRI-STATE: null
     // means the version was never examined — every version filed before this shipped — so the badge shows only

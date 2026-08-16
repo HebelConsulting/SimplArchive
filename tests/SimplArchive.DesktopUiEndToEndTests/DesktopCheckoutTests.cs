@@ -57,6 +57,43 @@ public class DesktopCheckoutTests
     }
 
     [Fact]
+    public async Task RotateSort_follows_the_working_copys_pages_rels_and_rewrites_the_stash()
+    {
+        DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
+        var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
+
+        var repo = (await api.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
+        using var http = new HttpClient();
+        var pdf = await http.GetByteArrayAsync($"{_app.BaseUrl}/download/samples/SimplArchive-Patch3-Sample-Batch.pdf");
+        var fileName = $"rs-{Guid.NewGuid():N}.pdf";
+        await api.UploadFileAsync(repo.Id, fileName, pdf);
+        var doc = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
+
+        await api.CheckOutAsync(doc.Id);
+
+        // The row advertises `pages` (extension-based), which is what gates the row menu; the resource's own
+        // answer (7 pages, sort offered) is what gates the ribbon (ADR 0593).
+        var vm = new CheckoutTabViewModel();
+        vm.Setup(api);
+        await vm.LoadAsync();
+        var row = vm.Items.Single(i => i.Id == doc.Id);
+        Assert.True(row.CanSortPages);
+
+        var pages = await api.Inbox.GetAsync(row.Item!.Href("pages")!);
+        Assert.True(pages is { CanSort: true, PageCount: 7 });
+
+        // Keep the last two pages, reversed — ONE request writes the stash; the archive is untouched until check-in.
+        await api.Inbox.SortAsync(pages!.SortHref!, [7, 6]);
+        var item = (await api.GetCheckoutsAsync()).Single(c => c.Id == doc.Id);
+        Assert.True(item.HasStash);
+        Assert.True(item.IsModified);
+        Assert.Equal(2, (await api.Inbox.GetAsync(item.Href("pages")!))!.PageCount);
+        Assert.Equal(pdf, await api.DownloadCurrentVersionAsync(doc.Id));
+
+        await api.CheckInAsync(doc.Id); // release + drop the stash — leaves the shared fixture clean
+    }
+
+    [Fact]
     public async Task Compare_loads_the_unified_diff_of_the_working_copy_vs_the_current_version()
     {
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;

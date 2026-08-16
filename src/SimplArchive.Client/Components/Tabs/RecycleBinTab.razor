@@ -68,6 +68,9 @@
                             <MudMenuItem Icon="@Icons.Material.Filled.RestoreFromTrash" OnClick="() => RestoreRecycleBinItemAsync(row)">@Strings.Get("RbRestore")</MudMenuItem>
                             @if (IsTenantAdmin)
                             {
+                                @* Destructive keeps its distance in a menu too — the divider the desktop's
+                                   context menu had from day one (tranche-1 parity slip, caught in review). *@
+                                <MudDivider />
                                 <MudMenuItem Icon="@Icons.Material.Filled.DeleteForever" OnClick="() => HardDeleteRecycleBinItemAsync(row)">@Strings.Get("RbHardDelete")</MudMenuItem>
                             }
                         </MudMenu>

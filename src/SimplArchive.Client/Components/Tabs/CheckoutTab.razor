@@ -30,9 +30,9 @@
        kind of place (#500). The heading is gone from the bar: the tab strip already names the tab, the count
        is the line below, and a title inside the action bar pushed the actions apart for no information.
 
-       Deliberately NOT here: split, join and sort. A checked-out document is a version of a FILED document,
-       so reshaping its pages is a records question, not a clerical one — ADR 0575 confined the page algebra to
-       the Inbox. Someone who needs it drags the file into the Inbox, reshapes it there, and checks it in. *@
+       Split and join stay Inbox-only (ADR 0575). Rotate/Sort IS here since ADR 0593 (#549) — it operates on
+       the WORKING COPY (the stash), never the archived version, so the records question 0575 confined the
+       algebra for does not arise: the result reaches the archive only through a normal check-in. *@
     <div class="wb-search-bar">
         @* Selected-item groups, first — the desktop's shape (#521, ADR 0511). Same actions as the row's ⋮ menu,
            different SCOPE: the menu acts on its own row, these on the selection. Disabled, not hidden, when
@@ -69,6 +69,13 @@
                    OnClick="@(() => OpenCompareCheckoutAsync(_selected!))"
                    title="@Strings.Get("CoCompare")" aria-label="@Strings.Get("CoCompare")">
             <MudIcon Icon="@Icons.Material.Filled.Difference" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CoCompare")</span>
+        </MudButton>
+        @* Rotate/Sort the WORKING COPY (ADR 0593) — greyed until the selected row's pages resource offered
+           `sort` (a signed or non-paged working copy never does, ADR 0543/0554). *@
+        <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_pages is not { CanSort: true } || _selectedIds.Count > 1)"
+                   OnClick="@(() => SortPagesAsync(_selected!))"
+                   title="@Strings.Get("InboxSortTitle")" aria-label="@Strings.Get("InboxSortTitle")">
+            <MudIcon Icon="@Icons.Material.Filled.Sort" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("InboxSortTitle")</span>
         </MudButton>
         <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(!SelectedRows.Any(r => r.IsModified))"
                    OnClick="CheckInSelectionAsync"
@@ -143,6 +150,10 @@
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.Difference" OnClick="() => OpenCompareCheckoutAsync(c)">@Strings.Get("CoCompare")</MudMenuItem>
                                 <MudMenuItem Icon="@Icons.Material.Filled.Check" OnClick="() => CheckInFromStashAsync(c)">@Strings.Get("CoCheckIn")</MudMenuItem>
+                            }
+                            @if (Links.Href(c.Links, "pages") is not null)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Sort" OnClick="() => SortPagesAsync(c)">@Strings.Get("InboxSortTitle")</MudMenuItem>
                             }
                             @if (c.ExpiresAt is not null)
                             {
@@ -248,13 +259,44 @@
     private PreviewPane? _preview;
     private (string? Url, bool Converted)? _pendingPreview;
 
+    // What the selected row's WORKING COPY offers (ADR 0593): the pages resource's own answer, fetched by
+    // following the row's `pages` rel — the listing only says "might have pages" (extension), the resource
+    // says what can actually be done (ADR 0575's split of the two questions).
+    private sealed record CheckoutPagesInfo(int PageCount, string? SortHref)
+    {
+        public bool CanSort => SortHref is not null;
+    }
+
+    private CheckoutPagesInfo? _pages;
+
+    private sealed class CheckoutPagesResponse
+    {
+        public int PageCount { get; set; }
+        public List<LinkResponse> Links { get; set; } = [];
+    }
+
+    private sealed record ProblemResponse { public string? ErrorCode { get; set; } }
+
     // A row's own detail: index data from the DOCUMENT (identical either side of an edit — a working copy
     // carries no metadata of its own) and a preview of the WORKING COPY.
     private async Task SelectAsync(CheckoutDto c)
     {
         _selected = c;
         _indexFields = [];
+        _pages = null;
         await ShowPreviewAsync(null, false);
+        if (Links.Href(c.Links, "pages") is { } pagesHref)
+        {
+            try
+            {
+                var pages = await Http.GetFromJsonAsync<CheckoutPagesResponse>(pagesHref);
+                _pages = new(pages?.PageCount ?? 0, Links.Href(pages?.Links, "sort"));
+            }
+            catch (Exception)
+            {
+                // The pages resource is an affordance, not the point of selecting — losing it greys the button.
+            }
+        }
 
         // The row advertises `self`; the document it resolves to advertises `index-data`. One read, then a rel
         // — never a composed sub-resource path (ADRs 0543/0557).
@@ -383,6 +425,84 @@
             await Refresh.InvokeAsync();
         }
         catch (Exception) { Snackbar.Add(Strings.Get("CoErrCheckIn"), Severity.Error); }
+    }
+
+    // Rotate/Sort the working copy (ADR 0593): thumbnails from pdf.js where the copy is a PDF (numbered tiles
+    // otherwise), the shared dialog, then ONE request that writes the whole arrangement into the stash. The
+    // archive is untouched — the result reaches it through a normal check-in.
+    private async Task SortPagesAsync(CheckoutDto c)
+    {
+        CheckoutPagesInfo? pages = _pages;
+        if (ReferenceEquals(c, _selected) is false || pages is null)
+        {
+            // Invoked from a row menu whose row is not the loaded selection — resolve the row's own resource
+            // and follow its rel (ADR 0559), one request inside a window that is usually empty.
+            try
+            {
+                var fresh = await Http.GetFromJsonAsync<CheckoutPagesResponse>(Href(c, "pages"));
+                pages = new(fresh?.PageCount ?? 0, Links.Href(fresh?.Links, "sort"));
+            }
+            catch (Exception) { pages = null; }
+        }
+
+        if (pages is not { CanSort: true, SortHref: { } sortHref })
+        {
+            Snackbar.Add(ApiErrorText.For("CHECKOUT_PAGES_NOT_SUPPORTED"), Severity.Warning);
+            return;
+        }
+
+        var images = new List<string>();
+        try
+        {
+            var module = await JS.InvokeAsync<IJSObjectReference>("import", "./preview.js");
+            await using (module)
+            {
+                images = (await module.InvokeAsync<string[]>("pageThumbnails", c.StashDownloadUrl ?? c.DownloadUrl, 260)).ToList();
+            }
+        }
+        catch (Exception)
+        {
+            images = [];
+        }
+
+        var parameters = new DialogParameters<Dialogs.SortPagesDialog>
+        {
+            { d => d.ItemName, c.Name + c.FileExtension },
+            { d => d.PageImages, images },
+            { d => d.PageCount, pages.PageCount },
+        };
+
+        var dialog = await DialogService.ShowAsync<Dialogs.SortPagesDialog>(Strings.Get("InboxSortTitle"), parameters);
+        if (await dialog.Result is not { Canceled: false, Data: Dialogs.SortPagesDialog.Result arrangement })
+        {
+            return;
+        }
+
+        try
+        {
+            object body = arrangement.Rotations.Count > 0
+                ? new
+                {
+                    pageOrder = arrangement.Order,
+                    rotations = arrangement.Rotations.Select(r => new { page = r.Key, degrees = r.Value }).ToList(),
+                }
+                : new { pageOrder = arrangement.Order };
+            var response = await Http.PostAsJsonAsync(sortHref, body);
+            if (!response.IsSuccessStatusCode)
+            {
+                string? errorCode = null;
+                try { errorCode = (await response.Content.ReadFromJsonAsync<ProblemResponse>())?.ErrorCode; } catch (Exception) { }
+                Snackbar.Add(ApiErrorText.For(errorCode), Severity.Warning);
+                return;
+            }
+
+            Snackbar.Add(string.Format(Strings.Get("StInboxSorted"), c.Name + c.FileExtension), Severity.Success);
+            await Refresh.InvokeAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(ApiErrorText.For(null), Severity.Error);
+        }
     }
 
     // Compare the working copy against the current version as an inline unified diff (ADR 0517). Modified rows only.

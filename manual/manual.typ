@@ -110,7 +110,10 @@ rest.
 Expand the *tree* to a folder and its documents appear in the *contents* list, which you can sort by any column.
 Selecting a document shows its *index data* in the detail pane and renders a *preview* below — PDFs, images, and
 converted Office/e-mail/Markdown documents alike. Full-text search hits are highlighted directly on the preview#idx("Hit highlighting"),
-and you can click a word to copy it. In the desktop client you can also *open* the document in its native
+and you can click any word to copy it#idx("Click-to-copy") — *shift-click* appends instead of replacing, so a
+few clicks collect a phrase (an invoice number, then its date) without touching the keyboard. That is the fast
+way to fill index fields on the *Inbox* tab: click the values in the scan's preview, paste them into the field.
+In the desktop client you can also *open* the document in its native
 application#idx("Open a document") — from the row's context menu, the ribbon, a double-click, or the keyboard
 shortcut *⌘O* (*Ctrl+O* on Windows and Linux). The same shortcut opens the selected item on the *Inbox* tab.
 
@@ -120,7 +123,8 @@ tall, where fitting the width pushes the bottom of the page out of sight. Zoomin
 to the whole page and stops there. Ctrl+scroll (⌘+scroll on a Mac) zooms as well.
 
 #shot("screenshots/desktop-search-hit-overlay.png",
-  [The preview with search hits highlighted on the page — click a word to copy it, or step through the matches.])
+  [The preview with search hits highlighted on the page — click a word to copy it (shift-click to append), or
+   step through the matches.])
 
 = Adding & versioning documents
 
@@ -220,9 +224,11 @@ and multi-page `.tif` files; anything else simply does not offer them.
   [*Operation*], [*What it does*],
   [*Split into pages*#idx("Split into pages")], [One new item per page. The original is kept, so a split that
    turns out wrong is undone by deleting its output — a scan can be the only copy of a piece of paper.],
-  [*Sort & rotate pages*#idx("Sort pages")#idx("Rotate pages")], [Opens the page dialog below: put the pages in
-   order, delete a page with the bin on its tile, and turn a page with the *⟲ ⟳* buttons under it. Nothing is
-   written until *Apply order* — one save for the whole arrangement, and *Cancel* discards everything.],
+  [*Rotate/Sort*#idx("Rotate/Sort")#idx("Sort pages")#idx("Rotate pages")], [Opens the page dialog below: put
+   the pages in order, delete a page with the bin on its tile, and turn a page with the *⟲ ⟳* buttons under it.
+   Nothing is written until *Apply order* — one save for the whole arrangement, and *Cancel* discards
+   everything. Offered from a single page up, because rotating a one-page scan that went in upside-down is
+   exactly what it is for.],
   [*Join items*#idx("Join items")], [Several staged items become one, in the order you chose them. The sources
    are kept.],
   [*Cut at separator sheets*#idx("Separator sheets")], [Cuts a batch into one item per document at the printed
@@ -230,7 +236,7 @@ and multi-page `.tif` files; anything else simply does not offer them.
 )
 
 #shot("screenshots/desktop-sort-rotate.png",
-  [The *Sort & rotate pages* dialog on the sample batch: page 4 went through the scanner upside-down and has
+  [The *Rotate/Sort* dialog on the sample batch: page 4 went through the scanner upside-down and has
    been turned a quarter so far — one more press of its *⟳* button puts it upright. The bin on each tile
    deletes that page; nothing is saved until *Apply order*.])
 
@@ -254,9 +260,10 @@ files saved into the Inbox folder of the mounted network drive:
   [*Toggle*], [*What it does to an arriving scan*],
   [*Auto-rotate*#idx("Auto-rotate")], [Turns pages that arrived upside-down or sideways the right way round.
    Works for `.pdf` and `.tif`.],
-  [*Auto-straighten*#idx("Auto-straighten (deskew)")], [Corrects the slight skew of a crooked scan. Only for
-   `.tif`: straightening re-renders the pages, and doing that to a PDF would replace its real text with a
-   recognised approximation.],
+  [*Auto-straighten*#idx("Auto-straighten (deskew)")], [Corrects the slight skew of a crooked scan — for
+   `.tif`, and for a PDF that is itself a pure scan (image pages, no real text). A born-digital PDF is left
+   alone: straightening re-renders the pages, and doing that would replace its real text with a recognised
+   approximation.],
   [*Cut at separator sheets*], [Applies the separator cut to every arriving batch, so a scanner that feeds
    straight into the Inbox needs no manual step at all.],
 )
@@ -265,6 +272,12 @@ files saved into the Inbox folder of the mounted network drive:
   *Digitally signed documents are never touched.* Every page operation would break the signature, so on a
   signed item none is offered and the automatic steps skip it — the refusal is the feature.
 ]
+
+*Already filed?* *Rotate/Sort* also exists on the *Check-out* tab#idx("Rotate/Sort"). It edits the
+*working copy* of a document you have checked out — the archived version stays exactly as it was, and your
+rearrangement becomes the new version only when you press *Check in* (or is thrown away by *Discard*, like
+any other working-copy edit). Split and join stay in the Inbox: they turn one item into several documents,
+which is filing work.
 
 #shot("screenshots/web-version-compare.png",
   [*Compare versions*: an inline diff of two revisions of a document — added lines marked with `+`, removed lines

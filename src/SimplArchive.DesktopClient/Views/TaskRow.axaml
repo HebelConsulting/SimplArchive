@@ -10,10 +10,14 @@
          ribbon's twin acts on the selection. Restructure only, by decision: approve/reject stay in the detail
          a task opens into — approving from a list row without seeing the document invites rubber-stamping. -->
     <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="0,8">
-        <Grid ColumnDefinitions="*,90,150">
+        <Grid ColumnDefinitions="*,110,90,150">
             <TextBlock Grid.Column="0" Text="{Binding DocumentName}" VerticalAlignment="Center" Margin="6,0" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="1" Text="{Binding VersionText}" VerticalAlignment="Center" Margin="6,0" Foreground="{DynamicResource WbMuted}" />
-            <TextBlock Grid.Column="2" Text="{Binding AssignedText}" VerticalAlignment="Center" Margin="6,0" Foreground="{DynamicResource WbMuted}" />
+            <!-- Constant by construction — a task IS a review assigned to you — but SAID (review finding). -->
+            <Border Grid.Column="1" Background="{DynamicResource WbChrome}" CornerRadius="9" Padding="8,1" Margin="6,0" HorizontalAlignment="Left" VerticalAlignment="Center">
+                <TextBlock Text="{loc:Tr WfStateInReview}" FontSize="11" />
+            </Border>
+            <TextBlock Grid.Column="2" Text="{Binding VersionText}" VerticalAlignment="Center" Margin="6,0" Foreground="{DynamicResource WbMuted}" />
+            <TextBlock Grid.Column="3" Text="{Binding AssignedText}" VerticalAlignment="Center" Margin="6,0" Foreground="{DynamicResource WbMuted}" />
             <Grid.ContextMenu>
                 <ContextMenu>
                     <MenuItem Header="{loc:Tr MwOpen}" Click="OnOpen">

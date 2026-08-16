@@ -46,7 +46,7 @@ public class WebSearchFacetsTests
 
         var page = await Ui.LoginAsync(_app);
         await page.Locator(".wb-tab[aria-label=\"Search\"]").First.ClickAsync();
-        await page.FillAsync(".wb-search-bar input", word);
+        await page.FillAsync(".wb-search-query input", word); // the query row moved below the ribbon (post-#530 review round)
         await page.GetByRole(AriaRole.Button, new() { Name = "Search", Exact = true }).ClickAsync();
 
         // The three results and the facet panel appear.

@@ -1,4 +1,5 @@
 using SimplArchive.Client.Models;
+using SimplArchive.Localization;
 
 namespace SimplArchive.Client.Services;
 
@@ -41,6 +42,42 @@ public sealed class DetailState
     // ---- The document's own facts, as stored ---------------------------------------------------------
 
     public bool SysHasVersion { get; set; }
+
+    /// <summary>The current version's workflow state (raw enum name), null when none was started.</summary>
+    public string? SysWorkflowStatus { get; set; }
+
+    /// <summary>The workflow state, localised for the pane's Status row.</summary>
+    public string WorkflowStateName => SysWorkflowStatus switch
+    {
+        null or "" => Strings.Get("WfNotStarted"),
+        "Draft" => Strings.Get("WfStateDraft"),
+        "InReview" => Strings.Get("WfStateInReview"),
+        "Approved" => Strings.Get("WfStateApproved"),
+        "Rejected" => Strings.Get("WfStateRejected"),
+        "Released" => Strings.Get("WfStateReleased"),
+        var other => other,
+    };
+
+    /// <summary>
+    /// The workflow affordance labels itself by the document's state (review decision: Start when none,
+    /// Manage while active, View once Released) — derived from the detail's payload, no extra request
+    /// (ADR 0557). A row context menu can't know a non-selected row's state, so IT stays a neutral
+    /// "Workflow…". Ribbon flavour is the bare label; the pane's button gets the trailing ellipsis.
+    /// </summary>
+    public string WorkflowRibbonLabel => SysWorkflowStatus switch
+    {
+        null or "" => Strings.Get("RibbonStartWorkflow"),
+        "Released" => Strings.Get("RibbonViewWorkflow"),
+        _ => Strings.Get("RibbonManageWorkflow"),
+    };
+
+    /// <inheritdoc cref="WorkflowRibbonLabel"/>
+    public string WorkflowButtonLabel => SysWorkflowStatus switch
+    {
+        null or "" => Strings.Get("CtxStartWorkflow"),
+        "Released" => Strings.Get("CtxViewWorkflow"),
+        _ => Strings.Get("CtxManageWorkflow"),
+    };
     public Guid SysCurrentVersionId { get; set; }
 
     /// <summary>The current version's advertised `document-date` address, captured from the version row when

@@ -96,8 +96,11 @@
                    title="@Strings.Get("Download")" aria-label="@Strings.Get("Download")">
             <MudIcon Icon="@Icons.Material.Filled.Download" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("Download")</span>
         </MudButton>
-        <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selectedInboxItem is null)"
-                   OnClick="@(() => DeleteInboxItemAsync(_selectedInboxItem!))"
+        @* Delete composes across the CHECKED set like File selected does (N deletes, one confirm naming the
+           count, one summary — the checkout tab's bulk story); with nothing checked it acts on the selected
+           row (review finding). The row's ⋮ twin stays single — it acts on its own row (ADR 0559). *@
+        <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selectedInboxItem is null && _inboxChecked.Count == 0)"
+                   OnClick="DeleteInboxSelectionAsync"
                    title="@Strings.Get("RibbonDelete")" aria-label="@Strings.Get("RibbonDelete")">
             <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonDelete")</span>
         </MudButton>
@@ -593,10 +596,26 @@
         // Signal ingest BEFORE dropping the busy state and reloading: deskew and the patch-code cut run in
         // that call, so reloading first would show the un-straightened, un-split file and then change it
         // under the user — or, before this was wired at all, not until the sweep worker's five-minute poll.
-        await InboxUploads.SignalProcessedAsync();
+        // The busy flag clears in finally: a failure here must not leave the spinner running forever, and it
+        // must be SAID — a swallowed ingest failure means deskew/cut silently did not run.
+        try
+        {
+            await InboxUploads.SignalProcessedAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrInboxProcessing"), Severity.Warning);
+        }
+        finally
+        {
+            _inboxBusy = false;
+        }
 
-        _inboxBusy = false;
         await LoadInboxAsync();
+        // A [JSInvokable] call doesn't auto-render (unlike a Blazor event handler): without this, the busy
+        // spinner kept spinning INDEFINITELY after a successful upload — every request 200, the list even
+        // refreshed, and the user staring at a stale render of it.
+        StateHasChanged();
     }
 
     // ---- Inbox mask/index-data staging pane (ADRs 0279/0281/0285) ------------------------------------
@@ -1310,6 +1329,48 @@
             _inboxIncludeGroups = false;
         }
 
+        await LoadInboxAsync();
+    }
+
+    private async Task DeleteInboxSelectionAsync()
+    {
+        var items = _inboxChecked.Count > 0 ? _inboxChecked.ToList()
+            : _selectedInboxItem is { } one ? new List<InboxItem> { one } : [];
+        if (items.Count <= 1)
+        {
+            if (items.Count == 1)
+            {
+                await DeleteInboxItemAsync(items[0]);
+            }
+
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = "Delete inbox items",
+            Message = string.Format(Strings.Get("InboxDeleteManyConfirm"), items.Count),
+            YesText = "Delete",
+            CancelText = "Cancel",
+        });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        var deleted = 0;
+        foreach (var item in items)
+        {
+            if ((await Http.DeleteAsync(item.DeleteHref)).IsSuccessStatusCode)
+            {
+                deleted++;
+                ClearInboxSelection(item);
+            }
+        }
+
+        Snackbar.Add(
+            deleted == items.Count ? string.Format(Strings.Get("StDeletedItems"), deleted) : Strings.Get("StErrDeleteSelection"),
+            deleted == items.Count ? Severity.Success : Severity.Warning);
         await LoadInboxAsync();
     }
 

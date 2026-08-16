@@ -24,4 +24,7 @@ public sealed class LegalHoldItemRowViewModel(Guid documentId, string documentNa
 
     public Guid DocumentId { get; } = documentId;
     public string DocumentName { get; } = documentName;
+
+    /// <summary>Remove is offered only while the pairing advertised it — a released hold's items are history (ADR 0543/0554).</summary>
+    public bool CanRemove => Item.RemoveHref is not null;
 }

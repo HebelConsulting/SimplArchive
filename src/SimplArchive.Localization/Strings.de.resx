@@ -4051,7 +4051,7 @@
     <value>&#x27;{0}&#x27; in seine {1} Seiten aufteilen? Das Original bleibt erhalten.</value>
   </data>
   <data name="InboxSortTitle" xml:space="preserve">
-    <value>Seiten sortieren</value>
+    <value>Drehen/Sortieren</value>
   </data>
   <data name="InboxSortPrompt" xml:space="preserve">
     <value>Bringen Sie die {1} Seiten von &#x27;{0}&#x27; in die gewünschte Reihenfolge. Wählen Sie eine Seite aus und verschieben Sie sie.</value>
@@ -4106,6 +4106,12 @@
   </data>
   <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
     <value>Die Seitenreihenfolge muss jede Seite genau einmal enthalten.</value>
+  </data>
+  <data name="ApiErrWorkingCopySigned" xml:space="preserve">
+    <value>Die Arbeitskopie ist digital signiert; eine Änderung der Seiten würde die Signatur ungültig machen.</value>
+  </data>
+  <data name="InboxDeleteManyConfirm" xml:space="preserve">
+    <value>{0} Elemente aus Ihrer Eingangsbox löschen?</value>
   </data>
   <data name="ApiErrInboxNoPatchCodes" xml:space="preserve">
     <value>In diesem Scan wurden keine Trennblätter gefunden, es gibt also nichts zu schneiden. Prüfen Sie, ob die Blätter im Stapel lagen und gerade genug eingezogen wurden.</value>
@@ -4181,5 +4187,41 @@
   </data>
   <data name="InboxPageRotateRight" xml:space="preserve">
     <value>90° nach rechts drehen</value>
+  </data>
+  <data name="StErrInboxProcessing" xml:space="preserve">
+    <value>Upload gespeichert, aber die Verarbeitung (Begradigen / Trennblatt-Schnitt) konnte nicht gestartet werden — aktualisieren und den Eintrag prüfen.</value>
+  </data>
+  <data name="WfStateDraft" xml:space="preserve">
+    <value>Entwurf</value>
+  </data>
+  <data name="WfStateInReview" xml:space="preserve">
+    <value>In Prüfung</value>
+  </data>
+  <data name="WfStateApproved" xml:space="preserve">
+    <value>Genehmigt</value>
+  </data>
+  <data name="WfStateRejected" xml:space="preserve">
+    <value>Abgelehnt</value>
+  </data>
+  <data name="WfStateReleased" xml:space="preserve">
+    <value>Freigegeben</value>
+  </data>
+  <data name="RibbonManageWorkflow" xml:space="preserve">
+    <value>Workflow verwalten</value>
+  </data>
+  <data name="RibbonViewWorkflow" xml:space="preserve">
+    <value>Workflow anzeigen</value>
+  </data>
+  <data name="CtxManageWorkflow" xml:space="preserve">
+    <value>Workflow verwalten…</value>
+  </data>
+  <data name="CtxViewWorkflow" xml:space="preserve">
+    <value>Workflow anzeigen…</value>
+  </data>
+  <data name="CtxWorkflow" xml:space="preserve">
+    <value>Workflow…</value>
+  </data>
+  <data name="WfNotStarted" xml:space="preserve">
+    <value>nicht gestartet</value>
   </data>
 </root>

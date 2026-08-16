@@ -141,7 +141,7 @@ public sealed class SimplArchiveApiClient
     // instead of rebuilding a path out of the two ids beside it (ADR 0543, issue #416).
     public sealed record SystemFields(
         Guid CurrentVersionId, int CurrentVersionNumber, DateTimeOffset CreatedAt, string CreatedByName, string DocumentDate,
-        bool HasTiffVersion, string? OcrLanguages, string FileExtension, string? DocumentDateHref = null);
+        bool HasTiffVersion, string? OcrLanguages, string FileExtension, string? DocumentDateHref = null, string? WorkflowStatus = null);
 
     public sealed record OcrLanguageOption(string Code, string DisplayName);
 
@@ -1099,7 +1099,7 @@ public sealed class SimplArchiveApiClient
             tiff is not null,
             ocr,
             Str(cur, "fileExtension"),
-            RelHref(cur, "document-date"));
+            RelHref(cur, "document-date"), StrOrNull(cur, "workflowStatus"));
     }
 
     public async Task<IReadOnlyList<OcrLanguageOption>> GetOcrLanguageCatalogAsync(CancellationToken cancellationToken = default)
@@ -2695,7 +2695,7 @@ public sealed class SimplArchiveApiClient
     // `working-copy`, `extend` and — only when there is a stash to diff — `compare`.
     // ImplicitAgent: the client that took this lock without the user asking — a save-by-rename edit over the
     // WebDAV mount (ADR 0562); null for an explicit check-out. Client-supplied text: display it, never act on it.
-    public sealed record CheckoutItem(Guid Id, string Name, string Path, string Sha256, string FileExtension, bool HasStash, bool IsModified, string? StashDownloadUrl, DateTimeOffset? ExpiresAt, IReadOnlyDictionary<string, string>? Links = null, string? ImplicitAgent = null, bool? IsSigned = null)
+    public sealed record CheckoutItem(Guid Id, string Name, string Path, string Sha256, string FileExtension, bool HasStash, bool IsModified, string? StashDownloadUrl, DateTimeOffset? ExpiresAt, IReadOnlyDictionary<string, string>? Links = null, string? ImplicitAgent = null, bool? IsSigned = null, string? DownloadUrl = null)
     {
         public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
     }
@@ -2772,8 +2772,7 @@ public sealed class SimplArchiveApiClient
             foreach (var i in arr.EnumerateArray())
             {
                 items.Add(new CheckoutItem(
-                    i.GetProperty("id").GetGuid(),
-                    i.GetProperty("name").GetString() ?? "",
+                    i.GetProperty("id").GetGuid(), i.GetProperty("name").GetString() ?? "",
                     i.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "",
                     i.TryGetProperty("sha256", out var s) ? s.GetString() ?? "" : "",
                     i.TryGetProperty("fileExtension", out var fe) ? fe.GetString() ?? "" : "",
@@ -2786,7 +2785,8 @@ public sealed class SimplArchiveApiClient
                     // Tri-state: absent means never examined (#491), which is not the same as "not signed".
                     i.TryGetProperty("isSigned", out var sg) && sg.ValueKind is JsonValueKind.True or JsonValueKind.False
                         ? sg.GetBoolean()
-                        : null));
+                        : null,
+                    StrOrNull(i, "downloadUrl")));
             }
         }
 
@@ -2837,7 +2837,7 @@ public sealed class SimplArchiveApiClient
     // from here rather than rebuilt from a document id and a version id (ADR 0543/0555).
     public sealed record VersionInfo(Guid Id, int? VersionNumber, string Status, string FileExtension, string? DownloadUrl,
         string DocumentDate = "", DateTimeOffset CreatedAt = default, string CreatedByName = "", bool IsCurrent = false,
-        string? Comment = null, IReadOnlyDictionary<string, string>? Links = null)
+        string? Comment = null, IReadOnlyDictionary<string, string>? Links = null, string? WorkflowStatus = null)
     {
         public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
     }
@@ -2898,7 +2898,7 @@ public sealed class SimplArchiveApiClient
                     v.TryGetProperty("createdAt", out var ca) && ca.ValueKind == JsonValueKind.String ? ca.GetDateTimeOffset() : default,
                     v.TryGetProperty("createdByName", out var cb) ? cb.GetString() ?? "" : "",
                     Comment: v.TryGetProperty("comment", out var cm) && cm.ValueKind == JsonValueKind.String ? cm.GetString() : null,
-                    Links: ParseLinks(v)));
+                    Links: ParseLinks(v), WorkflowStatus: StrOrNull(v, "workflowStatus")));
             }
         }
 
@@ -4071,7 +4071,7 @@ public sealed class SimplArchiveApiClient
 
     // A covered document. RemoveHref is the pairing's own address — the item is the only thing that knows both
     // ends of it — and is null once the hold is released.
-    public sealed record LegalHoldItemInfo(Guid DocumentId, string DocumentName, string? RemoveHref = null);
+    public sealed record LegalHoldItemInfo(Guid DocumentId, string DocumentName, string? RemoveHref = null, Guid? ParentId = null);
 
     public async Task<List<LegalHoldInfo>> GetLegalHoldsAsync(CancellationToken cancellationToken = default)
     {
@@ -4138,7 +4138,7 @@ public sealed class SimplArchiveApiClient
         {
             foreach (var i in itemsEl.EnumerateArray())
             {
-                items.Add(new LegalHoldItemInfo(i.GetProperty("documentId").GetGuid(), i.GetProperty("documentName").GetString() ?? "", RelHref(i, "remove")));
+                items.Add(new LegalHoldItemInfo(i.GetProperty("documentId").GetGuid(), i.GetProperty("documentName").GetString() ?? "", RelHref(i, "remove"), i.TryGetProperty("parentId", out var pp) && pp.ValueKind == JsonValueKind.String ? pp.GetGuid() : null));
             }
         }
 

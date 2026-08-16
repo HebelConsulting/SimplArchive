@@ -31,7 +31,7 @@ public class WebSearchFieldClearTests
 
         // The clear button is MudBlazor's adornment inside the field, so it is found from the field's own wrapper
         // rather than the page — the Search tab has other buttons that would match a looser locator.
-        var field = page.Locator(".wb-search-bar .mud-input-control").First;
+        var field = page.Locator(".wb-search-query .mud-input-control").First;
         await field.Locator("button").Last.ClickAsync();
 
         await Expect(input).ToHaveValueAsync(string.Empty);

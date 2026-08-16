@@ -94,6 +94,35 @@ public static class InboxPageThumbnails
         return thumbnails;
     }
 
+    /// <summary>
+    /// The check-out working copy's pages (ADR 0593): a PDF rasterises locally from the stash — or the archived
+    /// version when no stash exists yet — the same PDFium route as the inbox. Anything else gets numbered tiles
+    /// (null bitmaps): the checkout preview has no per-page rendition endpoint, and a tile without a picture
+    /// still carries its page number, which is enough to rotate a known-upside-down scan.
+    /// </summary>
+    public static async Task<IReadOnlyList<Bitmap?>> LoadForCheckoutAsync(
+        SimplArchiveApiClient.CheckoutItem item,
+        int pageCount,
+        CancellationToken cancellationToken = default)
+    {
+        if (item.FileExtension.Equals(".pdf", StringComparison.OrdinalIgnoreCase)
+            && (item.StashDownloadUrl ?? item.DownloadUrl) is { } url)
+        {
+            try
+            {
+                using var http = new HttpClient();
+                var bytes = await http.GetByteArrayAsync(url, cancellationToken);
+                return PreviewRenderer.RenderPdfPages(bytes).Select(Scale).Cast<Bitmap?>().ToList();
+            }
+            catch (Exception)
+            {
+                // Numbered tiles below — losing the pictures must not cost the dialog (ADR 0575's trade).
+            }
+        }
+
+        return new Bitmap?[pageCount];
+    }
+
     private static Bitmap Scale(Bitmap source)
     {
         if (source.PixelSize.Width <= ThumbnailWidth)

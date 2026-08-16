@@ -76,6 +76,7 @@
                     <span @onclick:stopPropagation="true">
                         <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
                             <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy" OnClick="async () => { await SelectPrincipalAsync(p); await CopyPrincipalAsync(); }">@Strings.Get("UgCopy")</MudMenuItem>
+                            <MudDivider />
                             <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="async () => { await SelectPrincipalAsync(p); await DeletePrincipalAsync(); }">@Strings.Get("UgDelete")</MudMenuItem>
                         </MudMenu>
                     </span>
@@ -89,7 +90,28 @@
             <div class="wb-ug-rights-head">
                 <MudIcon Icon="@(sel.IsGroup ? Icons.Material.Filled.Group : Icons.Material.Filled.Person)" Size="Size.Small" />
                 <MudText Typo="Typo.subtitle1">@sel.Name</MudText>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">@string.Format(Strings.Get("UgRights"), sel.IsGroup ? Strings.Get("UgGroup") : Strings.Get("UgUser"))</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="flex:1 1 auto; min-width:0;">@string.Format(Strings.Get("UgRights"), sel.IsGroup ? Strings.Get("UgGroup") : Strings.Get("UgUser"))</MudText>
+                @* Edit lives in the pane's upper-right, ribbon-style, and Save/Cancel take its
+                   slot for the edit's duration (ADR 0550 — the transition doesn't hide its own
+                   actions, and they sit where the pencil that started it was). *@
+                @if (_ugEditing)
+                {
+                    <MudTooltip Text="@Strings.Get("Save")">
+                        <MudIconButton Size="Size.Small" aria-label="@Strings.Get("Save")" Color="Color.Primary"
+                                       Icon="@Icons.Material.Filled.Save" OnClick="SaveRightsAsync" Disabled="_ugBusy" />
+                    </MudTooltip>
+                    <MudTooltip Text="@Strings.Get("Cancel")">
+                        <MudIconButton Size="Size.Small" aria-label="@Strings.Get("Cancel")"
+                                       Icon="@Icons.Material.Filled.Close" OnClick="CancelRightsEdit" Disabled="_ugBusy" />
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudTooltip Text="@Strings.Get("Edit")">
+                        <MudIconButton Size="Size.Small" aria-label="@Strings.Get("Edit")"
+                                       Icon="@Icons.Material.Filled.Edit" OnClick="BeginRightsEdit" />
+                    </MudTooltip>
+                }
             </div>
             @* Profile photo (users only — groups have none). ADR "User profile photo". *@
             @if (!sel.IsGroup)
@@ -151,17 +173,6 @@
                     }
                 </MudSelect>
                 <InfoButton Text="@(Strings.Get("UgClearanceInfo"))" />
-            </div>
-            <div class="wb-detail-actions">
-                @if (_ugEditing)
-                {
-                    <MudButton Size="Size.Small" OnClick="CancelRightsEdit" Disabled="_ugBusy">@Strings.Get("Cancel")</MudButton>
-                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveRightsAsync" Disabled="_ugBusy">@Strings.Get("Save")</MudButton>
-                }
-                else
-                {
-                    <MudButton Size="Size.Small" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Edit" OnClick="BeginRightsEdit">@Strings.Get("Edit")</MudButton>
-                }
             </div>
             @* Group membership (ADR "Group membership editing") — direct members with a
                searchable add-picker. *@

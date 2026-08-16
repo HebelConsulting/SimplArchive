@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Infrastructure.Persistence;
 using SimplArchive.Infrastructure.Storage;
+using SimplArchive.Infrastructure.Conversion;
 
 namespace SimplArchive.Infrastructure.Inbox;
 
@@ -65,9 +66,12 @@ public sealed class StraightenIngestProcessor(
             .Select(u => new { u.RotateInboxUploads, u.DeskewInboxUploads })
             .FirstOrDefaultAsync(cancellationToken);
 
-        // Rotation may run on either format; deskew only on a TIFF, for the reason in the remarks above.
+        // Rotation may run on either format. Deskew needs a re-render, so it runs on a TIFF — and, since the
+        // review of 2026-08-16, on a PDF the detector classifies as a SCAN: its text layer is OCR output
+        // already, so the re-render trades nothing real away (a digital-born PDF keeps the lossless-only rule).
         var rotate = wanted?.RotateInboxUploads == true;
-        var deskew = wanted?.DeskewInboxUploads == true && isTiff;
+        var deskew = wanted?.DeskewInboxUploads == true
+            && (isTiff || (format == PageComposer.PageFormat.Pdf && ScannedPdfDetector.IsConvertibleScan(context.Bytes)));
 
         if (!rotate && !deskew)
         {

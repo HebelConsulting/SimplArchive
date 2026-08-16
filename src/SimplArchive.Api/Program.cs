@@ -178,6 +178,7 @@ builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentRestorer>();
 // The inbox's page operations and the scope/authorization rule they share with InboxController (ADR 0575).
 builder.Services.AddScoped<SimplArchive.Api.Inbox.InboxScopeResolver>();
 builder.Services.AddScoped<SimplArchive.Api.Inbox.InboxPageService>();
+builder.Services.AddScoped<SimplArchive.Api.Checkouts.CheckoutPageService>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.RepositoryExporter>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.RepositoryImporter>();
 // Get-or-create the caller's personal repository — shared by PersonalRepositoryController and the WebDAV

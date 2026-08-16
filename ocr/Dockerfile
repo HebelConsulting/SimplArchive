@@ -13,6 +13,7 @@ FROM python:3.14-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ocrmypdf \
         pngquant \
+        qpdf \
         tesseract-ocr-deu \
         tesseract-ocr-fra \
         tesseract-ocr-ita \

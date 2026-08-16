@@ -4051,7 +4051,7 @@
     <value>Split &#x27;{0}&#x27; into its {1} pages? The original is kept.</value>
   </data>
   <data name="InboxSortTitle" xml:space="preserve">
-    <value>Sort pages</value>
+    <value>Rotate/Sort</value>
   </data>
   <data name="InboxSortPrompt" xml:space="preserve">
     <value>Put the {1} pages of &#x27;{0}&#x27; in the order you want. Select a page, then move it.</value>
@@ -4106,6 +4106,12 @@
   </data>
   <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
     <value>The page order must list each page exactly once.</value>
+  </data>
+  <data name="ApiErrWorkingCopySigned" xml:space="preserve">
+    <value>The working copy is digitally signed; changing its pages would void the signature.</value>
+  </data>
+  <data name="InboxDeleteManyConfirm" xml:space="preserve">
+    <value>Delete {0} items from your inbox?</value>
   </data>
   <data name="ApiErrInboxNoPatchCodes" xml:space="preserve">
     <value>No separator sheets were found in this scan, so there is nothing to cut it into. Check that the sheets were in the stack and came through straight enough to read.</value>
@@ -4181,5 +4187,41 @@
   </data>
   <data name="InboxPageRotateRight" xml:space="preserve">
     <value>Rotate 90° right</value>
+  </data>
+  <data name="StErrInboxProcessing" xml:space="preserve">
+    <value>Upload stored, but processing (deskew / separator cut) could not be started — refresh and check the item.</value>
+  </data>
+  <data name="WfStateDraft" xml:space="preserve">
+    <value>Draft</value>
+  </data>
+  <data name="WfStateInReview" xml:space="preserve">
+    <value>In Review</value>
+  </data>
+  <data name="WfStateApproved" xml:space="preserve">
+    <value>Approved</value>
+  </data>
+  <data name="WfStateRejected" xml:space="preserve">
+    <value>Rejected</value>
+  </data>
+  <data name="WfStateReleased" xml:space="preserve">
+    <value>Released</value>
+  </data>
+  <data name="RibbonManageWorkflow" xml:space="preserve">
+    <value>Manage workflow</value>
+  </data>
+  <data name="RibbonViewWorkflow" xml:space="preserve">
+    <value>View workflow</value>
+  </data>
+  <data name="CtxManageWorkflow" xml:space="preserve">
+    <value>Manage workflow…</value>
+  </data>
+  <data name="CtxViewWorkflow" xml:space="preserve">
+    <value>View workflow…</value>
+  </data>
+  <data name="CtxWorkflow" xml:space="preserve">
+    <value>Workflow…</value>
+  </data>
+  <data name="WfNotStarted" xml:space="preserve">
+    <value>not started</value>
   </data>
 </root>

@@ -28,6 +28,8 @@ public partial class CheckoutRibbon : UserControl
 
     private void OnCheckoutBeyondCompare(object? sender, RoutedEventArgs e) => Window()?.OnCheckoutBeyondCompare(sender, e);
 
+    private void OnCheckoutSortPages(object? sender, RoutedEventArgs e) => Window()?.OnCheckoutSortPages(sender, e);
+
     private void OnCheckoutCheckIn(object? sender, RoutedEventArgs e) => Window()?.OnCheckoutCheckIn(sender, e);
 
     private void OnCheckoutDiscard(object? sender, RoutedEventArgs e) => Window()?.OnCheckoutDiscard(sender, e);

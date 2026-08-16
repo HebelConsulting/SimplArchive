@@ -95,15 +95,18 @@ public sealed class InboxApi(HttpClient http, SimplArchiveApiClient client)
     }
 
     /// <summary>Null when the row advertised no <c>pages</c> rel at all — no request is made in that case.</summary>
-    public async Task<PagesInfo?> GetAsync(
+    public Task<PagesInfo?> GetAsync(
         SimplArchiveApiClient.InboxItemInfo item,
-        CancellationToken cancellationToken = default)
-    {
-        if (item.Href("pages") is not { } pagesHref)
-        {
-            return null;
-        }
+        CancellationToken cancellationToken = default) =>
+        item.Href("pages") is { } pagesHref ? GetAsync(pagesHref, cancellationToken) : Task.FromResult<PagesInfo?>(null);
 
+    /// <summary>
+    /// The pages resource at an advertised href. Overload shared with the Check-out tab (ADR 0593): a check-out
+    /// row's `pages` rel answers the same protocol for the WORKING COPY, so the parse lives once here rather
+    /// than as a second copy that can drift.
+    /// </summary>
+    public async Task<PagesInfo?> GetAsync(string pagesHref, CancellationToken cancellationToken = default)
+    {
         using var response = await http.GetAsync(pagesHref.TrimStart('/'), cancellationToken);
         if (!response.IsSuccessStatusCode)
         {

@@ -63,6 +63,9 @@
                 <MenuItem Header="{loc:Tr MwExtendCheckoutTip}" Click="OnExtend" IsVisible="{Binding CanExtend}">
                     <MenuItem.Icon><i:Icon Value="mdi-clock-plus-outline" /></MenuItem.Icon>
                 </MenuItem>
+                <MenuItem Header="{loc:Tr InboxSortTitle}" Click="OnSortPages" IsVisible="{Binding CanSortPages}">
+                    <MenuItem.Icon><i:Icon Value="mdi-sort" /></MenuItem.Icon>
+                </MenuItem>
                 <!-- Discard is separated by a rule, here as in the ribbon: it is the one that throws work away,
                      and it sits next to the one that commits it. -->
                 <Separator />

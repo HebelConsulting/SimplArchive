@@ -43,6 +43,10 @@ public record VersionListResponse
 
 public record VersionResponse
 {
+    /// <summary>Draft/InReview/Approved/Rejected/Released — or null when no workflow was ever started;
+    /// what labels the workflow affordance by state without following the rel (review round).</summary>
+    public string? WorkflowStatus { get; set; }
+
     public Guid Id { get; set; }
     public int? VersionNumber { get; set; }
     public string Status { get; set; } = "";

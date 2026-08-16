@@ -1,6 +1,7 @@
 using SimplArchive.Api.Errors.Exceptions.Inbox;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Infrastructure.Inbox;
+using SimplArchive.Infrastructure.Conversion;
 using SimplArchive.Infrastructure.Storage;
 
 namespace SimplArchive.Api.Inbox;
@@ -177,19 +178,9 @@ public sealed class InboxPageService(
         var (format, bytes) = await LoadPagedAsync(prefix, name, cancellationToken);
         var pageCount = PageComposer.CountPages(bytes, format);
 
-        // A subset is allowed (the omitted pages are deleted); a duplicate, an out-of-range page, or an empty
-        // order is not — those are the shapes that mean the caller has made a mistake rather than a choice.
-        if (pageOrder.Count == 0 || pageOrder.Count > pageCount
-            || pageOrder.Distinct().Count() != pageOrder.Count
-            || pageOrder.Any(p => p < 1 || p > pageCount))
-        {
-            throw new InboxPageOrderInvalidException(name, pageCount);
-        }
-
-        // Rotations get the order's treatment before anything is written (#522): validate the whole set, then
-        // write once. A rotation of a page that is not being kept, or an angle that is not a quarter turn, is
-        // a caller mistake — never a partial application.
-        if (rotations is not null && rotations.Any(r => !pageOrder.Contains(r.Key) || r.Value is not (90 or 180 or 270)))
+        // Validate the whole request, then write once (#522) — the rule itself lives on PageComposer, shared
+        // with the check-out working-copy surface so the two cannot drift.
+        if (!PageComposer.IsValidOrder(pageCount, pageOrder, rotations))
         {
             throw new InboxPageOrderInvalidException(name, pageCount);
         }
@@ -231,15 +222,14 @@ public sealed class InboxPageService(
             throw new InboxPagesNotSupportedException(name);
         }
 
-        // Deskew only on a TIFF, rotation on either — the same rule the automatic path follows, and for the
-        // same reason: sub-degree correction cannot happen without re-rendering, so asking for it on a PDF
-        // would trade the document's real text for an OCR approximation. This call used to pass deskew:true
-        // for both, which meant the MANUAL button did to a PDF exactly what the automatic path refuses.
+        // Deskew needs a re-render, so it runs on a TIFF and on a PDF the detector classifies as a SCAN
+        // (its text layer is OCR output already; review 2026-08-16) — the same rule the automatic path
+        // follows. A digital-born PDF keeps the lossless-only treatment: rotation, never deskew.
         var straightened = await converter.ConvertToSearchablePdfAsync(
             bytes,
             sourceKind,
             OcrLanguages,
-            deskew: sourceKind == SearchablePdfSourceKind.Tiff,
+            deskew: sourceKind == SearchablePdfSourceKind.Tiff || ScannedPdfDetector.IsConvertibleScan(bytes),
             rotate: true,
             cancellationToken);
 
@@ -374,7 +364,7 @@ public sealed class InboxPageService(
         CancellationToken cancellationToken)
     {
         await using var payload = new MemoryStream(bytes);
-        await storage.PutObjectAsync(key, payload, ContentTypeOf(format), cancellationToken);
+        await storage.PutObjectAsync(key, payload, PageComposer.ContentTypeOf(format), cancellationToken);
     }
 
     private Task CopyMaskDraftAsync(
@@ -410,12 +400,6 @@ public sealed class InboxPageService(
 
     private static string Stem(string name) => InboxNaming.Stem(name);
 
-    private static string ContentTypeOf(PageComposer.PageFormat format) => format switch
-    {
-        PageComposer.PageFormat.Pdf => "application/pdf",
-        PageComposer.PageFormat.Tiff => "image/tiff",
-        _ => "application/octet-stream",
-    };
 
     /// <summary>The staged-mask sidecar's name suffix, as the Api's controllers already know it.</summary>
     /// <remarks>

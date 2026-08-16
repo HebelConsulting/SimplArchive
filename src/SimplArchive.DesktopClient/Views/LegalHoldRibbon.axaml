@@ -20,6 +20,13 @@
                 <Button AutomationProperties.AutomationId="lh-release" IsEnabled="{Binding SelectedHoldIsActive}"
                         Click="OnRelease" ToolTip.Tip="{loc:Tr LhRelease}"><i:Icon Value="mdi-lock-open-outline" FontSize="18" /></Button>
             </StackPanel>
+            <!-- The DOCUMENT group (review finding): Go to jumps to the selected held document in
+                 Repositories — the Search ribbon's affordance, acting on the item selection here. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="lh-goto" IsEnabled="{Binding HasSelectedHoldItem}"
+                        Command="{Binding GoToSelectedHoldItemCommand}"
+                        ToolTip.Tip="{loc:Tr SearchGoToDocument}"><i:Icon Value="mdi-open-in-new" FontSize="18" /></Button>
+            </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
                 <Button Command="{Binding LoadLegalHoldsCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
             </StackPanel>

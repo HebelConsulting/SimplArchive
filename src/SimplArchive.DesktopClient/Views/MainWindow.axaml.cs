@@ -359,16 +359,32 @@ public partial class MainWindow : Window
 
 
 
+    // A row-tagged call deletes THAT row (ADR 0559); the ribbon (no Tag) composes across the whole
+    // multi-selection — N deletes, one confirm naming the count (the checkout bulk story; review finding).
     internal void OnInboxDelete(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
-        if (DataContext is not MainWindowViewModel vm || InboxItemFrom(sender) is not { } item)
+        if (DataContext is not MainWindowViewModel vm)
         {
             return;
         }
 
-        if (await new ConfirmDialog($"Delete '{item.Name}' from the inbox?", "Delete").ShowDialog<bool>(this))
+        var items = (sender as Control)?.Tag is InboxItemViewModel tagged
+            ? new List<InboxItemViewModel> { tagged }
+            : ServerInboxList.SelectedItems?.OfType<InboxItemViewModel>().ToList() ?? [];
+        if (items.Count == 0)
         {
-            await vm.InboxActions.DeleteAsync(item);
+            return;
+        }
+
+        var message = items.Count == 1
+            ? $"Delete '{items[0].Name}' from the inbox?"
+            : string.Format(Strings.Get("InboxDeleteManyConfirm"), items.Count);
+        if (await new ConfirmDialog(message, "Delete").ShowDialog<bool>(this))
+        {
+            foreach (var item in items)
+            {
+                await vm.InboxActions.DeleteAsync(item);
+            }
         }
     });
 

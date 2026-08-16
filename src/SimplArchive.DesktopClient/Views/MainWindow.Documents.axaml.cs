@@ -49,13 +49,14 @@ public partial class MainWindow
         }
     });
 
-    private void OnRemoveLegalHoldItem(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    // Double-click on a held document = Go to (the search-results gesture); single click already selected it.
+    private void OnGoToHoldItem(object? sender, TappedEventArgs e)
     {
-        if (DataContext is MainWindowViewModel vm && sender is Button { Tag: LegalHoldItemRowViewModel row })
+        if (DataContext is MainWindowViewModel vm)
         {
-            await vm.RemoveHoldItemAsync(row);
+            vm.GoToSelectedHoldItemCommand.Execute(null);
         }
-    });
+    }
 
     // Save as…: pick a destination via the native save-file dialog, then download the document's bytes there.
     // Triggered from both the ribbon button and the row context menu.
@@ -100,6 +101,39 @@ public partial class MainWindow
     // disagreeing about which document they act on — and neither consults the detail pane (ADR 0559).
     private static CheckoutRowViewModel? CheckoutRowFrom(object? sender, MainWindowViewModel vm) =>
         (sender as Control)?.Tag as CheckoutRowViewModel ?? vm.Checkout.SelectedRow;
+
+    // Rotate/Sort the WORKING COPY (ADR 0593): the inbox recipe against the check-out's pages resource — the
+    // rels are re-read at click time so the dialog opens on what the resource says NOW, and one request writes
+    // the whole arrangement into the stash. The archive changes only through a normal check-in.
+    internal void OnCheckoutSortPages(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api
+            || CheckoutRowFrom(sender, vm) is not { } row || row.Item is not { } item
+            || item.Href("pages") is not { } pagesHref
+            || await api.Inbox.GetAsync(pagesHref) is not { SortHref: { } sortHref } pages)
+        {
+            return;
+        }
+
+        var thumbnails = await InboxPageThumbnails.LoadForCheckoutAsync(item, pages.PageCount);
+        var dialog = new SortPagesDialog(row.DisplayName, thumbnails);
+        if (await dialog.ShowDialog<SortPagesDialog.Result?>(this) is not { } arrangement)
+        {
+            return;
+        }
+
+        try
+        {
+            await api.Inbox.SortAsync(sortHref, arrangement.Order, arrangement.Rotations.Count > 0 ? arrangement.Rotations : null);
+            vm.Status = string.Format(Strings.Get("StInboxSorted"), row.DisplayName);
+        }
+        catch (ApiActionException ex)
+        {
+            vm.Status = ex.Message;
+        }
+
+        await vm.Checkout.LoadAsync();
+    });
 
     internal void OnCheckoutCompare(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {

@@ -4106,6 +4106,38 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public bool HasSelectedHold => SelectedLegalHold is not null;
     public bool SelectedHoldIsActive => SelectedLegalHold is { IsActive: true };
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedHoldItem))]
+    private LegalHoldItemRowViewModel? _selectedHoldItem;
+
+    public bool HasSelectedHoldItem => SelectedHoldItem is not null;
+
+    // Go to the held document in Repositories (review finding) — the search jump, addressed by the
+    // item's ParentId rather than pane state (ADR 0559).
+    [RelayCommand]
+    public async Task GoToHoldItemAsync(LegalHoldItemRowViewModel row)
+    {
+        SelectedTab = 0;
+        if (row.Item.ParentId is { } parentId)
+        {
+            await RevealDocumentInTreeAsync(row.DocumentId, parentId);
+        }
+        else
+        {
+            // A document filed at a repository root is itself a top-level tree node.
+            await RevealFolderInTreeAsync(row.DocumentId);
+        }
+    }
+
+    [RelayCommand]
+    private async Task GoToSelectedHoldItemAsync()
+    {
+        if (SelectedHoldItem is { } row)
+        {
+            await GoToHoldItemAsync(row);
+        }
+    }
+
     [RelayCommand]
     public async Task LoadLegalHoldsAsync()
     {
@@ -4135,6 +4167,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     async partial void OnSelectedLegalHoldChanged(LegalHoldRowViewModel? value)
     {
         SelectedHoldItems.Clear();
+        SelectedHoldItem = null; // the items are re-fetched — a held-over selection is a stale subject (ADR 0559)
         if (_api is null || value is null)
         {
             return;
@@ -4207,6 +4240,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    [RelayCommand]
     public async Task RemoveHoldItemAsync(LegalHoldItemRowViewModel row)
     {
         if (_api is null || SelectedLegalHold is not { } hold)
@@ -5355,6 +5389,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SysDocumentDate = null;
         SysCreated = "";
         SysCreatedBy = "";
+        SysWorkflowStatus = null;
         SysFileExtension = "";
         SysHasTiff = false;
         SysOcrLanguages = "";
@@ -5411,6 +5446,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SysCurrentVersion = fields.CurrentVersionNumber.ToString();
         SysCreated = fields.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
         SysCreatedBy = fields.CreatedByName;
+        SysWorkflowStatus = fields.WorkflowStatus;
         SysFileExtension = fields.FileExtension;
         SysDocumentDate = DateTimeOffset.TryParse(fields.DocumentDate, out var d) ? new DateTimeOffset(d.Date, TimeSpan.Zero) : null;
         SysHasTiff = fields.HasTiffVersion;
@@ -6000,6 +6036,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SysDocumentDate = null;
         SysCreated = "";
         SysCreatedBy = "";
+        SysWorkflowStatus = null;
         SysFileExtension = "";
         SysHasTiff = false;
         SysOcrLanguages = "";

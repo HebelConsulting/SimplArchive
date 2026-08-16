@@ -38,7 +38,7 @@ public class WebInboxSortRotationTests
         await row.ClickAsync();
 
         // The Sort button appears once the server said the item can be sorted (ADR 0554).
-        var sort = page.Locator(".wb-search-bar [aria-label=\"Sort pages\"], .wb-search-bar [title=\"Sort pages\"]").First;
+        var sort = page.Locator(".wb-search-bar [aria-label=\"Rotate/Sort\"], .wb-search-bar [title=\"Rotate/Sort\"]").First;
         await Expect(sort).ToBeVisibleAsync(new() { Timeout = 15000 });
         await sort.ClickAsync();
 

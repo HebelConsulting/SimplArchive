@@ -65,6 +65,12 @@ public class InboxPagesController(
         if (info.PageCount > 1 && !info.Signed)
         {
             links.Add(new Link("split", Href(name, "pages/split", group, user), "POST"));
+        }
+
+        // Sort needs only a page, not several, since the same request also ROTATES (#522/#549) — a one-page
+        // scan fed upside-down is exactly what the affordance exists for.
+        if (info.PageCount > 0 && !info.Signed)
+        {
             links.Add(new Link("sort", Href(name, "pages/order", group, user), "POST"));
         }
 

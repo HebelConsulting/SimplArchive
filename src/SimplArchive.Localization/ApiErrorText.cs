@@ -50,6 +50,10 @@ public static class ApiErrorText
         "INBOX_JOIN_NEEDS_SEVERAL_ITEMS" => Strings.Get("ApiErrInboxJoinNeedsSeveral"),
         "INBOX_JOIN_NOT_HOMOGENEOUS" => Strings.Get("ApiErrInboxJoinNotHomogeneous"),
         "INBOX_PAGE_ORDER_INVALID" => Strings.Get("ApiErrInboxPageOrderInvalid"),
+        // The check-out working-copy page operations (ADR 0593) — same rules, same words.
+        "CHECKOUT_PAGE_ORDER_INVALID" => Strings.Get("ApiErrInboxPageOrderInvalid"),
+        "CHECKOUT_PAGES_NOT_SUPPORTED" => Strings.Get("ApiErrInboxPagesNotSupported"),
+        "CHECKOUT_WORKING_COPY_SIGNED" => Strings.Get("ApiErrWorkingCopySigned"),
         "INBOX_NO_PATCH_CODES_FOUND" => Strings.Get("ApiErrInboxNoPatchCodes"),
         _ => Strings.Get("ApiErrGeneric"),
     };

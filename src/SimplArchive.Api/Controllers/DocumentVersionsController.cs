@@ -233,6 +233,11 @@ public class DocumentVersionsController : ControllerBase
 
         public string Status { get; set; } = "";
 
+        /// <summary>The version's approval-workflow status (Draft/InReview/Approved/Rejected/Released), or
+        /// null when none was ever started — what lets a client label its workflow affordance by state
+        /// ("Start" vs "Manage" vs "View") without following the workflow rel first (review round, ADR 0557).</summary>
+        public string? WorkflowStatus { get; set; }
+
         // True when the `preview` link points at a server-generated rendition rather than the original file
         // shown as-is — the client badges it so the user knows it isn't the original (ADR "Converted-preview
         // overlay badge").
@@ -893,7 +898,9 @@ public class DocumentVersionsController : ControllerBase
             links.Add(new Link("preview-pages", $"/api/documents/{version.DocumentId}/versions/{version.Id}/preview-pages", "GET"));
 
             // The version's approval workflow (ADR "Workflow / document state model", 0009). Static link — the
-            // endpoint resolves the current status + valid-transition links on demand.
+            // endpoint resolves the current status + valid-transition links on demand. The STATUS itself rides
+            // in the payload (one indexed lookup, beside the preview resolution this method already pays) so a
+            // client can label its workflow affordance without a request per rel (ADR 0557).
             links.Add(new Link("workflow", $"/api/documents/{version.DocumentId}/versions/{version.Id}/workflow", "GET"));
 
             // Roll back to this version (ADR "Version restore") — copies its content into a new current version.
@@ -918,6 +925,10 @@ public class DocumentVersionsController : ControllerBase
             ObjectKey = version.ObjectKey,
             Sha256Hash = version.Sha256Hash,
             Status = version.Status.ToString(),
+            WorkflowStatus = (await _dbContext.WorkflowStates
+                .Where(w => w.DocumentVersionId == version.Id)
+                .Select(w => (WorkflowStatus?)w.Status)
+                .FirstOrDefaultAsync(cancellationToken))?.ToString(),
             PreviewConverted = previewConverted,
             CreatedAt = version.CreatedAt,
             CreatedByName = await ResolveCreatorNameAsync(version.CreatedByUserId, version.CreatedByServiceAccountId, cancellationToken),
