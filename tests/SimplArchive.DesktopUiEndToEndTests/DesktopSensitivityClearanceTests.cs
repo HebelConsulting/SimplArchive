@@ -21,20 +21,20 @@ public class DesktopSensitivityClearanceTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
         // A user gets clearance 2 via the rights bundle; it reads back on the user resource.
-        var userId = await client.CreateUserAsync($"clr-{suffix}@example.test", "clr-user-" + suffix);
-        await client.SetRightsAsync(userId, new SimplArchiveApiClient.SystemRightsData(
+        var userId = await client.Admin.CreateUserAsync($"clr-{suffix}@example.test", "clr-user-" + suffix);
+        await client.Admin.SetRightsAsync(userId, new AdminClient.SystemRightsData(
             false, false, false, false, false, false, false, false, false, false, false, false, false, ClearanceRank: 2));
 
-        var user = (await client.GetUsersAsync()).Single(u => u.Id == userId.Id);
+        var user = (await client.Admin.GetUsersAsync()).Single(u => u.Id == userId.Id);
         Assert.Equal(2, user.Rights.ClearanceRank);
 
         // The tenant EnforceClearance switch round-trips through the Tenant tab api (leave it OFF so the shared
         // demo tenant is unaffected for other tests).
-        var before = await client.GetTenantSettingsAsync();
-        var on = await client.SaveTenantSettingsGroupAsync(before, "security", new { requireMfa = before.RequireMfa, allowPasskeyLogin = before.AllowPasskeyLogin, enforceClearance = true });
+        var before = await client.Admin.GetTenantSettingsAsync();
+        var on = await client.Admin.SaveTenantSettingsGroupAsync(before, "security", new { requireMfa = before.RequireMfa, allowPasskeyLogin = before.AllowPasskeyLogin, enforceClearance = true });
         Assert.True(on.EnforceClearance);
 
-        var off = await client.SaveTenantSettingsGroupAsync(before, "security", new { requireMfa = before.RequireMfa, allowPasskeyLogin = before.AllowPasskeyLogin, enforceClearance = false });
+        var off = await client.Admin.SaveTenantSettingsGroupAsync(before, "security", new { requireMfa = before.RequireMfa, allowPasskeyLogin = before.AllowPasskeyLogin, enforceClearance = false });
         Assert.False(off.EnforceClearance);
     }
 }

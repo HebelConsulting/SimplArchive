@@ -20,7 +20,7 @@ public class DesktopImpersonationTests
         var adminToken = await Ui.GetUserTokenAsync(_app.BaseUrl);
         var api = new SimplArchiveApiClient(adminToken);
 
-        var targetId = await api.CreateUserAsync($"imp-target-{Guid.NewGuid():N}@e2e.local", "Imp Target");
+        var targetId = await api.Admin.CreateUserAsync($"imp-target-{Guid.NewGuid():N}@e2e.local", "Imp Target");
 
         var impersonationToken = await SimplArchiveApiClient.ExchangeImpersonationTokenAsync(adminToken, targetId.Id);
         Assert.NotNull(impersonationToken);

@@ -21,7 +21,7 @@ public class DesktopSensitivityLabelTests
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
         // The tenant's seeded default labels are present; pick "Confidential" (watermarked).
-        var catalog = await api.GetSensitivityLabelsAsync();
+        var catalog = await api.Admin.GetSensitivityLabelsAsync();
         var confidential = catalog.Items.Single(l => l.Name == "Confidential");
         Assert.True(confidential.Watermark);
 

@@ -23,8 +23,8 @@ public class DesktopPasswordTests
         var email = $"pw-{suffix}@example.test";
 
         // A throwaway user, then an admin reset → the returned password logs them in.
-        var userId = await admin.CreateUserAsync(email, "PW User " + suffix);
-        var reset = await admin.ResetUserPasswordAsync(userId);
+        var userId = await admin.Admin.CreateUserAsync(email, "PW User " + suffix);
+        var reset = await admin.Admin.ResetUserPasswordAsync(userId);
         Assert.NotEmpty(reset);
 
         var userToken = await Ui.GetUserTokenAsync(_app.BaseUrl, email, reset);

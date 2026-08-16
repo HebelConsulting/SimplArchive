@@ -27,30 +27,30 @@ public class DesktopUsersGroupsTests
         Assert.True((await client.GetWhoAmIAsync()).CanManageUsers);
 
         // Create a group and grant it "Manage masks" (a right the demo admin holds), then read it back.
-        var groupId = await client.CreateGroupAsync("dt-group-" + suffix);
-        await client.SetRightsAsync(groupId, Rights(canManageMasks: true));
+        var groupId = await client.Admin.CreateGroupAsync("dt-group-" + suffix);
+        await client.Admin.SetRightsAsync(groupId, Rights(canManageMasks: true));
 
-        var group = (await client.GetGroupsAsync()).Single(g => g.Id == groupId.Id);
+        var group = (await client.Admin.GetGroupsAsync()).Single(g => g.Id == groupId.Id);
         Assert.True(group.IsGroup);
         Assert.True(group.Rights.CanManageMasks);
         Assert.False(group.Rights.CanImpersonate);
 
         // Create a user too — it shows up (not a group).
-        var userId = await client.CreateUserAsync($"dt-{suffix}@example.test", "dt-user-" + suffix);
-        var user = (await client.GetUsersAsync()).Single(u => u.Id == userId.Id);
+        var userId = await client.Admin.CreateUserAsync($"dt-{suffix}@example.test", "dt-user-" + suffix);
+        var user = (await client.Admin.GetUsersAsync()).Single(u => u.Id == userId.Id);
         Assert.False(user.IsGroup);
         Assert.True(user.IsActive);
 
         // The founding tenant admin holds every system right, so it can grant Impersonate — the assignment
         // round-trips through the desktop api client and reads back.
-        await client.SetRightsAsync(userId, Rights(canImpersonate: true));
-        Assert.True((await client.GetUsersAsync()).Single(u => u.Id == userId.Id).Rights.CanImpersonate);
+        await client.Admin.SetRightsAsync(userId, Rights(canImpersonate: true));
+        Assert.True((await client.Admin.GetUsersAsync()).Single(u => u.Id == userId.Id).Rights.CanImpersonate);
 
         // Delete the group → it's gone from the list.
-        await client.DeleteGroupAsync(groupId);
-        Assert.DoesNotContain(await client.GetGroupsAsync(), g => g.Id == groupId.Id);
+        await client.Admin.DeleteGroupAsync(groupId);
+        Assert.DoesNotContain(await client.Admin.GetGroupsAsync(), g => g.Id == groupId.Id);
     }
 
-    private static SimplArchiveApiClient.SystemRightsData Rights(bool canManageMasks = false, bool canImpersonate = false) =>
+    private static AdminClient.SystemRightsData Rights(bool canManageMasks = false, bool canImpersonate = false) =>
         new(false, canImpersonate, false, false, false, false, false, canManageMasks, false, false, false, false, false);
 }

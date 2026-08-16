@@ -29,9 +29,9 @@ public class DesktopNotificationsTests
 
         // A fresh reviewer (tenant admin so they can read the content), with a password to log in.
         var email = $"dt-reviewer-{suffix}@example.test";
-        var reviewerId = await admin.CreateUserAsync(email, $"DT Reviewer {suffix}");
-        await admin.SetRightsAsync(reviewerId, new SimplArchiveApiClient.SystemRightsData(true, false, false, false, false, false, false, false, false, false, false, false, false));
-        var password = await admin.ResetUserPasswordAsync(reviewerId);
+        var reviewerId = await admin.Admin.CreateUserAsync(email, $"DT Reviewer {suffix}");
+        await admin.Admin.SetRightsAsync(reviewerId, new AdminClient.SystemRightsData(true, false, false, false, false, false, false, false, false, false, false, false, false));
+        var password = await admin.Admin.ResetUserPasswordAsync(reviewerId);
 
         // Submit the document to the reviewer → a ReviewAssigned notification for them.
         var wf = await admin.GetWorkflowAsync(doc.Id);

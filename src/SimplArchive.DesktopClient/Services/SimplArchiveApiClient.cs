@@ -50,6 +50,7 @@ public sealed class SimplArchiveApiClient
     private InboxApi? _inbox;
     private CheckoutClient? _checkout;
     private SearchClient? _search;
+    private AdminClient? _admin;
 
     public SimplArchiveApiClient(string accessToken)
     {
@@ -65,6 +66,9 @@ public sealed class SimplArchiveApiClient
 
     /// <summary>The search area (#443 tranche 3).</summary>
     public SearchClient Search => _search ??= new SearchClient(Core);
+
+    /// <summary>The administration area (#443 tranche 4).</summary>
+    public AdminClient Admin => _admin ??= new AdminClient(Core);
 
     // This client's bearer token — used as the RFC 8693 subject_token to start impersonation (ADR "User
     // impersonation").
@@ -203,45 +207,6 @@ public sealed class SimplArchiveApiClient
     // The signed-in principal's ids + display names (ADR "S3-backed inbox") — names drive the local folder
     // path. IsTenantAdmin gates admin-only actions (e.g. the searchable-PDF backfill).
     public sealed record WhoAmIInfo(Guid? UserId, Guid? TenantId, string? TenantName, string? UserName, bool IsTenantAdmin, bool CanManageUsers, bool HasPhoto, bool CanViewAuditLog, bool MfaEnabled, bool CanResetMfa, bool CanLegalHold, bool CanManageClassification, bool CanOverrideCheckout = false, bool CanImpersonate = false, string? ImpersonatedBy = null, bool CanExport = false, bool CanImport = false, bool CanManageInboxes = false, bool CanManageServiceAccounts = false);
-
-    // Tenant-wide system-level rights, mirroring the User/Group columns (ADR "Users & groups administration
-    // tab"). Backs the rights matrix on the Users & groups tab.
-    public sealed record SystemRightsData(
-        bool IsTenantAdmin, bool CanImpersonate, bool CanOverrideCheckout, bool CanLegalHold,
-        bool CanManageClassification, bool CanResetMfa, bool CanManageRepositories, bool CanManageMasks,
-        bool CanManageServiceAccounts, bool CanManageUsers, bool CanViewAuditLog, bool CanExport, bool CanImport,
-        // Tenant-wide inbox triage (ADR 0532). Defaulted so existing 13-bool construction sites keep compiling.
-        bool CanManageInboxes = false,
-        // Share a document with someone who has no account (ADR 0546). Defaulted for the same reason.
-        bool CanCreateExternalLink = false,
-        // Data-classification clearance (ADR "Sensitivity clearance enforcement"). Defaulted so existing
-        // construction sites (e.g. a copied-rights bundle) keep compiling.
-        int ClearanceRank = 0);
-
-    // A user or group in the combined admin list (ADR "Users & groups administration tab"). IsActive is
-    // meaningful only for a user (a group has no active/inactive concept).
-    // Links are the row's own advertised addresses (ADR 0543/0555): rights, photo, reset-password, reset-mfa,
-    // deactivate for a user; rights, members, delete for a group. The client's methods take this row and follow
-    // one of them, instead of rebuilding /users/{id}/… and /groups/{id}/… paths from an id.
-    public sealed record PrincipalInfo(bool IsGroup, Guid Id, string Name, bool IsActive, SystemRightsData Rights, bool MfaEnabled = false,
-        IReadOnlyDictionary<string, string>? Links = null)
-    {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
-    }
-
-    // A machine-to-machine service account (ADR 0203/0534). ClientId is the OAuth client_id; the client_secret is
-    // only ever returned once on create/rotate (see NewSecret) and is never carried on a list/read.
-    // A REVOKED account advertises none of edit/revoke/rotate-secret, so the row's actions disable from the
-    // server's answer rather than from IsActive re-derived here (issue #416).
-    public sealed record ServiceAccountInfo(Guid Id, string Name, string ClientId, bool IsActive,
-        bool CanManageRepositories, bool CanManageMasks, bool CanManageServiceAccounts, bool CanImport, bool CanExport,
-        IReadOnlyDictionary<string, string>? Links = null)
-    {
-        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
-    }
-
-    // The one-time client_id + client_secret shown after create/rotate — never retrievable again.
-    public sealed record ServiceAccountSecret(string ClientId, string ClientSecret);
 
     // A server-inbox item — a staged file (ADR "S3-backed inbox"). Download is a presigned URL; HasMask tells
     // whether a `{name}.mask.json` staging sidecar exists (ADR "Inbox item classification + preview"). Group/User
@@ -956,12 +921,6 @@ public sealed class SimplArchiveApiClient
     // per-tenant label on the document (id/name/colour + whether it watermarks), read from the document resource.
     public sealed record DocumentSensitivityInfo(Guid? LabelId, string Name, string? Color, bool Watermark);
 
-    // SelfHref / RetireHref / UnretireHref are the addresses the catalog row advertised. Exactly one of the last
-    // two is present, and which one it is expresses the label's state (ADR 0543, issue #416).
-    public sealed record SensitivityLabelInfo(Guid Id, string Name, int Rank, string? Color, bool Watermark, bool Retired,
-        string? SelfHref = null, string? RetireHref = null, string? UnretireHref = null);
-    public sealed record SensitivityLabelCatalog(IReadOnlyList<SensitivityLabelInfo> Items, bool CanManage);
-
     public async Task<DocumentSensitivityInfo> GetDocumentSensitivityAsync(Guid documentId, CancellationToken cancellationToken = default) =>
         (await GetDocumentDetailAsync(documentId, cancellationToken)).Sensitivity;
 
@@ -1015,53 +974,6 @@ public sealed class SimplArchiveApiClient
             throw new ApiActionException($"Could not set the sensitivity label ({(int)response.StatusCode}).");
         }
     }
-
-    // The tenant's configurable label catalog (for the picker + admin).
-    public async Task<SensitivityLabelCatalog> GetSensitivityLabelsAsync(CancellationToken cancellationToken = default)
-    {
-        var json = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("sensitivityLabels", cancellationToken), cancellationToken);
-        var items = new List<SensitivityLabelInfo>();
-        if (json.TryGetProperty("labels", out var arr) && arr.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var l in arr.EnumerateArray())
-            {
-                var links = ParseLinks(l) ?? new Dictionary<string, string>();
-                items.Add(new SensitivityLabelInfo(
-                    l.GetProperty("id").GetGuid(),
-                    l.GetProperty("name").GetString() ?? "",
-                    l.TryGetProperty("rank", out var r) ? r.GetInt32() : 0,
-                    l.TryGetProperty("color", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null,
-                    l.TryGetProperty("watermark", out var w) && w.ValueKind == JsonValueKind.True,
-                    l.TryGetProperty("retired", out var rt) && rt.ValueKind == JsonValueKind.True,
-                    links.GetValueOrDefault("self"),
-                    // Exactly one of these is advertised, and which one IS the label's state — the client no
-                    // longer decides "retire or un-retire?" from the Retired flag (issue #416).
-                    links.GetValueOrDefault("retire"),
-                    links.GetValueOrDefault("unretire")));
-            }
-        }
-
-        return new SensitivityLabelCatalog(items, json.TryGetProperty("canManage", out var cm) && cm.GetBoolean());
-    }
-
-    public async Task CreateSensitivityLabelAsync(string name, int rank, string? color, bool watermark, CancellationToken cancellationToken = default)
-    {
-        var resp = await _http.PostAsJsonAsync(await RootHrefAsync("sensitivityLabels", cancellationToken), new { name, rank, color, watermark }, cancellationToken);
-        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ErrorMessageAsync(resp, "Could not add the label."));
-    }
-
-    /// <summary>Updates a label at the address its own catalog row advertised (`self`).</summary>
-    public async Task UpdateSensitivityLabelAsync(string selfHref, string name, int rank, string? color, bool watermark, CancellationToken cancellationToken = default)
-    {
-        var resp = await _http.PutAsJsonAsync(selfHref, new { name, rank, color, watermark }, cancellationToken);
-        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await ErrorMessageAsync(resp, "Could not update the label."));
-    }
-
-    public async Task RetireSensitivityLabelAsync(string retireHref, CancellationToken cancellationToken = default) =>
-        (await _http.DeleteAsync(retireHref, cancellationToken)).EnsureSuccessStatusCode();
-
-    public async Task UnretireSensitivityLabelAsync(string unretireHref, CancellationToken cancellationToken = default) =>
-        (await _http.PostAsync(unretireHref, null, cancellationToken)).EnsureSuccessStatusCode();
 
     // Free-form tags (ADR "Document tags"). GET the document's tags; PUT-replaces the whole set (the server
     // normalizes/dedupes and returns the stored set); the tenant tag catalog backs add-box autocomplete.
@@ -1146,7 +1058,7 @@ public sealed class SimplArchiveApiClient
     }
 
     // As ThrowIfProblemAsync: the machine code, never the server's English `detail` (issue #424).
-    private static async Task<string> ErrorMessageAsync(HttpResponseMessage resp, string fallback)
+    internal static async Task<string> ErrorMessageAsync(HttpResponseMessage resp, string fallback)
     {
         try
         {
@@ -1667,129 +1579,9 @@ public sealed class SimplArchiveApiClient
         response.EnsureSuccessStatusCode();
     }
 
-    // ---- Tenant-admin settings (ADR "Tenant-admin settings tab") -----------------------------------
-
-    public sealed record TenantSettingsInfo(Guid Id, string Name, string Status, DateTimeOffset CreatedAt, string DefaultOcrLanguages, int AuditRetentionDays, int CheckoutTtlDays, int CheckoutWarningDays, int WormLockMode, bool RequireMfa, bool AllowPasskeyLogin, bool RequireDispositionReview, bool RestrictTagsToCatalog, bool EnforceClearance, bool AllowExternalLinks, int ExternalLinkMaxDays, int ExternalLinkDefaultAccesses, bool ShowExternalLinkUrl, long? StorageQuotaBytes, long StorageUsedBytes, int IncompleteUploadCleanupDays, string? AuditWebhookUrl, bool AuditWebhookConfigured, int AuditWebhookConsecutiveFailures, DateTimeOffset? AuditWebhookLastSuccessAt, DateTimeOffset? AuditWebhookLastFailureAt, DateTimeOffset? AuditWebhookNextAttemptAt, string? AuditWebhookLastError,
-        IReadOnlyDictionary<string, string>? Links = null);
-
-    private static DateTimeOffset? OptDate(JsonElement j, string name) =>
+    internal static DateTimeOffset? OptDate(JsonElement j, string name) =>
         j.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetDateTimeOffset() : null;
 
-    private static TenantSettingsInfo ParseTenantSettings(JsonElement j) => new(
-        j.GetProperty("id").GetGuid(),
-        j.GetProperty("name").GetString() ?? "",
-        j.GetProperty("status").GetString() ?? "",
-        j.GetProperty("createdAt").GetDateTimeOffset(),
-        j.GetProperty("defaultOcrLanguages").GetString() ?? "",
-        j.TryGetProperty("auditRetentionDays", out var r) ? r.GetInt32() : 0,
-        j.TryGetProperty("checkoutTtlDays", out var c) ? c.GetInt32() : 0,
-        j.TryGetProperty("checkoutWarningDays", out var cw) ? cw.GetInt32() : 1,
-        j.TryGetProperty("wormLockMode", out var w) ? w.GetInt32() : 0,
-        j.TryGetProperty("requireMfa", out var m) && m.ValueKind == JsonValueKind.True,
-        j.TryGetProperty("allowPasskeyLogin", out var pk) && pk.ValueKind == JsonValueKind.True,
-        j.TryGetProperty("requireDispositionReview", out var dr) && dr.ValueKind == JsonValueKind.True,
-        j.TryGetProperty("restrictTagsToCatalog", out var rt) && rt.ValueKind == JsonValueKind.True,
-        j.TryGetProperty("enforceClearance", out var ec) && ec.ValueKind == JsonValueKind.True,
-        j.TryGetProperty("allowExternalLinks", out var xl) && xl.ValueKind == JsonValueKind.True,
-        j.TryGetProperty("externalLinkMaxDays", out var xd) ? xd.GetInt32() : 180,
-        j.TryGetProperty("externalLinkDefaultAccesses", out var xa) ? xa.GetInt32() : 5,
-        j.TryGetProperty("showExternalLinkUrl", out var xu) && xu.GetBoolean(),
-        j.TryGetProperty("storageQuotaBytes", out var sq) && sq.ValueKind == JsonValueKind.Number ? sq.GetInt64() : null,
-        j.TryGetProperty("storageUsedBytes", out var su) && su.ValueKind == JsonValueKind.Number ? su.GetInt64() : 0,
-        j.TryGetProperty("incompleteUploadCleanupDays", out var iu) ? iu.GetInt32() : 0,
-        j.TryGetProperty("auditWebhookUrl", out var u) && u.ValueKind == JsonValueKind.String ? u.GetString() : null,
-        j.TryGetProperty("auditWebhookConfigured", out var cf) && cf.ValueKind == JsonValueKind.True,
-        j.TryGetProperty("auditWebhookConsecutiveFailures", out var f) ? f.GetInt32() : 0,
-        OptDate(j, "auditWebhookLastSuccessAt"),
-        OptDate(j, "auditWebhookLastFailureAt"),
-        OptDate(j, "auditWebhookNextAttemptAt"),
-        j.TryGetProperty("auditWebhookLastError", out var le) && le.ValueKind == JsonValueKind.String ? le.GetString() : null,
-        ParseLinks(j));
-
-    public async Task<TenantSettingsInfo> GetTenantSettingsAsync(CancellationToken cancellationToken = default)
-    {
-        var j = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("tenantSettings", cancellationToken), cancellationToken);
-        return ParseTenantSettings(j);
-    }
-
-    // The tenant-settings resource's own maintenance actions (issue #416). Both are rels ON that resource, so
-    // reaching them means reading it first — paid once per admin click, which is the trade the root's
-    // "collection roots only" rule asks for: an action on a resource is advertised by that resource, not by the
-    // root. (Contrast the notification badge, which is polled and therefore earned a root rel of its own.)
-    private async Task<string> TenantSettingsRelAsync(string rel, CancellationToken cancellationToken)
-    {
-        var settings = await _http.GetFromJsonAsync<JsonElement>(await RootHrefAsync("tenantSettings", cancellationToken), cancellationToken);
-        return ParseLinks(settings) is { } links && links.TryGetValue(rel, out var href)
-            ? href
-            : throw new InvalidOperationException($"Tenant settings advertised no '{rel}' rel (ADR 0543).");
-    }
-
-    // Sends a synthetic test event to the tenant's saved SIEM webhook (ADR "Audit webhook test delivery") — returns
-    // whether the endpoint accepted it + the error on failure.
-    public async Task<(bool Success, string? Error)> TestAuditWebhookAsync(CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsync(await TenantSettingsRelAsync("audit-webhook-test", cancellationToken), null, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.BadRequest)
-        {
-            throw new ApiActionException("Save the webhook URL + secret before sending a test.");
-        }
-
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to test the audit webhook.");
-        }
-
-        response.EnsureSuccessStatusCode();
-        var j = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        return (j.GetProperty("success").GetBoolean(),
-            j.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null);
-    }
-
-    // Rebuilds the tenant's used-storage counter from the actual stored blobs (ADR "Per-tenant storage quota").
-    public async Task<TenantSettingsInfo> RecomputeStorageAsync(CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsync(await TenantSettingsRelAsync("recompute-storage", cancellationToken), null, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to recompute storage usage.");
-        }
-
-        response.EnsureSuccessStatusCode();
-        var j = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        return ParseTenantSettings(j);
-    }
-
-    // NOTE: this PUT is a FULL REPLACEMENT — a field left out of the payload is set to its DTO default, not left
-    // alone. The external-link settings are therefore REQUIRED parameters rather than optional ones: when they
-    // were simply missing here, a desktop admin saving any unrelated tenant setting silently switched external
-    // links off AND set both caps to 0. An optional default would recreate exactly that bug at the next caller.
-    // ONE generic per-group save (#530 tranche 10, ADR "Per-group tenant settings"): the caller passes the
-    // already-read settings (whose links carry the writable sub-resources) plus the group's rel suffix and its
-    // payload. Follows the advertised settings-<group> rel (ADR 0543) — a missing rel means "not offered".
-    public async Task<TenantSettingsInfo> SaveTenantSettingsGroupAsync(TenantSettingsInfo settings, string group, object body, CancellationToken cancellationToken = default)
-    {
-        var href = settings.Links?.GetValueOrDefault($"settings-{group}")
-            ?? throw new ApiActionException("The server offered no way to edit these settings.");
-        using var response = await _http.PutAsJsonAsync(href, body, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            throw new ApiActionException("Another active tenant already uses this name.");
-        }
-
-        if (response.StatusCode == HttpStatusCode.BadRequest)
-        {
-            throw new ApiActionException("Check the entered values (name, OCR languages, retention, webhook URL/secret).");
-        }
-
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to manage tenant settings.");
-        }
-
-        response.EnsureSuccessStatusCode();
-        var j = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        return ParseTenantSettings(j);
-    }
 
     public async Task CreateRepositoryAsync(string name, CancellationToken cancellationToken = default)
     {
@@ -2945,52 +2737,6 @@ public sealed class SimplArchiveApiClient
         }
     }
 
-    // ---- Users & groups administration (ADR "Users & groups administration tab") --------------------
-
-    public async Task<List<PrincipalInfo>> GetUsersAsync(CancellationToken cancellationToken = default) =>
-        await LoadPagedAsync(await RootHrefAsync("users", cancellationToken), "users", ParseUser, cancellationToken);
-
-    public async Task<List<PrincipalInfo>> GetGroupsAsync(CancellationToken cancellationToken = default) =>
-        await LoadPagedAsync(await RootHrefAsync("groups", cancellationToken), "groups", ParseGroup, cancellationToken);
-
-    /// <summary>
-    /// Creates a user and returns the created ROW — not its id. The create response is the resource, rels
-    /// included, so a caller that goes on to act on what it created already holds the addresses (ADR 0555).
-    /// </summary>
-    public async Task<PrincipalInfo> CreateUserAsync(string email, string displayName, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsJsonAsync(await RootHrefAsync("users", cancellationToken), new { email, displayName }, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            throw new ApiActionException("A user with this email already exists.");
-        }
-
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to manage users.");
-        }
-
-        response.EnsureSuccessStatusCode();
-        return ParseUser(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
-    }
-
-    public async Task<PrincipalInfo> CreateGroupAsync(string name, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsJsonAsync(await RootHrefAsync("groups", cancellationToken), new { name }, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            throw new ApiActionException($"A group named '{name}' already exists.");
-        }
-
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to manage groups.");
-        }
-
-        response.EnsureSuccessStatusCode();
-        return ParseGroup(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
-    }
-
     // Follows a rel off a resource the client just READ or just CREATED — the case where the address is already
     // in hand and only needs picking up, as opposed to DocumentRelAsync's "I hold an id, fetch the resource".
     private static string RequireRel(JsonElement resource, string rel, string what) =>
@@ -3026,53 +2772,7 @@ public sealed class SimplArchiveApiClient
         tag.Href(rel)
         ?? throw new InvalidOperationException($"The tag '{tag.Name}' advertised no '{rel}' rel (ADR 0543/0555).");
 
-    private static string RequireHref(ServiceAccountInfo account, string rel) =>
-        account.Href(rel)
-        ?? throw new InvalidOperationException($"The service account advertised no '{rel}' rel — a revoked account offers none (ADR 0543/0555).");
-
-    private static string RequireHref(PrincipalInfo principal, string rel) =>
-        principal.Href(rel)
-        ?? throw new InvalidOperationException($"The {(principal.IsGroup ? "group" : "user")} row advertised no '{rel}' rel (ADR 0543/0555).");
-
-    /// <summary>Sets a principal's system rights at the address its own row advertised.</summary>
-    public Task SetRightsAsync(PrincipalInfo principal, SystemRightsData rights, CancellationToken cancellationToken = default) =>
-        SetRightsCoreAsync(RequireHref(principal, "rights"), rights, cancellationToken);
-
-    private async Task SetRightsCoreAsync(string path, SystemRightsData rights, CancellationToken cancellationToken)
-    {
-        using var response = await _http.PutAsJsonAsync(path, rights, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You can only grant rights you hold yourself; changing tenant-admin needs a tenant admin.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    // Deactivates a user (reversible on the server; the row stays, marked inactive).
-    // Deactivates a user. If they still hold pending review tasks, the server refuses (409
-    // REVIEWER_HAS_PENDING_REVIEWS) unless reassignReviewsTo hands them to a replacement reviewer (ADR
-    // "Workflow review reassignment") — surfaced as ReviewerHasPendingReviewsException so the caller can prompt.
-    public async Task DeleteUserAsync(PrincipalInfo user, Guid? reassignReviewsTo = null, CancellationToken cancellationToken = default)
-    {
-        // The reassignment is a QUERY on the advertised address, not a path this client invents.
-        var deactivateHref = RequireHref(user, "deactivate");
-        var url = reassignReviewsTo is { } r ? $"{deactivateHref}?reassignReviewsTo={r}" : deactivateHref;
-        using var response = await _http.DeleteAsync(url, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to manage users.");
-        }
-
-        if (response.StatusCode == HttpStatusCode.Conflict && await ErrorCodeAsync(response, cancellationToken) == "REVIEWER_HAS_PENDING_REVIEWS")
-        {
-            throw new ReviewerHasPendingReviewsException("This user still holds pending review tasks.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    private static async Task<string?> ErrorCodeAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    internal static async Task<string?> ErrorCodeAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         try
         {
@@ -3083,113 +2783,6 @@ public sealed class SimplArchiveApiClient
         {
             return null;
         }
-    }
-
-    // Deletes a group (409 if it still has child groups or members).
-    public async Task DeleteGroupAsync(PrincipalInfo group, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.DeleteAsync(RequireHref(group, "delete"), cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            throw new ApiActionException("The group still has child groups or members.");
-        }
-
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to manage groups.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    // ---- Service accounts (ADR 0203/0534) -----------------------------------------------------------
-
-    public async Task<List<ServiceAccountInfo>> GetServiceAccountsAsync(CancellationToken cancellationToken = default) =>
-        await LoadPagedAsync(await RootHrefAsync("serviceAccounts", cancellationToken), "serviceAccounts", ParseServiceAccount, cancellationToken);
-
-    // Create a service account with its rights; returns the one-time client_id + client_secret (shown once).
-    public async Task<ServiceAccountSecret> CreateServiceAccountAsync(string name, SystemRightsData rights, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsJsonAsync(await RootHrefAsync("serviceAccounts", cancellationToken), ToServiceAccountBody(name, rights), cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            throw new ApiActionException($"A service account named '{name}' already exists.");
-        }
-
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You can only grant rights you hold yourself.");
-        }
-
-        response.EnsureSuccessStatusCode();
-        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        return new ServiceAccountSecret(json.GetProperty("clientId").GetString() ?? "", json.GetProperty("clientSecret").GetString() ?? "");
-    }
-
-    // Edit an existing account's name + rights (PUT, ADR 0534) — escalation-capped server-side like create.
-    public async Task UpdateServiceAccountAsync(ServiceAccountInfo account, string name, SystemRightsData rights, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PutAsJsonAsync(RequireHref(account, "edit"), ToServiceAccountBody(name, rights), cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            throw new ApiActionException($"A service account named '{name}' already exists.");
-        }
-
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You can only grant rights you hold yourself.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    // Rotate the secret — mints a new client_secret and invalidates the old one; returns the one-time secret.
-    public async Task<ServiceAccountSecret> RotateServiceAccountSecretAsync(ServiceAccountInfo account, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsync(RequireHref(account, "rotate-secret"), null, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to manage service accounts.");
-        }
-
-        response.EnsureSuccessStatusCode();
-        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        return new ServiceAccountSecret(json.GetProperty("clientId").GetString() ?? "", json.GetProperty("clientSecret").GetString() ?? "");
-    }
-
-    // Revoke — one-way, sets IsActive = false; the credentials stop working immediately.
-    public async Task RevokeServiceAccountAsync(ServiceAccountInfo account, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.DeleteAsync(RequireHref(account, "revoke"), cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to manage service accounts.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    // The create/update body — the five grantable rights, camelCase over the wire (name + booleans).
-    private static object ToServiceAccountBody(string name, SystemRightsData rights) => new
-    {
-        name,
-        canManageRepositories = rights.CanManageRepositories,
-        canManageMasks = rights.CanManageMasks,
-        canManageServiceAccounts = rights.CanManageServiceAccounts,
-        canImport = rights.CanImport,
-        canExport = rights.CanExport,
-    };
-
-    private static ServiceAccountInfo ParseServiceAccount(JsonElement e)
-    {
-        bool B(string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
-        return new ServiceAccountInfo(
-            e.GetProperty("id").GetGuid(),
-            e.GetProperty("name").GetString() ?? "",
-            e.TryGetProperty("clientId", out var c) ? c.GetString() ?? "" : "",
-            !e.TryGetProperty("isActive", out var a) || a.ValueKind == JsonValueKind.True,
-            B("canManageRepositories"), B("canManageMasks"), B("canManageServiceAccounts"), B("canImport"), B("canExport"),
-            ParseLinks(e));
     }
 
     // ---- Passwords (ADR "User password management") -------------------------------------------------
@@ -3221,20 +2814,6 @@ public sealed class SimplArchiveApiClient
 
     public async Task RevokeWebDavPasswordAsync(CancellationToken cancellationToken = default) =>
         (await _http.DeleteAsync(await MeHrefAsync("webdavPassword", cancellationToken), cancellationToken)).EnsureSuccessStatusCode();
-
-    // Admin reset — returns the generated password (shown once).
-    public async Task<string> ResetUserPasswordAsync(PrincipalInfo user, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsync(RequireHref(user, "reset-password"), null, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to reset passwords.");
-        }
-
-        response.EnsureSuccessStatusCode();
-        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        return json.GetProperty("password").GetString() ?? "";
-    }
 
     // ---- Two-factor authentication (ADR "MFA (interactive login, TOTP)") ----------------------------
 
@@ -3270,18 +2849,6 @@ public sealed class SimplArchiveApiClient
     public async Task DisableMfaAsync(CancellationToken cancellationToken = default)
     {
         using var response = await _http.DeleteAsync(await MeHrefAsync("mfa", cancellationToken), cancellationToken);
-        response.EnsureSuccessStatusCode();
-    }
-
-    // Admin reset — disables a locked-out user's two-factor.
-    public async Task ResetUserMfaAsync(PrincipalInfo user, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsync(RequireHref(user, "reset-mfa"), null, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to reset two-factor authentication.");
-        }
-
         response.EnsureSuccessStatusCode();
     }
 
@@ -3718,135 +3285,23 @@ public sealed class SimplArchiveApiClient
         e.GetProperty("canAnnotate").GetBoolean(),
         e.GetProperty("canManagePermissions").GetBoolean());
 
-    // ---- Group membership (ADR "Group membership editing") ------------------------------------------
-
-    public Task<List<UserOptionInfo>> GetGroupMembersAsync(PrincipalInfo group, CancellationToken cancellationToken = default) =>
-        LoadPagedAsync(RequireHref(group, "members"), "members", ParseMember, cancellationToken);
-
-    // The API takes the member in the BODY of a POST to the collection now, so the group row's `members`
-    // address serves every add — the chosen user travels as data, not as a path segment (issue #416).
-    public async Task AddGroupMemberAsync(PrincipalInfo group, Guid userId, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsJsonAsync(RequireHref(group, "members"), new { userId }, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to manage members.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
-
-    public async Task RemoveGroupMemberAsync(UserOptionInfo member, CancellationToken cancellationToken = default)
-    {
-        var removeHref = member.RemoveHref
-            ?? throw new InvalidOperationException("The member row advertised no 'remove' rel (ADR 0543/0555).");
-        using var response = await _http.DeleteAsync(removeHref, cancellationToken);
-        if (response.StatusCode != HttpStatusCode.NotFound)
-        {
-            response.EnsureSuccessStatusCode();
-        }
-    }
-
-    private static UserOptionInfo ParseMember(JsonElement e) =>
+    internal static UserOptionInfo ParseMember(JsonElement e) =>
         new(e.GetProperty("id").GetGuid(),
             e.GetProperty("displayName").GetString() ?? "",
             ParseLinks(e) is { } links && links.TryGetValue("remove", out var removeHref) ? removeHref : null);
 
-    // ---- Profile photo (ADR "User profile photo") ---------------------------------------------------
-
-    public Task SetUserPhotoAsync(PrincipalInfo user, byte[] png, CancellationToken cancellationToken = default) =>
-        PutPhotoAsync(RequireHref(user, "photo"), png, cancellationToken);
-
     public async Task SetMyPhotoAsync(byte[] png, CancellationToken cancellationToken = default) =>
-        await PutPhotoAsync(await MeHrefAsync("photo", cancellationToken), png, cancellationToken);
-
-    private async Task PutPhotoAsync(string url, byte[] png, CancellationToken cancellationToken)
-    {
-        var content = new ByteArrayContent(png);
-        content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
-        using var response = await _http.PutAsync(url, content, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new ApiActionException("You don't have permission to change this photo.");
-        }
-
-        if (response.StatusCode == HttpStatusCode.BadRequest)
-        {
-            throw new ApiActionException("That image could not be used as a profile photo.");
-        }
-
-        response.EnsureSuccessStatusCode();
-    }
+        await Core.PutPhotoAsync(await MeHrefAsync("photo", cancellationToken), png, cancellationToken);
 
     /// <summary>The caller's OWN avatar, at the address the `me` resource advertises for it.</summary>
     public async Task<byte[]?> GetMyPhotoAsync(CancellationToken cancellationToken = default) =>
-        await GetPhotoAsync(await MeHrefAsync("photo", cancellationToken), cancellationToken);
+        await Core.GetPhotoAsync(await MeHrefAsync("photo", cancellationToken), cancellationToken);
 
-    // The normalized PNG bytes, or null if the user has no photo.
-    public Task<byte[]?> GetUserPhotoAsync(PrincipalInfo user, CancellationToken cancellationToken = default) =>
-        GetPhotoAsync(RequireHref(user, "photo"), cancellationToken);
-
-    private async Task<byte[]?> GetPhotoAsync(string photoHref, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.GetAsync(photoHref, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.NotFound)
-        {
-            return null;
-        }
-
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsByteArrayAsync(cancellationToken);
-    }
 
     /// <summary>Removes the caller's OWN avatar, at the address the `me` resource advertises.</summary>
     public Task DeleteMyPhotoAsync(CancellationToken cancellationToken = default) =>
-        DeletePhotoAsync(MeHrefAsync("photo", cancellationToken), cancellationToken);
+        Core.DeletePhotoAsync(MeHrefAsync("photo", cancellationToken), cancellationToken);
 
-    public Task DeleteUserPhotoAsync(PrincipalInfo user, CancellationToken cancellationToken = default) =>
-        DeletePhotoAsync(Task.FromResult(RequireHref(user, "photo")), cancellationToken);
-
-    private async Task DeletePhotoAsync(Task<string> photoHref, CancellationToken cancellationToken)
-    {
-        using var response = await _http.DeleteAsync(await photoHref, cancellationToken);
-        if (response.StatusCode != HttpStatusCode.NotFound)
-        {
-            response.EnsureSuccessStatusCode();
-        }
-    }
-
-    private static PrincipalInfo ParseUser(JsonElement e) => new(
-        false,
-        e.GetProperty("id").GetGuid(),
-        e.GetProperty("displayName").GetString() ?? "",
-        !e.TryGetProperty("isActive", out var a) || a.ValueKind == JsonValueKind.True,
-        ParseRights(e),
-        e.TryGetProperty("mfaEnabled", out var mfa) && mfa.ValueKind == JsonValueKind.True,
-        ParseLinks(e));
-
-    private static PrincipalInfo ParseGroup(JsonElement e) => new(
-        true,
-        e.GetProperty("id").GetGuid(),
-        e.GetProperty("name").GetString() ?? "",
-        true,
-        ParseRights(e),
-        false,
-        ParseLinks(e));
-
-    private static SystemRightsData ParseRights(JsonElement e)
-    {
-        if (!e.TryGetProperty("rights", out var r))
-        {
-            return new SystemRightsData(false, false, false, false, false, false, false, false, false, false, false, false, false);
-        }
-
-        bool B(string name) => r.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
-        return new SystemRightsData(
-            B("isTenantAdmin"), B("canImpersonate"), B("canOverrideCheckout"), B("canLegalHold"),
-            B("canManageClassification"), B("canResetMfa"), B("canManageRepositories"), B("canManageMasks"),
-            B("canManageServiceAccounts"), B("canManageUsers"), B("canViewAuditLog"), B("canExport"), B("canImport"),
-            B("canManageInboxes"), B("canCreateExternalLink"),
-            r.TryGetProperty("clearanceRank", out var cr) && cr.ValueKind == JsonValueKind.Number ? cr.GetInt32() : 0);
-    }
 
     internal static string? StrOrNull(JsonElement e, string name) =>
         e.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;

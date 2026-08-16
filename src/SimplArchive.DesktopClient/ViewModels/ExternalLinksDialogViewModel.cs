@@ -102,7 +102,7 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
             // Only a tenant admin can filter by another person, so the directory is fetched only for them —
             // and only once. Reuses the existing users listing rather than adding a parallel endpoint.
             Users.Add(new SimplArchiveApiClient.UserOptionInfo(Guid.Empty, Strings.Get("ExtLinkMine")));
-            foreach (var user in await _api.GetUsersAsync())
+            foreach (var user in await _api.Admin.GetUsersAsync())
             {
                 Users.Add(new SimplArchiveApiClient.UserOptionInfo(user.Id, user.Name));
             }

@@ -39,7 +39,7 @@ public sealed partial class ServiceAccountsViewModel : ObservableObject
     {
         try
         {
-            var accounts = await _client.GetServiceAccountsAsync(cancellationToken);
+            var accounts = await _client.Admin.GetServiceAccountsAsync(cancellationToken);
             Accounts.Clear();
             foreach (var a in accounts)
             {
@@ -55,7 +55,7 @@ public sealed partial class ServiceAccountsViewModel : ObservableObject
     }
 
     // The create form's rights, folded into the shared SystemRightsData shape (only the five grantable fields set).
-    public SimplArchiveApiClient.SystemRightsData NewRights() => new(
+    public AdminClient.SystemRightsData NewRights() => new(
         false, false, false, false, false, false,
         NewCanManageRepositories, NewCanManageMasks, NewCanManageServiceAccounts, false, false,
         NewCanExport, NewCanImport);
@@ -70,9 +70,9 @@ public sealed partial class ServiceAccountsViewModel : ObservableObject
 // One row in the list — wraps the API DTO and renders a short, localized rights summary for display.
 public sealed class ServiceAccountRowViewModel
 {
-    public ServiceAccountRowViewModel(SimplArchiveApiClient.ServiceAccountInfo info) => Info = info;
+    public ServiceAccountRowViewModel(AdminClient.ServiceAccountInfo info) => Info = info;
 
-    public SimplArchiveApiClient.ServiceAccountInfo Info { get; }
+    public AdminClient.ServiceAccountInfo Info { get; }
 
     public Guid Id => Info.Id;
     public string Name => Info.Name;

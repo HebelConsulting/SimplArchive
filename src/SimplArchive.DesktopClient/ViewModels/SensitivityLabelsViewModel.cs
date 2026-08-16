@@ -30,7 +30,7 @@ public sealed partial class SensitivityLabelsViewModel : ObservableObject
         Labels.Clear();
         try
         {
-            foreach (var l in (await _api.GetSensitivityLabelsAsync()).Items)
+            foreach (var l in (await _api.Admin.GetSensitivityLabelsAsync()).Items)
             {
                 Labels.Add(new SensitivityLabelRow(l.Id, l.Name, l.Rank, l.Color, l.Watermark, l.Retired, l.SelfHref, l.RetireHref, l.UnretireHref));
             }
@@ -48,7 +48,7 @@ public sealed partial class SensitivityLabelsViewModel : ObservableObject
 
         try
         {
-            await _api.CreateSensitivityLabelAsync(NewName.Trim(), NewRank, string.IsNullOrWhiteSpace(NewColor) ? null : NewColor.Trim(), NewWatermark);
+            await _api.Admin.CreateSensitivityLabelAsync(NewName.Trim(), NewRank, string.IsNullOrWhiteSpace(NewColor) ? null : NewColor.Trim(), NewWatermark);
             NewName = ""; NewColor = ""; NewWatermark = false;
             await LoadAsync();
         }
@@ -67,7 +67,7 @@ public sealed partial class SensitivityLabelsViewModel : ObservableObject
         {
             if (row.SelfHref is not { } selfHref) { return; }
 
-            await _api.UpdateSensitivityLabelAsync(selfHref, row.Name.Trim(), row.Rank, string.IsNullOrWhiteSpace(row.Color) ? null : row.Color!.Trim(), row.Watermark);
+            await _api.Admin.UpdateSensitivityLabelAsync(selfHref, row.Name.Trim(), row.Rank, string.IsNullOrWhiteSpace(row.Color) ? null : row.Color!.Trim(), row.Watermark);
             await LoadAsync();
         }
         catch (Exception e) { Status = e is ApiActionException a ? a.Message : "Could not update the label."; }
@@ -84,8 +84,8 @@ public sealed partial class SensitivityLabelsViewModel : ObservableObject
         try
         {
             // Which rel is present decides the transition — the server already answered "retire or un-retire?".
-            if (row.UnretireHref is { } unretire) { await _api.UnretireSensitivityLabelAsync(unretire); }
-            else if (row.RetireHref is { } retire) { await _api.RetireSensitivityLabelAsync(retire); }
+            if (row.UnretireHref is { } unretire) { await _api.Admin.UnretireSensitivityLabelAsync(unretire); }
+            else if (row.RetireHref is { } retire) { await _api.Admin.RetireSensitivityLabelAsync(retire); }
             else { return; }
             await LoadAsync();
         }

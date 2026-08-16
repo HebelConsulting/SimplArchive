@@ -19,19 +19,19 @@ public class DesktopTenantSettingsTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var before = await api.GetTenantSettingsAsync();
+        var before = await api.Admin.GetTenantSettingsAsync();
         Assert.False(string.IsNullOrEmpty(before.Name));
 
         // Update GROUP BY GROUP via the settings-<group> sub-resources (#530 tranche 10) — keep the same name
         // to avoid a cross-test collision. WORM mode 1 = Compliance. Each save touches only its group; the
         // final response reflects everything, which the asserts below verify.
-        await api.SaveTenantSettingsGroupAsync(before, "capture", new { defaultOcrLanguages = "deu+eng", restrictTagsToCatalog = false });
-        await api.SaveTenantSettingsGroupAsync(before, "records", new { auditRetentionDays = 500, wormLockMode = 1, requireDispositionReview = true });
-        await api.SaveTenantSettingsGroupAsync(before, "checkout", new { checkoutTtlDays = 21, checkoutWarningDays = 3 });
-        await api.SaveTenantSettingsGroupAsync(before, "security", new { requireMfa = true, allowPasskeyLogin = true, enforceClearance = false });
-        await api.SaveTenantSettingsGroupAsync(before, "storage", new { storageQuotaBytes = 500L * 1024 * 1024, incompleteUploadCleanupDays = 14 });
-        await api.SaveTenantSettingsGroupAsync(before, "external-links", new { allowExternalLinks = true, externalLinkMaxDays = 30, externalLinkDefaultAccesses = 2, showExternalLinkUrl = true });
-        var updated = await api.SaveTenantSettingsGroupAsync(before, "audit-streaming", new { auditWebhookUrl = "https://siem.example.com/ingest", auditWebhookSecret = "s3cr3t-signing-key" });
+        await api.Admin.SaveTenantSettingsGroupAsync(before, "capture", new { defaultOcrLanguages = "deu+eng", restrictTagsToCatalog = false });
+        await api.Admin.SaveTenantSettingsGroupAsync(before, "records", new { auditRetentionDays = 500, wormLockMode = 1, requireDispositionReview = true });
+        await api.Admin.SaveTenantSettingsGroupAsync(before, "checkout", new { checkoutTtlDays = 21, checkoutWarningDays = 3 });
+        await api.Admin.SaveTenantSettingsGroupAsync(before, "security", new { requireMfa = true, allowPasskeyLogin = true, enforceClearance = false });
+        await api.Admin.SaveTenantSettingsGroupAsync(before, "storage", new { storageQuotaBytes = 500L * 1024 * 1024, incompleteUploadCleanupDays = 14 });
+        await api.Admin.SaveTenantSettingsGroupAsync(before, "external-links", new { allowExternalLinks = true, externalLinkMaxDays = 30, externalLinkDefaultAccesses = 2, showExternalLinkUrl = true });
+        var updated = await api.Admin.SaveTenantSettingsGroupAsync(before, "audit-streaming", new { auditWebhookUrl = "https://siem.example.com/ingest", auditWebhookSecret = "s3cr3t-signing-key" });
         // External links (issue #385): a group save must not disturb the OTHER groups — the split exists so a
         // forgotten field can no longer silently switch an unrelated feature off.
         Assert.True(updated.AllowExternalLinks);
@@ -54,7 +54,7 @@ public class DesktopTenantSettingsTests
         Assert.Equal("https://siem.example.com/ingest", updated.AuditWebhookUrl);
         Assert.True(updated.AuditWebhookConfigured);
 
-        var readBack = await api.GetTenantSettingsAsync();
+        var readBack = await api.Admin.GetTenantSettingsAsync();
         Assert.Equal("deu+eng", readBack.DefaultOcrLanguages);
         Assert.Equal(500, readBack.AuditRetentionDays);
         Assert.Equal(21, readBack.CheckoutTtlDays);
@@ -66,14 +66,14 @@ public class DesktopTenantSettingsTests
 
         // Restore the original values so a re-run / other tests see a clean tenant (require-MFA OFF for the shared demo admin,
         // passkey login back to the tenant's original state, webhook cleared).
-        await api.SaveTenantSettingsGroupAsync(before, "capture", new { defaultOcrLanguages = before.DefaultOcrLanguages, restrictTagsToCatalog = before.RestrictTagsToCatalog });
-        await api.SaveTenantSettingsGroupAsync(before, "records", new { auditRetentionDays = before.AuditRetentionDays, wormLockMode = before.WormLockMode, requireDispositionReview = before.RequireDispositionReview });
-        await api.SaveTenantSettingsGroupAsync(before, "checkout", new { checkoutTtlDays = before.CheckoutTtlDays, checkoutWarningDays = before.CheckoutWarningDays });
-        await api.SaveTenantSettingsGroupAsync(before, "security", new { requireMfa = before.RequireMfa, allowPasskeyLogin = before.AllowPasskeyLogin, enforceClearance = before.EnforceClearance });
-        await api.SaveTenantSettingsGroupAsync(before, "storage", new { storageQuotaBytes = before.StorageQuotaBytes, incompleteUploadCleanupDays = before.IncompleteUploadCleanupDays });
-        await api.SaveTenantSettingsGroupAsync(before, "external-links", new { allowExternalLinks = before.AllowExternalLinks, externalLinkMaxDays = before.ExternalLinkMaxDays, externalLinkDefaultAccesses = before.ExternalLinkDefaultAccesses, showExternalLinkUrl = before.ShowExternalLinkUrl });
-        await api.SaveTenantSettingsGroupAsync(before, "audit-streaming", new { auditWebhookUrl = (string?)null, auditWebhookSecret = (string?)null });
-        var restored = await api.GetTenantSettingsAsync();
+        await api.Admin.SaveTenantSettingsGroupAsync(before, "capture", new { defaultOcrLanguages = before.DefaultOcrLanguages, restrictTagsToCatalog = before.RestrictTagsToCatalog });
+        await api.Admin.SaveTenantSettingsGroupAsync(before, "records", new { auditRetentionDays = before.AuditRetentionDays, wormLockMode = before.WormLockMode, requireDispositionReview = before.RequireDispositionReview });
+        await api.Admin.SaveTenantSettingsGroupAsync(before, "checkout", new { checkoutTtlDays = before.CheckoutTtlDays, checkoutWarningDays = before.CheckoutWarningDays });
+        await api.Admin.SaveTenantSettingsGroupAsync(before, "security", new { requireMfa = before.RequireMfa, allowPasskeyLogin = before.AllowPasskeyLogin, enforceClearance = before.EnforceClearance });
+        await api.Admin.SaveTenantSettingsGroupAsync(before, "storage", new { storageQuotaBytes = before.StorageQuotaBytes, incompleteUploadCleanupDays = before.IncompleteUploadCleanupDays });
+        await api.Admin.SaveTenantSettingsGroupAsync(before, "external-links", new { allowExternalLinks = before.AllowExternalLinks, externalLinkMaxDays = before.ExternalLinkMaxDays, externalLinkDefaultAccesses = before.ExternalLinkDefaultAccesses, showExternalLinkUrl = before.ShowExternalLinkUrl });
+        await api.Admin.SaveTenantSettingsGroupAsync(before, "audit-streaming", new { auditWebhookUrl = (string?)null, auditWebhookSecret = (string?)null });
+        var restored = await api.Admin.GetTenantSettingsAsync();
         Assert.Equal(before.AllowPasskeyLogin, restored.AllowPasskeyLogin); // round-trips to the original (passkey login defaults ON, ADR "Passwordless passkey login on by default")
         Assert.False(restored.RequireDispositionReview);
         Assert.Null(restored.AuditWebhookUrl);

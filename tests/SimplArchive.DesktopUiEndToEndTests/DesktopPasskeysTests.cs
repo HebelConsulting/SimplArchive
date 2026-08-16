@@ -23,8 +23,8 @@ public class DesktopPasskeysTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var email = $"passkey-{suffix}@example.test";
 
-        var userId = await admin.CreateUserAsync(email, "Passkey User " + suffix);
-        var password = await admin.ResetUserPasswordAsync(userId);
+        var userId = await admin.Admin.CreateUserAsync(email, "Passkey User " + suffix);
+        var password = await admin.Admin.ResetUserPasswordAsync(userId);
         var user = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl, email, password));
 
         // No passkeys to start.

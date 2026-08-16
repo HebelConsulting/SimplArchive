@@ -26,34 +26,34 @@ public class DesktopServiceAccountsTests
 
         // Create with CanExport → a one-time client_id + client_secret comes back.
         var name = "dt-sa-" + suffix;
-        var secret = await client.CreateServiceAccountAsync(name, Rights(canExport: true));
+        var secret = await client.Admin.CreateServiceAccountAsync(name, Rights(canExport: true));
         Assert.NotEmpty(secret.ClientId);
         Assert.NotEmpty(secret.ClientSecret);
 
         // It's listed, active, and carries the granted right.
-        var created = (await client.GetServiceAccountsAsync()).Single(a => a.Name == name);
+        var created = (await client.Admin.GetServiceAccountsAsync()).Single(a => a.Name == name);
         Assert.True(created.IsActive);
         Assert.True(created.CanExport);
         Assert.False(created.CanImport);
 
         // Edit (PUT): rename + add CanImport → reads back.
         var newName = "dt-sa-edited-" + suffix;
-        await client.UpdateServiceAccountAsync(created, newName, Rights(canExport: true, canImport: true));
-        var edited = (await client.GetServiceAccountsAsync()).Single(a => a.Id == created.Id);
+        await client.Admin.UpdateServiceAccountAsync(created, newName, Rights(canExport: true, canImport: true));
+        var edited = (await client.Admin.GetServiceAccountsAsync()).Single(a => a.Id == created.Id);
         Assert.Equal(newName, edited.Name);
         Assert.True(edited.CanImport);
 
         // Rotate the secret → a fresh one-time secret.
-        var rotated = await client.RotateServiceAccountSecretAsync(created);
+        var rotated = await client.Admin.RotateServiceAccountSecretAsync(created);
         Assert.NotEmpty(rotated.ClientSecret);
         Assert.NotEqual(secret.ClientSecret, rotated.ClientSecret);
 
         // Revoke → still listed, but inactive (one-way).
-        await client.RevokeServiceAccountAsync(edited);
-        var revoked = (await client.GetServiceAccountsAsync()).Single(a => a.Id == created.Id);
+        await client.Admin.RevokeServiceAccountAsync(edited);
+        var revoked = (await client.Admin.GetServiceAccountsAsync()).Single(a => a.Id == created.Id);
         Assert.False(revoked.IsActive);
     }
 
-    private static SimplArchiveApiClient.SystemRightsData Rights(bool canExport = false, bool canImport = false) =>
+    private static AdminClient.SystemRightsData Rights(bool canExport = false, bool canImport = false) =>
         new(false, false, false, false, false, false, false, false, false, false, false, canExport, canImport);
 }

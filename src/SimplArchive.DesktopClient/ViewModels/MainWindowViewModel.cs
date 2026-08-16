@@ -439,7 +439,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public ObservableCollection<SensitivityPickerItem> SensitivityPickerItems { get; } = [];
     [ObservableProperty] private SensitivityPickerItem? _selectedSensitivityItem;
     // The full label catalog (for the management dialog + the picker), loaded on login.
-    public ObservableCollection<SimplArchiveApiClient.SensitivityLabelInfo> SensitivityCatalog { get; } = [];
+    public ObservableCollection<AdminClient.SensitivityLabelInfo> SensitivityCatalog { get; } = [];
 
     public sealed record SensitivityPickerItem(Guid? Id, string Name);
 
@@ -462,7 +462,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var catalog = await _api.GetSensitivityLabelsAsync();
+            var catalog = await _api.Admin.GetSensitivityLabelsAsync();
             SensitivityCatalog.Clear();
             foreach (var l in catalog.Items)
             {
@@ -3937,7 +3937,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.AddGroupMemberAsync(group.Source!, value.Id);
+            await _api.Admin.AddGroupMemberAsync(group.Source!, value.Id);
             await LoadGroupMembersAsync(group);
             Status = string.Format(Strings.Get("StAdded"), value.DisplayName);
         }
@@ -3965,7 +3965,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            foreach (var m in await _api.GetGroupMembersAsync(p.Source!))
+            foreach (var m in await _api.Admin.GetGroupMembersAsync(p.Source!))
             {
                 GroupMembers.Add(m);
             }
@@ -4000,7 +4000,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.RemoveGroupMemberAsync(member);
+            await _api.Admin.RemoveGroupMemberAsync(member);
             GroupMembers.Remove(member);
             HasGroupMembers = GroupMembers.Count > 0;
             RebuildMemberCandidates();
@@ -4075,7 +4075,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.ResetUserMfaAsync(p.Source!);
+            await _api.Admin.ResetUserMfaAsync(p.Source!);
             p.MfaEnabled = false;
             OnPropertyChanged(nameof(SelectedPrincipalMfaStatus));
             OnPropertyChanged(nameof(CanResetSelectedPrincipalMfa));
@@ -4440,7 +4440,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var s = await _api.GetTenantSettingsAsync();
+            var s = await _api.Admin.GetTenantSettingsAsync();
             ApplyTenantSettings(s);
             TenantEditingGroup = null;
             TenantSettingsLoaded = true;
@@ -4456,7 +4456,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    private void ApplyTenantSettings(SimplArchiveApiClient.TenantSettingsInfo s)
+    private void ApplyTenantSettings(AdminClient.TenantSettingsInfo s)
     {
         LastTenantSettings = s; // group saves follow this resource's settings-<group> rels (ADR 0543)
         TenantName = s.Name;
@@ -4506,7 +4506,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // The read-only webhook-delivery health line (ADR "Audit webhook delivery retry/backoff"); empty when no
     // webhook is configured.
-    private static string DescribeWebhookHealth(SimplArchiveApiClient.TenantSettingsInfo s)
+    private static string DescribeWebhookHealth(AdminClient.TenantSettingsInfo s)
     {
         if (string.IsNullOrEmpty(s.AuditWebhookUrl))
         {
@@ -4539,7 +4539,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            ApplyTenantSettings(await _api.RecomputeStorageAsync());
+            ApplyTenantSettings(await _api.Admin.RecomputeStorageAsync());
             Status = Strings.Get("StStorageRecomputed");
         }
         catch (ApiActionException ex)
@@ -4562,7 +4562,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var (success, error) = await _api.TestAuditWebhookAsync();
+            var (success, error) = await _api.Admin.TestAuditWebhookAsync();
             Status = success ? "Test event delivered successfully." : $"Test delivery failed: {error ?? "unknown error"}";
         }
         catch (ApiActionException ex)
@@ -4661,7 +4661,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var password = await _api.ResetUserPasswordAsync(p.Source!);
+            var password = await _api.Admin.ResetUserPasswordAsync(p.Source!);
             Status = string.Format(Strings.Get("StPwResetFor"), p.Name);
             return password;
         }
@@ -4731,7 +4731,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var bytes = await _api.GetUserPhotoAsync(p.Source!);
+            var bytes = await _api.Admin.GetUserPhotoAsync(p.Source!);
             SelectedPrincipalPhoto = bytes is null ? null : Decode(bytes);
         }
         catch (Exception)
@@ -4749,7 +4749,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.SetUserPhotoAsync(p.Source!, png);
+            await _api.Admin.SetUserPhotoAsync(p.Source!, png);
             await LoadSelectedPrincipalPhotoAsync(p);
             Status = Strings.Get("StPhotoUpdated");
         }
@@ -4772,7 +4772,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.DeleteUserPhotoAsync(p.Source!);
+            await _api.Admin.DeleteUserPhotoAsync(p.Source!);
             SelectedPrincipalPhoto = null;
             Status = Strings.Get("StPhotoRemoved");
         }
@@ -4782,7 +4782,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    private static bool RightAt(SimplArchiveApiClient.SystemRightsData r, int i) => i switch
+    private static bool RightAt(AdminClient.SystemRightsData r, int i) => i switch
     {
         0 => r.IsTenantAdmin,
         1 => r.CanImpersonate,
@@ -4801,7 +4801,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _ => r.CanCreateExternalLink,
     };
 
-    private SimplArchiveApiClient.SystemRightsData CurrentMatrixRights() => new(
+    private AdminClient.SystemRightsData CurrentMatrixRights() => new(
         PrincipalRights[0].IsChecked, PrincipalRights[1].IsChecked, PrincipalRights[2].IsChecked,
         PrincipalRights[3].IsChecked, PrincipalRights[4].IsChecked, PrincipalRights[5].IsChecked,
         PrincipalRights[6].IsChecked, PrincipalRights[7].IsChecked, PrincipalRights[8].IsChecked,
@@ -4820,8 +4820,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var previousIsGroup = SelectedPrincipal?.IsGroup;
         try
         {
-            var groups = await _api.GetGroupsAsync();
-            var users = await _api.GetUsersAsync();
+            var groups = await _api.Admin.GetGroupsAsync();
+            var users = await _api.Admin.GetUsersAsync();
             Principals.Clear();
             // Groups first (two-person icon), then users, each alphabetical.
             foreach (var p in groups.Concat(users).OrderByDescending(p => p.IsGroup).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
@@ -4849,13 +4849,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         CanManageUsers = true;
         Principals.Clear();
         Principals.Add(new PrincipalRowViewModel(true, Guid.NewGuid(), "Administrators", true,
-            new SimplArchiveApiClient.SystemRightsData(true, false, false, false, false, false, true, true, true, true, true, true, true)));
+            new AdminClient.SystemRightsData(true, false, false, false, false, false, true, true, true, true, true, true, true)));
         Principals.Add(new PrincipalRowViewModel(true, Guid.NewGuid(), "Editors", true,
-            new SimplArchiveApiClient.SystemRightsData(false, false, false, false, false, false, true, false, false, false, false, false, false)));
+            new AdminClient.SystemRightsData(false, false, false, false, false, false, true, false, false, false, false, false, false)));
         Principals.Add(new PrincipalRowViewModel(false, Guid.NewGuid(), "Demo Admin", true,
-            new SimplArchiveApiClient.SystemRightsData(true, false, false, false, false, false, true, true, true, true, true, true, true)));
+            new AdminClient.SystemRightsData(true, false, false, false, false, false, true, true, true, true, true, true, true)));
         Principals.Add(new PrincipalRowViewModel(false, Guid.NewGuid(), "Jane Doe", false,
-            new SimplArchiveApiClient.SystemRightsData(false, false, false, false, false, false, false, false, false, false, false, false, false)));
+            new AdminClient.SystemRightsData(false, false, false, false, false, false, false, false, false, false, false, false, false)));
         // Select the Administrators group so the rights matrix + Members section show (mock members, no API).
         SelectedPrincipal = Principals[0];
         GroupMembers.Add(new SimplArchiveApiClient.UserOptionInfo(Guid.NewGuid(), "Demo Admin"));
@@ -4926,11 +4926,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             var rights = CurrentMatrixRights();
             if (p.IsGroup)
             {
-                await _api.SetRightsAsync(p.Source!, rights);
+                await _api.Admin.SetRightsAsync(p.Source!, rights);
             }
             else
             {
-                await _api.SetRightsAsync(p.Source!, rights);
+                await _api.Admin.SetRightsAsync(p.Source!, rights);
             }
 
             p.Rights = rights;
@@ -4953,7 +4953,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // Called from the view's New/Copy code-behind (the create dialog lives in the view). copyRights carries
     // the source principal's rights for Copy; null for a fresh New.
-    public async Task CreatePrincipalAsync(bool isGroup, string name, string email, SimplArchiveApiClient.SystemRightsData? copyRights)
+    public async Task CreatePrincipalAsync(bool isGroup, string name, string email, AdminClient.SystemRightsData? copyRights)
     {
         if (_api is null)
         {
@@ -4962,12 +4962,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var created = isGroup ? await _api.CreateGroupAsync(name) : await _api.CreateUserAsync(email, name);
+            var created = isGroup ? await _api.Admin.CreateGroupAsync(name) : await _api.Admin.CreateUserAsync(email, name);
             if (copyRights is not null)
             {
                 // The create response IS the resource, rels included, so Copy applies the source's rights by
                 // following the new row's own `rights` rel — no re-fetch, no path rebuilt from an id (ADR 0555).
-                await _api.SetRightsAsync(created, copyRights);
+                await _api.Admin.SetRightsAsync(created, copyRights);
             }
 
             await LoadPrincipalsAsync();
@@ -4999,11 +4999,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             if (p.IsGroup)
             {
-                await _api.DeleteGroupAsync(p.Source!);
+                await _api.Admin.DeleteGroupAsync(p.Source!);
             }
             else
             {
-                await _api.DeleteUserAsync(p.Source!);
+                await _api.Admin.DeleteUserAsync(p.Source!);
             }
 
             Status = p.IsGroup ? "Group deleted." : "User deactivated.";
@@ -5044,7 +5044,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.DeleteUserAsync(p.Source!, replacementId);
+            await _api.Admin.DeleteUserAsync(p.Source!, replacementId);
             Status = Strings.Get("StReviewsReassigned");
             SelectedPrincipal = null;
             await LoadPrincipalsAsync();
@@ -6492,7 +6492,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         await root.ReloadChildrenAsync();
         var sub = root.Children.First(c => c.Name == name);
 
-        var granteeId = await _api!.CreateUserAsync($"treeacl-{suffix}@simplarchive.local", $"TreeAcl {suffix}");
+        var granteeId = await _api!.Admin.CreateUserAsync($"treeacl-{suffix}@simplarchive.local", $"TreeAcl {suffix}");
         var viewer = new SimplArchiveApiClient.AclRights(
             CanSee: true, CanReadContent: true, CanEditContent: false, CanEditIndexData: false,
             CanCreateSubItems: false, CanDelete: false, CanMove: false, CanAnnotate: false, CanManagePermissions: false);
@@ -6677,7 +6677,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         UseApi(new SimplArchiveApiClient(accessToken));
         CanManageInboxes = (await _api!.GetWhoAmIAsync()).CanManageInboxes;
 
-        var recipient = await _api.CreateUserAsync($"send-{Guid.NewGuid():N}@e2e.local", "Send Recipient");
+        var recipient = await _api.Admin.CreateUserAsync($"send-{Guid.NewGuid():N}@e2e.local", "Send Recipient");
 
         var name = "send-" + Guid.NewGuid().ToString("N")[..8] + ".txt";
         await UploadFilesToInboxAsync(new[] { (name, System.Text.Encoding.UTF8.GetBytes("hand-off")) });
@@ -6701,7 +6701,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             await _api.Inbox.DeleteInboxItemAsync(handedOver);
         }
 
-        await _api.DeleteUserAsync(recipient);
+        await _api.Admin.DeleteUserAsync(recipient);
         return leftOwnInbox && inRecipientInbox;
     }
 

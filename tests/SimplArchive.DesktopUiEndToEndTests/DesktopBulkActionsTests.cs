@@ -41,7 +41,7 @@ public class DesktopBulkActionsTests
             Assert.Equal(new[] { "batch", "reviewed" }, await api.GetTagsAsync((await api.GetDocumentDetailAsync(id)).Href("tags")));
         }
 
-        var confidential = (await api.GetSensitivityLabelsAsync()).Items.Single(l => l.Name == "Confidential");
+        var confidential = (await api.Admin.GetSensitivityLabelsAsync()).Items.Single(l => l.Name == "Confidential");
         var classified = await api.BulkSetSensitivityAsync(ids, confidential.Id);
         Assert.Equal(3, classified.Succeeded);
         Assert.Equal(confidential.Id, (await api.GetDocumentSensitivityAsync(ids[0])).LabelId);

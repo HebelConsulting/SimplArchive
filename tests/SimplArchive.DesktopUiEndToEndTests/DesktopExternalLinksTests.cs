@@ -56,7 +56,7 @@ public class DesktopExternalLinksTests
         await api.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("shareable"));
         var document = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
-        var before = await api.GetTenantSettingsAsync();
+        var before = await api.Admin.GetTenantSettingsAsync();
         try
         {
             await SetExternalLinksAsync(api, before, allow: false);
@@ -89,7 +89,7 @@ public class DesktopExternalLinksTests
         await api.CreateFolderAsync(repo.Id, name);
         var folder = (await api.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
 
-        var before = await api.GetTenantSettingsAsync();
+        var before = await api.Admin.GetTenantSettingsAsync();
         try
         {
             await SetExternalLinksAsync(api, before, allow: true);
@@ -103,8 +103,8 @@ public class DesktopExternalLinksTests
 
     // The external-links GROUP is saved whole (its own full replacement), and nothing else is touched —
     // exactly what the per-group split (#530 tranche 10) exists for: no other setting can be rewritten here.
-    private static Task SetExternalLinksAsync(SimplArchiveApiClient api, SimplArchiveApiClient.TenantSettingsInfo before, bool allow) =>
-        api.SaveTenantSettingsGroupAsync(before, "external-links", new
+    private static Task SetExternalLinksAsync(SimplArchiveApiClient api, AdminClient.TenantSettingsInfo before, bool allow) =>
+        api.Admin.SaveTenantSettingsGroupAsync(before, "external-links", new
         {
             allowExternalLinks = allow,
             externalLinkMaxDays = before.ExternalLinkMaxDays,

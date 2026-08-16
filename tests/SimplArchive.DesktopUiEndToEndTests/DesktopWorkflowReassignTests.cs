@@ -30,10 +30,10 @@ public class DesktopWorkflowReassignTests
         var doc = (await client.GetChildrenAsync(repo.Href("children"))).First(c => c.HasVersions);
 
         // Two reviewers — tenant admins so they can read the content (valid reviewer targets).
-        var u1 = await client.CreateUserAsync($"dt-r1-{suffix}@example.test", $"Reviewer One {suffix}");
-        var u2 = await client.CreateUserAsync($"dt-r2-{suffix}@example.test", $"Reviewer Two {suffix}");
-        await client.SetRightsAsync(u1, TenantAdmin);
-        await client.SetRightsAsync(u2, TenantAdmin);
+        var u1 = await client.Admin.CreateUserAsync($"dt-r1-{suffix}@example.test", $"Reviewer One {suffix}");
+        var u2 = await client.Admin.CreateUserAsync($"dt-r2-{suffix}@example.test", $"Reviewer Two {suffix}");
+        await client.Admin.SetRightsAsync(u1, TenantAdmin);
+        await client.Admin.SetRightsAsync(u2, TenantAdmin);
 
         // Submit to U1.
         var wf = await client.GetWorkflowAsync(doc.Id);
@@ -50,15 +50,15 @@ public class DesktopWorkflowReassignTests
         Assert.Equal($"Reviewer Two {suffix}", wf.AssignedToName);
 
         // Deactivating U2 (who now holds the task) without a replacement is refused.
-        await Assert.ThrowsAsync<ReviewerHasPendingReviewsException>(() => client.DeleteUserAsync(u2));
+        await Assert.ThrowsAsync<ReviewerHasPendingReviewsException>(() => client.Admin.DeleteUserAsync(u2));
 
         // Handing the review back to U1 deactivates U2 and moves the task.
-        await client.DeleteUserAsync(u2, u1.Id);
+        await client.Admin.DeleteUserAsync(u2, u1.Id);
         wf = await client.GetWorkflowAsync(doc.Id);
         Assert.Equal($"Reviewer One {suffix}", wf!.AssignedToName);
-        Assert.False((await client.GetUsersAsync()).Single(u => u.Id == u2.Id).IsActive);
+        Assert.False((await client.Admin.GetUsersAsync()).Single(u => u.Id == u2.Id).IsActive);
     }
 
-    private static readonly SimplArchiveApiClient.SystemRightsData TenantAdmin =
+    private static readonly AdminClient.SystemRightsData TenantAdmin =
         new(true, false, false, false, false, false, false, false, false, false, false, false, false);
 }

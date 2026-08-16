@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -136,4 +137,43 @@ public sealed class ApiCore
     /// <summary>Maps a Problem-Details refusal to a localized <see cref="ApiActionException"/>.</summary>
     public static Task ThrowIfProblemAsync(HttpResponseMessage response, string fallback, CancellationToken cancellationToken) =>
         SimplArchiveApiClient.ThrowIfProblemAsync(response, fallback, cancellationToken);
+    public async Task<byte[]?> GetPhotoAsync(string photoHref, CancellationToken cancellationToken = default)
+    {
+        using var response = await Http.GetAsync(photoHref, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync(cancellationToken);
+    }
+
+    public async Task DeletePhotoAsync(Task<string> photoHref, CancellationToken cancellationToken)
+    {
+        using var response = await Http.DeleteAsync(await photoHref, cancellationToken);
+        if (response.StatusCode != HttpStatusCode.NotFound)
+        {
+            response.EnsureSuccessStatusCode();
+        }
+    }
+
+    /// <summary>PUTs a PNG to an advertised photo href, translating the refusals a caller can act on.</summary>
+    public async Task PutPhotoAsync(string url, byte[] png, CancellationToken cancellationToken)
+    {
+        var content = new ByteArrayContent(png);
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+        using var response = await Http.PutAsync(url, content, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException("You don't have permission to change this photo.");
+        }
+
+        if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            throw new ApiActionException("That image could not be used as a profile photo.");
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
 }

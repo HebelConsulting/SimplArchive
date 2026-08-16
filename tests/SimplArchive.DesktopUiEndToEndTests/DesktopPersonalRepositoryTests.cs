@@ -21,10 +21,10 @@ public class DesktopPersonalRepositoryTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
         // Two throwaway users with known passwords, each logging in for their own token.
-        var aliceId = await admin.CreateUserAsync($"alice-{suffix}@example.test", "Alice " + suffix);
-        var bobId = await admin.CreateUserAsync($"bob-{suffix}@example.test", "Bob " + suffix);
-        var alicePw = await admin.ResetUserPasswordAsync(aliceId);
-        var bobPw = await admin.ResetUserPasswordAsync(bobId);
+        var aliceId = await admin.Admin.CreateUserAsync($"alice-{suffix}@example.test", "Alice " + suffix);
+        var bobId = await admin.Admin.CreateUserAsync($"bob-{suffix}@example.test", "Bob " + suffix);
+        var alicePw = await admin.Admin.ResetUserPasswordAsync(aliceId);
+        var bobPw = await admin.Admin.ResetUserPasswordAsync(bobId);
 
         var alice = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl, $"alice-{suffix}@example.test", alicePw));
         var bob = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl, $"bob-{suffix}@example.test", bobPw));

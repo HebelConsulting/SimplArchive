@@ -25,8 +25,8 @@ public class DesktopMfaTests
         var email = $"mfa-{suffix}@example.test";
 
         // A throwaway user with a known password (via admin create + reset), then log in as them.
-        var userId = await admin.CreateUserAsync(email, "MFA User " + suffix);
-        var password = await admin.ResetUserPasswordAsync(userId);
+        var userId = await admin.Admin.CreateUserAsync(email, "MFA User " + suffix);
+        var password = await admin.Admin.ResetUserPasswordAsync(userId);
         var user = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl, email, password));
 
         // Enroll → a secret + QR; a wrong code is rejected; the right one enables MFA + returns recovery codes.

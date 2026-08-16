@@ -150,7 +150,7 @@ public sealed partial class MainWindowViewModel
     // SaveTenantSettingsGroupAsync, following the settings-<group> rel of the last-READ settings.
 
     /// <summary>The settings resource as last read — its links carry the writable sub-resources.</summary>
-    public Services.SimplArchiveApiClient.TenantSettingsInfo? LastTenantSettings { get; private set; }
+    public Services.AdminClient.TenantSettingsInfo? LastTenantSettings { get; private set; }
 
     // ApplyTenantSettings (the big partial) is the one writer; a method rather than a public setter keeps it so.
     partial void OnTenantEditingGroupChanged(string? value)
@@ -226,7 +226,7 @@ public sealed partial class MainWindowViewModel
 
         try
         {
-            ApplyTenantSettings(await _api.SaveTenantSettingsGroupAsync(settings, group, body));
+            ApplyTenantSettings(await _api.Admin.SaveTenantSettingsGroupAsync(settings, group, body));
             TenantEditingGroup = null;
             Status = Strings.Get("StTenantSaved");
         }

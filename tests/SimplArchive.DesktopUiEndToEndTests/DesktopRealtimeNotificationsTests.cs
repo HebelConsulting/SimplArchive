@@ -25,8 +25,8 @@ public class DesktopRealtimeNotificationsTests
 
         // A throwaway recipient user.
         var email = $"rt-{suffix}@example.test";
-        var userId = await admin.CreateUserAsync(email, "RT User " + suffix);
-        var password = await admin.ResetUserPasswordAsync(userId);
+        var userId = await admin.Admin.CreateUserAsync(email, "RT User " + suffix);
+        var password = await admin.Admin.ResetUserPasswordAsync(userId);
         var userToken = await Ui.GetUserTokenAsync(_app.BaseUrl, email, password);
 
         // Connect the recipient's realtime client (real WebSocket + ?access_token=).

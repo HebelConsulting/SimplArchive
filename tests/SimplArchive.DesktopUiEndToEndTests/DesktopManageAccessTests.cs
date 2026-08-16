@@ -29,7 +29,7 @@ public class DesktopManageAccessTests
 
         // A fresh active user to grant to — it shows up in the grantable-principals picker by display name.
         var granteeName = $"Grantee {suffix}";
-        var granteeId = await api.CreateUserAsync($"grantee-{suffix}@simplarchive.local", granteeName);
+        var granteeId = await api.Admin.CreateUserAsync($"grantee-{suffix}@simplarchive.local", granteeName);
 
         // A brand-new child inherits (no direct grants) and the admin can manage it (not forbidden).
         var initial = await api.GetAclAsync(folder.Id);
@@ -116,9 +116,9 @@ public class DesktopManageAccessTests
 
         // A group with a member.
         var groupName = $"grp-{suffix}";
-        var groupId = await api.CreateGroupAsync(groupName);
-        var userId = await api.CreateUserAsync($"member-{suffix}@simplarchive.local", $"Member {suffix}");
-        await api.AddGroupMemberAsync(groupId, userId.Id);
+        var groupId = await api.Admin.CreateGroupAsync(groupName);
+        var userId = await api.Admin.CreateUserAsync($"member-{suffix}@simplarchive.local", $"Member {suffix}");
+        await api.Admin.AddGroupMemberAsync(groupId, userId.Id);
 
         // Grant the group Viewer directly on the folder (now the governing scope).
         var viewer = new SimplArchiveApiClient.AclRights(true, true, false, false, false, false, false, false, false);

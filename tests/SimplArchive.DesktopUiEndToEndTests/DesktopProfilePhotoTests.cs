@@ -24,21 +24,21 @@ public class DesktopProfilePhotoTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
         // A throwaway user (admin path), so this doesn't touch the shared demo admin.
-        var userId = await client.CreateUserAsync($"photo-{suffix}@example.test", "Photo User " + suffix);
-        Assert.Null(await client.GetUserPhotoAsync(userId));
+        var userId = await client.Admin.CreateUserAsync($"photo-{suffix}@example.test", "Photo User " + suffix);
+        Assert.Null(await client.Admin.GetUserPhotoAsync(userId));
 
         // Set → GET round-trips the exact bytes.
         var png = Png(256, 256);
-        await client.SetUserPhotoAsync(userId, png);
-        Assert.Equal(png, await client.GetUserPhotoAsync(userId));
+        await client.Admin.SetUserPhotoAsync(userId, png);
+        Assert.Equal(png, await client.Admin.GetUserPhotoAsync(userId));
 
         // Server-side validation: a non-PNG and an over-large dimension are both rejected.
-        await Assert.ThrowsAsync<ApiActionException>(() => client.SetUserPhotoAsync(userId, [1, 2, 3, 4]));
-        await Assert.ThrowsAsync<ApiActionException>(() => client.SetUserPhotoAsync(userId, Png(2049, 2049)));
+        await Assert.ThrowsAsync<ApiActionException>(() => client.Admin.SetUserPhotoAsync(userId, [1, 2, 3, 4]));
+        await Assert.ThrowsAsync<ApiActionException>(() => client.Admin.SetUserPhotoAsync(userId, Png(2049, 2049)));
 
         // Delete → gone.
-        await client.DeleteUserPhotoAsync(userId);
-        Assert.Null(await client.GetUserPhotoAsync(userId));
+        await client.Admin.DeleteUserPhotoAsync(userId);
+        Assert.Null(await client.Admin.GetUserPhotoAsync(userId));
 
         // Self path: me/photo sets the caller's own photo → whoami reports it; clean up afterwards.
         var me = (await client.GetWhoAmIAsync()).UserId!.Value;
