@@ -37,6 +37,11 @@ spec:
             - name: http
               containerPort: 8080
               protocol: TCP
+            {{- if .Values.imap.enabled }}
+            - name: imaps
+              containerPort: {{ .Values.imap.tlsPort }}
+              protocol: TCP
+            {{- end }}
           env:
             {{- include "simplarchive.appConfigEnv" . | nindent 12 }}
             {{- with .Values.extraEnv }}

@@ -3,6 +3,7 @@ using MimeKit;
 using SimplArchive.Api.Documents;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
+using SimplArchive.Api.Controllers;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Imap;
@@ -132,6 +133,10 @@ internal static class ImapWrites
         mailbox.NextUid++;
         db.ImapMessageUids.Add(new Domain.Imap.ImapMessageUid { FolderId = folder.Id, DocumentId = document.Id, TenantId = tenantId, Uid = uid });
         await db.SaveChangesAsync();
+
+        // Every user-facing mutation is audited (#562 slice 4) — same action the workbench filing records.
+        await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()
+            .RecordAsync(AuditActions.DocumentFiled, "Document", document.Id, document.Name, "Filed over IMAP");
         await session.WriteLineAsync($"{tag} OK [APPENDUID {mailbox.UidValidity} {uid}] APPEND completed");
     }
 
@@ -166,6 +171,8 @@ internal static class ImapWrites
             var document = await db.Documents.FirstAsync(d => d.Id == message.DocumentId);
             document.DeletedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync();
+            await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()
+                .RecordAsync(AuditActions.DocumentDeleted, "Document", document.Id, document.Name, "Deleted over IMAP (EXPUNGE)");
             expungedSequences.Add(index + 1);
         }
 
@@ -248,6 +255,8 @@ internal static class ImapWrites
                 try
                 {
                     await db.SaveChangesAsync();
+                    await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()
+                        .RecordAsync(AuditActions.DocumentMoved, "Document", document.Id, document.Name, "Moved over IMAP");
                     movedSequences.Add(sequence);
                 }
                 catch (InvalidOperationException)
@@ -273,6 +282,8 @@ internal static class ImapWrites
                         CreatedAt = DateTimeOffset.UtcNow,
                     });
                     await db.SaveChangesAsync();
+                    await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()
+                        .RecordAsync(AuditActions.ReferenceAdded, "Document", message.DocumentId, message.Name, "Referenced over IMAP (COPY)");
                 }
 
                 remaining.Add(message);

@@ -135,6 +135,15 @@ service:
   type: ClusterIP
   port: 80
 
+# The IMAP endpoint (ADR 0594/0596, #562). Off by default; when enabled the pod listens on 993 (implicit
+# TLS) and the Service exposes it. The certificate PEM + key come from the existing secret (envFrom) as
+# Imap__CertificatePem / Imap__CertificateKeyPem — in a cluster, point cert-manager (Let's Encrypt) at a
+# Certificate whose secret is mapped into those keys; see docs/deploy/README.md. The plaintext dev port is
+# never exposed here — the production-readiness gate refuses it outside Development.
+imap:
+  enabled: false
+  tlsPort: 993
+
 ingress:
   enabled: false
   className: ""

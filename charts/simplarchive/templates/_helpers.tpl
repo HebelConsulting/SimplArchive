@@ -101,6 +101,12 @@ rolls the Deployment automatically (the pod template changes). Secrets come from
   value: {{ .Values.config.app.baseUrl | quote }}
 - name: App__ApplyMigrationsAtStartup
   value: {{ .Values.config.app.applyMigrationsAtStartup | quote }}
+{{- if .Values.imap.enabled }}
+- name: Imap__Enabled
+  value: "true"
+- name: Imap__TlsPort
+  value: {{ .Values.imap.tlsPort | quote }}
+{{- end }}
 - name: ObjectStorage__ServiceUrl
   value: {{ include "simplarchive.objectStorageServiceUrl" . | quote }}
 - name: ObjectStorage__PublicServiceUrl

@@ -221,7 +221,7 @@ public class ImapEndpointTests
         var repoId = (await TestJson.Post(owner, "/api/repositories", new { name = repoName })).GetProperty("id").GetGuid();
 
         var email = $"imap-wr-{Guid.NewGuid():N}@e2e.local";
-        await _factory.SeedUserAsync(tenantId, email, "wr-1234", "Writer");
+        await _factory.SeedUserAsync(tenantId, email, "wr-1234", "Writer", canViewAuditLog: true);
         await _factory.GrantTenantAdminAsync(email);
         using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "wr-1234"));
         var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
@@ -277,5 +277,12 @@ public class ImapEndpointTests
         Assert.Contains(bin, i => i.GetProperty("name").GetString() == "Filed from the mail client (2)");
 
         await client.DisconnectAsync(true);
+
+        // Every IMAP mutation is audited with its workbench twin's action (#562 slice 4, ADR 0597).
+        var audit = (await TestJson.Get(api, "/api/audit-events?limit=200")).GetProperty("events").EnumerateArray().ToList();
+        Assert.Contains(audit, e => e.GetProperty("action").GetString() == "Document.Filed" && e.GetProperty("details").GetString() == "Filed over IMAP");
+        Assert.Contains(audit, e => e.GetProperty("action").GetString() == "Document.Moved" && e.GetProperty("details").GetString() == "Moved over IMAP");
+        Assert.Contains(audit, e => e.GetProperty("action").GetString() == "Reference.Added" && e.GetProperty("details").GetString() == "Referenced over IMAP (COPY)");
+        Assert.Contains(audit, e => e.GetProperty("action").GetString() == "Document.Deleted" && e.GetProperty("details").GetString() == "Deleted over IMAP (EXPUNGE)");
     }
 }

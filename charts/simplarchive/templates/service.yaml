@@ -11,5 +11,13 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+    {{- if .Values.imap.enabled }}
+    # IMAP is TCP, not HTTP — it bypasses the Ingress; expose it via this Service (LoadBalancer/NodePort as
+    # the deployment dictates) or a TCP-capable proxy. See docs/deploy/README.md.
+    - port: {{ .Values.imap.tlsPort }}
+      targetPort: imaps
+      protocol: TCP
+      name: imaps
+    {{- end }}
   selector:
     {{- include "simplarchive.selectorLabels" . | nindent 4 }}
