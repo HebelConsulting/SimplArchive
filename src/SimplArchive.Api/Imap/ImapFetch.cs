@@ -42,7 +42,8 @@ internal static class ImapFetch
                 seen.Add(message.DocumentId);
             }
 
-            await WriteMessageAsync(session, storage, message, sequence, items, seen.Contains(message.DocumentId));
+            await WriteMessageAsync(session, storage, message, sequence, items, seen.Contains(message.DocumentId),
+                selected.DeletedDocumentIds.Contains(message.DocumentId));
         }
 
         await session.OkAsync(tag, uidMode ? "UID FETCH" : "FETCH");
@@ -128,7 +129,7 @@ internal static class ImapFetch
     // ---- Response ------------------------------------------------------------------------------------
 
     private static async Task WriteMessageAsync(
-        ImapSession session, IObjectStorageClient storage, ImapMessageEntry message, int sequence, List<string> items, bool seen)
+        ImapSession session, IObjectStorageClient storage, ImapMessageEntry message, int sequence, List<string> items, bool seen, bool deleted)
     {
         byte[]? bytes = null;
         MimeMessage? mime = null;
@@ -164,8 +165,8 @@ internal static class ImapFetch
             switch (upper)
             {
                 case "FLAGS":
-                    // The caller's persisted read state (#562 slice 2) — per user + document.
-                    parts.Add($"FLAGS ({(seen ? "\\Seen" : string.Empty)})");
+                    // Persisted read state (slice 2) + the session's \Deleted staging (slice 3).
+                    parts.Add($"FLAGS ({string.Join(' ', new[] { seen ? "\\Seen" : null, deleted ? "\\Deleted" : null }.Where(f => f is not null))})");
                     break;
                 case "UID":
                     parts.Add($"UID {message.Uid}");

@@ -210,5 +210,72 @@ public class ImapEndpointTests
             await client.DisconnectAsync(true);
         }
     }
-}
 
+    [Fact]
+    public async Task Append_expunge_move_and_copy_map_to_archive_semantics()
+    {
+        // Arrange: a repo with a subfolder, a user with IMAP credentials.
+        var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+        var repoName = $"Wr{Guid.NewGuid():N}"[..10];
+        var repoId = (await TestJson.Post(owner, "/api/repositories", new { name = repoName })).GetProperty("id").GetGuid();
+
+        var email = $"imap-wr-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "wr-1234", "Writer");
+        await _factory.GrantTenantAdminAsync(email);
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "wr-1234"));
+        var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
+        await TestJson.Post(api, $"/api/documents/{repoId}/children", new { name = "Archive" });
+
+        var port = ((ImapServer)_factory.Services.GetService(typeof(ImapServer))!).BoundPort!.Value;
+        using var client = new ImapClient();
+        await client.ConnectAsync("127.0.0.1", port, SecureSocketOptions.None);
+        await client.AuthenticateAsync(email, imapPassword);
+
+        // ---- APPEND files the .eml through the shared finalizer (name = Subject, eMail mask) ----------
+        var message = new MimeKit.MimeMessage();
+        message.From.Add(new MimeKit.MailboxAddress("Alice", "alice@example.test"));
+        message.To.Add(new MimeKit.MailboxAddress("Bob", "bob@example.test"));
+        message.Subject = "Filed from the mail client";
+        message.Body = new MimeKit.TextPart("plain") { Text = "archived over IMAP" };
+
+        var repo = await client.GetFolderAsync(repoName);
+        var appended = await repo.AppendAsync(message);
+        Assert.NotNull(appended); // APPENDUID came back
+
+        var children = (await TestJson.Get(owner, $"/api/documents/{repoId}/children")).GetProperty("children").EnumerateArray().ToList();
+        var filed = children.Single(c => c.GetProperty("name").GetString() == "Filed from the mail client");
+        Assert.Equal("eMail", filed.GetProperty("documentType").GetString()); // the finalizer classified it
+
+        // A second identical Subject auto-suffixes instead of clashing. Both messages carry the SAME
+        // envelope subject — the archive names differ — so the APPENDUIDs are what tells them apart.
+        var appendedSecond = await repo.AppendAsync(message);
+        children = (await TestJson.Get(owner, $"/api/documents/{repoId}/children")).GetProperty("children").EnumerateArray().ToList();
+        Assert.Contains(children, c => c.GetProperty("name").GetString() == "Filed from the mail client (2)");
+
+        // ---- MOVE reparents; COPY files a reference ---------------------------------------------------
+        await repo.OpenAsync(FolderAccess.ReadWrite);
+        var archive = await client.GetFolderAsync($"{repoName}/Archive");
+        var first = appended!.Value;
+        var second = appendedSecond!.Value;
+
+        await repo.MoveToAsync(first, archive);
+        var archiveId = children.Single(c => c.GetProperty("name").GetString() == "Archive").GetProperty("id").GetGuid();
+        var archiveChildren = (await TestJson.Get(owner, $"/api/documents/{archiveId}/children")).GetProperty("children").EnumerateArray().ToList();
+        Assert.Contains(archiveChildren, c => c.GetProperty("name").GetString() == "Filed from the mail client");
+
+        await repo.CopyToAsync(second, archive);
+        var references = (await TestJson.Get(owner, $"/api/documents/{archiveId}/references")).GetProperty("references").EnumerateArray().ToList();
+        Assert.Contains(references, r => r.GetProperty("name").GetString() == "Filed from the mail client (2)");
+
+        // ---- \Deleted + EXPUNGE = soft delete (recycle bin), not a purge ------------------------------
+        await repo.AddFlagsAsync(second, MessageFlags.Deleted, silent: true);
+        await repo.ExpungeAsync();
+        children = (await TestJson.Get(owner, $"/api/documents/{repoId}/children")).GetProperty("children").EnumerateArray().ToList();
+        Assert.DoesNotContain(children, c => c.GetProperty("name").GetString() == "Filed from the mail client (2)");
+        var bin = (await TestJson.Get(api, "/api/recycle-bin")).GetProperty("items").EnumerateArray().ToList();
+        Assert.Contains(bin, i => i.GetProperty("name").GetString() == "Filed from the mail client (2)");
+
+        await client.DisconnectAsync(true);
+    }
+}

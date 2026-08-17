@@ -395,9 +395,11 @@ yours per account: off (the default) lists only e-mails; on lists everything you
 attached to open straight from the mail client.
 
 #note[
-  *The mail client cannot rearrange the archive.* Folders are created, renamed and deleted in SimplArchive —
-  an IMAP client trying the same is politely refused. In this first version the mailboxes are read-only;
-  filing e-mails into the archive from the mail client arrives with a later version.
+  *The mail client cannot rearrange the folders.* Folders are created, renamed and deleted in SimplArchive —
+  an IMAP client trying the same is politely refused. Messages, though, are yours to work with: drag an
+  e-mail into a folder to *file it into the archive* (it becomes a proper e-mail document, named by its
+  subject), move a message to re-file it, copy one to leave a *reference*, and delete + expunge to send it
+  to the *recycle bin* — never a hard delete. Read/unread marks are remembered per person.
 ]
 
 = Metadata & classification

@@ -22,6 +22,7 @@ internal static class ImapStore
         var silent = operation.EndsWith(".SILENT", StringComparison.Ordinal);
         var baseOperation = silent ? operation[..^".SILENT".Length] : operation;
         var wantsSeen = tokens[2].Contains("\\Seen", StringComparison.OrdinalIgnoreCase);
+        var wantsDeleted = tokens[2].Contains("\\Deleted", StringComparison.OrdinalIgnoreCase);
 
         bool? targetSeen = baseOperation switch
         {
@@ -53,11 +54,23 @@ internal static class ImapStore
                 await ImapMailboxes.MarkSeenAsync(scope, message.DocumentId, seen);
             }
 
+            // \Deleted stages in the session only (#562): EXPUNGE is where the soft delete happens.
+            var deletedNow = baseOperation switch
+            {
+                "+FLAGS" when wantsDeleted => selected.DeletedDocumentIds.Add(message.DocumentId) || true,
+                "-FLAGS" when wantsDeleted => !selected.DeletedDocumentIds.Remove(message.DocumentId) && false,
+                "FLAGS" => wantsDeleted
+                    ? selected.DeletedDocumentIds.Add(message.DocumentId) || true
+                    : !selected.DeletedDocumentIds.Remove(message.DocumentId) && false,
+                _ => selected.DeletedDocumentIds.Contains(message.DocumentId),
+            };
+
             if (!silent)
             {
                 var seenNow = targetSeen ?? (await ImapMailboxes.SeenSetAsync(scope, [message])).Contains(message.DocumentId);
+                var flags = string.Join(' ', new[] { seenNow ? "\\Seen" : null, deletedNow ? "\\Deleted" : null }.Where(f => f is not null));
                 var uidPart = uidMode ? $"UID {message.Uid} " : string.Empty;
-                await session.WriteLineAsync($"* {sequence} FETCH ({uidPart}FLAGS ({(seenNow ? "\\Seen" : string.Empty)}))");
+                await session.WriteLineAsync($"* {sequence} FETCH ({uidPart}FLAGS ({flags}))");
             }
         }
 

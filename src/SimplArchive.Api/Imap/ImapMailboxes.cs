@@ -9,8 +9,13 @@ namespace SimplArchive.Api.Imap;
 /// <summary>One mailbox in the catalog: its wire name and the folder Document behind it.</summary>
 internal sealed record ImapMailboxEntry(string Name, Guid FolderId, bool HasChildren);
 
-/// <summary>The SELECTed mailbox's session snapshot: sequence numbers are positions in <see cref="Messages"/>.</summary>
-internal sealed record ImapSelectedMailbox(Guid FolderId, string Name, IReadOnlyList<ImapMessageEntry> Messages);
+/// <summary>The SELECTed mailbox's session snapshot: sequence numbers are positions in <see cref="Messages"/>.
+/// DeletedDocumentIds is the session-transient \Deleted staging (#562 slice 3) — nothing happens before
+/// EXPUNGE; ReadOnly marks an EXAMINE, whose mailbox refuses STORE and EXPUNGE per RFC 3501.</summary>
+internal sealed record ImapSelectedMailbox(Guid FolderId, string Name, IReadOnlyList<ImapMessageEntry> Messages, bool ReadOnly = false)
+{
+    public HashSet<Guid> DeletedDocumentIds { get; } = [];
+}
 
 /// <summary>One message of a selected mailbox: the document, its stable UID, and the current version's essentials.</summary>
 internal sealed record ImapMessageEntry(Guid DocumentId, int Uid, string Name, string Extension, string ObjectKey, long? SizeBytes, DateTimeOffset InternalDate);
@@ -82,7 +87,7 @@ internal static class ImapMailboxes
         await session.OkAsync(tag, "STATUS");
     }
 
-    internal static async Task SelectAsync(ImapSession session, IServiceScope scope, string tag, string arguments)
+    internal static async Task SelectAsync(ImapSession session, IServiceScope scope, string tag, string arguments, bool readOnly)
     {
         var tokens = ImapProtocol.Tokenize(arguments);
         if (tokens.Count < 1)
@@ -100,17 +105,22 @@ internal static class ImapMailboxes
         }
 
         var (mailbox, messages) = resolved.Value;
-        session.Selected = new ImapSelectedMailbox(mailbox.FolderId, tokens[0], messages);
+        session.Selected = new ImapSelectedMailbox(mailbox.FolderId, tokens[0], messages, ReadOnly: readOnly);
 
         await session.WriteLineAsync($"* {messages.Count} EXISTS");
         await session.WriteLineAsync("* 0 RECENT");
-        await session.WriteLineAsync("* FLAGS (\\Seen)");
+        await session.WriteLineAsync("* FLAGS (\\Seen \\Deleted)");
         await session.WriteLineAsync($"* OK [UIDVALIDITY {mailbox.UidValidity}] UIDs valid");
         await session.WriteLineAsync($"* OK [UIDNEXT {mailbox.NextUid}] predicted next UID");
         // \Seen persists per user + document (#562 slice 2) — the one storable flag; everything else stays
         // read-only until the write slice.
-        await session.WriteLineAsync("* OK [PERMANENTFLAGS (\\Seen)] seen state persists");
-        await session.WriteLineAsync($"{tag} OK [READ-WRITE] SELECT completed");
+        // \Seen persists (slice 2). \Deleted is session-transient by design (#562) — strictly it is not
+        // "permanent", but clients (MailKit measured, line: `UID STORE .. +FLAGS ()`) intersect a STORE's flags
+        // with PERMANENTFLAGS and silently drop what is missing, which turns delete-then-expunge into a no-op.
+        // Advertising it is what makes the normal flag-then-expunge flow work; a client that flags and
+        // disconnects without EXPUNGE loses the staging, which is exactly the decided semantics.
+        await session.WriteLineAsync("* OK [PERMANENTFLAGS (\\Seen \\Deleted)] seen state persists; deleted stages until EXPUNGE");
+        await session.WriteLineAsync($"{tag} OK [{(readOnly ? "READ-ONLY" : "READ-WRITE")}] {(readOnly ? "EXAMINE" : "SELECT")} completed");
     }
 
     // ---- Catalog + resolution ------------------------------------------------------------------------

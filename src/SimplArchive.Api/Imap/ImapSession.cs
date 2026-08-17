@@ -108,7 +108,7 @@ public sealed class ImapSession
         switch (command)
         {
             case "CAPABILITY":
-                await WriteLineAsync("* CAPABILITY IMAP4rev1 AUTH=PLAIN");
+                await WriteLineAsync("* CAPABILITY IMAP4rev1 AUTH=PLAIN MOVE UIDPLUS");
                 await OkAsync(tag, "CAPABILITY");
                 return true;
             case "NOOP":
@@ -155,7 +155,7 @@ public sealed class ImapSession
                 return true;
             case "SELECT":
             case "EXAMINE":
-                await RunScopedAsync(scope => ImapMailboxes.SelectAsync(this, scope, tag, arguments));
+                await RunScopedAsync(scope => ImapMailboxes.SelectAsync(this, scope, tag, arguments, readOnly: command == "EXAMINE"));
                 return true;
             case "CLOSE":
                 _selected = null;
@@ -184,9 +184,42 @@ public sealed class ImapSession
                     return true;
                 }
 
+                if (_selected.ReadOnly)
+                {
+                    await WriteLineAsync($"{tag} NO the mailbox is open read-only");
+                    return true;
+                }
+
                 var storeUidMode = command == "UID";
                 var storeArguments = storeUidMode ? arguments["STORE ".Length..] : arguments;
                 await RunScopedAsync(scope => ImapStore.StoreAsync(this, scope, tag, _selected, storeArguments, storeUidMode));
+                return true;
+            case "APPEND":
+                await RunScopedAsync(scope => ImapWrites.AppendAsync(this, scope, tag, arguments));
+                return true;
+            case "EXPUNGE":
+                if (_selected is null || _selected.ReadOnly)
+                {
+                    await WriteLineAsync($"{tag} NO no writable mailbox selected");
+                    return true;
+                }
+
+                await RunScopedAsync(scope => ImapWrites.ExpungeAsync(this, scope, tag, _selected));
+                return true;
+            case "MOVE":
+            case "COPY":
+            case "UID" when arguments.StartsWith("MOVE ", StringComparison.OrdinalIgnoreCase)
+                || arguments.StartsWith("COPY ", StringComparison.OrdinalIgnoreCase):
+                if (_selected is null)
+                {
+                    await WriteLineAsync($"{tag} NO no mailbox selected");
+                    return true;
+                }
+
+                var mcUid = command == "UID";
+                var mcMove = (mcUid ? arguments : command).StartsWith("MOVE", StringComparison.OrdinalIgnoreCase);
+                var mcArguments = mcUid ? arguments[(mcMove ? "MOVE " : "COPY ").Length..] : arguments;
+                await RunScopedAsync(scope => ImapWrites.MoveOrCopyAsync(this, scope, tag, _selected, mcArguments, mcUid, mcMove));
                 return true;
             case "CREATE":
             case "DELETE":
@@ -195,10 +228,6 @@ public sealed class ImapSession
                 // workbench, where the ACL and naming rules live.
                 await WriteLineAsync($"{tag} NO the folder structure is managed in SimplArchive, not over IMAP");
                 return true;
-            case "APPEND":
-            case "EXPUNGE":
-            case "MOVE":
-            case "COPY":
             case "SEARCH":
             case "UID":
                 await WriteLineAsync($"{tag} NO not supported in this slice");
