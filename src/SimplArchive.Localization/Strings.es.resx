@@ -4329,4 +4329,31 @@
   <data name="CalendarEmpty" xml:space="preserve">
     <value>No hay citas en los calendarios marcados.</value>
   </data>
+  <data name="MwNewSection" xml:space="preserve">
+    <value>Nueva sección…</value>
+  </data>
+  <data name="MwNewNote" xml:space="preserve">
+    <value>Nueva nota…</value>
+  </data>
+  <data name="NewSectionName" xml:space="preserve">
+    <value>Nombre de la sección</value>
+  </data>
+  <data name="NewNoteTitle" xml:space="preserve">
+    <value>Título</value>
+  </data>
+  <data name="NewNoteBody" xml:space="preserve">
+    <value>Nota</value>
+  </data>
+  <data name="StCreatedSection" xml:space="preserve">
+    <value>Sección '{0}' creada.</value>
+  </data>
+  <data name="StErrCreateSection" xml:space="preserve">
+    <value>No se ha podido crear la sección: {0}</value>
+  </data>
+  <data name="StCreatedNote" xml:space="preserve">
+    <value>Nota '{0}' creada.</value>
+  </data>
+  <data name="StErrCreateNote" xml:space="preserve">
+    <value>No se ha podido crear la nota: {0}</value>
+  </data>
 </root>

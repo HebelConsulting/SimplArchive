@@ -780,6 +780,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // menu opens.
     [ObservableProperty] private bool _treeContextHasReferences;
 
+    // "New section …" / "New note …" appear only where the right-clicked node ADVERTISED them — a notebook or
+    // a section (#564). The client does not re-derive that from a mask name: the rule about what may hold what
+    // lives on the server, and re-deriving it here would be the same rule implemented twice, differently.
+    [ObservableProperty] private bool _treeContextCanAddSection;
+
+    [ObservableProperty] private bool _treeContextCanAddNote;
+
     // Set while a search-hit reveal selects the parent folder's tree node after it has *already* loaded the folder
     // contents + selected the document itself (issue #340) — so the reactive load below doesn't re-fetch the folder
     // and clobber that document selection.
@@ -1613,7 +1620,23 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // Create a subfolder directly under a tree folder (not necessarily the currently-open one) — through the
     // node's own children address (ADR 0555); the id only drives the local tree refresh.
-    public async Task CreateSubfolderAsync(Guid parentId, string childrenHref, string name)
+    public Task CreateSubfolderAsync(Guid parentId, string childrenHref, string name) =>
+        CreateChildAsync(parentId, api => api.Documents.CreateFolderAsync(childrenHref, name), "StCreatedFolder", "StErrCreateFolder", name);
+
+    // A section, and a note, inside a notebook (#564). Both reach the server through an href the row itself
+    // advertised — the caller never names a mask, so the rule about what may live where stays on the server.
+    public Task CreateSectionAsync(Guid parentId, string sectionsHref, string name) =>
+        CreateChildAsync(parentId, api => api.Documents.CreateSectionAsync(sectionsHref, name), "StCreatedSection", "StErrCreateSection", name);
+
+    public Task CreateNoteAsync(Guid parentId, string notesHref, string title, string body) =>
+        CreateChildAsync(parentId, api => api.Documents.CreateNoteAsync(notesHref, title, body), "StCreatedNote", "StErrCreateNote", title);
+
+    // The three creates differ only in the call and the two strings, so they share one body rather than
+    // becoming three copies that drift (the fourth would get the fix and the first three would not). What
+    // genuinely differs rides in as a lambda at each call site, where a reader wants both the difference and
+    // the delegation on one line.
+    private async Task CreateChildAsync(
+        Guid parentId, Func<SimplArchiveApiClient, Task> create, string okKey, string errKey, string name)
     {
         if (_api is null)
         {
@@ -1622,8 +1645,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.Documents.CreateFolderAsync(childrenHref, name);
-            Status = string.Format(Strings.Get("StCreatedFolder"), name);
+            await create(_api);
+            Status = string.Format(Strings.Get(okKey), name);
             await ShowNewChildInTreeAsync(parentId);
             if (_currentFolderId == parentId)
             {
@@ -1631,7 +1654,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
         catch (Services.ApiActionException e) { Status = e.Message; }
-        catch (Exception e) { Status = string.Format(Strings.Get("StErrCreateFolder"), e.Message); }
+        catch (Exception e) { Status = string.Format(Strings.Get(errKey), e.Message); }
     }
 
     // Rename a tree folder by id (rebuilds the tree so its node label updates, unlike the list-row rename).

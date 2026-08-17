@@ -21,8 +21,15 @@ public sealed class PersonalRepositoryProvisioner
     /// <summary>The default subfolder every personal repository is seeded with (ADR "My Documents in the personal space").</summary>
     public const string MyDocumentsFolderName = "My Documents";
 
-    // The typed notes folder (#562 slice 5) — the IMAP layer projects it as the root "Notes" mailbox.
-    public const string NotesFolderName = "Notes";
+    // The typed notebook (#562 slice 5, renamed with its mask by #564). The IMAP layer keeps projecting it as
+    // the root mailbox literally named "Notes" — that name is Apple's convention for where notes live, not
+    // ours, and an account that already works discovers the mailbox by it. So the rename stops at the wire:
+    // the folder, the tree, WebDAV and both clients say Notebook; IMAP says Notes.
+    public const string NotebookFolderName = "Notebook";
+
+    // What the folder was called before that rename, so an already-provisioned personal space is healed rather
+    // than given a second one beside the first (the same trap #574 hit with maskless Notes).
+    public const string LegacyNotesFolderName = "Notes";
 
     // The typed calendar/contact folders (#564) — every user gets one of each, and CalDAV/CardDAV list them
     // first in the home set. Unlike these defaults, further typed folders may be created anywhere in the tree.
@@ -48,7 +55,7 @@ public sealed class PersonalRepositoryProvisioner
     {
         var root = await EnsureRootAsync(userId, tenantId, cancellationToken);
         await EnsureMyDocumentsAsync(root, tenantId, userId, cancellationToken);
-        await EnsureTypedFolderAsync(root, tenantId, userId, NotesFolderName, WellKnownMaskIds.NoteFolder, cancellationToken);
+        await EnsureTypedFolderAsync(root, tenantId, userId, NotebookFolderName, WellKnownMaskIds.Notebook, cancellationToken, LegacyNotesFolderName);
         await EnsureTypedFolderAsync(root, tenantId, userId, MyCalendarFolderName, WellKnownMaskIds.Calendar, cancellationToken);
         await EnsureTypedFolderAsync(root, tenantId, userId, MyContactsFolderName, WellKnownMaskIds.Addressbook, cancellationToken);
         return root;
@@ -162,12 +169,28 @@ public sealed class PersonalRepositoryProvisioner
     /// as "My Documents".
     /// </summary>
     private async Task EnsureTypedFolderAsync(
-        Document root, Guid tenantId, Guid userId, string name, Guid folderMaskId, CancellationToken cancellationToken)
+        Document root, Guid tenantId, Guid userId, string name, Guid folderMaskId, CancellationToken cancellationToken,
+        string? legacyName = null)
     {
         var maskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, folderMaskId, cancellationToken);
 
         var existing = await _dbContext.Documents
             .FirstOrDefaultAsync(d => d.ParentId == root.Id && d.Name == name, cancellationToken);
+
+        // Nothing under the new name — but an already-provisioned space has it under the OLD one, and looking
+        // only for the new name would give that user a second, empty folder beside the one holding their notes
+        // (#574's trap: a grow-later seed that only ever exercises the fresh-volume path). Rename in place.
+        if (existing is null && legacyName is not null)
+        {
+            existing = await _dbContext.Documents
+                .FirstOrDefaultAsync(d => d.ParentId == root.Id && d.Name == legacyName, cancellationToken);
+            if (existing is not null)
+            {
+                existing.Name = name;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+        }
+
         if (existing is not null)
         {
             // Heal a maskless typed folder: a provisioning run whose tenant predated this mask (an upgraded

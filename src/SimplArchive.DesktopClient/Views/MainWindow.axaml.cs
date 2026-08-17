@@ -920,8 +920,43 @@ public partial class MainWindow : Window
         {
             vm.SelectedTreeNode = node;
             vm.TreeContextHasReferences = node.HasReferences;
+            // Read from the RIGHT-CLICKED node, not from pane state (ADR 0559): the pane describes whatever
+            // last finished loading, which during a load is a different folder than the one under the cursor.
+            vm.TreeContextCanAddSection = node.HasRel("sections");
+            vm.TreeContextCanAddNote = node.HasRel("notes");
         }
     }
+
+    private void OnTreeNewSection(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node)
+        {
+            return;
+        }
+
+        // The same dialog "New subfolder" uses — a section IS a folder, so asking for it differently would be
+        // a second way to ask the same question. It takes its own title/label so the user is told which of the
+        // two they are creating.
+        var name = await new NewFolderDialog(Strings.Get("MwNewSection"), Strings.Get("NewSectionName"))
+            .ShowDialog<string?>(this);
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            await vm.CreateSectionAsync(node.Id, node.Href("sections"), name);
+        }
+    });
+
+    private void OnTreeNewNote(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node)
+        {
+            return;
+        }
+
+        if (await new NewNoteDialog().ShowDialog<NewNoteDialog.Result?>(this) is { } note)
+        {
+            await vm.CreateNoteAsync(node.Id, node.Href("notes"), note.Title, note.Body);
+        }
+    });
 
     private void OnTreeNewFolder(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {

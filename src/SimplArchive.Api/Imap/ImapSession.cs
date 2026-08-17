@@ -249,6 +249,10 @@ public sealed class ImapSession
                 await RunScopedAsync(scope => ImapWrites.MoveOrCopyAsync(this, scope, tag, _selected, mcArguments, mcUid, mcMove));
                 return true;
             case "CREATE":
+                // The one opening in the read-only tree (#564): a section inside the notebook. Everything else
+                // is refused by CreateAsync itself, with the same sentence DELETE and RENAME give.
+                await RunScopedAsync(scope => ImapWrites.CreateAsync(this, scope, tag, arguments));
+                return true;
             case "DELETE":
             case "RENAME":
                 // The mailbox tree IS the archive tree — read-only by design (#562): folders are managed in the

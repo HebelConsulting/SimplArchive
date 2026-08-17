@@ -295,15 +295,19 @@ public class ImapEndpointTests
         using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "note-1234"));
         var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
 
-        // Get-or-create the personal space — Personal/Notes arrives with it, wearing the NoteFolder mask.
+        // Get-or-create the personal space — Personal/Notebook arrives with it, wearing the Notebook mask.
+        //
+        // The TREE says "Notebook" while IMAP says "Notes", and holding both in one test is the point: they
+        // are one folder with two projections, so the wire name a notes client looks for must survive a
+        // rename of what the workbench displays (#564).
         var personal = await TestJson.Post(api, "/api/me/personal-repository", new { });
         var personalId = personal.GetProperty("id").GetGuid();
         var children = (await TestJson.Get(api, $"/api/documents/{personalId}/children")).GetProperty("children").EnumerateArray().ToList();
-        var notes = children.Single(c => c.GetProperty("name").GetString() == "Notes");
-        Assert.Equal("Note Folder", notes.GetProperty("documentType").GetString());
+        var notes = children.Single(c => c.GetProperty("name").GetString() == "Notebook");
+        Assert.Equal("Notebook", notes.GetProperty("documentType").GetString());
         var notesId = notes.GetProperty("id").GetGuid();
 
-        // Typed containment: a non-Note document cannot LIVE in the Notes folder (the SaveChanges invariant).
+        // Typed containment: a non-Note document cannot LIVE in the notebook (the SaveChanges invariant).
         //
         // Asked for as a FOLDER — a bare create no longer proves this and must not (ADR 0623): the endpoint
         // serves both "make a folder" and step one of an upload with the same body, so inside a typed folder a

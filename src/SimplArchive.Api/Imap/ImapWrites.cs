@@ -77,7 +77,7 @@ internal static class ImapWrites
         // The Notes flow (#562 slice 5): a NoteFolder-typed mailbox correlates by the client's UUID header —
         // Apple Notes EDITS by appending a new message and deleting the old, so a UUID match becomes a new
         // VERSION of the existing note document instead of a sibling.
-        var folderIsNotes = await db.MaskVersions.AnyAsync(v => v.Id == folder.MaskVersionId && v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.NoteFolder);
+        var folderIsNotes = await db.MaskVersions.AnyAsync(v => v.Id == folder.MaskVersionId && v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.Notebook);
         if (folderIsNotes)
         {
             await AppendNoteAsync(session, scope, tag, db, folder, mailbox, stem, bytes, userId, tenantId);
@@ -437,5 +437,80 @@ internal static class ImapWrites
                 existingId is null ? "Note filed over IMAP" : "Note updated over IMAP");
         await session.WriteLineAsync($"{tag} OK [APPENDUID {mailbox.UidValidity} {uid}] APPEND completed");
     }
-}
 
+    // ---- CREATE (notebook sections only) -------------------------------------------------------------
+
+    // The mailbox tree IS the archive tree and stays read-only over IMAP (#562) — with ONE opening, decided in
+    // #564: a section inside the notebook. Apple Notes sorts notes into subfolders, so a notebook that cannot
+    // grow one is a notebook the client cannot actually use, and refusing here is refusing the feature rather
+    // than protecting anything. The confinement is the point: the target must resolve under the Notes mailbox,
+    // and what gets created is a NotebookSection, never a plain folder.
+    internal static async Task CreateAsync(ImapSession session, IServiceScope scope, string tag, string arguments)
+    {
+        var tokens = ImapProtocol.Tokenize(arguments);
+        if (tokens.Count < 1)
+        {
+            await session.WriteLineAsync($"{tag} BAD CREATE expects a mailbox name");
+            return;
+        }
+
+        var name = ImapProtocol.DecodeModifiedUtf7(tokens[0]).TrimEnd('/');
+        var segments = name.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length < 2 || !string.Equals(segments[0], "Notes", StringComparison.Ordinal))
+        {
+            await session.WriteLineAsync($"{tag} NO the folder structure is managed in SimplArchive, not over IMAP");
+            return;
+        }
+
+        // The parent is everything but the last segment, and it must already exist — IMAP clients create a
+        // nested path one level at a time, so inventing the intermediates here would let a typo build a tree.
+        var parentName = string.Join('/', segments[..^1]);
+        var leaf = segments[^1];
+
+        var parent = await ImapMailboxes.ResolveAsync(session, scope, ImapProtocol.EncodeModifiedUtf7(parentName));
+        if (parent is null)
+        {
+            await session.WriteLineAsync($"{tag} NO [TRYCREATE] no such parent mailbox");
+            return;
+        }
+
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+        var calculator = scope.ServiceProvider.GetRequiredService<IEffectiveRightsCalculator>();
+        var userId = scope.ServiceProvider.GetRequiredService<ICurrentUserAccessor>().UserId!.Value;
+        var tenantId = scope.ServiceProvider.GetRequiredService<ICurrentTenantAccessor>().TenantId!.Value;
+
+        if (!(await calculator.GetEffectiveRightsAsync(userId, parent.Value.Mailbox.FolderId)).CanCreateSubItems)
+        {
+            await session.WriteLineAsync($"{tag} NO you cannot create a section here");
+            return;
+        }
+
+        var maskVersionId = await FolderMask.CurrentVersionIdAsync(
+            db, tenantId, SimplArchive.Domain.Masks.WellKnownMaskIds.NotebookSection, CancellationToken.None);
+
+        db.Documents.Add(new Document
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ParentId = parent.Value.Mailbox.FolderId,
+            Name = leaf,
+            MaskVersionId = maskVersionId,
+            CreatedByUserId = userId,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (InvalidOperationException)
+        {
+            // Sibling-name clash, or containment refusing the placement — either way the client's remedy is a
+            // different name or a different parent, and IMAP has one status for both.
+            await session.WriteLineAsync($"{tag} NO could not create '{leaf}' there");
+            return;
+        }
+
+        await session.WriteLineAsync($"{tag} OK CREATE completed");
+    }
+}

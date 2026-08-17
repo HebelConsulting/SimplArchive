@@ -178,9 +178,9 @@ internal static class ImapMailboxes
                 continue;
             }
 
-            // INBOX is the personal repository root (#562) — the name every mail client knows. Its Notes
-            // child (the NoteFolder-typed folder, slice 5) projects as a ROOT-level "Notes" mailbox instead,
-            // where Apple Notes discovers it by name — one folder, two projections, so it is skipped below.
+            // INBOX is the personal repository root (#562) — the name every mail client knows. Its Notebook
+            // child projects as a ROOT-level mailbox instead, where Apple Notes discovers it — one folder, two
+            // projections, so it is skipped below.
             var rootName = root.PersonalOfUserId == userId ? "INBOX" : root.Name;
             entries.Add(new ImapMailboxEntry(rootName, root.Id, HasChildren: true));
 
@@ -188,12 +188,22 @@ internal static class ImapMailboxes
             if (root.PersonalOfUserId == userId)
             {
                 notesFolderId = await db.Documents
-                    .Where(d => d.ParentId == root.Id && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.NoteFolder))
+                    .Where(d => d.ParentId == root.Id && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.Notebook))
                     .Select(d => (Guid?)d.Id)
                     .FirstOrDefaultAsync();
                 if (notesFolderId is { } nid)
                 {
-                    entries.Add(new ImapMailboxEntry("Notes", nid, HasChildren: false));
+                    // The mailbox stays literally "Notes" though the folder is now called Notebook: that name
+                    // is Apple's convention for where notes live, and an account that already works finds the
+                    // mailbox by it. The rename stops at the wire.
+                    //
+                    // Its sections are then walked from here, so they surface as Notes/Work/2026. Before
+                    // sections existed this said HasChildren: false and the subtree was never visited — which
+                    // is exactly why Apple Notes could see no subfolders.
+                    var hasSections = await db.Documents.AnyAsync(
+                        d => d.ParentId == nid && !db.DocumentVersions.Any(v => v.DocumentId == d.Id));
+                    entries.Add(new ImapMailboxEntry("Notes", nid, hasSections));
+                    await AddSubfoldersAsync(db, calculator, userId, nid, "Notes", entries);
                 }
             }
 

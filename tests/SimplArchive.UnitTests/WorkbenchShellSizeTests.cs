@@ -41,7 +41,12 @@ public class WorkbenchShellSizeTests
     // four lines differing in an icon, a label and a tour id — which is why every tab added cost the shell
     // another four. Paying rather than raising is the point of this guard: the growth got argued for, and the
     // argument produced a component instead of a bigger number.
-    private const int Ceiling = 3_190;
+    // 3,190 → 3,196 for the notebook affordances (#564, ADR 0625): two menu entries and the `@if` that gates
+    // them on the rels the row advertised. The BEHAVIOUR cost nothing here — it went to DocumentActions, where
+    // the other row actions already live — so what the shell is charged for is six lines of menu markup, which
+    // is what a menu entry genuinely costs. A component wrapping two MudMenuItems would have bought the number
+    // back at the price of a file that exists only to hold them.
+    private const int Ceiling = 3_196;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

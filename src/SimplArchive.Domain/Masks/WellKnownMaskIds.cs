@@ -17,10 +17,14 @@ public static class WellKnownMaskIds
     // nowhere to live on the fieldless Folder mask.
     public static readonly Guid UserFolder = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E35");
 
-    // The Notes pair (#562 slice 5, ADR "IMAP endpoint: Notes"): Personal/Notes wears NoteFolder — a TYPED
-    // folder that admits only Note-masked children (the same containment idea #564's Contact/Calendar folders
-    // share) — and every note wears Note.
-    public static readonly Guid NoteFolder = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E36");
+    // The Notebook family (#562 slice 5, ADR "IMAP endpoint: Notes"; sections added by #564). A Notebook is a
+    // TYPED folder, but unlike an Addressbook or a Calendar it admits TWO masks: notes, and sections that hold
+    // more of the same. That is not a special case bolted on — Apple Notes sorts notes into subfolders, so a
+    // flat notebook cannot represent what the client already does.
+    //
+    // The id is unchanged through the "Note Folder" → "Notebook" rename, so no document moves: only the
+    // display name heals, exactly as Addressbook/Calendar did.
+    public static readonly Guid Notebook = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E36");
 
     public static readonly Guid Note = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E37");
 
@@ -37,23 +41,50 @@ public static class WellKnownMaskIds
 
     public static readonly Guid Appointment = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E3B");
 
+    /// <summary>A section INSIDE a notebook: a folder that holds notes and further sections (#564).</summary>
+    /// <remarks>
+    /// Fieldless, like the Notebook it lives in — it types the folder, and the fields live on the notes.
+    /// </remarks>
+    public static readonly Guid NotebookSection = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E3C");
+
     /// <summary>
-    /// The typed-folder pairs, as data: a folder mask admits ONLY children wearing its item mask, and an item
-    /// mask's primary location is ONLY such a folder (references may point anywhere). One table rather than a
-    /// copy of the rule per pair — <see cref="SimplArchive.Domain.Masks.TypedFolderPair"/> names both sides so
-    /// the invariant's message can say which type it is talking about.
+    /// The typed-folder rules, as data: a folder mask admits ONLY children wearing one of its admitted masks,
+    /// and an admitted mask's primary location is ONLY a folder that admits it (references may point
+    /// anywhere). One table rather than a copy of the rule per family.
     /// </summary>
-    public static readonly IReadOnlyList<TypedFolderPair> TypedFolderPairs =
+    /// <remarks>
+    /// This was a list of PAIRS — one folder, one item — until sections arrived. Two things broke that shape at
+    /// once: a Notebook admits two masks, and a NotebookSection admits ITSELF, so the relation is neither
+    /// one-to-one nor acyclic. Rather than special-case notebooks, admission is now a SET and every family
+    /// reads the same way; Addressbook and Calendar simply have sets of one.
+    /// </remarks>
+    public static readonly IReadOnlyList<TypedFolderRule> TypedFolderRules =
     [
-        new(NoteFolder, Note, "Note Folder", "Note"),
-        new(Addressbook, Contact, "Addressbook", "Contact"),
-        new(Calendar, Appointment, "Calendar", "Appointment"),
+        new(Notebook, "Notebook", [(NotebookSection, "Section"), (Note, "Note")]),
+        new(NotebookSection, "Section", [(NotebookSection, "Section"), (Note, "Note")]),
+        new(Addressbook, "Addressbook", [(Contact, "Contact")]),
+        new(Calendar, "Calendar", [(Appointment, "Appointment")]),
     ];
+
+    /// <summary>The masks that may only ever live inside a typed folder, with the folders that admit each.</summary>
+    /// <remarks>
+    /// Derived from <see cref="TypedFolderRules"/> rather than written out again: a second hand-maintained
+    /// table is how the two directions of one rule drift apart, and the drift is invisible until something is
+    /// filed where it should not be.
+    /// </remarks>
+    public static readonly IReadOnlyDictionary<Guid, IReadOnlyList<TypedFolderRule>> AdmittingFolders =
+        TypedFolderRules
+            .SelectMany(rule => rule.Admits.Select(a => (a.MaskId, Rule: rule)))
+            .GroupBy(x => x.MaskId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<TypedFolderRule>)[.. g.Select(x => x.Rule)]);
 }
 
-/// <summary>A typed folder and the one item mask it admits (#562 slice 5, generalized for #564).</summary>
+/// <summary>A typed folder and the masks it admits (#562 slice 5, set-valued for #564's notebook sections).</summary>
 /// <param name="FolderMaskId">The mask the folder wears.</param>
-/// <param name="ItemMaskId">The only mask its children may wear.</param>
 /// <param name="FolderName">The folder mask's display name, for the invariant's message.</param>
-/// <param name="ItemName">The item mask's display name, for the invariant's message.</param>
-public sealed record TypedFolderPair(Guid FolderMaskId, Guid ItemMaskId, string FolderName, string ItemName);
+/// <param name="Admits">Each mask a child may wear, with its display name for the message.</param>
+public sealed record TypedFolderRule(Guid FolderMaskId, string FolderName, IReadOnlyList<(Guid MaskId, string Name)> Admits)
+{
+    /// <summary>The admitted masks, listed for a human — "Section or Note".</summary>
+    public string AdmittedNames => string.Join(" or ", Admits.Select(a => a.Name));
+}

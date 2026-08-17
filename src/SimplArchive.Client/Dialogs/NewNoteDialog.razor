@@ -1,0 +1,35 @@
+@* New note: a title and a body, in one step (#564). Returns both, or cancels.
+
+   Together rather than title-then-edit, because a note whose body had to be added afterwards would be filed
+   empty — and an empty note is indistinguishable from a mistake in both the tree and a notes client. The
+   title is required and the body is not, which is what the server enforces: the title becomes the tree name
+   AND the message Subject, so an empty one is unnameable in one place and unidentifiable in the other. *@
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_title" Label="@Strings.Get("NewNoteTitle")" Variant="Variant.Outlined"
+                      Immediate="true" AutoFocus="true" Style="min-width: 420px;" />
+        <MudTextField @bind-Value="_body" Label="@Strings.Get("NewNoteBody")" Variant="Variant.Outlined"
+                      Lines="8" Immediate="true" Class="mt-4" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@string.IsNullOrWhiteSpace(_title)"
+                   OnClick="Save">@Strings.Get("Create")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    /// <summary>What the dialog hands back — both halves of the note, so the caller posts once.</summary>
+    public sealed record NewNote(string Title, string Body);
+
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    private string _title = "";
+
+    private string _body = "";
+
+    private void Save() => Dialog.Close(DialogResult.Ok(new NewNote(_title.Trim(), _body)));
+
+    private void Cancel() => Dialog.Cancel();
+}

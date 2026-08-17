@@ -1,8 +1,8 @@
 namespace SimplArchive.Domain.Masks;
 
 /// <summary>
-/// A typed folder was asked to hold something it does not admit, or a typed item to live somewhere that is not
-/// its folder (<see cref="WellKnownMaskIds.TypedFolderPairs"/>).
+/// A typed folder was asked to hold something it does not admit, or a typed item to live somewhere that does
+/// not admit it (<see cref="WellKnownMaskIds.TypedFolderRules"/>).
 /// </summary>
 /// <remarks>
 /// Derives from <see cref="InvalidOperationException"/> so the existing boundary catches keep working — the
@@ -18,13 +18,24 @@ public sealed class TypedFolderContainmentException : InvalidOperationException
     {
     }
 
-    /// <summary>The folder refuses the child: it admits only its own item type.</summary>
-    public static TypedFolderContainmentException FolderAdmitsOnly(string documentName, TypedFolderPair pair) =>
-        new($"'{documentName}' cannot live in a {pair.FolderName} — only {pair.ItemName}-masked documents can "
+    /// <summary>The folder refuses the child: it admits only the masks it names.</summary>
+    public static TypedFolderContainmentException FolderAdmitsOnly(string documentName, TypedFolderRule rule) =>
+        new($"'{documentName}' cannot live in a {rule.FolderName} — only {rule.AdmittedNames} can "
             + "(typed-folder containment, #562/#564).");
 
-    /// <summary>The item refuses the folder: a typed item's primary location is only its own folder.</summary>
-    public static TypedFolderContainmentException ItemBelongsIn(string documentName, TypedFolderPair pair) =>
-        new($"'{documentName}' wears the {pair.ItemName} mask and can only live in a {pair.FolderName} "
+    /// <summary>
+    /// The child refuses the folder: a typed item's primary location is only a folder that admits it. Plural
+    /// because a Note lives in a Notebook OR a Section, and naming just one of them would send the reader to
+    /// the wrong place half the time.
+    /// </summary>
+    public static TypedFolderContainmentException ItemBelongsIn(
+        string documentName, Guid maskId, IReadOnlyList<TypedFolderRule> admittingRules)
+    {
+        var itemName = admittingRules
+            .SelectMany(r => r.Admits)
+            .First(a => a.MaskId == maskId).Name;
+        var places = string.Join(" or ", admittingRules.Select(r => $"a {r.FolderName}"));
+        return new($"'{documentName}' wears the {itemName} mask and can only live in {places} "
             + "(typed-folder containment, #562/#564).");
+    }
 }

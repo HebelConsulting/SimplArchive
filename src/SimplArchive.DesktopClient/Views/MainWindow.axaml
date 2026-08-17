@@ -146,6 +146,15 @@
                                     <MenuItem Header="{loc:Tr MwNewSubfolder}" Click="OnTreeNewFolder">
                                         <MenuItem.Icon><i:Icon Value="mdi-folder-plus-outline" /></MenuItem.Icon>
                                     </MenuItem>
+                                    <!-- Only on a notebook or a section, and only because the node advertised the
+                                         rel (#564). "New subfolder" above stays visible there and is refused by
+                                         the server, which is correct: a notebook holds sections, not folders. -->
+                                    <MenuItem Header="{loc:Tr MwNewSection}" Click="OnTreeNewSection" IsVisible="{Binding TreeContextCanAddSection}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-notebook-plus-outline" /></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="{loc:Tr MwNewNote}" Click="OnTreeNewNote" IsVisible="{Binding TreeContextCanAddNote}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-note-plus-outline" /></MenuItem.Icon>
+                                    </MenuItem>
                                     <MenuItem Header="{loc:Tr Upload}" Click="OnTreeUpload">
                                         <MenuItem.Icon><i:Icon Value="mdi-upload-outline" /></MenuItem.Icon>
                                     </MenuItem>

@@ -373,9 +373,23 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     }
 
     // Creates a folder = a child Document with no version (ADR 0175). Duplicate name -> 409, no permission -> 403.
-    public async Task CreateFolderAsync(string childrenHref, string name, CancellationToken cancellationToken = default)
+    public Task CreateFolderAsync(string childrenHref, string name, CancellationToken cancellationToken = default) =>
+        PostCreateAsync(childrenHref, new { name }, name, "folder", cancellationToken);
+
+    // A section, and a note, inside a notebook (#564). Each is its own sub-resource rather than a folderMask on
+    // POST children, and the caller reaches it by following a rel the server advertised — so which folders can
+    // hold which stays a server rule, never a mask name the client had to know.
+    public Task CreateSectionAsync(string sectionsHref, string name, CancellationToken cancellationToken = default) =>
+        PostCreateAsync(sectionsHref, new { name }, name, "section", cancellationToken);
+
+    public Task CreateNoteAsync(string notesHref, string title, string body, CancellationToken cancellationToken = default) =>
+        PostCreateAsync(notesHref, new { title, body }, title, "note", cancellationToken);
+
+    // One body for all three: they differ only in the address, the payload and the noun in the refusal.
+    private async Task PostCreateAsync(
+        string href, object payload, string name, string what, CancellationToken cancellationToken)
     {
-        using var response = await _core.Http.PostAsJsonAsync(childrenHref, new { name }, cancellationToken);
+        using var response = await _core.Http.PostAsJsonAsync(href, payload, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException($"A folder or document named '{name}' already exists here.");
@@ -383,12 +397,11 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
 
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
-            throw new ApiActionException("You don't have permission to create a folder here.");
+            throw new ApiActionException($"You don't have permission to create a {what} here.");
         }
 
         response.EnsureSuccessStatusCode();
     }
-
 
     public async Task CreateRepositoryAsync(string name, CancellationToken cancellationToken = default)
     {

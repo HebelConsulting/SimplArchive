@@ -41,19 +41,31 @@ public class OverLimitFileCeilingTests
         // the file was really being charged for — the chain made every new tab cost another dozen lines, so
         // the growth was structural rather than per-feature (#517). Lowered rather than left with headroom: an
         // unlowered ceiling is permission to grow back into it, silently.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_998,
+        // → 7,021 for the notebook affordances (#564, owner-confirmed 2026-08-17): "New section" / "New note"
+        // need two gating flags and two creates. The three creates were unified into ONE body first —
+        // CreateSubfolder now shares it and shrank to a single line — so what is charged here is the feature,
+        // not a third copy of a method that already existed twice.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_021,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
         // OWNER-CONFIRMED as an accepted exception (2026-08-17, on #443's close): split further only if a real
         // seam appears; the finale already took the obvious ones (#518 owns any future burn-down).
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_498,
+        // → 1,511 for the section/note creates (#564, owner-confirmed 2026-08-17). Half the raise it would have
+        // been: CreateFolderAsync had the same body, so it now shares the new helper instead of sitting beside
+        // a near-duplicate — +13 rather than +26.
+        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_511,
 
         // Re-entered 2026-08-17 (ADR 0613): burned down to 967 in an earlier pass, back to 1,156 since — the
         // handlers here are what #519 moves into per-tab UserControls, which is what takes it under again.
         // The +4 for Help ▸ Show log folder is OWNER-CONFIRMED (2026-08-17): the handler belongs beside
         // OnOpenManual and OnShowAbout, and #519's tranche moves all three together.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_156,
+        // → 1,191 for the two notebook context-menu handlers (#564, owner-confirmed 2026-08-17). The cheaper
+        // route was considered and declined here: six handlers repeat the same vm/node guard, and extracting it
+        // would net about -16, but it rewrites five handlers this feature does not touch. #519 moves all of
+        // them into per-tab UserControls, and that is where the guard should be collapsed once rather than
+        // twice.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_191,
 
         // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).

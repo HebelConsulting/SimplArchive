@@ -75,11 +75,17 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("Reference", FieldDataType.Text, IsRequired: false),
         ], cancellationToken);
 
-        // The Notes pair (#562 slice 5). NoteFolder is fieldless — it types the folder; the fields live on the
-        // notes. "Note UUID" is the X-Universally-Unique-Identifier correlation key (an edit from a notes
-        // client re-appends under the same UUID and becomes a new VERSION); "Modified" is the newest version's
-        // client-stamped time. Field set decided as a guess-to-validate in the epic's interview.
-        await EnsureMaskAsync(tenantId, WellKnownMaskIds.NoteFolder, "Note Folder", [], cancellationToken);
+        // The Notebook family (#562 slice 5; sections added by #564). Notebook and Section are both fieldless —
+        // they type the folder; the fields live on the notes. "Note UUID" is the
+        // X-Universally-Unique-Identifier correlation key (an edit from a notes client re-appends under the
+        // same UUID and becomes a new VERSION); "Modified" is the newest version's client-stamped time. Field
+        // set decided as a guess-to-validate in the epic's interview.
+        //
+        // "Note Folder" → "Notebook" is a RENAME, not a new mask: the id is unchanged, so RenameIfNeededAsync
+        // heals every already-seeded tenant in place and no document moves.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Notebook, "Notebook", [], cancellationToken);
+
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.NotebookSection, "Section", [], cancellationToken);
 
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Note, "Note",
         [

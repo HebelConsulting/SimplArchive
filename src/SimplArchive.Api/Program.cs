@@ -184,6 +184,9 @@ builder.Services.Configure<SimplArchive.Api.CalDav.DavPushOptions>(
 builder.Services.AddSingleton<SimplArchive.Api.CalDav.DavPushConfiguration>();
 builder.Services.AddScoped<SimplArchive.Api.CalDav.DavPushNotifier>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.CalendarContactClassifier>();
+// Composing a note as the .eml a notes client expects (#564) — the workbench's "New note" meets the IMAP
+// write path at one shape, written down in one place.
+builder.Services.AddScoped<SimplArchive.Api.Documents.NoteComposer>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentFinalizer>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.ChatSystemEntryRecorder>();
 

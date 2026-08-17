@@ -440,11 +440,16 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
         }
     }
 
-    // Typed-folder containment (#562 slice 5, generalized for #564's Contact/Calendar folders): a typed folder
-    // admits ONLY children wearing its item mask, and such an item's PRIMARY location is only that folder —
-    // references may point anywhere. The pairs are data (WellKnownMaskIds.TypedFolderPairs), so a new typed
-    // family is a row there rather than another copy of this rule. Enforced here, the single enforcement point,
-    // so every path (workbench move, import, WebDAV, IMAP, CalDAV/CardDAV) obeys.
+    // Typed-folder containment (#562 slice 5, generalized for #564's Contact/Calendar folders and its notebook
+    // sections): a typed folder admits ONLY children wearing one of its admitted masks, and such a child's
+    // PRIMARY location is only a folder that admits it — references may point anywhere. The rules are data
+    // (WellKnownMaskIds.TypedFolderRules), so a new typed family is a row there rather than another copy of
+    // this rule. Enforced here, the single enforcement point, so every path (workbench move, import, WebDAV,
+    // IMAP, CalDAV/CardDAV) obeys.
+    //
+    // Admission is a SET, not one mask: a Notebook holds Sections and Notes, and a Section holds more of both
+    // — including itself, so the relation is neither one-to-one nor acyclic. An Addressbook is the same rule
+    // with a set of one, which is why there is no notebook special case below.
     private async Task EnforceTypedFolderContainmentAsync(Document document, CancellationToken cancellationToken)
     {
         async Task<Guid?> MaskIdOfAsync(Guid? maskVersionId) => maskVersionId is not { } mv
@@ -470,17 +475,22 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
         // Entry (a real mask, so the very next save is refused, which is exactly the rejection we want).
         var typeUndetermined = ownMaskId is null;
 
-        foreach (var pair in Domain.Masks.WellKnownMaskIds.TypedFolderPairs)
+        // Does the parent admit this child?
+        if (!typeUndetermined
+            && Domain.Masks.WellKnownMaskIds.TypedFolderRules.FirstOrDefault(r => r.FolderMaskId == parentMaskId) is { } parentRule
+            && !parentRule.Admits.Any(a => a.MaskId == ownMaskId))
         {
-            if (!typeUndetermined && parentMaskId == pair.FolderMaskId && ownMaskId != pair.ItemMaskId)
-            {
-                throw Domain.Masks.TypedFolderContainmentException.FolderAdmitsOnly(document.Name, pair);
-            }
+            throw Domain.Masks.TypedFolderContainmentException.FolderAdmitsOnly(document.Name, parentRule);
+        }
 
-            if (ownMaskId == pair.ItemMaskId && parentMaskId != pair.FolderMaskId)
-            {
-                throw Domain.Masks.TypedFolderContainmentException.ItemBelongsIn(document.Name, pair);
-            }
+        // …and is this child somewhere that admits it? A Section satisfies BOTH questions — it is an admitted
+        // child of a Notebook and a typed folder in its own right — so the two checks are independent, not an
+        // if/else. Getting that wrong would let a Section live at the archive root.
+        if (ownMaskId is { } ownId
+            && Domain.Masks.WellKnownMaskIds.AdmittingFolders.TryGetValue(ownId, out var admittingRules)
+            && !admittingRules.Any(r => r.FolderMaskId == parentMaskId))
+        {
+            throw Domain.Masks.TypedFolderContainmentException.ItemBelongsIn(document.Name, ownId, admittingRules);
         }
     }
 

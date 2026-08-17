@@ -301,6 +301,25 @@ public class DocumentsController : ControllerBase
             links.Add(new Link("import", Url.Action(nameof(DocumentTransferController.Import), "DocumentTransfer", new { documentId })!, "POST"));
         }
 
+        // What a notebook holds (#564). CONDITIONAL, and on the mask rather than on a right: these
+        // sub-resources do not EXIST on an ordinary folder, so their absence is the clients' whole test for
+        // whether to offer "New section" / "New note". Without them each client would read a mask name off a
+        // row and decide for itself — the same rule implemented twice, differently, and drifting from the
+        // containment invariant that actually enforces it.
+        // DocumentRow is a projection and does not carry the mask — one small query rather than widening the
+        // row for every read that does not need it.
+        var folderMaskId = await _dbContext.Documents
+            .Where(d => d.Id == documentId && d.MaskVersionId != null)
+            .Join(_dbContext.MaskVersions, d => d.MaskVersionId, v => v.Id, (_, v) => (Guid?)v.MaskId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (WellKnownMaskIds.TypedFolderRules.FirstOrDefault(r => r.FolderMaskId == folderMaskId) is { } typedRule
+            && typedRule.Admits.Any(a => a.MaskId == WellKnownMaskIds.Note))
+        {
+            links.Add(new Link("sections", $"/api/documents/{documentId}/sections", "POST"));
+            links.Add(new Link("notes", $"/api/documents/{documentId}/notes", "POST"));
+        }
+
         if (rights.CanEditIndexData)
         {
             if (isFolder)

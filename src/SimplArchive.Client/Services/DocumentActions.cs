@@ -37,6 +37,56 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
     public static string? DocumentAddress(BrowseNode node) =>
         node.Links?.GetValueOrDefault("document") ?? node.Links?.GetValueOrDefault("self");
 
+    /// <summary>
+    /// Creates a section, or a note, inside a notebook (#564). Both post to an address the ROW advertised, so
+    /// a row that offers neither rel simply cannot reach them — which is why the menu gates on the same rels
+    /// rather than on a mask name the client would have to interpret.
+    /// </summary>
+    public async Task<bool> CreateSectionAsync(BrowseNode node)
+    {
+        if (BrowseService.HrefOf(node, "sections") is not { } href)
+        {
+            return false;
+        }
+
+        var parameters = new DialogParameters<RenameDialog> { { x => x.ConfirmLabelKey, "Create" } };
+        var dialog = await dialogs.ShowAsync<RenameDialog>(Strings.Get("MwNewSection"), parameters);
+        return await dialog.Result is { Canceled: false, Data: string name } && !string.IsNullOrWhiteSpace(name)
+            && await PostCreateAsync(href, new { name }, "StErrCreateSection", "StCreatedSection", name);
+    }
+
+    public async Task<bool> CreateNoteAsync(BrowseNode node)
+    {
+        if (BrowseService.HrefOf(node, "notes") is not { } href)
+        {
+            return false;
+        }
+
+        var dialog = await dialogs.ShowAsync<NewNoteDialog>(Strings.Get("MwNewNote"));
+        return await dialog.Result is { Canceled: false, Data: NewNoteDialog.NewNote note }
+            && await PostCreateAsync(href, new { title = note.Title, body = note.Body }, "StErrCreateNote", "StCreatedNote", note.Title);
+    }
+
+    // One body for both: they differ only in the address, the payload and the message.
+    private async Task<bool> PostCreateAsync(string href, object payload, string errKey, string okKey, string name)
+    {
+        var response = await http.PostAsJsonAsync(href, payload);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            snackbar.Add(string.Format(Strings.Get("StNameTaken"), name), Severity.Warning);
+            return false;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            snackbar.Add(Strings.Get(errKey), Severity.Error);
+            return false;
+        }
+
+        snackbar.Add(string.Format(Strings.Get(okKey), name), Severity.Success);
+        return true;
+    }
+
     /// <summary>Opens the manage-access dialog for a row.</summary>
     public Task OpenManageAccessAsync(BrowseNode node) =>
         OpenManageAccessAsync(node.Id, node.Name, DocumentAddress(node));

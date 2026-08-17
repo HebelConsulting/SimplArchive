@@ -1,5 +1,9 @@
-@* Rename dialog, pre-filled with the current name — see ADR "Web client rename/delete/recycle-bin".
-   Returns the trimmed new name, or cancels. *@
+@* Name dialog, pre-filled with the current name — see ADR "Web client rename/delete/recycle-bin".
+   Returns the trimmed name, or cancels.
+
+   Also serves the plain "give this a name" prompts (a new section, #564), which is why the confirm button
+   takes its label from a parameter: a create whose button says "Rename" is a small lie the user reads before
+   they read anything else. Defaults to Rename, so every existing caller is unchanged. *@
 <MudDialog>
     <DialogContent>
         <MudTextField @bind-Value="_name" Label="@Strings.Get("Name")" Variant="Variant.Outlined" Immediate="true"
@@ -7,7 +11,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">@Strings.Get("Cancel")</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@string.IsNullOrWhiteSpace(_name)" OnClick="Save">@Strings.Get("RibbonRename")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@string.IsNullOrWhiteSpace(_name)" OnClick="Save">@Strings.Get(ConfirmLabelKey)</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -16,6 +20,9 @@
     private IMudDialogInstance Dialog { get; set; } = null!;
 
     [Parameter] public string CurrentName { get; set; } = "";
+
+    /// <summary>Localisation key for the confirm button — "Rename" unless the caller is creating something.</summary>
+    [Parameter] public string ConfirmLabelKey { get; set; } = "RibbonRename";
 
     private string _name = "";
 

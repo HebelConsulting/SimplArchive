@@ -1,0 +1,25 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.NewNoteDialog"
+        Title="{loc:Tr MwNewNote}" Width="460" Height="360" CanResize="True"
+        WindowStartupLocation="CenterOwner">
+    <!-- Title and body together, in one step. A note whose body had to be added afterwards would be filed
+         empty, and an empty note is indistinguishable from a mistake in both the tree and a notes client. -->
+    <DockPanel Margin="18" LastChildFill="True">
+        <StackPanel DockPanel.Dock="Top" Spacing="6">
+            <TextBlock Text="{loc:Tr NewNoteTitle}" />
+            <TextBox x:Name="TitleBox" Watermark="{loc:Tr Name}" />
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
+                    HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+            <Button Content="{loc:Tr Create}" Click="OnCreate" IsDefault="True" />
+        </StackPanel>
+        <StackPanel Spacing="6" Margin="0,12,0,0">
+            <TextBlock Text="{loc:Tr NewNoteBody}" />
+            <TextBox x:Name="BodyBox" AcceptsReturn="True" TextWrapping="Wrap"
+                     VerticalAlignment="Stretch" Height="180" />
+        </StackPanel>
+    </DockPanel>
+</Window>

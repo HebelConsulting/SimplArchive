@@ -113,11 +113,14 @@ public class WellKnownMaskFieldHealTests
             Assert.Equal(9, names.Count);
 
             // Every well-known mask stays on exactly one version — the probe must never mint one. The count
-            // tracks the well-known set (10 since #564 added the Contact/Calendar pairs): asserting the two
-            // counts are EQUAL is the invariant, and the literal additionally catches a mask appearing by
-            // accident, so both are kept.
+            // tracks the well-known set (11 since #564 added the Contact/Calendar pairs and then the notebook
+            // Section): asserting the two counts are EQUAL is the invariant, and the literal additionally
+            // catches a mask appearing by accident, so both are kept.
+            //
+            // Note the Notebook itself is NOT a new mask here — "Note Folder" → "Notebook" is a rename on the
+            // same id, which is what keeps the upgrade free of any document movement.
             var maskCount = await db.Masks.IgnoreQueryFilters().CountAsync(m => m.TenantId == _tenantId);
-            Assert.Equal(10, maskCount);
+            Assert.Equal(11, maskCount);
             Assert.Equal(maskCount, await db.MaskVersions.IgnoreQueryFilters().CountAsync(v => v.TenantId == _tenantId));
         }
     }

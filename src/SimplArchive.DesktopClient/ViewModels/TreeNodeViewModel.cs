@@ -44,6 +44,13 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     // resource at all, so there is nothing to follow and Href() correctly refuses.
     public IReadOnlyDictionary<string, string>? Links { get; }
 
+    /// <summary>
+    /// Whether the server advertised <paramref name="rel"/> for this node — i.e. whether the affordance it
+    /// reaches exists here at all. Ask this before offering the action; a missing rel means "not available to
+    /// you, here, now" (ADR 0543), and <see cref="Href"/> deliberately throws rather than answering it.
+    /// </summary>
+    public bool HasRel(string rel) => Links is not null && Links.ContainsKey(rel);
+
     /// <summary>The advertised href for <paramref name="rel"/>; throws rather than composing one.</summary>
     public string Href(string rel) =>
         Links is not null && Links.TryGetValue(rel, out var href)

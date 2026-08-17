@@ -20,14 +20,25 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
     /// <summary>Shared empty attribute set, so a non-participating node costs no allocation per render.</summary>
     public static readonly Dictionary<string, object> EmptyAttributes = new();
 
+    /// <summary>
+    /// The row's advertised address for <paramref name="rel"/>, or <c>null</c> when the listing carried none —
+    /// which means "not available to you, here, now" (ADR 0543), so a caller disables the affordance rather
+    /// than composing the URL it did not get.
+    /// </summary>
+    /// <remarks>
+    /// One implementation for every rel rather than an accessor per rel. There were two, and the notebook
+    /// affordances would have made four — at which point the fourth gets a fix the first three do not, and
+    /// nothing points that out.
+    /// </remarks>
+    public static string? HrefOf(BrowseNode node, string rel) =>
+        node.Links is not null && node.Links.TryGetValue(rel, out var href) ? href : null;
+
     /// <summary>The row's advertised children address, or <c>null</c> when the listing carried none.</summary>
-    public static string? ChildrenHrefOf(BrowseNode node) =>
-        node.Links is not null && node.Links.TryGetValue("children", out var href) ? href : null;
+    public static string? ChildrenHrefOf(BrowseNode node) => HrefOf(node, "children");
 
     /// <summary>The row's advertised references address — travels with children so opening a folder reads both
     /// collections from the addresses the row carried rather than fetching to learn one of them (ADR 0557).</summary>
-    public static string? ReferencesHrefOf(BrowseNode node) =>
-        node.Links is not null && node.Links.TryGetValue("references", out var href) ? href : null;
+    public static string? ReferencesHrefOf(BrowseNode node) => HrefOf(node, "references");
 
     /// <summary>
     /// Turns an id back into an address by FETCHING the resource and following its own <paramref name="rel"/>.

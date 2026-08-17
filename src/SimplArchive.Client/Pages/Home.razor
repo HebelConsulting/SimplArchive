@@ -482,6 +482,12 @@
                     <TreePane @ref="_treePane" SelectedFolder="_selectedFolder" FolderSelected="SelectFolderAsync">
                         <NodeMenu Context="tn">
                             <MudMenuItem Icon="@Icons.Material.Filled.CreateNewFolder" OnClick="NewFolderAsync">@Strings.Get("MwNewSubfolder")</MudMenuItem>
+                            @* Only where the ROW advertised them — a notebook or a section (#564, ADR 0625). *@
+                            @if (BrowseService.HrefOf(tn, "sections") is not null)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.LibraryAdd" OnClick="() => RunAndRefreshAsync(Actions.CreateSectionAsync(tn))">@Strings.Get("MwNewSection")</MudMenuItem>
+                                <MudMenuItem Icon="@Icons.Material.Filled.NoteAdd" OnClick="() => RunAndRefreshAsync(Actions.CreateNoteAsync(tn))">@Strings.Get("MwNewNote")</MudMenuItem>
+                            }
                             <MudMenuItem Icon="@Icons.Material.Filled.Upload" OnClick="UploadAsync">@Strings.Get("Upload")</MudMenuItem>
                             <MudDivider />
                             <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => RunAndRefreshAsync(Actions.RenameAsync(tn))">@Strings.Get("CtxRename")</MudMenuItem>

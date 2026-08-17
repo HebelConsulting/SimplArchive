@@ -125,7 +125,7 @@ public class DocumentChildrenController : ControllerBase
         public DateTimeOffset? VersionCreatedAt { get; set; }
     }
 
-    private record DocumentSummaryRow(Guid Id, string Name, DateTimeOffset CreatedAt, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, bool OnLegalHold, Guid? CheckedOutByUserId, string? CheckedOutByName, string? LatestObjectKey, string? DocumentType, DateOnly? DocumentDate, long? SizeBytes, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, int VersionCount, DateTimeOffset? VersionCreatedAt);
+    private record DocumentSummaryRow(Guid Id, string Name, DateTimeOffset CreatedAt, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, bool OnLegalHold, Guid? CheckedOutByUserId, string? CheckedOutByName, string? LatestObjectKey, string? DocumentType, DateOnly? DocumentDate, long? SizeBytes, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, int VersionCount, DateTimeOffset? VersionCreatedAt, Guid? MaskId);
 
     public class DocumentChildrenResource : HypermediaResource
     {
@@ -216,7 +216,11 @@ public class DocumentChildrenController : ControllerBase
                 // The CURRENT version's CreatedAt (filing timestamp) — the "Created" contents-sort key (pointer-aware).
                 d.CurrentVersionId != null
                     ? _dbContext.DocumentVersions.Where(v => v.Id == d.CurrentVersionId && v.DocumentId == d.Id).Select(v => (DateTimeOffset?)v.CreatedAt).FirstOrDefault()
-                    : _dbContext.DocumentVersions.Where(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed).OrderByDescending(v => v.VersionNumber).Select(v => (DateTimeOffset?)v.CreatedAt).FirstOrDefault()))
+                    : _dbContext.DocumentVersions.Where(v => v.DocumentId == d.Id && v.Status == DocumentVersionStatus.Confirmed).OrderByDescending(v => v.VersionNumber).Select(v => (DateTimeOffset?)v.CreatedAt).FirstOrDefault(),
+                // The assigned mask's ID, alongside the NAME two fields up. The name is for display and is
+                // localised/renamable; the id is the stable thing a rule keys on — "Note Folder" became
+                // "Notebook" without a single document moving precisely because the id did not change.
+                _dbContext.MaskVersions.Where(mv => mv.Id == d.MaskVersionId).Select(mv => (Guid?)mv.MaskId).FirstOrDefault()))
             .ToListAsync(cancellationToken);
         var (page, hasMore) = Cursor.Split(fetched, pageSize);
 
@@ -266,26 +270,50 @@ public class DocumentChildrenController : ControllerBase
                 // counting. Fetching `self` first instead would cost a round trip per row, and paying two calls to
                 // follow one rel is the usual reason a codebase abandons hypermedia and goes back to string paths.
                 //
-                // CONDITIONAL rels are deliberately absent — checkout/checkin, external-links, acl-inheritance.
-                // Each depends on the caller's rights or the item's state, which the full document resource
-                // computes once and a listing would have to compute per row. A listing is the wrong place to
-                // answer "may I?", so those affordances still require the resource itself, and their absence here
-                // must NOT be read as "not available" (ADR 0543's rule applies to a resource, not to a summary).
-                Links = new List<Link>
-                {
-                    new("self", $"/api/documents/{d.Id}", "GET"),
-                    new("chat", $"/api/documents/{d.Id}/chat", "GET"),
-                    new("versions", $"/api/documents/{d.Id}/versions", "GET"),
-                    new("children", $"/api/documents/{d.Id}/children", "GET"),
-                    new("mask", $"/api/documents/{d.Id}/mask", "GET"),
-                    new("index-data", $"/api/documents/{d.Id}/index-data", "GET"),
-                    new("references", $"/api/documents/{d.Id}/references", "GET"),
-                    new("referencing-folders", $"/api/documents/{d.Id}/referencing-folders", "GET"),
-                },
+                // Rels that depend on the CALLER'S RIGHTS or the item's STATE are deliberately absent —
+                // checkout/checkin, external-links, acl-inheritance. Each is a question the full document
+                // resource computes once and a listing would have to compute per row. A listing is the wrong
+                // place to answer "may I?", so those affordances still require the resource itself, and their
+                // absence here must NOT be read as "not available" (ADR 0543's rule applies to a resource, not
+                // to a summary).
+                //
+                // A MASK-DERIVED rel is not one of those, and the distinction matters (#564). Whether a folder
+                // holds sections and notes is a property of its mask, not of who is asking — and the query is
+                // already joining MaskVersions to produce DocumentType, so it costs nothing to answer here.
+                // The alternative was for a client to fetch each row's resource when its context menu opens,
+                // which is exactly the per-rel round trip ADR 0557 exists to prevent.
+                Links = RowLinks(d),
             }).ToList(),
             ContentsSortOrder = folderSortOrder.Value,
             Links = links,
         });
+    }
+
+    /// <summary>The addresses a listed row carries — see the call site for which rels belong here and why.</summary>
+    private static List<Link> RowLinks(DocumentSummaryRow d)
+    {
+        var links = new List<Link>
+        {
+            new("self", $"/api/documents/{d.Id}", "GET"),
+            new("chat", $"/api/documents/{d.Id}/chat", "GET"),
+            new("versions", $"/api/documents/{d.Id}/versions", "GET"),
+            new("children", $"/api/documents/{d.Id}/children", "GET"),
+            new("mask", $"/api/documents/{d.Id}/mask", "GET"),
+            new("index-data", $"/api/documents/{d.Id}/index-data", "GET"),
+            new("references", $"/api/documents/{d.Id}/references", "GET"),
+            new("referencing-folders", $"/api/documents/{d.Id}/referencing-folders", "GET"),
+        };
+
+        // A notebook and a section hold the same two things, so they advertise the same two creates. Everything
+        // else advertises neither, and that absence is what tells a client to leave both off its menu.
+        if (WellKnownMaskIds.TypedFolderRules.FirstOrDefault(r => r.FolderMaskId == d.MaskId) is { } rule
+            && rule.Admits.Any(a => a.MaskId == WellKnownMaskIds.Note))
+        {
+            links.Add(new Link("sections", $"/api/documents/{d.Id}/sections", "POST"));
+            links.Add(new Link("notes", $"/api/documents/{d.Id}/notes", "POST"));
+        }
+
+        return links;
     }
 
     // Batched tag lookup for a page of documents (ADR "List-row columns and sorting") — one query, grouped by
@@ -343,19 +371,23 @@ public class DocumentChildrenController : ControllerBase
         ["folder"] = WellKnownMaskIds.Folder,
         ["calendar"] = WellKnownMaskIds.Calendar,
         ["addressbook"] = WellKnownMaskIds.Addressbook,
-        ["notes"] = WellKnownMaskIds.NoteFolder,
+        ["notebook"] = WellKnownMaskIds.Notebook,
+        // "notes" is the name this kind shipped under and stays accepted: the mask was renamed, and a wire
+        // value a client may already be sending is not the place to charge for that.
+        ["notes"] = WellKnownMaskIds.Notebook,
+        ["section"] = WellKnownMaskIds.NotebookSection,
     };
 
     // The typed-folder family this mask version belongs to as a FOLDER, or null for an ordinary folder. The
-    // pairs are data (WellKnownMaskIds.TypedFolderPairs), so a new typed family needs no change here.
-    private async Task<TypedFolderPair?> TypedFolderPairOfAsync(Guid maskVersionId, CancellationToken cancellationToken)
+    // rules are data (WellKnownMaskIds.TypedFolderRules), so a new typed family needs no change here.
+    private async Task<TypedFolderRule?> TypedFolderRuleOfAsync(Guid maskVersionId, CancellationToken cancellationToken)
     {
         var maskId = await _dbContext.MaskVersions
             .Where(v => v.Id == maskVersionId)
             .Select(v => (Guid?)v.MaskId)
             .SingleOrDefaultAsync(cancellationToken);
 
-        return maskId is { } id ? WellKnownMaskIds.TypedFolderPairs.FirstOrDefault(p => p.FolderMaskId == id) : null;
+        return maskId is { } id ? WellKnownMaskIds.TypedFolderRules.FirstOrDefault(r => r.FolderMaskId == id) : null;
     }
 
     [HttpPost("children")]
@@ -381,23 +413,29 @@ public class DocumentChildrenController : ControllerBase
             throw new InvalidFolderMaskException(requestedMask);
         }
 
-        // Is the PARENT a typed folder (Notes / Addressbook / Calendar)? It admits only its own item type, and
-        // an item is typed by the finalizer once it has bytes to read — so a child created here must be left
-        // MASKLESS, exactly as the CardDAV/IMAP write paths leave theirs.
+        // Is the PARENT a typed folder (Notebook / Section / Addressbook / Calendar)?
+        //
+        // Two shapes, and the difference is whether the caller SAID what it wants. A named folderMask is an
+        // unambiguous ask: honour it when the parent admits that mask — a Section inside a Notebook — and
+        // refuse it with the reason when it does not. An unnamed one is ambiguous, because this endpoint
+        // serves both "make a folder" and step one of an upload with the same body, so inside a typed folder
+        // it is an item-to-be and must be left MASKLESS for the finalizer, exactly as the CardDAV/IMAP write
+        // paths leave theirs.
         //
         // Stamping the Folder mask unconditionally is what made an upload into a typed folder impossible: the
         // containment rule exempts a document whose type is not determined yet (its own comment says so, and
         // names .vcf/.ics), and this endpoint was defeating that exemption before the finalizer ever ran.
-        var parentTypedPair = parent.MaskVersionId is { } parentMaskVersionId
-            ? await TypedFolderPairOfAsync(parentMaskVersionId, cancellationToken)
+        var parentRule = parent.MaskVersionId is { } parentMaskVersionId
+            ? await TypedFolderRuleOfAsync(parentMaskVersionId, cancellationToken)
             : null;
 
-        if (parentTypedPair is { } typedPair && folderMaskRequested)
+        var admittedFolder = parentRule is not null && folderMaskRequested
+            && parentRule.Admits.Any(a => a.MaskId == folderMaskId);
+
+        if (parentRule is { } rule && folderMaskRequested && !admittedFolder)
         {
-            // A folder inside a typed folder can never be valid, so say that rather than creating it and
-            // letting the containment rule refuse the very next save.
             throw new Errors.Exceptions.Documents.TypedFolderContainmentException(
-                $"A {typedPair.FolderName} holds only {typedPair.ItemName} items — it cannot contain folders.");
+                $"A {rule.FolderName} holds only {rule.AdmittedNames} — '{request.FolderMask}' cannot live there.");
         }
 
         var rights = await _access.GetCallerRightsAsync(documentId, cancellationToken);
@@ -418,8 +456,9 @@ public class DocumentChildrenController : ControllerBase
             // Assigned the Folder mask now; if a version is later added, finalize reclassifies it (ADR "Folder mask on folders").
             // A typed folder (#564) instead wears the mask the request named — resolved tenant-explicitly, so a
             // caller with no ambient tenant can't produce a maskless folder (ADR 0590's defect).
-            // Inside a typed folder, null: the finalizer decides what this is (see above).
-            MaskVersionId = parentTypedPair is not null
+            // Inside a typed folder, null UNLESS the caller named a mask that folder admits (a Section in a
+            // Notebook): an unnamed one is an item-to-be, and the finalizer decides what it is (see above).
+            MaskVersionId = parentRule is not null && !admittedFolder
                 ? null
                 : await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, parent.TenantId, folderMaskId, cancellationToken)
                     ?? await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken),
