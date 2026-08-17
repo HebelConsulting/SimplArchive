@@ -10,14 +10,13 @@ namespace SimplArchive.DesktopClient.Services;
 
 /// <summary>
 /// The documents area's client (#443, the finale): repositories/children, filing, rename/move/delete, the
-/// recycle bin, references, tags, ACL, chat, index data, masks, sensitivity and the id-addressed entry points
-/// that could not leave the god client earlier — all over the shared authenticated <see cref="ApiCore"/>.
-/// Reached as <c>api.Documents</c>.
+/// recycle bin, references, tags, ACL, chat, index data, masks and sensitivity — all over the shared
+/// authenticated <see cref="ApiCore"/>. Reached as <c>api.Documents</c>.
 /// </summary>
 /// <remarks>
-/// Carries the ONE composed URL (<c>DocumentAddress</c>) and its resolver <c>DocumentRelAsync</c> — moved
-/// here with the guard's same-commit assertion update (ClientHypermediaTests): converting its remaining
-/// consumers to rows/self-hrefs and deleting it is the half-B endgame this client now owns in one place.
+/// Fully href-based since the #443 endgame: every method takes an address a listing row, a payload or the
+/// document resource itself advertised (ADR 0543/0555). The one composed URL the desktop ever had
+/// (<c>DocumentAddress</c>) is gone — a caller that holds only an id has nothing to call here, by design.
 /// </remarks>
 public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminders)
 {
@@ -51,7 +50,8 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     public sealed record AclInfo(bool Forbidden, bool BreaksInheritance, List<AclEntryInfo> Entries, List<GrantablePrincipalInfo> Principals, string? InheritanceHref);
 
     // A folder that references a given item, with its full display path — see ADR "References-of-an-item list".
-    public sealed record ReferencingFolder(Guid Id, string Name, string Path);
+    // OpenHref is the row's own `open` address (ADR 0555) — null where the server withheld it.
+    public sealed record ReferencingFolder(Guid Id, string Name, string Path, string? OpenHref = null);
 
     // The references-of-an-item view: the document's real primary location (null when it's a repository root or
     // the caller can't see the parent) plus the folders that reference it (ADR 0506).
@@ -87,7 +87,7 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     // it are still here because the tree needs them, but nothing composes a URL out of them any more.
     public sealed record Reference(
         Guid ReferenceId, Guid TargetId, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, Guid? RealParentId,
-        string? DeleteHref = null);
+        string? DeleteHref = null, IReadOnlyDictionary<string, string>? Links = null);
 
     public async Task<List<Node>> GetRepositoriesAsync(CancellationToken cancellationToken = default) =>
         await _core.LoadPagedAsync(await _core.RootHrefAsync("repositories", cancellationToken), "repositories", ParseNode, cancellationToken);
@@ -97,21 +97,11 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     public Task<List<Node>> GetChildrenAsync(string childrenHref, CancellationToken cancellationToken = default) =>
         _core.LoadPagedAsync(childrenHref, "children", ParseNode, cancellationToken);
 
-    // For a caller that has only an ID and no resource — a breadcrumb, a restored selection, a self-test — this
-    // FETCHES the document and follows its own `children` rel. One round trip, then a rel; never a composed
-    // sub-resource path.
-    //
-    // Prefer the href overload wherever a row or node is in hand — this exists so the remaining id-shaped call
-    // sites (the view model tracks "where am I" as a Guid) do not have to rebuild sub-resource paths while that
-    // state is still id-shaped.
-    public async Task<List<Node>> GetChildrenAsync(Guid documentId, CancellationToken cancellationToken = default) =>
-        await GetChildrenAsync(await DocumentRelAsync(documentId, "children", cancellationToken), cancellationToken);
-
     // The item's ancestor folder ids, repository-root first down to its immediate parent (issue #340) — used to
     // reveal a search hit in the lazy tree. Empty for an item filed at a repository root.
-    public async Task<List<Guid>> GetAncestorsAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<List<Guid>> GetAncestorsAsync(string ancestorsHref, CancellationToken cancellationToken = default)
     {
-        var json = await _core.Http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "ancestors", cancellationToken), cancellationToken);
+        var json = await _core.Http.GetFromJsonAsync<JsonElement>(ancestorsHref, cancellationToken);
         var ids = new List<Guid>();
         if (json.TryGetProperty("ancestors", out var arr) && arr.ValueKind == JsonValueKind.Array)
         {
@@ -129,22 +119,16 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
 
     // The folder's persisted default contents sort order (ADR "Per-folder contents sort order") from the children
     // listing envelope — 0=Name / 1=DocumentDate / 2=Created; DocumentDate (1) when unavailable.
-    //
     // The order travels IN the children envelope, so a screen that is listing the folder anyway should call
     // GetFolderContentsAsync and read both from one response. This overload is for the callers that want only
     // the number (a VM check), and it asks for a single row rather than a page to get it.
-    public async Task<int> GetContentsSortOrderAsync(Guid folderId, CancellationToken cancellationToken = default) =>
-        await GetContentsSortOrderAsync(await DocumentRelAsync(folderId, "children", cancellationToken), cancellationToken);
-
     public async Task<int> GetContentsSortOrderAsync(string childrenHref, CancellationToken cancellationToken = default) =>
         ReadContentsSortOrder(await _core.Http.GetFromJsonAsync<JsonElement>(childrenHref + "?limit=1", cancellationToken));
 
     // Sets the folder's persisted default contents sort order (CanEditIndexData-gated).
-    public async Task SetContentsSortOrderAsync(Guid folderId, int sortOrder, CancellationToken cancellationToken = default)
+    public async Task SetContentsSortOrderAsync(string contentsSortOrderHref, int sortOrder, CancellationToken cancellationToken = default)
     {
-        // Fetch-then-follow: a user-initiated write on one item, so one extra request when acting is the right
-        // trade against composing the path (ADR 0543, #416).
-        var response = await _core.Http.PutAsJsonAsync(await DocumentRelAsync(folderId, "contents-sort-order", cancellationToken), new { sortOrder }, cancellationToken);
+        var response = await _core.Http.PutAsJsonAsync(contentsSortOrderHref, new { sortOrder }, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException($"Could not set the contents sort order ({(int)response.StatusCode}).");
@@ -152,11 +136,11 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     }
 
     // Lists a .zip document's entries on demand (ADR "Zip file browsing") — nothing is unpacked.
-    public async Task<IReadOnlyList<ArchiveEntryInfo>> GetArchiveEntriesAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<ArchiveEntryInfo>> GetArchiveEntriesAsync(string archiveEntriesHref, CancellationToken cancellationToken = default)
     {
-        // Follows the resource's own archive-entries rel — advertised only for a zip, so its PRESENCE is the
-        // server answering "can I browse inside this?" instead of the client comparing ".zip" (#416).
-        var json = await _core.Http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "archive-entries", cancellationToken), cancellationToken);
+        // The rel is advertised only for a zip, so its PRESENCE is the server answering "can I browse inside
+        // this?" instead of the client comparing ".zip" (#416).
+        var json = await _core.Http.GetFromJsonAsync<JsonElement>(archiveEntriesHref, cancellationToken);
         var entries = new List<ArchiveEntryInfo>();
         if (json.TryGetProperty("entries", out var array))
         {
@@ -173,13 +157,9 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         return entries;
     }
 
-    // The caller's effective group inboxes (ADR 0532) — the "Send to a group" choices.
-    public async Task<string> GetDocumentNameAsync(Guid documentId, CancellationToken cancellationToken = default) =>
-        (await GetDocumentDetailAsync(documentId, cancellationToken)).Name;
-
-    public async Task<List<IndexField>> GetIndexDataAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<List<IndexField>> GetIndexDataAsync(string indexDataHref, CancellationToken cancellationToken = default)
     {
-        var response = await _core.Http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "index-data", cancellationToken), cancellationToken);
+        var response = await _core.Http.GetFromJsonAsync<JsonElement>(indexDataHref, cancellationToken);
         var fields = new List<IndexField>();
         if (response.TryGetProperty("fields", out var items))
         {
@@ -198,9 +178,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     // Data-classification / sensitivity label (ADR "Configurable sensitivity labels + upload defaults") — the
     // per-tenant label on the document (id/name/colour + whether it watermarks), read from the document resource.
     public sealed record DocumentSensitivityInfo(Guid? LabelId, string Name, string? Color, bool Watermark);
-
-    public async Task<DocumentSensitivityInfo> GetDocumentSensitivityAsync(Guid documentId, CancellationToken cancellationToken = default) =>
-        (await GetDocumentDetailAsync(documentId, cancellationToken)).Sensitivity;
 
     // Everything the detail pane needs from the document resource, from ONE read of it (issue #385).
     //
@@ -225,9 +202,9 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
                     + "the resource — do not compose the URL (ADR 0543).");
     }
 
-    public async Task<DocumentDetailInfo> GetDocumentDetailAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<DocumentDetailInfo> GetDocumentDetailAsync(string documentSelfHref, CancellationToken cancellationToken = default)
     {
-        var json = await _core.Http.GetFromJsonAsync<JsonElement>(DocumentAddress(documentId), cancellationToken);
+        var json = await _core.Http.GetFromJsonAsync<JsonElement>(documentSelfHref, cancellationToken);
 
         return new DocumentDetailInfo(
             json.TryGetProperty("name", out var name) ? name.GetString() ?? "" : "",
@@ -244,9 +221,9 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
             ApiCore.ParseLinks(json));
     }
 
-    public async Task SetSensitivityAsync(Guid documentId, Guid? labelId, CancellationToken cancellationToken = default)
+    public async Task SetSensitivityAsync(string sensitivityHref, Guid? labelId, CancellationToken cancellationToken = default)
     {
-        var response = await _core.Http.PutAsJsonAsync(await DocumentRelAsync(documentId, "sensitivity", cancellationToken), new { labelId }, cancellationToken);
+        var response = await _core.Http.PutAsJsonAsync(sensitivityHref, new { labelId }, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException($"Could not set the sensitivity label ({(int)response.StatusCode}).");
@@ -277,19 +254,10 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     public async Task<BulkResult> BulkSetSensitivityAsync(IEnumerable<Guid> ids, Guid? labelId, CancellationToken cancellationToken = default) =>
         await PostBulkAsync(await BulkRelAsync("sensitivity", cancellationToken), new { ids = ids.ToArray(), labelId }, cancellationToken);
 
-    // The ONE place in this client where an id becomes a document address (ADR 0543, issue #416).
-    //
-    // It is the irreducible composition — turning an id back into a resource — and it is deliberately NOT
-    // pretended away: every OTHER address now comes from a rel, so what remains is a single line naming a
-    // single route, rather than forty call sites each knowing a different piece of the API's URL space. It
-    // disappears for good when the last id-shaped view-model state becomes a row that carries its own `self`
-    // (ADR 0555); until then, centralising it is what makes that final step a one-line change.
-    private static string DocumentAddress(Guid documentId) => $"api/documents/{documentId}";
-
     // The latest confirmed version's workflow (null if the document has no confirmed version).
-    public async Task<WorkflowClient.WorkflowInfo?> GetWorkflowAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<WorkflowClient.WorkflowInfo?> GetWorkflowAsync(string versionsHref, CancellationToken cancellationToken = default)
     {
-        var response = await _core.Http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "versions", cancellationToken), cancellationToken);
+        var response = await _core.Http.GetFromJsonAsync<JsonElement>(versionsHref, cancellationToken);
         if (!response.TryGetProperty("versions", out var versions))
         {
             return null;
@@ -345,28 +313,14 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     }
 
 
-    // For a caller that holds an ID and no resource: FETCH the document and return the named rel. One round
-    // trip, then follow — never a composed sub-resource path.
-    //
-    // Prefer the href overloads wherever the resource is already in hand — the detail pane holds it, so the pane
-    // pays nothing.
-    private async Task<string> DocumentRelAsync(Guid documentId, string rel, CancellationToken cancellationToken)
-    {
-        var doc = await _core.Http.GetFromJsonAsync<JsonElement>(DocumentAddress(documentId), cancellationToken);
-        var links = ApiCore.ParseLinks(doc);
-        return links is not null && links.TryGetValue(rel, out var href)
-            ? href
-            : throw new InvalidOperationException($"Document {documentId} advertised no '{rel}' rel (ADR 0543).");
-    }
+    public async Task<bool> GetSubscriptionAsync(string subscriptionHref, CancellationToken cancellationToken = default) =>
+        await _reminders().GetSubscriptionAsync(subscriptionHref, cancellationToken);
 
-    public async Task<bool> GetSubscriptionAsync(Guid documentId, CancellationToken cancellationToken = default) =>
-        await _reminders().GetSubscriptionAsync(await DocumentRelAsync(documentId, "subscription", cancellationToken), cancellationToken);
+    public async Task SetSubscriptionAsync(string subscriptionHref, bool subscribe, CancellationToken cancellationToken = default) =>
+        await _reminders().SetSubscriptionAsync(subscriptionHref, subscribe, cancellationToken);
 
-    public async Task SetSubscriptionAsync(Guid documentId, bool subscribe, CancellationToken cancellationToken = default) =>
-        await _reminders().SetSubscriptionAsync(await DocumentRelAsync(documentId, "subscription", cancellationToken), subscribe, cancellationToken);
-
-    public async Task<IReadOnlyList<RemindersClient.ReminderInfo>> GetRemindersAsync(Guid documentId, CancellationToken cancellationToken = default) =>
-        (await GetRemindersViewAsync(documentId, cancellationToken)).Reminders;
+    public async Task<IReadOnlyList<RemindersClient.ReminderInfo>> GetRemindersAsync(string remindersHref, CancellationToken cancellationToken = default) =>
+        (await GetRemindersViewAsync(remindersHref, cancellationToken)).Reminders;
 
     /// <summary>
     /// The document's reminders AND the address of its target picker, from ONE read of the collection that
@@ -374,22 +328,22 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     /// fetching the document twice and the collection twice, which is how following rels turns into four
     /// requests where there used to be two (ADR 0543, issue #416).
     /// </summary>
-    public async Task<(IReadOnlyList<RemindersClient.ReminderInfo> Reminders, string TargetsHref)> GetRemindersViewAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<(IReadOnlyList<RemindersClient.ReminderInfo> Reminders, string TargetsHref)> GetRemindersViewAsync(string remindersHref, CancellationToken cancellationToken = default)
     {
-        var collection = await _core.Http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "reminders", cancellationToken), cancellationToken);
-        return (RemindersClient.ParseReminders(collection), ApiCore.RequireRel(collection, "targets", $"The reminders collection for {documentId}"));
+        var collection = await _core.Http.GetFromJsonAsync<JsonElement>(remindersHref, cancellationToken);
+        return (RemindersClient.ParseReminders(collection), ApiCore.RequireRel(collection, "targets", "The reminders collection"));
     }
 
-    public async Task CreateReminderAsync(Guid documentId, DateTimeOffset remindAt, string? note, int recurrence, Guid? targetUserId, CancellationToken cancellationToken = default) =>
-        await _reminders().CreateReminderAsync(await DocumentRelAsync(documentId, "reminders", cancellationToken), remindAt, note, recurrence, targetUserId, cancellationToken);
+    public async Task CreateReminderAsync(string remindersHref, DateTimeOffset remindAt, string? note, int recurrence, Guid? targetUserId, CancellationToken cancellationToken = default) =>
+        await _reminders().CreateReminderAsync(remindersHref, remindAt, note, recurrence, targetUserId, cancellationToken);
 
     // The thread AND the rel that reaches its mention picker, from one request. The href has to travel with the
     // messages: it is advertised on the list resource, and re-fetching it separately would mean composing the
     // thread's URL a second time, which is exactly what ADR 0543 forbids.
-    public async Task<ChatThread> GetChatAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<ChatThread> GetChatAsync(string chatHref, CancellationToken cancellationToken = default)
     {
         string? mentionableUsersHref = null;
-        var messages = await _core.LoadPagedAsync(await DocumentRelAsync(documentId, "chat", cancellationToken), "messages", ParseComment, cancellationToken,
+        var messages = await _core.LoadPagedAsync(chatHref, "messages", ParseComment, cancellationToken,
             // First page only: the rel describes the thread, not the page.
             page => mentionableUsersHref ??= ApiCore.FindLink(page, "mentionable-users"));
 
@@ -419,9 +373,9 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     }
 
     // Creates a folder = a child Document with no version (ADR 0175). Duplicate name -> 409, no permission -> 403.
-    public async Task CreateFolderAsync(Guid parentId, string name, CancellationToken cancellationToken = default)
+    public async Task CreateFolderAsync(string childrenHref, string name, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsJsonAsync(await DocumentRelAsync(parentId, "children", cancellationToken), new { name }, cancellationToken);
+        using var response = await _core.Http.PostAsJsonAsync(childrenHref, new { name }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             throw new ApiActionException($"A folder or document named '{name}' already exists here.");
@@ -455,10 +409,10 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     // Renames a document/folder. Both this and DeleteAsync require an If-Match ETag (ADR 0188), fetched via
     // a HEAD first. 409 = duplicate sibling name, 403 = no permission (CanEditIndexData), 412 = changed since
     // it was loaded.
-    public async Task RenameAsync(Guid documentId, string newName, CancellationToken cancellationToken = default)
+    public async Task RenameAsync(string documentSelfHref, string newName, CancellationToken cancellationToken = default)
     {
-        var etag = await GetETagAsync(documentId, cancellationToken);
-        using var request = new HttpRequestMessage(HttpMethod.Put, DocumentAddress(documentId))
+        var etag = await GetETagAsync(documentSelfHref, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Put, documentSelfHref)
         {
             Content = JsonContent.Create(new { name = newName }),
         };
@@ -488,10 +442,10 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
 
     // Soft-deletes a document/folder to the recycle bin (a folder cascades to its whole subtree, ADR 0196).
     // Requires If-Match (ADR 0188). 403 = no permission (CanDelete), 412 = changed since it was loaded.
-    public async Task DeleteAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(string documentSelfHref, CancellationToken cancellationToken = default)
     {
-        var etag = await GetETagAsync(documentId, cancellationToken);
-        using var request = new HttpRequestMessage(HttpMethod.Delete, DocumentAddress(documentId));
+        var etag = await GetETagAsync(documentSelfHref, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Delete, documentSelfHref);
         if (etag is not null)
         {
             request.Headers.IfMatch.Add(etag);
@@ -550,24 +504,21 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     }
 
     // The references (shortcuts) filed in a folder — see ADR "Desktop drag-and-drop move and reference".
-    public async Task<List<Reference>> GetReferencesAsync(Guid folderId, CancellationToken cancellationToken = default) =>
-        await _core.LoadPagedAsync(await DocumentRelAsync(folderId, "references", cancellationToken), "references", ParseReference, cancellationToken);
-
     public Task<List<Reference>> GetReferencesAsync(string referencesHref, CancellationToken cancellationToken = default) =>
         _core.LoadPagedAsync(referencesHref, "references", ParseReference, cancellationToken);
 
     // The folders that reference a given item (with full paths) — see ADR "References-of-an-item list".
-    public async Task<List<ReferencingFolder>> GetReferencingFoldersAsync(Guid documentId, CancellationToken cancellationToken = default) =>
-        await _core.LoadPagedAsync(await DocumentRelAsync(documentId, "referencing-folders", cancellationToken), "folders", ParseReferencingFolder, cancellationToken);
+    public async Task<List<ReferencingFolder>> GetReferencingFoldersAsync(string referencingFoldersHref, CancellationToken cancellationToken = default) =>
+        await _core.LoadPagedAsync(referencingFoldersHref, "folders", ParseReferencingFolder, cancellationToken);
 
     // The full references view — the item's real primary location plus every referencing folder (ADR 0506). The
     // primary location is a top-level object on the first page (not part of the paged array), so this can't reuse
     // LoadPagedAsync; it walks the pages itself.
-    public async Task<ReferencesView> GetReferencesViewAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<ReferencesView> GetReferencesViewAsync(string referencingFoldersHref, CancellationToken cancellationToken = default)
     {
         var folders = new List<ReferencingFolder>();
         ReferencingFolder? primary = null;
-        string? next = await DocumentRelAsync(documentId, "referencing-folders", cancellationToken);
+        string? next = referencingFoldersHref;
         var first = true;
 
         while (next is not null)
@@ -596,10 +547,10 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
 
     // Promotes a referenced folder to be the document's primary location (ADR 0506): atomic move + leave a
     // reference at the former home. Same If-Match contract as MoveAsync.
-    public async Task SetPrimaryLocationAsync(Guid documentId, Guid folderId, CancellationToken cancellationToken = default)
+    public async Task SetPrimaryLocationAsync(string documentSelfHref, Guid folderId, CancellationToken cancellationToken = default)
     {
-        var etag = await GetETagAsync(documentId, cancellationToken);
-        using var request = new HttpRequestMessage(HttpMethod.Put, await DocumentRelAsync(documentId, "set-primary-location", cancellationToken))
+        var (links, etag) = await GetLinksAndETagAsync(documentSelfHref, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Put, links.TryGetValue("set-primary-location", out var h) ? h : throw new InvalidOperationException("The document advertised no 'set-primary-location' rel (ADR 0543)."))
         {
             Content = JsonContent.Create(new { folderId }),
         };
@@ -630,10 +581,10 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
 
     // Moves (reparents) an item into another folder. Requires If-Match (like rename/delete), fetched via a
     // HEAD. 400 = into its own subtree, 403 = no permission (CanMove/CanCreateSubItems), 409 = name clash.
-    public async Task MoveAsync(Guid documentId, Guid newParentId, CancellationToken cancellationToken = default)
+    public async Task MoveAsync(string documentSelfHref, Guid newParentId, CancellationToken cancellationToken = default)
     {
-        var etag = await GetETagAsync(documentId, cancellationToken);
-        using var request = new HttpRequestMessage(HttpMethod.Put, await DocumentRelAsync(documentId, "move", cancellationToken))
+        var (links, etag) = await GetLinksAndETagAsync(documentSelfHref, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Put, links.TryGetValue("move", out var h) ? h : throw new InvalidOperationException("The document advertised no 'move' rel (ADR 0543)."))
         {
             Content = JsonContent.Create(new { parentId = newParentId }),
         };
@@ -691,9 +642,9 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         return list;
     }
 
-    public async Task CreateReferenceAsync(Guid folderId, Guid targetId, CancellationToken cancellationToken = default)
+    public async Task CreateReferenceAsync(string referencesHref, Guid targetId, CancellationToken cancellationToken = default)
     {
-        using var response = await _core.Http.PostAsJsonAsync(await DocumentRelAsync(folderId, "references", cancellationToken), new { targetId }, cancellationToken);
+        using var response = await _core.Http.PostAsJsonAsync(referencesHref, new { targetId }, cancellationToken);
         if (response.StatusCode == HttpStatusCode.BadRequest)
         {
             throw new ApiActionException("Can't reference an item into itself or one of its own sub-folders.");
@@ -730,16 +681,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     // for .eml/.msg, else Basic Entry — ADR "Email auto-classification"), so the client doesn't classify.
     // Returns the created document's id. An optional feed comment is posted on it after finalize (ADR "Filing
     // posts a feed comment") — used by list-pane drop filing into a folder (ADR "List-pane drop filing").
-    public async Task<Guid> UploadFileAsync(Guid folderId, string fileName, byte[] bytes, string? comment = null, CancellationToken cancellationToken = default) =>
-        await UploadFileAsync(await DocumentRelAsync(folderId, "children", cancellationToken), fileName, bytes, comment, cancellationToken);
-
-    /// <summary>The same upload, posted to a children address the caller already holds.</summary>
-    /// <remarks>
-    /// The href overload is the real one. A drop of several files into one folder resolves that folder's
-    /// <c>children</c> rel ONCE and files every file through it, rather than fetching the folder again per file —
-    /// following a rel must not cost a request per use (ADR 0557). The id overload above is what the view model,
-    /// whose "where am I" state is still a <see cref="Guid"/>, calls.
-    /// </remarks>
     public async Task<Guid> UploadFileAsync(string childrenHref, string fileName, byte[] bytes, string? comment = null, CancellationToken cancellationToken = default)
     {
         // Document.Name is the stem (no extension); the extension rides on the version's object key (ADR
@@ -842,12 +783,12 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     // The collection then hands over `grantable-principals`, so the picker is one link away rather than a second
     // path assembled here. The whole call is best-effort in the same direction it always was: any failure reads
     // as "no rights", which hides affordances rather than offering ones that cannot work.
-    public async Task<AclInfo> GetAclAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<AclInfo> GetAclAsync(string documentSelfHref, CancellationToken cancellationToken = default)
     {
         JsonElement doc;
         try
         {
-            doc = await _core.Http.GetFromJsonAsync<JsonElement>(DocumentAddress(documentId), cancellationToken);
+            doc = await _core.Http.GetFromJsonAsync<JsonElement>(documentSelfHref, cancellationToken);
         }
         catch (HttpRequestException)
         {
@@ -910,9 +851,9 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     // expanded to members, tenant admins flagged).
     // `effective` is a rel on the ACL COLLECTION, so the collection is read first — one hop that also answers
     // "may I see this at all" by whether the document advertised `acl-entries` (ADR 0543).
-    public async Task<EffectiveAccessInfo> GetEffectiveAccessAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<EffectiveAccessInfo> GetEffectiveAccessAsync(string aclEntriesHref, CancellationToken cancellationToken = default)
     {
-        var collection = await _core.Http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "acl-entries", cancellationToken), cancellationToken);
+        var collection = await _core.Http.GetFromJsonAsync<JsonElement>(aclEntriesHref, cancellationToken);
         var json = await _core.Http.GetFromJsonAsync<JsonElement>(ApiCore.RequireRel(collection, "effective", "The ACL collection"), cancellationToken);
 
         var entries = new List<EffectiveAccessEntryInfo>();
@@ -951,7 +892,9 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     private static ReferencingFolder ParseReferencingFolder(JsonElement item) => new(
         item.GetProperty("id").GetGuid(),
         item.GetProperty("name").GetString() ?? "",
-        item.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "");
+        item.TryGetProperty("path", out var p) ? p.GetString() ?? "" : "",
+        // The row's own `open` address (ADR 0555) — how "Go to"/promote-then-navigate reaches the folder.
+        ApiCore.RelHref(item, "open"));
 
     private static Reference ParseReference(JsonElement item) => new(
         item.GetProperty("referenceId").GetGuid(),
@@ -962,7 +905,10 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         item.TryGetProperty("hasSubfolders", out var hs) && hs.GetBoolean(),
         item.TryGetProperty("hasReferences", out var hr) && hr.GetBoolean(),
         item.TryGetProperty("realParentId", out var rp) && rp.ValueKind != JsonValueKind.Null ? rp.GetGuid() : null,
-        ApiCore.RelHref(item, "delete"));
+        ApiCore.RelHref(item, "delete"),
+        // A reference row stands for a REAL document, and the server advertises the same target sub-resources
+        // a children row gets (#416) — carry them so the row is not quietly less capable than its neighbour.
+        ApiCore.ParseLinks(item));
 
     private static RecycleBinItem ParseRecycleBinItem(JsonElement item) => new(
         item.GetProperty("id").GetGuid(),
@@ -1045,12 +991,25 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     }
 
     // Reads the current ETag (a HEAD, cheaper than GET) so a rename/delete can send it as If-Match.
-    private async Task<EntityTagHeaderValue?> GetETagAsync(Guid documentId, CancellationToken cancellationToken)
+    private async Task<EntityTagHeaderValue?> GetETagAsync(string documentSelfHref, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Head, DocumentAddress(documentId));
+        using var request = new HttpRequestMessage(HttpMethod.Head, documentSelfHref);
         using var response = await _core.Http.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
         return response.Headers.ETag;
+    }
+
+    // One GET of the document resource for the writes that need BOTH a rel to follow and an If-Match: the
+    // links come from the body and the ETag from the same response's headers, so following the rel costs one
+    // request instead of a HEAD plus a fetch (ADR 0557).
+    private async Task<(IReadOnlyDictionary<string, string> Links, EntityTagHeaderValue? ETag)> GetLinksAndETagAsync(string documentSelfHref, CancellationToken cancellationToken)
+    {
+        using var response = await _core.Http.GetAsync(documentSelfHref, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        var links = ApiCore.ParseLinks(json)
+            ?? throw new InvalidOperationException($"'{documentSelfHref}' advertised no links at all (ADR 0543).");
+        return (links, response.Headers.ETag);
     }
 
     private static string GuessContentType(string fileName) => Path.GetExtension(fileName).ToLowerInvariant() switch
@@ -1109,7 +1068,7 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     public sealed record ImportResultInfo(Guid RootId, string RootName, int Documents, int Versions, int Skipped);
 
     // Exports a repository/folder + subtree to a .zip (ADR "Repository export"). Tenant-admin-only server-side.
-    public async Task<byte[]> ExportRepositoryAsync(Guid rootId, RepositoryExportOptions options, CancellationToken cancellationToken = default)
+    public async Task<byte[]> ExportRepositoryAsync(string exportHref, RepositoryExportOptions options, CancellationToken cancellationToken = default)
     {
         var query = new List<string> { $"versions={(options.ActiveOnly ? "active" : "all")}" };
         if (options.DocumentDateFrom is { } df) query.Add($"documentDateFrom={df:yyyy-MM-dd}");
@@ -1119,12 +1078,12 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         if (!string.IsNullOrWhiteSpace(options.CreatedBy)) query.Add($"createdBy={Uri.EscapeDataString(options.CreatedBy.Trim())}");
         if (options.IncludePermissions) query.Add("includePermissions=true");
 
-        return await _core.Http.GetByteArrayAsync(await DocumentRelAsync(rootId, "export", cancellationToken) + "?" + string.Join("&", query), cancellationToken);
+        return await _core.Http.GetByteArrayAsync(exportHref + "?" + string.Join("&", query), cancellationToken);
     }
 
     // Imports an export archive (ADR "Repository import"). targetFolderId == null → a new repository; otherwise
     // grafted under that folder. Tenant-admin-only server-side. Returns the imported root's name + counts.
-    public async Task<ImportResultInfo> ImportRepositoryAsync(Guid? targetFolderId, byte[] zip, bool updateExisting = false, bool includePermissions = false, bool merge = false, string leafConflict = "rename", CancellationToken cancellationToken = default)
+    public async Task<ImportResultInfo> ImportRepositoryAsync(string? importHref, byte[] zip, bool updateExisting = false, bool includePermissions = false, bool merge = false, string leafConflict = "rename", CancellationToken cancellationToken = default)
     {
         using var content = new MultipartFormDataContent();
         var file = new ByteArrayContent(zip);
@@ -1135,9 +1094,8 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         // COLLECTION advertises, since the archive's root becomes a sibling of everything in it and belongs to
         // no repository in particular. `?limit=1` so learning one address doesn't drag back a page of
         // ACL-filtered repositories (ADR 0543, issue #416).
-        var basePath = targetFolderId is { } id
-            ? await DocumentRelAsync(id, "import", cancellationToken)
-            : ApiCore.RequireRel(
+        var basePath = importHref
+            ?? ApiCore.RequireRel(
                 await _core.Http.GetFromJsonAsync<JsonElement>(await _core.RootHrefAsync("repositories", cancellationToken) + "?limit=1", cancellationToken),
                 "import",
                 "The repositories collection");
@@ -1153,9 +1111,9 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
             json.GetProperty("skipped").GetInt32());
     }
 
-    public async Task<MaskInfo> GetMaskAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<MaskInfo> GetMaskAsync(string maskHref, CancellationToken cancellationToken = default)
     {
-        var mask = await _core.Http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "mask", cancellationToken), cancellationToken);
+        var mask = await _core.Http.GetFromJsonAsync<JsonElement>(maskHref, cancellationToken);
         return new MaskInfo(
             mask.TryGetProperty("maskId", out var mid) && mid.ValueKind == JsonValueKind.String ? mid.GetGuid() : null,
             mask.TryGetProperty("name", out var n) ? n.GetString() : null,
@@ -1179,30 +1137,30 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     }
 
     // Assigns (or changes) the document's mask. 400 REQUIRED_FIELD_MISSING surfaces as a friendly message.
-    public async Task SetMaskAsync(Guid documentId, Guid maskId, CancellationToken cancellationToken = default)
+    public async Task SetMaskAsync(string maskHref, Guid maskId, CancellationToken cancellationToken = default)
     {
-        var response = await _core.Http.PutAsJsonAsync(await DocumentRelAsync(documentId, "mask", cancellationToken), new { maskId }, cancellationToken);
+        var response = await _core.Http.PutAsJsonAsync(maskHref, new { maskId }, cancellationToken);
         await ApiCore.ThrowIfProblemAsync(response, "Could not assign the mask", cancellationToken);
     }
 
-    public async Task ClearMaskAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task ClearMaskAsync(string maskHref, CancellationToken cancellationToken = default)
     {
-        var response = await _core.Http.DeleteAsync(await DocumentRelAsync(documentId, "mask", cancellationToken), cancellationToken);
+        var response = await _core.Http.DeleteAsync(maskHref, cancellationToken);
         await ApiCore.ThrowIfProblemAsync(response, "Could not clear the mask", cancellationToken);
     }
 
     // Replaces the whole index-data set. 400 FIELD_VALUE_INVALID / MULTIPLE_VALUES_NOT_ALLOWED surface as a message.
-    public async Task SetIndexDataAsync(Guid documentId, IEnumerable<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> fields, CancellationToken cancellationToken = default)
+    public async Task SetIndexDataAsync(string indexDataHref, IEnumerable<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> fields, CancellationToken cancellationToken = default)
     {
         var body = new { fields = fields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.Values }) };
-        var response = await _core.Http.PutAsJsonAsync(await DocumentRelAsync(documentId, "index-data", cancellationToken), body, cancellationToken);
+        var response = await _core.Http.PutAsJsonAsync(indexDataHref, body, cancellationToken);
         await ApiCore.ThrowIfProblemAsync(response, "Could not save the index data", cancellationToken);
     }
 
-    public async Task<SystemFields?> GetSystemFieldsAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<SystemFields?> GetSystemFieldsAsync(string versionsHref, CancellationToken cancellationToken = default)
     {
-        var response = await _core.Http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "versions", cancellationToken), cancellationToken);
-        if (SimplArchiveApiClient.PickCurrentVersionElement(response) is not { } picked)
+        var response = await _core.Http.GetFromJsonAsync<JsonElement>(versionsHref, cancellationToken);
+        if (VersionsClient.PickCurrentVersionElement(response) is not { } picked)
         {
             return null;
         }
@@ -1253,9 +1211,9 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     }
 
     // Sets the document's OCR-language override (ordered codes) and re-runs the searchable-PDF conversion.
-    public async Task SetOcrLanguagesAsync(Guid documentId, IReadOnlyList<string> codes, CancellationToken cancellationToken = default)
+    public async Task SetOcrLanguagesAsync(string ocrLanguagesHref, IReadOnlyList<string> codes, CancellationToken cancellationToken = default)
     {
-        var response = await _core.Http.PutAsJsonAsync(await DocumentRelAsync(documentId, "ocr-languages", cancellationToken), new { languages = codes }, cancellationToken);
+        var response = await _core.Http.PutAsJsonAsync(ocrLanguagesHref, new { languages = codes }, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
             throw new ApiActionException($"Could not set OCR languages ({(int)response.StatusCode}).");
@@ -1305,28 +1263,28 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         await PostBulkAsync(await BulkRelAsync("tags", cancellationToken), new { ids = ids.ToArray(), tags = tags.ToArray() }, cancellationToken);
 
     // The latest confirmed version's preview + download links plus whether the preview is a converted rendition.
-    public async Task<SimplArchiveApiClient.Preview> GetPreviewAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<Preview> GetPreviewAsync(string versionsHref, CancellationToken cancellationToken = default)
     {
-        var response = await _core.Http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "versions", cancellationToken), cancellationToken);
+        var response = await _core.Http.GetFromJsonAsync<JsonElement>(versionsHref, cancellationToken);
         // The current version honoring the server's currentVersionId pointer (issue #265), else the latest confirmed.
-        if (SimplArchiveApiClient.PickCurrentVersionElement(response) is not { } picked)
+        if (VersionsClient.PickCurrentVersionElement(response) is not { } picked)
         {
-            return new SimplArchiveApiClient.Preview(null, false, null, null, null, "");
+            return new Preview(null, false, null, null, null, "");
         }
 
         var confirmed = picked.Version;
 
         var converted = confirmed.TryGetProperty("previewConverted", out var pc) && pc.GetBoolean();
         var extension = confirmed.TryGetProperty("fileExtension", out var fe) ? fe.GetString() ?? "" : "";
-        return new SimplArchiveApiClient.Preview(ApiCore.FindLink(confirmed, "preview"), converted, ApiCore.FindLink(confirmed, "download"), ApiCore.FindLink(confirmed, "text-layout"), ApiCore.FindLink(confirmed, "preview-pages"), extension, ApiCore.FindLink(confirmed, "annotations"));
+        return new Preview(ApiCore.FindLink(confirmed, "preview"), converted, ApiCore.FindLink(confirmed, "download"), ApiCore.FindLink(confirmed, "text-layout"), ApiCore.FindLink(confirmed, "preview-pages"), extension, ApiCore.FindLink(confirmed, "annotations"));
     }
 
-    public async Task PostCommentAsync(Guid documentId, string body, Guid? parentCommentId, CancellationToken cancellationToken = default)
+    public async Task PostCommentAsync(string chatHref, string body, Guid? parentCommentId, CancellationToken cancellationToken = default)
     {
         var payload = parentCommentId is { } parent
             ? new { body, parentMessageId = parent }
             : (object)new { body };
-        using var response = await _core.Http.PostAsJsonAsync(await DocumentRelAsync(documentId, "chat", cancellationToken), payload, cancellationToken);
+        using var response = await _core.Http.PostAsJsonAsync(chatHref, payload, cancellationToken);
         response.EnsureSuccessStatusCode();
     }
 
@@ -1347,14 +1305,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
 
     // Uploads bytes as a NEW version of an existing document (the check-in upload) — POST /versions → PUT bytes
     // → finalize. Distinct from UploadFileAsync, which creates a new document.
-    public async Task UploadNewVersionAsync(Guid documentId, byte[] bytes, string fileExtension, string? comment = null, CancellationToken cancellationToken = default) =>
-        await UploadNewVersionAsync(await DocumentRelAsync(documentId, "versions", cancellationToken), bytes, fileExtension, comment, cancellationToken);
-
-    /// <summary>The same new version, posted to a versions address the caller already holds.</summary>
-    /// <remarks>
-    /// A caller holding the ROW — a folder listing advertises each child's <c>versions</c> rel — follows it
-    /// directly instead of fetching the document again to find it (ADRs 0555/0557).
-    /// </remarks>
     public async Task UploadNewVersionAsync(string versionsHref, byte[] bytes, string fileExtension, string? comment = null, CancellationToken cancellationToken = default)
     {
         // The check-in comment is the new version's "why this revision" note (ADR 0528) — set on the version
@@ -1382,17 +1332,17 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     // The candidate reviewers for submitting a document into the workflow (ADR "Workflow assignable-reviewers
     // endpoint") — a light per-document catalog any editor can read, no CanManageUsers needed. Returns empty on
     // no access (e.g. the caller lacks CanEditContent).
-    public async Task<IReadOnlyList<SimplArchiveApiClient.UserOptionInfo>> GetAssignableReviewersAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<UserOptionInfo>> GetAssignableReviewersAsync(string assignableReviewersHref, CancellationToken cancellationToken = default)
     {
         try
         {
-            var json = await _core.Http.GetFromJsonAsync<JsonElement>(await DocumentRelAsync(documentId, "assignable-reviewers", cancellationToken), cancellationToken);
-            var list = new List<SimplArchiveApiClient.UserOptionInfo>();
+            var json = await _core.Http.GetFromJsonAsync<JsonElement>(assignableReviewersHref, cancellationToken);
+            var list = new List<UserOptionInfo>();
             if (json.TryGetProperty("reviewers", out var reviewers))
             {
                 foreach (var u in reviewers.EnumerateArray())
                 {
-                    list.Add(new SimplArchiveApiClient.UserOptionInfo(u.GetProperty("id").GetGuid(), u.GetProperty("displayName").GetString() ?? ""));
+                    list.Add(new UserOptionInfo(u.GetProperty("id").GetGuid(), u.GetProperty("displayName").GetString() ?? ""));
                 }
             }
 
@@ -1462,7 +1412,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     }
 
 
-
     /// <summary>
     /// A folder's contents AND its persisted contents order, from the one listing that already carries both.
     /// Following rels must not turn one screen into N requests, and the order travelling in the children
@@ -1485,22 +1434,28 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     }
 
 
-
     /// <summary>
     /// Every address a document advertises, from ONE read (ADR 0543/0555). For a caller that holds an id and
     /// needs several of the document's sub-resources at once — opening a folder wants children, references and
     /// the contents order — this is what keeps "follow a rel" from meaning "fetch the document once per rel".
     /// </summary>
-    public async Task<IReadOnlyDictionary<string, string>> GetDocumentLinksAsync(Guid documentId, CancellationToken cancellationToken = default) =>
-        ApiCore.ParseLinks(await _core.Http.GetFromJsonAsync<JsonElement>(DocumentAddress(documentId), cancellationToken))
-        ?? throw new InvalidOperationException($"Document {documentId} advertised no links at all (ADR 0543).");
+    /// <summary>
+    /// One rel, resolved by fetching the resource at its ADVERTISED self address and following what it
+    /// offers (ADR 0559): for the caller whose row advertises `self` but not the sub-resource it needs.
+    /// Throws when the resource does not offer the rel — that absence is the server's answer (ADR 0543).
+    /// </summary>
+    public async Task<string> RelViaSelfAsync(string documentSelfHref, string rel, CancellationToken cancellationToken = default) =>
+        (await GetDocumentLinksAsync(documentSelfHref, cancellationToken)).TryGetValue(rel, out var href)
+            ? href
+            : throw new InvalidOperationException($"The document advertised no '{rel}' rel (ADR 0543).");
+
+    public async Task<IReadOnlyDictionary<string, string>> GetDocumentLinksAsync(string documentSelfHref, CancellationToken cancellationToken = default) =>
+        ApiCore.ParseLinks(await _core.Http.GetFromJsonAsync<JsonElement>(documentSelfHref, cancellationToken))
+        ?? throw new InvalidOperationException($"'{documentSelfHref}' advertised no links at all (ADR 0543).");
 
 
-
-    public async Task<List<Comment>> GetCommentsAsync(Guid documentId, CancellationToken cancellationToken = default) =>
-        (await GetChatAsync(documentId, cancellationToken)).Messages;
-
-
+    public async Task<List<Comment>> GetCommentsAsync(string chatHref, CancellationToken cancellationToken = default) =>
+        (await GetChatAsync(chatHref, cancellationToken)).Messages;
 
 
     /// <summary>An inline preview of a check-out's WORKING COPY — what you are about to check in.</summary>
@@ -1508,9 +1463,9 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     /// Follows the row's own `preview` rel (ADRs 0543/0555). The rel is absent until a working copy has been
     /// saved, and its absence means exactly that — there is nothing to preview — so it is not an error.
     /// </remarks>
-    public async Task<byte[]> DownloadCurrentVersionAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async Task<byte[]> DownloadCurrentVersionAsync(string versionsHref, CancellationToken cancellationToken = default)
     {
-        var preview = await GetPreviewAsync(documentId, cancellationToken);
+        var preview = await GetPreviewAsync(versionsHref, cancellationToken);
         if (preview.DownloadUrl is null)
         {
             throw new ApiActionException("This document has no downloadable version.");
@@ -1520,4 +1475,24 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         return bytes;
     }
 
+    public async Task CreateTagAsync(string name, string? color, CancellationToken cancellationToken = default)
+    {
+        var resp = await _core.Http.PostAsJsonAsync(await _core.RootHrefAsync("tags", cancellationToken), new { name, color }, cancellationToken);
+        if (!resp.IsSuccessStatusCode) throw new ApiActionException(await SimplArchiveApiClient.ErrorMessageAsync(resp, "Could not add the tag."));
+    }
+    // Writes the rights at the address the ROW gave us for writing them — `grant` on a principal being added,
+    // `edit` on an entry already there. One method, because it is one operation: the two rels differ only in
+    // which side of the same address the server chose to advertise (ADR 0555).
+    public async Task SetAclEntryAsync(IAdvertisesLinks row, AclRights rights, CancellationToken cancellationToken = default)
+    {
+        var href = row.Href("grant") ?? row.Href("edit")
+            ?? throw new InvalidOperationException($"The row '{row.Name}' advertised neither 'grant' nor 'edit' — you may not change its access (ADR 0543/0555).");
+        using var response = await _core.Http.PutAsJsonAsync(href, rights, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new ApiActionException(Strings.Get("MaInsufficientRights"));
+        }
+
+        await SimplArchiveApiClient.ThrowIfProblemAsync(response, Strings.Get("MaLoadFailed"), cancellationToken);
+    }
 }

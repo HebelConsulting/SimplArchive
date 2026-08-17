@@ -37,10 +37,10 @@ public class DesktopApiErrorLocalizationTests
         // A throwaway folder, frozen by a hold the demo admin may place (CanLegalHold via the demo seed).
         var repo = (await api.Documents.GetRepositoriesAsync())[0];
         var folderName = $"i18n-{suffix}";
-        await api.Documents.CreateFolderAsync(repo.Id, folderName);
+        await api.Documents.CreateFolderAsync(repo.Href("children"), folderName);
         var folder = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == folderName);
-        var hold = await api.CreateLegalHoldAsync($"Matter {suffix}", "localisation guard");
-        await api.AddLegalHoldItemAsync(hold, folder.Id);
+        var hold = await api.LegalHolds.CreateLegalHoldAsync($"Matter {suffix}", "localisation guard");
+        await api.LegalHolds.AddLegalHoldItemAsync(hold, folder.Id);
 
         // Only CurrentUICulture — never Culture.Apply, which sets the process-global DefaultThreadCurrentUICulture
         // and would leak German into the culture-dependent messages other tests assert on in English. The setter
@@ -51,7 +51,7 @@ public class DesktopApiErrorLocalizationTests
             CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("de");
 
             var error = await Assert.ThrowsAsync<ApiActionException>(
-                () => api.Documents.SetIndexDataAsync(folder.Id, []));
+                () => api.Documents.SetIndexDataAsync(folder.Href("index-data"), []));
 
             Assert.Equal(
                 "Dieses Dokument unterliegt einem Legal Hold und kann nicht geändert werden.",
@@ -68,8 +68,8 @@ public class DesktopApiErrorLocalizationTests
         finally
         {
             CultureInfo.CurrentUICulture = original;
-            await api.ReleaseLegalHoldAsync(hold);
-            await api.Documents.DeleteAsync(folder.Id);
+            await api.LegalHolds.ReleaseLegalHoldAsync(hold);
+            await api.Documents.DeleteAsync(folder.Href("self"));
         }
     }
 }

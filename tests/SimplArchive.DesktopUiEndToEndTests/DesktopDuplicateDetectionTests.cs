@@ -23,7 +23,7 @@ public class DesktopDuplicateDetectionTests
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var content = Encoding.UTF8.GetBytes($"desktop duplicate content {Guid.NewGuid():N}\n");
         var fileName = $"dupd-{Guid.NewGuid():N}.txt";
-        await api.Documents.UploadFileAsync(repo.Id, fileName, content);
+        await api.Documents.UploadFileAsync(repo.Href("children"), fileName, content);
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
 
         // The same content's hash finds the just-uploaded document (this is what the client computes pre-upload).

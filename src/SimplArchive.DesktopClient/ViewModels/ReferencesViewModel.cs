@@ -13,16 +13,27 @@ public sealed partial class ReferencesViewModel : ObservableObject
 {
     private readonly SimplArchiveApiClient _api;
 
-    public ReferencesViewModel(SimplArchiveApiClient api, Guid itemId, string itemName)
+    public ReferencesViewModel(SimplArchiveApiClient api, Guid itemId, string itemName, string documentSelfHref, string? referencingFoldersHref = null)
     {
         _api = api;
         ItemId = itemId;
         ItemName = itemName;
+        DocumentSelfHref = documentSelfHref;
+        _referencingFoldersHref = referencingFoldersHref;
     }
 
+    // For NAVIGATING to a row after the dialog closes — a local selection concern, never an address.
     public Guid ItemId { get; }
 
     public string ItemName { get; }
+
+    /// <summary>The item's document address, from the row that opened the dialog (ADR 0555/0559) — what
+    /// promote follows.</summary>
+    public string DocumentSelfHref { get; }
+
+    // The row's advertised referencing-folders address; a row that did not carry it (a repository root) is
+    // resolved through its self address once, at load (ADR 0559).
+    private readonly string? _referencingFoldersHref;
 
     // The item's real home folder (ADR 0506) — null when it's a repository root or the caller can't see the
     // parent, in which case the primary row is hidden and no promote is offered.
@@ -41,14 +52,15 @@ public sealed partial class ReferencesViewModel : ObservableObject
         Items.Clear();
         try
         {
-            var view = await _api.Documents.GetReferencesViewAsync(ItemId);
+            var view = await _api.Documents.GetReferencesViewAsync(
+                _referencingFoldersHref ?? await _api.Documents.RelViaSelfAsync(DocumentSelfHref, "referencing-folders"));
             PrimaryLocation = view.Primary is { } p
-                ? new ReferencingFolderViewModel { Id = p.Id, Name = p.Name, Path = p.Path }
+                ? new ReferencingFolderViewModel { Id = p.Id, Name = p.Name, Path = p.Path, OpenHref = p.OpenHref }
                 : null;
 
             foreach (var folder in view.Folders)
             {
-                Items.Add(new ReferencingFolderViewModel { Id = folder.Id, Name = folder.Name, Path = folder.Path });
+                Items.Add(new ReferencingFolderViewModel { Id = folder.Id, Name = folder.Name, Path = folder.Path, OpenHref = folder.OpenHref });
             }
 
             Status = Items.Count == 0
@@ -70,7 +82,11 @@ public sealed class ReferencingFolderViewModel
     public required string Name { get; init; }
 
     public required string Path { get; init; }
+
+    // The row's own `open` address (ADR 0555) — what navigating to the folder follows.
+    public string? OpenHref { get; init; }
 }
 
-// The dialog's outcome: navigate to FolderId, and when Promote is set, first make it the item's primary location.
-public sealed record ReferencesDialogResult(Guid FolderId, bool Promote);
+// The dialog's outcome: navigate to the folder (by its row's advertised address; the id only selects the row
+// afterwards), and when Promote is set, first make it the item's primary location.
+public sealed record ReferencesDialogResult(Guid FolderId, string? FolderHref, bool Promote);

@@ -467,12 +467,13 @@ internal static class Program
         }
 
         // Check that the desktop client resolves a multi-page TIFF into separate page images (ADR "Multi-page
-        // TIFF preview pages"): `--multipage-test <token> <documentId>`. Exercises the real api-client parse +
-        // download; skips Avalonia image decoding (that needs a display).
+        // TIFF preview pages"): `--multipage-test <token> <documentName>`. Exercises the real api-client parse +
+        // download; skips Avalonia image decoding (that needs a display). Takes the NAME (searched across the
+        // visible repositories' children) — an id alone has no address any more (#443).
         var multipageIndex = Array.IndexOf(args, "--multipage-test");
         if (multipageIndex >= 0 && multipageIndex + 2 < args.Length)
         {
-            RunMultipageTestAsync(args[multipageIndex + 1], Guid.Parse(args[multipageIndex + 2])).GetAwaiter().GetResult();
+            RunMultipageTestAsync(args[multipageIndex + 1], args[multipageIndex + 2]).GetAwaiter().GetResult();
             return;
         }
 
@@ -487,10 +488,14 @@ internal static class Program
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
-    private static async Task RunMultipageTestAsync(string token, Guid documentId)
+    private static async Task RunMultipageTestAsync(string token, string documentName)
     {
         var api = new Services.SimplArchiveApiClient(token);
-        var preview = await api.Documents.GetPreviewAsync(documentId);
+        var document = (await api.Documents.GetRepositoriesAsync())
+            .SelectMany(r => api.Documents.GetChildrenAsync(r.Href("children")).GetAwaiter().GetResult())
+            .FirstOrDefault(c => c.Name == documentName)
+            ?? throw new InvalidOperationException($"No document named '{documentName}' in any visible repository's top level.");
+        var preview = await api.Documents.GetPreviewAsync(document.Href("versions"));
         Console.WriteLine($"preview-pages link present: {preview.PreviewPagesUrl is not null}");
         if (preview.PreviewPagesUrl is not { } url)
         {
@@ -498,7 +503,7 @@ internal static class Program
             return;
         }
 
-        var pages = await api.GetPreviewPagesAsync(url);
+        var pages = await api.Versions.GetPreviewPagesAsync(url);
         Console.WriteLine($"page urls: {pages?.Count ?? 0}");
         if (pages is null)
         {
@@ -731,7 +736,7 @@ internal static class Program
         var image = new Avalonia.Media.Imaging.Bitmap(stream);
 
         // Real boxes measured from the sample invoice's OCR layout (normalized 0..1).
-        var words = new List<Services.SimplArchiveApiClient.TextLayoutBox>
+        var words = new List<Services.VersionsClient.TextLayoutBox>
         {
             new("Alpsteinwerk", 0.0871, 0.0490, 0.2315, 0.0251),
             new("RECHNUNG", 0.0831, 0.2668, 0.2395, 0.0257),
@@ -751,7 +756,7 @@ internal static class Program
         var root = (await api.Documents.GetRepositoriesAsync()).First();
         Console.WriteLine($"creating folder '{name}' in '{root.Name}'…");
 
-        await api.Documents.CreateFolderAsync(root.Id, name);
+        await api.Documents.CreateFolderAsync(root.Href("children"), name);
 
         var match = (await api.Documents.GetChildrenAsync(root.Href("children"))).FirstOrDefault(c => c.Name == name);
         Console.WriteLine(match is null
@@ -767,18 +772,18 @@ internal static class Program
         var original = $"modify-test-{Guid.NewGuid():N}";
         var renamed = $"{original}-renamed";
         Console.WriteLine($"creating folder '{original}' in '{root.Name}'…");
-        await api.Documents.CreateFolderAsync(root.Id, original);
+        await api.Documents.CreateFolderAsync(root.Href("children"), original);
         var created = (await api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == original);
 
         Console.WriteLine($"renaming to '{renamed}'…");
-        await api.Documents.RenameAsync(created.Id, renamed);
+        await api.Documents.RenameAsync(created.Href("self"), renamed);
         var afterRename = await api.Documents.GetChildrenAsync(root.Href("children"));
         Console.WriteLine(afterRename.Any(c => c.Name == renamed) && afterRename.All(c => c.Name != original)
             ? "OK: rename reflected."
             : "FAILED: rename not reflected.");
 
         Console.WriteLine("deleting…");
-        await api.Documents.DeleteAsync(created.Id);
+        await api.Documents.DeleteAsync(created.Href("self"));
         var afterDelete = await api.Documents.GetChildrenAsync(root.Href("children"));
         var recycled = await api.Documents.GetRecycleBinAsync(root);
         Console.WriteLine(afterDelete.All(c => c.Id != created.Id) && recycled.Any(r => r.Id == created.Id)
@@ -794,7 +799,7 @@ internal static class Program
             : "FAILED: restore state wrong.");
 
         // Clean up so repeated runs don't accumulate folders.
-        await api.Documents.DeleteAsync(created.Id);
+        await api.Documents.DeleteAsync(created.Href("self"));
     }
 
     private static async Task RunSaveAsTestAsync(string accessToken, string outPath)
@@ -805,10 +810,10 @@ internal static class Program
         var name = $"saveas-test-{Guid.NewGuid():N}.txt";
         var content = System.Text.Encoding.UTF8.GetBytes("save-as round-trip test\n");
         Console.WriteLine($"uploading '{name}' to '{root.Name}'…");
-        await api.Documents.UploadFileAsync(root.Id, name, content);
+        await api.Documents.UploadFileAsync(root.Href("children"), name, content);
         var document = (await api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == name);
 
-        var preview = await api.Documents.GetPreviewAsync(document.Id);
+        var preview = await api.Documents.GetPreviewAsync(document.Href("versions"));
         if (preview.DownloadUrl is null)
         {
             Console.WriteLine("FAILED: no download URL.");
@@ -821,7 +826,7 @@ internal static class Program
             ? $"OK: saved {bytes.Length} bytes -> {outPath}; round-trip matches."
             : "FAILED: saved bytes don't match the uploaded content.");
 
-        await api.Documents.DeleteAsync(document.Id); // cleanup
+        await api.Documents.DeleteAsync(document.Href("self")); // cleanup
     }
 
     private static async Task RunReferenceTestAsync(string accessToken)
@@ -830,33 +835,33 @@ internal static class Program
         var root = (await api.Documents.GetRepositoriesAsync()).First();
         var s = Guid.NewGuid().ToString("N")[..6];
 
-        await api.Documents.CreateFolderAsync(root.Id, $"ref-A-{s}");
-        await api.Documents.CreateFolderAsync(root.Id, $"ref-B-{s}");
+        await api.Documents.CreateFolderAsync(root.Href("children"), $"ref-A-{s}");
+        await api.Documents.CreateFolderAsync(root.Href("children"), $"ref-B-{s}");
         var a = (await api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == $"ref-A-{s}");
         var b = (await api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == $"ref-B-{s}");
-        await api.Documents.CreateFolderAsync(a.Id, $"ref-C-{s}");
+        await api.Documents.CreateFolderAsync(a.Href("children"), $"ref-C-{s}");
         var c = (await api.Documents.GetChildrenAsync(a.Href("children"))).First(n => n.Name == $"ref-C-{s}");
 
         Console.WriteLine("moving C from A to B…");
-        await api.Documents.MoveAsync(c.Id, b.Id);
+        await api.Documents.MoveAsync(c.Href("self"), b.Id);
         var cInB = (await api.Documents.GetChildrenAsync(b.Href("children"))).Any(n => n.Id == c.Id);
         var cGoneFromA = !(await api.Documents.GetChildrenAsync(a.Href("children"))).Any(n => n.Id == c.Id);
         Console.WriteLine(cInB && cGoneFromA ? "OK: moved." : "FAILED: move state wrong.");
 
         Console.WriteLine("referencing C into A…");
-        await api.Documents.CreateReferenceAsync(a.Id, c.Id);
-        var refs = await api.Documents.GetReferencesAsync(a.Id);
+        await api.Documents.CreateReferenceAsync(a.Href("references"), c.Id);
+        var refs = await api.Documents.GetReferencesAsync(a.Href("references"));
         var reference = refs.FirstOrDefault(r => r.TargetId == c.Id);
         Console.WriteLine(reference is not null && reference.RealParentId == b.Id
-            ? $"OK: reference present, realParentId points to B; go-to folder = '{await api.Documents.GetDocumentNameAsync(reference.RealParentId!.Value)}'."
+            ? $"OK: reference present, realParentId points to B; go-to folder = '{(await api.GetDocumentByAddressAsync(reference.Links!["go-to"])).Name}'."
             : "FAILED: reference/realParentId wrong.");
 
         Console.WriteLine("removing the reference…");
         await api.Documents.DeleteReferenceAsync(reference!.DeleteHref!);
-        Console.WriteLine((await api.Documents.GetReferencesAsync(a.Id)).Count == 0 ? "OK: reference removed." : "FAILED: reference still present.");
+        Console.WriteLine((await api.Documents.GetReferencesAsync(a.Href("references"))).Count == 0 ? "OK: reference removed." : "FAILED: reference still present.");
 
-        await api.Documents.DeleteAsync(a.Id); // cleanup (cascades C)
-        await api.Documents.DeleteAsync(b.Id);
+        await api.Documents.DeleteAsync(a.Href("self")); // cleanup (cascades C)
+        await api.Documents.DeleteAsync(b.Href("self"));
     }
 
     private static async Task RunSearchTestAsync(string accessToken, string query)
@@ -877,26 +882,26 @@ internal static class Program
         var root = (await api.Documents.GetRepositoriesAsync()).First();
         var s = Guid.NewGuid().ToString("N")[..6];
 
-        await api.Documents.CreateFolderAsync(root.Id, $"rt-A-{s}");
-        await api.Documents.CreateFolderAsync(root.Id, $"rt-B-{s}");
+        await api.Documents.CreateFolderAsync(root.Href("children"), $"rt-A-{s}");
+        await api.Documents.CreateFolderAsync(root.Href("children"), $"rt-B-{s}");
         var a = (await api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == $"rt-A-{s}");
         var b = (await api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == $"rt-B-{s}");
-        await api.Documents.CreateFolderAsync(a.Id, $"rt-C-{s}");
+        await api.Documents.CreateFolderAsync(a.Href("children"), $"rt-C-{s}");
         var c = (await api.Documents.GetChildrenAsync(a.Href("children"))).First(n => n.Name == $"rt-C-{s}");
 
-        await api.Documents.CreateReferenceAsync(b.Id, c.Id);
+        await api.Documents.CreateReferenceAsync(b.Href("references"), c.Id);
 
         var cRow = (await api.Documents.GetChildrenAsync(a.Href("children"))).First(n => n.Id == c.Id);
         Console.WriteLine(cRow.HasReferences ? "OK: hasReferences=true on the referenced item." : "FAILED: hasReferences not set.");
 
-        var folders = await api.Documents.GetReferencingFoldersAsync(c.Id);
+        var folders = await api.Documents.GetReferencingFoldersAsync(c.Href("referencing-folders"));
         var match = folders.FirstOrDefault(f => f.Id == b.Id);
         Console.WriteLine(match is not null
             ? $"OK: referencing folder listed with path '{match.Path}'."
             : "FAILED: referencing folder not listed.");
 
-        await api.Documents.DeleteAsync(a.Id);
-        await api.Documents.DeleteAsync(b.Id);
+        await api.Documents.DeleteAsync(a.Href("self"));
+        await api.Documents.DeleteAsync(b.Href("self"));
     }
 
     private static async Task RunUploadTestAsync(string accessToken, string filePath)
@@ -906,7 +911,7 @@ internal static class Program
         var name = Path.GetFileName(filePath);
         Console.WriteLine($"uploading '{name}' into '{root.Name}'…");
 
-        await api.Documents.UploadFileAsync(root.Id, name, await File.ReadAllBytesAsync(filePath));
+        await api.Documents.UploadFileAsync(root.Href("children"), name, await File.ReadAllBytesAsync(filePath));
 
         var match = (await api.Documents.GetChildrenAsync(root.Href("children"))).FirstOrDefault(c => c.Name == name);
         Console.WriteLine(match is null
@@ -921,26 +926,26 @@ internal static class Program
         var repo = (await api.Documents.GetRepositoriesAsync()).First();
         Console.WriteLine($"repo '{repo.Name}', me {me.UserId}");
 
-        await api.Documents.UploadFileAsync(repo.Id, "wf-desktop-test.txt", System.Text.Encoding.UTF8.GetBytes("workflow desktop test"));
+        await api.Documents.UploadFileAsync(repo.Href("children"), "wf-desktop-test.txt", System.Text.Encoding.UTF8.GetBytes("workflow desktop test"));
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == "wf-desktop-test");
         Console.WriteLine($"created doc {doc.Name} ({doc.Id})");
 
-        var wf = await api.Documents.GetWorkflowAsync(doc.Id);
+        var wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
         Console.WriteLine($"initial: {wf?.StatusName} | links: {string.Join(",", wf?.Links.Keys ?? [])}");
 
         await api.Workflow.PostWorkflowActionAsync(wf!.Links["submit"], new { reviewerId = me.UserId });
-        wf = await api.Documents.GetWorkflowAsync(doc.Id);
+        wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
         Console.WriteLine($"after submit: {wf?.StatusName} | assignedTo: {wf?.AssignedToName} | links: {string.Join(",", wf?.Links.Keys ?? [])}");
 
         var tasks = await api.Workflow.GetTasksAsync();
         Console.WriteLine($"tasks: {tasks.Count} -> {string.Join(",", tasks.Select(t => $"{t.DocumentName}/v{t.VersionNumber}"))}");
 
         await api.Workflow.PostWorkflowActionAsync(wf!.Links["approve"], null);
-        wf = await api.Documents.GetWorkflowAsync(doc.Id);
+        wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
         Console.WriteLine($"after approve: {wf?.StatusName} | links: {string.Join(",", wf?.Links.Keys ?? [])}");
 
         await api.Workflow.PostWorkflowActionAsync(wf!.Links["release"], null);
-        wf = await api.Documents.GetWorkflowAsync(doc.Id);
+        wf = await api.Documents.GetWorkflowAsync(doc.Href("versions"));
         Console.WriteLine($"after release: {wf?.StatusName}");
         Console.WriteLine("history:");
         foreach (var h in wf!.History)
@@ -977,20 +982,20 @@ internal static class Program
             return;
         }
 
-        var mask = await api.Documents.GetMaskAsync(document.Id);
+        var mask = await api.Documents.GetMaskAsync(document.Href("mask"));
         Console.WriteLine($"mask: {mask.Name ?? "(none)"} v{mask.VersionNumber}");
 
-        var indexData = await api.Documents.GetIndexDataAsync(document.Id);
+        var indexData = await api.Documents.GetIndexDataAsync(document.Href("index-data"));
         Console.WriteLine($"index-data fields: {indexData.Count}");
         foreach (var field in indexData)
         {
             Console.WriteLine($"  {field.FieldName} = {string.Join(", ", field.Values)}");
         }
 
-        var comments = await api.Documents.GetCommentsAsync(document.Id);
+        var comments = await api.Documents.GetCommentsAsync(document.Href("chat"));
         Console.WriteLine($"comments: {comments.Count}");
 
-        var preview = await api.Documents.GetPreviewAsync(document.Id);
+        var preview = await api.Documents.GetPreviewAsync(document.Href("versions"));
         Console.WriteLine($"preview: {(preview.PreviewUrl is null ? "(none)" : "resolved")} converted={preview.PreviewConverted}; download: {(preview.DownloadUrl is null ? "(none)" : "resolved")}");
 
         if (preview.PreviewUrl is not null)

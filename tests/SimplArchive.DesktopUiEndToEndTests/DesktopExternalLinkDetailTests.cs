@@ -11,7 +11,7 @@ namespace SimplArchive.UiEndToEndTests;
 // was TOLD, not in how Avalonia drew it.
 public class DesktopExternalLinkDetailTests
 {
-    private static SimplArchiveApiClient.ExternalLinkInfo Link(
+    private static ExternalLinksClient.ExternalLinkInfo Link(
         string documentName = "", string? revealHref = null, DateTimeOffset? expiresAt = null) =>
         new(
             Id: Guid.NewGuid(),

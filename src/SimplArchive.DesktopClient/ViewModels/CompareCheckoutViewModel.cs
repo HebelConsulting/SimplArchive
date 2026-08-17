@@ -15,7 +15,7 @@ namespace SimplArchive.DesktopClient.ViewModels;
 public sealed partial class CompareCheckoutViewModel : ObservableObject
 {
     private SimplArchiveApiClient? _api;
-    private Guid _documentId;
+    private string? _downloadUrl;
     private string _fileExtension = "";
     private string? _stashDownloadUrl;
 
@@ -28,7 +28,7 @@ public sealed partial class CompareCheckoutViewModel : ObservableObject
     public async Task SetupAsync(SimplArchiveApiClient api, CheckoutClient.CheckoutItem checkout, string documentName, string fileExtension, string? stashDownloadUrl)
     {
         _api = api;
-        _documentId = checkout.Id;
+        _downloadUrl = checkout.DownloadUrl;
         _fileExtension = fileExtension;
         _stashDownloadUrl = stashDownloadUrl;
         DocumentName = documentName;
@@ -70,6 +70,6 @@ public sealed partial class CompareCheckoutViewModel : ObservableObject
         // The staging, the left/right order and the not-installed branch (ADR 0518) live in CheckoutDiffLauncher,
         // which the Check-out row's own button also calls — one implementation, so the two cannot drift apart.
         Status = Strings.Get("StOpeningBc");
-        Status = await CheckoutDiffLauncher.OpenAsync(_api, _documentId, _fileExtension, _stashDownloadUrl);
+        Status = await CheckoutDiffLauncher.OpenAsync(_api, _downloadUrl, _fileExtension, _stashDownloadUrl);
     }
 }

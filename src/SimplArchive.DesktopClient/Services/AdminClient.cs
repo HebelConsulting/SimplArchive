@@ -373,7 +373,7 @@ public sealed class AdminClient(ApiCore core)
 
     // ---- Group membership (ADR "Group membership editing") ------------------------------------------
 
-    public Task<List<SimplArchiveApiClient.UserOptionInfo>> GetGroupMembersAsync(PrincipalInfo group, CancellationToken cancellationToken = default) =>
+    public Task<List<UserOptionInfo>> GetGroupMembersAsync(PrincipalInfo group, CancellationToken cancellationToken = default) =>
         _core.LoadPagedAsync(RequireHref(group, "members"), "members", SimplArchiveApiClient.ParseMember, cancellationToken);
 
     // The API takes the member in the BODY of a POST to the collection now, so the group row's `members`
@@ -389,7 +389,7 @@ public sealed class AdminClient(ApiCore core)
         response.EnsureSuccessStatusCode();
     }
 
-    public async Task RemoveGroupMemberAsync(SimplArchiveApiClient.UserOptionInfo member, CancellationToken cancellationToken = default)
+    public async Task RemoveGroupMemberAsync(UserOptionInfo member, CancellationToken cancellationToken = default)
     {
         var removeHref = member.RemoveHref
             ?? throw new InvalidOperationException("The member row advertised no 'remove' rel (ADR 0543/0555).");
@@ -539,4 +539,36 @@ public sealed class AdminClient(ApiCore core)
             j.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null);
     }
 
+    // Links carries the repository's advertised addresses (`document`, `children`) — see #443.
+    public sealed record AdminPersonalRepoInfo(Guid UserId, string DisplayName, string Email, bool UserIsActive, Guid RepositoryId, bool HasChildren, bool HasSubfolders,
+        IReadOnlyDictionary<string, string>? Links = null)
+    {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
+
+    // Lists every user's personal repository (ADR "Tenant-admin Administration → Users view") — tenant-admin only.
+    public async Task<List<AdminPersonalRepoInfo>> GetAdminPersonalRepositoriesAsync(CancellationToken cancellationToken = default)
+    {
+        // The root's `admin` rel leads to the administration index, which advertises this list — two hops, but
+        // both of them followed rather than assembled, and paid once per admin screen (ADR 0543).
+        var admin = await _core.Http.GetFromJsonAsync<JsonElement>(await _core.RootHrefAsync("admin", cancellationToken), cancellationToken);
+        var json = await _core.Http.GetFromJsonAsync<JsonElement>(ApiCore.RequireRel(admin, "personal-repositories", "The administration index"), cancellationToken);
+        var list = new List<AdminPersonalRepoInfo>();
+        if (json.TryGetProperty("repositories", out var array))
+        {
+            foreach (var r in array.EnumerateArray())
+            {
+                list.Add(new AdminPersonalRepoInfo(
+                    r.GetProperty("userId").GetGuid(),
+                    r.GetProperty("displayName").GetString() ?? "",
+                    r.TryGetProperty("email", out var e) ? e.GetString() ?? "" : "",
+                    r.TryGetProperty("userIsActive", out var a) && a.GetBoolean(),
+                    r.GetProperty("repositoryId").GetGuid(),
+                    r.TryGetProperty("hasChildren", out var hc) && hc.GetBoolean(),
+                    r.TryGetProperty("hasSubfolders", out var hs) && hs.GetBoolean(),
+                    ApiCore.ParseLinks(r)));
+            }
+        }
+        return list;
+    }
 }

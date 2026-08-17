@@ -20,7 +20,7 @@ public partial class ReferencesDialog : Window
     {
         if (sender is Control { DataContext: ReferencingFolderViewModel folder })
         {
-            Close(new ReferencesDialogResult(folder.Id, Promote: false));
+            Close(new ReferencesDialogResult(folder.Id, folder.OpenHref, Promote: false));
         }
     }
 
@@ -28,7 +28,7 @@ public partial class ReferencesDialog : Window
     {
         if (DataContext is ReferencesViewModel { PrimaryLocation: { } primary })
         {
-            Close(new ReferencesDialogResult(primary.Id, Promote: false));
+            Close(new ReferencesDialogResult(primary.Id, primary.OpenHref, Promote: false));
         }
     }
 
@@ -44,7 +44,7 @@ public partial class ReferencesDialog : Window
         var message = string.Format(Strings.Get("RefMakePrimaryConfirm"), folder.Name, primary.Name);
         if (await new ConfirmDialog(message, Strings.Get("RefMakePrimary")).ShowDialog<bool>(this))
         {
-            Close(new ReferencesDialogResult(folder.Id, Promote: true));
+            Close(new ReferencesDialogResult(folder.Id, folder.OpenHref, Promote: true));
         }
     });
 

@@ -15,12 +15,12 @@ namespace SimplArchive.DesktopClient.ViewModels;
 public partial class ReminderDialogViewModel : ObservableObject
 {
     private readonly SimplArchiveApiClient _api;
-    private readonly Guid _documentId;
+    private readonly string _remindersHref;
 
-    public ReminderDialogViewModel(SimplArchiveApiClient api, Guid documentId, string documentName)
+    public ReminderDialogViewModel(SimplArchiveApiClient api, string remindersHref, string documentName)
     {
         _api = api;
-        _documentId = documentId;
+        _remindersHref = remindersHref;
         DocumentName = documentName;
     }
 
@@ -32,11 +32,11 @@ public partial class ReminderDialogViewModel : ObservableObject
     [ObservableProperty] private TimeSpan? _reminderTime = new(9, 0, 0);
     [ObservableProperty] private string _note = "";
     [ObservableProperty] private int _recurrenceIndex;
-    [ObservableProperty] private SimplArchiveApiClient.UserOptionInfo? _selectedTarget;
+    [ObservableProperty] private UserOptionInfo? _selectedTarget;
     [ObservableProperty] private string _status = "";
 
     // The target picker: "Myself" (Id = Empty) first, then the tenant's active users.
-    public ObservableCollection<SimplArchiveApiClient.UserOptionInfo> Targets { get; } = [];
+    public ObservableCollection<UserOptionInfo> Targets { get; } = [];
     public ObservableCollection<RemindersClient.ReminderInfo> Reminders { get; } = [];
 
     // The reminders collection is read FIRST because it carries both halves of this dialog: the rows, and the
@@ -45,14 +45,14 @@ public partial class ReminderDialogViewModel : ObservableObject
     public async Task LoadAsync()
     {
         Targets.Clear();
-        Targets.Add(new SimplArchiveApiClient.UserOptionInfo(Guid.Empty, "Myself"));
+        Targets.Add(new UserOptionInfo(Guid.Empty, "Myself"));
         SelectedTarget = Targets[0];
 
         string? targetsHref = null;
         Reminders.Clear();
         try
         {
-            var (reminders, href) = await _api.Documents.GetRemindersViewAsync(_documentId);
+            var (reminders, href) = await _api.Documents.GetRemindersViewAsync(_remindersHref);
             targetsHref = href;
             foreach (var r in reminders)
             {
@@ -89,7 +89,7 @@ public partial class ReminderDialogViewModel : ObservableObject
         Reminders.Clear();
         try
         {
-            foreach (var r in await _api.Documents.GetRemindersAsync(_documentId))
+            foreach (var r in await _api.Documents.GetRemindersAsync(_remindersHref))
             {
                 Reminders.Add(r);
             }
@@ -112,7 +112,7 @@ public partial class ReminderDialogViewModel : ObservableObject
         {
             var when = new DateTimeOffset(date.Date + (ReminderTime ?? TimeSpan.Zero), date.Offset);
             var targetId = SelectedTarget is { } t && t.Id != Guid.Empty ? t.Id : (Guid?)null;
-            await _api.Documents.CreateReminderAsync(_documentId, when, string.IsNullOrWhiteSpace(Note) ? null : Note, RecurrenceIndex, targetId);
+            await _api.Documents.CreateReminderAsync(_remindersHref, when, string.IsNullOrWhiteSpace(Note) ? null : Note, RecurrenceIndex, targetId);
             Note = "";
             Status = Strings.Get("StReminderSet");
             await ReloadRemindersAsync();

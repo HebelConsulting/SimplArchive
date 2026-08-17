@@ -24,8 +24,10 @@ namespace SimplArchive.DesktopClient.Services;
 public static class CheckoutDiffLauncher
 {
     /// <summary>Opens the comparison; returns a status message, or an empty string on success.</summary>
+    /// <remarks>Both sides come from URLs the check-out ROW advertised (ADR 0555): the current version's
+    /// presigned download and the working-copy stash's.</remarks>
     public static async Task<string> OpenAsync(
-        SimplArchiveApiClient api, Guid documentId, string fileExtension, string? stashDownloadUrl)
+        SimplArchiveApiClient api, string? downloadUrl, string fileExtension, string? stashDownloadUrl)
     {
         if (!BeyondCompare.IsInstalled)
         {
@@ -33,7 +35,7 @@ public static class CheckoutDiffLauncher
             return string.Empty;
         }
 
-        if (stashDownloadUrl is null)
+        if (stashDownloadUrl is null || downloadUrl is null)
         {
             // No working copy staged means there is no right-hand side to compare against — the row should not
             // have offered this, so say so rather than opening the tool on one file.
@@ -43,7 +45,7 @@ public static class CheckoutDiffLauncher
         try
         {
             // Left: the current confirmed version (what the server diffs against). Right: the working-copy stash.
-            var current = await StageAsync(await api.Documents.DownloadCurrentVersionAsync(documentId), "current", fileExtension);
+            var current = await StageAsync((await SimplArchiveApiClient.DownloadAsync(downloadUrl)).Bytes, "current", fileExtension);
             var working = await StageAsync(await api.Checkout.DownloadStashAsync(stashDownloadUrl), "working", fileExtension);
             return BeyondCompare.Launch(current, working) ? string.Empty : Strings.Get("StErrBeyondCompareLaunch");
         }

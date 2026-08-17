@@ -11,7 +11,10 @@ namespace SimplArchive.DesktopClient.Services;
 
 // One contents-list item to stage for a drag-out (issue #266). Kept decoupled from NodeViewModel so the stager is
 // unit-testable. IsFolder = a Document with no confirmed version (a folder); everything else is a leaf document.
-public sealed record DragOutItem(Guid Id, string Name, bool IsFolder);
+// The hrefs are the ROW's advertised addresses (ADR 0555): a document stages through its `versions`, a folder
+// recurses through its `children`; an item whose row did not carry the needed address is skipped (best-effort,
+// same as a failed download).
+public sealed record DragOutItem(string Name, bool IsFolder, string? VersionsHref, string? ChildrenHref);
 
 // Stages contents-list items as **real OS files in a fresh temp folder** so they can be dragged out to the OS
 // filesystem (Finder/Explorer/desktop) — issue #266: a **document** → its current version file (`<stem><ext>`),
@@ -34,7 +37,9 @@ public static class DragOutStager
             {
                 staged.Add(item.IsFolder
                     ? await StageFolderZipAsync(api, item, dir, cancellationToken)
-                    : await StageDocumentAsync(api, item.Id, item.Name, dir, cancellationToken));
+                    : await StageDocumentAsync(api,
+                        item.VersionsHref ?? throw new InvalidOperationException("The row advertised no 'versions' rel (ADR 0543)."),
+                        item.Name, dir, cancellationToken));
             }
             catch (Exception)
             {
@@ -45,15 +50,15 @@ public static class DragOutStager
         return staged;
     }
 
-    private static async Task<string> StageDocumentAsync(SimplArchiveApiClient api, Guid documentId, string stem, string dir, CancellationToken ct)
+    private static async Task<string> StageDocumentAsync(SimplArchiveApiClient api, string versionsHref, string stem, string dir, CancellationToken ct)
     {
-        var preview = await api.Documents.GetPreviewAsync(documentId, ct);
+        var preview = await api.Documents.GetPreviewAsync(versionsHref, ct);
         if (preview.DownloadUrl is null)
         {
             throw new InvalidOperationException("The document has no downloadable version.");
         }
 
-        var bytes = await api.DownloadVersionBytesAsync(preview.DownloadUrl, ct);
+        var bytes = await api.Versions.DownloadVersionBytesAsync(preview.DownloadUrl, ct);
         var path = UniquePath(dir, MainWindowViewModel.WithExtension(Sanitize(stem), preview.FileExtension));
         await File.WriteAllBytesAsync(path, bytes, ct);
         return path;
@@ -64,7 +69,9 @@ public static class DragOutStager
         var zipPath = UniquePath(dir, Sanitize(folder.Name) + ".zip");
         using (var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create))
         {
-            await AddFolderAsync(api, folder.Id, "", zip, ct);
+            await AddFolderAsync(api,
+                folder.ChildrenHref ?? throw new InvalidOperationException("The row advertised no 'children' rel (ADR 0543)."),
+                "", zip, ct);
         }
 
         return zipPath;
@@ -72,26 +79,26 @@ public static class DragOutStager
 
     // Recursively adds a folder's documents to the zip under `prefix` (its path within the archive). A child
     // folder recurses one level deeper; a leaf document is written as an entry named `<stem><ext>`.
-    private static async Task AddFolderAsync(SimplArchiveApiClient api, Guid folderId, string prefix, ZipArchive zip, CancellationToken ct)
+    private static async Task AddFolderAsync(SimplArchiveApiClient api, string childrenHref, string prefix, ZipArchive zip, CancellationToken ct)
     {
-        foreach (var child in await api.Documents.GetChildrenAsync(folderId, ct))
+        foreach (var child in await api.Documents.GetChildrenAsync(childrenHref, ct))
         {
             var name = Sanitize(child.Name);
             if (!child.HasVersions)
             {
-                await AddFolderAsync(api, child.Id, prefix + name + "/", zip, ct);
+                await AddFolderAsync(api, child.Href("children"), prefix + name + "/", zip, ct);
                 continue;
             }
 
             try
             {
-                var preview = await api.Documents.GetPreviewAsync(child.Id, ct);
+                var preview = await api.Documents.GetPreviewAsync(child.Href("versions"), ct);
                 if (preview.DownloadUrl is null)
                 {
                     continue;
                 }
 
-                var bytes = await api.DownloadVersionBytesAsync(preview.DownloadUrl, ct);
+                var bytes = await api.Versions.DownloadVersionBytesAsync(preview.DownloadUrl, ct);
                 var entry = zip.CreateEntry(prefix + MainWindowViewModel.WithExtension(name, preview.FileExtension), CompressionLevel.Fastest);
                 await using var stream = entry.Open();
                 await stream.WriteAsync(bytes, ct);

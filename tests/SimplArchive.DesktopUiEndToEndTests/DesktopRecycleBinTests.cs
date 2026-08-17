@@ -22,9 +22,9 @@ public class DesktopRecycleBinTests
 
         // Create a throwaway folder in the demo repository, then soft-delete it.
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
-        await api.Documents.CreateFolderAsync(repo.Id, name);
+        await api.Documents.CreateFolderAsync(repo.Href("children"), name);
         var folder = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
-        await api.Documents.DeleteAsync(folder.Id);
+        await api.Documents.DeleteAsync(folder.Href("self"));
 
         // The tenant-wide recycle-bin list shows it, with a full path and an audit-derived "deleted by".
         var vm = new RecycleBinTabViewModel();
@@ -43,7 +43,7 @@ public class DesktopRecycleBinTests
         Assert.Contains(await api.Documents.GetChildrenAsync(repo.Href("children")), n => n.Id == folder.Id); // back in the repo
 
         // Delete again, then permanently hard-delete it from the recycle bin.
-        await api.Documents.DeleteAsync(folder.Id);
+        await api.Documents.DeleteAsync(folder.Href("self"));
         await vm.LoadAsync();
         var again = vm.Items.Single(i => i.Id == folder.Id);
         await vm.HardDeleteCommand.ExecuteAsync(again);
@@ -60,9 +60,9 @@ public class DesktopRecycleBinTests
 
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var names = new[] { $"bulk-a-{tag}", $"bulk-b-{tag}", $"bulk-c-{tag}" };
-        foreach (var n in names) await api.Documents.CreateFolderAsync(repo.Id, n);
+        foreach (var n in names) await api.Documents.CreateFolderAsync(repo.Href("children"), n);
         var folders = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Where(n => names.Contains(n.Name)).ToList();
-        foreach (var f in folders) await api.Documents.DeleteAsync(f.Id);
+        foreach (var f in folders) await api.Documents.DeleteAsync(f.Href("self"));
 
         var vm = new RecycleBinTabViewModel();
         vm.SetApi(api);
@@ -91,9 +91,9 @@ public class DesktopRecycleBinTests
 
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var names = new[] { $"purge-a-{tag}", $"purge-b-{tag}" };
-        foreach (var n in names) await api.Documents.CreateFolderAsync(repo.Id, n);
+        foreach (var n in names) await api.Documents.CreateFolderAsync(repo.Href("children"), n);
         var folders = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Where(n => names.Contains(n.Name)).ToList();
-        foreach (var f in folders) await api.Documents.DeleteAsync(f.Id);
+        foreach (var f in folders) await api.Documents.DeleteAsync(f.Href("self"));
 
         var vm = new RecycleBinTabViewModel { IsTenantAdmin = true };
         vm.SetApi(api);

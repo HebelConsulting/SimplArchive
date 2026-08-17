@@ -27,7 +27,7 @@ public class DesktopCheckoutDetailTests
     {
         var api = await ApiAsync();
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
-        var docId = await api.Documents.UploadFileAsync(repo.Id, $"wc-{Guid.NewGuid():N}.txt", Encoding.UTF8.GetBytes("ARCHIVED BODY"));
+        var docId = await api.Documents.UploadFileAsync(repo.Href("children"), $"wc-{Guid.NewGuid():N}.txt", Encoding.UTF8.GetBytes("ARCHIVED BODY"));
         await api.Checkout.CheckOutViaDocumentAsync(await TestRels.DocumentSelfAsync(api, repo, docId));
 
         // Nothing saved yet: the row advertises no `preview` rel, and asking anyway yields nothing rather than
@@ -52,7 +52,7 @@ public class DesktopCheckoutDetailTests
         await api.Checkout.CheckInViaDocumentAsync(await TestRels.DocumentSelfAsync(api, repo, docId)); // releases the lock (DELETE checkout), leaving the fixture clean
     }
 
-    private static async Task<string> FetchAsync(SimplArchiveApiClient.Preview? preview)
+    private static async Task<string> FetchAsync(Preview? preview)
     {
         Assert.NotNull(preview);
         using var anonymous = new HttpClient();

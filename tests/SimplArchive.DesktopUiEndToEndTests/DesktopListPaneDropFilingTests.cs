@@ -23,16 +23,16 @@ public class DesktopListPaneDropFilingTests
 
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"dropver-{Guid.NewGuid():N}.txt";
-        await api.Documents.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("v1"));
+        await api.Documents.UploadFileAsync(repo.Href("children"), name, Encoding.UTF8.GetBytes("v1"));
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
-        await api.Documents.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes("v2 dropped"), ".txt", "dropped as a new version");
+        await api.Documents.UploadNewVersionAsync(doc.Href("versions"), Encoding.UTF8.GetBytes("v2 dropped"), ".txt", "dropped as a new version");
 
-        var fields = await api.Documents.GetSystemFieldsAsync(doc.Id);
+        var fields = await api.Documents.GetSystemFieldsAsync(doc.Href("versions"));
         Assert.Equal(2, fields!.CurrentVersionNumber);
 
         // The filing comment is the version's note (ADR 0528), not a chat comment.
-        var versions = await api.GetVersionsAsync(doc.Href("versions"));
+        var versions = await api.Versions.GetVersionsAsync(doc.Href("versions"));
         Assert.Equal("dropped as a new version", versions.Single(v => v.VersionNumber == 2).Comment);
     }
 
@@ -44,17 +44,17 @@ public class DesktopListPaneDropFilingTests
 
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var folderName = $"dropfolder-{Guid.NewGuid():N}";
-        await api.Documents.CreateFolderAsync(repo.Id, folderName);
+        await api.Documents.CreateFolderAsync(repo.Href("children"), folderName);
         var folder = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == folderName);
 
         var docName = $"dropped-{Guid.NewGuid():N}.txt";
-        var newId = await api.Documents.UploadFileAsync(folder.Id, docName, Encoding.UTF8.GetBytes("body"), "filed via drop");
+        var newId = await api.Documents.UploadFileAsync(folder.Href("children"), docName, Encoding.UTF8.GetBytes("body"), "filed via drop");
 
         // Find the created row and follow ITS advertised versions rel — upload returns an id, and an id is not
         // an address (ADR 0543).
         var created = (await api.Documents.GetChildrenAsync(folder.Href("children"))).Single(n => n.Id == newId);
         // The filing comment lands on the created document's first version (ADR 0528), not a chat comment.
-        var versions = await api.GetVersionsAsync(created.Href("versions"));
+        var versions = await api.Versions.GetVersionsAsync(created.Href("versions"));
         Assert.Equal("filed via drop", versions.Single(v => v.VersionNumber == 1).Comment);
     }
 }

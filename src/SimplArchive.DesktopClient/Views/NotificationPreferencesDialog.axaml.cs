@@ -45,7 +45,7 @@ public partial class NotificationPreferencesDialog : Window
         try
         {
             _rows.Clear();
-            foreach (var p in await _api.GetNotificationPreferencesAsync())
+            foreach (var p in await _api.Profile.GetNotificationPreferencesAsync())
             {
                 _rows.Add(new PrefRow { Type = p.Type, Label = Label(p.TypeName), EmailEnabled = p.EmailEnabled });
             }
@@ -64,8 +64,8 @@ public partial class NotificationPreferencesDialog : Window
         SaveButton.IsEnabled = false;
         try
         {
-            await _api.SetNotificationPreferencesAsync(
-                System.Linq.Enumerable.Select(_rows, r => new SimplArchiveApiClient.NotificationPreferenceInfo(r.Type, "", r.EmailEnabled)));
+            await _api.Profile.SetNotificationPreferencesAsync(
+                System.Linq.Enumerable.Select(_rows, r => new ProfileClient.NotificationPreferenceInfo(r.Type, "", r.EmailEnabled)));
             Close();
         }
         catch (Exception)

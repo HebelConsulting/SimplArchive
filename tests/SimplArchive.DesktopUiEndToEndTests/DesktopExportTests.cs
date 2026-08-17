@@ -24,13 +24,13 @@ public class DesktopExportTests
 
         var repoName = $"Desktop export {Guid.NewGuid():N}";
         await api.Documents.CreateRepositoryAsync(repoName);
-        var repoId = (await api.Documents.GetRepositoriesAsync()).Single(r => r.Name == repoName).Id;
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(r => r.Name == repoName);
 
         var payload = Encoding.UTF8.GetBytes($"desktop-export-{Guid.NewGuid():N}");
-        await api.Documents.UploadFileAsync(repoId, "report.txt", payload);
+        await api.Documents.UploadFileAsync(repo.Href("children"), "report.txt", payload);
 
         var options = new DocumentsClient.RepositoryExportOptions(ActiveOnly: false, null, null, null, null, null);
-        var zipBytes = await api.Documents.ExportRepositoryAsync(repoId, options);
+        var zipBytes = await api.Documents.ExportRepositoryAsync(await api.Documents.RelViaSelfAsync(repo.Href("document"), "export"), options);
 
         using var archive = new ZipArchive(new MemoryStream(zipBytes), ZipArchiveMode.Read);
 

@@ -21,19 +21,19 @@ public class DesktopSubscriptionTests
 
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"sub-{Guid.NewGuid():N}.txt";
-        await api.Documents.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("follow me"));
+        await api.Documents.UploadFileAsync(repo.Href("children"), name, Encoding.UTF8.GetBytes("follow me"));
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
-        Assert.False(await api.Documents.GetSubscriptionAsync(doc.Id)); // not following by default
+        Assert.False(await api.Documents.GetSubscriptionAsync(await api.Documents.RelViaSelfAsync(doc.Href("self"), "subscription"))); // not following by default
 
-        await api.Documents.SetSubscriptionAsync(doc.Id, subscribe: true);
-        Assert.True(await api.Documents.GetSubscriptionAsync(doc.Id));
+        await api.Documents.SetSubscriptionAsync(await api.Documents.RelViaSelfAsync(doc.Href("self"), "subscription"), subscribe: true);
+        Assert.True(await api.Documents.GetSubscriptionAsync(await api.Documents.RelViaSelfAsync(doc.Href("self"), "subscription")));
 
         // Idempotent: following again stays true.
-        await api.Documents.SetSubscriptionAsync(doc.Id, subscribe: true);
-        Assert.True(await api.Documents.GetSubscriptionAsync(doc.Id));
+        await api.Documents.SetSubscriptionAsync(await api.Documents.RelViaSelfAsync(doc.Href("self"), "subscription"), subscribe: true);
+        Assert.True(await api.Documents.GetSubscriptionAsync(await api.Documents.RelViaSelfAsync(doc.Href("self"), "subscription")));
 
-        await api.Documents.SetSubscriptionAsync(doc.Id, subscribe: false);
-        Assert.False(await api.Documents.GetSubscriptionAsync(doc.Id));
+        await api.Documents.SetSubscriptionAsync(await api.Documents.RelViaSelfAsync(doc.Href("self"), "subscription"), subscribe: false);
+        Assert.False(await api.Documents.GetSubscriptionAsync(await api.Documents.RelViaSelfAsync(doc.Href("self"), "subscription")));
     }
 }

@@ -52,6 +52,13 @@ public sealed partial class TreeNodeViewModel : ObservableObject
                 $"The '{rel}' rel was not advertised for tree node '{Name}'. Follow a rel the resource offers, or "
                 + "fetch the resource — do not compose the URL (ADR 0543).");
 
+    /// <summary>
+    /// The DOCUMENT resource's own address. A repository row calls its document view <c>document</c> — its
+    /// <c>self</c> is the repository view (ADR 0200) — while every other row's <c>self</c> IS the document.
+    /// </summary>
+    public string DocumentSelfHref =>
+        Links is not null && Links.TryGetValue("document", out var doc) ? doc : Href("self");
+
     public Guid Id { get; }
 
     public string Name { get; }

@@ -75,15 +75,15 @@ public sealed class RemindersClient(ApiCore core)
     // off the reminders href would be composing a URL out of one the server happened to give us, which is the
     // same mistake in nicer clothing (ADR 0543). Callers that also want the reminders should take both from
     // GetRemindersViewAsync and pass the href here, so the collection is read once rather than twice.
-    public async Task<IReadOnlyList<SimplArchiveApiClient.UserOptionInfo>> GetReminderTargetsAsync(string targetsHref, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<UserOptionInfo>> GetReminderTargetsAsync(string targetsHref, CancellationToken cancellationToken = default)
     {
         var json = await _core.Http.GetFromJsonAsync<JsonElement>(targetsHref, cancellationToken);
-        var list = new List<SimplArchiveApiClient.UserOptionInfo>();
+        var list = new List<UserOptionInfo>();
         if (json.TryGetProperty("targets", out var targets))
         {
             foreach (var u in targets.EnumerateArray())
             {
-                list.Add(new SimplArchiveApiClient.UserOptionInfo(u.GetProperty("id").GetGuid(), u.GetProperty("displayName").GetString() ?? ""));
+                list.Add(new UserOptionInfo(u.GetProperty("id").GetGuid(), u.GetProperty("displayName").GetString() ?? ""));
             }
         }
 

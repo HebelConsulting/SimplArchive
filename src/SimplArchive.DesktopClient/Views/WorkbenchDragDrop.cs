@@ -170,7 +170,10 @@ internal sealed class WorkbenchDragDrop
         var fileCount = 0;
         if (_window.DataContext is MainWindowViewModel dragVm && dragVm.Api is { } dragApi)
         {
-            var items = source.Where(n => !n.IsReference).Select(n => new DragOutItem(n.Id, n.Name, n.IsFolder)).ToList();
+            var items = source.Where(n => !n.IsReference)
+                .Select(n => new DragOutItem(n.Name, n.IsFolder,
+                    n.Links?.GetValueOrDefault("versions"), n.Links?.GetValueOrDefault("children")))
+                .ToList();
             if (items.Count > 0)
             {
                 dragVm.Status = Strings.Get("StPreparingDrag");
@@ -257,7 +260,7 @@ internal sealed class WorkbenchDragDrop
             dragVm.Status = Strings.Get("StPreparingDrag");
             try
             {
-                var files = await DragOutStager.StageAsync(dragApi, [new DragOutItem(node.Id, node.Name, true)]);
+                var files = await DragOutStager.StageAsync(dragApi, [new DragOutItem(node.Name, true, null, node.Links?.GetValueOrDefault("children"))]);
                 if (files.Count > 0)
                 {
                     data.Set(DataFormats.FileNames, files);
@@ -344,7 +347,7 @@ internal sealed class WorkbenchDragDrop
         }
 
         // Dropped onto a folder row → that folder; anywhere else → the currently-open folder.
-        await vm.UploadDroppedFilesAsync(files, target is { IsFolder: true } ? target.Id : null);
+        await vm.UploadDroppedFilesAsync(files, target is { IsFolder: true } ? target.Links : null);
     });
 
     private void OnTreeDragOver(object? sender, DragEventArgs e)
@@ -430,8 +433,8 @@ internal sealed class WorkbenchDragDrop
 
         // A plain folder node: file into THAT folder, then follow to it, so the user sees what they filed
         // rather than being left looking at whatever folder was open.
-        await vm.UploadDroppedFilesAsync(storageFiles, treeNode.Id);
-        await vm.OpenFolderAsync(treeNode.Id);
+        await vm.UploadDroppedFilesAsync(storageFiles, treeNode.Links);
+        await vm.OpenFolderAsync(treeNode.DocumentSelfHref);
     });
 
     // Dragged real items offer Move or Reference; a drag of only shortcuts only ever places more shortcuts (moving

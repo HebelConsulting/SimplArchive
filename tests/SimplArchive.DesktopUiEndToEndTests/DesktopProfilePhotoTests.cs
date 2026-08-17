@@ -42,9 +42,9 @@ public class DesktopProfilePhotoTests
 
         // Self path: me/photo sets the caller's own photo → whoami reports it; clean up afterwards.
         var me = (await client.GetWhoAmIAsync()).UserId!.Value;
-        await client.SetMyPhotoAsync(Png(256, 256));
+        await client.Profile.SetMyPhotoAsync(Png(256, 256));
         Assert.True((await client.GetWhoAmIAsync()).HasPhoto);
-        await client.DeleteMyPhotoAsync();
+        await client.Profile.DeleteMyPhotoAsync();
         Assert.False((await client.GetWhoAmIAsync()).HasPhoto);
     }
 

@@ -24,7 +24,7 @@ public sealed class CheckoutClient(ApiCore core)
 {
     private readonly ApiCore _core = core;
 
-    public async Task<SimplArchiveApiClient.Preview?> GetCheckoutPreviewAsync(CheckoutItem checkout, CancellationToken cancellationToken = default)
+    public async Task<Preview?> GetCheckoutPreviewAsync(CheckoutItem checkout, CancellationToken cancellationToken = default)
     {
         if (checkout.Href("preview") is not { } href)
         {
@@ -41,7 +41,7 @@ public sealed class CheckoutClient(ApiCore core)
 
         // No text layout / pages / annotations: those belong to an archived VERSION, and a working copy is not
         // one yet. The preview is the picture, nothing more.
-        return new SimplArchiveApiClient.Preview(
+        return new Preview(
             json.GetProperty("previewUrl").GetString(),
             json.TryGetProperty("previewConverted", out var c) && c.ValueKind == JsonValueKind.True,
             null, null, null, checkout.FileExtension);
@@ -219,18 +219,18 @@ public sealed class CheckoutClient(ApiCore core)
         checkout.Href(rel)
         ?? throw new InvalidOperationException($"The check-out on '{checkout.Name}' advertised no '{rel}' rel — `compare` is absent with no stash to diff (ADR 0543/0555).");
 
-    public async Task<SimplArchiveApiClient.VersionComparison> GetCheckoutComparisonAsync(CheckoutItem checkout, CancellationToken cancellationToken = default)
+    public async Task<VersionComparison> GetCheckoutComparisonAsync(CheckoutItem checkout, CancellationToken cancellationToken = default)
     {
         var json = await _core.Http.GetFromJsonAsync<JsonElement>(RequireHref(checkout, "compare"), cancellationToken);
-        var lines = new List<SimplArchiveApiClient.DiffLineInfo>();
+        var lines = new List<DiffLineInfo>();
         if (json.TryGetProperty("lines", out var arr))
         {
             foreach (var l in arr.EnumerateArray())
             {
-                lines.Add(new SimplArchiveApiClient.DiffLineInfo(l.GetProperty("op").GetInt32(), l.GetProperty("text").GetString() ?? ""));
+                lines.Add(new DiffLineInfo(l.GetProperty("op").GetInt32(), l.GetProperty("text").GetString() ?? ""));
             }
         }
 
-        return new SimplArchiveApiClient.VersionComparison(json.TryGetProperty("available", out var a) && a.ValueKind == JsonValueKind.True, lines);
+        return new VersionComparison(json.TryGetProperty("available", out var a) && a.ValueKind == JsonValueKind.True, lines);
     }
 }

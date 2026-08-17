@@ -19,7 +19,7 @@ public class DesktopRetentionTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        var schedule = (await api.GetRetentionScheduleAsync()).Items;
+        var schedule = (await api.LegalHolds.GetRetentionScheduleAsync()).Items;
 
         var demoDoc = schedule.FirstOrDefault(i => i.DocumentName == "Invoice 2026-003");
         Assert.NotNull(demoDoc);

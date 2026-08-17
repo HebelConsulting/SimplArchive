@@ -24,15 +24,17 @@ public class DesktopAdminUsersTests
         var userId = await admin.Admin.CreateUserAsync($"au-{suffix}@example.test", "AdminView User " + suffix);
         var password = await admin.Admin.ResetUserPasswordAsync(userId);
         var user = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl, $"au-{suffix}@example.test", password));
-        var userRepo = await user.GetPersonalRepositoryAsync();
+        var userRepo = await user.Profile.GetPersonalRepositoryAsync();
         Assert.NotNull(userRepo);
 
         // The admin lists every personal repository — the throwaway user's is present.
-        var repos = await admin.GetAdminPersonalRepositoriesAsync();
+        var repos = await admin.Admin.GetAdminPersonalRepositoriesAsync();
         Assert.Contains(repos, r => r.RepositoryId == userRepo!.Id && r.UserId == userId.Id);
 
-        // The admin can browse into it (empty, but reachable via the ACL bypass).
-        var children = await admin.Documents.GetChildrenAsync(userRepo!.Id);
+        // The admin can browse into it (empty, but reachable via the ACL bypass) — through the address the
+        // admin listing's own row advertised (#443).
+        var adminRow = repos.Single(r => r.RepositoryId == userRepo!.Id);
+        var children = await admin.Documents.GetChildrenAsync(adminRow.Href("children")!);
         Assert.NotNull(children);
     }
 }

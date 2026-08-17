@@ -29,7 +29,7 @@ public partial class WebDavDialog : Window
     {
         try
         {
-            var status = await _api.GetWebDavStatusAsync();
+            var status = await _api.Profile.GetWebDavStatusAsync();
             UrlBox.Text = status.Url;
             UsernameBox.Text = status.Username;
             Apply(status.Enabled);
@@ -54,7 +54,7 @@ public partial class WebDavDialog : Window
     {
         try
         {
-            var status = await _api.GenerateWebDavPasswordAsync();
+            var status = await _api.Profile.GenerateWebDavPasswordAsync();
             UrlBox.Text = status.Url;
             UsernameBox.Text = status.Username;
             PasswordBox.Text = status.Password ?? "";
@@ -71,7 +71,7 @@ public partial class WebDavDialog : Window
     {
         try
         {
-            await _api.RevokeWebDavPasswordAsync();
+            await _api.Profile.RevokeWebDavPasswordAsync();
             PasswordPanel.IsVisible = false;
             Apply(false);
         }

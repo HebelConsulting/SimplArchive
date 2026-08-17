@@ -30,19 +30,19 @@ public class DesktopMfaTests
         var user = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl, email, password));
 
         // Enroll → a secret + QR; a wrong code is rejected; the right one enables MFA + returns recovery codes.
-        var enroll = await user.EnrollMfaAsync();
+        var enroll = await user.Profile.EnrollMfaAsync();
         Assert.NotEmpty(enroll.Secret);
         Assert.StartsWith("data:image/png;base64,", enroll.QrDataUrl);
 
-        await Assert.ThrowsAsync<ApiActionException>(() => user.EnableMfaAsync("000000"));
+        await Assert.ThrowsAsync<ApiActionException>(() => user.Profile.EnableMfaAsync("000000"));
 
         var totp = new Totp(Base32Encoding.ToBytes(enroll.Secret));
-        var recoveryCodes = await user.EnableMfaAsync(totp.ComputeTotp());
+        var recoveryCodes = await user.Profile.EnableMfaAsync(totp.ComputeTotp());
         Assert.Equal(10, recoveryCodes.Count);
         Assert.True((await user.GetWhoAmIAsync()).MfaEnabled);
 
         // Self-disable turns it back off.
-        await user.DisableMfaAsync();
+        await user.Profile.DisableMfaAsync();
         Assert.False((await user.GetWhoAmIAsync()).MfaEnabled);
     }
 }

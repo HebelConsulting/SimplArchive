@@ -38,11 +38,11 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
     // Only the per-document dialog offers creation; the cross-document one is a review surface.
     public bool ShowCreate => !_crossDocument;
 
-    public ObservableCollection<SimplArchiveApiClient.ExternalLinkInfo> Links { get; } = [];
+    public ObservableCollection<ExternalLinksClient.ExternalLinkInfo> Links { get; } = [];
 
-    public ObservableCollection<SimplArchiveApiClient.UserOptionInfo> Users { get; } = [];
+    public ObservableCollection<UserOptionInfo> Users { get; } = [];
 
-    [ObservableProperty] private SimplArchiveApiClient.UserOptionInfo? _selectedUser;
+    [ObservableProperty] private UserOptionInfo? _selectedUser;
 
     // UtcNow, not Now: a DateTimeOffset carrying a local offset is a valid instant but Postgres stores instants
     // with offset 0 only, so sending one used to 500 the create endpoint for anybody not sitting in UTC. The
@@ -66,7 +66,8 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
     // for itself, so they arrive as callbacks rather than as a dependency on the main view-model.
     public Func<ExternalLinkDetailDialogViewModel, Task>? ShowDetailDialog { get; set; }
 
-    public Action<Guid, Guid?>? GoToDocument { get; set; }
+    // (documentId for selecting the row after navigation, the document's advertised address, its parent's.)
+    public Action<Guid, string?, string?>? GoToDocument { get; set; }
 
     // Set by the host window, so "Go to" can dismiss this dialog before the workbench moves behind it.
     public Action? RequestClose { get; set; }
@@ -85,8 +86,8 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
     public async Task LoadAsync()
     {
         var result = _crossDocument
-            ? await _api.GetMyExternalLinksAsync(_linksHref, SelectedUser?.Id == Guid.Empty ? null : SelectedUser?.Id)
-            : await _api.GetExternalLinksAsync(_linksHref);
+            ? await _api.ExternalLinks.GetMyExternalLinksAsync(_linksHref, SelectedUser?.Id == Guid.Empty ? null : SelectedUser?.Id)
+            : await _api.ExternalLinks.GetExternalLinksAsync(_linksHref);
 
         Links.Clear();
         foreach (var link in result.Links)
@@ -101,10 +102,10 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
         {
             // Only a tenant admin can filter by another person, so the directory is fetched only for them —
             // and only once. Reuses the existing users listing rather than adding a parallel endpoint.
-            Users.Add(new SimplArchiveApiClient.UserOptionInfo(Guid.Empty, Strings.Get("ExtLinkMine")));
+            Users.Add(new UserOptionInfo(Guid.Empty, Strings.Get("ExtLinkMine")));
             foreach (var user in await _api.Admin.GetUsersAsync())
             {
-                Users.Add(new SimplArchiveApiClient.UserOptionInfo(user.Id, user.Name));
+                Users.Add(new UserOptionInfo(user.Id, user.Name));
             }
         }
     }
@@ -112,10 +113,10 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
     [RelayCommand]
     private async Task CreateAsync()
     {
-        SimplArchiveApiClient.ExternalLinkInfo? created;
+        ExternalLinksClient.ExternalLinkInfo? created;
         try
         {
-            created = await _api.CreateExternalLinkAsync(_linksHref, Expiry, MaxAccesses);
+            created = await _api.ExternalLinks.CreateExternalLinkAsync(_linksHref, Expiry, MaxAccesses);
         }
         catch (ApiActionException e)
         {
@@ -139,14 +140,14 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task RevokeAsync(SimplArchiveApiClient.ExternalLinkInfo? link)
+    private async Task RevokeAsync(ExternalLinksClient.ExternalLinkInfo? link)
     {
         if (link?.RevokeHref is not { } href)
         {
             return;
         }
 
-        if (await _api.RevokeExternalLinkAsync(href, link.Etag))
+        if (await _api.ExternalLinks.RevokeExternalLinkAsync(href, link.Etag))
         {
             await LoadAsync();
         }
@@ -156,7 +157,7 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
     // rather than on the row because it is now two decisions — how long, and how many more times — and a
     // row-sized button cannot ask for either without guessing on the reader's behalf.
     [RelayCommand]
-    private async Task ShowAsync(SimplArchiveApiClient.ExternalLinkInfo? link)
+    private async Task ShowAsync(ExternalLinksClient.ExternalLinkInfo? link)
     {
         if (link is null || ShowDetailDialog is null)
         {
@@ -179,14 +180,14 @@ public partial class ExternalLinksDialogViewModel : ObservableObject
     // Hands the document back to the workbench, which owns the tree and list panes; this dialog cannot see them.
     // Only meaningful in the cross-document list — the per-document one is already sitting on the document.
     [RelayCommand]
-    private void GoTo(SimplArchiveApiClient.ExternalLinkInfo? link)
+    private void GoTo(ExternalLinksClient.ExternalLinkInfo? link)
     {
         if (link is null)
         {
             return;
         }
 
-        GoToDocument?.Invoke(link.DocumentId, link.ParentId);
+        GoToDocument?.Invoke(link.DocumentId, link.DocumentHref, link.ParentHref);
     }
 
     [RelayCommand]

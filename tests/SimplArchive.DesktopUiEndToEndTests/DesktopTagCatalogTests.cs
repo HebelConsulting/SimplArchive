@@ -26,12 +26,12 @@ public class DesktopTagCatalogTests
         // A document tagged with 'alpha' (populates the catalog + gives rename/merge something to re-tag).
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var docName = $"tagcat-{suffix}.txt";
-        await api.Documents.UploadFileAsync(repo.Id, docName, Encoding.UTF8.GetBytes("body"));
+        await api.Documents.UploadFileAsync(repo.Href("children"), docName, Encoding.UTF8.GetBytes("body"));
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
-        await api.Documents.SetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Id)).Href("tags"), [alpha]);
+        await api.Documents.SetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Href("self"))).Href("tags"), [alpha]);
 
         // Create a second, coloured catalog tag directly.
-        await api.CreateTagAsync(beta, "#2e7d32");
+        await api.Documents.CreateTagAsync(beta, "#2e7d32");
 
         var catalog = await api.Documents.GetTagCatalogWithColorsAsync();
         Assert.True(catalog.CanManage);
@@ -41,13 +41,13 @@ public class DesktopTagCatalogTests
         // Rename 'alpha' → 'gamma…' cascades to the document.
         var gamma = $"gamma{suffix}";
         await api.Documents.UpdateTagAsync(alphaDef, gamma, null);
-        Assert.Equal(new[] { gamma }, await api.Documents.GetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Id)).Href("tags")));
+        Assert.Equal(new[] { gamma }, await api.Documents.GetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Href("self"))).Href("tags")));
 
         // Merge 'gamma' into 'beta' → the document now carries 'beta', and 'gamma' is gone from the catalog.
         var gammaDef = (await api.Documents.GetTagCatalogWithColorsAsync()).Items.Single(t => t.Name == gamma);
         var betaDef = (await api.Documents.GetTagCatalogWithColorsAsync()).Items.Single(t => t.Name == beta);
         await api.Documents.MergeTagAsync(gammaDef, betaDef.Id);
-        Assert.Equal(new[] { beta }, await api.Documents.GetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Id)).Href("tags")));
+        Assert.Equal(new[] { beta }, await api.Documents.GetTagsAsync((await api.Documents.GetDocumentDetailAsync(doc.Href("self"))).Href("tags")));
         Assert.DoesNotContain((await api.Documents.GetTagCatalogWithColorsAsync()).Items, t => t.Name == gamma);
 
         // Retire 'beta' → excluded from the active catalog.

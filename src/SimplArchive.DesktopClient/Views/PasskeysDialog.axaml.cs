@@ -42,7 +42,7 @@ public partial class PasskeysDialog : Window
 
         try
         {
-            var keys = await _api.GetPasskeysAsync();
+            var keys = await _api.Profile.GetPasskeysAsync();
             _rows.Clear();
             foreach (var k in keys)
             {
@@ -98,7 +98,7 @@ public partial class PasskeysDialog : Window
         {
             if (row.RemoveHref is not { } removeHref) { return; }
 
-            await _api.RemovePasskeyAsync(removeHref);
+            await _api.Profile.RemovePasskeyAsync(removeHref);
             await LoadAsync();
         }
         catch (Exception)

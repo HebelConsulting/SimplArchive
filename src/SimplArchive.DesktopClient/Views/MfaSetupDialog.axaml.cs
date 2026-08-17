@@ -35,7 +35,7 @@ public partial class MfaSetupDialog : Window
 
         try
         {
-            var enroll = await _api.EnrollMfaAsync();
+            var enroll = await _api.Profile.EnrollMfaAsync();
             SecretRun.Text = enroll.Secret;
             var base64 = enroll.QrDataUrl.Contains(',') ? enroll.QrDataUrl[(enroll.QrDataUrl.IndexOf(',') + 1)..] : enroll.QrDataUrl;
             using var stream = new MemoryStream(Convert.FromBase64String(base64));
@@ -62,7 +62,7 @@ public partial class MfaSetupDialog : Window
         EnableButton.IsEnabled = false;
         try
         {
-            var codes = await _api.EnableMfaAsync(code);
+            var codes = await _api.Profile.EnableMfaAsync(code);
             EnrollPanel.IsVisible = false;
             RecoveryList.ItemsSource = codes;
             RecoveryPanel.IsVisible = true;

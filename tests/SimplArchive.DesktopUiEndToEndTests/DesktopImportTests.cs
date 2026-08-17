@@ -21,10 +21,10 @@ public class DesktopImportTests
 
         var repoName = $"Desktop import {Guid.NewGuid():N}";
         await api.Documents.CreateRepositoryAsync(repoName);
-        var repoId = (await api.Documents.GetRepositoriesAsync()).Single(r => r.Name == repoName).Id;
-        await api.Documents.UploadFileAsync(repoId, "report.txt", System.Text.Encoding.UTF8.GetBytes($"import-{Guid.NewGuid():N}"));
+        var repo = (await api.Documents.GetRepositoriesAsync()).Single(r => r.Name == repoName);
+        await api.Documents.UploadFileAsync(repo.Href("children"), "report.txt", System.Text.Encoding.UTF8.GetBytes($"import-{Guid.NewGuid():N}"));
 
-        var zip = await api.Documents.ExportRepositoryAsync(repoId, new DocumentsClient.RepositoryExportOptions(false, null, null, null, null, null));
+        var zip = await api.Documents.ExportRepositoryAsync(await api.Documents.RelViaSelfAsync(repo.Href("document"), "export"), new DocumentsClient.RepositoryExportOptions(false, null, null, null, null, null));
 
         // Import as a new repository (targetFolderId == null). The root name collides with the original, so it's
         // auto-renamed ("… (imported)").
@@ -32,7 +32,7 @@ public class DesktopImportTests
         Assert.StartsWith(repoName, result.RootName);
         Assert.True(result.Documents >= 1);
         Assert.Equal(1, result.Versions);
-        Assert.NotEqual(repoId, result.RootId);
+        Assert.NotEqual(repo.Id, result.RootId);
 
         // The imported repository is now listed alongside the original (auto-renamed since the name collides).
         var repos = await api.Documents.GetRepositoriesAsync();

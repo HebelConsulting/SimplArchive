@@ -35,7 +35,7 @@ public partial class VersionsDialog : Window
             return;
         }
 
-        var bytes = await api.DownloadVersionBytesAsync(url);
+        var bytes = await api.Versions.DownloadVersionBytesAsync(url);
         var fileName = MainWindowViewModel.WithExtension($"{vm.DocumentName} v{row.VersionNumber}", row.FileExtension);
         await NativeFileOpener.OpenBytesAsync(bytes, fileName);
     });
@@ -57,7 +57,7 @@ public partial class VersionsDialog : Window
             return; // cancelled
         }
 
-        var bytes = await api.DownloadVersionBytesAsync(url);
+        var bytes = await api.Versions.DownloadVersionBytesAsync(url);
         await using var stream = await file.OpenWriteAsync();
         await stream.WriteAsync(bytes);
     });

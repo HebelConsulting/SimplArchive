@@ -72,6 +72,9 @@ public class PersonalRepositoryController : ControllerBase
             [
                 new Link("self", "/api/me/personal-repository", "POST"),
                 new Link("children", $"/api/documents/{id}/children", "GET"),
+                // Opening the personal space lists its children AND the shortcuts filed in it, exactly as any
+                // other folder — the same pair the repositories listing carries (#443).
+                new Link("references", $"/api/documents/{id}/references", "GET"),
                 new Link("document", $"/api/documents/{id}", "GET"),
             ],
         };

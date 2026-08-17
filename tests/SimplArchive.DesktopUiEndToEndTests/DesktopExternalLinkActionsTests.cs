@@ -25,17 +25,17 @@ public class DesktopExternalLinkActionsTests
     {
         var dialog = Dialog(crossDocument: true);
         var documentId = Guid.NewGuid();
-        var parentId = Guid.NewGuid();
 
-        (Guid Document, Guid? Parent)? navigated = null;
+        (Guid Document, string? DocumentHref, string? ParentHref)? navigated = null;
         var closed = false;
-        dialog.GoToDocument = (d, p) => navigated = (d, p);
+        dialog.GoToDocument = (d, dh, ph) => navigated = (d, dh, ph);
         dialog.RequestClose = () => closed = true;
 
-        dialog.GoToCommand.Execute(Link(documentId, parentId));
+        dialog.GoToCommand.Execute(Link(documentId, Guid.NewGuid()));
 
-        // The PARENT is what the workbench needs — it opens that folder and selects the document inside it.
-        Assert.Equal((documentId, parentId), navigated);
+        // The PARENT's advertised address is what the workbench follows — it opens that folder and selects the
+        // document inside it (#443).
+        Assert.Equal((documentId, "api/documents/doc", "api/documents/parent"), navigated);
 
         // Closing is the host's job, invoked from its own callback rather than from the command, so the dialog
         // does not dismiss itself before the caller has read what it handed over.
@@ -73,8 +73,9 @@ public class DesktopExternalLinkActionsTests
     private static ExternalLinksDialogViewModel Dialog(bool crossDocument) =>
         new(null!, "https://example.test/links", "Links", crossDocument);
 
-    private static SimplArchiveApiClient.ExternalLinkInfo Link(Guid documentId, Guid? parentId) =>
+    private static ExternalLinksClient.ExternalLinkInfo Link(Guid documentId, Guid? parentId) =>
         new(Guid.NewGuid(), documentId, "Doc", null, DateTimeOffset.UtcNow.AddDays(10),
             MaxAccesses: null, AccessCount: 0, CreatedByName: "Demo Admin", CanExtend: true, Etag: "etag",
-            RevokeHref: null, AvailabilityHref: null, ParentId: parentId);
+            RevokeHref: null, AvailabilityHref: null, ParentId: parentId,
+            DocumentHref: "api/documents/doc", ParentHref: parentId is null ? null : "api/documents/parent");
 }

@@ -30,17 +30,17 @@ public class DesktopPersonalRepositoryTests
         var bob = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl, $"bob-{suffix}@example.test", bobPw));
 
         // Get-or-create is idempotent and gives each user a distinct space.
-        var aliceRepo = await alice.GetPersonalRepositoryAsync();
+        var aliceRepo = await alice.Profile.GetPersonalRepositoryAsync();
         Assert.NotNull(aliceRepo);
         Assert.Equal("Personal", aliceRepo!.Name);
-        Assert.Equal(aliceRepo.Id, (await alice.GetPersonalRepositoryAsync())!.Id);
+        Assert.Equal(aliceRepo.Id, (await alice.Profile.GetPersonalRepositoryAsync())!.Id);
 
-        var bobRepo = await bob.GetPersonalRepositoryAsync();
+        var bobRepo = await bob.Profile.GetPersonalRepositoryAsync();
         Assert.NotNull(bobRepo);
         Assert.NotEqual(aliceRepo.Id, bobRepo!.Id);
 
         // Alice files a private folder into her personal repository.
-        await alice.Documents.CreateFolderAsync(aliceRepo.Id, "alice-private-" + suffix);
+        await alice.Documents.CreateFolderAsync(aliceRepo.Href("children"), "alice-private-" + suffix);
         Assert.Contains(await alice.Documents.GetChildrenAsync(aliceRepo.Href("children")), c => c.Name == "alice-private-" + suffix);
 
         // Bob can't list Alice's personal repository (no ACL grant → the API denies it).

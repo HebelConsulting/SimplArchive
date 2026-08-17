@@ -23,31 +23,31 @@ public class DesktopVersionRestoreTests
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"restore-{Guid.NewGuid():N}.txt";
         var contentA = $"A-{Guid.NewGuid():N}";
-        await api.Documents.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes(contentA));
+        await api.Documents.UploadFileAsync(repo.Href("children"), name, Encoding.UTF8.GetBytes(contentA));
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
         // A second version of the same document, with different content.
-        await api.Documents.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes($"B-{Guid.NewGuid():N}"), ".txt");
+        await api.Documents.UploadNewVersionAsync(doc.Href("versions"), Encoding.UTF8.GetBytes($"B-{Guid.NewGuid():N}"), ".txt");
 
-        var versions = await api.GetVersionsAsync(doc.Href("versions"));
+        var versions = await api.Versions.GetVersionsAsync(doc.Href("versions"));
         Assert.Equal(2, versions.Count);
         Assert.True(versions.Single(v => v.VersionNumber == 2).IsCurrent); // v2 is current before the roll-back
         var v1 = versions.Single(v => v.VersionNumber == 1);
 
         // Make v1 current → still exactly two versions, and v1 is now flagged current (no copy).
-        await api.RestoreVersionAsync(v1);
-        var after = await api.GetVersionsAsync(doc.Href("versions"));
+        await api.Versions.RestoreVersionAsync(v1);
+        var after = await api.Versions.GetVersionsAsync(doc.Href("versions"));
         Assert.Equal(2, after.Count);
         var current = after.Single(v => v.IsCurrent);
         Assert.Equal(v1.Id, current.Id);
 
         // Its content (served as current) equals version A.
-        var bytes = await api.DownloadVersionBytesAsync(current.DownloadUrl!);
+        var bytes = await api.Versions.DownloadVersionBytesAsync(current.DownloadUrl!);
         Assert.Equal(contentA, Encoding.UTF8.GetString(bytes));
 
         // Uploading a new version takes over as current.
-        await api.Documents.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes($"C-{Guid.NewGuid():N}"), ".txt");
-        var final = await api.GetVersionsAsync(doc.Href("versions"));
+        await api.Documents.UploadNewVersionAsync(doc.Href("versions"), Encoding.UTF8.GetBytes($"C-{Guid.NewGuid():N}"), ".txt");
+        var final = await api.Versions.GetVersionsAsync(doc.Href("versions"));
         Assert.Equal(3, final.Count);
         Assert.Equal(3, final.Single(v => v.IsCurrent).VersionNumber);
     }

@@ -22,11 +22,11 @@ public class DesktopVersionComparisonTests
 
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var fileName = $"cmp-{Guid.NewGuid():N}.txt";
-        await api.Documents.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("one\ntwo\nthree\n"));
+        await api.Documents.UploadFileAsync(repo.Href("children"), fileName, Encoding.UTF8.GetBytes("one\ntwo\nthree\n"));
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
-        await api.Documents.UploadNewVersionAsync(doc.Id, Encoding.UTF8.GetBytes("one\nTWO edited\nthree\nfour\n"), ".txt");
+        await api.Documents.UploadNewVersionAsync(doc.Href("versions"), Encoding.UTF8.GetBytes("one\nTWO edited\nthree\nfour\n"), ".txt");
 
-        var versions = await api.GetVersionsAsync(doc.Href("versions"));
+        var versions = await api.Versions.GetVersionsAsync(doc.Href("versions"));
         Assert.Equal(2, versions.Count); // both confirmed, newest first
         Assert.Equal(2, versions[0].VersionNumber);
 
@@ -35,8 +35,8 @@ public class DesktopVersionComparisonTests
         Assert.Equal(2, (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Id == doc.Id).VersionCount);
 
         // The version collection advertises ONE compare address; the pair travels as query parameters.
-        var (_, compareHref) = await api.GetVersionsWithLinksAsync(doc.Href("versions"));
-        var cmp = await api.GetVersionComparisonAsync(compareHref!, versions[1].Id, versions[0].Id);
+        var (_, compareHref) = await api.Versions.GetVersionsWithLinksAsync(doc.Href("versions"));
+        var cmp = await api.Versions.GetVersionComparisonAsync(compareHref!, versions[1].Id, versions[0].Id);
         Assert.True(cmp.Available);
         Assert.Contains(cmp.Lines, l => l.Op == 0 && l.Text == "one");     // unchanged
         Assert.Contains(cmp.Lines, l => l.Op == 2 && l.Text == "two");     // removed

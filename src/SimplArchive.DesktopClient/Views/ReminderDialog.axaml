@@ -44,7 +44,7 @@
             <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Tr RemRemind}" VerticalAlignment="Center" />
             <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}" HorizontalAlignment="Stretch">
                 <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="svc:SimplArchiveApiClient+UserOptionInfo">
+                    <DataTemplate x:DataType="svc:UserOptionInfo">
                         <TextBlock Text="{Binding DisplayName}" />
                     </DataTemplate>
                 </ComboBox.ItemTemplate>

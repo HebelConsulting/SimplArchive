@@ -72,3 +72,19 @@ public sealed record AclEntryInfo(string PrincipalType, Guid PrincipalId, AclRig
 
     public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
 }
+
+// FileExtension is the current version's derived extension (ADR "Extension off Document.Name"); native
+// Open/Save-as append it to Document.Name (the bare stem) to reconstruct a correct filename.
+public sealed record Preview(string? PreviewUrl, bool PreviewConverted, string? DownloadUrl, string? TextLayoutUrl, string? PreviewPagesUrl, string FileExtension, string? AnnotationsUrl = null);
+// A user option for the reviewer picker.
+// RemoveHref is set only where the option came from a collection whose rows advertise a removal address —
+// a group's members; it is null for pickers such as reminder targets (issue #416).
+public sealed record UserOptionInfo(Guid Id, string DisplayName, string? RemoveHref = null);
+public sealed record DiffLineInfo(int Op, string Text);
+
+
+
+// Inline unified diff of a checked-out document's current version vs its working copy in check-out (ADR 0517).
+// Holder-only; Available=false when there's no working-copy stash or a side has no extractable text.
+
+public sealed record VersionComparison(bool Available, List<DiffLineInfo> Lines);

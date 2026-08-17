@@ -111,7 +111,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     /// <summary>Re-reads the WebDAV button's state; safe to call whenever the session or the mount may have changed.</summary>
     public Task RefreshWebDavStateAsync() =>
-        WebDav.RefreshAsync(Api is { } api ? async () => (await api.GetWebDavStatusAsync()).Enabled : null);
+        WebDav.RefreshAsync(Api is { } api ? async () => (await api.Profile.GetWebDavStatusAsync()).Enabled : null);
 
     // ---- Resizable / collapsible panes (persisted, like the web client — ADR 0224/"Desktop collapsible
     // panes") ------------------------------------------------------------------------------------------
@@ -520,7 +520,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private async Task ToggleSubscriptionAsync()
     {
-        if (_api is not { } api || _selectedDocumentId is not { } documentId)
+        if (_api is not { } api || _detailLinks is null)
         {
             return;
         }
@@ -528,7 +528,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         try
         {
             var target = !DetailSubscribed;
-            await api.Documents.SetSubscriptionAsync(documentId, target);
+            await api.Documents.SetSubscriptionAsync(DetailHref("subscription"), target);
             DetailSubscribed = target;
             Status = target ? "Following this document." : "Unfollowed.";
         }
@@ -693,7 +693,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        await ShowReminderDialog(new ReminderDialogViewModel(api, item.Id, item.Name));
+        await ShowReminderDialog(new ReminderDialogViewModel(
+            api, await api.Documents.RelViaSelfAsync(item.DocumentSelfHref, "reminders"), item.Name));
     }
 
     // The current folder's name (the export root's suggested filename) + the export call (ADR "Repository
@@ -722,7 +723,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public string? CurrentFolderName => _currentFolderId is null || Breadcrumbs.Count == 0 ? null : Breadcrumbs[^1].Name;
 
     public Task<byte[]>? ExportRepositoryBytesAsync(DocumentsClient.RepositoryExportOptions options) =>
-        _currentFolderId is { } id && _api is { } api ? api.Documents.ExportRepositoryAsync(id, options) : null;
+        _currentFolderLinks is { } links && _api is { } api ? ExportRepositoryCoreAsync(api, links, options) : null;
+
+    // The export rel lives on the document RESOURCE, not the listing row — one fetch of the folder's own
+    // resource, then the follow (ADR 0559).
+    private static async Task<byte[]> ExportRepositoryCoreAsync(SimplArchiveApiClient api, IReadOnlyDictionary<string, string> folderLinks, DocumentsClient.RepositoryExportOptions options) =>
+        await api.Documents.ExportRepositoryAsync(await api.Documents.RelViaSelfAsync(folderLinks["self"], "export"), options);
 
     // Imports an archive (ADR "Repository import") under the current folder, or as a new repository when at the
     // repository-list root, then rebuilds the tree so the imported content shows. Returns null if not signed in.
@@ -733,7 +739,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return null;
         }
 
-        var result = await api.Documents.ImportRepositoryAsync(_currentFolderId, zip, updateExisting, includePermissions, merge, leafConflict);
+        // Into the open folder → its own `import` rel (resolved through its self address); at the repository
+        // list root → null, and the client follows the repositories collection's import rel instead.
+        var importHref = _currentFolderLinks is { } folderLinks
+            ? await api.Documents.RelViaSelfAsync(folderLinks["self"], "import")
+            : null;
+        var result = await api.Documents.ImportRepositoryAsync(importHref, zip, updateExisting, includePermissions, merge, leafConflict);
         await ReloadTreeAsync();
         if (_currentFolderId is { } folderId)
         {
@@ -965,7 +976,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         // The user's personal repository, pinned at the top (ADR "Per-user personal repository"). It's excluded
         // from GetRepositoriesAsync, so it never appears twice.
-        var personal = await _api.GetPersonalRepositoryAsync();
+        var personal = await _api.Profile.GetPersonalRepositoryAsync();
         if (personal is not null)
         {
             // Always expandable — it holds at least the Inbox + Check-out launcher nodes (ADR "GUI-tree Personal
@@ -1025,7 +1036,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private async Task<IEnumerable<TreeNodeViewModel>> LoadAdminUsersAsync(TreeNodeViewModel _)
     {
-        var repos = await _api!.GetAdminPersonalRepositoriesAsync();
+        var repos = await _api!.Admin.GetAdminPersonalRepositoriesAsync();
         // Each user's personal repo is a normal browsable node (Id = the repo; the admin's ACL bypass grants it).
         return repos.Select(r => new TreeNodeViewModel(
             r.RepositoryId,
@@ -1062,7 +1073,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
             .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync, links: c.Links, hasReferences: c.HasReferences, hasChildren: c.HasChildren));
 
-        var references = await _api.Documents.GetReferencesAsync(node.Id);
+        var references = await _api.Documents.GetReferencesAsync(node.Href("references"));
         var referenceNodes = references
             .Where(r => !r.HasVersions)
             .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
@@ -1096,6 +1107,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             ClearDetail();
         }
 
+        var isReload = _currentFolderId == folderId;
         _archiveDocumentId = null; // leave any archive-browsing view
         _currentFolderId = folderId;
         CanCreateFolder = true;
@@ -1105,11 +1117,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             // Use the caller's links only when they carry BOTH addresses this needs. A listing advertises a
             // fixed set, and not every listing advertises the same one — so "the caller passed something" is not
-            // the same as "the caller passed enough", and reading the resource is the correct fallback rather
-            // than a KeyNotFoundException at the one node whose row is shaped differently.
+            // the same as "the caller passed enough". A partial set is completed by reading the resource at ITS
+            // OWN advertised document address (a repository row calls the document view `document`, ADR 0200);
+            // a reload of the folder already open reuses its stored links. There is no id fallback any more —
+            // an id alone has no address (ADR 0543, #443).
             var links = folderLinks is not null && folderLinks.ContainsKey("children") && folderLinks.ContainsKey("references")
                 ? folderLinks
-                : await _api.Documents.GetDocumentLinksAsync(folderId);
+                : folderLinks is not null && (folderLinks.TryGetValue("document", out var ownAddress) || folderLinks.TryGetValue("self", out ownAddress))
+                    ? await _api.Documents.GetDocumentLinksAsync(ownAddress)
+                    : isReload && _currentFolderLinks is { } stored
+                        ? stored
+                        : throw new InvalidOperationException($"No advertised address for folder '{folderId}' (ADR 0543).");
+            _currentFolderLinks = links;
             // The folder's persisted default contents order (ADR "Per-folder contents sort order") arrives with
             // the contents; opening a fresh folder resets any ephemeral column-header sort back to that default.
             var (children, sortOrder) = await _api.Documents.GetFolderContentsAsync(links["children"]);
@@ -1150,6 +1169,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
             {
                 Items.Add(new NodeViewModel
                 {
+                    // The server advertises the same target sub-resources a children row gets (#416), so the
+                    // shortcut row is no less capable than the real row beside it.
+                    Links = reference.Links,
                     Id = reference.TargetId,
                     Name = reference.Name,
                     HasChildren = reference.HasChildren,
@@ -1176,6 +1198,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // Folders are ALWAYS listed on top (ADR "Per-folder contents sort order"); within each group the default is
     // the open folder's persisted _folderSortOrder (0=Name/1=DocumentDate/2=Created). Clicking a column header is
     // an EPHEMERAL override (_headerSortActive) that resets when another folder is opened.
+    // The open folder's advertised addresses, stored with its id so a same-folder reload and the
+    // folder-scoped actions (create folder, upload, export, import) follow what the navigation row carried
+    // (ADR 0555) instead of re-deriving anything from the id.
+    private IReadOnlyDictionary<string, string>? _currentFolderLinks;
+
     private int _folderSortOrder = 1; // DocumentDate
     private bool _headerSortActive;
     private string _contentSortColumn = "name";
@@ -1431,7 +1458,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             // Fetch the preview to resolve the version's file extension (Document.Name is a bare stem now —
             // ADR "Extension off Document.Name"), needed both to spot a .zip and to name the opened temp file.
-            var preview = await _api.Documents.GetPreviewAsync(node.Id);
+            var preview = await _api.Documents.GetPreviewAsync(node.Href("versions"));
 
             if (node.HasVersions && string.Equals(preview.FileExtension, ".zip", StringComparison.OrdinalIgnoreCase))
             {
@@ -1468,7 +1495,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var entries = await _api.Documents.GetArchiveEntriesAsync(zip.Id);
+            // `archive-entries` is CONDITIONAL on the resource — its presence is the server answering "can I
+            // browse inside this?" — so it is resolved through the row's document address (ADR 0559).
+            var entries = await _api.Documents.GetArchiveEntriesAsync(await _api.Documents.RelViaSelfAsync(zip.DocumentSelfHref, "archive-entries"));
             _archiveDocumentId = zip.Id;
             CanCreateFolder = false;
             CanExport = false;
@@ -1532,7 +1561,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return (null, node.Name);
         }
 
-        var preview = await _api.Documents.GetPreviewAsync(node.Id);
+        var preview = await _api.Documents.GetPreviewAsync(node.Href("versions"));
         return (preview.DownloadUrl, WithExtension(node.Name, preview.FileExtension));
     }
 
@@ -1547,14 +1576,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // Creates a folder in the currently-open folder (the view collects the name via a dialog and calls this).
     public async Task CreateFolderAsync(string name)
     {
-        if (_api is null || _currentFolderId is not { } folderId)
+        if (_api is null || _currentFolderId is not { } folderId || _currentFolderLinks is not { } folderLinks)
         {
             return;
         }
 
         try
         {
-            await _api.Documents.CreateFolderAsync(folderId, name);
+            await _api.Documents.CreateFolderAsync(folderLinks["children"], name);
             Status = string.Format(Strings.Get("StCreatedFolder"), name);
             await ShowNewChildInTreeAsync(folderId); // refresh the parent's children in the tree, keep it expanded
             await LoadFolderContentsAsync(folderId);
@@ -1571,8 +1600,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // ---- Tree-pane folder actions (the code-behind context menu targets a tree node by id) ----------------
 
-    // Create a subfolder directly under a tree folder (not necessarily the currently-open one).
-    public async Task CreateSubfolderAsync(Guid parentId, string name)
+    // Create a subfolder directly under a tree folder (not necessarily the currently-open one) — through the
+    // node's own children address (ADR 0555); the id only drives the local tree refresh.
+    public async Task CreateSubfolderAsync(Guid parentId, string childrenHref, string name)
     {
         if (_api is null)
         {
@@ -1581,7 +1611,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.Documents.CreateFolderAsync(parentId, name);
+            await _api.Documents.CreateFolderAsync(childrenHref, name);
             Status = string.Format(Strings.Get("StCreatedFolder"), name);
             await ShowNewChildInTreeAsync(parentId);
             if (_currentFolderId == parentId)
@@ -1594,7 +1624,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     // Rename a tree folder by id (rebuilds the tree so its node label updates, unlike the list-row rename).
-    public async Task RenameFolderByIdAsync(Guid folderId, string newName)
+    public async Task RenameFolderAsync(string documentSelfHref, string newName)
     {
         if (_api is null)
         {
@@ -1603,7 +1633,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.Documents.RenameAsync(folderId, newName);
+            await _api.Documents.RenameAsync(documentSelfHref, newName);
             Status = string.Format(Strings.Get("StRenamedTo"), newName);
             await ReloadTreeAsync();
             if (_currentFolderId is { } current)
@@ -1618,7 +1648,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // Move a TREE folder (and its subtree) under another folder, by id — the tree context menu's "Move to…"
     // (ADR "Tree-pane context menu"). Unlike MoveNodeAsync (a dragged contents-list row) the tree itself
     // changes shape, so this reloads the tree as well as the open folder's contents.
-    public async Task MoveFolderByIdAsync(Guid folderId, string folderName, Guid targetFolderId)
+    public async Task MoveFolderAsync(string documentSelfHref, string folderName, Guid targetFolderId)
     {
         if (_api is null)
         {
@@ -1627,7 +1657,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.Documents.MoveAsync(folderId, targetFolderId);
+            await _api.Documents.MoveAsync(documentSelfHref, targetFolderId);
             Status = string.Format(Strings.Get("StMoved"), folderName);
             await ReloadTreeAsync();
             if (_currentFolderId is { } current)
@@ -1642,7 +1672,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // Place a reference (shortcut) to a TREE folder into another folder, by id — the tree context menu's
     // "Place reference…". The referenced folder shows up in the target's subtree (ADR "Referenced folder in the
     // tree"), so the tree is reloaded too.
-    public async Task PlaceReferenceAsync(Guid folderId, string folderName, Guid targetFolderId)
+    public async Task PlaceReferenceAsync(Guid folderId, string folderName, string targetReferencesHref)
     {
         if (_api is null)
         {
@@ -1651,7 +1681,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.Documents.CreateReferenceAsync(targetFolderId, folderId);
+            await _api.Documents.CreateReferenceAsync(targetReferencesHref, folderId);
             Status = string.Format(Strings.Get("StPlacedRef"), folderName);
             await ReloadTreeAsync();
             if (_currentFolderId is { } current)
@@ -1664,7 +1694,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     // Soft-delete a tree folder (and its subtree) to the recycle bin by id.
-    public async Task DeleteFolderByIdAsync(Guid folderId)
+    public async Task DeleteFolderAsync(Guid folderId, string documentSelfHref)
     {
         if (_api is null)
         {
@@ -1673,7 +1703,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.Documents.DeleteAsync(folderId);
+            await _api.Documents.DeleteAsync(documentSelfHref);
             Status = Strings.Get("StFolderDeleted");
             if (_currentFolderId == folderId)
             {
@@ -1690,7 +1720,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // Follow / unfollow a folder and its whole subtree (ADR "Folder / subtree subscriptions") — fetches the
     // current state and toggles it, so one menu item is always correct.
-    public async Task ToggleFolderSubscriptionAsync(Guid folderId)
+    public async Task ToggleFolderSubscriptionAsync(string documentSelfHref)
     {
         if (_api is null)
         {
@@ -1699,8 +1729,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var following = await _api.Documents.GetSubscriptionAsync(folderId);
-            await _api.Documents.SetSubscriptionAsync(folderId, !following);
+            // ONE fetch of the folder's resource, then both halves follow its advertised address (ADR 0557).
+            var subscriptionHref = await _api.Documents.RelViaSelfAsync(documentSelfHref, "subscription");
+            var following = await _api.Documents.GetSubscriptionAsync(subscriptionHref);
+            await _api.Documents.SetSubscriptionAsync(subscriptionHref, !following);
             Status = !following ? "Following this folder and everything in it." : "Unfollowed folder.";
         }
         catch (Services.ApiActionException e) { Status = e.Message; }
@@ -1719,7 +1751,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.Documents.RenameAsync(node.Id, newName);
+            await _api.Documents.RenameAsync(node.DocumentSelfHref, newName);
             Status = string.Format(Strings.Get("StRenamedTo"), newName);
             await LoadFolderContentsAsync(folderId);
         }
@@ -1762,7 +1794,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
             else
             {
-                await _api.Documents.DeleteAsync(node.Id);
+                await _api.Documents.DeleteAsync(node.DocumentSelfHref);
                 if (_selectedDocumentId == node.Id)
                 {
                     ClearDetail();
@@ -1793,7 +1825,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.Documents.MoveAsync(node.Id, targetFolderId);
+            await _api.Documents.MoveAsync(node.DocumentSelfHref, targetFolderId);
             Status = string.Format(Strings.Get("StMoved"), node.Name);
             await LoadFolderContentsAsync(folderId);
         }
@@ -1876,7 +1908,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // Files a reference (shortcut) to a dragged item into a folder. node.Id is the target (for a reference
     // source it's the underlying item, so referencing a reference just points at the same item).
-    public async Task ReferenceNodeAsync(NodeViewModel node, Guid targetFolderId)
+    public async Task ReferenceNodeAsync(NodeViewModel node, string targetReferencesHref)
     {
         if (_api is null || _currentFolderId is not { } folderId)
         {
@@ -1885,7 +1917,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.Documents.CreateReferenceAsync(targetFolderId, node.Id);
+            await _api.Documents.CreateReferenceAsync(targetReferencesHref, node.Id);
             Status = string.Format(Strings.Get("StPlacedRef"), node.Name);
             await LoadFolderContentsAsync(folderId);
         }
@@ -1938,9 +1970,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        if (node.RealParentId is { } parentId)
+        if (node.RealParentId is not null)
         {
-            await OpenFolderAsync(parentId, node.Id);
+            await OpenFolderAsync(
+                node.Links?.GetValueOrDefault("go-to")
+                ?? throw new InvalidOperationException($"The shortcut '{node.Name}' advertised no 'go-to' rel (ADR 0543/0555)."),
+                node.Id);
         }
         else
         {
@@ -1976,24 +2011,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    public async Task OpenFolderAsync(Guid folderId, Guid? selectTargetId = null)
-    {
-        if (_api is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var name = await _api.Documents.GetDocumentNameAsync(folderId);
-            await OpenLoadedFolderAsync(folderId, name, folderLinks: null, selectTargetId);
-        }
-        catch (Exception e)
-        {
-            Status = string.Format(Strings.Get("StErrOpenFolder"), e.Message);
-        }
-    }
-
     // The shared tail of both opens: contents, breadcrumbs, selection.
     private async Task OpenLoadedFolderAsync(Guid folderId, string name, IReadOnlyDictionary<string, string>? folderLinks, Guid? selectTargetId)
     {
@@ -2010,20 +2027,22 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Builds the references-dialog view model for the selected item (the view owns the dialog).
+    // Builds the references-dialog view model for the selected item (the view owns the dialog); the row's own
+    // addresses travel with it (ADR 0555).
     public ReferencesViewModel? CreateReferencesViewModel() =>
         _api is not null && SelectedItem is { } item
-            ? new ReferencesViewModel(_api, item.Id, item.Name)
+            ? new ReferencesViewModel(_api, item.Id, item.Name, item.DocumentSelfHref,
+                item.Links is not null && item.Links.TryGetValue("referencing-folders", out var rf) ? rf : null)
             : null;
 
-    // Same dialog for an explicit item — the tree context menu's "References…" acts on the right-clicked folder,
+    // Same dialog for an explicit row — the tree context menu's "References…" acts on the right-clicked folder,
     // which is not a contents-list row.
-    public ReferencesViewModel? CreateReferencesViewModel(Guid itemId, string itemName) =>
-        _api is not null ? new ReferencesViewModel(_api, itemId, itemName) : null;
+    public ReferencesViewModel? CreateReferencesViewModel(Guid itemId, string itemName, string documentSelfHref) =>
+        _api is not null ? new ReferencesViewModel(_api, itemId, itemName, documentSelfHref) : null;
 
     // Promote a referenced folder to be the item's primary location (ADR 0506): one atomic server call, then
     // reload the tree (the item moved) and navigate to its new home. Errors surface on the status line.
-    public async Task PromotePrimaryLocationAsync(Guid itemId, Guid folderId)
+    public async Task PromotePrimaryLocationAsync(string itemSelfHref, Guid itemId, Guid folderId, string folderHref)
     {
         if (_api is null)
         {
@@ -2032,9 +2051,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.Documents.SetPrimaryLocationAsync(itemId, folderId);
+            await _api.Documents.SetPrimaryLocationAsync(itemSelfHref, folderId);
             await ReloadTreeAsync();
-            await OpenFolderAsync(folderId, itemId);
+            await OpenFolderAsync(folderHref, itemId);
             Status = Strings.Get("RefPrimaryLocationChanged");
         }
         catch (ApiActionException e)
@@ -2245,15 +2264,16 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // The current version's file extension for a document (so the working copy keeps the right type).
-    private async Task<string> ResolveFileExtensionAsync(Guid documentId)
+    // The current version's file extension for a document (so the working copy keeps the right type) —
+    // read from the versions address the caller's row advertised (ADR 0555).
+    private async Task<string> ResolveFileExtensionAsync(string versionsHref)
     {
         if (_api is null)
         {
             return "";
         }
 
-        var fields = await _api.Documents.GetSystemFieldsAsync(documentId);
+        var fields = await _api.Documents.GetSystemFieldsAsync(versionsHref);
         return fields?.FileExtension ?? "";
     }
 
@@ -2743,9 +2763,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
             // detail so the comment + the new version's preview show without a manual reselect.
             if (_selectedDocumentId == documentId)
             {
-                await LoadCommentsAsync(documentId);
-                await LoadPreviewAsync(documentId);
-                await LoadSystemFieldsAsync(documentId, DetailTitle);
+                await LoadCommentsAsync(DetailHref("chat"));
+                await LoadPreviewAsync(DetailHref("versions"));
+                await LoadSystemFieldsAsync(DetailHref("self"), DetailHref("versions"), DetailTitle);
             }
         }
         catch (ApiActionException e)
@@ -3450,7 +3470,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         try
         {
             // Follows the address the ROW advertised rather than turning the id back into one (ADR 0557).
-            await SearchPreview.RenderAsync(await _api.GetPreviewFromVersionsAsync(versionsHref));
+            await SearchPreview.RenderAsync(await _api.Versions.GetPreviewFromVersionsAsync(versionsHref));
         }
         catch (Exception)
         {
@@ -3475,22 +3495,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
             Preview.FindQuery = SearchQuery.Trim();
         }
 
-        if (result.IsFolder)
-        {
-            // Reveal the folder itself: expand its ancestors + select it in the tree (which loads its contents).
-            await RevealFolderInTreeAsync(result.Id);
-        }
-        else if (result.ParentId is { } parentId)
+        if (!result.IsFolder && result.Links?.GetValueOrDefault("parent") is { } parentHref
+            && result.Links?.GetValueOrDefault("self") is { } docHref)
         {
             // Reveal the document in context: expand + select its parent folder in the tree, load the folder into
-            // the list pane, and select the document there (issue #340). The contents load follows the hit's
-            // `parent` address (#443); the tree expansion stays id-matching against rows already loaded.
-            await RevealDocumentInTreeAsync(result.Id, parentId, result.Links?.GetValueOrDefault("parent"));
+            // the list pane, and select the document there (issue #340). Both loads follow the hit's own
+            // advertised addresses (#443); the tree expansion stays id-matching against rows already loaded.
+            await RevealDocumentInTreeAsync(result.Id, docHref, parentHref);
         }
         else
         {
-            // A document filed at a repository root is itself a top-level tree node.
-            await RevealFolderInTreeAsync(result.Id);
+            // A folder, or a document filed at a repository root (itself a top-level tree node).
+            await RevealFolderInTreeAsync(result.Links?.GetValueOrDefault("self")
+                ?? throw new InvalidOperationException($"The search hit '{result.Name}' advertised no 'self' rel (ADR 0543)."));
         }
     }
 
@@ -3518,15 +3535,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     // Reveal a folder (or a root-level item): expand its ancestors, then select it in the tree so its contents load.
-    private async Task RevealFolderInTreeAsync(Guid folderId)
+    // ONE fetch of the advertised address serves the id, the ancestors rel and the fallback open (ADR 0557).
+    private async Task RevealFolderInTreeAsync(string folderSelfHref)
     {
         if (_api is null)
         {
             return;
         }
 
-        var chain = await _api.Documents.GetAncestorsAsync(folderId);
-        chain.Add(folderId); // ancestors are up to the parent; append the folder itself as the reveal target
+        var stub = await _api.GetDocumentByAddressAsync(folderSelfHref);
+        var chain = await _api.Documents.GetAncestorsAsync(stub.Links["ancestors"]);
+        chain.Add(stub.Id); // ancestors are up to the parent; append the folder itself as the reveal target
         var node = await ExpandTreePathAsync(chain);
         if (node is not null)
         {
@@ -3534,25 +3553,25 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
         else
         {
-            await OpenFolderAsync(folderId); // not mirrored in the tree — fall back to a contents-only open
+            // Not mirrored in the tree — fall back to a contents-only open of the already-fetched resource.
+            await OpenLoadedFolderAsync(stub.Id, stub.Name, stub.Links, null);
         }
     }
 
     // Reveal a document: expand + select its parent folder in the tree, load the folder into the list, select the doc.
-    private async Task RevealDocumentInTreeAsync(Guid documentId, Guid parentFolderId, string? parentHref = null)
+    private async Task RevealDocumentInTreeAsync(Guid documentId, string documentSelfHref, string parentHref)
     {
         if (_api is null)
         {
             return;
         }
 
-        var node = await ExpandTreePathAsync(await _api.Documents.GetAncestorsAsync(documentId));
+        var node = await ExpandTreePathAsync(
+            await _api.Documents.GetAncestorsAsync(await _api.Documents.RelViaSelfAsync(documentSelfHref, "ancestors")));
 
         // Load the parent folder into the list + select the document (+ its preview) regardless of the tree
-        // outcome — following the caller's advertised address where it holds one (#443).
-        await (parentHref is not null
-            ? OpenFolderAsync(parentHref, documentId)
-            : OpenFolderAsync(parentFolderId, documentId));
+        // outcome — following the caller's advertised addresses (#443).
+        await OpenFolderAsync(parentHref, documentId);
 
         // Then reflect it in the tree — select the parent node without re-loading the folder (already loaded above).
         if (node is not null)
@@ -3566,27 +3585,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // Uploads files dropped onto the contents pane as new documents. Dropped onto a folder row, they go into
     // that folder (overrideFolderId); anywhere else, the currently-open folder. See ADR "Desktop drag-and-drop
     // upload" + ADR "List-pane drop filing".
-    public async Task UploadDroppedFilesAsync(IReadOnlyList<Avalonia.Platform.Storage.IStorageFile> files, Guid? overrideFolderId = null)
+    public async Task UploadDroppedFilesAsync(IReadOnlyList<Avalonia.Platform.Storage.IStorageFile> files, IReadOnlyDictionary<string, string>? targetFolderLinks = null)
     {
-        if (_api is null || (overrideFolderId ?? _currentFolderId) is not { } folderId)
+        // The drop target's own addresses, carried by the row it landed on (ADR 0555), else the open folder's.
+        // Resolved ONCE for the whole drop — following a rel must not cost a request per file (ADR 0557).
+        var folderLinks = targetFolderLinks ?? _currentFolderLinks;
+        if (_api is null || folderLinks is null)
         {
             Status = Strings.Get("StSelectFolderDrop");
             return;
         }
 
-        // The target folder's own address for its children, resolved ONCE for the whole drop. Filing per file
-        // through the id overload fetched the folder again for every file — following a rel must not cost a
-        // request per use (ADR 0557). It is also what the name-conflict prompt reads the siblings from.
-        string childrenHref;
-        try
-        {
-            childrenHref = (await _api.Documents.GetDocumentLinksAsync(folderId))["children"];
-        }
-        catch (Exception e)
-        {
-            Status = string.Format(Strings.Get("StErrUpload2"), files[0].Name, e.Message);
-            return;
-        }
+        var childrenHref = folderLinks["children"];
 
         var uploaded = 0;
         var failed = 0;
@@ -3621,7 +3631,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
                         if (choice.Action == "reference")
                         {
-                            await _api.Documents.CreateReferenceAsync(folderId, choice.TargetId);
+                            await _api.Documents.CreateReferenceAsync(folderLinks["references"], choice.TargetId);
                             uploaded++;
                             continue;
                         }
@@ -3658,7 +3668,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
 
-        await LoadFolderContentsAsync(folderId);
+        if (_currentFolderId is { } openFolderId)
+        {
+            await LoadFolderContentsAsync(openFolderId);
+        }
+
         Status = string.Format(Strings.Get("StUploadedN"), uploaded) + (failed > 0 ? string.Format(Strings.Get("StFailedN"), failed) : "") + ".";
     }
 
@@ -3681,7 +3695,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         var folderPath = string.Join(" / ", Breadcrumbs.Select(b => b.Name));
         var folderName = Breadcrumbs.LastOrDefault()?.Name ?? "";
-        var context = new DocumentFilingContext(document.Id, document.Name, $"{folderPath} / {document.Name}", fid, folderName, folderPath);
+        var context = new DocumentFilingContext(document.Id, document.Name, $"{folderPath} / {document.Name}", fid, folderName, folderPath,
+            document.Links,
+            // "Into its folder": a reference row's real home travels as its `go-to` address; a real row files
+            // into the OPEN folder, whose links the navigation stored (ADR 0555).
+            document.IsReference ? document.Links?.GetValueOrDefault("go-to") is { } goTo ? new Dictionary<string, string> { ["self"] = goTo } : null : _currentFolderLinks);
         return new FolderPickerViewModel(_api, context, bulk: fileCount > 1);
     }
 
@@ -3711,11 +3729,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
                 if (result.Mode == FilingMode.AsVersion)
                 {
-                    await _api.Documents.UploadNewVersionAsync(result.TargetId, bytes, Path.GetExtension(file.Name), result.Comment);
+                    await _api.Documents.UploadNewVersionAsync(await TargetHrefAsync(result, "versions"), bytes, Path.GetExtension(file.Name), result.Comment);
                 }
                 else
                 {
-                    await _api.Documents.UploadFileAsync(result.TargetId, file.Name, bytes, result.Comment);
+                    await _api.Documents.UploadFileAsync(await TargetHrefAsync(result, "children"), file.Name, bytes, result.Comment);
                 }
 
                 done++;
@@ -3750,6 +3768,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
             ? $"Filed {done} new version(s)" + (failed > 0 ? $", {failed} failed" : "") + "."
             : $"Filed {done} file(s)" + (failed > 0 ? $", {failed} failed" : "") + ".";
     }
+
+    // The filing target's address for a rel: from the links the picked row carried where it advertised the
+    // rel, else resolved once through the row's document address (ADR 0559).
+    private async Task<string> TargetHrefAsync(FilingResult result, string rel) =>
+        result.TargetLinks?.GetValueOrDefault(rel)
+        ?? await _api!.Documents.RelViaSelfAsync(
+            result.TargetLinks?.GetValueOrDefault("self")
+            ?? throw new InvalidOperationException($"The filing target advertised no address at all (ADR 0543)."),
+            rel);
 
     // Refresh reloads both the folders-only tree (LoadRootAsync/ReloadTreeAsync) and the current folder's
     // contents — the tree caches lazily-loaded children, so without an explicit rebuild it never picks up
@@ -3820,17 +3847,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var mask = await _api.Documents.GetMaskAsync(document.Id);
+            var mask = await _api.Documents.GetMaskAsync(document.Href("mask"));
             MaskLine = mask.Name is null ? "No mask" : $"Mask: {mask.Name}" + (mask.VersionNumber is { } v ? $" · version {v}" : "");
 
-            foreach (var field in await _api.Documents.GetIndexDataAsync(document.Id))
+            foreach (var field in await _api.Documents.GetIndexDataAsync(document.Href("index-data")))
             {
                 IndexFields.Add(new IndexFieldViewModel { FieldName = field.FieldName, Values = string.Join(", ", field.Values) });
             }
 
-            await LoadSystemFieldsAsync(document.Id, document.Name);
-            await LoadPreviewAsync(document.Id);
-            await LoadCommentsAsync(document.Id);
+            await LoadSystemFieldsAsync(document.DocumentSelfHref, document.Href("versions"), document.Name);
+            await LoadPreviewAsync(document.Href("versions"));
+            await LoadCommentsAsync(document.Href("chat"));
         }
         catch (Exception e)
         {
@@ -3920,15 +3947,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // ---- Group membership (ADR "Group membership editing") ------------------------------------------
 
-    public ObservableCollection<SimplArchiveApiClient.UserOptionInfo> GroupMembers { get; } = [];
-    public ObservableCollection<SimplArchiveApiClient.UserOptionInfo> MemberCandidates { get; } = [];
+    public ObservableCollection<UserOptionInfo> GroupMembers { get; } = [];
+    public ObservableCollection<UserOptionInfo> MemberCandidates { get; } = [];
 
     [ObservableProperty] private bool _hasGroupMembers;
 
     // The AutoCompleteBox's selected candidate — setting it (a pick) adds that user, then resets.
-    [ObservableProperty] private SimplArchiveApiClient.UserOptionInfo? _selectedMemberToAdd;
+    [ObservableProperty] private UserOptionInfo? _selectedMemberToAdd;
 
-    async partial void OnSelectedMemberToAddChanged(SimplArchiveApiClient.UserOptionInfo? value)
+    async partial void OnSelectedMemberToAddChanged(UserOptionInfo? value)
     {
         if (value is null || _api is null || SelectedPrincipal is not { IsGroup: true } group)
         {
@@ -3986,12 +4013,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var memberIds = GroupMembers.Select(m => m.Id).ToHashSet();
         foreach (var p in Principals.Where(p => !p.IsGroup && !memberIds.Contains(p.Id)).OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
         {
-            MemberCandidates.Add(new SimplArchiveApiClient.UserOptionInfo(p.Id, p.Name));
+            MemberCandidates.Add(new UserOptionInfo(p.Id, p.Name));
         }
     }
 
     [RelayCommand]
-    private async Task RemoveMember(SimplArchiveApiClient.UserOptionInfo? member)
+    private async Task RemoveMember(UserOptionInfo? member)
     {
         if (member is null || _api is null || SelectedPrincipal is not { IsGroup: true } group)
         {
@@ -4056,7 +4083,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.DisableMfaAsync();
+            await _api.Profile.DisableMfaAsync();
             MfaEnabled = false;
             Status = Strings.Get("StMfaDisabled");
         }
@@ -4112,20 +4139,22 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public bool HasSelectedHoldItem => SelectedHoldItem is not null;
 
-    // Go to the held document in Repositories (review finding) — the search jump, addressed by the
-    // item's ParentId rather than pane state (ADR 0559).
+    // Go to the held document in Repositories (review finding) — addressed from the ROW's advertised
+    // `document`/`parent` (ADR 0555/0559), never from pane state or a bare id.
     [RelayCommand]
     public async Task GoToHoldItemAsync(LegalHoldItemRowViewModel row)
     {
         SelectedTab = 0;
-        if (row.Item.ParentId is { } parentId)
+        var documentHref = row.Item.Href("document")
+            ?? throw new InvalidOperationException($"The hold item '{row.DocumentName}' advertised no 'document' rel (ADR 0543/0555).");
+        if (row.Item.Href("parent") is { } parentHref)
         {
-            await RevealDocumentInTreeAsync(row.DocumentId, parentId);
+            await RevealDocumentInTreeAsync(row.DocumentId, documentHref, parentHref);
         }
         else
         {
             // A document filed at a repository root is itself a top-level tree node.
-            await RevealFolderInTreeAsync(row.DocumentId);
+            await RevealFolderInTreeAsync(documentHref);
         }
     }
 
@@ -4148,7 +4177,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var holds = await _api.GetLegalHoldsAsync();
+            var holds = await _api.LegalHolds.GetLegalHoldsAsync();
             var previousId = SelectedLegalHold?.Id;
             LegalHolds.Clear();
             foreach (var h in holds)
@@ -4175,7 +4204,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var hold = await _api.GetLegalHoldAsync(value.Hold);
+            var hold = await _api.LegalHolds.GetLegalHoldAsync(value.Hold);
             foreach (var item in hold.Items)
             {
                 SelectedHoldItems.Add(new LegalHoldItemRowViewModel(item.DocumentId, item.DocumentName, item));
@@ -4197,10 +4226,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var hold = await _api.CreateLegalHoldAsync(name, reason);
+            var hold = await _api.LegalHolds.CreateLegalHoldAsync(name, reason);
             if (documentId is { } docId)
             {
-                await _api.AddLegalHoldItemAsync(hold, docId);
+                await _api.LegalHolds.AddLegalHoldItemAsync(hold, docId);
                 await ReloadCurrentFolderAsync(); // refresh the lock indicator
             }
 
@@ -4229,7 +4258,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.ReleaseLegalHoldAsync(hold.Hold);
+            await _api.LegalHolds.ReleaseLegalHoldAsync(hold.Hold);
             Status = Strings.Get("StHoldReleased");
             await LoadLegalHoldsAsync();
             await ReloadCurrentFolderAsync();
@@ -4250,7 +4279,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.RemoveLegalHoldItemAsync(row.Item);
+            await _api.LegalHolds.RemoveLegalHoldItemAsync(row.Item);
             var reselect = hold;
             await LoadLegalHoldsAsync();
             SelectedLegalHold = LegalHolds.FirstOrDefault(h => h.Id == reselect.Id);
@@ -4303,7 +4332,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var schedule = await _api.GetRetentionScheduleAsync();
+            var schedule = await _api.LegalHolds.GetRetentionScheduleAsync();
             RetentionRequiresReview = schedule.RequiresReview;
             RetentionItems.Clear();
             foreach (var item in schedule.Items)
@@ -4327,7 +4356,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.DisposeRetentionAsync(row.Item);
+            await _api.LegalHolds.DisposeRetentionAsync(row.Item);
             Status = string.Format(Strings.Get("StDisposed"), row.DocumentName);
             await LoadRetentionScheduleAsync();
         }
@@ -4352,7 +4381,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.ExtendRetentionAsync(row.Item, until);
+            await _api.LegalHolds.ExtendRetentionAsync(row.Item, until);
             Status = string.Format(Strings.Get("StExtendedRetention"), row.DocumentName);
             await LoadRetentionScheduleAsync();
         }
@@ -4638,7 +4667,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.ChangeMyPasswordAsync(current, newPassword);
+            await _api.Profile.ChangeMyPasswordAsync(current, newPassword);
             Status = Strings.Get("StPwChanged");
         }
         catch (ApiActionException ex)
@@ -4688,7 +4717,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         try
         {
             // My own avatar is a rel on the `me` resource; the id was only ever a way to rebuild the path.
-            var bytes = await _api.GetMyPhotoAsync();
+            var bytes = await _api.Profile.GetMyPhotoAsync();
             ProfilePhoto = bytes is null ? null : Decode(bytes);
         }
         catch (Exception)
@@ -4706,7 +4735,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.SetMyPhotoAsync(png);
+            await _api.Profile.SetMyPhotoAsync(png);
             await LoadMyPhotoAsync();
             Status = Strings.Get("StPhotoUpdated");
         }
@@ -4858,10 +4887,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             new AdminClient.SystemRightsData(false, false, false, false, false, false, false, false, false, false, false, false, false)));
         // Select the Administrators group so the rights matrix + Members section show (mock members, no API).
         SelectedPrincipal = Principals[0];
-        GroupMembers.Add(new SimplArchiveApiClient.UserOptionInfo(Guid.NewGuid(), "Demo Admin"));
-        GroupMembers.Add(new SimplArchiveApiClient.UserOptionInfo(Guid.NewGuid(), "Jane Doe"));
+        GroupMembers.Add(new UserOptionInfo(Guid.NewGuid(), "Demo Admin"));
+        GroupMembers.Add(new UserOptionInfo(Guid.NewGuid(), "Jane Doe"));
         HasGroupMembers = true;
-        MemberCandidates.Add(new SimplArchiveApiClient.UserOptionInfo(Guid.NewGuid(), "Bob Smith"));
+        MemberCandidates.Add(new UserOptionInfo(Guid.NewGuid(), "Bob Smith"));
     }
 
     // Mocks the Audit tab for the headless screenshot (ADR "Desktop audit viewer").
@@ -5079,7 +5108,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return null;
         }
 
-        return new WorkflowWindowViewModel(_api, item.Id);
+        return new WorkflowWindowViewModel(_api, item.Href("versions"), item.DocumentSelfHref);
     }
 
     // ---- In-app notifications bell (ADR "Notification viewer + click-through") -----------------------
@@ -5278,7 +5307,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.CreateTagAsync(NewTagName.Trim(), string.IsNullOrWhiteSpace(NewTagColor) ? null : NewTagColor.Trim());
+            await _api.Documents.CreateTagAsync(NewTagName.Trim(), string.IsNullOrWhiteSpace(NewTagColor) ? null : NewTagColor.Trim());
             NewTagName = "";
             NewTagColor = "";
             await LoadTagCatalogAsync();
@@ -5385,7 +5414,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // Loads the always-shown system fields for the selected document (ADR "System fields + OCR-language mask
     // field"). OCR languages only apply to a TIFF-sourced document.
-    private async Task LoadSystemFieldsAsync(Guid documentId, string name)
+    private async Task LoadSystemFieldsAsync(string documentSelfHref, string versionsHref, string name)
     {
         SysName = name;
         SysDocumentDate = null;
@@ -5409,7 +5438,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         try
         {
             // One read of the document resource serves the label AND the external-links rel (issue #385).
-            var detail = await _api.Documents.GetDocumentDetailAsync(documentId);
+            var detail = await _api.Documents.GetDocumentDetailAsync(documentSelfHref);
             var s = detail.Sensitivity;
             _detailSensitivityName = s.Name;
             _detailSensitivityColor = s.Color;
@@ -5437,7 +5466,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         try { foreach (var t in await _api.Documents.GetTagsAsync(DetailHref("tags"))) DetailTags.Add(t); } catch (Exception) { /* leave empty */ }
         HasDetailTags = DetailTags.Count > 0;
 
-        var fields = await _api.Documents.GetSystemFieldsAsync(documentId);
+        var fields = await _api.Documents.GetSystemFieldsAsync(versionsHref);
         if (fields is null)
         {
             return; // no confirmed version yet (e.g. a folder)
@@ -5560,9 +5589,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 AvailableMasks.Add(new MaskChoiceViewModel(mask.Id, mask.Name, mask));
             }
 
-            _originalMaskId = (await _api.Documents.GetMaskAsync(documentId)).MaskId;
+            _originalMaskId = (await _api.Documents.GetMaskAsync(DetailHref("mask"))).MaskId;
             SelectedMaskChoice = AvailableMasks.FirstOrDefault(m => m.MaskId == _originalMaskId) ?? AvailableMasks[0];
-            await LoadMaskEditFieldsAsync(documentId, SelectedMaskChoice.Mask, withCurrentValues: true);
+            await LoadMaskEditFieldsAsync(SelectedMaskChoice.Mask, withCurrentValues: true);
 
             IsEditing = true;
         }
@@ -5585,10 +5614,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        await LoadMaskEditFieldsAsync(documentId, value?.Mask, withCurrentValues: false);
+        await LoadMaskEditFieldsAsync(value?.Mask, withCurrentValues: false);
     }
 
-    private async Task LoadMaskEditFieldsAsync(Guid documentId, DocumentsClient.MaskOptionInfo? mask, bool withCurrentValues)
+    private async Task LoadMaskEditFieldsAsync(DocumentsClient.MaskOptionInfo? mask, bool withCurrentValues)
     {
         MaskEditFields.Clear();
         if (_api is null || mask is not { } chosen)
@@ -5598,7 +5627,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         var fields = await _api.Documents.GetMaskFieldsAsync(chosen);
         var valuesByName = withCurrentValues
-            ? (await _api.Documents.GetIndexDataAsync(documentId)).ToDictionary(f => f.FieldName, f => f.Values)
+            ? (await _api.Documents.GetIndexDataAsync(DetailHref("index-data"))).ToDictionary(f => f.FieldName, f => f.Values)
             : new Dictionary<string, IReadOnlyList<string>>();
 
         foreach (var field in fields)
@@ -5629,7 +5658,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             try
             {
-                await _api.Documents.RenameAsync(documentId, newName);
+                await _api.Documents.RenameAsync(DetailHref("self"), newName);
                 DetailTitle = newName;
                 _originalName = newName;
                 nameChanged = true;
@@ -5642,7 +5671,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             try
             {
-                await _api.SetDocumentDateAsync(dateHref, date.ToString("yyyy-MM-dd"));
+                await _api.Versions.SetDocumentDateAsync(dateHref, date.ToString("yyyy-MM-dd"));
                 _originalDocumentDate = date;
             }
             catch (Exception e) { failures.Add($"document date ({e.Message})"); }
@@ -5653,7 +5682,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             try
             {
-                await _api.Documents.SetOcrLanguagesAsync(documentId, _stagedOcrCodes);
+                await _api.Documents.SetOcrLanguagesAsync(DetailHref("ocr-languages"), _stagedOcrCodes);
                 _sysOcrCodes = _stagedOcrCodes;
             }
             catch (Exception e) { failures.Add($"OCR languages ({e.Message})"); }
@@ -5665,7 +5694,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             try
             {
-                await _api.Documents.SetSensitivityAsync(documentId, chosenLabelId);
+                await _api.Documents.SetSensitivityAsync(DetailHref("sensitivity"), chosenLabelId);
                 var lbl = SensitivityCatalog.FirstOrDefault(l => l.Id == chosenLabelId);
                 _detailSensitivityName = lbl?.Name ?? "";
                 _detailSensitivityColor = lbl?.Color;
@@ -5699,7 +5728,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             {
                 if (_originalMaskId is not null)
                 {
-                    await _api.Documents.ClearMaskAsync(documentId);
+                    await _api.Documents.ClearMaskAsync(DetailHref("mask"));
                     _originalMaskId = null;
                 }
             }
@@ -5707,10 +5736,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             {
                 // Fill index data first, then (re)assign the mask — assigning re-checks required fields, so
                 // the values must already be in place (ADR "Document metadata (index data) endpoints").
-                await _api.Documents.SetIndexDataAsync(documentId, MaskEditFields.Select(f => (f.FieldDefinitionId, f.ToValues())));
+                await _api.Documents.SetIndexDataAsync(DetailHref("index-data"), MaskEditFields.Select(f => (f.FieldDefinitionId, f.ToValues())));
                 if (newMaskId != _originalMaskId)
                 {
-                    await _api.Documents.SetMaskAsync(documentId, newMaskId.Value);
+                    await _api.Documents.SetMaskAsync(DetailHref("mask"), newMaskId.Value);
                     _originalMaskId = newMaskId;
                 }
             }
@@ -5724,7 +5753,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             try
             {
-                await _api.Documents.SetContentsSortOrderAsync(documentId, EditSortOrder);
+                await _api.Documents.SetContentsSortOrderAsync(DetailHref("contents-sort-order"), EditSortOrder);
                 _detailSortOrder = EditSortOrder;
                 OnPropertyChanged(nameof(DetailSortText));
 
@@ -5746,7 +5775,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         IsEditing = false;
         Status = Strings.Get("StSaved");
-        await ReloadDetailAsync(documentId);
+        await ReloadDetailAsync();
         if (nameChanged)
         {
             await ReloadTreeAsync();
@@ -5773,25 +5802,25 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _stagedOcrCodes = _sysOcrCodes;
         SysOcrLanguages = DescribeOcrLanguages(_sysOcrCodes);
 
-        if (_selectedDocumentId is { } documentId)
+        if (_selectedDocumentId is not null)
         {
-            await ReloadDetailAsync(documentId);
+            await ReloadDetailAsync();
         }
     }
 
     // Reloads the read-only mask line + index fields after a save/cancel.
-    private async Task ReloadDetailAsync(Guid documentId)
+    private async Task ReloadDetailAsync()
     {
         if (_api is null)
         {
             return;
         }
 
-        var mask = await _api.Documents.GetMaskAsync(documentId);
+        var mask = await _api.Documents.GetMaskAsync(DetailHref("mask"));
         MaskLine = mask.Name is null ? "No mask" : $"Mask: {mask.Name}" + (mask.VersionNumber is { } v ? $" · version {v}" : "");
 
         IndexFields.Clear();
-        foreach (var field in await _api.Documents.GetIndexDataAsync(documentId))
+        foreach (var field in await _api.Documents.GetIndexDataAsync(DetailHref("index-data")))
         {
             IndexFields.Add(new IndexFieldViewModel { FieldName = field.FieldName, Values = string.Join(", ", field.Values) });
         }
@@ -5799,7 +5828,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // The Repositories/Inbox preview render goes through the shared Preview surface (ADR "Desktop recycle bin
     // parity" — the Recycle bin has its own).
-    private async Task LoadPreviewAsync(Guid documentId) => await Preview.RenderAsync(await _api!.Documents.GetPreviewAsync(documentId));
+    private async Task LoadPreviewAsync(string versionsHref) => await Preview.RenderAsync(await _api!.Documents.GetPreviewAsync(versionsHref));
 
     // ---- Author identity card (ADR 0544) -------------------------------------------------------------
 
@@ -5824,7 +5853,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        var loaded = await _api.GetUserCardAsync(href);
+        var loaded = await _api.Profile.GetUserCardAsync(href);
         if (loaded is not { } result)
         {
             AuthorCardFailed = true;
@@ -5911,11 +5940,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // "Go to" leaves the dialog and moves the workbench to the shared document — the same end state as
         // browsing to it by hand, which is what the reader of a cross-document list is usually after.
         Guid? goToDocument = null;
-        Guid? goToParent = null;
-        dialog.GoToDocument = (documentId, parentId) =>
+        string? goToDocumentHref = null;
+        string? goToParentHref = null;
+        dialog.GoToDocument = (documentId, documentHref, parentHref) =>
         {
             goToDocument = documentId;
-            goToParent = parentId;
+            goToDocumentHref = documentHref;
+            goToParentHref = parentHref;
             dialog.RequestClose?.Invoke();
         };
 
@@ -5923,14 +5954,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         if (goToDocument is { } target)
         {
-            // The parent is where the document lives; without one it IS a repository root, so open it directly.
-            await (goToParent is { } parent ? OpenFolderAsync(parent, target) : OpenFolderAsync(target));
+            // The parent is where the document lives; without one it IS a repository root, so open the document's
+            // own address directly. Both are the ROW's advertised addresses (ADR 0555, #443).
+            await OpenFolderAsync(
+                goToParentHref ?? goToDocumentHref
+                ?? throw new InvalidOperationException("The external-link row advertised no 'document' rel (ADR 0543/0555)."),
+                target);
         }
     }
 
-    private async Task LoadCommentsAsync(Guid documentId)
+    private async Task LoadCommentsAsync(string chatHref)
     {
-        var thread = await _api!.Documents.GetChatAsync(documentId);
+        var thread = await _api!.Documents.GetChatAsync(chatHref);
         var comments = thread.Messages;
         _mentionableUsersHref = thread.MentionableUsersHref;
         MentionCandidates.Clear();
@@ -5985,11 +6020,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.Documents.PostCommentAsync(documentId, message.ReplyText, parentCommentId: message.Id);
+            await _api.Documents.PostCommentAsync(DetailHref("chat"), message.ReplyText, parentCommentId: message.Id);
 
             // Reloading rebuilds the collection, so the open reply box disappears with it — no need to reset the
             // flag on an instance that is about to be replaced.
-            await LoadCommentsAsync(documentId);
+            await LoadCommentsAsync(DetailHref("chat"));
         }
         catch (Exception e)
         {
@@ -6007,9 +6042,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.Documents.PostCommentAsync(documentId, NewComment, parentCommentId: null);
+            await _api.Documents.PostCommentAsync(DetailHref("chat"), NewComment, parentCommentId: null);
             NewComment = "";
-            await LoadCommentsAsync(documentId);
+            await LoadCommentsAsync(DetailHref("chat"));
         }
         catch (Exception e)
         {
@@ -6178,13 +6213,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var repositories = await _api!.Documents.GetRepositoriesAsync();
         var repositoryNode = new TreeNodeViewModel(repositories[0].Id, repositories[0].Name, repositories[0].HasSubfolders, LoadTreeChildrenAsync, links: repositories[0].Links);
         SetBreadcrumbFromTreeNode(repositoryNode);
-        await LoadFolderContentsAsync(repositoryNode.Id);
+        await LoadFolderContentsAsync(repositoryNode.Id, repositoryNode.Links);
         trail.Add(BreadcrumbTrail());
 
         if (Items.FirstOrDefault(i => i.IsFolder) is { } folder)
         {
             Breadcrumbs.Add(new BreadcrumbViewModel { Name = folder.Name, FolderId = folder.Id, ShowSeparator = true });
-            await LoadFolderContentsAsync(folder.Id);
+            await LoadFolderContentsAsync(folder.Id, folder.Links);
             trail.Add(BreadcrumbTrail());
 
             // Click the repository crumb (index 1) to navigate back up.
@@ -6251,14 +6286,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         var root = (await _api!.Documents.GetRepositoriesAsync())[0];
         var s = Guid.NewGuid().ToString("N")[..6];
-        await _api.Documents.CreateFolderAsync(root.Id, $"rtree-A-{s}");
-        await _api.Documents.CreateFolderAsync(root.Id, $"rtree-B-{s}");
+        await _api.Documents.CreateFolderAsync(root.Href("children"), $"rtree-A-{s}");
+        await _api.Documents.CreateFolderAsync(root.Href("children"), $"rtree-B-{s}");
         var a = (await _api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == $"rtree-A-{s}");
         var b = (await _api.Documents.GetChildrenAsync(root.Href("children"))).First(c => c.Name == $"rtree-B-{s}");
-        await _api.Documents.CreateFolderAsync(a.Id, $"rtree-F-{s}");
+        await _api.Documents.CreateFolderAsync(a.Href("children"), $"rtree-F-{s}");
         var f = (await _api.Documents.GetChildrenAsync(a.Href("children"))).First(c => c.Name == $"rtree-F-{s}");
 
-        await _api.Documents.CreateReferenceAsync(b.Id, f.Id);
+        await _api.Documents.CreateReferenceAsync(b.Href("references"), f.Id);
 
         var bTreeChildren = (await LoadTreeChildrenAsync(new TreeNodeViewModel(b.Id, b.Name, false, null, links: b.Links))).ToList();
         var refNode = bTreeChildren.FirstOrDefault(n => n.IsReference);
@@ -6266,8 +6301,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
             ? "OK: referenced folder appears in the tree as a shortcut node targeting F."
             : "FAILED: referenced folder missing from the tree.");
 
-        await _api.Documents.DeleteAsync(a.Id);
-        await _api.Documents.DeleteAsync(b.Id);
+        await _api.Documents.DeleteAsync(a.Href("self"));
+        await _api.Documents.DeleteAsync(b.Href("self"));
         return log;
     }
 
@@ -6284,7 +6319,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         var repository = (await _api!.Documents.GetRepositoriesAsync())[0];
         var name = $"treetest-{Guid.NewGuid():N}"[..16];
-        await LoadFolderContentsAsync(repository.Id);
+        await LoadFolderContentsAsync(repository.Id, repository.Links);
         await CreateFolderAsync(name);
 
         var treeChildren = (await LoadTreeChildrenAsync(new TreeNodeViewModel(repository.Id, repository.Name, false, null, links: repository.Links))).Select(n => n.Name).ToList();
@@ -6296,7 +6331,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         // Clean up the test folder.
         var created = (await _api.Documents.GetChildrenAsync(repository.Href("children"))).First(c => c.Name == name);
-        await _api.Documents.DeleteAsync(created.Id);
+        await _api.Documents.DeleteAsync(created.Href("self"));
         return log;
     }
 
@@ -6319,19 +6354,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
 #pragma warning disable MVVMTK0034 // deliberately set the backing field to avoid firing the change handler
         _selectedTreeNode = repo;
 #pragma warning restore MVVMTK0034
-        await LoadFolderContentsAsync(repo.Id);
+        await LoadFolderContentsAsync(repo.Id, repo.Links);
         var sub = Items.FirstOrDefault(n => !n.HasVersions);
         if (sub is null)
         {
             // Other tests sharing the demo tenant may have removed the seeded subfolder; create one so this
             // self-test doesn't depend on test ordering.
-            await _api!.Documents.CreateFolderAsync(repo.Id, "tree-select-" + Guid.NewGuid().ToString("N")[..8]);
-            await LoadFolderContentsAsync(repo.Id);
+            await _api!.Documents.CreateFolderAsync(repo.Href("children"), "tree-select-" + Guid.NewGuid().ToString("N")[..8]);
+            await LoadFolderContentsAsync(repo.Id, repo.Links);
             sub = Items.First(n => !n.HasVersions);
         }
 
         // …then drills into the subfolder via the CONTENTS list — the tree's selection stays on the repo.
-        await LoadFolderContentsAsync(sub.Id);
+        await LoadFolderContentsAsync(sub.Id, sub.Links);
         var afterDrill = _currentFolderId!.Value;
 
         // Re-tap the still-selected repo node in the tree: the fix reloads the list back to the repo.
@@ -6351,19 +6386,21 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         // Seed a subfolder + a document inside it (independent of test ordering).
         var subName = "reveal-" + Guid.NewGuid().ToString("N")[..8];
-        await _api!.Documents.CreateFolderAsync(repo.Id, subName);
-        await LoadFolderContentsAsync(repo.Id);
+        await _api!.Documents.CreateFolderAsync(repo.Href("children"), subName);
+        await LoadFolderContentsAsync(repo.Id, repo.Links);
         var sub = Items.First(n => n.IsFolder && !n.IsReference && n.Name == subName);
         var docName = "reveal-doc-" + Guid.NewGuid().ToString("N")[..8] + ".txt";
-        var docId = await _api.Documents.UploadFileAsync(sub.Id, docName, System.Text.Encoding.UTF8.GetBytes("reveal me"));
+        var docId = await _api.Documents.UploadFileAsync(sub.Href("children"), docName, System.Text.Encoding.UTF8.GetBytes("reveal me"));
 
         // Start from a clean slate: nothing selected in the tree, the list showing the repo root (not the subfolder).
-        await LoadFolderContentsAsync(repo.Id);
+        await LoadFolderContentsAsync(repo.Id, repo.Links);
 #pragma warning disable MVVMTK0034 // set the backing field so the reveal's selection is a real change, not a no-op
         _selectedTreeNode = null;
 #pragma warning restore MVVMTK0034
 
-        // Activate the search hit for the seeded document — the real path a double-click drives.
+        // Activate the search hit for the seeded document — the real path a double-click drives. A real hit
+        // carries its advertised addresses (#443), so the synthetic one does too, built from the rows in hand.
+        var docRow = (await _api.Documents.GetChildrenAsync(sub.Href("children"))).Single(n => n.Id == docId);
         await OpenSearchResultAsync(new SearchResultViewModel
         {
             Id = docId,
@@ -6371,6 +6408,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             IsFolder = false,
             ParentId = sub.Id,
             Path = "",
+            Links = new Dictionary<string, string> { ["self"] = docRow.Href("self"), ["parent"] = sub.Href("self") },
         });
 
         return (
@@ -6391,19 +6429,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         // A document filed at the repo root (its primary location) and a subfolder that references it.
         var refFolderName = "refopen-" + Guid.NewGuid().ToString("N")[..8];
-        await _api!.Documents.CreateFolderAsync(repo.Id, refFolderName);
-        await LoadFolderContentsAsync(repo.Id);
+        await _api!.Documents.CreateFolderAsync(repo.Href("children"), refFolderName);
+        await LoadFolderContentsAsync(repo.Id, repo.Links);
         var refFolder = Items.First(n => n.IsFolder && !n.IsReference && n.Name == refFolderName);
         var docName = "refopen-doc-" + Guid.NewGuid().ToString("N")[..8] + ".txt";
-        var docId = await _api.Documents.UploadFileAsync(repo.Id, docName, System.Text.Encoding.UTF8.GetBytes("body"));
-        await _api.Documents.CreateReferenceAsync(refFolder.Id, docId);
+        var docId = await _api.Documents.UploadFileAsync(repo.Href("children"), docName, System.Text.Encoding.UTF8.GetBytes("body"));
+        await _api.Documents.CreateReferenceAsync(refFolder.Href("references"), docId);
 
         // Open the primary location selecting the doc → its real (non-reference) row is selected.
-        await OpenFolderAsync(repo.Id, docId);
+        await OpenFolderAsync(repo.DocumentSelfHref, docId);
         var primaryOk = SelectedItem is { IsReference: false } primary && primary.Id == docId;
 
         // Open the referencing folder selecting the doc → its reference (shortcut) row is selected for viewing.
-        await OpenFolderAsync(refFolder.Id, docId);
+        await OpenFolderAsync(refFolder.DocumentSelfHref, docId);
         var refOk = SelectedItem is { IsReference: true } shortcut && shortcut.Id == docId;
 
         return (primaryOk, refOk);
@@ -6419,18 +6457,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var repo = Tree[0];
 
         var parentName = "sort-" + Guid.NewGuid().ToString("N")[..8];
-        await _api!.Documents.CreateFolderAsync(repo.Id, parentName);
-        await LoadFolderContentsAsync(repo.Id);
+        await _api!.Documents.CreateFolderAsync(repo.Href("children"), parentName);
+        await LoadFolderContentsAsync(repo.Id, repo.Links);
         var parent = Items.First(n => n.IsFolder && !n.IsReference && n.Name == parentName);
 
         // Subfolders created out of alphabetical order + a document filed alongside them.
-        await _api.Documents.CreateFolderAsync(parent.Id, "Zebra");
-        await _api.Documents.CreateFolderAsync(parent.Id, "Apple");
-        await _api.Documents.CreateFolderAsync(parent.Id, "Mango");
-        await _api.Documents.UploadFileAsync(parent.Id, "a-document.txt", System.Text.Encoding.UTF8.GetBytes("doc"));
+        await _api.Documents.CreateFolderAsync(parent.Href("children"), "Zebra");
+        await _api.Documents.CreateFolderAsync(parent.Href("children"), "Apple");
+        await _api.Documents.CreateFolderAsync(parent.Href("children"), "Mango");
+        await _api.Documents.UploadFileAsync(parent.Href("children"), "a-document.txt", System.Text.Encoding.UTF8.GetBytes("doc"));
 
         // List: folders first (alphabetical), then the document — regardless of creation order.
-        await LoadFolderContentsAsync(parent.Id);
+        await LoadFolderContentsAsync(parent.Id, parent.Links);
         var listOk = Items.Select(n => n.Name).SequenceEqual(["Apple", "Mango", "Zebra", "a-document"]);
 
         // Tree: expand the parent; its folder children are alphabetical (the document isn't a tree node).
@@ -6452,25 +6490,25 @@ public sealed partial class MainWindowViewModel : ObservableObject
         UseApi(new SimplArchiveApiClient(accessToken));
         await LoadRootAsync();
         var repo = Tree[0];
-        await LoadFolderContentsAsync(repo.Id);
+        await LoadFolderContentsAsync(repo.Id, repo.Links);
 
         // A guaranteed different folder to navigate into — create one if the shared demo tenant has none.
         var sub = Items.FirstOrDefault(n => n.IsFolder && !n.IsReference);
         if (sub is null)
         {
-            await _api!.Documents.CreateFolderAsync(repo.Id, "panereset-" + Guid.NewGuid().ToString("N")[..8]);
-            await LoadFolderContentsAsync(repo.Id);
+            await _api!.Documents.CreateFolderAsync(repo.Href("children"), "panereset-" + Guid.NewGuid().ToString("N")[..8]);
+            await LoadFolderContentsAsync(repo.Id, repo.Links);
             sub = Items.First(n => n.IsFolder && !n.IsReference);
         }
 
         // Populate the detail (as selecting a document does), then navigate to a DIFFERENT folder — must clear.
         DetailTitle = "sentinel-A";
-        await LoadFolderContentsAsync(sub.Id);
+        await LoadFolderContentsAsync(sub.Id, sub.Links);
         var clearedOnFolderChange = string.IsNullOrEmpty(DetailTitle);
 
         // A same-folder reload (e.g. after an in-place operation) must KEEP the current detail.
         DetailTitle = "sentinel-B";
-        await LoadFolderContentsAsync(sub.Id);
+        await LoadFolderContentsAsync(sub.Id, sub.Links);
         var keptOnSameFolderReload = DetailTitle == "sentinel-B";
 
         return (clearedOnFolderChange, keptOnSameFolderReload);
@@ -6488,7 +6526,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var name = "treeacl-" + suffix;
-        await CreateSubfolderAsync(root.Id, name);
+        await CreateSubfolderAsync(root.Id, root.Href("children"), name);
         await root.ReloadChildrenAsync();
         var sub = root.Children.First(c => c.Name == name);
 
@@ -6497,10 +6535,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             CanSee: true, CanReadContent: true, CanEditContent: false, CanEditIndexData: false,
             CanCreateSubItems: false, CanDelete: false, CanMove: false, CanAnnotate: false, CanManagePermissions: false);
 
-        var rootGranted = await GrantAndRevokeAsync(root.Id, granteeId.Id, viewer);
-        var subGranted = await GrantAndRevokeAsync(sub.Id, granteeId.Id, viewer);
+        var rootGranted = await GrantAndRevokeAsync(root.DocumentSelfHref, granteeId.Id, viewer);
+        var subGranted = await GrantAndRevokeAsync(sub.DocumentSelfHref, granteeId.Id, viewer);
 
-        await DeleteFolderByIdAsync(sub.Id); // clean up
+        await DeleteFolderAsync(sub.Id, sub.Href("self")); // clean up
         return (rootGranted, subGranted);
     }
 
@@ -6516,20 +6554,20 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var subjectName = $"treemove-{suffix}";
         var destinationName = $"treedest-{suffix}";
-        await CreateSubfolderAsync(root.Id, subjectName);
-        await CreateSubfolderAsync(root.Id, destinationName);
+        await CreateSubfolderAsync(root.Id, root.Href("children"), subjectName);
+        await CreateSubfolderAsync(root.Id, root.Href("children"), destinationName);
         var children = await _api!.Documents.GetChildrenAsync(root.Href("children"));
         var subject = children.First(c => c.Name == subjectName);
         var destination = children.First(c => c.Name == destinationName);
 
-        await MoveFolderByIdAsync(subject.Id, subject.Name, destination.Id);
+        await MoveFolderAsync(subject.Href("self"), subject.Name, destination.Id);
         var moved = (await _api.Documents.GetChildrenAsync(destination.Href("children"))).Any(c => c.Id == subject.Id);
 
         // Place a reference to the moved folder back under the repository root.
-        await PlaceReferenceAsync(subject.Id, subject.Name, root.Id);
-        var referenced = (await _api.Documents.GetReferencesAsync(root.Id)).Any(r => r.TargetId == subject.Id);
+        await PlaceReferenceAsync(subject.Id, subject.Name, root.Href("references"));
+        var referenced = (await _api.Documents.GetReferencesAsync(root.Href("references"))).Any(r => r.TargetId == subject.Id);
 
-        await DeleteFolderByIdAsync(destination.Id); // clean up (takes the subject with it)
+        await DeleteFolderAsync(destination.Id, destination.Href("self")); // clean up (takes the subject with it)
         return (moved, referenced);
     }
 
@@ -6543,27 +6581,27 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var root = Tree.First(n => n is { IsSynthetic: false, IsLauncher: false, IsPersonal: false });
 
         var name = "treeempty-" + Guid.NewGuid().ToString("N")[..8];
-        await CreateSubfolderAsync(root.Id, name);
+        await CreateSubfolderAsync(root.Id, root.Href("children"), name);
         await root.ReloadChildrenAsync();
         var emptyWhenNew = root.Children.First(c => c.Name == name).IsEmptyFolder;
 
-        var folderId = root.Children.First(c => c.Name == name).Id;
-        await _api!.Documents.UploadFileAsync(folderId, "a-document.txt", System.Text.Encoding.UTF8.GetBytes("doc"));
+        var child = root.Children.First(c => c.Name == name);
+        await _api!.Documents.UploadFileAsync(child.Href("children"), "a-document.txt", System.Text.Encoding.UTF8.GetBytes("doc"));
         await root.ReloadChildrenAsync();
         var notEmptyWithADocument = !root.Children.First(c => c.Name == name).IsEmptyFolder;
 
-        await DeleteFolderByIdAsync(folderId); // clean up
+        await DeleteFolderAsync(child.Id, child.Href("self")); // clean up
         return (emptyWhenNew, notEmptyWithADocument);
     }
 
-    private async Task<bool> GrantAndRevokeAsync(Guid documentId, Guid granteeId, AclRights rights)
+    private async Task<bool> GrantAndRevokeAsync(string documentSelfHref, Guid granteeId, AclRights rights)
     {
         // Grant through the principal row the ACL view offers, then revoke through the entry row that grant
         // produced — the same path the dialog takes, which is the point of a self-test (ADR 0555).
-        var before = await _api!.Documents.GetAclAsync(documentId);
-        await _api.SetAclEntryAsync(before.Principals.Single(p => p.Type == "users" && p.Id == granteeId), rights);
+        var before = await _api!.Documents.GetAclAsync(documentSelfHref);
+        await _api.Documents.SetAclEntryAsync(before.Principals.Single(p => p.Type == "users" && p.Id == granteeId), rights);
 
-        var after = await _api.Documents.GetAclAsync(documentId);
+        var after = await _api.Documents.GetAclAsync(documentSelfHref);
         var entry = after.Entries.FirstOrDefault(e => e.PrincipalType == "users" && e.PrincipalId == granteeId);
         var granted = entry is { Rights.CanSee: true };
         if (entry is not null)
@@ -6580,22 +6618,22 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         UseApi(new SimplArchiveApiClient(accessToken));
         await LoadRootAsync();
-        var repoId = Tree[0].Id;
+        var repo = Tree[0];
 
         var name = "treeact-" + Guid.NewGuid().ToString("N")[..8];
-        await CreateSubfolderAsync(repoId, name);
-        var created = (await _api!.Documents.GetChildrenAsync(repoId)).FirstOrDefault(c => c.Name == name);
+        await CreateSubfolderAsync(repo.Id, repo.Href("children"), name);
+        var created = (await _api!.Documents.GetChildrenAsync(repo.Href("children"))).FirstOrDefault(c => c.Name == name);
         if (created is null)
         {
             return (false, false, false);
         }
 
         var renamed = name + "-r";
-        await RenameFolderByIdAsync(created.Id, renamed);
-        var isRenamed = (await _api!.Documents.GetChildrenAsync(repoId)).Any(c => c.Id == created.Id && c.Name == renamed);
+        await RenameFolderAsync(created.Href("self"), renamed);
+        var isRenamed = (await _api!.Documents.GetChildrenAsync(repo.Href("children"))).Any(c => c.Id == created.Id && c.Name == renamed);
 
-        await DeleteFolderByIdAsync(created.Id);
-        var isDeleted = (await _api!.Documents.GetChildrenAsync(repoId)).All(c => c.Id != created.Id);
+        await DeleteFolderAsync(created.Id, created.Href("self"));
+        var isDeleted = (await _api!.Documents.GetChildrenAsync(repo.Href("children"))).All(c => c.Id != created.Id);
 
         return (true, isRenamed, isDeleted);
     }
@@ -6612,14 +6650,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
         await repo.ReloadChildrenAsync(); // materialise + expand the repository node, as navigating into it would
 
         var name = "treeexp-" + Guid.NewGuid().ToString("N")[..8];
-        await CreateSubfolderAsync(repo.Id, name);
+        await CreateSubfolderAsync(repo.Id, repo.Href("children"), name);
 
         var stillExpanded = Tree.Contains(repo) && repo.IsExpanded && repo.Children.Any(c => c.Name == name);
 
         var created = (await _api!.Documents.GetChildrenAsync(repo.Href("children"))).FirstOrDefault(c => c.Name == name);
         if (created is not null)
         {
-            await DeleteFolderByIdAsync(created.Id);
+            await DeleteFolderAsync(created.Id, created.Href("self"));
         }
         return stillExpanded;
     }
@@ -6631,25 +6669,25 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         UseApi(new SimplArchiveApiClient(accessToken));
         await LoadRootAsync();
-        var repoId = Tree[0].Id;
+        var repo = Tree[0];
 
         var name = "fsort-" + Guid.NewGuid().ToString("N")[..8];
-        await _api!.Documents.CreateFolderAsync(repoId, name);
-        var folderId = (await _api.Documents.GetChildrenAsync(repoId)).First(c => c.Name == name).Id;
+        await _api!.Documents.CreateFolderAsync(repo.Href("children"), name);
+        var folder = (await _api.Documents.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == name);
 
-        await OpenFolderAsync(folderId);
+        await OpenFolderAsync(folder.Href("self"));
         var defaultIsDocDate = _folderSortOrder == 1 && FolderSortText == Strings.Get("FolderSortDocDate");
 
         // Through the ONE detail edit now (issue #408): the order is a field in the pane, committed by the same
         // Save as the mask, rather than by a toggle of its own.
-        await LoadDetailAsync(new NodeViewModel { Id = folderId, Name = name, HasChildren = false, HasVersions = false });
+        await LoadDetailAsync(new NodeViewModel { Id = folder.Id, Name = name, HasChildren = false, HasVersions = false, Links = folder.Links });
         await BeginEditCommand.ExecuteAsync(null);
         EditSortOrder = 2; // Created
         await SaveDetailCommand.ExecuteAsync(null);
-        var persisted = await _api.Documents.GetContentsSortOrderAsync(folderId) == 2;
+        var persisted = await _api.Documents.GetContentsSortOrderAsync(folder.Href("children")) == 2;
         var reflected = _detailSortOrder == 2 && !IsEditing && DetailSortText == Strings.Get("FolderSortCreated");
 
-        await DeleteFolderByIdAsync(folderId);
+        await DeleteFolderAsync(folder.Id, folder.Href("self"));
         return defaultIsDocDate && persisted && reflected;
     }
 
@@ -6743,7 +6781,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // Seeds a preview page with a bitmap + hit-overlay words and a find query, for the headless overlay
     // screenshot (no network).
-    internal void PopulateHitOverlayForScreenshot(Bitmap image, IReadOnlyList<SimplArchiveApiClient.TextLayoutBox> words, string query)
+    internal void PopulateHitOverlayForScreenshot(Bitmap image, IReadOnlyList<VersionsClient.TextLayoutBox> words, string query)
     {
         var page = new PreviewPageViewModel(image);
         page.SetWords(words);
@@ -6814,7 +6852,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
             // "To" is inclusive of the whole selected day.
             var to = AuditTo is { } t ? new DateTimeOffset(t.Date.AddDays(1), TimeSpan.Zero) : (DateTimeOffset?)null;
-            var page = await _api.GetAuditEventsAsync(
+            var page = await _api.Audit.GetAuditEventsAsync(
                 string.IsNullOrWhiteSpace(AuditActionFilter) ? null : AuditActionFilter,
                 AuditFrom,
                 to,
@@ -6856,7 +6894,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         var to = AuditTo is { } t ? new DateTimeOffset(t.Date.AddDays(1), TimeSpan.Zero) : (DateTimeOffset?)null;
-        return _api.ExportAuditEventsAsync(string.IsNullOrWhiteSpace(AuditActionFilter) ? null : AuditActionFilter, AuditFrom, to);
+        return _api.Audit.ExportAuditEventsAsync(string.IsNullOrWhiteSpace(AuditActionFilter) ? null : AuditActionFilter, AuditFrom, to);
     }
 
     [RelayCommand]
@@ -6869,7 +6907,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var result = await _api.VerifyAuditChainAsync();
+            var result = await _api.Audit.VerifyAuditChainAsync();
             AuditVerifyValid = result.Valid;
             AuditVerifyStatus = result.Valid
                 ? $"Chain intact ({result.CheckedCount} events)"
@@ -6892,7 +6930,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var result = await _api.VerifyAuditWormAsync();
+            var result = await _api.Audit.VerifyAuditWormAsync();
             WormVerifyValid = result.Valid;
             WormVerifyStatus = result.Valid
                 ? $"WORM sealed intact ({result.CheckedCount} events, {result.SegmentCount} segments)"
@@ -6914,7 +6952,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var retention = await _api.GetAuditRetentionAsync();
+            var retention = await _api.Audit.GetAuditRetentionAsync();
             AuditRetentionDays = retention.RetentionDays;
             AuditRetentionNote = retention.ChainStartSequence > 0
                 ? $"Retained from #{retention.ChainStartSequence}" + (retention.LastPurgedAt is { } lp ? $" · last purged {lp.LocalDateTime:yyyy-MM-dd}" : "")
@@ -6936,7 +6974,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var retention = await _api.SetAuditRetentionAsync(AuditRetentionDays);
+            var retention = await _api.Audit.SetAuditRetentionAsync(AuditRetentionDays);
             AuditRetentionDays = retention.RetentionDays;
             Status = Strings.Get("StAuditRetUpdated");
         }
@@ -6956,7 +6994,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            var result = await _api.PurgeAuditAsync();
+            var result = await _api.Audit.PurgeAuditAsync();
             await LoadRetentionAsync();
             await LoadAuditPageAsync(reset: true);
             Status = string.Format(Strings.Get("StPurgedAudit"), result.PurgedCount);

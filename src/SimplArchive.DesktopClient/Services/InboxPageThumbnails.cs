@@ -78,7 +78,7 @@ public static class InboxPageThumbnails
         // (ADR 0543), and one read per resource rather than one per page (ADR 0557).
         var preview = await api.Inbox.GetInboxPreviewAsync(item, cancellationToken);
         if (preview.PreviewPagesUrl is not { } pagesUrl
-            || await api.GetPreviewPagesAsync(pagesUrl, cancellationToken) is not { } urls)
+            || await api.Versions.GetPreviewPagesAsync(pagesUrl, cancellationToken) is not { } urls)
         {
             return [];
         }

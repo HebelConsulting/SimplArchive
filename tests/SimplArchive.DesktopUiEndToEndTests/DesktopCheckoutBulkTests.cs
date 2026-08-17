@@ -28,7 +28,7 @@ public class DesktopCheckoutBulkTests
         var ids = new List<Guid>();
         foreach (var fileName in names)
         {
-            await api.Documents.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("original"));
+            await api.Documents.UploadFileAsync(repo.Href("children"), fileName, Encoding.UTF8.GetBytes("original"));
             var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
             ids.Add(doc.Id);
             await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
@@ -86,7 +86,7 @@ public class DesktopCheckoutBulkTests
         for (var i = 0; i < 2; i++)
         {
             var fileName = $"codisc-{Guid.NewGuid():N}.txt";
-            await api.Documents.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("original"));
+            await api.Documents.UploadFileAsync(repo.Href("children"), fileName, Encoding.UTF8.GetBytes("original"));
             var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
             ids.Add(doc.Id);
             await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));

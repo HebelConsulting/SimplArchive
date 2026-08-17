@@ -308,12 +308,24 @@ public class LegalHoldsController : ControllerBase
         // pairing, so without it a client holding the list has two ids and no address, and had to compose the
         // path. Only while the hold is active — a released hold's items are history, not something to edit, so
         // the rel's absence is the answer rather than a refusal after the click (ADR 0543).
-        if (hold.ReleasedAt is null)
+        //
+        // `document` (and `parent`, where the document has one) is UNCONDITIONAL: an item row names a document,
+        // and a row that names one without its address leaves the client an id it can only compose from (#443) —
+        // the desktop's "Go to" follows these to reveal the document in the Repositories tree.
+        foreach (var item in items)
         {
-            foreach (var item in items)
+            var itemLinks = new List<Link> { new("document", $"/api/documents/{item.DocumentId}", "GET") };
+            if (item.ParentId is { } parentId)
             {
-                item.Links = [new Link("remove", $"/api/legal-holds/{holdId}/items/{item.DocumentId}", "DELETE")];
+                itemLinks.Add(new Link("parent", $"/api/documents/{parentId}", "GET"));
             }
+
+            if (hold.ReleasedAt is null)
+            {
+                itemLinks.Add(new Link("remove", $"/api/legal-holds/{holdId}/items/{item.DocumentId}", "DELETE"));
+            }
+
+            item.Links = itemLinks;
         }
 
         var links = new List<Link> { new("self", $"/api/legal-holds/{holdId}", "GET") };

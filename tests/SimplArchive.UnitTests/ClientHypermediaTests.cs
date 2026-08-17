@@ -45,17 +45,15 @@ public partial class ClientHypermediaTests
     //     already have, so a caller holding ONLY an id must fetch once before it can follow anything. It is
     //     deliberately the single place the web client writes that address, because two copies of the one
     //     sanctioned line is how a rule with one exception quietly acquires a second.
-    //   • SimplArchiveApiClient.DocumentAddress — the desktop's same turn, and the one that is DEBT rather than
-    //     design (#443): it survives only while the desktop view-model keeps id-shaped state and while the
-    //     id-bearing payloads (a notification, a task, a reminder, a search hit) do not advertise the document's
-    //     address. Retiring it deletes its entry here, and the message below says so.
+    //
+    // The DESKTOP has no entry at all any more: its one composed URL (DocumentAddress, the id→resource turn)
+    // was retired by #443's endgame — every DocumentsClient method takes an address a listing row, a payload
+    // or the document resource advertised, and the id-bearing payloads (a notification, a task, a reminder, a
+    // search hit, a hold item, an external-link row) advertise the document's address themselves.
     private static readonly Dictionary<string, int> NamedExceptions = new()
     {
         ["src/SimplArchive.Client/Services/ApiRoot.cs"] = 1,
         ["src/SimplArchive.Client/Services/BrowseService.cs"] = 1,
-        // Moved with the documents area in the #443 finale: DocumentsClient now owns every consumer of the
-        // exception, which is what makes retiring it a single-file endgame instead of a cross-file hunt.
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1,
     };
 
     [Fact]

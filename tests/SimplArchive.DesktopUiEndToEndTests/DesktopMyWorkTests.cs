@@ -21,12 +21,12 @@ public class DesktopMyWorkTests
 
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"mywork-{Guid.NewGuid():N}.txt";
-        await api.Documents.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("dashboard"));
+        await api.Documents.UploadFileAsync(repo.Href("children"), name, Encoding.UTF8.GetBytes("dashboard"));
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
         // A due-soon reminder + following the document.
-        await api.Documents.CreateReminderAsync(doc.Id, DateTimeOffset.UtcNow.AddDays(1), "Dashboard check", recurrence: 0, targetUserId: null);
-        await api.Documents.SetSubscriptionAsync(doc.Id, subscribe: true);
+        await api.Documents.CreateReminderAsync(await api.Documents.RelViaSelfAsync(doc.Href("self"), "reminders"), DateTimeOffset.UtcNow.AddDays(1), "Dashboard check", recurrence: 0, targetUserId: null);
+        await api.Documents.SetSubscriptionAsync(await api.Documents.RelViaSelfAsync(doc.Href("self"), "subscription"), subscribe: true);
 
         var reminders = await api.Reminders.GetDashboardRemindersAsync();
         Assert.Contains(reminders, r => r.DocumentId == doc.Id && r.ParentId == repo.Id && r.Note == "Dashboard check");

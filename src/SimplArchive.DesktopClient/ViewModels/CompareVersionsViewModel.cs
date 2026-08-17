@@ -52,7 +52,7 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
         DocumentName = documentName;
 
         Versions.Clear();
-        var (versions, compareHref) = await api.GetVersionsWithLinksAsync(versionsHref);
+        var (versions, compareHref) = await api.Versions.GetVersionsWithLinksAsync(versionsHref);
         _compareHref = compareHref;
         foreach (var v in versions)
         {
@@ -108,7 +108,7 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
         {
             if (_compareHref is null) { return; }
 
-            var cmp = await _api.GetVersionComparisonAsync(_compareHref, FromVersion.Id, ToVersion.Id);
+            var cmp = await _api.Versions.GetVersionComparisonAsync(_compareHref, FromVersion.Id, ToVersion.Id);
             if (!cmp.Available)
             {
                 NotAvailable = true;
@@ -159,7 +159,7 @@ public sealed partial class CompareVersionsViewModel : ObservableObject
 
     private async Task<string> StageAsync(VersionOption v)
     {
-        var bytes = await _api!.DownloadVersionBytesAsync(v.DownloadUrl!);
+        var bytes = await _api!.Versions.DownloadVersionBytesAsync(v.DownloadUrl!);
         var path = Path.Combine(Path.GetTempPath(), $"simplarchive-v{v.Number}-{Guid.NewGuid():N}{v.FileExtension}");
         await File.WriteAllBytesAsync(path, bytes);
         return path;

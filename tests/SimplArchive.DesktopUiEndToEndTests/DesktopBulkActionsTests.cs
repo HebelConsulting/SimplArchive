@@ -22,15 +22,16 @@ public class DesktopBulkActionsTests
 
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var targetName = $"BulkTarget-{Guid.NewGuid():N}";
-        await api.Documents.CreateFolderAsync(repo.Id, targetName);
+        await api.Documents.CreateFolderAsync(repo.Href("children"), targetName);
 
         var prefix = $"bulk-{Guid.NewGuid():N}";
         for (var i = 0; i < 3; i++)
         {
-            await api.Documents.UploadFileAsync(repo.Id, $"{prefix}-{i}.txt", Encoding.UTF8.GetBytes("x"));
+            await api.Documents.UploadFileAsync(repo.Href("children"), $"{prefix}-{i}.txt", Encoding.UTF8.GetBytes("x"));
         }
         var children = await api.Documents.GetChildrenAsync(repo.Href("children"));
-        var targetId = children.Single(n => n.Name == targetName).Id;
+        var target = children.Single(n => n.Name == targetName);
+        var targetId = target.Id;
         var ids = children.Where(n => n.Name.StartsWith(prefix)).Select(n => n.Id).ToList();
         Assert.Equal(3, ids.Count);
 
@@ -38,17 +39,17 @@ public class DesktopBulkActionsTests
         Assert.Equal(3, tagged.Succeeded);
         foreach (var id in ids)
         {
-            Assert.Equal(new[] { "batch", "reviewed" }, await api.Documents.GetTagsAsync((await api.Documents.GetDocumentDetailAsync(id)).Href("tags")));
+            Assert.Equal(new[] { "batch", "reviewed" }, await api.Documents.GetTagsAsync((await api.Documents.GetDocumentDetailAsync(await TestRels.DocumentSelfAsync(api, repo, id))).Href("tags")));
         }
 
         var confidential = (await api.Admin.GetSensitivityLabelsAsync()).Items.Single(l => l.Name == "Confidential");
         var classified = await api.Documents.BulkSetSensitivityAsync(ids, confidential.Id);
         Assert.Equal(3, classified.Succeeded);
-        Assert.Equal(confidential.Id, (await api.Documents.GetDocumentSensitivityAsync(ids[0])).LabelId);
+        Assert.Equal(confidential.Id, (await api.Documents.GetDocumentDetailAsync(await TestRels.DocumentSelfAsync(api, repo, ids[0]))).Sensitivity.LabelId);
 
         var moved = await api.Documents.BulkMoveAsync(ids.Take(2), targetId);
         Assert.Equal(2, moved.Succeeded);
-        var movedInto = (await api.Documents.GetChildrenAsync(targetId)).Select(n => n.Id).ToHashSet();
+        var movedInto = (await api.Documents.GetChildrenAsync(target.Href("children"))).Select(n => n.Id).ToHashSet();
         Assert.Contains(ids[0], movedInto);
         Assert.Contains(ids[1], movedInto);
 
@@ -66,15 +67,16 @@ public class DesktopBulkActionsTests
 
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var targetName = $"RefTarget-{Guid.NewGuid():N}";
-        await api.Documents.CreateFolderAsync(repo.Id, targetName);
+        await api.Documents.CreateFolderAsync(repo.Href("children"), targetName);
 
         var prefix = $"ref-{Guid.NewGuid():N}";
         for (var i = 0; i < 2; i++)
         {
-            await api.Documents.UploadFileAsync(repo.Id, $"{prefix}-{i}.txt", Encoding.UTF8.GetBytes("x"));
+            await api.Documents.UploadFileAsync(repo.Href("children"), $"{prefix}-{i}.txt", Encoding.UTF8.GetBytes("x"));
         }
         var children = await api.Documents.GetChildrenAsync(repo.Href("children"));
-        var targetId = children.Single(n => n.Name == targetName).Id;
+        var target = children.Single(n => n.Name == targetName);
+        var targetId = target.Id;
         var ids = children.Where(n => n.Name.StartsWith(prefix)).Select(n => n.Id).ToList();
         Assert.Equal(2, ids.Count);
 
@@ -85,7 +87,7 @@ public class DesktopBulkActionsTests
         var stillHome = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Select(n => n.Id).ToHashSet();
         Assert.Contains(ids[0], stillHome);
         Assert.Contains(ids[1], stillHome);
-        var refs = (await api.Documents.GetReferencesAsync(targetId)).Select(r => r.TargetId).ToHashSet();
+        var refs = (await api.Documents.GetReferencesAsync(target.Href("references"))).Select(r => r.TargetId).ToHashSet();
         Assert.Contains(ids[0], refs);
         Assert.Contains(ids[1], refs);
 

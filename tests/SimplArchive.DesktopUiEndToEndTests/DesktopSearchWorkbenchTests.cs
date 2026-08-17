@@ -28,7 +28,7 @@ public class DesktopSearchWorkbenchTests
         // two branches are compared against the same response rather than two searches.
         await api.Documents.CreateRepositoryAsync($"{word}-repo");
         var repo = (await api.Documents.GetRepositoriesAsync()).First(r => r.Name == $"{word}-repo");
-        var docId = await UploadAsync(api, repo.Id, $"doc-{suffix}", word);
+        var docId = await UploadAsync(api, repo, $"doc-{suffix}", word);
 
         await PollAsync(async () => (await api.Search.SearchAsync(word)).Any(r => r.Id == docId), "the document is indexed");
 
@@ -40,7 +40,7 @@ public class DesktopSearchWorkbenchTests
 
         // Following it must actually produce a renderable preview — an address that resolves to nothing would
         // leave the pane blank with no way to tell that from "this document has no rendition".
-        var preview = await api.GetPreviewFromVersionsAsync(doc.VersionsHref!);
+        var preview = await api.Versions.GetPreviewFromVersionsAsync(doc.VersionsHref!);
         Assert.False(string.IsNullOrEmpty(preview.PreviewUrl));
 
         // The folder advertises no `versions`: there is nothing to preview, and a row that claimed otherwise
@@ -64,8 +64,8 @@ public class DesktopSearchWorkbenchTests
 
         await api.Documents.CreateRepositoryAsync($"reset-{suffix}");
         var repo = (await api.Documents.GetRepositoriesAsync()).First(r => r.Name == $"reset-{suffix}");
-        var a = await UploadClassifiedAsync(api, repo.Id, $"a-{suffix}", word, maskA.Id);
-        var b = await UploadClassifiedAsync(api, repo.Id, $"b-{suffix}", word, maskB.Id);
+        var a = await UploadClassifiedAsync(api, repo, $"a-{suffix}", word, maskA.Id);
+        var b = await UploadClassifiedAsync(api, repo, $"b-{suffix}", word, maskB.Id);
 
         // Wait for the MASK assignments to re-index, not merely for the documents to become searchable:
         // SetMaskAsync re-indexes asynchronously and separately from the content, so for a beat b is still
@@ -96,16 +96,16 @@ public class DesktopSearchWorkbenchTests
         Assert.Equal(2, reset.Results.Count);
     }
 
-    private static async Task<Guid> UploadAsync(SimplArchiveApiClient api, Guid repoId, string name, string content)
+    private static async Task<Guid> UploadAsync(SimplArchiveApiClient api, Node repo, string name, string content)
     {
-        await api.Documents.UploadFileAsync(repoId, $"{name}.txt", Encoding.UTF8.GetBytes($"body {content} end"));
-        return (await api.Documents.GetChildrenAsync(repoId)).First(c => c.Name == name).Id;
+        await api.Documents.UploadFileAsync(repo.Href("children"), $"{name}.txt", Encoding.UTF8.GetBytes($"body {content} end"));
+        return (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == name).Id;
     }
 
-    private static async Task<Guid> UploadClassifiedAsync(SimplArchiveApiClient api, Guid repoId, string name, string content, Guid maskId)
+    private static async Task<Guid> UploadClassifiedAsync(SimplArchiveApiClient api, Node repo, string name, string content, Guid maskId)
     {
-        var docId = await UploadAsync(api, repoId, name, content);
-        await api.Documents.SetMaskAsync(docId, maskId);
+        var docId = await UploadAsync(api, repo, name, content);
+        await api.Documents.SetMaskAsync((await api.Documents.GetChildrenAsync(repo.Href("children"))).First(c => c.Id == docId).Href("mask"), maskId);
         return docId;
     }
 

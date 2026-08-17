@@ -929,7 +929,7 @@ public partial class MainWindow : Window
         var name = await new NewFolderDialog().ShowDialog<string?>(this);
         if (!string.IsNullOrWhiteSpace(name))
         {
-            await vm.CreateSubfolderAsync(node.Id, name);
+            await vm.CreateSubfolderAsync(node.Id, node.Href("children"), name);
         }
     });
 
@@ -943,7 +943,7 @@ public partial class MainWindow : Window
         var name = await new RenameDialog(node.Name).ShowDialog<string?>(this);
         if (!string.IsNullOrWhiteSpace(name) && name != node.Name)
         {
-            await vm.RenameFolderByIdAsync(node.Id, name);
+            await vm.RenameFolderAsync(node.Href("self"), name);
         }
     });
 
@@ -952,7 +952,7 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel vm && _treeContextNode is { } node
             && await new ConfirmDialog($"Delete the folder '{node.Name}' and everything inside it? It will be moved to the recycle bin.", "Delete").ShowDialog<bool>(this))
         {
-            await vm.DeleteFolderByIdAsync(node.Id);
+            await vm.DeleteFolderAsync(node.Id, node.Href("self"));
         }
     });
 
@@ -977,7 +977,7 @@ public partial class MainWindow : Window
         });
         if (files.Count > 0)
         {
-            await vm.UploadDroppedFilesAsync(files, node.Id);
+            await vm.UploadDroppedFilesAsync(files, node.Links);
         }
     });
 
@@ -991,7 +991,7 @@ public partial class MainWindow : Window
 
         if (await new FolderPickerDialog { DataContext = picker }.ShowDialog<FilingResult?>(this) is { } result)
         {
-            await vm.MoveFolderByIdAsync(node.Id, node.Name, result.TargetId);
+            await vm.MoveFolderAsync(node.Href("self"), node.Name, result.TargetId);
         }
     });
 
@@ -1029,14 +1029,16 @@ public partial class MainWindow : Window
 
         if (await new FolderPickerDialog { DataContext = picker }.ShowDialog<FilingResult?>(this) is { } result)
         {
-            await vm.PlaceReferenceAsync(node.Id, node.Name, result.TargetId);
+            await vm.PlaceReferenceAsync(node.Id, node.Name,
+                result.TargetLinks?.GetValueOrDefault("references")
+                ?? throw new InvalidOperationException("The picked folder advertised no 'references' rel (ADR 0543/0555)."));
         }
     });
 
     private void OnTreeReferences(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node
-            || vm.CreateReferencesViewModel(node.Id, node.Name) is not { } references)
+            || vm.CreateReferencesViewModel(node.Id, node.Name, node.DocumentSelfHref) is not { } references)
         {
             return;
         }
@@ -1047,11 +1049,14 @@ public partial class MainWindow : Window
         {
             if (r.Promote)
             {
-                await vm.PromotePrimaryLocationAsync(references.ItemId, r.FolderId);
+                await vm.PromotePrimaryLocationAsync(references.DocumentSelfHref, references.ItemId, r.FolderId,
+                    r.FolderHref ?? throw new InvalidOperationException("The referencing-folder row advertised no 'open' rel (ADR 0543/0555)."));
             }
             else
             {
-                await vm.OpenFolderAsync(r.FolderId, references.ItemId);
+                await vm.OpenFolderAsync(
+                    r.FolderHref ?? throw new InvalidOperationException("The referencing-folder row advertised no 'open' rel (ADR 0543/0555)."),
+                    references.ItemId);
             }
         }
     });
@@ -1067,7 +1072,7 @@ public partial class MainWindow : Window
         }
 
         var mvm = new ManageAccessViewModel();
-        await mvm.SetupAsync(api, node.Id, node.Name);
+        await mvm.SetupAsync(api, node.DocumentSelfHref, node.Name);
         await new ManageAccessDialog(mvm).ShowDialog(this);
     });
 
@@ -1083,7 +1088,7 @@ public partial class MainWindow : Window
     {
         if (DataContext is MainWindowViewModel vm && _treeContextNode is { IsSynthetic: false } node)
         {
-            await vm.ToggleFolderSubscriptionAsync(node.Id);
+            await vm.ToggleFolderSubscriptionAsync(node.DocumentSelfHref);
         }
     });
 

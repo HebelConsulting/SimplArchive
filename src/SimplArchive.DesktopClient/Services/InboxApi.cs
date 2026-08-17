@@ -302,12 +302,12 @@ public sealed class InboxApi(ApiCore core)
 
     // The inbox item's preview (renditions on the object key) — same Preview shape as a document's, so it feeds
     // the same rendering + hit-overlay pipeline. 204 (no preview available) yields an all-null Preview.
-    public async Task<SimplArchiveApiClient.Preview> GetInboxPreviewAsync(InboxItemInfo item, CancellationToken cancellationToken = default)
+    public async Task<Preview> GetInboxPreviewAsync(InboxItemInfo item, CancellationToken cancellationToken = default)
     {
         using var response = await core.Http.GetAsync(RequireHref(item, "preview"), cancellationToken);
         if (response.StatusCode == HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
         {
-            return new SimplArchiveApiClient.Preview(null, false, null, null, null, "");
+            return new Preview(null, false, null, null, null, "");
         }
 
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
@@ -315,7 +315,7 @@ public sealed class InboxApi(ApiCore core)
             ? links.EnumerateArray().Where(l => l.GetProperty("rel").GetString() == rel).Select(l => l.GetProperty("href").GetString()).FirstOrDefault()
             : null;
 
-        return new SimplArchiveApiClient.Preview(
+        return new Preview(
             json.TryGetProperty("previewUrl", out var pu) ? pu.GetString() : null,
             json.TryGetProperty("previewConverted", out var pc) && pc.GetBoolean(),
             DownloadUrl: null,

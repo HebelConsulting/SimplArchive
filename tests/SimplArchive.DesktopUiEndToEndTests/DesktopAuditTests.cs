@@ -24,21 +24,21 @@ public class DesktopAuditTests
         Assert.True((await client.GetWhoAmIAsync()).CanViewAuditLog);
 
         // The interactive login recorded an Auth.LoggedIn event, so the log is non-empty.
-        var page = await client.GetAuditEventsAsync(null, null, null, null);
+        var page = await client.Audit.GetAuditEventsAsync(null, null, null, null);
         Assert.NotEmpty(page.Events);
 
         // The action filter narrows to exactly that action.
-        var filtered = await client.GetAuditEventsAsync("Auth.LoggedIn", null, null, null);
+        var filtered = await client.Audit.GetAuditEventsAsync("Auth.LoggedIn", null, null, null);
         Assert.NotEmpty(filtered.Events);
         Assert.All(filtered.Events, e => Assert.Equal("Auth.LoggedIn", e.Action));
 
         // The tamper-evidence chain verifies clean.
-        var verify = await client.VerifyAuditChainAsync();
+        var verify = await client.Audit.VerifyAuditChainAsync();
         Assert.True(verify.Valid);
         Assert.True(verify.CheckedCount > 0);
 
         // NDJSON export — one event per line, each with the chain fields.
-        var exportBytes = await client.ExportAuditEventsAsync(null, null, null);
+        var exportBytes = await client.Audit.ExportAuditEventsAsync(null, null, null);
         var lines = System.Text.Encoding.UTF8.GetString(exportBytes).Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.NotEmpty(lines);
         Assert.All(lines, l =>
@@ -49,11 +49,11 @@ public class DesktopAuditTests
         });
 
         // Retention get/set (the demo admin is a tenant admin) — round-trip a value then restore the default.
-        Assert.Equal(365, (await client.GetAuditRetentionAsync()).RetentionDays);
-        Assert.Equal(400, (await client.SetAuditRetentionAsync(400)).RetentionDays);
-        Assert.Equal(365, (await client.SetAuditRetentionAsync(365)).RetentionDays);
+        Assert.Equal(365, (await client.Audit.GetAuditRetentionAsync()).RetentionDays);
+        Assert.Equal(400, (await client.Audit.SetAuditRetentionAsync(400)).RetentionDays);
+        Assert.Equal(365, (await client.Audit.SetAuditRetentionAsync(365)).RetentionDays);
 
         // Purge is non-destructive here (all events are fresh; nothing is older than the window).
-        Assert.Equal(0, (await client.PurgeAuditAsync()).PurgedCount);
+        Assert.Equal(0, (await client.Audit.PurgeAuditAsync()).PurgedCount);
     }
 }

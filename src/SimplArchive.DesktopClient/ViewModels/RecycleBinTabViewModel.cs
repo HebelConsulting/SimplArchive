@@ -89,7 +89,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
         ClearDetail();
         try
         {
-            var bin = await _api.GetRecycleBinItemsAsync();
+            var bin = await _api.RecycleBin.GetRecycleBinItemsAsync();
             _binLinks = bin.Links;
             foreach (var item in bin.Items)
             {
@@ -134,16 +134,21 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
         try
         {
-            // These read endpoints serve soft-deleted documents (ADR "Recycle bin tab") — read-only inspection.
-            var mask = await _api.Documents.GetMaskAsync(value.Id);
+            // These read endpoints serve soft-deleted documents (ADR "Recycle bin tab") — read-only inspection,
+            // each at the address the ROW advertised: the document is behind the soft-delete query filter, so
+            // its rows are the only place these addresses can come from (ADR 0543/0555).
+            string Rel(string rel) => value.Entry?.Href(rel)
+                ?? throw new InvalidOperationException($"The recycle-bin row '{value.Name}' advertised no '{rel}' rel (ADR 0543/0555).");
+
+            var mask = await _api.Documents.GetMaskAsync(Rel("mask"));
             MaskLine = mask.Name is null ? "No mask" : $"Mask: {mask.Name}" + (mask.VersionNumber is { } v ? $" · version {v}" : "");
 
-            foreach (var field in await _api.Documents.GetIndexDataAsync(value.Id))
+            foreach (var field in await _api.Documents.GetIndexDataAsync(Rel("index-data")))
             {
                 IndexFields.Add(new IndexFieldViewModel { FieldName = field.FieldName, Values = string.Join(", ", field.Values) });
             }
 
-            var fields = await _api.Documents.GetSystemFieldsAsync(value.Id);
+            var fields = await _api.Documents.GetSystemFieldsAsync(Rel("versions"));
             SysName = value.Name;
             SysCreated = fields is null ? "" : fields.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
             SysCreatedBy = fields?.CreatedByName ?? "";
@@ -151,8 +156,8 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
             SysDocumentDate = fields?.DocumentDate ?? "";
             SysOcrLanguages = fields?.OcrLanguages ?? "";
 
-            await Preview.RenderAsync(await _api.Documents.GetPreviewAsync(value.Id));
-            await LoadCommentsAsync(value.Id);
+            await Preview.RenderAsync(await _api.Documents.GetPreviewAsync(Rel("versions")));
+            await LoadCommentsAsync(Rel("chat"));
         }
         catch (Exception e)
         {
@@ -160,9 +165,9 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
         }
     }
 
-    private async Task LoadCommentsAsync(Guid documentId)
+    private async Task LoadCommentsAsync(string chatHref)
     {
-        var comments = await _api!.Documents.GetCommentsAsync(documentId);
+        var comments = await _api!.Documents.GetCommentsAsync(chatHref);
         var byId = comments.ToDictionary(
             c => c.Id,
             c => new ChatMessageViewModel { Id = c.Id, AuthorName = c.AuthorName, Body = c.Body, CreatedAt = c.CreatedAt, AuthorCardHref = c.AuthorCardHref, Kind = c.Kind, VersionNumber = c.VersionNumber, VersionComment = c.VersionComment, VersionCommentKind = c.VersionCommentKind });
@@ -262,7 +267,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
         try
         {
-            var (restored, skipped) = await _api.RestoreManyAsync(BinRel("restore-selected"), ids);
+            var (restored, skipped) = await _api.RecycleBin.RestoreManyAsync(BinRel("restore-selected"), ids);
             Report(skipped > 0 ? $"Restored {restored} item(s), skipped {skipped}." : $"Restored {restored} item(s).");
             await LoadAsync();
         }
@@ -289,7 +294,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
         try
         {
-            var (purged, skipped) = await _api.PurgeManyAsync(BinRel("purge-selected"), ids);
+            var (purged, skipped) = await _api.RecycleBin.PurgeManyAsync(BinRel("purge-selected"), ids);
             Report(skipped > 0 ? $"Permanently deleted {purged} item(s), skipped {skipped} (legal hold / locked)." : $"Permanently deleted {purged} item(s).");
             await LoadAsync();
         }
@@ -335,7 +340,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
 
         try
         {
-            await _api.PurgeRecycleBinAsync(BinRel("purge-all"));
+            await _api.RecycleBin.PurgeRecycleBinAsync(BinRel("purge-all"));
             Report("The recycle bin was permanently emptied.");
             await LoadAsync();
         }
@@ -355,7 +360,7 @@ public sealed partial class RecycleBinRowViewModel : ObservableObject
 {
     // The row the server sent — restore / purge follow the addresses it advertised (ADR 0543/0555). Null only
     // for the designer-preview rows, which reach no server.
-    public SimplArchive.DesktopClient.Services.SimplArchiveApiClient.RecycleBinEntry? Entry { get; init; }
+    public SimplArchive.DesktopClient.Services.RecycleBinClient.RecycleBinEntry? Entry { get; init; }
 
     public required Guid Id { get; init; }
     public required string Name { get; init; }

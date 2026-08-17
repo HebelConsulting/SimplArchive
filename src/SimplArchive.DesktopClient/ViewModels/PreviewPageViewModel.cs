@@ -57,7 +57,7 @@ public sealed record HitCopyResult(string Word, bool Appended);
 // subset drawn for the current find query. Both are reassigned wholesale so the bound overlay control updates.
 public sealed partial class PreviewPageViewModel : ObservableObject
 {
-    private IReadOnlyList<SimplArchiveApiClient.TextLayoutBox> _words = [];
+    private IReadOnlyList<VersionsClient.TextLayoutBox> _words = [];
 
     public PreviewPageViewModel(Bitmap image)
     {
@@ -82,7 +82,7 @@ public sealed partial class PreviewPageViewModel : ObservableObject
     // overlay; null when the active match is on another page (ADR "Find occurrence count + prev/next").
     [ObservableProperty] private HighlightBox? _activeHighlight;
 
-    public void SetWords(IReadOnlyList<SimplArchiveApiClient.TextLayoutBox> words)
+    public void SetWords(IReadOnlyList<VersionsClient.TextLayoutBox> words)
     {
         _words = words;
         AllWords = words.Select(w => new HighlightBox(w.Text, w.X, w.Y, w.Width, w.Height)).ToList();

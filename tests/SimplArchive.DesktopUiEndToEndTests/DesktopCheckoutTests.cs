@@ -24,7 +24,7 @@ public class DesktopCheckoutTests
 
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var fileName = $"co-{Guid.NewGuid():N}.txt";
-        await api.Documents.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("original content"));
+        await api.Documents.UploadFileAsync(repo.Href("children"), fileName, Encoding.UTF8.GetBytes("original content"));
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
 
         await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
@@ -52,7 +52,7 @@ public class DesktopCheckoutTests
         await vm.CheckInCommand.ExecuteAsync(row);
         Assert.DoesNotContain(vm.Items, i => i.Id == doc.Id);
         Assert.False((await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Id == doc.Id).CheckedOut);
-        var bytes = await api.Documents.DownloadCurrentVersionAsync(doc.Id);
+        var bytes = await api.Documents.DownloadCurrentVersionAsync(doc.Href("versions"));
         Assert.Equal("edited via webdav", Encoding.UTF8.GetString(bytes));
     }
 
@@ -66,7 +66,7 @@ public class DesktopCheckoutTests
         using var http = new HttpClient();
         var pdf = await http.GetByteArrayAsync($"{_app.BaseUrl}/download/samples/SimplArchive-Patch3-Sample-Batch.pdf");
         var fileName = $"rs-{Guid.NewGuid():N}.pdf";
-        await api.Documents.UploadFileAsync(repo.Id, fileName, pdf);
+        await api.Documents.UploadFileAsync(repo.Href("children"), fileName, pdf);
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
 
         await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
@@ -88,7 +88,7 @@ public class DesktopCheckoutTests
         Assert.True(item.HasStash);
         Assert.True(item.IsModified);
         Assert.Equal(2, (await api.Inbox.GetAsync(item.Href("pages")!))!.PageCount);
-        Assert.Equal(pdf, await api.Documents.DownloadCurrentVersionAsync(doc.Id));
+        Assert.Equal(pdf, await api.Documents.DownloadCurrentVersionAsync(doc.Href("versions")));
 
         await api.Checkout.CheckInViaDocumentAsync(doc.Href("self")); // release + drop the stash — leaves the shared fixture clean
     }
@@ -101,7 +101,7 @@ public class DesktopCheckoutTests
 
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var fileName = $"cmp-{Guid.NewGuid():N}.txt";
-        await api.Documents.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("line one\nline two\nline three\n"));
+        await api.Documents.UploadFileAsync(repo.Href("children"), fileName, Encoding.UTF8.GetBytes("line one\nline two\nline three\n"));
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
 
         await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
@@ -130,7 +130,7 @@ public class DesktopCheckoutTests
 
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var fileName = $"un-{Guid.NewGuid():N}.txt";
-        await api.Documents.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("v1"));
+        await api.Documents.UploadFileAsync(repo.Href("children"), fileName, Encoding.UTF8.GetBytes("v1"));
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
         await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
 
@@ -154,7 +154,7 @@ public class DesktopCheckoutTests
 
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var fileName = $"ext-{Guid.NewGuid():N}.txt";
-        await api.Documents.UploadFileAsync(repo.Id, fileName, Encoding.UTF8.GetBytes("v1"));
+        await api.Documents.UploadFileAsync(repo.Href("children"), fileName, Encoding.UTF8.GetBytes("v1"));
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(fileName));
         await api.Checkout.CheckOutViaDocumentAsync(doc.Href("self"));
 

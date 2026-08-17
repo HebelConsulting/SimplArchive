@@ -28,7 +28,7 @@ public class DesktopPasskeysTests
         var user = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl, email, password));
 
         // No passkeys to start.
-        Assert.Empty(await user.GetPasskeysAsync());
+        Assert.Empty(await user.Profile.GetPasskeysAsync());
 
         // Seed a credential row directly (a registration needs a browser ceremony we can't run here).
         var passkeyId = Guid.NewGuid();
@@ -56,7 +56,7 @@ public class DesktopPasskeysTests
         }
 
         // The api client lists it, then removes it.
-        var passkeys = await user.GetPasskeysAsync();
+        var passkeys = await user.Profile.GetPasskeysAsync();
         var seeded = Assert.Single(passkeys);
         Assert.Equal("Seeded Key", seeded.Name);
         Assert.Equal(passkeyId, seeded.Id);
@@ -64,7 +64,7 @@ public class DesktopPasskeysTests
         // Removal follows the row's own `self` rel rather than a path rebuilt from the id (ADR 0543, issue
         // #416) — so asserting the rel arrived is part of asserting removal works at all.
         Assert.NotNull(seeded.RemoveHref);
-        await user.RemovePasskeyAsync(seeded.RemoveHref!);
-        Assert.Empty(await user.GetPasskeysAsync());
+        await user.Profile.RemovePasskeyAsync(seeded.RemoveHref!);
+        Assert.Empty(await user.Profile.GetPasskeysAsync());
     }
 }

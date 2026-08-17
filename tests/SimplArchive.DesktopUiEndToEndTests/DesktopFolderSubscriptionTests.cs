@@ -21,15 +21,15 @@ public class DesktopFolderSubscriptionTests
 
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"watched-{Guid.NewGuid():N}";
-        await api.Documents.CreateFolderAsync(repo.Id, name);
+        await api.Documents.CreateFolderAsync(repo.Href("children"), name);
         var folder = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == name);
 
-        Assert.False(await api.Documents.GetSubscriptionAsync(folder.Id)); // not following by default
+        Assert.False(await api.Documents.GetSubscriptionAsync(await api.Documents.RelViaSelfAsync(folder.Href("self"), "subscription"))); // not following by default
 
-        await api.Documents.SetSubscriptionAsync(folder.Id, subscribe: true);
-        Assert.True(await api.Documents.GetSubscriptionAsync(folder.Id));
+        await api.Documents.SetSubscriptionAsync(await api.Documents.RelViaSelfAsync(folder.Href("self"), "subscription"), subscribe: true);
+        Assert.True(await api.Documents.GetSubscriptionAsync(await api.Documents.RelViaSelfAsync(folder.Href("self"), "subscription")));
 
-        await api.Documents.SetSubscriptionAsync(folder.Id, subscribe: false);
-        Assert.False(await api.Documents.GetSubscriptionAsync(folder.Id));
+        await api.Documents.SetSubscriptionAsync(await api.Documents.RelViaSelfAsync(folder.Href("self"), "subscription"), subscribe: false);
+        Assert.False(await api.Documents.GetSubscriptionAsync(await api.Documents.RelViaSelfAsync(folder.Href("self"), "subscription")));
     }
 }

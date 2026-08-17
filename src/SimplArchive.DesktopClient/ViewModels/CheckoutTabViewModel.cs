@@ -159,10 +159,12 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
         Preview.Reset(Strings.Get("StLoading"));
 
         // Index data belongs to the DOCUMENT and is the same either side of an edit — a working copy carries no
-        // metadata of its own. The preview is the half that must come from the working copy.
+        // metadata of its own. The preview is the half that must come from the working copy. The row's `self`
+        // is the document resource; its index-data address comes from following that once (ADR 0559).
         try
         {
-            foreach (var field in await _api.Documents.GetIndexDataAsync(row.Id))
+            foreach (var field in await _api.Documents.GetIndexDataAsync(await _api.Documents.RelViaSelfAsync(
+                item.Href("self") ?? throw new InvalidOperationException("The check-out row advertised no 'self' rel (ADR 0543)."), "index-data")))
             {
                 IndexFields.Add(new IndexFieldViewModel
                 {
@@ -262,7 +264,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
 
         try
         {
-            var webdav = await _api.GetWebDavStatusAsync();
+            var webdav = await _api.Profile.GetWebDavStatusAsync();
             if (!webdav.Enabled || string.IsNullOrWhiteSpace(webdav.Url))
             {
                 Report(Strings.Get("CoEditNeedsWebDav"));

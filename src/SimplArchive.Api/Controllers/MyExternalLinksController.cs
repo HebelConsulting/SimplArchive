@@ -175,13 +175,17 @@ public class MyExternalLinksController : ControllerBase
                 CanExtend = l.ExpiresAt <= now.AddDays(ExtendableWithinDays),
                 Etag = l.ConcurrencyToken.ToString(),
                 // Revoke and availability live under the document, so the client follows these rather than
-                // composing them (ADR 0543). No "document" rel: the "Go to" action does not CALL anything — it
-                // moves the workbench's own tree and list panes — so what it needs is the document's parent id,
-                // carried as data below, not a URL to follow.
+                // composing them (ADR 0543). `document`/`parent` carry the addresses the "Go to" action
+                // follows — since the #443 endgame the desktop navigates by fetching the advertised parent,
+                // so a row naming a document without its address would leave an id it can only compose from.
                 Links =
                 [
                     new Link("revoke", $"/api/documents/{l.DocumentId}/external-links/{l.Id}", "DELETE"),
                     new Link("availability", $"/api/documents/{l.DocumentId}/external-links/{l.Id}/availability", "PUT"),
+                    new Link("document", $"/api/documents/{l.DocumentId}", "GET"),
+                    .. l.ParentId is { } linkParentId
+                        ? new[] { new Link("parent", $"/api/documents/{linkParentId}", "GET") }
+                        : [],
                     .. showsUrl
                         ? new[] { new Link("reveal-url", $"/api/documents/{l.DocumentId}/external-links/{l.Id}/url", "GET") }
                         : [],

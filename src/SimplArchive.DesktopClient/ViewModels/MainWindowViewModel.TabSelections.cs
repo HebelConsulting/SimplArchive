@@ -43,14 +43,14 @@ public sealed partial class MainWindowViewModel
         IsLoggedIn = true;
         LegalHolds.Clear();
         SelectedHoldItems.Clear();
-        var items = new List<Services.SimplArchiveApiClient.LegalHoldItemInfo>
+        var items = new List<Services.LegalHoldsClient.LegalHoldItemInfo>
         {
             new(Guid.NewGuid(), "Disputed delivery note"),
             new(Guid.NewGuid(), "Framework agreement 2019"),
         };
-        var active = new Services.SimplArchiveApiClient.LegalHoldInfo(
+        var active = new Services.LegalHoldsClient.LegalHoldInfo(
             Guid.NewGuid(), "Case 2026-17 Meyer", "Pending litigation", new DateTimeOffset(2026, 3, 2, 9, 0, 0, TimeSpan.Zero), true, items.Count, items);
-        var released = new Services.SimplArchiveApiClient.LegalHoldInfo(
+        var released = new Services.LegalHoldsClient.LegalHoldInfo(
             Guid.NewGuid(), "Audit 2025", null, new DateTimeOffset(2025, 11, 5, 14, 0, 0, TimeSpan.Zero), false, 0, []);
         LegalHolds.Add(new LegalHoldRowViewModel(active.Id, active.Name, active.IsActive, active.ItemCount, active));
         LegalHolds.Add(new LegalHoldRowViewModel(released.Id, released.Name, released.IsActive, released.ItemCount, released));

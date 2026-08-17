@@ -17,7 +17,10 @@ namespace SimplArchive.DesktopClient.ViewModels;
 public sealed partial class ManageAccessViewModel : ObservableObject
 {
     private SimplArchiveApiClient? _api;
-    private Guid _documentId;
+
+    // The document's ADVERTISED address, taken from the row that opened the dialog at click time (ADR 0559 —
+    // the wrong-document grant lived exactly here) — every read in the dialog follows it.
+    private string _documentSelfHref = string.Empty;
     private List<DocumentsClient.GrantablePrincipalInfo> _principals = [];
 
     [ObservableProperty] private string _documentName = "";
@@ -74,7 +77,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
         EffectiveLoading = true;
         try
         {
-            var info = await _api.Documents.GetEffectiveAccessAsync(_documentId);
+            var info = await _api.Documents.GetEffectiveAccessAsync(await _api.Documents.RelViaSelfAsync(_documentSelfHref, "acl-entries"));
             EffectiveInheritedFrom = info.InheritedFrom ?? "";
             Effective.Clear();
             foreach (var e in info.Entries.OrderBy(e => e.Type).ThenBy(e => e.Name))
@@ -150,10 +153,10 @@ public sealed partial class ManageAccessViewModel : ObservableObject
         OnPropertyChanged(nameof(CanSave));
     }
 
-    public async Task SetupAsync(SimplArchiveApiClient api, Guid documentId, string documentName)
+    public async Task SetupAsync(SimplArchiveApiClient api, string documentSelfHref, string documentName)
     {
         _api = api;
-        _documentId = documentId;
+        _documentSelfHref = documentSelfHref;
         DocumentName = documentName;
         await ReloadAsync();
     }
@@ -165,7 +168,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
         LoadFailed = false;
         try
         {
-            var info = await _api!.Documents.GetAclAsync(_documentId);
+            var info = await _api!.Documents.GetAclAsync(_documentSelfHref);
             Forbidden = info.Forbidden;
             if (Forbidden)
             {
@@ -302,7 +305,7 @@ public sealed partial class ManageAccessViewModel : ObservableObject
 
         try
         {
-            await _api.SetAclEntryAsync(target, Current());
+            await _api.Documents.SetAclEntryAsync(target, Current());
             Editing = false;
             await ReloadAsync();
         }

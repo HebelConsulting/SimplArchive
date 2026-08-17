@@ -42,7 +42,7 @@ public partial class EditProfileDialog : Window
         // Which account this is. Costs no request of its own — it rides in the same "me" read the rels use.
         try
         {
-            EmailText.Text = await _api.MyEmailAsync() ?? "";
+            EmailText.Text = await _api.Profile.MyEmailAsync() ?? "";
         }
         catch (Exception)
         {
@@ -53,7 +53,7 @@ public partial class EditProfileDialog : Window
         // plain image source would send no token and get a 401.
         try
         {
-            if (await _api.GetMyPhotoAsync() is { Length: > 0 } bytes)
+            if (await _api.Profile.GetMyPhotoAsync() is { Length: > 0 } bytes)
             {
                 using var ms = new MemoryStream(bytes);
                 CurrentPhoto.Source = new Bitmap(ms);
@@ -78,7 +78,7 @@ public partial class EditProfileDialog : Window
 
         try
         {
-            await _api.ChangeMyPasswordAsync(result.Current, result.New);
+            await _api.Profile.ChangeMyPasswordAsync(result.Current, result.New);
             PasswordStatus.Text = Strings.Get("PwdChanged");
         }
         catch (Exception)

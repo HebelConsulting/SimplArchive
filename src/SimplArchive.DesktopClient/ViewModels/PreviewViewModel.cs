@@ -694,7 +694,7 @@ public sealed partial class PreviewViewModel : ObservableObject
 
     // Renders any preview (a document version's or an inbox item's — the Preview shape is shared) into the
     // preview pane, then attaches the hit-overlay.
-    public async Task RenderAsync(SimplArchiveApiClient.Preview preview)
+    public async Task RenderAsync(Preview preview)
     {
         if (Api is null)
         {
@@ -716,7 +716,7 @@ public sealed partial class PreviewViewModel : ObservableObject
 
         // Multi-page TIFF: each page is its own image rendition (ADR "Multi-page TIFF preview pages") — load
         // them as separate pages. Null (204) for every other format, which falls through to the single flow.
-        if (preview.PreviewPagesUrl is { } pagesUrl && await Api.GetPreviewPagesAsync(pagesUrl) is { Count: > 0 } pageUrls)
+        if (preview.PreviewPagesUrl is { } pagesUrl && await Api.Versions.GetPreviewPagesAsync(pagesUrl) is { Count: > 0 } pageUrls)
         {
             Reset(null);
             foreach (var url in pageUrls)
@@ -837,7 +837,7 @@ public sealed partial class PreviewViewModel : ObservableObject
 
         try
         {
-            var layout = await Api.GetTextLayoutAsync(textLayoutUrl);
+            var layout = await Api.Versions.GetTextLayoutAsync(textLayoutUrl);
             if (layout is null || layout.Pages.Count == 0)
             {
                 return;

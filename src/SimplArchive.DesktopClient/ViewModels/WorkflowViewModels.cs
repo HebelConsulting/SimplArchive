@@ -14,13 +14,18 @@ namespace SimplArchive.DesktopClient.ViewModels;
 public sealed partial class WorkflowWindowViewModel : ObservableObject
 {
     private readonly SimplArchiveApiClient _api;
-    private readonly Guid _documentId;
+
+    // The row's own addresses (ADR 0555/0559): the versions collection carries the workflow, and the document
+    // address resolves the reviewer catalog when a submit/reassign is offered.
+    private readonly string _versionsHref;
+    private readonly string _documentSelfHref;
     private Dictionary<string, string> _links = new();
 
-    public WorkflowWindowViewModel(SimplArchiveApiClient api, Guid documentId)
+    public WorkflowWindowViewModel(SimplArchiveApiClient api, string versionsHref, string documentSelfHref)
     {
         _api = api;
-        _documentId = documentId;
+        _versionsHref = versionsHref;
+        _documentSelfHref = documentSelfHref;
     }
 
     public bool Changed { get; private set; }
@@ -33,13 +38,13 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
     [ObservableProperty] private bool _canRelease;
     [ObservableProperty] private bool _canReassign;  // delegate/re-route (reviewer or editor)
     [ObservableProperty] private bool _hasHistory;
-    [ObservableProperty] private SimplArchiveApiClient.UserOptionInfo? _selectedReviewer;
+    [ObservableProperty] private UserOptionInfo? _selectedReviewer;
     [ObservableProperty] private string _rejectReason = "";
     [ObservableProperty] private bool _busy;
     [ObservableProperty] private string _status = "";
 
     public ObservableCollection<WorkflowHistoryItemViewModel> History { get; } = [];
-    public ObservableCollection<SimplArchiveApiClient.UserOptionInfo> Reviewers { get; } = [];
+    public ObservableCollection<UserOptionInfo> Reviewers { get; } = [];
 
     public async Task LoadAsync()
     {
@@ -52,7 +57,7 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
         WorkflowClient.WorkflowInfo? wf;
         try
         {
-            wf = await _api.Documents.GetWorkflowAsync(_documentId);
+            wf = await _api.Documents.GetWorkflowAsync(_versionsHref);
         }
         catch (Exception e)
         {
@@ -89,7 +94,7 @@ public sealed partial class WorkflowWindowViewModel : ObservableObject
         // (ADR "Workflow assignable-reviewers endpoint"), no CanManageUsers needed.
         if ((CanSubmit || CanReassign) && Reviewers.Count == 0)
         {
-            foreach (var u in await _api.Documents.GetAssignableReviewersAsync(_documentId))
+            foreach (var u in await _api.Documents.GetAssignableReviewersAsync(await _api.Documents.RelViaSelfAsync(_documentSelfHref, "assignable-reviewers")))
             {
                 Reviewers.Add(u);
             }

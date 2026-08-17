@@ -160,7 +160,7 @@ public partial class MainWindow
         }
 
         vm.Status = Strings.Get("StOpeningBc");
-        vm.Status = await CheckoutDiffLauncher.OpenAsync(api, row.Id, row.FileExtension, row.StashDownloadUrl);
+        vm.Status = await CheckoutDiffLauncher.OpenAsync(api, row.Item?.DownloadUrl, row.FileExtension, row.StashDownloadUrl);
     });
 
     private void OnManageAccess(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
@@ -171,7 +171,7 @@ public partial class MainWindow
         }
 
         var mvm = new ManageAccessViewModel();
-        await mvm.SetupAsync(api, node.Id, node.Name);
+        await mvm.SetupAsync(api, node.DocumentSelfHref, node.Name);
         await new ManageAccessDialog(mvm).ShowDialog(this);
     });
 
@@ -236,13 +236,16 @@ public partial class MainWindow
 
         if (r.Promote)
         {
-            await vm.PromotePrimaryLocationAsync(references.ItemId, r.FolderId);
+            await vm.PromotePrimaryLocationAsync(references.DocumentSelfHref, references.ItemId, r.FolderId,
+                    r.FolderHref ?? throw new InvalidOperationException("The referencing-folder row advertised no 'open' rel (ADR 0543/0555)."));
         }
         else
         {
             // Open the chosen folder AND select the item for viewing — its real row in the primary location, or its
             // reference (shortcut) row in a referencing folder.
-            await vm.OpenFolderAsync(r.FolderId, references.ItemId);
+            await vm.OpenFolderAsync(
+                r.FolderHref ?? throw new InvalidOperationException("The referencing-folder row advertised no 'open' rel (ADR 0543/0555)."),
+                references.ItemId);
         }
     });
 
@@ -493,7 +496,7 @@ public partial class MainWindow
             return;
         }
 
-        var status = await api.GetWebDavStatusAsync();
+        var status = await api.Profile.GetWebDavStatusAsync();
         if (!status.Enabled)
         {
             // No credentials yet: the dialog IS the next useful thing, not an error about the missing ones.

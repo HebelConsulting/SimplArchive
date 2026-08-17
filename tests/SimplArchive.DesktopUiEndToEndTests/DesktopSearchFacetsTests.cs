@@ -28,9 +28,9 @@ public class DesktopSearchFacetsTests
 
         await api.Documents.CreateRepositoryAsync($"dt-facets-{suffix}");
         var repo = (await api.Documents.GetRepositoriesAsync()).First(r => r.Name == $"dt-facets-{suffix}");
-        var a1 = await UploadClassifiedAsync(api, repo.Id, $"a1-{suffix}", word, maskA.Id);
-        var a2 = await UploadClassifiedAsync(api, repo.Id, $"a2-{suffix}", word, maskA.Id);
-        var b1 = await UploadClassifiedAsync(api, repo.Id, $"b1-{suffix}", word, maskB.Id);
+        var a1 = await UploadClassifiedAsync(api, repo, $"a1-{suffix}", word, maskA.Id);
+        var a2 = await UploadClassifiedAsync(api, repo, $"a2-{suffix}", word, maskA.Id);
+        var b1 = await UploadClassifiedAsync(api, repo, $"b1-{suffix}", word, maskB.Id);
 
         // Wait until all three are content-indexed AND their mask assignments have re-indexed. SetMaskAsync
         // re-indexes asynchronously and separately from the content, so the document-type facet counts settle a
@@ -74,11 +74,11 @@ public class DesktopSearchFacetsTests
         Assert.Contains(b1, both);
     }
 
-    private static async Task<Guid> UploadClassifiedAsync(SimplArchiveApiClient api, Guid repoId, string name, string content, Guid maskId)
+    private static async Task<Guid> UploadClassifiedAsync(SimplArchiveApiClient api, Node repo, string name, string content, Guid maskId)
     {
-        await api.Documents.UploadFileAsync(repoId, $"{name}.txt", Encoding.UTF8.GetBytes(content));
-        var doc = (await api.Documents.GetChildrenAsync(repoId)).First(c => c.Name == name);
-        await api.Documents.SetMaskAsync(doc.Id, maskId);
+        await api.Documents.UploadFileAsync(repo.Href("children"), $"{name}.txt", Encoding.UTF8.GetBytes(content));
+        var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == name);
+        await api.Documents.SetMaskAsync(doc.Href("mask"), maskId);
         return doc.Id;
     }
 

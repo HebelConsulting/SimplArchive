@@ -44,10 +44,13 @@ public class AdminController : ControllerBase
         public string DisplayName { get; set; } = "";
         public string Email { get; set; } = "";
         public bool UserIsActive { get; set; }
-        // The user's personal repository — browse it via GET /api/documents/{id}/children (the admin's ACL bypass).
+        // The user's personal repository, with its advertised addresses (#443): `document` (the repository seen
+        // as a document) and `children` (browse it, via the admin's ACL bypass) — a row naming a repository
+        // without its address leaves the client an id it can only compose from.
         public Guid RepositoryId { get; set; }
         public bool HasChildren { get; set; }
         public bool HasSubfolders { get; set; }
+        public List<Link>? Links { get; set; }
     }
 
     public class PersonalRepositoriesResource : HypermediaResource
@@ -107,6 +110,15 @@ public class AdminController : ControllerBase
             .OrderBy(x => x.DisplayName)
             .ThenBy(x => x.Email)
             .ToListAsync(cancellationToken);
+
+        foreach (var item in items)
+        {
+            item.Links =
+            [
+                new Link("document", $"/api/documents/{item.RepositoryId}", "GET"),
+                new Link("children", $"/api/documents/{item.RepositoryId}/children", "GET"),
+            ];
+        }
 
         // Record the admin's access to personal spaces (not silent) — after the read succeeds.
         await _auditRecorder.RecordAsync(

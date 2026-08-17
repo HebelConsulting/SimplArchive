@@ -30,7 +30,7 @@ public sealed partial class ExternalLinkDetailDialogViewModel : ObservableObject
     /// so the row is used when the caller has nothing better.
     /// </param>
     public ExternalLinkDetailDialogViewModel(
-        SimplArchiveApiClient api, SimplArchiveApiClient.ExternalLinkInfo link, string? documentName = null)
+        SimplArchiveApiClient api, ExternalLinksClient.ExternalLinkInfo link, string? documentName = null)
     {
         _api = api;
         Link = link;
@@ -38,7 +38,7 @@ public sealed partial class ExternalLinkDetailDialogViewModel : ObservableObject
         DocumentName = string.IsNullOrWhiteSpace(documentName) ? link.DocumentName : documentName;
     }
 
-    public SimplArchiveApiClient.ExternalLinkInfo Link { get; }
+    public ExternalLinksClient.ExternalLinkInfo Link { get; }
 
     public string DocumentName { get; }
 
@@ -83,7 +83,7 @@ public sealed partial class ExternalLinkDetailDialogViewModel : ObservableObject
         Revealing = true;
         try
         {
-            RevealedUrl = await _api.RevealExternalLinkUrlAsync(href);
+            RevealedUrl = await _api.ExternalLinks.RevealExternalLinkUrlAsync(href);
             if (RevealedUrl is null)
             {
                 Status = Strings.Get("ExtLinkUrlRevealFailed");
@@ -134,7 +134,7 @@ public sealed partial class ExternalLinkDetailDialogViewModel : ObservableObject
             return;
         }
 
-        if (await _api.RenewExternalLinkAsync(href, Days, MaxAccesses, Link.Etag))
+        if (await _api.ExternalLinks.RenewExternalLinkAsync(href, Days, MaxAccesses, Link.Etag))
         {
             Renewed = true;
             RequestClose?.Invoke();

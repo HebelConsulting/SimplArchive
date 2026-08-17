@@ -27,18 +27,19 @@ public class DesktopSensitivityLabelTests
 
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var name = $"sens-{Guid.NewGuid():N}.txt";
-        await api.Documents.UploadFileAsync(repo.Id, name, Encoding.UTF8.GetBytes("classified"));
+        await api.Documents.UploadFileAsync(repo.Href("children"), name, Encoding.UTF8.GetBytes("classified"));
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(name));
 
-        Assert.Null((await api.Documents.GetDocumentSensitivityAsync(doc.Id)).LabelId); // None by default
+        Assert.Null((await api.Documents.GetDocumentDetailAsync(doc.Href("self"))).Sensitivity.LabelId); // None by default
 
-        await api.Documents.SetSensitivityAsync(doc.Id, confidential.Id);
-        var s = await api.Documents.GetDocumentSensitivityAsync(doc.Id);
+        await api.Documents.SetSensitivityAsync(await api.Documents.RelViaSelfAsync(doc.Href("self"), "sensitivity"), confidential.Id);
+        var s = (await api.Documents.GetDocumentDetailAsync(doc.Href("self"))).Sensitivity;
         Assert.Equal(confidential.Id, s.LabelId);
         Assert.Equal("Confidential", s.Name);
         Assert.True(s.Watermark);
 
-        await Assert.ThrowsAsync<ApiActionException>(() => api.Documents.SetSensitivityAsync(doc.Id, Guid.NewGuid())); // unknown id → 400
+        var sensitivityHref = await api.Documents.RelViaSelfAsync(doc.Href("self"), "sensitivity");
+        await Assert.ThrowsAsync<ApiActionException>(() => api.Documents.SetSensitivityAsync(sensitivityHref, Guid.NewGuid())); // unknown id → 400
 
         // The child listing carries the label name/colour so the row can show a badge.
         var listed = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Id == doc.Id);

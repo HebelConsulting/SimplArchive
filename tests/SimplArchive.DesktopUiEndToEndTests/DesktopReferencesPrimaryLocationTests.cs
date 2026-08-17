@@ -23,25 +23,25 @@ public class DesktopReferencesPrimaryLocationTests
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
         var nameA = $"pl-a-{Guid.NewGuid():N}";
         var nameB = $"pl-b-{Guid.NewGuid():N}";
-        await api.Documents.CreateFolderAsync(repo.Id, nameA);
-        await api.Documents.CreateFolderAsync(repo.Id, nameB);
+        await api.Documents.CreateFolderAsync(repo.Href("children"), nameA);
+        await api.Documents.CreateFolderAsync(repo.Href("children"), nameB);
         var folderA = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == nameA);
         var folderB = (await api.Documents.GetChildrenAsync(repo.Href("children"))).Single(n => n.Name == nameB);
 
         var docName = $"pl-doc-{Guid.NewGuid():N}.txt";
-        await api.Documents.UploadFileAsync(folderA.Id, docName, Encoding.UTF8.GetBytes("body"));
+        await api.Documents.UploadFileAsync(folderA.Href("children"), docName, Encoding.UTF8.GetBytes("body"));
         var doc = (await api.Documents.GetChildrenAsync(folderA.Href("children"))).Single(n => n.Name == Path.GetFileNameWithoutExtension(docName));
 
         // A pre-existing reference to the doc in Folder B — promotion should drop it as redundant.
-        await api.Documents.CreateReferenceAsync(folderB.Id, doc.Id);
+        await api.Documents.CreateReferenceAsync(folderB.Href("references"), doc.Id);
 
-        var before = await api.Documents.GetReferencesViewAsync(doc.Id);
+        var before = await api.Documents.GetReferencesViewAsync(doc.Href("referencing-folders"));
         Assert.Equal(folderA.Id, before.Primary!.Id);
         Assert.Contains(before.Folders, f => f.Id == folderB.Id);
 
-        await api.Documents.SetPrimaryLocationAsync(doc.Id, folderB.Id);
+        await api.Documents.SetPrimaryLocationAsync(doc.Href("self"), folderB.Id);
 
-        var after = await api.Documents.GetReferencesViewAsync(doc.Id);
+        var after = await api.Documents.GetReferencesViewAsync(doc.Href("referencing-folders"));
         Assert.Equal(folderB.Id, after.Primary!.Id);                     // re-homed into Folder B
         Assert.Contains(after.Folders, f => f.Id == folderA.Id);         // reference left at the former home
         Assert.DoesNotContain(after.Folders, f => f.Id == folderB.Id);   // redundant reference removed

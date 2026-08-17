@@ -31,10 +31,10 @@ public class DesktopPasswordTests
         var user = new SimplArchiveApiClient(userToken);
 
         // Self-service change: wrong current password is rejected; the correct one works.
-        await Assert.ThrowsAsync<ApiActionException>(() => user.ChangeMyPasswordAsync("not-the-password", "Whatever1!"));
+        await Assert.ThrowsAsync<ApiActionException>(() => user.Profile.ChangeMyPasswordAsync("not-the-password", "Whatever1!"));
 
         var newPassword = "New-" + suffix + "-Pw1!";
-        await user.ChangeMyPasswordAsync(reset, newPassword);
+        await user.Profile.ChangeMyPasswordAsync(reset, newPassword);
 
         // The old password no longer logs in; the new one does.
         await Assert.ThrowsAnyAsync<Exception>(() => Ui.GetUserTokenAsync(_app.BaseUrl, email, reset));

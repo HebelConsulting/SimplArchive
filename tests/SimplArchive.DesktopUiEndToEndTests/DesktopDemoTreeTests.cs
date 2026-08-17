@@ -25,22 +25,22 @@ public class DesktopDemoTreeTests
         Assert.Contains("Contracts", topLevel);
         Assert.Contains("General", topLevel);
 
-        async Task<Node> ChildAsync(Guid parentId, string name) =>
-            (await api.Documents.GetChildrenAsync(parentId)).Single(n => n.Name == name);
+        async Task<Node> ChildAsync(Node parent, string name) =>
+            (await api.Documents.GetChildrenAsync(parent.Href("children"))).Single(n => n.Name == name);
 
         // Business Years / 2026 / 03 March holds the chocolate-gift invoice with TWO versions (Compare-versions).
-        var businessYears = await ChildAsync(repo.Id, "Business Years");
-        var year = await ChildAsync(businessYears.Id, "2026");
-        var march = await ChildAsync(year.Id, "03 March");
-        var chocolate = await ChildAsync(march.Id, "Invoice for customer's chocolate gift");
+        var businessYears = await ChildAsync(repo, "Business Years");
+        var year = await ChildAsync(businessYears, "2026");
+        var march = await ChildAsync(year, "03 March");
+        var chocolate = await ChildAsync(march, "Invoice for customer's chocolate gift");
         Assert.Equal(2, chocolate.VersionCount);
 
         // The March Telekom invoice lives under Contracts/MyCountry Telekom/Invoices and is referenced into a month
         // folder — so it reports HasReferences.
-        var contracts = await ChildAsync(repo.Id, "Contracts");
-        var telekom = await ChildAsync(contracts.Id, "MyCountry Telekom");
-        var telekomInvoices = await ChildAsync(telekom.Id, "Invoices");
-        var marchInvoice = await ChildAsync(telekomInvoices.Id, "MyCountry Telekom invoice — March 2026");
+        var contracts = await ChildAsync(repo, "Contracts");
+        var telekom = await ChildAsync(contracts, "MyCountry Telekom");
+        var telekomInvoices = await ChildAsync(telekom, "Invoices");
+        var marchInvoice = await ChildAsync(telekomInvoices, "MyCountry Telekom invoice — March 2026");
         Assert.True(marchInvoice.HasReferences);
     }
 }

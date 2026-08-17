@@ -22,11 +22,11 @@ public class DesktopPurgeTests
 
         var repo = (await api.Documents.GetRepositoriesAsync())[0];
         var folderName = $"Purge {suffix}";
-        await api.Documents.CreateFolderAsync(repo.Id, folderName);
+        await api.Documents.CreateFolderAsync(repo.Href("children"), folderName);
         var folder = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == folderName);
 
         // Delete it, then purge it permanently.
-        await api.Documents.DeleteAsync(folder.Id);
+        await api.Documents.DeleteAsync(folder.Href("self"));
         var recycled = await api.Documents.GetRecycleBinAsync(repo);
         Assert.Contains(recycled, i => i.Id == folder.Id);
 
