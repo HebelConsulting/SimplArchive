@@ -23,3 +23,14 @@
 *.snk   binary
 *.dll   binary
 *.exe   binary
+
+# The ADR index is append-only, and every ADR PR appends to the SAME line region — so two ADR PRs in flight always
+# conflict on it, mechanically and pointlessly (three times on 2026-08-17 alone), each conflict forcing a fresh CI
+# cycle on the trailing PR. `merge=union` resolves that by keeping BOTH sides' lines instead of raising a conflict,
+# which is exactly right for a table nobody edits in place. The index is CURATED, not generated — 96 of its status
+# cells and 16 of its titles are deliberately terser or more current than the ADR files they point at, and for
+# ADR 0406 the index is the only record that 0503 superseded it — so generating it from the files was rejected: it
+# would delete that. Union keeps every cell as written. Its one artifact is ordering (an auto-merged row can land
+# out of numeric sequence) and its one risk is a same-line edit being duplicated rather than flagged; both are
+# caught by AdrIndexTests, which asserts the table stays sorted, unique, and 1:1 with the files on disk.
+docs/adr/README.md merge=union
