@@ -112,9 +112,13 @@ public class WellKnownMaskFieldHealTests
             Assert.Equal(names.Count, names.Distinct().Count());
             Assert.Equal(9, names.Count);
 
-            // Every well-known mask stays on exactly one version — the probe must never mint one.
-            Assert.Equal(6, await db.Masks.IgnoreQueryFilters().CountAsync(m => m.TenantId == _tenantId));
-            Assert.Equal(6, await db.MaskVersions.IgnoreQueryFilters().CountAsync(v => v.TenantId == _tenantId));
+            // Every well-known mask stays on exactly one version — the probe must never mint one. The count
+            // tracks the well-known set (10 since #564 added the Contact/Calendar pairs): asserting the two
+            // counts are EQUAL is the invariant, and the literal additionally catches a mask appearing by
+            // accident, so both are kept.
+            var maskCount = await db.Masks.IgnoreQueryFilters().CountAsync(m => m.TenantId == _tenantId);
+            Assert.Equal(10, maskCount);
+            Assert.Equal(maskCount, await db.MaskVersions.IgnoreQueryFilters().CountAsync(v => v.TenantId == _tenantId));
         }
     }
 

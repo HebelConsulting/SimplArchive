@@ -434,10 +434,11 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
         }
     }
 
-    // Typed-folder containment (#562 slice 5; the mechanism #564's Contact/Calendar folders will share): a
-    // NoteFolder admits ONLY Note-masked children, and a Note-masked document's PRIMARY location is a
-    // NoteFolder — references may point anywhere. Enforced here, the single enforcement point, so every path
-    // (workbench move, import, WebDAV, IMAP) obeys.
+    // Typed-folder containment (#562 slice 5, generalized for #564's Contact/Calendar folders): a typed folder
+    // admits ONLY children wearing its item mask, and such an item's PRIMARY location is only that folder —
+    // references may point anywhere. The pairs are data (WellKnownMaskIds.TypedFolderPairs), so a new typed
+    // family is a row there rather than another copy of this rule. Enforced here, the single enforcement point,
+    // so every path (workbench move, import, WebDAV, IMAP, CalDAV/CardDAV) obeys.
     private async Task EnforceTypedFolderContainmentAsync(Document document, CancellationToken cancellationToken)
     {
         async Task<Guid?> MaskIdOfAsync(Guid? maskVersionId) => maskVersionId is not { } mv
@@ -456,16 +457,26 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
             parentMaskId = await MaskIdOfAsync(parentMaskVersionId);
         }
 
-        if (parentMaskId == Domain.Masks.WellKnownMaskIds.NoteFolder && ownMaskId != Domain.Masks.WellKnownMaskIds.Note)
-        {
-            throw new InvalidOperationException(
-                $"'{document.Name}' cannot live in a Note Folder — only Note-masked documents can (typed-folder containment, #562).");
-        }
+        // A document whose type is not DETERMINED yet is exempt from the folder's admission rule: an upload
+        // creates the row (and its Pending version) BEFORE the finalizer can read the bytes and classify it,
+        // so enforcing here would refuse every .vcf/.ics before it could become a Contact/Calendar. Nothing
+        // escapes through the gap — classification ends by assigning either the item mask (admitted) or Basic
+        // Entry (a real mask, so the very next save is refused, which is exactly the rejection we want).
+        var typeUndetermined = ownMaskId is null;
 
-        if (ownMaskId == Domain.Masks.WellKnownMaskIds.Note && parentMaskId != Domain.Masks.WellKnownMaskIds.NoteFolder)
+        foreach (var pair in Domain.Masks.WellKnownMaskIds.TypedFolderPairs)
         {
-            throw new InvalidOperationException(
-                $"'{document.Name}' wears the Note mask and can only live in a Note Folder (typed-folder containment, #562).");
+            if (!typeUndetermined && parentMaskId == pair.FolderMaskId && ownMaskId != pair.ItemMaskId)
+            {
+                throw new InvalidOperationException(
+                    $"'{document.Name}' cannot live in a {pair.FolderName} — only {pair.ItemName}-masked documents can (typed-folder containment, #562/#564).");
+            }
+
+            if (ownMaskId == pair.ItemMaskId && parentMaskId != pair.FolderMaskId)
+            {
+                throw new InvalidOperationException(
+                    $"'{document.Name}' wears the {pair.ItemName} mask and can only live in a {pair.FolderName} (typed-folder containment, #562/#564).");
+            }
         }
     }
 

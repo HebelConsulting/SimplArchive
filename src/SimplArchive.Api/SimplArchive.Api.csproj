@@ -61,6 +61,8 @@
     <PackageReference Include="Asp.Versioning.Mvc" Version="10.0.0" />
     <PackageReference Include="Fido2" Version="4.0.1" />
     <PackageReference Include="Fido2.AspNet" Version="4.0.1" />
+    <PackageReference Include="FolkerKinzel.VCards" Version="8.2.0" />
+    <PackageReference Include="Ical.Net" Version="5.2.3" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.9" />
     <!-- OpenAPI (ADR "OpenAPI definition endpoint"): Microsoft.AspNetCore.OpenApi generates /openapi/v1.json;
          Scalar renders the browsable UI. Both MIT. Microsoft.OpenApi is pinned to 2.0.1 (a transitive of

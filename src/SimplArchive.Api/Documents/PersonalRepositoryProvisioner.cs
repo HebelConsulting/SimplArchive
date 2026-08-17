@@ -24,6 +24,12 @@ public sealed class PersonalRepositoryProvisioner
     // The typed notes folder (#562 slice 5) — the IMAP layer projects it as the root "Notes" mailbox.
     public const string NotesFolderName = "Notes";
 
+    // The typed calendar/contact folders (#564) — every user gets one of each, and CalDAV/CardDAV list them
+    // first in the home set. Unlike these defaults, further typed folders may be created anywhere in the tree.
+    public const string MyCalendarFolderName = "My Calendar";
+
+    public const string MyContactsFolderName = "My Contacts";
+
     private readonly SimplArchiveDbContext _dbContext;
     private readonly IAuditRecorder _audit;
 
@@ -42,7 +48,9 @@ public sealed class PersonalRepositoryProvisioner
     {
         var root = await EnsureRootAsync(userId, tenantId, cancellationToken);
         await EnsureMyDocumentsAsync(root, tenantId, userId, cancellationToken);
-        await EnsureNotesAsync(root, tenantId, userId, cancellationToken);
+        await EnsureTypedFolderAsync(root, tenantId, userId, NotesFolderName, WellKnownMaskIds.NoteFolder, cancellationToken);
+        await EnsureTypedFolderAsync(root, tenantId, userId, MyCalendarFolderName, WellKnownMaskIds.CalendarFolder, cancellationToken);
+        await EnsureTypedFolderAsync(root, tenantId, userId, MyContactsFolderName, WellKnownMaskIds.ContactFolder, cancellationToken);
         return root;
     }
 
@@ -148,24 +156,26 @@ public sealed class PersonalRepositoryProvisioner
     }
 
     /// <summary>
-    /// Idempotently ensures the personal repository has a "Notes" child wearing the NoteFolder mask (#562
-    /// slice 5) — the TYPED folder the notes clients sync into, projected as the root "Notes" mailbox over
-    /// IMAP. Same concurrency posture as "My Documents".
+    /// Idempotently ensures the personal repository has a TYPED child folder wearing <paramref name="folderMaskId"/>
+    /// — "Notes" for the IMAP notes mailbox (#562 slice 5), "My Calendar"/"My Contacts" for CalDAV/CardDAV
+    /// (#564). One implementation for all three: they differ only in name and mask. Same concurrency posture
+    /// as "My Documents".
     /// </summary>
-    private async Task EnsureNotesAsync(Document root, Guid tenantId, Guid userId, CancellationToken cancellationToken)
+    private async Task EnsureTypedFolderAsync(
+        Document root, Guid tenantId, Guid userId, string name, Guid folderMaskId, CancellationToken cancellationToken)
     {
-        var noteFolderMaskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, WellKnownMaskIds.NoteFolder, cancellationToken);
+        var maskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, folderMaskId, cancellationToken);
 
         var existing = await _dbContext.Documents
-            .FirstOrDefaultAsync(d => d.ParentId == root.Id && d.Name == NotesFolderName, cancellationToken);
+            .FirstOrDefaultAsync(d => d.ParentId == root.Id && d.Name == name, cancellationToken);
         if (existing is not null)
         {
-            // Heal a maskless Notes folder: a provisioning run whose tenant predated the NoteFolder mask
-            // (an upgraded deployment) created the folder with no mask at all — in which state it neither
-            // projects as the root "Notes" IMAP mailbox nor enforces its typed containment.
-            if (existing.MaskVersionId is null && noteFolderMaskVersionId is not null)
+            // Heal a maskless typed folder: a provisioning run whose tenant predated this mask (an upgraded
+            // deployment) created the folder with no mask at all — in which state it neither projects onto its
+            // protocol surface nor enforces its typed containment.
+            if (existing.MaskVersionId is null && maskVersionId is not null)
             {
-                existing.MaskVersionId = noteFolderMaskVersionId;
+                existing.MaskVersionId = maskVersionId;
                 await _dbContext.SaveChangesAsync(cancellationToken);
             }
             return;
@@ -176,8 +186,8 @@ public sealed class PersonalRepositoryProvisioner
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ParentId = root.Id,
-            Name = NotesFolderName,
-            MaskVersionId = noteFolderMaskVersionId,
+            Name = name,
+            MaskVersionId = maskVersionId,
             CreatedByUserId = userId,
             CreatedAt = DateTimeOffset.UtcNow,
         });

@@ -28,8 +28,13 @@ public class WebSearchFacetsTests
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await Ui.GetUserTokenAsync(_app.BaseUrl));
 
         var masks = (await http.GetFromJsonAsync<JsonElement>("/api/masks")).GetProperty("masks").EnumerateArray().ToArray();
-        var maskA = masks[0];
-        var maskB = masks.First(m => m.GetProperty("id").GetGuid() != maskA.GetProperty("id").GetGuid());
+        // Two masks that are genuinely assignable to a plain document, picked BY NAME because an
+        // index-based pick is not stable against the well-known set growing. The pick has to clear two
+        // separate refusals: a TYPED mask (Note/Contact/Calendar) is admitted only inside its own folder
+        // (containment, #564/ADR 0619), and a mask with REQUIRED fields — eMail wants From/To/Subject —
+        // is refused on assignment until they are filled (ADR 0176). Basic Entry and Folder clear both.
+        var maskA = masks.First(m => m.GetProperty("name").GetString() == "Basic Entry");
+        var maskB = masks.First(m => m.GetProperty("name").GetString() == "Folder");
         var (maskAId, maskAName) = (maskA.GetProperty("id").GetGuid(), maskA.GetProperty("name").GetString()!);
 
         var repoId = await PostIdAsync(http, "/api/repositories", new { name = $"webfacets-{suffix}" });

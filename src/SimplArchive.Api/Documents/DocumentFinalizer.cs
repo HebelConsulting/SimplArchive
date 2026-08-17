@@ -25,6 +25,7 @@ public class DocumentFinalizer
     private readonly IStorageQuotaService _storageQuota;
     private readonly INotificationService _notifications;
     private readonly ChatSystemEntryRecorder _chatEntries;
+    private readonly CalendarContactClassifier _calendarContactClassifier;
 
     public DocumentFinalizer(
         SimplArchiveDbContext dbContext,
@@ -35,7 +36,8 @@ public class DocumentFinalizer
         IWormLockService wormLock,
         IStorageQuotaService storageQuota,
         INotificationService notifications,
-        ChatSystemEntryRecorder chatEntries)
+        ChatSystemEntryRecorder chatEntries,
+        CalendarContactClassifier calendarContactClassifier)
     {
         _dbContext = dbContext;
         _objectStorageClient = objectStorageClient;
@@ -46,6 +48,7 @@ public class DocumentFinalizer
         _storageQuota = storageQuota;
         _notifications = notifications;
         _chatEntries = chatEntries;
+        _calendarContactClassifier = calendarContactClassifier;
     }
 
     // Extensions that trigger a searchable-PDF successor job. A TIFF always converts; a PDF is a *candidate* —
@@ -323,6 +326,15 @@ public class DocumentFinalizer
                 await ClassifyAsEmailAsync(document, version, metadata, cancellationToken);
                 return true;
             }
+        }
+
+        // A .vcf/.ics becomes a Contact/Calendar (#564, ADR 0619) — required, not decorative: the typed-folder
+        // containment invariant refuses a Basic-Entry-masked child of a Contact/Calendar Folder, so without
+        // this an upload into one of those folders could not be saved at all.
+        if (CalendarContactClassifier.Handles(extension)
+            && await _calendarContactClassifier.TryClassifyAsync(document, version, cancellationToken))
+        {
+            return false; // classified, but it has no attachments to file
         }
 
         document.MaskVersionId = await ResolveCurrentMaskVersionIdAsync(WellKnownMaskIds.BasicEntry, cancellationToken);

@@ -23,8 +23,13 @@ public class DesktopSearchFacetsTests
         var word = $"dtfacet{suffix}";
 
         var masks = await api.Documents.GetMasksAsync();
-        var maskA = masks[0];
-        var maskB = masks.First(m => m.Id != maskA.Id);
+        // Two masks that are genuinely assignable to a plain document, picked BY NAME because an
+        // index-based pick is not stable against the well-known set growing. The pick has to clear two
+        // separate refusals: a TYPED mask (Note/Contact/Calendar) is admitted only inside its own folder
+        // (containment, #564/ADR 0619), and a mask with REQUIRED fields — eMail wants From/To/Subject —
+        // is refused on assignment until they are filled (ADR 0176). Basic Entry and Folder clear both.
+        var maskA = masks.First(m => m.Name == "Basic Entry");
+        var maskB = masks.First(m => m.Name == "Folder");
 
         await api.Documents.CreateRepositoryAsync($"dt-facets-{suffix}");
         var repo = (await api.Documents.GetRepositoriesAsync()).First(r => r.Name == $"dt-facets-{suffix}");

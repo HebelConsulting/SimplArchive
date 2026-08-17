@@ -170,6 +170,7 @@ builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService
 
 // Confirms + auto-classifies an uploaded/filed DocumentVersion — shared by version finalize and intray
 // filing (ADR "S3-backed inbox").
+builder.Services.AddScoped<SimplArchive.Api.Documents.CalendarContactClassifier>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentFinalizer>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.ChatSystemEntryRecorder>();
 
@@ -544,6 +545,10 @@ app.UseSerilogRequestLogging(options =>
 // The WebDAV gateway (ADRs "WebDAV gateway" / 0509) handles /SimplArchive (and the /webdav alias) with its own
 // HTTP Basic auth, ahead of the normal OIDC/JWT pipeline; it short-circuits for those and passes the rest through.
 app.UseMiddleware<SimplArchive.Api.WebDav.WebDavMiddleware>();
+
+// The CalDAV/CardDAV gateway (#564, ADR 0619) handles /caldav + /carddav and the two well-known discovery
+// URIs, with the same HTTP Basic auth against the SHARED DAV password; it passes everything else through.
+app.UseMiddleware<SimplArchive.Api.CalDav.CalDavMiddleware>();
 
 app.UseBlazorFrameworkFiles();
 

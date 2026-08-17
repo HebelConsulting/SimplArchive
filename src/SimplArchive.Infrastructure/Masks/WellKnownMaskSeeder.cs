@@ -84,6 +84,32 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("Note UUID", FieldDataType.Text, IsRequired: true),
             new FieldSpec("Modified", FieldDataType.Date, IsRequired: false),
         ], cancellationToken);
+
+        // The CalDAV/CardDAV pairs (#564, ADR 0619) — same shape as the Notes pair: the folder masks are
+        // fieldless (they type the folder, and unlike Notes they may sit anywhere in the tree), the item masks
+        // carry the fields extracted from the stored .vcf/.ics. The UID fields are the correlation keys a DAV
+        // PUT matches on to make a new version rather than a second document. Recurrence stays opaque in the
+        // .ics — "Start"/"End" are the first occurrence's, for search and listing only.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.ContactFolder, "Contact Folder", [], cancellationToken);
+
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Contact, "Contact",
+        [
+            new FieldSpec("Contact UID", FieldDataType.Text, IsRequired: true),
+            new FieldSpec("Full name", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Email", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Phone", FieldDataType.Text, IsRequired: false),
+            new FieldSpec("Organization", FieldDataType.Text, IsRequired: false),
+        ], cancellationToken);
+
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.CalendarFolder, "Calendar Folder", [], cancellationToken);
+
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Calendar, "Calendar",
+        [
+            new FieldSpec("Event UID", FieldDataType.Text, IsRequired: true),
+            new FieldSpec("Start", FieldDataType.Date, IsRequired: false),
+            new FieldSpec("End", FieldDataType.Date, IsRequired: false),
+            new FieldSpec("Location", FieldDataType.Text, IsRequired: false),
+        ], cancellationToken);
     }
 
     private async Task EnsureMaskAsync(Guid tenantId, Guid maskId, string name, IReadOnlyList<FieldSpec> fields, CancellationToken cancellationToken)

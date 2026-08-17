@@ -52,13 +52,15 @@ public class PersonalRepositoryTests
 
         var personalId = (await TestJson.Post(user, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
 
-        // The personal repository is seeded with exactly "My Documents" + the typed "Notes" folder (#562
-        // slice 5); the Intray / Check-out launchers are a client-side tree concept, not API children.
-        Assert.Equal(["My Documents", "Notes"], await ChildNamesAsync(user, personalId));
+        // The personal repository is seeded with "My Documents" plus the typed folders: "Notes" (#562
+        // slice 5) and "My Calendar"/"My Contacts" (#564); the Intray / Check-out launchers are a
+        // client-side tree concept, not API children. The order is the list endpoint's (CreatedAt, Id),
+        // i.e. the order the provisioner creates them in — not alphabetical.
+        Assert.Equal(["My Documents", "Notes", "My Calendar", "My Contacts"], await ChildNamesAsync(user, personalId));
 
         // A second ensure does not duplicate either — the idempotent backfill.
         await TestJson.Post(user, "/api/me/personal-repository", new { });
-        Assert.Equal(["My Documents", "Notes"], await ChildNamesAsync(user, personalId));
+        Assert.Equal(["My Documents", "Notes", "My Calendar", "My Contacts"], await ChildNamesAsync(user, personalId));
     }
 
     [Fact]
