@@ -17,14 +17,16 @@ public sealed class CalDavController : DavControllerBase
     private readonly IEffectiveRightsCalculator _rights;
     private readonly IObjectStorageClient _storage;
     private readonly IServiceProvider _services;
+    private readonly DavPushConfiguration _push;
 
     public CalDavController(
-        SimplArchiveDbContext dbContext, IEffectiveRightsCalculator rights, IObjectStorageClient storage, IServiceProvider services)
+        SimplArchiveDbContext dbContext, IEffectiveRightsCalculator rights, IObjectStorageClient storage, IServiceProvider services, DavPushConfiguration push)
     {
         _dbContext = dbContext;
         _rights = rights;
         _storage = storage;
         _services = services;
+        _push = push;
     }
 
     private DavControllerContext Context()
@@ -32,7 +34,7 @@ public sealed class CalDavController : DavControllerBase
         ApplyPrincipal(_services);
         return new DavControllerContext(
             Protocol, Request, _dbContext, _rights, _storage, CurrentUserId, CurrentTenantId,
-            User.Identity?.Name ?? "SimplArchive", Depth(), HttpContext.RequestAborted);
+            User.Identity?.Name ?? "SimplArchive", Depth(), _push.VapidPublicKey, HttpContext.RequestAborted);
     }
 
     // Discovery is answered WITHOUT credentials — a client probes it before it has any (RFC 6764).
@@ -86,6 +88,11 @@ public sealed class CalDavController : DavControllerBase
     [HttpPut("~/caldav/calendars/{folderId:guid}/{resourceName}")]
     public Task<IActionResult> Put(Guid folderId, string resourceName) =>
         DavEndpoints.PutAsync(Context(), _services, folderId, resourceName);
+
+    // WebDAV-Push: a client POSTs push-register to the COLLECTION, and deletes the returned URL to stop.
+    [HttpPost("~/caldav/calendars/{folderId:guid}")]
+    public Task<IActionResult> RegisterPush(Guid folderId) =>
+        DavPushRegistration.RegisterAsync(Context(), _push, folderId);
 
     [HttpDelete("~/caldav/calendars/{folderId:guid}/{resourceName}")]
     public Task<IActionResult> Delete(Guid folderId, string resourceName) =>

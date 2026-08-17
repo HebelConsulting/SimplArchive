@@ -71,6 +71,10 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<SimplArchive.Domain.CalDav.DavCollectionColor> DavCollectionColors => Set<SimplArchive.Domain.CalDav.DavCollectionColor>();
 
+    public DbSet<SimplArchive.Domain.CalDav.DavCollectionChange> DavCollectionChanges => Set<SimplArchive.Domain.CalDav.DavCollectionChange>();
+
+    public DbSet<SimplArchive.Domain.CalDav.DavPushSubscription> DavPushSubscriptions => Set<SimplArchive.Domain.CalDav.DavPushSubscription>();
+
     public DbSet<SimplArchive.Domain.LegalHolds.LegalHoldItem> LegalHoldItems => Set<SimplArchive.Domain.LegalHolds.LegalHoldItem>();
 
     public DbSet<SimplArchive.Domain.Audit.AuditEvent> AuditEvents => Set<SimplArchive.Domain.Audit.AuditEvent>();

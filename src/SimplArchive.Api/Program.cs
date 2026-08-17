@@ -176,6 +176,13 @@ builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService
 
 // Confirms + auto-classifies an uploaded/filed DocumentVersion — shared by version finalize and intray
 // filing (ADR "S3-backed inbox").
+// WebDAV-Push (#564 slice 3, ADR 0622): the VAPID configuration is a singleton because in Development it
+// GENERATES an ephemeral key pair — one per process, not one per request, or every client's registration
+// would be signed by a different key.
+builder.Services.Configure<SimplArchive.Api.CalDav.DavPushOptions>(
+    builder.Configuration.GetSection(SimplArchive.Api.CalDav.DavPushOptions.SectionName));
+builder.Services.AddSingleton<SimplArchive.Api.CalDav.DavPushConfiguration>();
+builder.Services.AddScoped<SimplArchive.Api.CalDav.DavPushNotifier>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.CalendarContactClassifier>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentFinalizer>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.ChatSystemEntryRecorder>();

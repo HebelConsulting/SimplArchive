@@ -55,6 +55,24 @@ public static class MultiStatus
     }
 
     /// <summary>Adds a top-level sync-token (used by sync-collection responses).</summary>
+    /// <summary>
+    /// ADDED for SimplArchive: appends the removed hrefs as bare 404 responses. RFC 6578 reports a deletion
+    /// exactly this way — an href with 404 and no properties — and it is the signal a client needs to drop its
+    /// local copy. The sister project derives these from its own store; here they come from the change log.
+    /// </summary>
+    public static XDocument AddNotFound(XDocument document, IEnumerable<string> hrefs)
+    {
+        foreach (var href in hrefs)
+        {
+            document.Root!.Add(new XElement(
+                DavNames.Response,
+                new XElement(DavNames.Href, href),
+                new XElement(DavNames.Status, DavNames.NotFound)));
+        }
+
+        return document;
+    }
+
     public static XDocument WithSyncToken(XDocument document, string syncToken)
     {
         document.Root!.Add(new XElement(DavNames.SyncToken, syncToken));

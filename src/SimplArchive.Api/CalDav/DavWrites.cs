@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Controllers;
 using SimplArchive.Api.Documents;
 using SimplArchive.Application.Abstractions;
+using SimplArchive.Domain.CalDav;
 using SimplArchive.Domain.Documents;
 
 namespace SimplArchive.Api.CalDav;
@@ -127,6 +128,14 @@ internal static class DavWrites
             existing is null ? $"Filed over {protocol.NamespacePrefix}DAV" : $"New version over {protocol.NamespacePrefix}DAV",
             cancellationToken: context.Cancellation);
 
+        // The change log is written AFTER the finalizer, because the resource name comes from the UID that
+        // classification fills in — logging earlier would record a name no client will ever ask for (ADR 0622).
+        var stored0 = await DavTree.ItemAsync(db, protocol, folderId, resourceName, context.Cancellation);
+        var sequence = await DavChangeLog.RecordAsync(db, context.TenantId, folderId, document.Id,
+            stored0?.ResourceName ?? resourceName,
+            existing is null ? DavChangeType.Created : DavChangeType.Modified, context.Cancellation);
+        await NotifyAsync(services, folderId, sequence, context.Cancellation);
+
         // Re-read the document for the ETag: the finalizer's save regenerated the concurrency token.
         var stored = await DavTree.ItemAsync(db, protocol, folderId, resourceName, context.Cancellation);
         if (stored is not null)
@@ -171,6 +180,12 @@ internal static class DavWrites
         document.DeletedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(context.Cancellation);
 
+        // Removal is the change a sync client most needs told: it is the one it cannot infer by re-listing,
+        // because the item is simply absent (ADR 0622).
+        var sequence = await DavChangeLog.RecordAsync(db, context.TenantId, folderId, document.Id, item.ResourceName,
+            DavChangeType.Removed, context.Cancellation);
+        await NotifyAsync(services, folderId, sequence, context.Cancellation);
+
         await services.GetRequiredService<IAuditRecorder>().RecordAsync(
             AuditActions.DocumentDeleted, "Document", document.Id, document.Name,
             $"Deleted over {protocol.NamespacePrefix}DAV", cancellationToken: context.Cancellation);
@@ -209,5 +224,21 @@ internal static class DavWrites
         return !ifMatch.Split(',')
             .Select(tag => tag.Trim().TrimStart('W', '/').Trim().Trim('"'))
             .Any(tag => tag == currentETag);
+    }
+
+    /// <summary>
+    /// Tells subscribers the collection moved on. BEST-EFFORT: a push is an optimisation over polling, so a
+    /// failure here must never fail the write that succeeded — the client just finds out on its next poll.
+    /// </summary>
+    private static async Task NotifyAsync(IServiceProvider services, Guid folderId, long sequence, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await services.GetRequiredService<DavPushNotifier>().NotifyAsync(folderId, sequence, cancellationToken);
+        }
+        catch (Exception)
+        {
+            // Swallowed deliberately; the notifier logs its own failures.
+        }
     }
 }

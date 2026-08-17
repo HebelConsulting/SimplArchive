@@ -44,7 +44,8 @@ internal static class DavResources
     }
 
     /// <summary>One subscribable collection: a typed folder the caller can see.</summary>
-    internal static DavResource Collection(DavProtocol protocol, Guid userId, DavCollection collection, EffectiveRights rights)
+    internal static DavResource Collection(
+        DavProtocol protocol, Guid userId, DavCollection collection, EffectiveRights rights, long changeSequence = 0, string? vapidPublicKey = null)
     {
         var resource = new DavResource(protocol.CollectionHref(collection.FolderId));
         resource.Set(DavNames.ResourceType, new object[]
@@ -56,6 +57,10 @@ internal static class DavResources
         resource.Set(DavNames.CurrentUserPrincipal, new XElement(DavNames.Href, protocol.PrincipalHref(userId)));
         resource.Set(DavNames.Owner, new XElement(DavNames.Href, protocol.PrincipalHref(userId)));
         resource.Set(DavNames.SupportedReportSet, SupportedReports(protocol));
+        // Both are the same number wearing different clothes: CTag is what a polling client compares, the
+        // sync-token is what sync-collection resumes from (ADR 0622).
+        resource.Set(DavNames.GetCTag, changeSequence.ToString());
+        resource.Set(DavNames.SyncToken, DavTokens.Format(changeSequence));
         resource.Set(DavNames.CurrentUserPrivilegeSet, DavPrivileges.From(rights));
 
         if (protocol == DavProtocol.CalDav)
@@ -68,6 +73,19 @@ internal static class DavResources
         {
             resource.Set(DavNames.SupportedAddressData,
                 new XElement(DavNames.AddressDataType, new XAttribute("content-type", "text/vcard"), new XAttribute("version", "3.0")));
+        }
+
+        // WebDAV-Push (ported from SimplCalCon's DavPushAdvertisement, ADR 0622): the transport, this
+        // collection's stable topic, and the triggers. Absent when push is off, which is how a client knows
+        // to keep polling instead.
+        if (vapidPublicKey is { Length: > 0 } vapid)
+        {
+            resource.Set(DavNames.PushTransports,
+                new XElement(DavNames.PushWebPush,
+                    new XElement(DavNames.PushVapidPublicKey, new XAttribute("type", "p256ecdsa"), vapid)));
+            resource.Set(DavNames.PushTopic, PushTopic(collection.FolderId));
+            resource.Set(DavNames.PushSupportedTriggers,
+                new XElement(DavNames.PushContentUpdate, new XElement(DavNames.Dav + "depth", "1")));
         }
 
         // The colour, in the namespace calendar/contacts clients actually read it from (ADR 0620).
@@ -99,6 +117,14 @@ internal static class DavResources
 
         return resource;
     }
+
+    /// <summary>
+    /// The stable, opaque push topic for a collection. Derived from the id rather than being the id: the topic
+    /// travels to a third-party push service, which has no business learning our identifiers.
+    /// </summary>
+    private static string PushTopic(Guid folderId) =>
+        Convert.ToBase64String(System.Security.Cryptography.SHA256.HashData(folderId.ToByteArray()))
+            .Replace('+', '-').Replace('/', '_').TrimEnd('=');
 
     private static IEnumerable<XElement> SupportedReports(DavProtocol protocol) =>
     [

@@ -38,7 +38,8 @@ internal static class DavEndpoints
             foreach (var collection in await DavTree.CollectionsAsync(context.Db, context.Rights, context.UserId, context.Protocol, context.Cancellation))
             {
                 var rights = await context.Rights.GetEffectiveRightsAsync(context.UserId, collection.FolderId);
-                resources.Add(DavResources.Collection(context.Protocol, context.UserId, collection, rights));
+                var sequence = await DavChangeLog.CurrentAsync(context.Db, collection.FolderId, context.Cancellation);
+                resources.Add(DavResources.Collection(context.Protocol, context.UserId, collection, rights, sequence, context.VapidPublicKey));
             }
         }
 
@@ -56,7 +57,8 @@ internal static class DavEndpoints
 
         var request = PropRequest.Parse(await context.ReadBodyAsync());
         var rights = await context.Rights.GetEffectiveRightsAsync(context.UserId, folderId);
-        var resources = new List<DavResource> { DavResources.Collection(context.Protocol, context.UserId, collection, rights) };
+        var sequence = await DavChangeLog.CurrentAsync(context.Db, folderId, context.Cancellation);
+        var resources = new List<DavResource> { DavResources.Collection(context.Protocol, context.UserId, collection, rights, sequence, context.VapidPublicKey) };
 
         if (context.Depth >= 1)
         {
@@ -99,6 +101,59 @@ internal static class DavEndpoints
     }
 
     /// <summary>
+    /// RFC 6578 <c>sync-collection</c>: what changed since the client's token, and the new token to resume
+    /// from. A REMOVED item is reported as its href with 404 — that is the whole point of the report, and the
+    /// one thing a client cannot work out by re-listing, because the item is simply absent.
+    /// </summary>
+    internal static async Task<IActionResult> SyncAsync(DavControllerContext context, Guid folderId, System.Xml.Linq.XElement body)
+    {
+        var since = DavTokens.TryParse(body.Element(DavNames.SyncToken)?.Value);
+
+        // An unparseable/foreign token is NOT an error to swallow: answering it as "everything" would silently
+        // hand the client a full resync it did not ask for. RFC 6578 says 403 with valid-sync-token.
+        if (body.Element(DavNames.SyncToken) is { } token && !string.IsNullOrWhiteSpace(token.Value) && since is null)
+        {
+            return new ContentResult
+            {
+                StatusCode = StatusCodes.Status403Forbidden,
+                ContentType = "application/xml; charset=utf-8",
+                Content = """<?xml version="1.0" encoding="utf-8"?><D:error xmlns:D="DAV:"><D:valid-sync-token/></D:error>""",
+            };
+        }
+
+        var request = PropRequest.FromProp(body.Element(DavNames.Prop));
+        var changes = await DavChangeLog.SinceAsync(context.Db, folderId, since ?? 0, context.Cancellation);
+        var current = await DavChangeLog.CurrentAsync(context.Db, folderId, context.Cancellation);
+
+        var resources = new List<DavResource>();
+        var removed = new List<string>();
+        foreach (var change in changes)
+        {
+            if (change.ChangeType == Domain.CalDav.DavChangeType.Removed)
+            {
+                removed.Add(context.Protocol.ItemHref(folderId, change.ResourceName));
+                continue;
+            }
+
+            var item = await DavTree.ItemAsync(context.Db, context.Protocol, folderId, change.ResourceName, context.Cancellation);
+            if (item is null)
+            {
+                // Logged as changed but no longer there — tell the client it is gone rather than omitting it,
+                // which would leave a stale copy on the device forever.
+                removed.Add(context.Protocol.ItemHref(folderId, change.ResourceName));
+                continue;
+            }
+
+            resources.Add(DavResources.Item(context.Protocol, item, data: null));
+        }
+
+        var document = MultiStatus.Build(request, resources);
+        MultiStatus.AddNotFound(document, removed);
+        MultiStatus.WithSyncToken(document, DavTokens.Format(current));
+        return DavXml.MultiStatus(document);
+    }
+
+    /// <summary>
     /// REPORT: the multiget forms answer exactly the hrefs asked for, the query forms answer the whole
     /// collection (no server-side filtering yet — poll-based clients re-filter locally anyway). Both carry the
     /// item data inline, which is what saves the per-item GET round trips.
@@ -111,6 +166,11 @@ internal static class DavEndpoints
         }
 
         var body = await context.ReadBodyAsync();
+        if (body?.Name == DavNames.SyncCollection)
+        {
+            return await SyncAsync(context, folderId, body);
+        }
+
         var request = PropRequest.FromProp(body?.Element(DavNames.Prop));
         var wanted = body?.Elements(DavNames.Href).Select(h => h.Value.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
 

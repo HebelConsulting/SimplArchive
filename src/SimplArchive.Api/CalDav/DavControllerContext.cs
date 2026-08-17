@@ -15,7 +15,7 @@ internal sealed class DavControllerContext
 
     internal DavControllerContext(
         DavProtocol protocol, HttpRequest request, SimplArchiveDbContext db, IEffectiveRightsCalculator rights,
-        IObjectStorageClient storage, Guid userId, Guid tenantId, string displayName, int depth, CancellationToken cancellation)
+        IObjectStorageClient storage, Guid userId, Guid tenantId, string displayName, int depth, string? vapidPublicKey, CancellationToken cancellation)
     {
         Protocol = protocol;
         Db = db;
@@ -24,6 +24,7 @@ internal sealed class DavControllerContext
         TenantId = tenantId;
         DisplayName = displayName;
         Depth = depth;
+        VapidPublicKey = vapidPublicKey;
         Cancellation = cancellation;
         _request = request;
         _storage = storage;
@@ -42,6 +43,9 @@ internal sealed class DavControllerContext
     internal string DisplayName { get; }
 
     internal int Depth { get; }
+
+    /// <summary>Advertised when push is enabled; null keeps the capability off the wire.</summary>
+    internal string? VapidPublicKey { get; }
 
     internal CancellationToken Cancellation { get; }
 
