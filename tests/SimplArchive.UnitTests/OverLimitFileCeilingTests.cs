@@ -31,9 +31,9 @@ public class OverLimitFileCeilingTests
         ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_009,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
-        // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself.
-        // Its burn-down story is #518's (split further only if a real seam appears — the finale already took
-        // the obvious ones).
+        // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
+        // OWNER-CONFIRMED as an accepted exception (2026-08-17, on #443's close): split further only if a real
+        // seam appears; the finale already took the obvious ones (#518 owns any future burn-down).
         ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_498,
 
         // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
