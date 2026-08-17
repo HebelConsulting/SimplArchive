@@ -146,17 +146,33 @@ internal static class ImapMailboxes
                 continue;
             }
 
-            // INBOX is the personal repository root (#562) — the name every mail client knows.
+            // INBOX is the personal repository root (#562) — the name every mail client knows. Its Notes
+            // child (the NoteFolder-typed folder, slice 5) projects as a ROOT-level "Notes" mailbox instead,
+            // where Apple Notes discovers it by name — one folder, two projections, so it is skipped below.
             var rootName = root.PersonalOfUserId == userId ? "INBOX" : root.Name;
             entries.Add(new ImapMailboxEntry(rootName, root.Id, HasChildren: true));
-            await AddSubfoldersAsync(db, calculator, userId, root.Id, rootName, entries);
+
+            Guid? notesFolderId = null;
+            if (root.PersonalOfUserId == userId)
+            {
+                notesFolderId = await db.Documents
+                    .Where(d => d.ParentId == root.Id && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.NoteFolder))
+                    .Select(d => (Guid?)d.Id)
+                    .FirstOrDefaultAsync();
+                if (notesFolderId is { } nid)
+                {
+                    entries.Add(new ImapMailboxEntry("Notes", nid, HasChildren: false));
+                }
+            }
+
+            await AddSubfoldersAsync(db, calculator, userId, root.Id, rootName, entries, notesFolderId);
         }
 
         return entries;
     }
 
     private static async Task AddSubfoldersAsync(
-        SimplArchiveDbContext db, IEffectiveRightsCalculator calculator, Guid userId, Guid parentId, string parentName, List<ImapMailboxEntry> entries)
+        SimplArchiveDbContext db, IEffectiveRightsCalculator calculator, Guid userId, Guid parentId, string parentName, List<ImapMailboxEntry> entries, Guid? skipFolderId = null)
     {
         // A mailbox is a FOLDER — a child document with no versions. Names carrying the hierarchy delimiter
         // are skipped defensively (the WebDAV gateway refuses them for the same mis-addressing reason).
@@ -165,7 +181,7 @@ internal static class ImapMailboxes
             .OrderBy(d => d.Name)
             .ToListAsync();
 
-        foreach (var folder in folders.Where(f => !f.Name.Contains('/')))
+        foreach (var folder in folders.Where(f => !f.Name.Contains('/') && f.Id != skipFolderId))
         {
             if (!(await calculator.GetEffectiveRightsAsync(userId, folder.Id)).CanSee)
             {

@@ -402,6 +402,12 @@ attached to open straight from the mail client.
   to the *recycle bin* — never a hard delete. Read/unread marks are remembered per person.
 ]
 
+*Notes, too.*#idx("Notes") Point your notes app (Apple Notes, for instance) at the same account and it finds the
+*Notes* mailbox — your personal *Notes* folder in disguise. Every note becomes a proper archive document with
+the *Note* document type, and editing a note on your phone adds a *new version* in the archive rather than a
+new copy — the full history stays browsable in the workbench. The Notes folder is typed: it accepts only
+notes, and notes live only there (references to them may go anywhere).
+
 = Metadata & classification
 
 Each document has a *mask* (document type) that defines its *index fields* — typed metadata such as an invoice

@@ -69,6 +69,18 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("Mailbox path", FieldDataType.Text, IsRequired: false),
             new FieldSpec("Reference", FieldDataType.Text, IsRequired: false),
         ], cancellationToken);
+
+        // The Notes pair (#562 slice 5). NoteFolder is fieldless — it types the folder; the fields live on the
+        // notes. "Note UUID" is the X-Universally-Unique-Identifier correlation key (an edit from a notes
+        // client re-appends under the same UUID and becomes a new VERSION); "Modified" is the newest version's
+        // client-stamped time. Field set decided as a guess-to-validate in the epic's interview.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.NoteFolder, "Note Folder", [], cancellationToken);
+
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Note, "Note",
+        [
+            new FieldSpec("Note UUID", FieldDataType.Text, IsRequired: true),
+            new FieldSpec("Modified", FieldDataType.Date, IsRequired: false),
+        ], cancellationToken);
     }
 
     private async Task EnsureMaskAsync(Guid tenantId, Guid maskId, string name, IReadOnlyList<FieldSpec> fields, CancellationToken cancellationToken)

@@ -285,4 +285,76 @@ public class ImapEndpointTests
         Assert.Contains(audit, e => e.GetProperty("action").GetString() == "Reference.Added" && e.GetProperty("details").GetString() == "Referenced over IMAP (COPY)");
         Assert.Contains(audit, e => e.GetProperty("action").GetString() == "Document.Deleted" && e.GetProperty("details").GetString() == "Deleted over IMAP (EXPUNGE)");
     }
+
+    [Fact]
+    public async Task Notes_sync_with_uuid_correlated_versioning_and_typed_containment()
+    {
+        var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
+        var email = $"imap-note-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "note-1234", "Note Writer");
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "note-1234"));
+        var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
+
+        // Get-or-create the personal space — Personal/Notes arrives with it, wearing the NoteFolder mask.
+        var personal = await TestJson.Post(api, "/api/me/personal-repository", new { });
+        var personalId = personal.GetProperty("id").GetGuid();
+        var children = (await TestJson.Get(api, $"/api/documents/{personalId}/children")).GetProperty("children").EnumerateArray().ToList();
+        var notes = children.Single(c => c.GetProperty("name").GetString() == "Notes");
+        Assert.Equal("Note Folder", notes.GetProperty("documentType").GetString());
+        var notesId = notes.GetProperty("id").GetGuid();
+
+        // Typed containment: a non-Note document cannot LIVE in the Notes folder (the SaveChanges invariant).
+        var refused = await api.PostAsJsonAsync($"/api/documents/{notesId}/children", new { name = "not-a-note" });
+        Assert.False(refused.IsSuccessStatusCode);
+
+        var port = ((ImapServer)_factory.Services.GetService(typeof(ImapServer))!).BoundPort!.Value;
+        using var client = new ImapClient();
+        await client.ConnectAsync("127.0.0.1", port, SecureSocketOptions.None);
+        await client.AuthenticateAsync(email, imapPassword);
+
+        // One folder, two projections: IMAP shows a ROOT-level "Notes", and NOT an INBOX/Notes child.
+        var all = await client.GetFoldersAsync(client.PersonalNamespaces[0]);
+        Assert.Contains(all, f => f.FullName == "Notes");
+        Assert.DoesNotContain(all, f => f.FullName == "INBOX/Notes");
+
+        // A note filed from the client wears the Note mask, named by its subject, with the UUID field set.
+        MimeKit.MimeMessage Note(string text)
+        {
+            var m = new MimeKit.MimeMessage();
+            m.From.Add(new MimeKit.MailboxAddress("Me", email));
+            m.Subject = "Shopping list";
+            m.Headers.Add("X-Universally-Unique-Identifier", "note-uuid-1");
+            m.Body = new MimeKit.TextPart("html") { Text = text };
+            return m;
+        }
+
+        var notesFolder = await client.GetFolderAsync("Notes");
+        var uid1 = (await notesFolder.AppendAsync(Note("<b>eggs</b>")))!.Value;
+
+        var noteDocs = (await TestJson.Get(api, $"/api/documents/{notesId}/children")).GetProperty("children").EnumerateArray().ToList();
+        var noteDoc = noteDocs.Single(c => c.GetProperty("name").GetString() == "Shopping list");
+        Assert.Equal("Note", noteDoc.GetProperty("documentType").GetString());
+        var noteId = noteDoc.GetProperty("id").GetGuid();
+        var fields = (await TestJson.Get(api, $"/api/documents/{noteId}/index-data")).GetProperty("fields").EnumerateArray().ToList();
+        Assert.Contains(fields, f => f.GetProperty("fieldName").GetString() == "Note UUID"
+            && f.GetProperty("values").EnumerateArray().Any(v => v.GetString() == "note-uuid-1"));
+
+        // The Apple edit dance: SELECT (session sees uid1), append the EDIT under the same UUID, then delete
+        // + expunge the OLD message. The edit becomes a new VERSION of the same document; the expunge of the
+        // superseded message is ABSORBED — the note survives with its history.
+        await notesFolder.OpenAsync(FolderAccess.ReadWrite);
+        var uid2 = (await notesFolder.AppendAsync(Note("<b>eggs and milk</b>")))!.Value;
+        Assert.True(uid2.Id > uid1.Id);
+        await notesFolder.AddFlagsAsync(uid1, MessageFlags.Deleted, silent: true);
+        await notesFolder.ExpungeAsync();
+
+        noteDocs = (await TestJson.Get(api, $"/api/documents/{notesId}/children")).GetProperty("children").EnumerateArray().ToList();
+        var survived = noteDocs.Single(c => c.GetProperty("name").GetString() == "Shopping list");
+        Assert.Equal(noteId, survived.GetProperty("id").GetGuid());   // SAME identity
+        Assert.Equal(2, survived.GetProperty("versionCount").GetInt32()); // full history
+        var bin = (await TestJson.Get(api, "/api/recycle-bin")).GetProperty("items").EnumerateArray().ToList();
+        Assert.DoesNotContain(bin, i => i.GetProperty("name").GetString() == "Shopping list");
+
+        await client.DisconnectAsync(true);
+    }
 }

@@ -74,6 +74,16 @@ internal static class ImapWrites
             stem = "Message";
         }
 
+        // The Notes flow (#562 slice 5): a NoteFolder-typed mailbox correlates by the client's UUID header —
+        // Apple Notes EDITS by appending a new message and deleting the old, so a UUID match becomes a new
+        // VERSION of the existing note document instead of a sibling.
+        var folderIsNotes = await db.MaskVersions.AnyAsync(v => v.Id == folder.MaskVersionId && v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.NoteFolder);
+        if (folderIsNotes)
+        {
+            await AppendNoteAsync(session, scope, tag, db, folder, mailbox, stem, bytes, userId, tenantId);
+            return;
+        }
+
         var siblings = await db.Documents.Where(d => d.ParentId == folder.Id).Select(d => d.Name).ToListAsync();
         var name = stem;
         for (var i = 2; siblings.Contains(name, StringComparer.OrdinalIgnoreCase); i++)
@@ -156,6 +166,18 @@ internal static class ImapWrites
             if (!selected.DeletedDocumentIds.Contains(message.DocumentId))
             {
                 remaining.Add(message);
+                continue;
+            }
+
+            // Absorption (#562 slice 5): a notes client edits by APPEND-new + delete-old. The re-append moved
+            // the document's UID forward, so a session holding the OLD uid is deleting a superseded message,
+            // not the note — absorb it (drop from the listing, keep the document and its new version).
+            var currentUid = await db.ImapMessageUids
+                .Where(u => u.FolderId == selected.FolderId && u.DocumentId == message.DocumentId)
+                .Select(u => (int?)u.Uid).FirstOrDefaultAsync();
+            if (currentUid is { } cu && cu != message.Uid)
+            {
+                expungedSequences.Add(index + 1); // it disappears from the client's view like any expunge
                 continue;
             }
 
@@ -302,4 +324,118 @@ internal static class ImapWrites
 
         await session.OkAsync(tag, move ? "MOVE" : "COPY");
     }
+
+    // ---- Notes (#562 slice 5, ADR "IMAP endpoint: Notes") --------------------------------------------
+
+    private static async Task AppendNoteAsync(
+        ImapSession session, IServiceScope scope, string tag, SimplArchiveDbContext db,
+        Document folder, Domain.Imap.ImapMailbox mailbox, string stem, byte[] bytes, Guid userId, Guid tenantId)
+    {
+        var storage = scope.ServiceProvider.GetRequiredService<IObjectStorageClient>();
+        var mime = MimeMessage.Load(new MemoryStream(bytes));
+        // The correlation key: Apple's X-Universally-Unique-Identifier, else the Message-ID, else fresh.
+        var uuid = mime.Headers["X-Universally-Unique-Identifier"] ?? mime.MessageId ?? Guid.NewGuid().ToString();
+        var modified = (mime.Date == default ? DateTimeOffset.UtcNow : mime.Date).UtcDateTime.ToString("yyyy-MM-dd");
+
+        var noteMaskVersionId = await db.MaskVersions
+            .Where(v => v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.Note && v.IsCurrent)
+            .Select(v => v.Id).SingleAsync();
+        var fieldIds = await db.FieldDefinitions
+            .Where(f => f.MaskVersionId == noteMaskVersionId)
+            .ToDictionaryAsync(f => f.Name, f => f.Id);
+
+        // An existing note with this UUID in this folder → the append IS an edit: a new version, same identity.
+        var existingId = await db.FieldValues
+            .Where(fv => fv.FieldDefinitionId == fieldIds["Note UUID"] && fv.Value == uuid
+                && db.Documents.Any(d => d.Id == fv.DocumentId && d.ParentId == folder.Id))
+            .Select(fv => (Guid?)fv.DocumentId)
+            .FirstOrDefaultAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var versionId = Guid.NewGuid();
+        Document document;
+        if (existingId is { } id)
+        {
+            document = await db.Documents.FirstAsync(d => d.Id == id);
+        }
+        else
+        {
+            var siblings = await db.Documents.Where(d => d.ParentId == folder.Id).Select(d => d.Name).ToListAsync();
+            var name = stem;
+            for (var i = 2; siblings.Contains(name, StringComparer.OrdinalIgnoreCase); i++)
+            {
+                name = $"{stem} ({i})";
+            }
+
+            // The Note mask + its REQUIRED UUID field land in the same save (ADR 0176 validates required
+            // fields on mask assignment) — and the containment invariant sees Note-in-NoteFolder, so it holds.
+            document = new Document
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ParentId = folder.Id,
+                Name = name,
+                MaskVersionId = noteMaskVersionId,
+                CreatedByUserId = userId,
+                CreatedAt = now,
+                StorageFolderId = Guid.NewGuid(),
+            };
+            db.Documents.Add(document);
+            db.FieldValues.Add(new SimplArchive.Domain.Masks.FieldValue { Id = Guid.NewGuid(), TenantId = tenantId, DocumentId = document.Id, FieldDefinitionId = fieldIds["Note UUID"], Value = uuid });
+            db.FieldValues.Add(new SimplArchive.Domain.Masks.FieldValue { Id = Guid.NewGuid(), TenantId = tenantId, DocumentId = document.Id, FieldDefinitionId = fieldIds["Modified"], Value = modified });
+        }
+
+        var objectKey = ObjectKeyBuilder.Build(tenantId, document.CreatedAt, document.StorageFolderId, versionId, ".eml");
+        await storage.PutObjectAsync(objectKey, new MemoryStream(bytes), "message/rfc822");
+        db.DocumentVersions.Add(new DocumentVersion
+        {
+            Id = versionId,
+            DocumentId = document.Id,
+            TenantId = tenantId,
+            Status = DocumentVersionStatus.Pending,
+            ObjectKey = objectKey,
+            CreatedByUserId = userId,
+            CreatedAt = now,
+            DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
+        });
+
+        if (existingId is not null)
+        {
+            var modifiedValue = await db.FieldValues.FirstOrDefaultAsync(fv => fv.DocumentId == document.Id && fv.FieldDefinitionId == fieldIds["Modified"]);
+            if (modifiedValue is null)
+            {
+                db.FieldValues.Add(new SimplArchive.Domain.Masks.FieldValue { Id = Guid.NewGuid(), TenantId = tenantId, DocumentId = document.Id, FieldDefinitionId = fieldIds["Modified"], Value = modified });
+            }
+            else
+            {
+                modifiedValue.Value = modified;
+            }
+        }
+
+        await db.SaveChangesAsync();
+        var version = await db.DocumentVersions.FirstAsync(v => v.Id == versionId);
+        await scope.ServiceProvider.GetRequiredService<DocumentFinalizer>().FinalizeAsync(version, CancellationToken.None);
+
+        // A stable identity gets a NEW UID per re-append (the row updates in place — the PK is per document,
+        // UIDs only ever grow). The old message's UID vanishes from later listings; an EXPUNGE aimed at it is
+        // ABSORBED (see ExpungeAsync) — the paired delete of an edit must not soft-delete the updated note.
+        var uid = mailbox.NextUid;
+        mailbox.NextUid++;
+        var uidRow = await db.ImapMessageUids.FirstOrDefaultAsync(u => u.FolderId == folder.Id && u.DocumentId == document.Id);
+        if (uidRow is null)
+        {
+            db.ImapMessageUids.Add(new Domain.Imap.ImapMessageUid { FolderId = folder.Id, DocumentId = document.Id, TenantId = tenantId, Uid = uid });
+        }
+        else
+        {
+            uidRow.Uid = uid;
+        }
+
+        await db.SaveChangesAsync();
+        await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()
+            .RecordAsync(AuditActions.DocumentFiled, "Document", document.Id, document.Name,
+                existingId is null ? "Note filed over IMAP" : "Note updated over IMAP");
+        await session.WriteLineAsync($"{tag} OK [APPENDUID {mailbox.UidValidity} {uid}] APPEND completed");
+    }
 }
+

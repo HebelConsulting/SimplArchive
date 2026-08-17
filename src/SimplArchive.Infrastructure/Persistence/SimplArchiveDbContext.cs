@@ -430,6 +430,42 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
             }
 
             await EnsureUniqueSiblingDocumentNameAsync(document, trackedDocuments.Values, cancellationToken);
+            await EnforceTypedFolderContainmentAsync(document, cancellationToken);
+        }
+    }
+
+    // Typed-folder containment (#562 slice 5; the mechanism #564's Contact/Calendar folders will share): a
+    // NoteFolder admits ONLY Note-masked children, and a Note-masked document's PRIMARY location is a
+    // NoteFolder — references may point anywhere. Enforced here, the single enforcement point, so every path
+    // (workbench move, import, WebDAV, IMAP) obeys.
+    private async Task EnforceTypedFolderContainmentAsync(Document document, CancellationToken cancellationToken)
+    {
+        async Task<Guid?> MaskIdOfAsync(Guid? maskVersionId) => maskVersionId is not { } mv
+            ? null
+            : await MaskVersions.IgnoreQueryFilters()
+                .Where(v => v.Id == mv)
+                .Select(v => (Guid?)v.MaskId)
+                .SingleOrDefaultAsync(cancellationToken);
+
+        var ownMaskId = await MaskIdOfAsync(document.MaskVersionId);
+        Guid? parentMaskId = null;
+        if (document.ParentId is { } parentId)
+        {
+            var parentMaskVersionId = ChangeTracker.Entries<Document>().FirstOrDefault(e => e.Entity.Id == parentId)?.Entity.MaskVersionId
+                ?? await Documents.IgnoreQueryFilters().Where(d => d.Id == parentId).Select(d => d.MaskVersionId).SingleOrDefaultAsync(cancellationToken);
+            parentMaskId = await MaskIdOfAsync(parentMaskVersionId);
+        }
+
+        if (parentMaskId == Domain.Masks.WellKnownMaskIds.NoteFolder && ownMaskId != Domain.Masks.WellKnownMaskIds.Note)
+        {
+            throw new InvalidOperationException(
+                $"'{document.Name}' cannot live in a Note Folder — only Note-masked documents can (typed-folder containment, #562).");
+        }
+
+        if (ownMaskId == Domain.Masks.WellKnownMaskIds.Note && parentMaskId != Domain.Masks.WellKnownMaskIds.NoteFolder)
+        {
+            throw new InvalidOperationException(
+                $"'{document.Name}' wears the Note mask and can only live in a Note Folder (typed-folder containment, #562).");
         }
     }
 

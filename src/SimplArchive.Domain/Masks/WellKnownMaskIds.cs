@@ -16,4 +16,11 @@ public static class WellKnownMaskIds
     // somebody's, and the metadata that belongs on it — a telephone number, an address to reach them at — has
     // nowhere to live on the fieldless Folder mask.
     public static readonly Guid UserFolder = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E35");
+
+    // The Notes pair (#562 slice 5, ADR "IMAP endpoint: Notes"): Personal/Notes wears NoteFolder — a TYPED
+    // folder that admits only Note-masked children (the same containment idea #564's Contact/Calendar folders
+    // share) — and every note wears Note.
+    public static readonly Guid NoteFolder = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E36");
+
+    public static readonly Guid Note = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E37");
 }

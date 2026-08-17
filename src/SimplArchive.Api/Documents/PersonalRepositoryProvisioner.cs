@@ -21,6 +21,9 @@ public sealed class PersonalRepositoryProvisioner
     /// <summary>The default subfolder every personal repository is seeded with (ADR "My Documents in the personal space").</summary>
     public const string MyDocumentsFolderName = "My Documents";
 
+    // The typed notes folder (#562 slice 5) — the IMAP layer projects it as the root "Notes" mailbox.
+    public const string NotesFolderName = "Notes";
+
     private readonly SimplArchiveDbContext _dbContext;
     private readonly IAuditRecorder _audit;
 
@@ -39,6 +42,7 @@ public sealed class PersonalRepositoryProvisioner
     {
         var root = await EnsureRootAsync(userId, tenantId, cancellationToken);
         await EnsureMyDocumentsAsync(root, tenantId, userId, cancellationToken);
+        await EnsureNotesAsync(root, tenantId, userId, cancellationToken);
         return root;
     }
 
@@ -137,6 +141,41 @@ public sealed class PersonalRepositoryProvisioner
             // A concurrent Ensure already created "My Documents" (the SaveChanges sibling-name guard, ADR 0177,
             // throws InvalidOperationException; a future unique-index would throw DbUpdateException). Either way
             // the folder now exists — drop this call's pending insert and move on.
+            _dbContext.ChangeTracker.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Idempotently ensures the personal repository has a "Notes" child wearing the NoteFolder mask (#562
+    /// slice 5) — the TYPED folder the notes clients sync into, projected as the root "Notes" mailbox over
+    /// IMAP. Same concurrency posture as "My Documents".
+    /// </summary>
+    private async Task EnsureNotesAsync(Document root, Guid tenantId, Guid userId, CancellationToken cancellationToken)
+    {
+        var exists = await _dbContext.Documents
+            .AnyAsync(d => d.ParentId == root.Id && d.Name == NotesFolderName, cancellationToken);
+        if (exists)
+        {
+            return;
+        }
+
+        _dbContext.Documents.Add(new Document
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ParentId = root.Id,
+            Name = NotesFolderName,
+            MaskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, WellKnownMaskIds.NoteFolder, cancellationToken),
+            CreatedByUserId = userId,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is DbUpdateException or InvalidOperationException)
+        {
             _dbContext.ChangeTracker.Clear();
         }
     }
