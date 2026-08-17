@@ -49,6 +49,57 @@ jobs:
       # subjects (not just files). Unit-tests that filter. Private-repo-only — publish/ is withheld from the public
       # mirror, so a false `if` skips this step cleanly there (the script is absent). (This step's wording avoids the
       # brand itself, since ci.yml is a published file scanned by the same gate.)
+      # Brand/trademark gate (ADR 0610). The pattern list lives HERE rather than in a test, because tests/ is
+      # published byte-for-byte to the public mirror (ADR 0484) and a test asserting these terms would publish
+      # the very list it exists to keep out. A workflow naming terms it forbids is a different thing: it is the
+      # enforcement, not the corpus.
+      #
+      # Scope is PROSE. Functional identifiers are exempt and must stay exempt: the framework namespaces
+      # (Microsoft.*), package ids, the resx format header (text/microsoft-resx) and MIME types ARE the things
+      # they name. Hence the -w word-boundary patterns plus the exclusions below, rather than a bare grep.
+      - name: Brand-name gate
+        run: |
+          set -uo pipefail
+          # Gratuitous naming of a third-party product: an office suite standing in for a file format, a mail
+          # client standing in for a message format. Dependencies this project integrates with are nominative
+          # use and are NOT listed here (ADR 0610).
+          PATTERN='(microsoft (word|excel|powerpoint|office)|\bms[- ](word|excel|office)\b|\bpowerpoint\b|\bexcel\b)'
+          HITS=$(git ls-files \
+            | grep -vE '^(docs/|tools/|publish/|CLAUDE.md|README.md|\.github/workflows/ci\.yml)' \
+            | xargs grep -InEi "$PATTERN" 2>/dev/null \
+            | grep -viE 'microsoft\.[a-z]|using microsoft|text/microsoft-resx|packagereference|application/vnd\.ms-|vnd\.openxmlformats' || true)
+          if [ -n "$HITS" ]; then
+            echo "::error::Brand/trademark names found in published prose (ADR 0610). Name the FORMAT or what the thing does:"
+            echo "$HITS"
+            exit 1
+          fi
+          echo "clean — no gratuitous brand names in published prose"
+
+      # Package-manager gate (ADR 0611). An installation instruction that pipes a downloaded script into a shell
+      # bypasses the host's package database, so the administrator cannot query, upgrade, audit or remove what it
+      # left behind. Legitimate exceptions exist (software nobody packages) — they carry a
+      # `package-manager-exception` marker within six lines, stating the reason and what retires it. The guard
+      # enforces the MARKER, not the absence: an unexplained bypass fails, an explained one passes and is greppable.
+      - name: Package-manager gate
+        run: |
+          set -uo pipefail
+          OFFENDERS=""
+          while IFS= read -r file; do
+            while IFS=: read -r line _; do
+              start=$(( line > 6 ? line - 6 : 1 ))
+              if ! sed -n "${start},${line}p" "$file" | grep -q 'package-manager-exception'; then
+                OFFENDERS="${OFFENDERS}${file}:${line}: $(sed -n "${line}p" "$file" | cut -c1-100)"$'\n'
+              fi
+            done < <(grep -nE '(curl|wget)[^|]*\| *(sudo )?(ba)?sh' "$file" || true)
+          done < <(git ls-files '*.md' '*.sh' '*.ks' '*.cfg' '*.typ' 'charts/**' \
+                     | grep -vE '^(\.github/|CLAUDE\.md|docs/SeedCLAUDE\.md|docs/adr/)')
+          if [ -n "$OFFENDERS" ]; then
+            echo "::error::Installer bypass without a documented exception (ADR 0611). Use the package manager, or add a 'package-manager-exception:' marker with its reason and retirement trigger:"
+            printf '%s' "$OFFENDERS"
+            exit 1
+          fi
+          echo "clean — every installer bypass carries its exception marker"
+
       - name: Publish subject-filter self-test
         if: ${{ github.repository == 'HebelConsulting/SimplArchivePrivate' }}
         run: bash publish/publish-public.sh --selftest

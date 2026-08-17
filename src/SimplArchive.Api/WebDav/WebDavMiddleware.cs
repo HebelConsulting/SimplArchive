@@ -924,7 +924,7 @@ public sealed class WebDavMiddleware
 
 
     // Advertise write-lock capability on every resource (exclusive + shared write locks). The server already sends
-    // DAV: 1, 2 on OPTIONS, but lock-checking editors (LibreOffice, MS Office) read the per-resource
+    // DAV: 1, 2 on OPTIONS, but lock-checking office editors read the per-resource
     // <D:supportedlock> property in PROPFIND to decide a file is writable — without it they open read-only even
     // though a LOCK would succeed. (ADR 0508 WebDAV atomic-save; the LOCK/UNLOCK handlers back a real lock store.)
     private const string SupportedLockXml =

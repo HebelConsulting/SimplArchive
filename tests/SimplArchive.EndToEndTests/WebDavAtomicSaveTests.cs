@@ -5,7 +5,7 @@ using System.Text;
 namespace SimplArchive.EndToEndTests;
 
 // Atomic-save over the WebDAV special folders (ADR 0508). Real office apps never overwrite in place — they write
-// a sibling TEMP file then rename it over the target (Microsoft Office additionally DELETEs the original and both
+// a sibling TEMP file then rename it over the target (one major office suite additionally DELETEs the original and both
 // office suites create a lock/owner file; macOS Preview renames the original away to a backup; some PDF tools
 // commit via COPY). This drives each editor's exact save sequence, for every office format, against BOTH the
 // Check-out folder (edits must land in the document's stash) and the Intray (edits must land in the staged object)
