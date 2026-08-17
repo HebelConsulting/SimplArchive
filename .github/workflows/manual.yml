@@ -26,6 +26,11 @@ concurrency:
 permissions:
   contents: write # the push-to-main job commits the regenerated manual
 
+env:
+  # Pinned deliberately: a manual build should not change because an upstream release happened between two
+  # runs of the same commit. Bumping this is a visible, reviewed change.
+  TYPST_VERSION: '0.15.1'
+
 jobs:
   manual:
     name: Build the user manual
@@ -45,8 +50,37 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
           restore-keys: nuget-${{ runner.os }}-
 
+      # Typst is installed from a PINNED release tarball rather than via setup-typst, and cached.
+      #
+      # The action resolves its version — `latest` OR a pinned one — through the GitHub API from the runner.
+      # When that API is throttled (GitHub-hosted runners share IP pools) it fails with "Typst <version> could
+      # not be resolved", which reads like a broken workflow rather than a rate limit. On 2026-08-17 that
+      # blocked every manual run for over half an hour across three branches, alongside 429s downloading
+      # setup-dotnet and a 503 from the API — and pinning the version alone did NOT help, because the pinned
+      # path makes the same call. A release-asset download is served separately from the API, and on a cache
+      # hit there is no network call at all.
+      - name: Cache Typst
+        id: typst-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.local/bin/typst
+          key: typst-${{ env.TYPST_VERSION }}-${{ runner.os }}
+
       - name: Install Typst
-        uses: typst-community/setup-typst@v5
+        if: ${{ steps.typst-cache.outputs.cache-hit != 'true' }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.local/bin
+          url="https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz"
+          # Retry: a transient 429/503 should cost seconds, not a whole run.
+          curl --fail --location --retry 5 --retry-delay 10 --retry-all-errors --silent --show-error "$url" \
+            | tar -xJ --strip-components=1 -C ~/.local/bin --wildcards '*/typst'
+          chmod +x ~/.local/bin/typst
+
+      - name: Put Typst on PATH
+        run: |
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/typst" --version
 
       # The desktop client renders headless via Avalonia + Skia; on a Linux runner that needs fontconfig + fonts
       # (the app embeds Inter via WithInterFont, but fall back to DejaVu/Noto for any other glyphs).
