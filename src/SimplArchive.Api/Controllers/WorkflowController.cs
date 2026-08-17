@@ -250,7 +250,7 @@ public class WorkflowController : ControllerBase
     }
 
     // The performer of the most recent Submit (→ In Review) for this workflow state — the person who requested
-    // the review, notified of the outcome. Null when the submitter was a ServiceAccount (no in-app inbox).
+    // the review, notified of the outcome. Null when the submitter was a ServiceAccount (no in-app intray).
     private Task<Guid?> SubmitterUserIdAsync(Guid workflowStateId, CancellationToken cancellationToken) =>
         _dbContext.WorkflowTransitions
             .Where(t => t.WorkflowStateId == workflowStateId && t.ToStatus == WorkflowStatus.InReview)

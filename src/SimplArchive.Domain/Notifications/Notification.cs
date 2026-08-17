@@ -42,7 +42,7 @@ public enum NotificationType
 }
 
 // A per-User in-app notification (ADR "Notifications (in-app, first slice)"). Written by INotificationService
-// at the trigger sites (workflow / comment / ACL), read through the recipient's own inbox. ITenantScoped, so
+// at the trigger sites (workflow / comment / ACL), read through the recipient's own intray. ITenantScoped, so
 // the tenant query filter applies. Title/Body are pre-rendered snapshots (like AuditEvent), so a later rename
 // doesn't rewrite the message. Not versioned/editable; only ReadAt changes (mark-read).
 public class Notification : ITenantScoped
@@ -51,7 +51,7 @@ public class Notification : ITenantScoped
 
     public Guid TenantId { get; set; }
 
-    // The User who receives it — in-app inboxes are per-User (a ServiceAccount has none).
+    // The User who receives it — in-app intrayes are per-User (a ServiceAccount has none).
     public Guid RecipientUserId { get; set; }
 
     public NotificationType Type { get; set; }

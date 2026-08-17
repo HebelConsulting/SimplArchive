@@ -83,7 +83,7 @@ public class WebEmptyFolderIconTests
         Assert.Equal(await GlyphOfAsync(IconOf(tree, docsOnlyName)), await GlyphOfAsync(IconOf(tree, emptyName)));
     }
 
-    // Gold marks a place documents live, so the Personal space's Inbox / Check-out launchers — real nodes, but
+    // Gold marks a place documents live, so the Personal space's Intray / Check-out launchers — real nodes, but
     // not containers — must NOT take it (ADR "Folder icon scheme"). Their being muted is what keeps the colour
     // meaningful rather than decorative.
     [Fact]
@@ -95,10 +95,10 @@ public class WebEmptyFolderIconTests
         await Expect(personal).ToBeVisibleAsync(new() { Timeout = 15000 });
         await personal.Locator(".mud-treeview-item-arrow").ClickAsync();
 
-        var inbox = IconOf(tree, "Inbox");
-        await Expect(inbox).ToBeVisibleAsync(new() { Timeout = 15000 });
+        var intray = IconOf(tree, "Intray");
+        await Expect(intray).ToBeVisibleAsync(new() { Timeout = 15000 });
 
-        Assert.NotEqual(Gold, await ColorOfAsync(inbox));
+        Assert.NotEqual(Gold, await ColorOfAsync(intray));
         // The Personal root itself IS a container, so it keeps the gold.
         Assert.Equal(Gold, await ColorOfAsync(personal.Locator(".mud-treeview-item-icon > .mud-icon-root")));
     }

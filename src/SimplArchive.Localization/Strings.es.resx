@@ -39,11 +39,11 @@
   <data name="EnvProduction" xml:space="preserve">
     <value>Producción</value>
   </data>
-  <data name="InboxRotateAutoTip" xml:space="preserve">
-    <value>Gira las páginas que llegaron al revés al entrar en su bandeja de entrada. Para .tif y .pdf. Los documentos firmados nunca se modifican.</value>
+  <data name="IntrayRotateAutoTip" xml:space="preserve">
+    <value>Gira las páginas que llegaron al revés al entrar en su bandeja de documentos. Para .tif y .pdf. Los documentos firmados nunca se modifican.</value>
   </data>
-  <data name="InboxDeskewAutoTipTiff" xml:space="preserve">
-    <value>Endereza los escaneos torcidos al entrar en su bandeja de entrada. Solo para .tif: en un .pdf sustituiría el texto real por una aproximación de OCR. Los documentos firmados nunca se modifican.</value>
+  <data name="IntrayDeskewAutoTipTiff" xml:space="preserve">
+    <value>Endereza los escaneos torcidos al entrar en su bandeja de documentos. Solo para .tif: en un .pdf sustituiría el texto real por una aproximación de OCR. Los documentos firmados nunca se modifican.</value>
   </data>
   <data name="LogonLogin" xml:space="preserve">
     <value>Iniciar sesión</value>
@@ -123,7 +123,7 @@
   <data name="TabRepositories" xml:space="preserve">
     <value>Archivos</value>
   </data>
-  <data name="TabInbox" xml:space="preserve">
+  <data name="TabIntray" xml:space="preserve">
     <value>Entrada</value>
   </data>
   <data name="TabCheckout" xml:space="preserve">
@@ -412,7 +412,7 @@
     <value>URL de montaje (todos los repositorios)</value>
   </data>
   <data name="WebDavPersonalFolder" xml:space="preserve">
-    <value>Carpeta personal (Bandeja de entrada, Check-out, archivo)</value>
+    <value>Carpeta personal (Bandeja de documentos, Check-out, archivo)</value>
   </data>
   <data name="WebDavUsername" xml:space="preserve">
     <value>Nombre de usuario</value>
@@ -1071,58 +1071,58 @@
   <data name="NoItemSelected" xml:space="preserve">
     <value>Ningún elemento seleccionado.</value>
   </data>
-  <data name="InboxUpload" xml:space="preserve">
-    <value>Subir a la bandeja de entrada</value>
+  <data name="IntrayUpload" xml:space="preserve">
+    <value>Subir a la bandeja de documentos</value>
   </data>
-  <data name="InboxCopyDav" xml:space="preserve">
+  <data name="IntrayCopyDav" xml:space="preserve">
     <value>Copiar URL de WebDAV</value>
   </data>
-  <data name="InboxFileN" xml:space="preserve">
+  <data name="IntrayFileN" xml:space="preserve">
     <value>Archivar {0} elementos</value>
   </data>
-  <data name="InboxDropHint" xml:space="preserve">
-    <value>Suelta archivos aquí para añadirlos a tu bandeja de entrada</value>
+  <data name="IntrayDropHint" xml:space="preserve">
+    <value>Suelta archivos aquí para añadirlos a tu bandeja de documentos</value>
   </data>
-  <data name="InboxFileToFolder" xml:space="preserve">
+  <data name="IntrayFileToFolder" xml:space="preserve">
     <value>Archivar en carpeta…</value>
   </data>
-  <data name="InboxEmailAutoMask" xml:space="preserve">
+  <data name="IntrayEmailAutoMask" xml:space="preserve">
     <value>Máscara asignada automáticamente por el sistema al archivar.</value>
   </data>
-  <data name="InboxSendTitle" xml:space="preserve">
+  <data name="IntraySendTitle" xml:space="preserve">
     <value>Enviar a…</value>
   </data>
-  <data name="InboxSendPrompt" xml:space="preserve">
+  <data name="IntraySendPrompt" xml:space="preserve">
     <value>Mover "{0}" a otra bandeja:</value>
   </data>
-  <data name="InboxDestination" xml:space="preserve">
+  <data name="IntrayDestination" xml:space="preserve">
     <value>Destino</value>
   </data>
-  <data name="InboxSendEmpty" xml:space="preserve">
+  <data name="IntraySendEmpty" xml:space="preserve">
     <value>No hay grupos ni otros usuarios disponibles.</value>
   </data>
-  <data name="InboxSend" xml:space="preserve">
+  <data name="IntraySend" xml:space="preserve">
     <value>Enviar</value>
   </data>
-  <data name="InboxClaimToMine" xml:space="preserve">
+  <data name="IntrayClaimToMine" xml:space="preserve">
     <value>Mover a mi bandeja</value>
   </data>
-  <data name="InboxShowGroups" xml:space="preserve">
+  <data name="IntrayShowGroups" xml:space="preserve">
     <value>Mostrar bandejas de grupo</value>
   </data>
-  <data name="InboxUserPicker" xml:space="preserve">
+  <data name="IntrayUserPicker" xml:space="preserve">
     <value>Abrir bandeja del usuario</value>
   </data>
-  <data name="InboxMine" xml:space="preserve">
+  <data name="IntrayMine" xml:space="preserve">
     <value>Mi bandeja</value>
   </data>
-  <data name="InboxGroupTag" xml:space="preserve">
+  <data name="IntrayGroupTag" xml:space="preserve">
     <value>Grupo</value>
   </data>
-  <data name="InboxUserTag" xml:space="preserve">
+  <data name="IntrayUserTag" xml:space="preserve">
     <value>Usuario</value>
   </data>
-  <data name="RightManageInboxes" xml:space="preserve">
+  <data name="RightManageIntrayes" xml:space="preserve">
     <value>Gestionar bandejas</value>
   </data>
   <data name="NoMask" xml:space="preserve">
@@ -2557,7 +2557,7 @@
     <value>El acceso WebDAV aún no está configurado.</value>
   </data>
   <data name="MwOpenWebDavTip" xml:space="preserve">
-    <value>Monta tu carpeta WebDAV personal (Bandeja de entrada / Desprotección / archivo) y ábrela en tu gestor de archivos</value>
+    <value>Monta tu carpeta WebDAV personal (Bandeja de documentos / Desprotección / archivo) y ábrela en tu gestor de archivos</value>
   </data>
   <data name="MwMoveSelected" xml:space="preserve">
     <value>Mover selección</value>
@@ -2601,7 +2601,7 @@
   <data name="MwSelectDeleted" xml:space="preserve">
     <value>Selecciona un elemento eliminado para ver sus detalles.</value>
   </data>
-  <data name="MwSelectInboxItem" xml:space="preserve">
+  <data name="MwSelectIntrayItem" xml:space="preserve">
     <value>Selecciona un elemento de la bandeja del servidor para establecer su máscara.</value>
   </data>
   <data name="MwSelectAll" xml:space="preserve">
@@ -2955,8 +2955,8 @@
   <data name="StErrLoadAudit" xml:space="preserve">
     <value>No se pudo cargar el registro de auditoría: {0}</value>
   </data>
-  <data name="StErrLoadInbox" xml:space="preserve">
-    <value>No se pudo cargar la bandeja de entrada: {0}</value>
+  <data name="StErrLoadIntray" xml:space="preserve">
+    <value>No se pudo cargar la bandeja de documentos: {0}</value>
   </data>
   <data name="StErrMove" xml:space="preserve">
     <value>No se pudo mover: {0}</value>
@@ -3858,8 +3858,8 @@
   <data name="StTemplateNoneCopied" xml:space="preserve">
     <value>No se copió nada a su bandeja.</value>
   </data>
-  <data name="StUploadedToInbox" xml:space="preserve">
-    <value>{0} archivo(s) subido(s) a su bandeja de entrada.</value>
+  <data name="StUploadedToIntray" xml:space="preserve">
+    <value>{0} archivo(s) subido(s) a su bandeja de documentos.</value>
   </data>
   <data name="StSomeUploadsFailed" xml:space="preserve">
     <value>No se pudieron subir algunos archivos.</value>
@@ -4044,74 +4044,74 @@
   <data name="ExtLinkUrlCopied" xml:space="preserve">
     <value>Enlace copiado al portapapeles.</value>
   </data>
-  <data name="InboxSplit" xml:space="preserve">
+  <data name="IntraySplit" xml:space="preserve">
     <value>Dividir en páginas</value>
   </data>
-  <data name="InboxSplitConfirm" xml:space="preserve">
+  <data name="IntraySplitConfirm" xml:space="preserve">
     <value>¿Dividir &#x27;{0}&#x27; en sus {1} páginas? El original se conserva.</value>
   </data>
-  <data name="InboxSortTitle" xml:space="preserve">
+  <data name="IntraySortTitle" xml:space="preserve">
     <value>Rotar/Ordenar</value>
   </data>
-  <data name="InboxSortPrompt" xml:space="preserve">
+  <data name="IntraySortPrompt" xml:space="preserve">
     <value>Coloca las {1} páginas de &#x27;{0}&#x27; en el orden que quieras. Selecciona una página y muévela.</value>
   </data>
-  <data name="InboxPageEarlier" xml:space="preserve">
+  <data name="IntrayPageEarlier" xml:space="preserve">
     <value>Mover antes</value>
   </data>
-  <data name="InboxPageLater" xml:space="preserve">
+  <data name="IntrayPageLater" xml:space="preserve">
     <value>Mover después</value>
   </data>
-  <data name="InboxPagesReverse" xml:space="preserve">
+  <data name="IntrayPagesReverse" xml:space="preserve">
     <value>Invertir orden</value>
   </data>
-  <data name="InboxPagesApply" xml:space="preserve">
+  <data name="IntrayPagesApply" xml:space="preserve">
     <value>Aplicar orden</value>
   </data>
-  <data name="InboxJoinTitle" xml:space="preserve">
+  <data name="IntrayJoinTitle" xml:space="preserve">
     <value>Unir elementos</value>
   </data>
-  <data name="InboxJoin" xml:space="preserve">
+  <data name="IntrayJoin" xml:space="preserve">
     <value>Unir</value>
   </data>
-  <data name="InboxJoinName" xml:space="preserve">
+  <data name="IntrayJoinName" xml:space="preserve">
     <value>Nombre:</value>
   </data>
-  <data name="InboxJoinPrompt" xml:space="preserve">
+  <data name="IntrayJoinPrompt" xml:space="preserve">
     <value>Une estos {0} elementos en uno, en este orden. Los originales se conservan.</value>
   </data>
-  <data name="StInboxSplit" xml:space="preserve">
+  <data name="StIntraySplit" xml:space="preserve">
     <value>&#x27;{0}&#x27; dividido en {1} elementos.</value>
   </data>
-  <data name="StInboxSorted" xml:space="preserve">
+  <data name="StIntraySorted" xml:space="preserve">
     <value>Páginas de &#x27;{0}&#x27; ordenadas.</value>
   </data>
-  <data name="StInboxJoined" xml:space="preserve">
+  <data name="StIntrayJoined" xml:space="preserve">
     <value>{0} elementos unidos en &#x27;{1}&#x27;.</value>
   </data>
-  <data name="ApiErrInboxPagesNotSupported" xml:space="preserve">
+  <data name="ApiErrIntrayPagesNotSupported" xml:space="preserve">
     <value>Solo los archivos PDF y TIFF tienen páginas que se puedan dividir, unir u ordenar.</value>
   </data>
-  <data name="ApiErrInboxItemHasNoPages" xml:space="preserve">
+  <data name="ApiErrIntrayItemHasNoPages" xml:space="preserve">
     <value>No se pudo leer el archivo como un documento con páginas: puede estar incompleto o dañado.</value>
   </data>
-  <data name="ApiErrInboxNoPagesToSplit" xml:space="preserve">
+  <data name="ApiErrIntrayNoPagesToSplit" xml:space="preserve">
     <value>El elemento tiene una sola página, no hay nada que dividir.</value>
   </data>
-  <data name="ApiErrInboxJoinNeedsSeveral" xml:space="preserve">
+  <data name="ApiErrIntrayJoinNeedsSeveral" xml:space="preserve">
     <value>Para unir se necesitan al menos dos elementos.</value>
   </data>
-  <data name="ApiErrInboxJoinNotHomogeneous" xml:space="preserve">
+  <data name="ApiErrIntrayJoinNotHomogeneous" xml:space="preserve">
     <value>Todos los elementos que se unan deben tener el mismo formato: todos PDF o todos TIFF.</value>
   </data>
-  <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
+  <data name="ApiErrIntrayPageOrderInvalid" xml:space="preserve">
     <value>El orden de páginas debe incluir cada página exactamente una vez.</value>
   </data>
   <data name="ApiErrWorkingCopySigned" xml:space="preserve">
     <value>La copia de trabajo está firmada digitalmente; cambiar sus páginas invalidaría la firma.</value>
   </data>
-  <data name="InboxDeleteManyConfirm" xml:space="preserve">
-    <value>¿Eliminar {0} elementos de su bandeja de entrada?</value>
+  <data name="IntrayDeleteManyConfirm" xml:space="preserve">
+    <value>¿Eliminar {0} elementos de su bandeja de documentos?</value>
   </data>
   <data name="FilterHint" xml:space="preserve">
     <value>Filtrar…</value>
@@ -4119,7 +4119,7 @@
   <data name="OverdueOnly" xml:space="preserve">
     <value>Solo vencidas</value>
   </data>
-  <data name="ApiErrInboxNoPatchCodes" xml:space="preserve">
+  <data name="ApiErrIntrayNoPatchCodes" xml:space="preserve">
     <value>No se encontraron hojas separadoras en este escaneo, así que no hay nada que cortar. Compruebe que las hojas estaban en la pila y pasaron lo bastante rectas.</value>
   </data>
   <data name="SignedBadge" xml:space="preserve">
@@ -4128,52 +4128,52 @@
   <data name="SignedBadgeTip" xml:space="preserve">
     <value>Este documento contiene una firma digital. Nunca se endereza, divide, ordena ni une, porque cualquier cambio en sus bytes invalidaría la firma.</value>
   </data>
-  <data name="InboxDeskewAuto" xml:space="preserve">
+  <data name="IntrayDeskewAuto" xml:space="preserve">
     <value>Enderezar escaneos automáticamente</value>
   </data>
-  <data name="InboxDeskewAutoTip" xml:space="preserve">
-    <value>Endereza los escaneos torcidos al llegar a tu bandeja de entrada. Los documentos firmados nunca se modifican.</value>
+  <data name="IntrayDeskewAutoTip" xml:space="preserve">
+    <value>Endereza los escaneos torcidos al llegar a tu bandeja de documentos. Los documentos firmados nunca se modifican.</value>
   </data>
-  <data name="InboxDeskewNow" xml:space="preserve">
+  <data name="IntrayDeskewNow" xml:space="preserve">
     <value>Enderezar documento…</value>
   </data>
-  <data name="InboxDeskewConfirm" xml:space="preserve">
+  <data name="IntrayDeskewConfirm" xml:space="preserve">
     <value>¿Enderezar &#x27;{0}&#x27;? Un TIFF se convierte en PDF, porque el enderezado vuelve a renderizar las páginas.</value>
   </data>
-  <data name="StInboxDeskewed" xml:space="preserve">
+  <data name="StIntrayDeskewed" xml:space="preserve">
     <value>&#x27;{0}&#x27; enderezado.</value>
   </data>
-  <data name="StInboxDeskewNothing" xml:space="preserve">
+  <data name="StIntrayDeskewNothing" xml:space="preserve">
     <value>No hay nada que enderezar en &#x27;{0}&#x27;.</value>
   </data>
-  <data name="InboxPatchAuto" xml:space="preserve">
+  <data name="IntrayPatchAuto" xml:space="preserve">
     <value>Cortar lotes automáticamente en las hojas separadoras</value>
   </data>
-  <data name="InboxPatchAutoTip" xml:space="preserve">
+  <data name="IntrayPatchAutoTip" xml:space="preserve">
     <value>Corta un escaneo por lotes entrante en un documento por cada hoja separadora. El lote se conserva y se renombra &#x27;…_to_be_deleted&#x27;. Los documentos firmados nunca se modifican.</value>
   </data>
-  <data name="InboxPatchCutNow" xml:space="preserve">
+  <data name="IntrayPatchCutNow" xml:space="preserve">
     <value>Cortar en las hojas separadoras…</value>
   </data>
-  <data name="InboxPatchCutConfirm" xml:space="preserve">
+  <data name="IntrayPatchCutConfirm" xml:space="preserve">
     <value>¿Cortar &#x27;{0}&#x27; en sus hojas separadoras? Las páginas separadoras se descartan y el lote se conserva, renombrado &#x27;…_to_be_deleted&#x27;, para que compruebe el resultado antes de eliminarlo.</value>
   </data>
-  <data name="InboxPatchSheetTip" xml:space="preserve">
+  <data name="IntrayPatchSheetTip" xml:space="preserve">
     <value>Imprima la hoja separadora: la página que se coloca entre los documentos de la pila.</value>
   </data>
-  <data name="InboxPatchSampleTip" xml:space="preserve">
+  <data name="IntrayPatchSampleTip" xml:space="preserve">
     <value>Descargue un escaneo de ejemplo para probarlo sin un escáner.</value>
   </data>
-  <data name="StInboxCutAtPatchCodes" xml:space="preserve">
+  <data name="StIntrayCutAtPatchCodes" xml:space="preserve">
     <value>&#x27;{0}&#x27; cortado en {1} documento(s).</value>
   </data>
-  <data name="InboxPageRemove" xml:space="preserve">
+  <data name="IntrayPageRemove" xml:space="preserve">
     <value>Quitar esta página</value>
   </data>
-  <data name="InboxPagesRemovedCount" xml:space="preserve">
+  <data name="IntrayPagesRemovedCount" xml:space="preserve">
     <value>Se eliminarán {0} página(s)</value>
   </data>
-  <data name="InboxPagesRemoveConfirm" xml:space="preserve">
+  <data name="IntrayPagesRemoveConfirm" xml:space="preserve">
     <value>Se eliminarán {0} página(s) de este documento. Esto no se puede deshacer. ¿Continuar?</value>
   </data>
   <data name="CoBulkCheckedIn" xml:space="preserve">
@@ -4185,16 +4185,16 @@
   <data name="CoBulkDiscarded" xml:space="preserve">
     <value>Se descartaron {0} de {1} bloqueo(s).</value>
   </data>
-  <data name="InboxSortNoPages" xml:space="preserve">
+  <data name="IntraySortNoPages" xml:space="preserve">
     <value>No hay imágenes de páginas disponibles para este elemento.</value>
   </data>
-  <data name="InboxPageRotateLeft" xml:space="preserve">
+  <data name="IntrayPageRotateLeft" xml:space="preserve">
     <value>Girar 90° a la izquierda</value>
   </data>
-  <data name="InboxPageRotateRight" xml:space="preserve">
+  <data name="IntrayPageRotateRight" xml:space="preserve">
     <value>Girar 90° a la derecha</value>
   </data>
-  <data name="StErrInboxProcessing" xml:space="preserve">
+  <data name="StErrIntrayProcessing" xml:space="preserve">
     <value>Carga guardada, pero el procesamiento (enderezado / corte por hojas separadoras) no pudo iniciarse — actualice y revise el elemento.</value>
   </data>
   <data name="WfStateDraft" xml:space="preserve">

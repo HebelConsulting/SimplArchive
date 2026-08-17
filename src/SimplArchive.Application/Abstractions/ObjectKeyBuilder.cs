@@ -42,7 +42,7 @@ public static class ObjectKeyBuilder
     // extension replaced by `suffix` — e.g. "…/{guid}/content.pdf" + ".preview.png" → "…/{guid}/content.preview.png".
     // The single scheme every derived-artifact service shares (renditions, per-page images, text-layout), so all of
     // a document's files stay grouped under its GUID folder. Keeping the inner stem (`content`) means the same helper
-    // is collision-safe for the name-based inbox staging keys too ("inbox/{name}.tif" → "inbox/{name}.preview.png").
+    // is collision-safe for the name-based intray staging keys too ("inbox/{name}.tif" → "inbox/{name}.preview.png").
     public static string DerivedKey(string baseKey, string suffix)
     {
         var lastSlash = baseKey.LastIndexOf('/');

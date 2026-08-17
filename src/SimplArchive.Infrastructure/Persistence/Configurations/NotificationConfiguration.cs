@@ -8,7 +8,7 @@ using SimplArchive.Domain.Users;
 namespace SimplArchive.Infrastructure.Persistence.Configurations;
 
 // See ADR "Notifications (in-app, first slice)". Per-User in-app notifications; the
-// (TenantId, RecipientUserId, CreatedAt, Id) index backs the recipient's newest-first inbox + unread count.
+// (TenantId, RecipientUserId, CreatedAt, Id) index backs the recipient's newest-first intray + unread count.
 public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
 {
     public void Configure(EntityTypeBuilder<Notification> builder)

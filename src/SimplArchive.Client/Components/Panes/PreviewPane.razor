@@ -12,7 +12,7 @@
    module, the display state and — crucially — its OWN DotNetObjectReference, so each place that shows a
    preview gets an independent one.
 
-   That independence is the point of extracting it. Before, the Repositories and Inbox tabs SHARED one host and
+   That independence is the point of extracting it. Before, the Repositories and Intray tabs SHARED one host and
    one state object, "mutually exclusive in the DOM", and relied on a reset during tab-switch to stop one tab's
    preview leaking into the other's host. Two tabs sharing a JS-owned div is a hazard that no amount of resetting
    makes safe; one instance each removes the question. The recycle bin had already been given its own duplicate
@@ -25,7 +25,7 @@
 
 <div class="wb-preview @(_fullscreen ? "wb-pv-fullscreen" : "")" style="@Style" data-pane="@DataPane" data-tour="@DataTour">
     @* min-height:0 or this column's content-driven minimum wins over the pane's bounds, and a tall document
-       stretches the pane to the document's own height — on the Inbox tab, whose ancestor chain has no
+       stretches the pane to the document's own height — on the Intray tab, whose ancestor chain has no
        overflow backstop, the pages then painted straight over the bottom tab bar. Repositories never showed
        it only because its pane happens to sit inside an overflow:auto container. *@
     <div style="display:flex; flex-direction:column; flex:1 1 auto; min-width:0; min-height:0;">
@@ -229,7 +229,7 @@
     /// <remarks>
     /// Deliberately SYNCHRONOUS. Callers clear and then immediately render the new selection, so an awaitable
     /// clear invites the fire-and-forget form — and a clear that lands after the render blanks the preview that
-    /// just loaded. That is exactly what happened to the inbox pane when this returned a Task. Leaving
+    /// just loaded. That is exactly what happened to the intray pane when this returned a Task. Leaving
     /// full-screen stays fire-and-forget because it only touches the JS overlay, never what is displayed.
     /// </remarks>
     public void Clear()

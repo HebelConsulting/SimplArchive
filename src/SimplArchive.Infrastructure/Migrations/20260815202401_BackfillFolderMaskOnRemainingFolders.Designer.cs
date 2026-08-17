@@ -1058,7 +1058,7 @@ namespace SimplArchive.Infrastructure.Migrations
                     b.Property<bool>("CanManageClassification")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("CanManageInboxes")
+                    b.Property<bool>("CanManageIntrayes")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageMasks")
@@ -1551,7 +1551,7 @@ namespace SimplArchive.Infrastructure.Migrations
                     b.Property<bool>("CanImport")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("CanManageInboxes")
+                    b.Property<bool>("CanManageIntrayes")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageMasks")
@@ -1778,7 +1778,7 @@ namespace SimplArchive.Infrastructure.Migrations
                     b.Property<bool>("CanManageClassification")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("CanManageInboxes")
+                    b.Property<bool>("CanManageIntrayes")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageMasks")
@@ -1808,10 +1808,10 @@ namespace SimplArchive.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("CutInboxUploadsAtPatchCodes")
+                    b.Property<bool>("CutIntrayUploadsAtPatchCodes")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("DeskewInboxUploads")
+                    b.Property<bool>("DeskewIntrayUploads")
                         .HasColumnType("boolean");
 
                     b.Property<string>("DisplayName")
@@ -1841,7 +1841,7 @@ namespace SimplArchive.Infrastructure.Migrations
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text");
 
-                    b.Property<bool>("RotateInboxUploads")
+                    b.Property<bool>("RotateIntrayUploads")
                         .HasColumnType("boolean");
 
                     b.Property<Guid>("TenantId")

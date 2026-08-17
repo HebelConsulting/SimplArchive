@@ -304,7 +304,7 @@ public class CheckoutsController : ControllerBase
                         ? new[] { new Link("preview", $"/api/checkouts/{d.Id}/preview", "GET") }
                         : [],
                     // Rotate/Sort on the WORKING COPY (ADR 0593) — advertised from the extension only, like
-                    // the inbox listing (ADR 0575): the pages resource itself answers what can actually be
+                    // the intray listing (ADR 0575): the pages resource itself answers what can actually be
                     // done, so a signed or empty working copy withholds `sort` there rather than 400ing here.
                     .. version is not null
                        && Infrastructure.Storage.PageComposer.FormatOf(version.ObjectKey) != Infrastructure.Storage.PageComposer.PageFormat.None
@@ -369,7 +369,7 @@ public class CheckoutsController : ControllerBase
 
     // The stash key + current version for a check-out THIS caller holds, or the response to return instead.
     // The holder-only rule itself lives on HeldCheckout, shared with the working-copy page operations
-    // (CheckoutPagesController) so it is stated once (the InboxScopeResolver precedent, ADR 0575).
+    // (CheckoutPagesController) so it is stated once (the IntrayScopeResolver precedent, ADR 0575).
     private async Task<(string StashKey, DocumentVersion? Version, IActionResult? Refusal)> ResolveHeldCheckoutAsync(
         Guid documentId, CancellationToken cancellationToken)
     {

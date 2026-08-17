@@ -17,16 +17,16 @@ public sealed class LayoutSettings
     public bool IndexCollapsed { get; set; }
     public bool ChatCollapsed { get; set; }
 
-    // The Inbox tab's four collapsible panes (ADR "Collapsible inbox panes").
-    public string InboxServerHeight { get; set; } = "1*";
-    public string InboxLocalHeight { get; set; } = "1*";
-    public string InboxMaskHeight { get; set; } = "1.1*";
-    public string InboxPreviewHeight { get; set; } = "1.6*";
+    // The Intray tab's four collapsible panes (ADR "Collapsible inbox panes").
+    public string IntrayServerHeight { get; set; } = "1*";
+    public string IntrayLocalHeight { get; set; } = "1*";
+    public string IntrayMaskHeight { get; set; } = "1.1*";
+    public string IntrayPreviewHeight { get; set; } = "1.6*";
 
-    public bool InboxServerCollapsed { get; set; }
-    public bool InboxLocalCollapsed { get; set; }
-    public bool InboxMaskCollapsed { get; set; }
-    public bool InboxPreviewCollapsed { get; set; }
+    public bool IntrayServerCollapsed { get; set; }
+    public bool IntrayLocalCollapsed { get; set; }
+    public bool IntrayMaskCollapsed { get; set; }
+    public bool IntrayPreviewCollapsed { get; set; }
 
     // The Repositories contents-list column widths, in pixels (ADR "Desktop list-pane resizable columns"):
     // Name | Type | Doc date | Size | Tags. Persisted so a resized layout survives restart.

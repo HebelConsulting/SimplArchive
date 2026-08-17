@@ -3,7 +3,7 @@
              xmlns:loc="using:SimplArchive.DesktopClient.Localization"
              xmlns:i="using:Projektanker.Icons.Avalonia"
              x:Class="SimplArchive.DesktopClient.Views.SignedBadge">
-    <!-- "This document carries a digital signature" (#491), shown on an inbox row and a check-out row.
+    <!-- "This document carries a digital signature" (#491), shown on an intray row and a check-out row.
          ONE control rather than the same ten lines in both lists: the second copy is where a wording or colour
          change would have been made in one place only, and the two lists would have quietly disagreed about
          what a signature looks like. -->

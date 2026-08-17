@@ -4,7 +4,7 @@
         xmlns:loc="using:SimplArchive.DesktopClient.Localization"
         xmlns:i="using:Projektanker.Icons.Avalonia"
         x:Class="SimplArchive.DesktopClient.Views.SortPagesDialog"
-        Title="{loc:Tr InboxSortTitle}" Width="720" Height="520"
+        Title="{loc:Tr IntraySortTitle}" Width="720" Height="520"
         WindowStartupLocation="CenterOwner">
     <Grid Margin="18" RowDefinitions="Auto,*,Auto">
         <TextBlock Grid.Row="0" x:Name="PromptText" TextWrapping="Wrap" Margin="0,0,0,10" />
@@ -20,7 +20,7 @@
                         </ItemsPanelTemplate>
                     </ListBox.ItemsPanel>
                     <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="vm:InboxPageViewModel">
+                        <DataTemplate x:DataType="vm:IntrayPageViewModel">
                             <StackPanel Width="130" Margin="4" Spacing="4">
                                 <Panel>
                                     <Border Background="White" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" Height="150">
@@ -38,7 +38,7 @@
                                     <!-- The bin sits ON the page it removes, top-right, rather than in the
                                          toolbar: a delete that acts on "the selection" is one the user has to
                                          double-check before pressing (#487). -->
-                                    <Button Click="OnRemovePage" Tag="{Binding}" ToolTip.Tip="{loc:Tr InboxPageRemove}"
+                                    <Button Click="OnRemovePage" Tag="{Binding}" ToolTip.Tip="{loc:Tr IntrayPageRemove}"
                                             HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,4,0"
                                             Padding="4,2"><i:Icon Value="mdi-delete-outline" FontSize="12" /></Button>
                                 </Panel>
@@ -47,9 +47,9 @@
                                      the user cannot tell whether the click registered. -->
                                 <DockPanel>
                                     <Button DockPanel.Dock="Left" Click="OnRotateLeft" Tag="{Binding}" Padding="4,2"
-                                            ToolTip.Tip="{loc:Tr InboxPageRotateLeft}"><i:Icon Value="mdi-rotate-left" FontSize="12" /></Button>
+                                            ToolTip.Tip="{loc:Tr IntrayPageRotateLeft}"><i:Icon Value="mdi-rotate-left" FontSize="12" /></Button>
                                     <Button DockPanel.Dock="Right" Click="OnRotateRight" Tag="{Binding}" Padding="4,2"
-                                            ToolTip.Tip="{loc:Tr InboxPageRotateRight}"><i:Icon Value="mdi-rotate-right" FontSize="12" /></Button>
+                                            ToolTip.Tip="{loc:Tr IntrayPageRotateRight}"><i:Icon Value="mdi-rotate-right" FontSize="12" /></Button>
                                     <TextBlock Text="{Binding Label}" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                Foreground="{DynamicResource WbMuted}" FontSize="11" />
                                 </DockPanel>
@@ -63,23 +63,23 @@
         <!-- The actions of this state, next to the thing they act on and visible without hunting (ADR 0550). -->
         <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" Margin="0,12,0,0">
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-                <Button x:Name="MoveEarlierButton" Click="OnMoveEarlier" ToolTip.Tip="{loc:Tr InboxPageEarlier}">
+                <Button x:Name="MoveEarlierButton" Click="OnMoveEarlier" ToolTip.Tip="{loc:Tr IntrayPageEarlier}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <i:Icon Value="mdi-arrow-left" /><TextBlock Text="{loc:Tr InboxPageEarlier}" />
+                        <i:Icon Value="mdi-arrow-left" /><TextBlock Text="{loc:Tr IntrayPageEarlier}" />
                     </StackPanel>
                 </Button>
-                <Button x:Name="MoveLaterButton" Click="OnMoveLater" ToolTip.Tip="{loc:Tr InboxPageLater}">
+                <Button x:Name="MoveLaterButton" Click="OnMoveLater" ToolTip.Tip="{loc:Tr IntrayPageLater}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock Text="{loc:Tr InboxPageLater}" /><i:Icon Value="mdi-arrow-right" />
+                        <TextBlock Text="{loc:Tr IntrayPageLater}" /><i:Icon Value="mdi-arrow-right" />
                     </StackPanel>
                 </Button>
-                <Button x:Name="ReverseButton" Click="OnReverse" Content="{loc:Tr InboxPagesReverse}" />
+                <Button x:Name="ReverseButton" Click="OnReverse" Content="{loc:Tr IntrayPagesReverse}" />
                 <TextBlock x:Name="RemovedText" Foreground="#c62828" FontSize="11" VerticalAlignment="Center"
                            Margin="8,0,0,0" IsVisible="False" />
             </StackPanel>
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
                 <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
-                <Button x:Name="ApplyButton" Content="{loc:Tr InboxPagesApply}" Click="OnApply" IsDefault="True" />
+                <Button x:Name="ApplyButton" Content="{loc:Tr IntrayPagesApply}" Click="OnApply" IsDefault="True" />
             </StackPanel>
         </Grid>
     </Grid>

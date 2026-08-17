@@ -25,7 +25,7 @@ public enum FilingMode { AsVersion, InFolder, PickedFolder }
 public sealed record FilingResult(FilingMode Mode, Guid TargetId, string? Comment, IReadOnlyDictionary<string, string>? TargetLinks = null);
 
 // Backs the folder-picker dialog (ADR "S3-backed inbox", phase 2): a folders-only tree of repositories,
-// lazily loaded like the main workbench tree, for choosing where to file an inbox item. When a document is
+// lazily loaded like the main workbench tree, for choosing where to file an intray item. When a document is
 // selected on the Repositories tab (ADR "Context-aware inbox filing dialog"), it also offers filing as a new
 // version of that document or into its folder, chosen by radio buttons.
 public sealed partial class FolderPickerViewModel : ObservableObject

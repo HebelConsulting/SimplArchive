@@ -35,18 +35,18 @@ public sealed class WebDavMiddleware
         : null;
 
     // Two special folders nested under the caller's Personal repository (ADR "WebDAV Inbox + Check-out folders",
-    // grouped under Personal by ADR "WebDAV Inbox/Check-out under Personal"): the per-user Inbox (an S3-backed
+    // grouped under Personal by ADR "WebDAV Inbox/Check-out under Personal"): the per-user Intray (an S3-backed
     // staging prefix) and Check-out (the caller's checked-out documents + their working-copy stash). Their WebDAV
-    // paths are /webdav/Personal/Inbox and /webdav/Personal/Check-out — virtual (not Documents), shadowing any
+    // paths are /webdav/Personal/Intray and /webdav/Personal/Check-out — virtual (not Documents), shadowing any
     // real same-named child of Personal.
     internal const string PersonalName = PersonalRepositoryProvisioner.PersonalRepositoryName;
-    internal const string InboxName = "Inbox";
+    internal const string IntrayName = "Intray";
     internal const string CheckoutName = "Check-out";
 
     // True when the path addresses (or sits inside) one of the Personal-nested special folders:
-    // [Personal, Inbox|Check-out, file?]. The special file, when present, is segments[2].
+    // [Personal, Intray|Check-out, file?]. The special file, when present, is segments[2].
     internal static bool IsSpecialPath(List<string> segments) =>
-        segments.Count >= 2 && segments[0] == PersonalName && segments[1] is InboxName or CheckoutName;
+        segments.Count >= 2 && segments[0] == PersonalName && segments[1] is IntrayName or CheckoutName;
 
     private readonly RequestDelegate _next;
     private readonly WebDavLockStore _lockStore;
@@ -96,7 +96,7 @@ public sealed class WebDavMiddleware
         services.GetRequiredService<CurrentTenantAccessor>().TenantId = user.TenantId;
         services.GetRequiredService<CurrentUserAccessor>().UserId = user.Id;
 
-        // The Personal repository is the home for the Inbox / Check-out folders and always appears at the WebDAV
+        // The Personal repository is the home for the Intray / Check-out folders and always appears at the WebDAV
         // root — ensure it exists (get-or-create, idempotent) before serving any request.
         await services.GetRequiredService<PersonalRepositoryProvisioner>().EnsureAsync(user.Id, user.TenantId, context.RequestAborted);
 
@@ -184,7 +184,7 @@ public sealed class WebDavMiddleware
         var depth = context.Request.Headers["Depth"].ToString();
         depth = string.IsNullOrEmpty(depth) ? "1" : depth; // some clients omit Depth; default 1
 
-        // The special Personal/Inbox and Personal/Check-out folders are backed by object storage / the check-out
+        // The special Personal/Intray and Personal/Check-out folders are backed by object storage / the check-out
         // entity, not the Document tree (ADR "WebDAV Inbox + Check-out folders").
         if (IsSpecialPath(segments))
         {
@@ -518,7 +518,7 @@ public sealed class WebDavMiddleware
     {
         if (segments.Count < 2 || IsSpecialPath(segments))
         {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden; // can't create folders at the root, on the virtual Inbox/Check-out folders, or inside them
+            context.Response.StatusCode = StatusCodes.Status403Forbidden; // can't create folders at the root, on the virtual Intray/Check-out folders, or inside them
             return;
         }
 
@@ -587,16 +587,16 @@ public sealed class WebDavMiddleware
             var storage = services.GetRequiredService<IObjectStorageClient>();
             var name = segments[2];
 
-            if (segments[1] == InboxName)
+            if (segments[1] == IntrayName)
             {
-                if ((await WebDavUserAreas.InboxFilesAsync(storage, user)).All(f => f.Name != name) && !WebDavClutter.IsLockFile(name))
+                if ((await WebDavUserAreas.IntrayFilesAsync(storage, user)).All(f => f.Name != name) && !WebDavClutter.IsLockFile(name))
                 {
                     context.Response.StatusCode = StatusCodes.Status404NotFound;
                     return;
                 }
 
-                await storage.DeleteObjectAsync(WebDavUserAreas.InboxPrefix(user) + name, context.RequestAborted);
-                try { await storage.DeleteObjectAsync(WebDavUserAreas.InboxPrefix(user) + name + ".mask.json", context.RequestAborted); } catch (Exception) { /* sidecar may not exist */ }
+                await storage.DeleteObjectAsync(WebDavUserAreas.IntrayPrefix(user) + name, context.RequestAborted);
+                try { await storage.DeleteObjectAsync(WebDavUserAreas.IntrayPrefix(user) + name + ".mask.json", context.RequestAborted); } catch (Exception) { /* sidecar may not exist */ }
                 context.Response.StatusCode = StatusCodes.Status204NoContent;
                 return;
             }
@@ -670,7 +670,7 @@ public sealed class WebDavMiddleware
     {
         if (IsSpecialPath(segments))
         {
-            await WebDavSpecialHandlers.HandleSpecialRenameAsync(context, services, db, user, segments, keepSource: false); // atomic-save rename within Inbox/Check-out (ADR 0508)
+            await WebDavSpecialHandlers.HandleSpecialRenameAsync(context, services, db, user, segments, keepSource: false); // atomic-save rename within Intray/Check-out (ADR 0508)
             return;
         }
 
@@ -768,7 +768,7 @@ public sealed class WebDavMiddleware
     {
         if (IsSpecialPath(segments))
         {
-            await WebDavSpecialHandlers.HandleSpecialRenameAsync(context, services, db, user, segments, keepSource: true); // atomic-save copy within Inbox/Check-out (ADR 0508)
+            await WebDavSpecialHandlers.HandleSpecialRenameAsync(context, services, db, user, segments, keepSource: true); // atomic-save copy within Intray/Check-out (ADR 0508)
             return;
         }
 

@@ -8,7 +8,7 @@ namespace SimplArchive.EndToEndTests;
 // a sibling TEMP file then rename it over the target (Microsoft Office additionally DELETEs the original and both
 // office suites create a lock/owner file; macOS Preview renames the original away to a backup; some PDF tools
 // commit via COPY). This drives each editor's exact save sequence, for every office format, against BOTH the
-// Check-out folder (edits must land in the document's stash) and the Inbox (edits must land in the staged object)
+// Check-out folder (edits must land in the document's stash) and the Intray (edits must land in the staged object)
 // — on real Postgres + object storage.
 //
 // Both test methods share a SINGLE tenant/user (created once) and give every round-trip unique file names — so the
@@ -69,7 +69,7 @@ public class WebDavAtomicSaveTests
     }
 
     // One full round-trip for a (format, editor): a freshly checked-out document edited via the Check-out folder
-    // (→ its stash) and a staged Inbox file edited via the Inbox (→ the staged object). Unique names per call.
+    // (→ its stash) and a staged Intray file edited via the Intray (→ the staged object). Unique names per call.
     private async Task AssertSaveRoundTripAsync(Context ctx, string ext, string suite)
     {
         Task<HttpResponseMessage> Dav(string method, string path, byte[]? body = null, (string, string)[]? headers = null)
@@ -99,15 +99,15 @@ public class WebDavAtomicSaveTests
         Assert.Equal(HttpStatusCode.OK, checkoutBack.StatusCode);
         Assert.Equal(checkoutEdit, await checkoutBack.Content.ReadAsByteArrayAsync());
 
-        // Inbox: a staged file, edited via WebDAV → the staged object must hold the edit.
-        var inboxName = $"in{id}{ext}";
-        (await Dav("PUT", $"/webdav/Personal/Inbox/{inboxName}", Encoding.UTF8.GetBytes("original"))).EnsureSuccessStatusCode();
+        // Intray: a staged file, edited via WebDAV → the staged object must hold the edit.
+        var intrayName = $"in{id}{ext}";
+        (await Dav("PUT", $"/webdav/Personal/Intray/{intrayName}", Encoding.UTF8.GetBytes("original"))).EnsureSuccessStatusCode();
 
-        var inboxEdit = Encoding.UTF8.GetBytes($"inbox {suite} {ext} {id}");
-        await SaveAtomicallyAsync(Dav, "Inbox", inboxName, inboxEdit, suite);
-        var inboxBack = await Dav("GET", $"/webdav/Personal/Inbox/{inboxName}");
-        Assert.Equal(HttpStatusCode.OK, inboxBack.StatusCode);
-        Assert.Equal(inboxEdit, await inboxBack.Content.ReadAsByteArrayAsync());
+        var intrayEdit = Encoding.UTF8.GetBytes($"intray {suite} {ext} {id}");
+        await SaveAtomicallyAsync(Dav, "Intray", intrayName, intrayEdit, suite);
+        var intrayBack = await Dav("GET", $"/webdav/Personal/Intray/{intrayName}");
+        Assert.Equal(HttpStatusCode.OK, intrayBack.StatusCode);
+        Assert.Equal(intrayEdit, await intrayBack.Content.ReadAsByteArrayAsync());
     }
 
     // Emits one editor's atomic-save sequence saving `content` onto /webdav/Personal/{folder}/{name}, asserting

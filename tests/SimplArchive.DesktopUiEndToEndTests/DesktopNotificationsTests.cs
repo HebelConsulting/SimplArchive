@@ -6,7 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 
 // The desktop half of the notification viewer (ADR "Notification viewer + click-through"): the real
 // SimplArchiveApiClient reads a user's notifications (with the document's parent folder for click-through) and
-// marks one read. Set up by the demo admin submitting a document to a fresh reviewer, who then reads their inbox.
+// marks one read. Set up by the demo admin submitting a document to a fresh reviewer, who then reads their intray.
 [Collection(UiCollection.Name)]
 public class DesktopNotificationsTests
 {
@@ -37,7 +37,7 @@ public class DesktopNotificationsTests
         var wf = await admin.Documents.GetWorkflowAsync(doc.Href("versions"));
         await admin.Workflow.PostWorkflowActionAsync(wf!.Links["submit"], new { reviewerId = reviewerId.Id });
 
-        // The reviewer reads their inbox: the notification carries the document + its parent folder.
+        // The reviewer reads their intray: the notification carries the document + its parent folder.
         var reviewer = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl, email, password));
         var list = await reviewer.Notifications.GetNotificationsAsync();
         Assert.True(list.UnreadCount >= 1);

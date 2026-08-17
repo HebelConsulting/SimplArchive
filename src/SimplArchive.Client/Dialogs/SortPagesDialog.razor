@@ -1,6 +1,6 @@
 @inject IDialogService DialogService
 
-@* Sort the pages of a staged inbox item (#487, ADR 0575) — the web half of the desktop's SortPagesDialog,
+@* Sort the pages of a staged intray item (#487, ADR 0575) — the web half of the desktop's SortPagesDialog,
    which is the canonical one (ADR 0511). Returns the chosen order as 1-based ORIGINAL page numbers.
 
    Deliberately dumb, exactly like its desktop twin: it is handed the page pictures and hands back an order.
@@ -15,7 +15,7 @@
     <DialogContent>
         <div style="min-width: 620px; max-width: 78vw;">
             <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">
-                @string.Format(Strings.Get("InboxSortPrompt"), ItemName, _pages.Count)
+                @string.Format(Strings.Get("IntraySortPrompt"), ItemName, _pages.Count)
             </MudText>
 
             @* The tiles carry the page each STARTED as — the position is already visible from where the tile
@@ -33,7 +33,7 @@
                         <div style="position:relative; height:150px; background:#fff; border:1px solid var(--mud-palette-lines-default); display:flex; align-items:center; justify-content:center; overflow:hidden;">
                             <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
                                            Style="position:absolute; top:2px; right:2px; background:rgba(255,255,255,0.85);"
-                                           title="@Strings.Get("InboxPageRemove")"
+                                           title="@Strings.Get("IntrayPageRemove")"
                                            OnClick="@(() => Remove(tile))" data-remove="@tile.OriginalNumber" />
                             @if (tile.Image is { Length: > 0 })
                             {
@@ -54,11 +54,11 @@
                            per-tile scope as the bin. *@
                         <div style="display:flex; align-items:center; justify-content:space-between;">
                             <MudIconButton Icon="@Icons.Material.Filled.RotateLeft" Size="Size.Small"
-                                           title="@Strings.Get("InboxPageRotateLeft")" data-rotate-left="@tile.OriginalNumber"
+                                           title="@Strings.Get("IntrayPageRotateLeft")" data-rotate-left="@tile.OriginalNumber"
                                            OnClick="@(() => RotateLeft(tile))" />
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@tile.OriginalNumber</MudText>
                             <MudIconButton Icon="@Icons.Material.Filled.RotateRight" Size="Size.Small"
-                                           title="@Strings.Get("InboxPageRotateRight")" data-rotate-right="@tile.OriginalNumber"
+                                           title="@Strings.Get("IntrayPageRotateRight")" data-rotate-right="@tile.OriginalNumber"
                                            OnClick="@(() => RotateRight(tile))" />
                         </div>
                     </div>
@@ -68,18 +68,18 @@
     </DialogContent>
     <DialogActions>
         @* The actions of this state, where the state is (ADR 0550). *@
-        <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" Disabled="@(_selected is null)" OnClick="MoveEarlier">@Strings.Get("InboxPageEarlier")</MudButton>
-        <MudButton EndIcon="@Icons.Material.Filled.ArrowForward" Disabled="@(_selected is null)" OnClick="MoveLater">@Strings.Get("InboxPageLater")</MudButton>
-        <MudButton OnClick="Reverse">@Strings.Get("InboxPagesReverse")</MudButton>
+        <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" Disabled="@(_selected is null)" OnClick="MoveEarlier">@Strings.Get("IntrayPageEarlier")</MudButton>
+        <MudButton EndIcon="@Icons.Material.Filled.ArrowForward" Disabled="@(_selected is null)" OnClick="MoveLater">@Strings.Get("IntrayPageLater")</MudButton>
+        <MudButton OnClick="Reverse">@Strings.Get("IntrayPagesReverse")</MudButton>
         @if (_removed > 0)
         {
             <MudText Typo="Typo.caption" Color="Color.Error" Class="ml-2">
-                @string.Format(Strings.Get("InboxPagesRemovedCount"), _removed)
+                @string.Format(Strings.Get("IntrayPagesRemovedCount"), _removed)
             </MudText>
         }
         <MudSpacer />
         <MudButton OnClick="@(() => Dialog.Cancel())">@Strings.Get("Cancel")</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Apply">@Strings.Get("InboxPagesApply")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Apply">@Strings.Get("IntrayPagesApply")</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -177,9 +177,9 @@
         {
             var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
             {
-                Title = Strings.Get("InboxSortTitle"),
-                Message = string.Format(Strings.Get("InboxPagesRemoveConfirm"), _removed),
-                YesText = Strings.Get("InboxPagesApply"),
+                Title = Strings.Get("IntraySortTitle"),
+                Message = string.Format(Strings.Get("IntrayPagesRemoveConfirm"), _removed),
+                YesText = Strings.Get("IntrayPagesApply"),
                 CancelText = Strings.Get("Cancel"),
             });
 

@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Http;
 namespace SimplArchive.Api.Errors.Exceptions.Checkout;
 
 // The cross-cutting edit lock: a document is checked out by another user, so a mutation is refused (ADR "Document
-// check-out / check-in"). Thrown at every mutation site — rename/mask/index/move, new version, inbox
+// check-out / check-in"). Thrown at every mutation site — rename/mask/index/move, new version, intray
 // file-as-version — plus the delete variant. All share the DOCUMENT_CHECKED_OUT wire code; the default ctor
 // covers the common "cannot be changed" case and ForDeletion() covers the delete variant.
 public sealed class DocumentCheckedOutException : CheckoutException

@@ -10,7 +10,7 @@ namespace SimplArchive.Api.Controllers;
 
 /// <summary>
 /// Page operations on a check-out's WORKING COPY (ADR 0593) — the Check-out tab's Rotate/Sort. Sibling of
-/// <see cref="CheckoutsController"/> the way <c>InboxPagesController</c> sits beside the inbox (ADR 0575):
+/// <see cref="CheckoutsController"/> the way <c>IntrayPagesController</c> sits beside the intray (ADR 0575):
 /// same holder-only rule (via <see cref="HeldCheckout"/>), its own resource. The subject is the working copy —
 /// the stash, falling back to the archived current version when none exists yet — and the result always lands
 /// in the stash; the archive changes only through a normal check-in.
@@ -42,7 +42,7 @@ public class CheckoutPagesController(
     }
 
     // A list of pairs, not a dictionary — these DTOs round-trip through XmlSerializer for the vendor XML
-    // media type, and a dictionary does not (the InboxPageRotation precedent).
+    // media type, and a dictionary does not (the IntrayPageRotation precedent).
     public class CheckoutPageRotation
     {
         public int Page { get; set; }
@@ -63,7 +63,7 @@ public class CheckoutPagesController(
 
         var links = new List<Link> { new("self", Href(documentId, "pages"), "GET") };
 
-        // Like the inbox (#549): sort needs only a page, since the same request also rotates — and never a
+        // Like the intray (#549): sort needs only a page, since the same request also rotates — and never a
         // signed working copy, because any rewrite voids the signature.
         if (info.PageCount > 0 && !info.Signed)
         {

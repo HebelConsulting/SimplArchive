@@ -50,7 +50,7 @@
             <MudTable Items="_recycleBinItems" Dense="true" Hover="true" Bordered="false" Elevation="0" T="RecycleBinItem" OnRowClick="@((TableRowClickEventArgs<RecycleBinItem> e) => e.Item is { } item ? OnRowClickAsync(item, e.MouseEventArgs) : Task.CompletedTask)">
                 <HeaderContent>
                     @* The checkbox column is the TOUCH affordance only (#530): a hover-capable pointer device
-                       multi-selects natively — Ctrl/Cmd-click toggles, Shift-click ranges — the Inbox recipe.
+                       multi-selects natively — Ctrl/Cmd-click toggles, Shift-click ranges — the Intray recipe.
                        No select-all: touch keeps per-row boxes, pointer gets Ctrl-click. *@
                     <MudTh Style="width:1px;" Class="wb-touch-only"></MudTh>
                     <MudTh>@Strings.Get("Name")</MudTh><MudTh>@Strings.Get("RbColPath")</MudTh><MudTh>@Strings.Get("RbColDeleted")</MudTh><MudTh>@Strings.Get("RbColDeletedBy")</MudTh><MudTh Style="width:1px;"></MudTh>
@@ -262,7 +262,7 @@
     }
 
     // ---- Bulk restore (ADR "Bulk restore from the recycle bin") ----
-    // Native multi-selection over the checked set — the Inbox recipe (#530): Ctrl/Cmd-click toggles,
+    // Native multi-selection over the checked set — the Intray recipe (#530): Ctrl/Cmd-click toggles,
     // Shift-click ranges from the anchor, a plain click makes the clicked row the whole set AND the detail
     // subject. "Selected" and "checked" are one thing; the touch-only checkbox column is a second way in.
     private Guid? _rbAnchor;

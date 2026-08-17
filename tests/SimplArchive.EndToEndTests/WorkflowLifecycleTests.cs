@@ -17,7 +17,7 @@ public class WorkflowLifecycleTests
     public WorkflowLifecycleTests(E2EApiFactory factory) => _factory = factory;
 
     [Fact]
-    public async Task Submit_task_inbox_approve_release_happy_path()
+    public async Task Submit_task_intray_approve_release_happy_path()
     {
         var setup = await SetUpConfirmedVersionWithReviewerAsync("Alpha");
         var workflow = setup.WorkflowPath;

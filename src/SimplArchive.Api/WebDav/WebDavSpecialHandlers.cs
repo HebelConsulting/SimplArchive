@@ -7,7 +7,7 @@ using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.WebDav;
 
-// The HTTP verb handling for the per-user special areas (Personal ▸ Inbox / Check-out) and their staging
+// The HTTP verb handling for the per-user special areas (Personal ▸ Intray / Check-out) and their staging
 // tiers — the half of the gateway that talks to S3 prefixes instead of the Document tree (issue #466 moved it
 // out of the middleware; key derivation + listings live in WebDavUserAreas, the clutter rules in
 // WebDavClutter). Stateless by construction: every method takes what it acts on, which is what let the whole
@@ -21,7 +21,7 @@ internal static class WebDavSpecialHandlers
 
         if (segments.Count == 2)
         {
-            // The Inbox / Check-out collection itself, plus (Depth 1) its files (lock/owner sidecars stay hidden).
+            // The Intray / Check-out collection itself, plus (Depth 1) its files (lock/owner sidecars stay hidden).
             var files = await WebDavUserAreas.SpecialFolderFilesAsync(storage, db, user, folder);
             var responses = new List<PropStatXml> { WebDavMiddleware.CollectionProp([segments[0], folder], folder) };
             if (depth != "0")
@@ -67,17 +67,17 @@ internal static class WebDavSpecialHandlers
         buffered.Position = 0;
         var contentType = context.Request.ContentType ?? "application/octet-stream";
 
-        if (segments[1] == WebDavMiddleware.InboxName)
+        if (segments[1] == WebDavMiddleware.IntrayName)
         {
-            // Stage a raw object in the inbox prefix — no Document is created (the staging semantics; it's filed
-            // later from the Inbox tab). ADR "S3-backed inbox" / "WebDAV Inbox + Check-out folders".
-            if (WebDavClutter.IsInboxLitter(name))
+            // Stage a raw object in the intray prefix — no Document is created (the staging semantics; it's filed
+            // later from the Intray tab). ADR "S3-backed inbox" / "WebDAV Intray + Check-out folders".
+            if (WebDavClutter.IsIntrayLitter(name))
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
                 return;
             }
 
-            var key = WebDavUserAreas.InboxPrefix(user) + name;
+            var key = WebDavUserAreas.IntrayPrefix(user) + name;
             var existed = await storage.ExistsAsync(key, context.RequestAborted);
             await storage.PutObjectAsync(key, buffered, contentType, context.RequestAborted);
             context.Response.StatusCode = existed ? StatusCodes.Status204NoContent : StatusCodes.Status201Created;
@@ -110,7 +110,7 @@ internal static class WebDavSpecialHandlers
     //  • a checked-out document → a scratch name = copy the document's CURRENT working bytes out to a scratch
     //    backup (macOS's replaceItemAtURL renames the original away before dropping the new file in) — the
     //    document itself stays checked out and in place.
-    // In the Inbox it renames/duplicates the staged object. So every combination office/PDF editors emit —
+    // In the Intray it renames/duplicates the staged object. So every combination office/PDF editors emit —
     // temp+rename, temp+copy, delete-then-rename, or the rename-original-to-backup dance — resolves correctly.
     internal static async Task HandleSpecialRenameAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments, bool keepSource)
     {
@@ -125,20 +125,20 @@ internal static class WebDavSpecialHandlers
         var storage = services.GetRequiredService<IObjectStorageClient>();
         var (srcName, destName) = (segments[2], destSegments[2]);
 
-        if (segments[1] == WebDavMiddleware.InboxName)
+        if (segments[1] == WebDavMiddleware.IntrayName)
         {
-            var srcKey = WebDavUserAreas.InboxPrefix(user) + srcName;
+            var srcKey = WebDavUserAreas.IntrayPrefix(user) + srcName;
             if (!await storage.ExistsAsync(srcKey, context.RequestAborted))
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
                 return;
             }
 
-            var destKey = WebDavUserAreas.InboxPrefix(user) + destName;
-            var inboxDestExisted = await storage.ExistsAsync(destKey, context.RequestAborted);
+            var destKey = WebDavUserAreas.IntrayPrefix(user) + destName;
+            var intrayDestExisted = await storage.ExistsAsync(destKey, context.RequestAborted);
             await storage.CopyObjectAsync(srcKey, destKey, context.RequestAborted);
             if (!keepSource) await storage.DeleteObjectAsync(srcKey, context.RequestAborted);
-            context.Response.StatusCode = inboxDestExisted ? StatusCodes.Status204NoContent : StatusCodes.Status201Created;
+            context.Response.StatusCode = intrayDestExisted ? StatusCodes.Status204NoContent : StatusCodes.Status201Created;
             return;
         }
 
@@ -396,7 +396,7 @@ internal static class WebDavSpecialHandlers
     }
 
     // Per-user scratch area for the Check-out folder's in-flight atomic-save temp files (ADR 0508) — the same
-    // tier as inbox/ and checkout/ (ADR 0368). A temp is committed to the doc's stash on the rename MOVE.
+    // tier as intray/ and checkout/ (ADR 0368). A temp is committed to the doc's stash on the rename MOVE.
     // Buffers an editor temp / owner sidecar written in the TREE into the per-user scratch area (ADR 0562).
     // Keyed by name only: the rename that commits it names the same file, and the scratch prefix is per user, so
     // two people editing different documents cannot collide unless they use the same temp name at the same

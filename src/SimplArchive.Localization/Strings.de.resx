@@ -39,11 +39,11 @@
   <data name="EnvProduction" xml:space="preserve">
     <value>Produktion</value>
   </data>
-  <data name="InboxRotateAutoTip" xml:space="preserve">
-    <value>Auf dem Kopf stehende Seiten beim Eintreffen im Posteingang richtig drehen. Für .tif und .pdf. Signierte Dokumente bleiben unberührt.</value>
+  <data name="IntrayRotateAutoTip" xml:space="preserve">
+    <value>Auf dem Kopf stehende Seiten beim Eintreffen im Eingangskorb richtig drehen. Für .tif und .pdf. Signierte Dokumente bleiben unberührt.</value>
   </data>
-  <data name="InboxDeskewAutoTipTiff" xml:space="preserve">
-    <value>Schief eingescannte Seiten beim Eintreffen im Posteingang begradigen. Nur für .tif — bei .pdf würde der echte Text durch eine OCR-Näherung ersetzt. Signierte Dokumente bleiben unberührt.</value>
+  <data name="IntrayDeskewAutoTipTiff" xml:space="preserve">
+    <value>Schief eingescannte Seiten beim Eintreffen im Eingangskorb begradigen. Nur für .tif — bei .pdf würde der echte Text durch eine OCR-Näherung ersetzt. Signierte Dokumente bleiben unberührt.</value>
   </data>
   <data name="LogonLogin" xml:space="preserve">
     <value>Anmelden</value>
@@ -123,8 +123,8 @@
   <data name="TabRepositories" xml:space="preserve">
     <value>Archive</value>
   </data>
-  <data name="TabInbox" xml:space="preserve">
-    <value>Posteingang</value>
+  <data name="TabIntray" xml:space="preserve">
+    <value>Eingangskorb</value>
   </data>
   <data name="TabCheckout" xml:space="preserve">
     <value>Ausgecheckt</value>
@@ -412,7 +412,7 @@
     <value>Mount-URL (alle Archive)</value>
   </data>
   <data name="WebDavPersonalFolder" xml:space="preserve">
-    <value>Persönlicher Ordner (Posteingang, Check-out, Archiv)</value>
+    <value>Persönlicher Ordner (Eingangskorb, Check-out, Archiv)</value>
   </data>
   <data name="WebDavUsername" xml:space="preserve">
     <value>Benutzername</value>
@@ -1071,58 +1071,58 @@
   <data name="NoItemSelected" xml:space="preserve">
     <value>Kein Element ausgewählt.</value>
   </data>
-  <data name="InboxUpload" xml:space="preserve">
+  <data name="IntrayUpload" xml:space="preserve">
     <value>In den Eingang hochladen</value>
   </data>
-  <data name="InboxCopyDav" xml:space="preserve">
+  <data name="IntrayCopyDav" xml:space="preserve">
     <value>WebDAV-URL kopieren</value>
   </data>
-  <data name="InboxFileN" xml:space="preserve">
+  <data name="IntrayFileN" xml:space="preserve">
     <value>{0} Elemente ablegen</value>
   </data>
-  <data name="InboxDropHint" xml:space="preserve">
+  <data name="IntrayDropHint" xml:space="preserve">
     <value>Dateien hierher ziehen, um sie in den Eingang zu legen</value>
   </data>
-  <data name="InboxFileToFolder" xml:space="preserve">
+  <data name="IntrayFileToFolder" xml:space="preserve">
     <value>In Ordner ablegen…</value>
   </data>
-  <data name="InboxEmailAutoMask" xml:space="preserve">
+  <data name="IntrayEmailAutoMask" xml:space="preserve">
     <value>Maske wird beim Ablegen automatisch vom System zugewiesen.</value>
   </data>
-  <data name="InboxSendTitle" xml:space="preserve">
+  <data name="IntraySendTitle" xml:space="preserve">
     <value>Senden an…</value>
   </data>
-  <data name="InboxSendPrompt" xml:space="preserve">
+  <data name="IntraySendPrompt" xml:space="preserve">
     <value>„{0}“ in einen anderen Eingang verschieben:</value>
   </data>
-  <data name="InboxDestination" xml:space="preserve">
+  <data name="IntrayDestination" xml:space="preserve">
     <value>Ziel</value>
   </data>
-  <data name="InboxSendEmpty" xml:space="preserve">
+  <data name="IntraySendEmpty" xml:space="preserve">
     <value>Keine Gruppen oder anderen Benutzer verfügbar.</value>
   </data>
-  <data name="InboxSend" xml:space="preserve">
+  <data name="IntraySend" xml:space="preserve">
     <value>Senden</value>
   </data>
-  <data name="InboxClaimToMine" xml:space="preserve">
+  <data name="IntrayClaimToMine" xml:space="preserve">
     <value>In meinen Eingang verschieben</value>
   </data>
-  <data name="InboxShowGroups" xml:space="preserve">
+  <data name="IntrayShowGroups" xml:space="preserve">
     <value>Gruppeneingänge anzeigen</value>
   </data>
-  <data name="InboxUserPicker" xml:space="preserve">
+  <data name="IntrayUserPicker" xml:space="preserve">
     <value>Benutzereingang öffnen</value>
   </data>
-  <data name="InboxMine" xml:space="preserve">
+  <data name="IntrayMine" xml:space="preserve">
     <value>Mein Eingang</value>
   </data>
-  <data name="InboxGroupTag" xml:space="preserve">
+  <data name="IntrayGroupTag" xml:space="preserve">
     <value>Gruppe</value>
   </data>
-  <data name="InboxUserTag" xml:space="preserve">
+  <data name="IntrayUserTag" xml:space="preserve">
     <value>Benutzer</value>
   </data>
-  <data name="RightManageInboxes" xml:space="preserve">
+  <data name="RightManageIntrayes" xml:space="preserve">
     <value>Eingänge verwalten</value>
   </data>
   <data name="NoMask" xml:space="preserve">
@@ -2601,7 +2601,7 @@
   <data name="MwSelectDeleted" xml:space="preserve">
     <value>Wählen Sie ein gelöschtes Element, um seine Details zu sehen.</value>
   </data>
-  <data name="MwSelectInboxItem" xml:space="preserve">
+  <data name="MwSelectIntrayItem" xml:space="preserve">
     <value>Wählen Sie ein Server-Eingangselement, um seine Maske festzulegen.</value>
   </data>
   <data name="MwSelectAll" xml:space="preserve">
@@ -2955,7 +2955,7 @@
   <data name="StErrLoadAudit" xml:space="preserve">
     <value>Audit-Log konnte nicht geladen werden: {0}</value>
   </data>
-  <data name="StErrLoadInbox" xml:space="preserve">
+  <data name="StErrLoadIntray" xml:space="preserve">
     <value>Eingang konnte nicht geladen werden: {0}</value>
   </data>
   <data name="StErrMove" xml:space="preserve">
@@ -3858,8 +3858,8 @@
   <data name="StTemplateNoneCopied" xml:space="preserve">
     <value>Es wurde nichts in Ihren Eingang kopiert.</value>
   </data>
-  <data name="StUploadedToInbox" xml:space="preserve">
-    <value>{0} Datei(en) in Ihren Posteingang hochgeladen.</value>
+  <data name="StUploadedToIntray" xml:space="preserve">
+    <value>{0} Datei(en) in Ihren Eingangskorb hochgeladen.</value>
   </data>
   <data name="StSomeUploadsFailed" xml:space="preserve">
     <value>Einige Dateien konnten nicht hochgeladen werden.</value>
@@ -4044,73 +4044,73 @@
   <data name="ExtLinkUrlCopied" xml:space="preserve">
     <value>Link in die Zwischenablage kopiert.</value>
   </data>
-  <data name="InboxSplit" xml:space="preserve">
+  <data name="IntraySplit" xml:space="preserve">
     <value>In Seiten aufteilen</value>
   </data>
-  <data name="InboxSplitConfirm" xml:space="preserve">
+  <data name="IntraySplitConfirm" xml:space="preserve">
     <value>&#x27;{0}&#x27; in seine {1} Seiten aufteilen? Das Original bleibt erhalten.</value>
   </data>
-  <data name="InboxSortTitle" xml:space="preserve">
+  <data name="IntraySortTitle" xml:space="preserve">
     <value>Drehen/Sortieren</value>
   </data>
-  <data name="InboxSortPrompt" xml:space="preserve">
+  <data name="IntraySortPrompt" xml:space="preserve">
     <value>Bringen Sie die {1} Seiten von &#x27;{0}&#x27; in die gewünschte Reihenfolge. Wählen Sie eine Seite aus und verschieben Sie sie.</value>
   </data>
-  <data name="InboxPageEarlier" xml:space="preserve">
+  <data name="IntrayPageEarlier" xml:space="preserve">
     <value>Nach vorne</value>
   </data>
-  <data name="InboxPageLater" xml:space="preserve">
+  <data name="IntrayPageLater" xml:space="preserve">
     <value>Nach hinten</value>
   </data>
-  <data name="InboxPagesReverse" xml:space="preserve">
+  <data name="IntrayPagesReverse" xml:space="preserve">
     <value>Reihenfolge umkehren</value>
   </data>
-  <data name="InboxPagesApply" xml:space="preserve">
+  <data name="IntrayPagesApply" xml:space="preserve">
     <value>Reihenfolge übernehmen</value>
   </data>
-  <data name="InboxJoinTitle" xml:space="preserve">
+  <data name="IntrayJoinTitle" xml:space="preserve">
     <value>Einträge zusammenfügen</value>
   </data>
-  <data name="InboxJoin" xml:space="preserve">
+  <data name="IntrayJoin" xml:space="preserve">
     <value>Zusammenfügen</value>
   </data>
-  <data name="InboxJoinName" xml:space="preserve">
+  <data name="IntrayJoinName" xml:space="preserve">
     <value>Name:</value>
   </data>
-  <data name="InboxJoinPrompt" xml:space="preserve">
+  <data name="IntrayJoinPrompt" xml:space="preserve">
     <value>Diese {0} Einträge in dieser Reihenfolge zu einem zusammenfügen. Die Originale bleiben erhalten.</value>
   </data>
-  <data name="StInboxSplit" xml:space="preserve">
+  <data name="StIntraySplit" xml:space="preserve">
     <value>&#x27;{0}&#x27; in {1} Einträge aufgeteilt.</value>
   </data>
-  <data name="StInboxSorted" xml:space="preserve">
+  <data name="StIntraySorted" xml:space="preserve">
     <value>Seiten von &#x27;{0}&#x27; sortiert.</value>
   </data>
-  <data name="StInboxJoined" xml:space="preserve">
+  <data name="StIntrayJoined" xml:space="preserve">
     <value>{0} Einträge zu &#x27;{1}&#x27; zusammengefügt.</value>
   </data>
-  <data name="ApiErrInboxPagesNotSupported" xml:space="preserve">
+  <data name="ApiErrIntrayPagesNotSupported" xml:space="preserve">
     <value>Nur PDF- und TIFF-Dateien haben Seiten, die aufgeteilt, zusammengefügt oder sortiert werden können.</value>
   </data>
-  <data name="ApiErrInboxItemHasNoPages" xml:space="preserve">
+  <data name="ApiErrIntrayItemHasNoPages" xml:space="preserve">
     <value>Die Datei konnte nicht als seitenbasiertes Dokument gelesen werden — sie ist möglicherweise unvollständig oder beschädigt.</value>
   </data>
-  <data name="ApiErrInboxNoPagesToSplit" xml:space="preserve">
+  <data name="ApiErrIntrayNoPagesToSplit" xml:space="preserve">
     <value>Der Eintrag hat nur eine Seite, es gibt nichts aufzuteilen.</value>
   </data>
-  <data name="ApiErrInboxJoinNeedsSeveral" xml:space="preserve">
+  <data name="ApiErrIntrayJoinNeedsSeveral" xml:space="preserve">
     <value>Zum Zusammenfügen werden mindestens zwei Einträge benötigt.</value>
   </data>
-  <data name="ApiErrInboxJoinNotHomogeneous" xml:space="preserve">
+  <data name="ApiErrIntrayJoinNotHomogeneous" xml:space="preserve">
     <value>Alle zusammenzufügenden Einträge müssen dasselbe Format haben — entweder alle PDF oder alle TIFF.</value>
   </data>
-  <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
+  <data name="ApiErrIntrayPageOrderInvalid" xml:space="preserve">
     <value>Die Seitenreihenfolge muss jede Seite genau einmal enthalten.</value>
   </data>
   <data name="ApiErrWorkingCopySigned" xml:space="preserve">
     <value>Die Arbeitskopie ist digital signiert; eine Änderung der Seiten würde die Signatur ungültig machen.</value>
   </data>
-  <data name="InboxDeleteManyConfirm" xml:space="preserve">
+  <data name="IntrayDeleteManyConfirm" xml:space="preserve">
     <value>{0} Elemente aus Ihrer Eingangsbox löschen?</value>
   </data>
   <data name="FilterHint" xml:space="preserve">
@@ -4119,7 +4119,7 @@
   <data name="OverdueOnly" xml:space="preserve">
     <value>Nur überfällige</value>
   </data>
-  <data name="ApiErrInboxNoPatchCodes" xml:space="preserve">
+  <data name="ApiErrIntrayNoPatchCodes" xml:space="preserve">
     <value>In diesem Scan wurden keine Trennblätter gefunden, es gibt also nichts zu schneiden. Prüfen Sie, ob die Blätter im Stapel lagen und gerade genug eingezogen wurden.</value>
   </data>
   <data name="SignedBadge" xml:space="preserve">
@@ -4128,52 +4128,52 @@
   <data name="SignedBadgeTip" xml:space="preserve">
     <value>Dieses Dokument trägt eine digitale Signatur. Es wird nie gerade gerichtet, aufgeteilt, sortiert oder zusammengefügt, da jede Änderung seiner Bytes die Signatur ungültig machen würde.</value>
   </data>
-  <data name="InboxDeskewAuto" xml:space="preserve">
+  <data name="IntrayDeskewAuto" xml:space="preserve">
     <value>Scans automatisch gerade richten</value>
   </data>
-  <data name="InboxDeskewAutoTip" xml:space="preserve">
-    <value>Schiefe Scans beim Eingang in Ihren Posteingang gerade richten. Signierte Dokumente werden nie verändert.</value>
+  <data name="IntrayDeskewAutoTip" xml:space="preserve">
+    <value>Schiefe Scans beim Eingang in Ihren Eingangskorb gerade richten. Signierte Dokumente werden nie verändert.</value>
   </data>
-  <data name="InboxDeskewNow" xml:space="preserve">
+  <data name="IntrayDeskewNow" xml:space="preserve">
     <value>Dokument gerade richten…</value>
   </data>
-  <data name="InboxDeskewConfirm" xml:space="preserve">
+  <data name="IntrayDeskewConfirm" xml:space="preserve">
     <value>&#x27;{0}&#x27; gerade richten? Ein TIFF wird zu einem PDF, da die Seiten dabei neu gerendert werden.</value>
   </data>
-  <data name="StInboxDeskewed" xml:space="preserve">
+  <data name="StIntrayDeskewed" xml:space="preserve">
     <value>&#x27;{0}&#x27; gerade gerichtet.</value>
   </data>
-  <data name="StInboxDeskewNothing" xml:space="preserve">
+  <data name="StIntrayDeskewNothing" xml:space="preserve">
     <value>In &#x27;{0}&#x27; gibt es nichts gerade zu richten.</value>
   </data>
-  <data name="InboxPatchAuto" xml:space="preserve">
+  <data name="IntrayPatchAuto" xml:space="preserve">
     <value>Stapel automatisch an Trennblättern schneiden</value>
   </data>
-  <data name="InboxPatchAutoTip" xml:space="preserve">
+  <data name="IntrayPatchAutoTip" xml:space="preserve">
     <value>Einen eingehenden Stapelscan an jedem Trennblatt in ein Dokument schneiden. Der Stapel selbst bleibt erhalten und wird in &#x27;…_to_be_deleted&#x27; umbenannt. Signierte Dokumente werden nie verändert.</value>
   </data>
-  <data name="InboxPatchCutNow" xml:space="preserve">
+  <data name="IntrayPatchCutNow" xml:space="preserve">
     <value>An Trennblättern schneiden…</value>
   </data>
-  <data name="InboxPatchCutConfirm" xml:space="preserve">
+  <data name="IntrayPatchCutConfirm" xml:space="preserve">
     <value>&#x27;{0}&#x27; an den Trennblättern schneiden? Die Trennseiten werden verworfen, der Stapel bleibt erhalten und wird in &#x27;…_to_be_deleted&#x27; umbenannt, damit Sie das Ergebnis vor dem Löschen prüfen können.</value>
   </data>
-  <data name="InboxPatchSheetTip" xml:space="preserve">
+  <data name="IntrayPatchSheetTip" xml:space="preserve">
     <value>Trennblatt drucken – die Seite, die Sie im Stapel zwischen die Dokumente legen.</value>
   </data>
-  <data name="InboxPatchSampleTip" xml:space="preserve">
+  <data name="IntrayPatchSampleTip" xml:space="preserve">
     <value>Beispiel-Stapelscan herunterladen, um dies ohne Scanner auszuprobieren.</value>
   </data>
-  <data name="StInboxCutAtPatchCodes" xml:space="preserve">
+  <data name="StIntrayCutAtPatchCodes" xml:space="preserve">
     <value>&#x27;{0}&#x27; in {1} Dokument(e) geschnitten.</value>
   </data>
-  <data name="InboxPageRemove" xml:space="preserve">
+  <data name="IntrayPageRemove" xml:space="preserve">
     <value>Diese Seite entfernen</value>
   </data>
-  <data name="InboxPagesRemovedCount" xml:space="preserve">
+  <data name="IntrayPagesRemovedCount" xml:space="preserve">
     <value>{0} Seite(n) werden gelöscht</value>
   </data>
-  <data name="InboxPagesRemoveConfirm" xml:space="preserve">
+  <data name="IntrayPagesRemoveConfirm" xml:space="preserve">
     <value>{0} Seite(n) werden aus diesem Dokument gelöscht. Das kann nicht rückgängig gemacht werden. Fortfahren?</value>
   </data>
   <data name="CoBulkCheckedIn" xml:space="preserve">
@@ -4185,16 +4185,16 @@
   <data name="CoBulkDiscarded" xml:space="preserve">
     <value>{0} von {1} Check-out(s) verworfen.</value>
   </data>
-  <data name="InboxSortNoPages" xml:space="preserve">
+  <data name="IntraySortNoPages" xml:space="preserve">
     <value>Für dieses Element sind keine Seitenbilder verfügbar.</value>
   </data>
-  <data name="InboxPageRotateLeft" xml:space="preserve">
+  <data name="IntrayPageRotateLeft" xml:space="preserve">
     <value>90° nach links drehen</value>
   </data>
-  <data name="InboxPageRotateRight" xml:space="preserve">
+  <data name="IntrayPageRotateRight" xml:space="preserve">
     <value>90° nach rechts drehen</value>
   </data>
-  <data name="StErrInboxProcessing" xml:space="preserve">
+  <data name="StErrIntrayProcessing" xml:space="preserve">
     <value>Upload gespeichert, aber die Verarbeitung (Begradigen / Trennblatt-Schnitt) konnte nicht gestartet werden — aktualisieren und den Eintrag prüfen.</value>
   </data>
   <data name="WfStateDraft" xml:space="preserve">

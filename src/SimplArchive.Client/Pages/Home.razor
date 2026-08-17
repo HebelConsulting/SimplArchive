@@ -22,7 +22,7 @@
 @inject SimplArchive.Client.Services.DetailCatalogs Catalogs
 @inject SimplArchive.Client.Services.DetailEditor Editor
 @inject SimplArchive.Client.Services.AnnotationEditor Annotations
-@inject SimplArchive.Client.Services.InboxUploads InboxUploads
+@inject SimplArchive.Client.Services.IntrayUploads IntrayUploads
 
 <PageTitle>SimplArchive</PageTitle>
 
@@ -60,7 +60,7 @@
        a descendant selector would colour every subfolder too. The four-class chain also out-specifies MudBlazor's
        own .mud-icon-default colour; the svg has no fill, so it inherits currentColor.
 
-       GOLD marks a place documents live — a folder, the personal root, a referenced folder. The Inbox /
+       GOLD marks a place documents live — a folder, the personal root, a referenced folder. The Intray /
        Check-out launchers and the Administration branch are real nodes but not containers, so they take the
        theme's secondary text colour: gold that lands on every row says nothing.
 
@@ -116,7 +116,7 @@
     .wb-detail-bottom { flex: 1 1 auto; min-height: 0; display: flex; }
     /* min-height:0, or a tall document's content minimum beats the pane's bounds and paints over the tab
        bar wherever the ancestor chain lacks an overflow backstop — Search showed it (review finding); the
-       Inbox had the same bug fixed one level deeper; Repositories only survives inside an overflow:auto
+       Intray had the same bug fixed one level deeper; Repositories only survives inside an overflow:auto
        container. This is the systemic version of that fix. */
     .wb-preview { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; position: relative; }
     .wb-preview iframe { width: 100%; height: 100%; border: 0; }
@@ -307,9 +307,9 @@
     .wb-ug-members { max-width: 360px; }
     .wb-ug-member { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
     .drop-target-active { outline: 2px dashed var(--mud-palette-primary); outline-offset: -3px; background: var(--mud-palette-primary-hover); }
-    /* Shared by the Search AND Inbox tabs, so these stay in the shell rather than moving into SearchTab's own
+    /* Shared by the Search AND Intray tabs, so these stay in the shell rather than moving into SearchTab's own
        style block with the rest of #462's search CSS: a rule that exists only while the Search tab renders strips
-       the Inbox's layout the moment the user is on the Inbox. `.wb-search` is what makes a tab fill its space,
+       the Intray's layout the moment the user is on the Intray. `.wb-search` is what makes a tab fill its space,
        so losing it there let the bottom tab bar ride up — which is precisely what WebTabBarTests caught. */
     .wb-search { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 12px 16px; }
     .wb-search-bar { flex: 0 0 auto; display: flex; align-items: center; }
@@ -686,7 +686,7 @@
 
                         <div class="wb-detail-bottom">
                             @* One PreviewPane instance per tab (ADR 0558). Before the extraction this tab and
-                               the Inbox SHARED one JS-owned host and one state object, kept apart only by a
+                               the Intray SHARED one JS-owned host and one state object, kept apart only by a
                                reset on tab switch; an instance each removes that question entirely. The
                                annotation tools ride in as Toolbar, and the gestures come back through
                                IPreviewAnnotationHost, because acting on one writes to the version's
@@ -732,14 +732,14 @@
                 <SearchTab InitialTagFilter="@_pendingSearchTag" OnFilterApplied="() => _pendingSearchTag = null"
                            OnOpenHit="OpenSearchResultAsync" />
             }
-            else if (_activeTab == Tab.Inbox)
+            else if (_activeTab == Tab.Intray)
             {
                 @* The tree's current folder pre-fills the filing dialog; the tab owns everything else,
                    including its own drop-zone and the DotNetObjectReference behind it (ADR 0558). *@
-                <InboxTab CurrentFolderId="_selectedFolder?.Id" CurrentFolderName="@(_selectedFolder?.Name)"
+                <IntrayTab CurrentFolderId="_selectedFolder?.Id" CurrentFolderName="@(_selectedFolder?.Name)"
                           CurrentDocumentId="@(_selectedItem is { IsFolder: false, IsReference: false } d ? (Guid?)d.Id : null)"
                           CurrentDocumentName="@(_selectedItem?.Name)"
-                          MyUserId="_myUserId" CanManageInboxes="_canManageInboxes" />
+                          MyUserId="_myUserId" CanManageIntrayes="_canManageIntrayes" />
             }
             else if (_activeTab == Tab.Checkout)
             {
@@ -803,9 +803,9 @@
                     <span class="wb-tab-ico"><MudIcon Icon="@Icons.Material.Filled.Folder" Size="Size.Small" /></span>
                     <span class="wb-tab-label">@Strings.Get("TabRepositories")</span>
                 </div>
-                <div class="wb-tab @(_activeTab == Tab.Inbox ? "wb-tab-active" : "")" data-tour="tab-inbox" data-tour-active="@(_activeTab == Tab.Inbox ? "true" : "false")" title="@Strings.Get("TabInbox")" aria-label="@Strings.Get("TabInbox")" @onclick="() => SetTab(Tab.Inbox)">
+                <div class="wb-tab @(_activeTab == Tab.Intray ? "wb-tab-active" : "")" data-tour="tab-intray" data-tour-active="@(_activeTab == Tab.Intray ? "true" : "false")" title="@Strings.Get("TabIntray")" aria-label="@Strings.Get("TabIntray")" @onclick="() => SetTab(Tab.Intray)">
                     <span class="wb-tab-ico"><MudIcon Icon="@Icons.Material.Filled.Inbox" Size="Size.Small" /></span>
-                    <span class="wb-tab-label">@Strings.Get("TabInbox")</span>
+                    <span class="wb-tab-label">@Strings.Get("TabIntray")</span>
                 </div>
                 <div class="wb-tab @(_activeTab == Tab.Checkout ? "wb-tab-active" : "")" data-tour="tab-checkout" data-tour-active="@(_activeTab == Tab.Checkout ? "true" : "false")" title="@Strings.Get("TabCheckout")" aria-label="@Strings.Get("TabCheckout")" @onclick="() => SetTab(Tab.Checkout)">
                     <span class="wb-tab-ico">
@@ -887,7 +887,7 @@
 </AuthorizeView>
 
 @code {
-    private enum Tab { Repositories, Inbox, Checkout, Tasks, Search, RecycleBin, MyWork, UsersGroups, Audit, LegalHolds, Retention, Tenant, Tags }
+    private enum Tab { Repositories, Intray, Checkout, Tasks, Search, RecycleBin, MyWork, UsersGroups, Audit, LegalHolds, Retention, Tenant, Tags }
 
 
     // Reference (shortcut) metadata mirrors the desktop client: for a reference, Id is the TARGET's id (so
@@ -985,7 +985,7 @@
     private string? _downloadUrl;
 
     // The Repositories preview (ADRs 0268/0269/0282/0294/0295) — one INSTANCE, owning its own host, state,
-    // preview.js module and DotNetObjectReference (ADR 0558). The Inbox and Recycle-bin tabs each own theirs,
+    // preview.js module and DotNetObjectReference (ADR 0558). The Intray and Recycle-bin tabs each own theirs,
     // so the shell holds only this one. Null until the tab has rendered.
     private PreviewPane? _repoPreview;
 
@@ -1027,7 +1027,7 @@
     // AnnotationEditor (ADR 0558). What stays here is the wiring: pointing the editor at the pane it draws on,
     // and handing it the version's annotations collection when the subject changes.
 
-    // Drops what the Repositories/Inbox previews show. Each pane clears its own display + full-screen, and the
+    // Drops what the Repositories/Intray previews show. Each pane clears its own display + full-screen, and the
     // annotation editor clears its own markers, selection, clipboard and authoring mode.
     private void ClearPreviewPane()
     {
@@ -1121,7 +1121,7 @@
             _canImpersonate = me?.CanImpersonate ?? false;
             _canExport = me?.CanExport ?? false;
             _canImport = me?.CanImport ?? false;
-            _canManageInboxes = me?.CanManageInboxes ?? false;
+            _canManageIntrayes = me?.CanManageIntrayes ?? false;
             _myUserId = me?.UserId;
             _viewerName = me?.UserName ?? "";
         }
@@ -1173,7 +1173,7 @@
     private bool _canImpersonate;
     private bool _canExport;
     private bool _canImport;
-    private bool _canManageInboxes;
+    private bool _canManageIntrayes;
     private Guid? _myUserId;
 
     // The shell's half of the shared row actions (ADR 0558): each reports whether anything changed, and the
@@ -1248,7 +1248,7 @@
 
     // The tenant's users and groups as dialog options. Only the external-links dialog needs them, so this is
     // deliberately a fetch-on-open rather than page state — nothing else here would keep it fresh.
-    private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanManageServiceAccounts { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public bool CanManageInboxes { get; set; } public Guid? UserId { get; set; } public string UserName { get; set; } = ""; }
+    private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanManageServiceAccounts { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public bool CanManageIntrayes { get; set; } public Guid? UserId { get; set; } public string UserName { get; set; } = ""; }
     // The logged-in user's display name — used in the sensitivity watermark (ADR "Document watermarking").
     private string _viewerName = "";
     private record BackfillResponse { public int Count { get; set; } }
@@ -1416,7 +1416,7 @@
 
         // Returning to Repositories: refresh the folder-contents list pane so newly-filed documents appear, and
         // — keeping focus on the selected document — re-render its detail so a version filed elsewhere (e.g.
-        // from the Inbox) shows. See the "refresh list pane on return" requirement.
+        // from the Intray) shows. See the "refresh list pane on return" requirement.
         if (tab == Tab.Repositories && _selectedFolder is { } folder)
         {
             _folderContents = await OpenFolderContentsAsync(folder);
@@ -1689,11 +1689,11 @@
             return;
         }
 
-        // The Inbox / Check-out launcher nodes under Personal switch to their bottom tab (ADR "GUI-tree Personal
+        // The Intray / Check-out launcher nodes under Personal switch to their bottom tab (ADR "GUI-tree Personal
         // space grouping"); the personal-root node itself browses like any repository (falls through).
-        if (folder is { PersonalKind: "inbox" })
+        if (folder is { PersonalKind: "intray" })
         {
-            await SetTab(Tab.Inbox);
+            await SetTab(Tab.Intray);
             return;
         }
 
@@ -2898,13 +2898,13 @@
         }
     }
 
-    // ---- Personal ▸ Inbox: a repository document as a TEMPLATE (#467) ----------------------------------
+    // ---- Personal ▸ Intray: a repository document as a TEMPLATE (#467) ----------------------------------
     //
-    // Dragging a document onto Inbox copies it in WITH its mask and index values, so new work can start from an
+    // Dragging a document onto Intray copies it in WITH its mask and index values, so new work can start from an
     // existing document without committing to a new document or version until it is filed. The copy happens
     // server-side (one request, no bytes through the browser, and no half-copied item if it fails).
     [JSInvokable]
-    public async Task CopyDocumentToInboxAsync(string documentId)
+    public async Task CopyDocumentToIntrayAsync(string documentId)
     {
         if (!Guid.TryParse(documentId, out var id))
         {
@@ -2913,9 +2913,9 @@
 
         try
         {
-            var inbox = await Http.GetFromJsonAsync<InboxLinksResponse>(await ApiRoot.RequireAsync("inbox"));
-            var href = Links.Href(inbox?.Links, "from-document")
-                ?? throw new InvalidOperationException("The inbox advertised no 'from-document' rel (ADR 0543).");
+            var intray = await Http.GetFromJsonAsync<IntrayLinksResponse>(await ApiRoot.RequireAsync("intray"));
+            var href = Links.Href(intray?.Links, "from-document")
+                ?? throw new InvalidOperationException("The intray advertised no 'from-document' rel (ADR 0543).");
 
             var response = await Http.PostAsJsonAsync(href, new { documentId = id });
             if (!await Actions.HandleMutationAsync(response,
@@ -2924,7 +2924,7 @@
                 return;
             }
 
-            await SetTab(Tab.Inbox);
+            await SetTab(Tab.Intray);
             StateHasChanged();
         }
         catch (Exception)
@@ -2933,7 +2933,7 @@
         }
     }
 
-    private sealed record InboxLinksResponse { public List<LinkResponse> Links { get; set; } = []; }
+    private sealed record IntrayLinksResponse { public List<LinkResponse> Links { get; set; } = []; }
 
     // ---- Personal ▸ Check-out drop: an edited working copy comes back (#467) ----------------------------
     //
@@ -2986,12 +2986,12 @@
         StateHasChanged();
     }
 
-    // ---- Personal ▸ Inbox drop (#467) --------------------------------------------------------------------
-    // These live HERE because dropUpload.js holds the shell's DotNetObjectReference; the Inbox tab has its own
-    // pair for its own reference. Both go through InboxUploads, so the POST exists once.
+    // ---- Personal ▸ Intray drop (#467) --------------------------------------------------------------------
+    // These live HERE because dropUpload.js holds the shell's DotNetObjectReference; the Intray tab has its own
+    // pair for its own reference. Both go through IntrayUploads, so the POST exists once.
 
     [JSInvokable]
-    public Task OnInboxUploadsStartingAsync(int count)
+    public Task OnIntrayUploadsStartingAsync(int count)
     {
         _uploading = true;
         StateHasChanged();
@@ -2999,30 +2999,30 @@
     }
 
     [JSInvokable]
-    public Task<string?> CreateInboxUploadTargetAsync(string fileName) => InboxUploads.CreateTargetAsync(fileName);
+    public Task<string?> CreateIntrayUploadTargetAsync(string fileName) => IntrayUploads.CreateTargetAsync(fileName);
 
     [JSInvokable]
-    public async Task OnInboxUploadsCompleteAsync(int count)
+    public async Task OnIntrayUploadsCompleteAsync(int count)
     {
         if (count > 0)
         {
-            Snackbar.Add(string.Format(Strings.Get("StUploadedToInbox"), count), Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StUploadedToIntray"), count), Severity.Success);
         }
 
-        // Same signal as the Inbox tab's own drop — the ingest pipeline runs there and nowhere else on this
+        // Same signal as the Intray tab's own drop — the ingest pipeline runs there and nowhere else on this
         // path, so a file dropped on the tree node would otherwise wait for the sweep worker.
-        await InboxUploads.SignalProcessedAsync();
+        await IntrayUploads.SignalProcessedAsync();
         _uploading = false;
 
-        // The files landed in the inbox, which the tree does not show — the tree lists FOLDERS, and Inbox is a
+        // The files landed in the intray, which the tree does not show — the tree lists FOLDERS, and Intray is a
         // launcher for the tab where staging and filing actually happen. So the drop opens that tab: without it
         // the user is left looking at a tree node that cannot show what they just added (#467).
-        await SetTab(Tab.Inbox);
+        await SetTab(Tab.Intray);
         StateHasChanged();
     }
 
     // ---- List-pane drop filing (ADR "List-pane drop filing") ---------------------------------------------
-    // Dropping OS files onto a document row (data-drop-doc) shows the inbox-style filing dialog and, per the
+    // Dropping OS files onto a document row (data-drop-doc) shows the intray-style filing dialog and, per the
     // choice, files as a new version of that document or as new documents in a folder (with an optional comment).
 
     public record DocumentDropDecision(string Mode, string? FolderId, string? Comment);
@@ -3170,7 +3170,7 @@
 
     // ---- WebDAV mount (ADR "WebDAV Inbox/Check-out under Personal") -----------------------------
 
-    // Copies the WebDAV mount URL of the caller's Personal folder (which holds the Inbox, Check-out, and personal
+    // Copies the WebDAV mount URL of the caller's Personal folder (which holds the Intray, Check-out, and personal
     // archive) so the user can paste it into their OS "Connect to Server" dialog (ADR "WebDAV Inbox/Check-out
     // under Personal"). A browser can't mount WebDAV itself, so this is copy-to-clipboard rather than a launch.
 

@@ -73,12 +73,12 @@ public class RootController : ControllerBase
                 // make the root a flat URL registry, which is the opposite of what ADR 0543 asks for.
                 new Link("auditEvents", "/api/audit-events", "GET"),
                 new Link("groups", "/api/groups", "GET"),
-                new Link("inbox", "/api/inbox", "GET"),
+                new Link("intray", "/api/intray", "GET"),
                 // The send-to pickers' choices (issue #416). Collection roots in their own right, not actions on
-                // the inbox: the send dialog opens from a single item and never lists the inbox, so reaching
-                // these through `inbox` would mean an S3 listing of every staged file to pick up two hrefs.
-                new Link("inboxGroups", "/api/inbox/groups", "GET"),
-                new Link("inboxUsers", "/api/inbox/users", "GET"),
+                // the intray: the send dialog opens from a single item and never lists the intray, so reaching
+                // these through `intray` would mean an S3 listing of every staged file to pick up two hrefs.
+                new Link("intrayGroups", "/api/intray/groups", "GET"),
+                new Link("intrayUsers", "/api/intray/users", "GET"),
                 new Link("masks", "/api/masks", "GET"),
                 // The searchable index-field catalogue (issue #416) — a collection in its own right, read by the
                 // search UI before any search has been run, so there is no search response to hang it off.

@@ -6,7 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 
 // Neither preview pane ever renders the other tab's document content.
 //
-// Written when the Repositories and Inbox tabs SHARED one JS-owned host and one state object (ADR 0294), where
+// Written when the Repositories and Intray tabs SHARED one JS-owned host and one state object (ADR 0294), where
 // only a reset on tab switch kept them apart. Each tab now owns a PreviewPane instance (ADR 0558), so there is
 // no shared host left to leak through — but this stayed, because it is the only test that reads what the pane
 // actually DISPLAYS rather than that it was asked to render. It earned that during the extraction twice over:
@@ -17,7 +17,7 @@ namespace SimplArchive.UiEndToEndTests;
 [Trait("Area", "ui-3")]
 public class WebPreviewIsolationTests
 {
-    private const string InboxMarker = "INBOXMARKERZZZ";
+    private const string IntrayMarker = "INTRAYMARKERZZZ";
     private const string RepoMarker = "REPOMARKERZZZ";
 
     private readonly SelfHostedAppFixture _app;
@@ -25,7 +25,7 @@ public class WebPreviewIsolationTests
     public WebPreviewIsolationTests(SelfHostedAppFixture app) => _app = app;
 
     [Fact]
-    public async Task Repository_and_inbox_previews_do_not_leak_into_each_other()
+    public async Task Repository_and_intray_previews_do_not_leak_into_each_other()
     {
         var page = await Ui.LoginAsync(_app);
         var preview = page.Locator(".wb-preview");
@@ -38,25 +38,25 @@ public class WebPreviewIsolationTests
         await SelectRepoDocumentAsync(page);
         await Expect(preview).ToContainTextAsync(RepoMarker);
 
-        // Inbox: upload a distinctively-worded file, select it → its content renders, and the Repositories
+        // Intray: upload a distinctively-worded file, select it → its content renders, and the Repositories
         // document's content must NOT still be showing in the shared pane.
-        await page.Locator(".wb-tab[aria-label=\"Inbox\"]").First.ClickAsync();
-        await page.SetInputFilesAsync("#inbox-file-input", new FilePayload
+        await page.Locator(".wb-tab[aria-label=\"Intray\"]").First.ClickAsync();
+        await page.SetInputFilesAsync("#intray-file-input", new FilePayload
         {
-            Name = "inbox-note.txt",
+            Name = "intray-note.txt",
             MimeType = "text/plain",
-            Buffer = Encoding.UTF8.GetBytes($"{InboxMarker} this is the inbox item body"),
+            Buffer = Encoding.UTF8.GetBytes($"{IntrayMarker} this is the intray item body"),
         });
-        await page.Locator(".wb-list-row").Filter(new() { HasText = "inbox-note" }).First.ClickAsync();
-        await Expect(preview).ToContainTextAsync(InboxMarker);
+        await page.Locator(".wb-list-row").Filter(new() { HasText = "intray-note" }).First.ClickAsync();
+        await Expect(preview).ToContainTextAsync(IntrayMarker);
         await Expect(preview).Not.ToContainTextAsync(RepoMarker);
 
-        // Back to Repositories: re-select the document → its content renders, and the inbox item's content must
+        // Back to Repositories: re-select the document → its content renders, and the intray item's content must
         // NOT have leaked into this pane.
         await page.Locator(".wb-tab[aria-label=\"Repositories\"]").First.ClickAsync();
         await SelectRepoDocumentAsync(page);
         await Expect(preview).ToContainTextAsync(RepoMarker);
-        await Expect(preview).Not.ToContainTextAsync(InboxMarker);
+        await Expect(preview).Not.ToContainTextAsync(IntrayMarker);
     }
 
     private static async Task UploadRepoDocumentAsync(IPage page)

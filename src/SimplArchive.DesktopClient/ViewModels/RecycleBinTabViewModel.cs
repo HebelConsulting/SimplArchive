@@ -10,7 +10,7 @@ namespace SimplArchive.DesktopClient.ViewModels;
 // wide master-detail — the list of soft-deleted documents (Name / Path / DeletedAt / DeletedBy + per-row
 // Restore + tenant-admin Hard-delete) on the left, and the same read-only detail + preview + chat as the
 // Repositories tab on the right. Its own PreviewViewModel keeps the recycle-bin preview from ever entangling
-// the Repositories/Inbox one (the explicit isolation requirement).
+// the Repositories/Intray one (the explicit isolation requirement).
 public sealed partial class RecycleBinTabViewModel : ObservableObject
 {
     private SimplArchiveApiClient? _api;
@@ -32,7 +32,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
         Preview.StatusReporter = Report;
     }
 
-    // This tab's INDEPENDENT preview surface (never shared with Repositories/Inbox — ADR "Desktop recycle bin
+    // This tab's INDEPENDENT preview surface (never shared with Repositories/Intray — ADR "Desktop recycle bin
     // parity"). Read-only: a deleted item is inspected, not edited.
     public PreviewViewModel Preview { get; } = new();
 
@@ -224,7 +224,7 @@ public sealed partial class RecycleBinTabViewModel : ObservableObject
     // ---- Bulk restore / bulk purge, over the native multi-SELECTION (#530 tranche 1). --------------------
     //
     // The checked-set column and its select-all reconcile machinery are gone: the list multi-selects the way
-    // Repositories, Inbox and Check-out already do, the view pushes the selection here, and the ribbon's bulk
+    // Repositories, Intray and Check-out already do, the view pushes the selection here, and the ribbon's bulk
     // buttons act on it. Falls back to the single SelectedItem so a programmatic selection (tests, the
     // headless screenshot) gates identically — the CheckoutTabViewModel recipe.
     private IReadOnlyList<RecycleBinRowViewModel> _selection = [];

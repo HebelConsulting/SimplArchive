@@ -166,7 +166,7 @@ public class CheckoutTests
         Assert.Equal("web-edited v2", await storage.GetStringAsync(download));
     }
 
-    // Anti-litter (like the inbox, ADR 0306): the S3 checkout stash prefix must not accumulate orphaned working
+    // Anti-litter (like the intray, ADR 0306): the S3 checkout stash prefix must not accumulate orphaned working
     // copies — a release (check-in / unlock / discard / override) removes the stash object.
     [Fact]
     public async Task Releasing_a_checkout_leaves_no_stash_litter_in_object_storage()

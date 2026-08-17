@@ -22,7 +22,7 @@ public class DocumentReminder : ITenantScoped
 
     public Guid TenantId { get; set; }
 
-    // The person reminded (FK Cascade) — reminders are per-User (a ServiceAccount has no in-app inbox).
+    // The person reminded (FK Cascade) — reminders are per-User (a ServiceAccount has no in-app intray).
     public Guid UserId { get; set; }
 
     public Guid DocumentId { get; set; }

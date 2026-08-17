@@ -129,26 +129,26 @@ internal static class Program
             return;
         }
 
-        // VM-level check that each Inbox pane collapses to height 0 and the state round-trips through the
-        // persisted layout: `--inbox-collapse-test` (ADR "Collapsible inbox panes").
-        if (args.Contains("--inbox-collapse-test"))
+        // VM-level check that each Intray pane collapses to height 0 and the state round-trips through the
+        // persisted layout: `--intray-collapse-test` (ADR "Collapsible inbox panes").
+        if (args.Contains("--intray-collapse-test"))
         {
             var vm = new MainWindowViewModel();
-            vm.ToggleInboxServerCommand.Execute(null);
-            vm.ToggleInboxLocalCommand.Execute(null);
-            vm.ToggleInboxMaskCommand.Execute(null);
-            vm.ToggleInboxPreviewCommand.Execute(null);
-            var collapsedToZero = vm.InboxServerHeight.Value == 0 && vm.InboxLocalHeight.Value == 0
-                && vm.InboxMaskHeight.Value == 0 && vm.InboxPreviewHeight.Value == 0;
-            var flags = vm.InboxServerCollapsed && vm.InboxLocalCollapsed && vm.InboxMaskCollapsed && vm.InboxPreviewCollapsed;
+            vm.ToggleIntrayServerCommand.Execute(null);
+            vm.ToggleIntrayLocalCommand.Execute(null);
+            vm.ToggleIntrayMaskCommand.Execute(null);
+            vm.ToggleIntrayPreviewCommand.Execute(null);
+            var collapsedToZero = vm.IntrayServerHeight.Value == 0 && vm.IntrayLocalHeight.Value == 0
+                && vm.IntrayMaskHeight.Value == 0 && vm.IntrayPreviewHeight.Value == 0;
+            var flags = vm.IntrayServerCollapsed && vm.IntrayLocalCollapsed && vm.IntrayMaskCollapsed && vm.IntrayPreviewCollapsed;
             Console.WriteLine($"collapsed: heights0={collapsedToZero} flags={flags}");
 
             // A fresh VM loads the just-persisted state (all collapsed).
             var reloaded = new MainWindowViewModel();
-            var persisted = reloaded.InboxServerCollapsed && reloaded.InboxLocalCollapsed
-                && reloaded.InboxMaskCollapsed && reloaded.InboxPreviewCollapsed;
+            var persisted = reloaded.IntrayServerCollapsed && reloaded.IntrayLocalCollapsed
+                && reloaded.IntrayMaskCollapsed && reloaded.IntrayPreviewCollapsed;
             reloaded.ResetLayoutCommand.Execute(null); // restore defaults so the test leaves no collapsed state behind
-            var reset = !reloaded.InboxServerCollapsed && reloaded.InboxMaskHeight.Value == 1.1 && reloaded.InboxMaskHeight.IsStar;
+            var reset = !reloaded.IntrayServerCollapsed && reloaded.IntrayMaskHeight.Value == 1.1 && reloaded.IntrayMaskHeight.IsStar;
             Console.WriteLine($"reloaded persisted={persisted} | reset ok={reset}");
             Console.WriteLine(collapsedToZero && flags && persisted && reset ? "OK" : "FAILED");
             return;
@@ -583,9 +583,9 @@ internal static class Program
             {
                 viewModel.PopulateSearchDemoForScreenshot();
             }
-            else if (Environment.GetCommandLineArgs().Contains("--inbox"))
+            else if (Environment.GetCommandLineArgs().Contains("--intray"))
             {
-                viewModel.PopulateInboxDemoForScreenshot();
+                viewModel.PopulateIntrayDemoForScreenshot();
             }
             else if (Environment.GetCommandLineArgs().Contains("--hitoverlay"))
             {

@@ -31,7 +31,7 @@ public static class Screens
         new("workbench", [], Pdf: "src/SimplArchive.Api/DemoData/sample-invoice.pdf"),
         new("search", ["--search"]),
         new("search-hit-overlay", ["--hitoverlay", "--fullscreen"]),
-        new("inbox", ["--inbox"]),
+        new("intray", ["--intray"]),
         new("tasks", ["--workflow", "--tasks"]),
         new("users", ["--users"]),
         new("audit", ["--audit"]),
@@ -50,7 +50,7 @@ public static class Screens
     [
         new("login", null, BeforeLogin: true),
         new("repositories", null),
-        new("inbox", "Inbox"),
+        new("intray", "Intray"),
         new("checkout", "Check-out"),
         new("search", "Search"),
         new("recycle-bin", "Recycle bin"),

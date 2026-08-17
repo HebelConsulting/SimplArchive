@@ -11,7 +11,7 @@ using SimplArchive.Localization;
 namespace SimplArchive.DesktopClient.Views;
 
 /// <summary>
-/// Puts the pages of a staged inbox item in a different order (issue #487). <c>ShowDialog&lt;IReadOnlyList&lt;int&gt;?&gt;</c>
+/// Puts the pages of a staged intray item in a different order (issue #487). <c>ShowDialog&lt;IReadOnlyList&lt;int&gt;?&gt;</c>
 /// returns the chosen order as 1-based ORIGINAL page numbers, or null if cancelled.
 /// </summary>
 /// <remarks>
@@ -28,7 +28,7 @@ namespace SimplArchive.DesktopClient.Views;
 /// </remarks>
 public partial class SortPagesDialog : Window
 {
-    private readonly ObservableCollection<InboxPageViewModel> _pages = [];
+    private readonly ObservableCollection<IntrayPageViewModel> _pages = [];
     private int _removed;
 
     public SortPagesDialog() : this(string.Empty, [])
@@ -41,10 +41,10 @@ public partial class SortPagesDialog : Window
 
         for (var i = 0; i < pageImages.Count; i++)
         {
-            _pages.Add(new InboxPageViewModel(i + 1, pageImages[i]));
+            _pages.Add(new IntrayPageViewModel(i + 1, pageImages[i]));
         }
 
-        PromptText.Text = string.Format(Strings.Get("InboxSortPrompt"), itemName, _pages.Count);
+        PromptText.Text = string.Format(Strings.Get("IntraySortPrompt"), itemName, _pages.Count);
         PageList.ItemsSource = _pages;
         if (_pages.Count > 0)
         {
@@ -56,7 +56,7 @@ public partial class SortPagesDialog : Window
     public IReadOnlyList<int> CurrentOrder => _pages.Select(p => p.OriginalNumber).ToList();
 
     /// <summary>The tiles themselves — public so the headless check can drive a turn the way a click does.</summary>
-    public IReadOnlyList<InboxPageViewModel> Pages => _pages;
+    public IReadOnlyList<IntrayPageViewModel> Pages => _pages;
 
     /// <summary>The pages the user turned, original page number to clockwise degrees — only actual turns (#522).</summary>
     public IReadOnlyDictionary<int, int> CurrentRotations =>
@@ -75,7 +75,7 @@ public partial class SortPagesDialog : Window
     /// Removes a page from the result. It is deleted when the order is applied, not before — so cancelling the
     /// dialog costs nothing, and the count of what will be lost stays visible until then.
     /// </summary>
-    public void Remove(InboxPageViewModel page)
+    public void Remove(IntrayPageViewModel page)
     {
         if (_pages.Count <= 1)
         {
@@ -113,7 +113,7 @@ public partial class SortPagesDialog : Window
 
     private void OnRemovePage(object? sender, RoutedEventArgs e)
     {
-        if (sender is Control { Tag: InboxPageViewModel page })
+        if (sender is Control { Tag: IntrayPageViewModel page })
         {
             Remove(page);
         }
@@ -123,7 +123,7 @@ public partial class SortPagesDialog : Window
     // tile's LayoutTransform, so the click visibly registered before anything is written.
     private void OnRotateLeft(object? sender, RoutedEventArgs e)
     {
-        if (sender is Control { Tag: InboxPageViewModel page })
+        if (sender is Control { Tag: IntrayPageViewModel page })
         {
             page.RotateLeft();
         }
@@ -131,7 +131,7 @@ public partial class SortPagesDialog : Window
 
     private void OnRotateRight(object? sender, RoutedEventArgs e)
     {
-        if (sender is Control { Tag: InboxPageViewModel page })
+        if (sender is Control { Tag: IntrayPageViewModel page })
         {
             page.RotateRight();
         }
@@ -140,7 +140,7 @@ public partial class SortPagesDialog : Window
     private void UpdateRemovedText()
     {
         RemovedText.IsVisible = _removed > 0;
-        RemovedText.Text = string.Format(Strings.Get("InboxPagesRemovedCount"), _removed);
+        RemovedText.Text = string.Format(Strings.Get("IntrayPagesRemovedCount"), _removed);
     }
 
     private void OnCancel(object? sender, RoutedEventArgs e) => Close(null);
@@ -151,8 +151,8 @@ public partial class SortPagesDialog : Window
     {
         if (_removed > 0)
         {
-            var prompt = string.Format(Strings.Get("InboxPagesRemoveConfirm"), _removed);
-            if (!await new ConfirmDialog(prompt, Strings.Get("InboxPagesApply")).ShowDialog<bool>(this))
+            var prompt = string.Format(Strings.Get("IntrayPagesRemoveConfirm"), _removed);
+            if (!await new ConfirmDialog(prompt, Strings.Get("IntrayPagesApply")).ShowDialog<bool>(this))
             {
                 return;
             }

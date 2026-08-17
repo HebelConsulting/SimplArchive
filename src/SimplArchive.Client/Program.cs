@@ -51,7 +51,7 @@ builder.Services.AddScoped<SimplArchive.Client.Services.SearchState>();
 // tab (rank → name). One loader rather than one per surface — see SensitivityLabelCatalog.
 builder.Services.AddScoped<SimplArchive.Client.Services.SensitivityLabelCatalog>();
 
-// The tenant's OCR languages, needed by the Repositories detail pane, the Inbox staging form and the Tenant
+// The tenant's OCR languages, needed by the Repositories detail pane, the Intray staging form and the Tenant
 // tab's default. One loader rather than three — see OcrLanguageCatalog.
 builder.Services.AddScoped<SimplArchive.Client.Services.OcrLanguageCatalog>();
 
@@ -79,7 +79,7 @@ builder.Services.AddScoped<SimplArchive.Client.Services.DetailState>();
 // The four tenant-wide lists the index-data pane offers, and the edit lifecycle that reads them. Scoped for the
 // same reason DetailState is: a catalogue fetched once should outlive the pane that asked for it, and the edit
 // flag has to survive the tab switch that disposes it.
-builder.Services.AddScoped<SimplArchive.Client.Services.InboxUploads>();
+builder.Services.AddScoped<SimplArchive.Client.Services.IntrayUploads>();
 builder.Services.AddScoped<SimplArchive.Client.Services.DetailCatalogs>();
 builder.Services.AddScoped<SimplArchive.Client.Services.DetailEditor>();
 

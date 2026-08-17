@@ -10,11 +10,11 @@ namespace SimplArchive.DesktopClient.Views;
 /// <remarks>
 /// <para>
 /// Its own control from the start rather than more markup in <c>MainWindow.axaml</c>, which is on the 1000-line
-/// standing-debt list: the Inbox's ribbon became <see cref="InboxRibbon"/> only after it had grown a group per
+/// standing-debt list: the Intray's ribbon became <see cref="IntrayRibbon"/> only after it had grown a group per
 /// feature inside that file (ADR 0577), and the lesson is cheaper to apply than to relearn.
 /// </para>
 /// <para>
-/// <b>The WebDAV handler stays on the window</b>, for the same reason the Inbox's does — it needs a parent for a
+/// <b>The WebDAV handler stays on the window</b>, for the same reason the Intray's does — it needs a parent for a
 /// modal dialog, which only the window has. Refresh needs nothing, so it binds to the view-model directly and
 /// has no forwarder here at all.
 /// </para>

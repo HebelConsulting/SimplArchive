@@ -74,11 +74,11 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     // the Api proxies these bytes and the path lives in the server's URL, not in one the client assembles.
     public sealed record ArchiveEntryInfo(string Name, string Path, long Size, string? DownloadHref = null);
 
-    // A server-inbox item — a staged file (ADR "S3-backed inbox"). Download is a presigned URL; HasMask tells
+    // A server-intray item — a staged file (ADR "S3-backed inbox"). Download is a presigned URL; HasMask tells
     // whether a `{name}.mask.json` staging sidecar exists (ADR "Inbox item classification + preview"). Group/User
     // label a non-own item's source queue (ADR 0532); MoveUrl is its move action, source query already baked in.
     // Links are the addresses the listing advertised for THIS item — preview, mask, file, move and its own
-    // deletion — each already carrying the right source prefix for a group or another user's inbox, which is
+    // deletion — each already carrying the right source prefix for a group or another user's intray, which is
     // exactly the part the client used to rebuild by hand (ADR 0543/0555, issue #416).
     // A reference (shortcut) filed in a folder — see ADR "Desktop drag-and-drop move and reference".
     // TargetId/Name/HasVersions/HasSubfolders describe the referenced item; ReferenceId identifies the

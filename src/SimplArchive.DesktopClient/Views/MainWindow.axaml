@@ -813,53 +813,53 @@
                 </Grid>
             </TabItem>
 
-            <TabItem ToolTip.Tip="{loc:Tr TabInbox}">
+            <TabItem ToolTip.Tip="{loc:Tr TabIntray}">
                 <TabItem.Header><i:Icon Value="mdi-inbox" FontSize="20" /></TabItem.Header>
-                <!-- Outer grid so the preview full-screen overlay can cover the inbox (tab strip stays reachable). -->
+                <!-- Outer grid so the preview full-screen overlay can cover the intray (tab strip stays reachable). -->
                 <Grid>
                 <DockPanel LastChildFill="True">
 
-                <!-- The inbox ribbon is its own control (ADR 0577): it grew a group per feature — pages,
+                <!-- The intray ribbon is its own control (ADR 0577): it grew a group per feature — pages,
                      straightening, separator sheets — and each one arrived as more lines in this file. -->
-                <v:InboxRibbon DockPanel.Dock="Top" />
+                <v:IntrayRibbon DockPanel.Dock="Top" />
 
                 <Grid Margin="14" ColumnDefinitions="*,10,1.15*">
 
-                    <!-- Left column: the server inbox (the S3-backed staging area) + actions. The old local-inbox
-                         sync is replaced by opening the Inbox as a WebDAV folder (ADR "Desktop inbox via WebDAV"). -->
+                    <!-- Left column: the server intray (the S3-backed staging area) + actions. The old local-intray
+                         sync is replaced by opening the Intray as a WebDAV folder (ADR "Desktop inbox via WebDAV"). -->
                     <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*,Auto">
-                        <!-- Inbox header -->
+                        <!-- Intray header -->
                         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock Text="{loc:Tr TabInbox}" FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding InboxStatus}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
+                                <TextBlock Text="{loc:Tr TabIntray}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding IntrayStatus}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                             </StackPanel>
                         </Grid>
-                        <!-- View filter (ADR 0532): a CanManageInboxes holder gets a user-picker to open another
-                             user's inbox. Its companion — "show group inboxes" — is an on/off, so it went to the
+                        <!-- View filter (ADR 0532): a CanManageIntrayes holder gets a user-picker to open another
+                             user's intray. Its companion — "show group intrayes" — is an on/off, so it went to the
                              ribbon as a toggle beside the other sticky toggles (#521, promoted from the web per
                              ADR 0511); a picker cannot follow it, because it chooses a value out of a list as
                              long as the tenant has users. -->
                         <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,0,0,6" VerticalAlignment="Center"
-                                    IsVisible="{Binding CanManageInboxes}">
+                                    IsVisible="{Binding CanManageIntrayes}">
                             <ComboBox MinWidth="180"
-                                      ItemsSource="{Binding InboxUsers}" SelectedItem="{Binding SelectedInboxUser}"
-                                      PlaceholderText="{loc:Tr InboxUserPicker}">
+                                      ItemsSource="{Binding IntrayUsers}" SelectedItem="{Binding SelectedIntrayUser}"
+                                      PlaceholderText="{loc:Tr IntrayUserPicker}">
                                 <ComboBox.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:InboxUserPickerItem">
+                                    <DataTemplate x:DataType="vm:IntrayUserPickerItem">
                                         <TextBlock Text="{Binding Name}" />
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
                         </StackPanel>
-                        <ListBox Grid.Row="2" x:Name="ServerInboxList" ItemsSource="{Binding ServerInbox}" SelectedItem="{Binding SelectedServerInboxItem}"
+                        <ListBox Grid.Row="2" x:Name="ServerIntrayList" ItemsSource="{Binding ServerIntray}" SelectedItem="{Binding SelectedServerIntrayItem}"
                                  DragDrop.AllowDrop="True"
-                                 SelectionMode="Multiple" SelectionChanged="OnServerInboxSelectionChanged" DoubleTapped="OnInboxItemDoubleTapped">
+                                 SelectionMode="Multiple" SelectionChanged="OnServerIntraySelectionChanged" DoubleTapped="OnIntrayItemDoubleTapped">
                             <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="vm:InboxItemViewModel">
+                                <DataTemplate x:DataType="vm:IntrayItemViewModel">
                                     <!-- The row, its indicators and its context menu are their own control
                                          (#521, #519): this file has no headroom, and a row is a thing. -->
-                                    <v:InboxRow />
+                                    <v:IntrayRow />
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
@@ -872,64 +872,64 @@
                     <Grid Grid.Column="2">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="{Binding InboxMaskHeight, Mode=TwoWay}" />
+                            <RowDefinition Height="{Binding IntrayMaskHeight, Mode=TwoWay}" />
                             <RowDefinition Height="6" />
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="{Binding InboxPreviewHeight, Mode=TwoWay}" />
+                            <RowDefinition Height="{Binding IntrayPreviewHeight, Mode=TwoWay}" />
                         </Grid.RowDefinitions>
 
                         <!-- Mask / index-data header -->
                         <Border Grid.Row="0" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0">
                             <Grid ColumnDefinitions="*,Auto" Margin="12,6">
-                                <TextBlock Grid.Column="0" Text="{Binding InboxDetailTitle}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Command="{Binding ToggleInboxMaskCommand}" ToolTip.Tip="{loc:Tr MwCollapseExpand}"><i:Icon Value="{Binding InboxMaskCaret}" /></Button>
+                                <TextBlock Grid.Column="0" Text="{Binding IntrayDetailTitle}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Command="{Binding ToggleIntrayMaskCommand}" ToolTip.Tip="{loc:Tr MwCollapseExpand}"><i:Icon Value="{Binding IntrayMaskCaret}" /></Button>
                             </Grid>
                         </Border>
 
                         <!-- Mask / index-data body (staged to the item's sidecar) — editable only for a focused server item -->
-                        <Border Grid.Row="1" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0" IsVisible="{Binding !InboxMaskCollapsed}">
+                        <Border Grid.Row="1" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0" IsVisible="{Binding !IntrayMaskCollapsed}">
                             <ScrollViewer>
                                 <StackPanel Margin="12,4" Spacing="6">
-                                    <TextBlock Text="{loc:Tr MwSelectInboxItem}" Foreground="{DynamicResource WbFaint}"
-                                               TextWrapping="Wrap" IsVisible="{Binding !InboxItemFocused}" />
+                                    <TextBlock Text="{loc:Tr MwSelectIntrayItem}" Foreground="{DynamicResource WbFaint}"
+                                               TextWrapping="Wrap" IsVisible="{Binding !IntrayItemFocused}" />
 
                                     <!-- Emails (.eml/.msg) are classified automatically when filed — no mask offered. -->
-                                    <StackPanel IsVisible="{Binding InboxIsEmail}" Orientation="Horizontal" Spacing="8" Margin="0,4">
+                                    <StackPanel IsVisible="{Binding IntrayIsEmail}" Orientation="Horizontal" Spacing="8" Margin="0,4">
                                         <i:Icon Value="mdi-email-check-outline" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                                        <TextBlock Text="{loc:Tr InboxEmailAutoMask}" Foreground="{DynamicResource WbMuted}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                                        <TextBlock Text="{loc:Tr IntrayEmailAutoMask}" Foreground="{DynamicResource WbMuted}" TextWrapping="Wrap" VerticalAlignment="Center" />
                                     </StackPanel>
 
                                     <StackPanel Spacing="6">
                                         <StackPanel.IsVisible>
                                             <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
-                                                <Binding Path="InboxItemFocused" />
-                                                <Binding Path="!InboxIsEmail" />
+                                                <Binding Path="IntrayItemFocused" />
+                                                <Binding Path="!IntrayIsEmail" />
                                             </MultiBinding>
                                         </StackPanel.IsVisible>
                                         <Grid ColumnDefinitions="180,*">
                                             <TextBlock Grid.Column="0" Text="{loc:Tr Name}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                                            <TextBox Grid.Column="1" Text="{Binding InboxName}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />
+                                            <TextBox Grid.Column="1" Text="{Binding IntrayName}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />
                                         </Grid>
                                         <Grid ColumnDefinitions="180,*">
                                             <TextBlock Grid.Column="0" Text="{loc:Tr VerColDocDate}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                                             <!-- Free-text date entry with an optional calendar picker (ADR "Intray refinements"). -->
-                                            <CalendarDatePicker Grid.Column="1" SelectedDate="{Binding InboxDocumentDate}" Watermark="yyyy-MM-dd" HorizontalAlignment="Stretch" />
+                                            <CalendarDatePicker Grid.Column="1" SelectedDate="{Binding IntrayDocumentDate}" Watermark="yyyy-MM-dd" HorizontalAlignment="Stretch" />
                                         </Grid>
                                         <Grid ColumnDefinitions="180,*">
                                             <TextBlock Grid.Column="0" Text="{loc:Tr MaskLabel}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                                            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding InboxAvailableMasks}" SelectedItem="{Binding InboxSelectedMaskChoice}">
+                                            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch" ItemsSource="{Binding IntrayAvailableMasks}" SelectedItem="{Binding IntraySelectedMaskChoice}">
                                                 <ComboBox.ItemTemplate>
                                                     <DataTemplate x:DataType="vm:MaskChoiceViewModel"><TextBlock Text="{Binding Name}" /></DataTemplate>
                                                 </ComboBox.ItemTemplate>
                                             </ComboBox>
                                         </Grid>
                                         <!-- OCR languages for a scannable item — staged, applied to the searchable-PDF conversion at filing (ADR "Inbox OCR-language staging"). -->
-                                        <Grid ColumnDefinitions="180,*,Auto" IsVisible="{Binding InboxStgScannable}">
+                                        <Grid ColumnDefinitions="180,*,Auto" IsVisible="{Binding IntrayStgScannable}">
                                             <TextBlock Grid.Column="0" Text="{loc:Tr SysOcrLanguages}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="1" Text="{Binding InboxOcrDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                                            <Button Grid.Column="2" Click="OnEditInboxOcrLanguages" Margin="6,2,0,2" ToolTip.Tip="{loc:Tr MwEditOcr}"><i:Icon Value="mdi-pencil-outline" /></Button>
+                                            <TextBlock Grid.Column="1" Text="{Binding IntrayOcrDisplay}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                            <Button Grid.Column="2" Click="OnEditIntrayOcrLanguages" Margin="6,2,0,2" ToolTip.Tip="{loc:Tr MwEditOcr}"><i:Icon Value="mdi-pencil-outline" /></Button>
                                         </Grid>
-                                        <ItemsControl ItemsSource="{Binding InboxMaskEditFields}">
+                                        <ItemsControl ItemsSource="{Binding IntrayMaskEditFields}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:MaskFieldEditViewModel">
                                                     <Grid ColumnDefinitions="180,*" Margin="0,3">
@@ -944,36 +944,36 @@
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
-                                        <Button Content="{loc:Tr Save}" Command="{Binding SaveInboxMaskCommand}" HorizontalAlignment="Right" Margin="0,4,0,0" />
+                                        <Button Content="{loc:Tr Save}" Command="{Binding SaveIntrayMaskCommand}" HorizontalAlignment="Right" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </StackPanel>
                             </ScrollViewer>
                         </Border>
 
                         <GridSplitter Grid.Row="2" Background="{DynamicResource WbBorder}" ResizeDirection="Rows" HorizontalAlignment="Stretch"
-                                      IsEnabled="{Binding !InboxMaskCollapsed}" />
+                                      IsEnabled="{Binding !IntrayMaskCollapsed}" />
 
                         <!-- Preview header -->
                         <Border Grid.Row="3" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,1,0,0">
                             <Grid ColumnDefinitions="*,Auto" Margin="12,6">
                                 <TextBlock Grid.Column="0" Text="{loc:Tr MwPreview}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Command="{Binding ToggleInboxPreviewCommand}" ToolTip.Tip="{loc:Tr MwCollapseExpand}"><i:Icon Value="{Binding InboxPreviewCaret}" /></Button>
+                                <Button Grid.Column="1" Command="{Binding ToggleIntrayPreviewCommand}" ToolTip.Tip="{loc:Tr MwCollapseExpand}"><i:Icon Value="{Binding IntrayPreviewCaret}" /></Button>
                             </Grid>
                         </Border>
 
                         <!-- Preview body (full parity: renditions, hit-overlay, find-in-document, click-to-copy) -->
-                        <!-- Inbox preview — the same reusable surface as the Repositories pane; full-screen shows
+                        <!-- Intray preview — the same reusable surface as the Repositories pane; full-screen shows
                              the overlay below (ADR "Desktop preview full-screen toggle"). -->
-                        <Border Grid.Row="4" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0" IsVisible="{Binding !InboxPreviewCollapsed}">
-                            <v:PreviewPane DataContext="{Binding InboxPreview}" />
+                        <Border Grid.Row="4" BorderBrush="{DynamicResource WbBorder}" BorderThickness="1,0,0,0" IsVisible="{Binding !IntrayPreviewCollapsed}">
+                            <v:PreviewPane DataContext="{Binding IntrayPreview}" />
                         </Border>
                     </Grid>
                 </Grid>
                 </DockPanel>
 
-                    <!-- Full-screen preview overlay for the Inbox tab (its own InboxPreview, disconnected from Repositories). -->
-                    <Border IsVisible="{Binding InboxPreview.PreviewFullscreen}" ZIndex="100" Background="{DynamicResource WbChrome}">
-                        <v:PreviewPane DataContext="{Binding InboxPreview}" />
+                    <!-- Full-screen preview overlay for the Intray tab (its own IntrayPreview, disconnected from Repositories). -->
+                    <Border IsVisible="{Binding IntrayPreview.PreviewFullscreen}" ZIndex="100" Background="{DynamicResource WbChrome}">
+                        <v:PreviewPane DataContext="{Binding IntrayPreview}" />
                     </Border>
                 </Grid>
             </TabItem>
@@ -995,17 +995,17 @@
                 <Grid>
                 <DockPanel LastChildFill="True">
 
-                <!-- The tab's own actions, in one place and in the same place the Inbox keeps its own (#500).
+                <!-- The tab's own actions, in one place and in the same place the Intray keeps its own (#500).
                      Refresh used to sit beside the heading and WebDAV in the bottom-left corner. -->
                 <v:CheckoutRibbon DockPanel.Dock="Top" />
 
                 <Grid Margin="14" ColumnDefinitions="*,10,1.15*">
 
                     <!-- Left column: what you hold locked, and what can be done with each. Same shape as the
-                         Inbox tab, because it is the same kind of place — a staging area you also reach from
+                         Intray tab, because it is the same kind of place — a staging area you also reach from
                          your file manager (ADR "The Check-out tab shows what you are about to check in"). -->
                     <Grid Grid.Column="0" RowDefinitions="Auto,*">
-                        <!-- Heading over its own count, at the Inbox's type scale (#500). The count used to sit
+                        <!-- Heading over its own count, at the Intray's type scale (#500). The count used to sit
                              at the bottom of the list, which is the one place the eye reaches last — and on a
                              long list, only after scrolling past everything it is counting. -->
                         <StackPanel Grid.Row="0" VerticalAlignment="Center" Margin="0,0,0,6">
@@ -1020,7 +1020,7 @@
                         <!-- No column headers, and icon buttons rather than labelled ones: the list is half the
                              window now, and the wide table this replaced pushed the document NAME off the left
                              edge — the one column nobody can do without. Path and expiry ride under the name;
-                             everything else is a tooltip. Same shape as the Inbox list, for the same reason. -->
+                             everything else is a tooltip. Same shape as the Intray list, for the same reason. -->
                         <ListBox x:Name="CheckoutList" ItemsSource="{Binding Checkout.Items}" SelectedItem="{Binding Checkout.SelectedRow}"
                                  SelectionMode="Multiple" SelectionChanged="OnCheckoutSelectionChanged"
                                  Background="Transparent" BorderThickness="0">
@@ -1039,7 +1039,7 @@
                     <GridSplitter Grid.Column="1" Background="{DynamicResource WbBorder}" ResizeDirection="Columns" HorizontalAlignment="Stretch" />
 
                     <!-- Right column: index data (top) over the WORKING COPY's preview (bottom). Each is
-                         resizable + collapsible, as on the Inbox tab. -->
+                         resizable + collapsible, as on the Intray tab. -->
                     <Grid Grid.Column="2">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -1352,7 +1352,7 @@
 
                     <!-- Its OWN preview instance (SearchPreview), never the Repositories one: sharing a
                          JS/PDF-owning pane between tabs is the hazard ADR 0558 called out on the web side, and
-                         the same reasoning applies here — the Inbox and Recycle bin each have their own too. -->
+                         the same reasoning applies here — the Intray and Recycle bin each have their own too. -->
                     <v:PreviewPane Grid.Column="2" DataContext="{Binding SearchPreview}" />
                     </Grid>
                 </DockPanel>

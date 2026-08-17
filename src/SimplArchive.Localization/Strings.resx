@@ -39,11 +39,11 @@
   <data name="EnvProduction" xml:space="preserve">
     <value>Production</value>
   </data>
-  <data name="InboxRotateAutoTip" xml:space="preserve">
-    <value>Turn pages that arrived upside-down the right way round, as they arrive in your inbox. Works for .tif and .pdf. Signed documents are never touched.</value>
+  <data name="IntrayRotateAutoTip" xml:space="preserve">
+    <value>Turn pages that arrived upside-down the right way round, as they arrive in your intray. Works for .tif and .pdf. Signed documents are never touched.</value>
   </data>
-  <data name="InboxDeskewAutoTipTiff" xml:space="preserve">
-    <value>Straighten crooked scans as they arrive in your inbox. Only for .tif — straightening a .pdf would replace its real text with an OCR approximation. Signed documents are never touched.</value>
+  <data name="IntrayDeskewAutoTipTiff" xml:space="preserve">
+    <value>Straighten crooked scans as they arrive in your intray. Only for .tif — straightening a .pdf would replace its real text with an OCR approximation. Signed documents are never touched.</value>
   </data>
   <data name="LogonLogin" xml:space="preserve">
     <value>Log in</value>
@@ -123,8 +123,8 @@
   <data name="TabRepositories" xml:space="preserve">
     <value>Repositories</value>
   </data>
-  <data name="TabInbox" xml:space="preserve">
-    <value>Inbox</value>
+  <data name="TabIntray" xml:space="preserve">
+    <value>Intray</value>
   </data>
   <data name="TabCheckout" xml:space="preserve">
     <value>Check-out</value>
@@ -412,7 +412,7 @@
     <value>Mount URL (all repositories)</value>
   </data>
   <data name="WebDavPersonalFolder" xml:space="preserve">
-    <value>Personal folder (Inbox, Check-out, archive)</value>
+    <value>Personal folder (Intray, Check-out, archive)</value>
   </data>
   <data name="WebDavUsername" xml:space="preserve">
     <value>Username</value>
@@ -1071,59 +1071,59 @@
   <data name="NoItemSelected" xml:space="preserve">
     <value>No item selected.</value>
   </data>
-  <data name="InboxUpload" xml:space="preserve">
-    <value>Upload to inbox</value>
+  <data name="IntrayUpload" xml:space="preserve">
+    <value>Upload to intray</value>
   </data>
-  <data name="InboxCopyDav" xml:space="preserve">
+  <data name="IntrayCopyDav" xml:space="preserve">
     <value>Copy WebDAV URL</value>
   </data>
-  <data name="InboxFileN" xml:space="preserve">
+  <data name="IntrayFileN" xml:space="preserve">
     <value>File {0} items</value>
   </data>
-  <data name="InboxDropHint" xml:space="preserve">
-    <value>Drop files here to add them to your inbox</value>
+  <data name="IntrayDropHint" xml:space="preserve">
+    <value>Drop files here to add them to your intray</value>
   </data>
-  <data name="InboxFileToFolder" xml:space="preserve">
+  <data name="IntrayFileToFolder" xml:space="preserve">
     <value>File to folder…</value>
   </data>
-  <data name="InboxEmailAutoMask" xml:space="preserve">
+  <data name="IntrayEmailAutoMask" xml:space="preserve">
     <value>Mask automatically assigned by the system when filed.</value>
   </data>
-  <data name="InboxSendTitle" xml:space="preserve">
+  <data name="IntraySendTitle" xml:space="preserve">
     <value>Send to…</value>
   </data>
-  <data name="InboxSendPrompt" xml:space="preserve">
-    <value>Move "{0}" to another inbox:</value>
+  <data name="IntraySendPrompt" xml:space="preserve">
+    <value>Move "{0}" to another intray:</value>
   </data>
-  <data name="InboxDestination" xml:space="preserve">
+  <data name="IntrayDestination" xml:space="preserve">
     <value>Destination</value>
   </data>
-  <data name="InboxSendEmpty" xml:space="preserve">
+  <data name="IntraySendEmpty" xml:space="preserve">
     <value>No groups or other users available.</value>
   </data>
-  <data name="InboxSend" xml:space="preserve">
+  <data name="IntraySend" xml:space="preserve">
     <value>Send</value>
   </data>
-  <data name="InboxClaimToMine" xml:space="preserve">
-    <value>Move to my inbox</value>
+  <data name="IntrayClaimToMine" xml:space="preserve">
+    <value>Move to my intray</value>
   </data>
-  <data name="InboxShowGroups" xml:space="preserve">
-    <value>Show group inboxes</value>
+  <data name="IntrayShowGroups" xml:space="preserve">
+    <value>Show group intrayes</value>
   </data>
-  <data name="InboxUserPicker" xml:space="preserve">
-    <value>Open user's inbox</value>
+  <data name="IntrayUserPicker" xml:space="preserve">
+    <value>Open user's intray</value>
   </data>
-  <data name="InboxMine" xml:space="preserve">
-    <value>My inbox</value>
+  <data name="IntrayMine" xml:space="preserve">
+    <value>My intray</value>
   </data>
-  <data name="InboxGroupTag" xml:space="preserve">
+  <data name="IntrayGroupTag" xml:space="preserve">
     <value>Group</value>
   </data>
-  <data name="InboxUserTag" xml:space="preserve">
+  <data name="IntrayUserTag" xml:space="preserve">
     <value>User</value>
   </data>
-  <data name="RightManageInboxes" xml:space="preserve">
-    <value>Manage inboxes</value>
+  <data name="RightManageIntrayes" xml:space="preserve">
+    <value>Manage intrayes</value>
   </data>
   <data name="NoMask" xml:space="preserve">
     <value>(No mask)</value>
@@ -2557,7 +2557,7 @@
     <value>WebDAV access is not set up yet.</value>
   </data>
   <data name="MwOpenWebDavTip" xml:space="preserve">
-    <value>Mount your Personal WebDAV folder (Inbox / Check-out / archive) and open it in your file manager</value>
+    <value>Mount your Personal WebDAV folder (Intray / Check-out / archive) and open it in your file manager</value>
   </data>
   <data name="MwMoveSelected" xml:space="preserve">
     <value>Move selected</value>
@@ -2601,8 +2601,8 @@
   <data name="MwSelectDeleted" xml:space="preserve">
     <value>Select a deleted item to see its details.</value>
   </data>
-  <data name="MwSelectInboxItem" xml:space="preserve">
-    <value>Select a server inbox item to set its mask.</value>
+  <data name="MwSelectIntrayItem" xml:space="preserve">
+    <value>Select a server intray item to set its mask.</value>
   </data>
   <data name="MwSelectAll" xml:space="preserve">
     <value>Select all</value>
@@ -2869,7 +2869,7 @@
     <value>Making current…</value>
   </data>
   <data name="StMaskSaved" xml:space="preserve">
-    <value>Mask saved to the inbox item.</value>
+    <value>Mask saved to the intray item.</value>
   </data>
   <data name="StNoConnection" xml:space="preserve">
     <value>No connection to the server. Retry later.</value>
@@ -2955,8 +2955,8 @@
   <data name="StErrLoadAudit" xml:space="preserve">
     <value>Could not load the audit log: {0}</value>
   </data>
-  <data name="StErrLoadInbox" xml:space="preserve">
-    <value>Could not load the inbox: {0}</value>
+  <data name="StErrLoadIntray" xml:space="preserve">
+    <value>Could not load the intray: {0}</value>
   </data>
   <data name="StErrMove" xml:space="preserve">
     <value>Could not move: {0}</value>
@@ -3841,25 +3841,25 @@
     <value>'{0}' cannot take a new working copy right now.</value>
   </data>
   <data name="StTemplateCopied" xml:space="preserve">
-    <value>Copied into your inbox as a template, with its index data.</value>
+    <value>Copied into your intray as a template, with its index data.</value>
   </data>
   <data name="StTemplateFailed" xml:space="preserve">
-    <value>Could not copy that document into your inbox.</value>
+    <value>Could not copy that document into your intray.</value>
   </data>
   <data name="StTemplateNameTaken" xml:space="preserve">
-    <value>Your inbox already holds an item with that name.</value>
+    <value>Your intray already holds an item with that name.</value>
   </data>
   <data name="StTemplateCopiedN" xml:space="preserve">
-    <value>{0} document(s) copied into your inbox as templates.</value>
+    <value>{0} document(s) copied into your intray as templates.</value>
   </data>
   <data name="StTemplateFailedOne" xml:space="preserve">
-    <value>A document could not be copied into your inbox ({0}).</value>
+    <value>A document could not be copied into your intray ({0}).</value>
   </data>
   <data name="StTemplateNoneCopied" xml:space="preserve">
-    <value>Nothing was copied into your inbox.</value>
+    <value>Nothing was copied into your intray.</value>
   </data>
-  <data name="StUploadedToInbox" xml:space="preserve">
-    <value>Uploaded {0} file(s) to your inbox.</value>
+  <data name="StUploadedToIntray" xml:space="preserve">
+    <value>Uploaded {0} file(s) to your intray.</value>
   </data>
   <data name="StSomeUploadsFailed" xml:space="preserve">
     <value>Some files could not be uploaded.</value>
@@ -4044,74 +4044,74 @@
   <data name="ExtLinkUrlCopied" xml:space="preserve">
     <value>Link copied to the clipboard.</value>
   </data>
-  <data name="InboxSplit" xml:space="preserve">
+  <data name="IntraySplit" xml:space="preserve">
     <value>Split into pages</value>
   </data>
-  <data name="InboxSplitConfirm" xml:space="preserve">
+  <data name="IntraySplitConfirm" xml:space="preserve">
     <value>Split &#x27;{0}&#x27; into its {1} pages? The original is kept.</value>
   </data>
-  <data name="InboxSortTitle" xml:space="preserve">
+  <data name="IntraySortTitle" xml:space="preserve">
     <value>Rotate/Sort</value>
   </data>
-  <data name="InboxSortPrompt" xml:space="preserve">
+  <data name="IntraySortPrompt" xml:space="preserve">
     <value>Put the {1} pages of &#x27;{0}&#x27; in the order you want. Select a page, then move it.</value>
   </data>
-  <data name="InboxPageEarlier" xml:space="preserve">
+  <data name="IntrayPageEarlier" xml:space="preserve">
     <value>Move earlier</value>
   </data>
-  <data name="InboxPageLater" xml:space="preserve">
+  <data name="IntrayPageLater" xml:space="preserve">
     <value>Move later</value>
   </data>
-  <data name="InboxPagesReverse" xml:space="preserve">
+  <data name="IntrayPagesReverse" xml:space="preserve">
     <value>Reverse order</value>
   </data>
-  <data name="InboxPagesApply" xml:space="preserve">
+  <data name="IntrayPagesApply" xml:space="preserve">
     <value>Apply order</value>
   </data>
-  <data name="InboxJoinTitle" xml:space="preserve">
+  <data name="IntrayJoinTitle" xml:space="preserve">
     <value>Join items</value>
   </data>
-  <data name="InboxJoin" xml:space="preserve">
+  <data name="IntrayJoin" xml:space="preserve">
     <value>Join</value>
   </data>
-  <data name="InboxJoinName" xml:space="preserve">
+  <data name="IntrayJoinName" xml:space="preserve">
     <value>Name:</value>
   </data>
-  <data name="InboxJoinPrompt" xml:space="preserve">
+  <data name="IntrayJoinPrompt" xml:space="preserve">
     <value>Join these {0} items into one, in this order. The originals are kept.</value>
   </data>
-  <data name="StInboxSplit" xml:space="preserve">
+  <data name="StIntraySplit" xml:space="preserve">
     <value>Split &#x27;{0}&#x27; into {1} items.</value>
   </data>
-  <data name="StInboxSorted" xml:space="preserve">
+  <data name="StIntraySorted" xml:space="preserve">
     <value>Sorted the pages of &#x27;{0}&#x27;.</value>
   </data>
-  <data name="StInboxJoined" xml:space="preserve">
+  <data name="StIntrayJoined" xml:space="preserve">
     <value>Joined {0} items into &#x27;{1}&#x27;.</value>
   </data>
-  <data name="ApiErrInboxPagesNotSupported" xml:space="preserve">
+  <data name="ApiErrIntrayPagesNotSupported" xml:space="preserve">
     <value>Only PDF and TIFF files have pages that can be split, joined or sorted.</value>
   </data>
-  <data name="ApiErrInboxItemHasNoPages" xml:space="preserve">
+  <data name="ApiErrIntrayItemHasNoPages" xml:space="preserve">
     <value>That file could not be read as a paged document — it may be incomplete or corrupt.</value>
   </data>
-  <data name="ApiErrInboxNoPagesToSplit" xml:space="preserve">
+  <data name="ApiErrIntrayNoPagesToSplit" xml:space="preserve">
     <value>That item has only one page, so there is nothing to split.</value>
   </data>
-  <data name="ApiErrInboxJoinNeedsSeveral" xml:space="preserve">
-    <value>Joining needs at least two inbox items.</value>
+  <data name="ApiErrIntrayJoinNeedsSeveral" xml:space="preserve">
+    <value>Joining needs at least two intray items.</value>
   </data>
-  <data name="ApiErrInboxJoinNotHomogeneous" xml:space="preserve">
+  <data name="ApiErrIntrayJoinNotHomogeneous" xml:space="preserve">
     <value>All the items being joined must be the same format — either all PDF or all TIFF.</value>
   </data>
-  <data name="ApiErrInboxPageOrderInvalid" xml:space="preserve">
+  <data name="ApiErrIntrayPageOrderInvalid" xml:space="preserve">
     <value>The page order must list each page exactly once.</value>
   </data>
   <data name="ApiErrWorkingCopySigned" xml:space="preserve">
     <value>The working copy is digitally signed; changing its pages would void the signature.</value>
   </data>
-  <data name="InboxDeleteManyConfirm" xml:space="preserve">
-    <value>Delete {0} items from your inbox?</value>
+  <data name="IntrayDeleteManyConfirm" xml:space="preserve">
+    <value>Delete {0} items from your intray?</value>
   </data>
   <data name="FilterHint" xml:space="preserve">
     <value>Filter…</value>
@@ -4119,7 +4119,7 @@
   <data name="OverdueOnly" xml:space="preserve">
     <value>Overdue only</value>
   </data>
-  <data name="ApiErrInboxNoPatchCodes" xml:space="preserve">
+  <data name="ApiErrIntrayNoPatchCodes" xml:space="preserve">
     <value>No separator sheets were found in this scan, so there is nothing to cut it into. Check that the sheets were in the stack and came through straight enough to read.</value>
   </data>
   <data name="SignedBadge" xml:space="preserve">
@@ -4128,52 +4128,52 @@
   <data name="SignedBadgeTip" xml:space="preserve">
     <value>This document carries a digital signature. It is never straightened, split, sorted or joined, because any change to its bytes would void the signature.</value>
   </data>
-  <data name="InboxDeskewAuto" xml:space="preserve">
+  <data name="IntrayDeskewAuto" xml:space="preserve">
     <value>Straighten scans automatically</value>
   </data>
-  <data name="InboxDeskewAutoTip" xml:space="preserve">
-    <value>Straighten crooked scans as they arrive in your inbox. Signed documents are never touched.</value>
+  <data name="IntrayDeskewAutoTip" xml:space="preserve">
+    <value>Straighten crooked scans as they arrive in your intray. Signed documents are never touched.</value>
   </data>
-  <data name="InboxDeskewNow" xml:space="preserve">
+  <data name="IntrayDeskewNow" xml:space="preserve">
     <value>Straighten document…</value>
   </data>
-  <data name="InboxDeskewConfirm" xml:space="preserve">
+  <data name="IntrayDeskewConfirm" xml:space="preserve">
     <value>Straighten &#x27;{0}&#x27;? A TIFF becomes a PDF, because straightening re-renders the pages.</value>
   </data>
-  <data name="StInboxDeskewed" xml:space="preserve">
+  <data name="StIntrayDeskewed" xml:space="preserve">
     <value>Straightened &#x27;{0}&#x27;.</value>
   </data>
-  <data name="StInboxDeskewNothing" xml:space="preserve">
+  <data name="StIntrayDeskewNothing" xml:space="preserve">
     <value>Nothing to straighten in &#x27;{0}&#x27;.</value>
   </data>
-  <data name="InboxPatchAuto" xml:space="preserve">
+  <data name="IntrayPatchAuto" xml:space="preserve">
     <value>Cut batches at separator sheets automatically</value>
   </data>
-  <data name="InboxPatchAutoTip" xml:space="preserve">
+  <data name="IntrayPatchAutoTip" xml:space="preserve">
     <value>Cut an arriving batch scan into one document per separator sheet. The batch itself is kept, renamed &#x27;…_to_be_deleted&#x27;. Signed documents are never touched.</value>
   </data>
-  <data name="InboxPatchCutNow" xml:space="preserve">
+  <data name="IntrayPatchCutNow" xml:space="preserve">
     <value>Cut at separator sheets…</value>
   </data>
-  <data name="InboxPatchCutConfirm" xml:space="preserve">
+  <data name="IntrayPatchCutConfirm" xml:space="preserve">
     <value>Cut &#x27;{0}&#x27; at its separator sheets? The separator pages are discarded and the batch is kept, renamed &#x27;…_to_be_deleted&#x27;, so you can check the result before deleting it.</value>
   </data>
-  <data name="InboxPatchSheetTip" xml:space="preserve">
+  <data name="IntrayPatchSheetTip" xml:space="preserve">
     <value>Print the separator sheet — the page you put between documents in a stack before scanning.</value>
   </data>
-  <data name="InboxPatchSampleTip" xml:space="preserve">
+  <data name="IntrayPatchSampleTip" xml:space="preserve">
     <value>Download a sample batch scan to try this without a scanner.</value>
   </data>
-  <data name="StInboxCutAtPatchCodes" xml:space="preserve">
+  <data name="StIntrayCutAtPatchCodes" xml:space="preserve">
     <value>Cut &#x27;{0}&#x27; into {1} document(s).</value>
   </data>
-  <data name="InboxPageRemove" xml:space="preserve">
+  <data name="IntrayPageRemove" xml:space="preserve">
     <value>Remove this page</value>
   </data>
-  <data name="InboxPagesRemovedCount" xml:space="preserve">
+  <data name="IntrayPagesRemovedCount" xml:space="preserve">
     <value>{0} page(s) will be deleted</value>
   </data>
-  <data name="InboxPagesRemoveConfirm" xml:space="preserve">
+  <data name="IntrayPagesRemoveConfirm" xml:space="preserve">
     <value>{0} page(s) will be deleted from this document. This cannot be undone. Continue?</value>
   </data>
   <data name="CoBulkCheckedIn" xml:space="preserve">
@@ -4185,16 +4185,16 @@
   <data name="CoBulkDiscarded" xml:space="preserve">
     <value>Discarded {0} of {1} check-out(s).</value>
   </data>
-  <data name="InboxSortNoPages" xml:space="preserve">
+  <data name="IntraySortNoPages" xml:space="preserve">
     <value>No page images are available for this item.</value>
   </data>
-  <data name="InboxPageRotateLeft" xml:space="preserve">
+  <data name="IntrayPageRotateLeft" xml:space="preserve">
     <value>Rotate 90° left</value>
   </data>
-  <data name="InboxPageRotateRight" xml:space="preserve">
+  <data name="IntrayPageRotateRight" xml:space="preserve">
     <value>Rotate 90° right</value>
   </data>
-  <data name="StErrInboxProcessing" xml:space="preserve">
+  <data name="StErrIntrayProcessing" xml:space="preserve">
     <value>Upload stored, but processing (deskew / separator cut) could not be started — refresh and check the item.</value>
   </data>
   <data name="WfStateDraft" xml:space="preserve">

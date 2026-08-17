@@ -12,7 +12,7 @@ namespace SimplArchive.Api.Documents;
 /// Get-or-create the logged-in user's personal repository (ADR "Per-user personal repository") — a root
 /// <see cref="Document"/> flagged with <c>PersonalOfUserId</c>, named "Personal", Folder-masked, with a
 /// full-rights ACL grant to the user. Extracted from <c>PersonalRepositoryController</c> so the WebDAV gateway
-/// (which nests the Inbox / Check-out folders under Personal) can ensure it exists too. Idempotent.
+/// (which nests the Intray / Check-out folders under Personal) can ensure it exists too. Idempotent.
 /// </summary>
 public sealed class PersonalRepositoryProvisioner
 {

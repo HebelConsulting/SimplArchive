@@ -4,7 +4,7 @@ using SimplArchive.DesktopClient.ViewModels;
 
 namespace SimplArchive.DesktopClient.Views;
 
-// Filing dialog (ADR "S3-backed inbox", phase 2; "Context-aware inbox filing dialog"). ShowDialog<FilingResult?>
+// Filing dialog (ADR "S3-backed inbox", phase 2; "Context-aware intray filing dialog"). ShowDialog<FilingResult?>
 // returns the chosen target (a folder to file into, or a document to version), or null if cancelled / nothing
 // selected.
 public partial class FolderPickerDialog : Window

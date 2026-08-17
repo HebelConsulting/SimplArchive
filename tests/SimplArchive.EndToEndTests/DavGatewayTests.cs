@@ -148,7 +148,7 @@ public class DavGatewayTests
     }
 
     [Fact]
-    public async Task WebDav_clutter_is_filtered_from_the_repo_but_transient_files_stage_in_the_inbox()
+    public async Task WebDav_clutter_is_filtered_from_the_repo_but_transient_files_stage_in_the_intray()
     {
         var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
         using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
@@ -195,17 +195,17 @@ public class DavGatewayTests
         Assert.DoesNotContain(".Trashes", repoChildren);  // the junk directory was not created
         Assert.Single(repoChildren);
 
-        // Into the Inbox: OS junk is still discarded, but a transient/partial file legitimately stages.
-        Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", "/webdav/Personal/Inbox/.DS_Store", bytes)).StatusCode);
-        Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", "/webdav/Personal/Inbox/partial.crdownload", bytes)).StatusCode);
+        // Into the Intray: OS junk is still discarded, but a transient/partial file legitimately stages.
+        Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", "/webdav/Personal/Intray/.DS_Store", bytes)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", "/webdav/Personal/Intray/partial.crdownload", bytes)).StatusCode);
 
-        var inboxList = await (await DavAsync("PROPFIND", "/webdav/Personal/Inbox", headers: [("Depth", "1")])).Content.ReadAsStringAsync();
-        Assert.Contains("partial.crdownload", inboxList); // transient is allowed in the staging area
-        Assert.DoesNotContain(".DS_Store", inboxList);    // OS junk is discarded even in the inbox
+        var intrayList = await (await DavAsync("PROPFIND", "/webdav/Personal/Intray", headers: [("Depth", "1")])).Content.ReadAsStringAsync();
+        Assert.Contains("partial.crdownload", intrayList); // transient is allowed in the staging area
+        Assert.DoesNotContain(".DS_Store", intrayList);    // OS junk is discarded even in the intray
     }
 
     [Fact]
-    public async Task WebDav_inbox_and_checkout_folders_work()
+    public async Task WebDav_intray_and_checkout_folders_work()
     {
         var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
         using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
@@ -231,21 +231,21 @@ public class DavGatewayTests
             return await dav.SendAsync(req);
         }
 
-        // The root lists the Personal folder (which nests Inbox + Check-out) — not top-level Inbox/Check-out.
+        // The root lists the Personal folder (which nests Intray + Check-out) — not top-level Intray/Check-out.
         var rootXml = await (await DavAsync("PROPFIND", "/webdav", headers: [("Depth", "1")])).Content.ReadAsStringAsync();
         Assert.Contains("Personal", rootXml);
 
         // Personal lists the two virtual special folders alongside its real children.
         var personalXml = await (await DavAsync("PROPFIND", "/webdav/Personal", headers: [("Depth", "1")])).Content.ReadAsStringAsync();
-        Assert.Contains("Inbox", personalXml);
+        Assert.Contains("Intray", personalXml);
         Assert.Contains("Check-out", personalXml);
 
-        // Inbox: PUT stages a raw object (no document), PROPFIND lists it, GET returns it, DELETE removes it.
-        Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", "/webdav/Personal/Inbox/staged.txt", Encoding.UTF8.GetBytes("stage me"))).StatusCode);
-        Assert.Contains("staged.txt", await (await DavAsync("PROPFIND", "/webdav/Personal/Inbox", headers: [("Depth", "1")])).Content.ReadAsStringAsync());
-        Assert.Equal("stage me", await (await DavAsync("GET", "/webdav/Personal/Inbox/staged.txt")).Content.ReadAsStringAsync());
-        Assert.Equal(HttpStatusCode.NoContent, (await DavAsync("DELETE", "/webdav/Personal/Inbox/staged.txt")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await DavAsync("GET", "/webdav/Personal/Inbox/staged.txt")).StatusCode);
+        // Intray: PUT stages a raw object (no document), PROPFIND lists it, GET returns it, DELETE removes it.
+        Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", "/webdav/Personal/Intray/staged.txt", Encoding.UTF8.GetBytes("stage me"))).StatusCode);
+        Assert.Contains("staged.txt", await (await DavAsync("PROPFIND", "/webdav/Personal/Intray", headers: [("Depth", "1")])).Content.ReadAsStringAsync());
+        Assert.Equal("stage me", await (await DavAsync("GET", "/webdav/Personal/Intray/staged.txt")).Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.NoContent, (await DavAsync("DELETE", "/webdav/Personal/Intray/staged.txt")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await DavAsync("GET", "/webdav/Personal/Intray/staged.txt")).StatusCode);
 
         // Check-out: create a document, check it out via the API, then browse/edit it in the WebDAV Check-out folder.
         var docId = (await TestJson.Post(owner, $"/api/documents/{repoId}/children", new { name = "codoc" })).GetProperty("id").GetGuid();

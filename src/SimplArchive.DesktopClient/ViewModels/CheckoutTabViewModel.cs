@@ -33,7 +33,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     //
     // The tab used to be a bare table: to see what you had actually edited you left it, found the document in
     // Repositories, and looked at the ARCHIVED version — the one thing that is definitely not your edit. It now
-    // has the Inbox tab's shape, a list beside index data over a preview, because they are the same kind of
+    // has the Intray tab's shape, a list beside index data over a preview, because they are the same kind of
     // place. The state lives here rather than on MainWindowViewModel, which is the largest entry on the
     // 1000-line debt list and where this would otherwise have added a dozen more properties.
 
@@ -104,7 +104,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedCanSortPages))]
-    private InboxApi.PagesInfo? _pages;
+    private IntrayApi.PagesInfo? _pages;
 
     public bool SelectedCanSortPages => Selection.Count == 1 && Pages is { CanSort: true };
 
@@ -147,7 +147,7 @@ public sealed partial class CheckoutTabViewModel : ObservableObject
         {
             try
             {
-                Pages = await _api.Inbox.GetAsync(pagesHref);
+                Pages = await _api.Intray.GetAsync(pagesHref);
             }
             catch (Exception)
             {

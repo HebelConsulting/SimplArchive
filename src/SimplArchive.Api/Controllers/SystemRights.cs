@@ -34,8 +34,8 @@ public class SystemRights
 
     public bool CanImport { get; set; }
 
-    // Manage other users' inboxes (ADR 0532): see + move any user's inbox items tenant-wide.
-    public bool CanManageInboxes { get; set; }
+    // Manage other users' intrayes (ADR 0532): see + move any user's intray items tenant-wide.
+    public bool CanManageIntrayes { get; set; }
 
     // Share a document outside the tenant via an expiring link (ADR 0546). Its own right rather than part of
     // reading: handing a document to someone with no account is a different act from opening it, and the people
@@ -87,7 +87,7 @@ public static class SystemRightsPolicy
             && IsGrantAllowed(caller.CanViewAuditLog, current.CanViewAuditLog, proposed.CanViewAuditLog)
             && IsGrantAllowed(caller.CanExport, current.CanExport, proposed.CanExport)
             && IsGrantAllowed(caller.CanImport, current.CanImport, proposed.CanImport)
-            && IsGrantAllowed(caller.CanManageInboxes, current.CanManageInboxes, proposed.CanManageInboxes)
+            && IsGrantAllowed(caller.CanManageIntrayes, current.CanManageIntrayes, proposed.CanManageIntrayes)
             && IsGrantAllowed(caller.CanCreateExternalLink, current.CanCreateExternalLink, proposed.CanCreateExternalLink);
     }
 

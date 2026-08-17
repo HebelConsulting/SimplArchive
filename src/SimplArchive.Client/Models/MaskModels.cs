@@ -5,7 +5,7 @@ namespace SimplArchive.Client.Models;
 /// <summary>A mask the caller may assign, as offered by the mask picker.</summary>
 /// <remarks>
 /// <para>
-/// Shared because two surfaces edit index data against a mask: the Repositories index-data pane, and the Inbox
+/// Shared because two surfaces edit index data against a mask: the Repositories index-data pane, and the Intray
 /// staging form that fills a draft before a file is filed. One shape read two ways is what drifts (ADR 0558).
 /// </para>
 /// <para>

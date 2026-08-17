@@ -36,4 +36,8 @@ regexes = [
   # The E2E/desktop tests' throwaway webhook signing secret (AuditWebhookTestDeliveryTests /
   # DesktopTenantSettingsTests) — it signs test deliveries to a loopback listener and nothing else.
   '''s3cr3t-signing-key''',
+  # IntrayOcrLanguagesTests' throwaway user password (a Testcontainers-only login). The pre-#561 spelling
+  # (inboxocr1234) never tripped the generic-api-key heuristics; the Intray rename's spelling does, and the
+  # old value lives on in the branch history either way — so the fixture is allowlisted by value, surgically.
+  '''intrayocr1234''',
 ]

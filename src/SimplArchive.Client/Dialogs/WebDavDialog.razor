@@ -12,7 +12,7 @@
                 @Strings.Get("WebDavInfo")
             </MudText>
 
-            @* The single "SimplArchive" mount URL lists the whole tree (Personal, with Inbox/Check-out, + the
+            @* The single "SimplArchive" mount URL lists the whole tree (Personal, with Intray/Check-out, + the
                shared repositories) — one resource, ADR 0509. *@
             <MudTextField T="string" Label="@Strings.Get("WebDavMountUrl")" Value="@_url" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
                           Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy" OnAdornmentClick="() => CopyAsync(_url)" />

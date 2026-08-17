@@ -34,10 +34,10 @@ public class DesktopEmptyFolderIconTests
     [InlineData(false, null, null, false, true)]
     // Holds something (a subfolder or a document) — the normal gold glyph.
     [InlineData(true, null, null, false, false)]
-    // The pseudo-nodes are never "empty": a synthetic admin branch and an Inbox / Check-out launcher aren't
+    // The pseudo-nodes are never "empty": a synthetic admin branch and an Intray / Check-out launcher aren't
     // folders at all, so the flag must not reach them even though they carry no children.
     [InlineData(false, "mdi-shield-account", null, false, false)]
-    [InlineData(false, null, "inbox", false, false)]
+    [InlineData(false, null, "intray", false, false)]
     // An admin-browsed OTHER user's personal repository is a normal folder — it has no launchers, so an empty one
     // reads as empty. (The caller's OWN Personal root never gets here: it is constructed with the default
     // hasChildren: true precisely because it always holds the launchers.)
@@ -65,7 +65,7 @@ public class DesktopEmptyFolderIconTests
     // An empty folder: the same gold, faded (App.axaml sets the alpha per theme).
     [InlineData(false, null, null, false, "WbFolderEmpty")]
     // Not containers at all.
-    [InlineData(false, null, "inbox", false, "WbMuted")]
+    [InlineData(false, null, "intray", false, "WbMuted")]
     [InlineData(false, null, "checkout", false, "WbMuted")]
     [InlineData(false, "mdi-shield-account", null, false, "WbMuted")]
     public void Gold_marks_a_container_and_nothing_else(bool hasChildren, string? syntheticIcon, string? personalKind, bool isPersonal, string expectedKey)

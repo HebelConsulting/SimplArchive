@@ -98,7 +98,7 @@ and *dark* appearance at any time.
 
 *The workbench.* After signing in you land on the *Repositories* workbench, laid out as: the *tree* of
 repositories and folders, the *contents* list of the selected folder, the *detail* pane (index data) over the
-*preview*#idx("Preview"), and — along the bottom — the *tab bar* that switches between Repositories, Inbox, Search, Tasks and the
+*preview*#idx("Preview"), and — along the bottom — the *tab bar* that switches between Repositories, Intray, Search, Tasks and the
 rest.
 
 #pair("screenshots/web-repositories.png", "screenshots/desktop-workbench.png",
@@ -112,10 +112,10 @@ Selecting a document shows its *index data* in the detail pane and renders a *pr
 converted Office/e-mail/Markdown documents alike. Full-text search hits are highlighted directly on the preview#idx("Hit highlighting"),
 and you can click any word to copy it#idx("Click-to-copy") — *shift-click* appends instead of replacing, so a
 few clicks collect a phrase (an invoice number, then its date) without touching the keyboard. That is the fast
-way to fill index fields on the *Inbox* tab: click the values in the scan's preview, paste them into the field.
+way to fill index fields on the *Intray* tab: click the values in the scan's preview, paste them into the field.
 In the desktop client you can also *open* the document in its native
 application#idx("Open a document") — from the row's context menu, the ribbon, a double-click, or the keyboard
-shortcut *⌘O* (*Ctrl+O* on Windows and Linux). The same shortcut opens the selected item on the *Inbox* tab.
+shortcut *⌘O* (*Ctrl+O* on Windows and Linux). The same shortcut opens the selected item on the *Intray* tab.
 
 The preview's toolbar carries the *zoom*#idx("Zoom") controls. A document opens fitted to the width of the pane;
 #emph[fit page] shrinks it until the whole page is visible at once — useful when the pane is wider than it is
@@ -145,10 +145,10 @@ belongs to something already filed, and how many you have. They all end in the s
   [*Drag onto empty space* in the contents list], [Same as above for the folder you are already in.],
   [*Drag onto a document*], [The file is a newer copy of that document — it is added as a *version*, not as a
    second document, and the history is kept.],
-  [*Drag onto Personal ▸ Inbox*#idx("Inbox")], [It is not ready to file, or you do not yet know where it belongs. It waits in
-   the Inbox until you classify and file it.],
-  [*Drag a document onto Personal ▸ Inbox*], [You want to start from an existing document as a *template*. A
-   copy lands in your Inbox carrying that document's document type and index data, so you edit what differs.
+  [*Drag onto Personal ▸ Intray*#idx("Intray")], [It is not ready to file, or you do not yet know where it belongs. It waits in
+   the Intray until you classify and file it.],
+  [*Drag a document onto Personal ▸ Intray*], [You want to start from an existing document as a *template*. A
+   copy lands in your Intray carrying that document's document type and index data, so you edit what differs.
    Nothing is created in the archive until you file it.],
   [*Drag onto Personal ▸ Check-out*#idx("Check-out")], [You checked a document out, edited it on your computer, and are bringing
    it back. The file must still carry the document's name — that is what says which document it belongs to.],
@@ -159,18 +159,18 @@ belongs to something already filed, and how many you have. They all end in the s
 )
 
 #shot("screenshots/web-personal-launchers.png",
-  [The *Personal* space expanded: *Inbox* and *Check-out* sit above your own folders. Drop files on *Inbox* to
-   stage them, or drop an edited working copy on *Check-out* to bring it back — and drag a document onto *Inbox*
+  [The *Personal* space expanded: *Intray* and *Check-out* sit above your own folders. Drop files on *Intray* to
+   stage them, or drop an edited working copy on *Check-out* to bring it back — and drag a document onto *Intray*
    to start new work from it as a template.])
 
 #note[
-  *Two of these do not create a document.* A drop onto the *Inbox* stages an item — it becomes a document only
+  *Two of these do not create a document.* A drop onto the *Intray* stages an item — it becomes a document only
   when you file it. A drop onto *Check-out* replaces your working copy — the document gets a new version only
   when you check it in. Everything else files immediately.
 ]
 
 *Uploading.* Drag a file straight onto a folder (the bytes go directly to object storage — the server never
-proxies them). *The Inbox* is a staging area: drop scans or files there, then classify each one (name, document
+proxies them). *The Intray* is a staging area: drop scans or files there, then classify each one (name, document
 type, index data) and *file* it into the archive.
 
 *When the name is already taken.*#idx("Name conflict") A folder cannot hold two things of the same name, so filing
@@ -207,13 +207,13 @@ list actually has, and no date can.
   [The *Versions* dialog: every version of the document with who saved it, when, and — the part that makes the
    list worth reading — the comment describing what changed.])
 
-#pair("screenshots/web-inbox.png", "screenshots/desktop-inbox.png",
-  [The Inbox: staged items waiting to be classified and filed, in the web (left) and desktop (right) clients.])
+#pair("screenshots/web-intray.png", "screenshots/desktop-intray.png",
+  [The Intray: staged items waiting to be classified and filed, in the web (left) and desktop (right) clients.])
 
 == Tidying a scan before filing
 
 A scan rarely arrives filing-ready: a batch holds several documents, a page went through the feeder sideways, a
-blank back rode along. The Inbox is where all of that is put right — *before* filing, because a staged item can
+blank back rode along. The Intray is where all of that is put right — *before* filing, because a staged item can
 be reshaped freely, while a filed document's pages are part of the record. Every operation here works on `.pdf`
 and multi-page `.tif` files; anything else simply does not offer them.
 
@@ -245,13 +245,13 @@ searchable text is untouched. A `.tif` page has no such notion and is re-encoded
 straightening makes.
 
 *Separator sheets.* For a stack of paper documents, print the *separator sheet* (the printer button in the
-Inbox toolbar), lay one between each document, and feed the whole pile through the scanner in one go. *Cut at
+Intray toolbar), lay one between each document, and feed the whole pile through the scanner in one go. *Cut at
 separator sheets* then produces one item per document and discards the sheets themselves. Sample files to try
 this with — a batch as the scanner would produce it, and the sheet — are served by your own installation under
 `/download/samples/`.
 
-*The automatic toggles.* Three sticky switches in the Inbox toolbar act on every *arriving* upload — including
-files saved into the Inbox folder of the mounted network drive:
+*The automatic toggles.* Three sticky switches in the Intray toolbar act on every *arriving* upload — including
+files saved into the Intray folder of the mounted network drive:
 
 #table(
   columns: (auto, 1fr),
@@ -265,7 +265,7 @@ files saved into the Inbox folder of the mounted network drive:
    alone: straightening re-renders the pages, and doing that would replace its real text with a recognised
    approximation.],
   [*Cut at separator sheets*], [Applies the separator cut to every arriving batch, so a scanner that feeds
-   straight into the Inbox needs no manual step at all.],
+   straight into the Intray needs no manual step at all.],
 )
 
 #note[
@@ -276,7 +276,7 @@ files saved into the Inbox folder of the mounted network drive:
 *Already filed?* *Rotate/Sort* also exists on the *Check-out* tab#idx("Rotate/Sort"). It edits the
 *working copy* of a document you have checked out — the archived version stays exactly as it was, and your
 rearrangement becomes the new version only when you press *Check in* (or is thrown away by *Discard*, like
-any other working-copy edit). Split and join stay in the Inbox: they turn one item into several documents,
+any other working-copy edit). Split and join stay in the Intray: they turn one item into several documents,
 which is filing work.
 
 #shot("screenshots/web-version-compare.png",
@@ -316,7 +316,7 @@ folder inside the drive rather than the top of the archive:
   [*Where you press it*], [*What opens*],
   [*Repositories* ribbon], [The folder selected in the tree — the drive mirrors the tree exactly, so "where I am"
    and "which folder on the drive" are the same place. With nothing selected, the whole archive opens.],
-  [*Inbox* tab, lower left], [Your *Inbox* folder.],
+  [*Intray* tab, lower left], [Your *Intray* folder.],
   [*Check-out* tab, lower left], [Your *Check-out* folder, where working copies live.],
 )
 

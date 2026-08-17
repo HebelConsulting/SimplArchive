@@ -17,7 +17,7 @@ public class ChatMessageMention : ITenantScoped
 
     public Guid ChatMessageId { get; set; }
 
-    // Who was addressed. Users only — a ServiceAccount has no in-app inbox to notify, the same reason
+    // Who was addressed. Users only — a ServiceAccount has no in-app intray to notify, the same reason
     // DocumentSubscription is per-User.
     public Guid UserId { get; set; }
 

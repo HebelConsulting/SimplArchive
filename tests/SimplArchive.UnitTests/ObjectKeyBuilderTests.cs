@@ -93,12 +93,12 @@ public class ObjectKeyBuilderTests
         Assert.DoesNotContain('.', folderSegment);
     }
 
-    // The same helper is collision-safe for the name-based inbox staging keys (no GUID folder): it derives
-    // alongside the item, keyed by the item's own name, so two inbox items don't share a sidecar.
+    // The same helper is collision-safe for the name-based intray staging keys (no GUID folder): it derives
+    // alongside the item, keyed by the item's own name, so two intray items don't share a sidecar.
     [Fact]
-    public void Derived_key_keeps_inbox_name_based_keys_distinct()
+    public void Derived_key_keeps_intray_name_based_keys_distinct()
     {
-        Assert.Equal("inbox/scan.preview.png", ObjectKeyBuilder.DerivedKey("inbox/scan.tif", ".preview.png"));
-        Assert.Equal("inbox/report.preview.png", ObjectKeyBuilder.DerivedKey("inbox/report.pdf", ".preview.png"));
+        Assert.Equal("intray/scan.preview.png", ObjectKeyBuilder.DerivedKey("intray/scan.tif", ".preview.png"));
+        Assert.Equal("intray/report.preview.png", ObjectKeyBuilder.DerivedKey("intray/report.pdf", ".preview.png"));
     }
 }

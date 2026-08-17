@@ -244,12 +244,12 @@ public static class OsFileManager
         var (fileName, arguments) = BuildOpenLocalFolderCommand(path, Current);
 
         // `open` reports a missing path with a non-zero exit, which is worth surfacing: the deep-link folder can
-        // legitimately not exist yet (an empty Inbox creates no directory), and silently doing nothing is the
+        // legitimately not exist yet (an empty Intray creates no directory), and silently doing nothing is the
         // failure mode this whole button exists to remove.
         return RunAsync(fileName, arguments, macOsChecksExit: Current == Platform.MacOs);
     }
 
-    // https://host:443/webdav/Inbox → davs://host:443/webdav/Inbox ; http → dav.
+    // https://host:443/webdav/Intray → davs://host:443/webdav/Intray ; http → dav.
 
     // ---- Already mounted? and mapping a persistent drive letter (issue #461) ---------------------------
 
@@ -434,7 +434,7 @@ public static class OsFileManager
     private static string ToDavScheme(Uri uri) =>
         (uri.Scheme == "https" ? "davs://" : "dav://") + uri.Authority + uri.AbsolutePath;
 
-    // https://host:443/webdav/Inbox → \\host@SSL@443\DavWWWRoot\webdav\Inbox ; http → \\host@80\...
+    // https://host:443/webdav/Intray → \\host@SSL@443\DavWWWRoot\webdav\Intray ; http → \\host@80\...
     private static string ToWindowsUnc(Uri uri)
     {
         var port = uri.IsDefaultPort ? (uri.Scheme == "https" ? 443 : 80) : uri.Port;

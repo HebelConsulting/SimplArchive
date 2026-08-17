@@ -1,4 +1,4 @@
-@* Join several staged inbox items into one (#487, ADR 0575) — the web half of the desktop's JoinItemsDialog
+@* Join several staged intray items into one (#487, ADR 0575) — the web half of the desktop's JoinItemsDialog
    (ADR 0511). Returns the names in the chosen order plus an optional name for the result.
 
    The order is the point of the dialog: a join with no stated order is a coin flip, and "which half of the
@@ -8,7 +8,7 @@
     <DialogContent>
         <div style="min-width: 420px;">
             <MudText Typo="Typo.body2" Class="mb-2 mud-text-secondary">
-                @string.Format(Strings.Get("InboxJoinPrompt"), _names.Count)
+                @string.Format(Strings.Get("IntrayJoinPrompt"), _names.Count)
             </MudText>
 
             <MudList T="string" Dense="true" Class="mb-2" style="max-height:40vh; overflow-y:auto;">
@@ -22,16 +22,16 @@
                 }
             </MudList>
 
-            <MudTextField T="string" @bind-Value="_name" Label="@Strings.Get("InboxJoinName")"
+            <MudTextField T="string" @bind-Value="_name" Label="@Strings.Get("IntrayJoinName")"
                           Margin="Margin.Dense" Variant="Variant.Outlined" />
         </div>
     </DialogContent>
     <DialogActions>
-        <MudButton StartIcon="@Icons.Material.Filled.ArrowUpward" Disabled="@(_selected is null)" OnClick="MoveUp">@Strings.Get("InboxPageEarlier")</MudButton>
-        <MudButton StartIcon="@Icons.Material.Filled.ArrowDownward" Disabled="@(_selected is null)" OnClick="MoveDown">@Strings.Get("InboxPageLater")</MudButton>
+        <MudButton StartIcon="@Icons.Material.Filled.ArrowUpward" Disabled="@(_selected is null)" OnClick="MoveUp">@Strings.Get("IntrayPageEarlier")</MudButton>
+        <MudButton StartIcon="@Icons.Material.Filled.ArrowDownward" Disabled="@(_selected is null)" OnClick="MoveDown">@Strings.Get("IntrayPageLater")</MudButton>
         <MudSpacer />
         <MudButton OnClick="@(() => Dialog.Cancel())">@Strings.Get("Cancel")</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_names.Count < 2)" OnClick="Join">@Strings.Get("InboxJoin")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_names.Count < 2)" OnClick="Join">@Strings.Get("IntrayJoin")</MudButton>
     </DialogActions>
 </MudDialog>
 

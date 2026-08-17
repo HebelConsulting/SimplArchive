@@ -6,15 +6,15 @@ namespace SimplArchive.Api.WebDav;
 // no I/O, no state — shared by the listing, PUT and MOVE paths.
 internal static class WebDavClutter
 {
-    // Cached preview/text-layout artifacts + staged mask sidecars never appear as inbox items (ADR "Avoid inbox
+    // Cached preview/text-layout artifacts + staged mask sidecars never appear as intray items (ADR "Avoid inbox
     // preview litter").
-    internal static bool IsInboxLitter(string name) =>
+    internal static bool IsIntrayLitter(string name) =>
         name.Contains(".preview.", StringComparison.OrdinalIgnoreCase)
         || name.EndsWith(".textlayout.json", StringComparison.OrdinalIgnoreCase)
         || name.EndsWith(".mask.json", StringComparison.OrdinalIgnoreCase);
 
     // OS metadata clutter written by Finder / Explorer when browsing a mounted WebDAV volume — never wanted
-    // ANYWHERE (repo, Inbox, or Check-out): macOS AppleDouble (._*), .DS_Store, the Spotlight/Trash/fsevents
+    // ANYWHERE (repo, Intray, or Check-out): macOS AppleDouble (._*), .DS_Store, the Spotlight/Trash/fsevents
     // dot-dirs, and Windows Thumbs.db / desktop.ini. Silently accepted-and-discarded (a copy in Finder/Explorer
     // succeeds; the junk is never stored). ADR "WebDAV clutter filter".
     internal static readonly HashSet<string> OsClutterNames = new(StringComparer.OrdinalIgnoreCase)
@@ -31,7 +31,7 @@ internal static class WebDavClutter
         || name.StartsWith(".TemporaryItems", StringComparison.OrdinalIgnoreCase)
         || name.StartsWith(".DocumentRevisions-V100", StringComparison.OrdinalIgnoreCase);
 
-    // Transient / partial-download / editor-temp files. Legitimate in the Inbox / Check-out staging areas (e.g. an
+    // Transient / partial-download / editor-temp files. Legitimate in the Intray / Check-out staging areas (e.g. an
     // in-progress download), but should NOT land in the permanent repository. ADR "WebDAV clutter filter".
     internal static readonly HashSet<string> TransientExtensions = new(StringComparer.OrdinalIgnoreCase)
     {

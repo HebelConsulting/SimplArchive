@@ -4,7 +4,7 @@ namespace SimplArchive.Client.Models;
 /// A workflow task assigned to the caller — the version awaiting their review, and when it fell due.
 /// </summary>
 /// <remarks>
-/// Shared because two tabs read it: the Tasks inbox lists them, and the My work dashboard counts and
+/// Shared because two tabs read it: the Tasks intray lists them, and the My work dashboard counts and
 /// summarises them. One shape read two ways is what drifts (ADR 0558).
 /// </remarks>
 public record TaskItem

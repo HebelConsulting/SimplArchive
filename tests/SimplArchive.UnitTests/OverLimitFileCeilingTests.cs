@@ -40,7 +40,7 @@ public class OverLimitFileCeilingTests
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).
         // MainWindow.axaml is pure markup; whether the 1000-line rule covers markup-only .axaml is undecided,
         // but a ceiling costs nothing while that question waits.
-        // 2,464 -> 2,427 (ADR 0577: the Inbox ribbon became its own control) -> 2,330 (ADR 0578: so did the
+        // 2,464 -> 2,427 (ADR 0577: the Intray ribbon became its own control) -> 2,330 (ADR 0578: so did the
         // top bar). Both had gained a responsibility per feature while living here; chrome and a ribbon are
         // things, not regions.
         ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 2_032,

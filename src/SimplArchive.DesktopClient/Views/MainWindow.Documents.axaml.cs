@@ -9,7 +9,7 @@ using SimplArchive.Localization;
 namespace SimplArchive.DesktopClient.Views;
 
 // The document/session handlers of the workbench window (issue #466 split the code-behind by feature family):
-// legal holds, versions + comparisons, manage access, save-as, references, the inbox row actions, check-out,
+// legal holds, versions + comparisons, manage access, save-as, references, the intray row actions, check-out,
 // recycle bin, and the WebDAV mount buttons. Same class — view-glue whose logic lives in the view models.
 public partial class MainWindow
 {
@@ -96,13 +96,13 @@ public partial class MainWindow
 
     // Compare a checked-out document's working copy against its current version (ADR 0517) — inline unified diff +
     // an optional Beyond Compare launch. Shown only on modified rows (the row's Tag carries the CheckoutRowViewModel).
-    // The Check-out twin of InboxItemFrom (#521): a context menu hands over its own row as the Tag, a ribbon
+    // The Check-out twin of IntrayItemFrom (#521): a context menu hands over its own row as the Tag, a ribbon
     // button hands over nothing and means the SELECTION. One expression, so the two surfaces cannot drift into
     // disagreeing about which document they act on — and neither consults the detail pane (ADR 0559).
     private static CheckoutRowViewModel? CheckoutRowFrom(object? sender, MainWindowViewModel vm) =>
         (sender as Control)?.Tag as CheckoutRowViewModel ?? vm.Checkout.SelectedRow;
 
-    // Rotate/Sort the WORKING COPY (ADR 0593): the inbox recipe against the check-out's pages resource — the
+    // Rotate/Sort the WORKING COPY (ADR 0593): the intray recipe against the check-out's pages resource — the
     // rels are re-read at click time so the dialog opens on what the resource says NOW, and one request writes
     // the whole arrangement into the stash. The archive changes only through a normal check-in.
     internal void OnCheckoutSortPages(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
@@ -110,12 +110,12 @@ public partial class MainWindow
         if (DataContext is not MainWindowViewModel vm || vm.Api is not { } api
             || CheckoutRowFrom(sender, vm) is not { } row || row.Item is not { } item
             || item.Href("pages") is not { } pagesHref
-            || await api.Inbox.GetAsync(pagesHref) is not { SortHref: { } sortHref } pages)
+            || await api.Intray.GetAsync(pagesHref) is not { SortHref: { } sortHref } pages)
         {
             return;
         }
 
-        var thumbnails = await InboxPageThumbnails.LoadForCheckoutAsync(item, pages.PageCount);
+        var thumbnails = await IntrayPageThumbnails.LoadForCheckoutAsync(item, pages.PageCount);
         var dialog = new SortPagesDialog(row.DisplayName, thumbnails);
         if (await dialog.ShowDialog<SortPagesDialog.Result?>(this) is not { } arrangement)
         {
@@ -124,8 +124,8 @@ public partial class MainWindow
 
         try
         {
-            await api.Inbox.SortAsync(sortHref, arrangement.Order, arrangement.Rotations.Count > 0 ? arrangement.Rotations : null);
-            vm.Status = string.Format(Strings.Get("StInboxSorted"), row.DisplayName);
+            await api.Intray.SortAsync(sortHref, arrangement.Order, arrangement.Rotations.Count > 0 ? arrangement.Rotations : null);
+            vm.Status = string.Format(Strings.Get("StIntraySorted"), row.DisplayName);
         }
         catch (ApiActionException ex)
         {
@@ -258,27 +258,27 @@ public partial class MainWindow
         }
     });
 
-    private void OnInboxItemDoubleTapped(object? sender, TappedEventArgs e) => Safe.Fire(async () =>
+    private void OnIntrayItemDoubleTapped(object? sender, TappedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm)
         {
-            await vm.OpenServerInboxItemCommand.ExecuteAsync(null);
+            await vm.OpenServerIntrayItemCommand.ExecuteAsync(null);
         }
     });
 
-    internal void OnInboxOpen(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnIntrayOpen(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
-        if (DataContext is MainWindowViewModel vm && InboxItemFrom(sender) is { } item)
+        if (DataContext is MainWindowViewModel vm && IntrayItemFrom(sender) is { } item)
         {
-            vm.SelectedServerInboxItem = item;
-            await vm.OpenServerInboxItemCommand.ExecuteAsync(null);
+            vm.SelectedServerIntrayItem = item;
+            await vm.OpenServerIntrayItemCommand.ExecuteAsync(null);
         }
     });
 
-    // File a server-inbox item into a folder chosen from the picker.
-    internal void OnInboxFile(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    // File a server-intray item into a folder chosen from the picker.
+    internal void OnIntrayFile(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
-        if (DataContext is not MainWindowViewModel vm || InboxItemFrom(sender) is not { } item ||
+        if (DataContext is not MainWindowViewModel vm || IntrayItemFrom(sender) is not { } item ||
             vm.CreateFolderPickerViewModel() is not { } picker)
         {
             return;
@@ -293,24 +293,24 @@ public partial class MainWindow
 
         if (result.Mode == FilingMode.AsVersion)
         {
-            await vm.FileServerInboxItemAsVersionAsync(item, result.TargetId, result.Comment);
+            await vm.FileServerIntrayItemAsVersionAsync(item, result.TargetId, result.Comment);
         }
         else
         {
-            await vm.FileServerInboxItemAsync(item, result.TargetId, result.Comment);
+            await vm.FileServerIntrayItemAsync(item, result.TargetId, result.Comment);
         }
     });
 
-    // "File multiple items": bulk-file the selected server inbox items into one folder (ADR "Bulk-file multiple
+    // "File multiple items": bulk-file the selected server intray items into one folder (ADR "Bulk-file multiple
     // inbox items").
-    internal void OnInboxFileMultiple(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnIntrayFileMultiple(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
             return;
         }
 
-        var items = ServerInboxList.SelectedItems?.OfType<InboxItemViewModel>().ToList() ?? [];
+        var items = ServerIntrayList.SelectedItems?.OfType<IntrayItemViewModel>().ToList() ?? [];
         if (items.Count == 0 || vm.CreateBulkFolderPickerViewModel() is not { } picker)
         {
             return;
@@ -442,7 +442,7 @@ public partial class MainWindow
             return;
         }
 
-        // The Repositories tab's folder is its context, exactly as Personal/Inbox is the Inbox tab's — the
+        // The Repositories tab's folder is its context, exactly as Personal/Intray is the Intray tab's — the
         // mounted volume IS the tree-pane (ADR 0509). With nothing selected the path is empty and the whole
         // archive opens: the button still does what it says, rather than nothing.
         await OpenWebDavAtAsync(vm, api, vm.WebDavFolderPath());
@@ -456,14 +456,14 @@ public partial class MainWindow
         }
     });
 
-    // The Inbox / Check-out tabs' single WebDAV button (ADR "One WebDAV button per tab, deep-linked"). It does
+    // The Intray / Check-out tabs' single WebDAV button (ADR "One WebDAV button per tab, deep-linked"). It does
     // the same next-useful-thing the ribbon button does — set up credentials, else mount, else open what is
     // already mounted — with one difference that is the whole point of it being on a tab: when the volume is
     // ALREADY mounted it opens that tab's own folder directly, not the mount root. The user pressed a button on
-    // the Inbox tab; landing them in the archive root and making them navigate is answering a question they did
+    // the Intray tab; landing them in the archive root and making them navigate is answering a question they did
     // not ask.
     //
-    // The button's Tag names the folder within the single mount ("Personal/Inbox", "Personal/Check-out").
+    // The button's Tag names the folder within the single mount ("Personal/Intray", "Personal/Check-out").
     internal void OnWebDavTabButton(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel { Api: { } api } vm)

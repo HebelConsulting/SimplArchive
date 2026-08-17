@@ -17,7 +17,7 @@ namespace SimplArchive.Client.Components.Panes;
 /// together or not at all.
 /// </para>
 /// <para>
-/// A pane with no annotations — the inbox, the recycle bin — passes <c>null</c> and every gesture is a no-op,
+/// A pane with no annotations — the intray, the recycle bin — passes <c>null</c> and every gesture is a no-op,
 /// which is the correct behaviour rather than a missing feature: there is nothing to annotate on a staged file
 /// or a deleted document.
 /// </para>

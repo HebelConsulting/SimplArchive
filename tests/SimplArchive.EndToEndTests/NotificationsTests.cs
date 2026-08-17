@@ -5,7 +5,7 @@ namespace SimplArchive.EndToEndTests;
 
 // End-to-end over the real API + Postgres, exercising in-app notifications (ADR "Notifications (in-app, first
 // slice)"): a ServiceAccount owner grants a User access (→ AccessGranted) and submits a version assigning that
-// User as reviewer (→ ReviewAssigned); the reviewer reads their own inbox, sees both, and marks them read.
+// User as reviewer (→ ReviewAssigned); the reviewer reads their own intray, sees both, and marks them read.
 [Collection(E2ECollection.Name)]
 public class NotificationsTests
 {
@@ -40,11 +40,11 @@ public class NotificationsTests
         // Submitting for review, assigning the reviewer → a ReviewAssigned notification for them.
         await TestJson.Post(owner, $"/api/documents/{docId}/versions/{versionId}/workflow/submit", new { reviewerId });
 
-        // The reviewer reads their own inbox and sees both (unread).
+        // The reviewer reads their own intray and sees both (unread).
         using var reviewer = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, password));
-        var inbox = await TestJson.Get(reviewer, "/api/notifications");
-        Assert.Equal(2, inbox.GetProperty("unreadCount").GetInt32());
-        var notifications = inbox.GetProperty("notifications").EnumerateArray().ToList();
+        var intray = await TestJson.Get(reviewer, "/api/notifications");
+        Assert.Equal(2, intray.GetProperty("unreadCount").GetInt32());
+        var notifications = intray.GetProperty("notifications").EnumerateArray().ToList();
         Assert.Contains(notifications, n => n.GetProperty("type").GetString() == "AccessGranted");
         var review = notifications.Single(n => n.GetProperty("type").GetString() == "ReviewAssigned");
         Assert.Equal(docId, review.GetProperty("documentId").GetGuid());
@@ -58,7 +58,7 @@ public class NotificationsTests
         (await reviewer.PostAsync("/api/notifications/read-all", null)).EnsureSuccessStatusCode();
         Assert.Equal(0, (await TestJson.Get(reviewer, "/api/notifications/unread-count")).GetProperty("unreadCount").GetInt32());
 
-        // The owner (a ServiceAccount) has no inbox at all — the notifications endpoint is User-only.
+        // The owner (a ServiceAccount) has no intray at all — the notifications endpoint is User-only.
         Assert.Equal(System.Net.HttpStatusCode.Forbidden, (await owner.GetAsync("/api/notifications")).StatusCode);
     }
 
@@ -93,11 +93,11 @@ public class NotificationsTests
 
         // The three comments collapsed into a SINGLE ChatMessagePosted notification carrying eventCount 3 (the
         // author also has one AccessGranted notification from the earlier grant — a discrete, non-coalesced type).
-        var inbox = await TestJson.Get(author, "/api/notifications");
-        var notifications = inbox.GetProperty("notifications").EnumerateArray().ToList();
+        var intray = await TestJson.Get(author, "/api/notifications");
+        var notifications = intray.GetProperty("notifications").EnumerateArray().ToList();
         var comment = notifications.Single(n => n.GetProperty("type").GetString() == "ChatMessagePosted");
         Assert.Equal(3, comment.GetProperty("eventCount").GetInt32());
         Assert.Single(notifications, n => n.GetProperty("type").GetString() == "AccessGranted");
-        Assert.Equal(2, inbox.GetProperty("unreadCount").GetInt32()); // the coalesced comment + the access grant
+        Assert.Equal(2, intray.GetProperty("unreadCount").GetInt32()); // the coalesced comment + the access grant
     }
 }

@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Http;
 namespace SimplArchive.Api.Errors.Exceptions.Documents;
 
 // The referenced document doesn't exist. Two call sites share the DOCUMENT_NOT_FOUND wire code but with different
-// intent/status: a legal-hold add treats it as a genuine 404, while filing an inbox item onto a target document
+// intent/status: a legal-hold add treats it as a genuine 404, while filing an intray item onto a target document
 // treats a bad target id as a 400. The factories preserve each.
 public sealed class DocumentNotFoundException : DocumentException
 {

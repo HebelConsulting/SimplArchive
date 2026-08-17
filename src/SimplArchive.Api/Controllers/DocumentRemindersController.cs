@@ -14,7 +14,7 @@ namespace SimplArchive.Api.Controllers;
 /// Document reminders — see ADR "Document reminders". A user sets a reminder on a
 /// document for a future date (optionally targeting a colleague, optionally recurring); a background sweep
 /// notifies the target on the due date. Reading/creating requires <c>CanSee</c> on the document; the target
-/// (if not the caller) must be an active user who can also see it. User-only (a ServiceAccount has no inbox).
+/// (if not the caller) must be an active user who can also see it. User-only (a ServiceAccount has no intray).
 /// </summary>
 [ApiController]
 [ApiVersion("1.0")]

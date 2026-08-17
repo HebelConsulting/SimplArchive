@@ -63,7 +63,7 @@ public static class AuditActions
     public const string AnnotationRemoved = "Annotation.Removed";
     // Permanent removal of a recycle-bin document (ADR "Manual hard-delete / purge").
     public const string DocumentPurged = "Document.Purged";
-    // Filed from the inbox — as a new document in a folder or as a new version of an existing one (ADR "Audit
+    // Filed from the intray — as a new document in a folder or as a new version of an existing one (ADR "Audit
     // tenant-settings, inbox filing + personal-repository creation").
     public const string DocumentFiled = "Document.Filed";
     // Import of an archive's root (ADR "Repository import").

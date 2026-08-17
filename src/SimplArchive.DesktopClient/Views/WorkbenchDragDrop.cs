@@ -16,7 +16,7 @@ namespace SimplArchive.DesktopClient.Views;
 #pragma warning disable CS0618 // DragEventArgs.Data / DataFormats.Files — the pre-DataTransfer drag API, as in the original code-behind
 
 // The workbench's drag-and-drop machinery (issue #466 moved it out of MainWindow's code-behind): OS-file drops
-// onto the list/tree/inbox, and the internal move/reference drag with its press-snapshot state (ADR "Desktop
+// onto the list/tree/intray, and the internal move/reference drag with its press-snapshot state (ADR "Desktop
 // drag-and-drop move and reference"; the selection snapshot exists because a multi-select ListBox collapses to
 // the pressed row before the drag threshold — see the memory that cost a session). A real collaborator rather
 // than a partial file: its six state fields and tunnel handlers are one lifecycle, coupled to the window only
@@ -26,14 +26,14 @@ internal sealed class WorkbenchDragDrop
     private readonly MainWindow _window;
     private readonly ListBox _contentsList;
     private readonly TreeView _folderTree;
-    private readonly ListBox _serverInboxList;
+    private readonly ListBox _serverIntrayList;
 
-    public WorkbenchDragDrop(MainWindow window, ListBox contentsList, TreeView folderTree, ListBox serverInboxList)
+    public WorkbenchDragDrop(MainWindow window, ListBox contentsList, TreeView folderTree, ListBox serverIntrayList)
     {
         _window = window;
         _contentsList = contentsList;
         _folderTree = folderTree;
-        _serverInboxList = serverInboxList;
+        _serverIntrayList = serverIntrayList;
     }
 
     // The handler wiring MainWindow's constructor used to do inline.
@@ -49,8 +49,8 @@ internal sealed class WorkbenchDragDrop
         _folderTree.AddHandler(InputElement.PointerPressedEvent, OnTreePointerPressed, RoutingStrategies.Tunnel);
         _folderTree.AddHandler(InputElement.PointerMovedEvent, OnTreePointerMoved, RoutingStrategies.Tunnel);
         _folderTree.AddHandler(InputElement.PointerReleasedEvent, OnTreePointerReleased, RoutingStrategies.Tunnel);
-        _serverInboxList.AddHandler(DragDrop.DragOverEvent, OnInboxDragOver);
-        _serverInboxList.AddHandler(DragDrop.DropEvent, OnInboxDrop);
+        _serverIntrayList.AddHandler(DragDrop.DragOverEvent, OnIntrayDragOver);
+        _serverIntrayList.AddHandler(DragDrop.DropEvent, OnIntrayDrop);
     }
 
     // Custom drag payload for an internal move/reference drag (distinct from an OS-file drop). See ADR
@@ -80,12 +80,12 @@ internal sealed class WorkbenchDragDrop
 
     private Point _treeDragStart;
 
-    private void OnInboxDragOver(object? sender, DragEventArgs e)
+    private void OnIntrayDragOver(object? sender, DragEventArgs e)
     {
         e.DragEffects = e.Data.Contains(DataFormats.Files) ? DragDropEffects.Copy : DragDropEffects.None;
     }
 
-    private void OnInboxDrop(object? sender, DragEventArgs e) => Safe.Fire(async () =>
+    private void OnIntrayDrop(object? sender, DragEventArgs e) => Safe.Fire(async () =>
     {
         if (_window.DataContext is not MainWindowViewModel vm)
         {
@@ -98,7 +98,7 @@ internal sealed class WorkbenchDragDrop
             return;
         }
 
-        await vm.UploadFilesToInboxAsync(await ReadStorageFilesAsync(storageFiles));
+        await vm.UploadFilesToIntrayAsync(await ReadStorageFilesAsync(storageFiles));
     });
 
     // Begin an internal move/reference drag once the pointer leaves the pressed row by a small threshold.
@@ -331,7 +331,7 @@ internal sealed class WorkbenchDragDrop
 
         var target = MainWindow.FindDataContext<NodeViewModel>(e.Source);
 
-        // Dropped onto a document row → the inbox-style filing dialog: file as a new version of it, or into its
+        // Dropped onto a document row → the intray-style filing dialog: file as a new version of it, or into its
         // folder, with an optional comment (ADR "List-pane drop filing").
         if (target is { IsFolder: false, IsArchiveEntry: false, IsArchiveBack: false }
             && vm.CreateDropFilingPickerViewModel(target, files.Count) is { } picker)
@@ -359,11 +359,11 @@ internal sealed class WorkbenchDragDrop
         {
             var node = MainWindow.FindDataContext<TreeNodeViewModel>(e.Source);
 
-            // Personal ▸ Inbox takes a document as a TEMPLATE (a copy, hence Copy); a real folder takes a move
+            // Personal ▸ Intray takes a document as a TEMPLATE (a copy, hence Copy); a real folder takes a move
             // or a reference; Check-out takes neither — a document already in the archive is not a working copy.
             e.DragEffects = node switch
             {
-                { PersonalKind: "inbox" } => DragDropEffects.Copy,
+                { PersonalKind: "intray" } => DragDropEffects.Copy,
                 { PersonalKind: "checkout" } => DragDropEffects.None,
                 _ => DragDropEffects.Copy | DragDropEffects.Move,
             };
@@ -388,14 +388,14 @@ internal sealed class WorkbenchDragDrop
             return;
         }
 
-        // An internal drag: onto Personal ▸ Inbox it copies the document in as a TEMPLATE, carrying its mask and
+        // An internal drag: onto Personal ▸ Intray it copies the document in as a TEMPLATE, carrying its mask and
         // index values, so new work can start from an existing document without creating one (#467). Onto a real
         // folder it moves or references, as before.
         if (_internalDrag is { } dragged)
         {
-            if (treeNode.PersonalKind == "inbox")
+            if (treeNode.PersonalKind == "intray")
             {
-                await vm.CopyDocumentsToInboxAsync(dragged.Select(d => d.Id).ToList());
+                await vm.CopyDocumentsToIntrayAsync(dragged.Select(d => d.Id).ToList());
                 return;
             }
 
@@ -418,9 +418,9 @@ internal sealed class WorkbenchDragDrop
         if (treeNode.IsLauncher)
         {
             var files = await ReadStorageFilesAsync(storageFiles);
-            if (treeNode.PersonalKind == "inbox")
+            if (treeNode.PersonalKind == "intray")
             {
-                await vm.UploadFilesToInboxAsync(files);
+                await vm.UploadFilesToIntrayAsync(files);
             }
             else
             {
@@ -473,7 +473,7 @@ internal sealed class WorkbenchDragDrop
                 break;
         }
     }
-    // Reading the bytes is shared with the inbox pane's own drop handler; a copy would be a second place to get
+    // Reading the bytes is shared with the intray pane's own drop handler; a copy would be a second place to get
     // stream disposal wrong.
     private static async Task<List<(string Name, byte[] Bytes)>> ReadStorageFilesAsync(IReadOnlyList<IStorageFile> storageFiles)
     {

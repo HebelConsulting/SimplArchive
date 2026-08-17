@@ -2,7 +2,7 @@ using SimplArchive.Infrastructure.Storage;
 
 namespace SimplArchive.IntegrationTests;
 
-// The page algebra behind the Inbox's split / join / reorder (issue #487), exercised on REAL bytes — a PDF
+// The page algebra behind the Intray's split / join / reorder (issue #487), exercised on REAL bytes — a PDF
 // built by PdfPig and a multi-page TIFF built by NetVips, the same two libraries the operations use.
 //
 // Round-trips rather than fixtures: a test that split a checked-in file and asserted "3 files" would pass with

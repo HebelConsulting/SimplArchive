@@ -5,7 +5,7 @@ using static Microsoft.Playwright.Assertions;
 namespace SimplArchive.UiEndToEndTests;
 
 // List-pane drop filing (ADR "List-pane drop filing"): dropping OS files onto a document row opens the
-// inbox-style filing dialog; choosing "file as a new version" adds a version to that document. Simulates the
+// intray-style filing dialog; choosing "file as a new version" adds a version to that document. Simulates the
 // drop with a synthetic DataTransfer carrying a File (Playwright's real DnD can't originate an OS file).
 [Collection(UiCollection.Name)]
 public class WebListPaneDropFilingTests

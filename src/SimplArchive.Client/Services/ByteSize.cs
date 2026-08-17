@@ -4,7 +4,7 @@ namespace SimplArchive.Client.Services;
 /// <remarks>
 /// One implementation, because there were two and they had already drifted: the workbench page carried a
 /// nullable, GB-aware <c>FormatSize</c> for document rows and a second <c>long</c> overload that stopped at MB,
-/// so a staged inbox file over a gigabyte rendered as "2048 MB". Nobody would ever have found that by reading
+/// so a staged intray file over a gigabyte rendered as "2048 MB". Nobody would ever have found that by reading
 /// either copy — it is only visible with both side by side, which is the whole argument for not making a third
 /// (CLAUDE.md, "the same work across several types is ONE implementation").
 /// </remarks>

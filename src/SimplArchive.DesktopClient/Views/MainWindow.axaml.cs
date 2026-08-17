@@ -23,8 +23,8 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         // Drag-and-drop — OS-file drops + the internal move/reference drag — lives in WorkbenchDragDrop
-        // (issue #466); it wires its own handlers onto the list, tree and inbox controls.
-        new WorkbenchDragDrop(this, ContentsList, FolderTree, ServerInboxList).Wire();
+        // (issue #466); it wires its own handlers onto the list, tree and intray controls.
+        new WorkbenchDragDrop(this, ContentsList, FolderTree, ServerIntrayList).Wire();
 
         // Ctrl/Cmd+P opens the server manager (ADR "Desktop server configuration"), Ctrl/Cmd+O opens the selected
         // document (#482) — a window-level tunnel handler so they fire regardless of focus.
@@ -39,7 +39,7 @@ public partial class MainWindow : Window
         // short-circuits a same-node re-selection). See MainWindowViewModel.ReselectTreeFolderAsync.
         FolderTree.AddHandler(Gestures.TappedEvent, OnTreeItemTapped);
 
-        // Provide the sticky-note dialog to the Repositories/Inbox preview (ADR "Document annotations"). Set on
+        // Provide the sticky-note dialog to the Repositories/Intray preview (ADR "Document annotations"). Set on
         // the main Preview only, so the Recycle-bin preview never offers note editing. Kept in code-behind since
         // it opens an Avalonia Window owned by this window, keeping the VM view-agnostic (mirrors StatusReporter).
         DataContextChanged += (_, _) =>
@@ -177,7 +177,7 @@ public partial class MainWindow : Window
 
 
 
-    // ---- Inbox (ADR "S3-backed inbox", phase 2) -------------------------------------------------------
+    // ---- Intray (ADR "S3-backed inbox", phase 2) -------------------------------------------------------
 
     // The one seam where the two surfaces differ (#521). A row's context menu carries the row as its Tag and
     // acts on THAT; a ribbon button carries none and acts on the current SELECTION. Both take their target
@@ -186,166 +186,166 @@ public partial class MainWindow : Window
     //
     // Every handler already went through this helper, so the ribbon's five buttons needed no new code path:
     // the distinction lives in one expression rather than being re-decided per action.
-    private InboxItemViewModel? InboxItemFrom(object? sender) =>
-        (sender as Control)?.Tag as InboxItemViewModel
-        ?? ServerInboxList.SelectedItem as InboxItemViewModel;
+    private IntrayItemViewModel? IntrayItemFrom(object? sender) =>
+        (sender as Control)?.Tag as IntrayItemViewModel
+        ?? ServerIntrayList.SelectedItem as IntrayItemViewModel;
 
 
 
 
 
-    // Track the server-inbox selection count so the "File multiple items" button shows only for 2+.
-    private void OnServerInboxSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    // Track the server-intray selection count so the "File multiple items" button shows only for 2+.
+    private void OnServerIntraySelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm)
         {
             return;
         }
 
-        var selected = ServerInboxList.SelectedItems?.Count ?? 0;
+        var selected = ServerIntrayList.SelectedItems?.Count ?? 0;
         vm.CanFileMultiple = selected >= 2;
-        vm.InboxActions.SelectedCount = selected;
+        vm.IntrayActions.SelectedCount = selected;
 
         // Ask what THIS row's pages can do. Fire-and-forget through Safe.Fire because a selection change must
         // not wait on a request; the buttons are cleared first, so during the flight they say "not available",
         // which is exactly true (ADR 0559).
-        Safe.Fire(async () => await vm.InboxActions.LoadPagesAsync(
-            selected == 1 ? ServerInboxList.SelectedItem as InboxItemViewModel : null));
+        Safe.Fire(async () => await vm.IntrayActions.LoadPagesAsync(
+            selected == 1 ? ServerIntrayList.SelectedItem as IntrayItemViewModel : null));
     }
 
     // ---- Page operations (#487, ADR 0575) -------------------------------------------------------------
     // Each is addressed from the href the server advertised for the SELECTED row, never composed (ADR 0543),
     // and each re-reads that address at the moment of acting rather than trusting pane state (ADR 0559).
 
-    internal void OnInboxSplit(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnIntraySplit(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm
-            || ServerInboxList.SelectedItem is not InboxItemViewModel item
-            || await vm.InboxActions.GetPagesAsync(item) is not { SplitHref: { } splitHref } pages)
+            || ServerIntrayList.SelectedItem is not IntrayItemViewModel item
+            || await vm.IntrayActions.GetPagesAsync(item) is not { SplitHref: { } splitHref } pages)
         {
             return;
         }
 
         // Splitting adds N items and keeps the source, so the count is worth stating before it happens: on a
         // 40-page scan the difference between "split" and "what have I done" is knowing it was 40.
-        var prompt = string.Format(Strings.Get("InboxSplitConfirm"), item.Name, pages.PageCount);
-        if (await new ConfirmDialog(prompt, Strings.Get("InboxSplit")).ShowDialog<bool>(this))
+        var prompt = string.Format(Strings.Get("IntraySplitConfirm"), item.Name, pages.PageCount);
+        if (await new ConfirmDialog(prompt, Strings.Get("IntraySplit")).ShowDialog<bool>(this))
         {
-            await vm.InboxActions.SplitAsync(item, splitHref);
+            await vm.IntrayActions.SplitAsync(item, splitHref);
         }
     });
 
-    internal void OnInboxSortPages(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnIntraySortPages(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm
-            || ServerInboxList.SelectedItem is not InboxItemViewModel item
+            || ServerIntrayList.SelectedItem is not IntrayItemViewModel item
             || item.Item is not { } info
             || vm.Api is not { } api
-            || await vm.InboxActions.GetPagesAsync(item) is not { SortHref: { } sortHref })
+            || await vm.IntrayActions.GetPagesAsync(item) is not { SortHref: { } sortHref })
         {
             return;
         }
 
-        var thumbnails = await InboxPageThumbnails.LoadAsync(api, info);
+        var thumbnails = await IntrayPageThumbnails.LoadAsync(api, info);
         if (thumbnails.Count == 0)
         {
             // The loader's contract all along — "the caller then keeps the sort affordance hidden rather than
             // opening a dialog full of blanks" — except the caller didn't, which is what made the scaling
             // crash (#522) present as an empty dialog instead of as this message.
-            vm.Status = Strings.Get("InboxSortNoPages");
+            vm.Status = Strings.Get("IntraySortNoPages");
             return;
         }
 
         var dialog = new SortPagesDialog(item.Name, thumbnails.Cast<Bitmap?>().ToList());
         if (await dialog.ShowDialog<SortPagesDialog.Result?>(this) is { } arrangement)
         {
-            await vm.InboxActions.SortAsync(item, sortHref, arrangement.Order, arrangement.Rotations);
+            await vm.IntrayActions.SortAsync(item, sortHref, arrangement.Order, arrangement.Rotations);
         }
     });
 
-    internal void OnInboxRotateAutoToggled(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnIntrayRotateAutoToggled(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && sender is ToggleButton { IsChecked: { } enabled })
         {
-            await vm.InboxActions.SetRotateAutomaticallyAsync(enabled);
+            await vm.IntrayActions.SetRotateAutomaticallyAsync(enabled);
         }
     });
 
-    internal void OnInboxDeskewAutoToggled(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnIntrayDeskewAutoToggled(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && sender is ToggleButton { IsChecked: { } enabled })
         {
-            await vm.InboxActions.SetDeskewAutomaticallyAsync(enabled);
+            await vm.IntrayActions.SetDeskewAutomaticallyAsync(enabled);
         }
     });
 
     // Straighten THIS document, now. Addressed from the selected row's own deskew rel, re-read at the moment of
     // acting rather than trusted from pane state (ADR 0559).
-    internal void OnInboxDeskew(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnIntrayDeskew(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm
-            || ServerInboxList.SelectedItem is not InboxItemViewModel item
-            || await vm.InboxActions.GetPagesAsync(item) is not { DeskewHref: { } deskewHref })
+            || ServerIntrayList.SelectedItem is not IntrayItemViewModel item
+            || await vm.IntrayActions.GetPagesAsync(item) is not { DeskewHref: { } deskewHref })
         {
             return;
         }
 
         // The format change is stated before it happens: a TIFF comes back a PDF, because straightening
         // re-renders the pages. Discovering that afterwards is how a user concludes the archive is unreliable.
-        var prompt = string.Format(Strings.Get("InboxDeskewConfirm"), item.Name);
-        if (await new ConfirmDialog(prompt, Strings.Get("InboxDeskewNow")).ShowDialog<bool>(this))
+        var prompt = string.Format(Strings.Get("IntrayDeskewConfirm"), item.Name);
+        if (await new ConfirmDialog(prompt, Strings.Get("IntrayDeskewNow")).ShowDialog<bool>(this))
         {
-            await vm.InboxActions.DeskewAsync(item, deskewHref);
+            await vm.IntrayActions.DeskewAsync(item, deskewHref);
         }
     });
 
-    internal void OnInboxPatchAutoToggled(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnIntrayPatchAutoToggled(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm && sender is ToggleButton { IsChecked: { } enabled })
         {
-            await vm.InboxActions.SetCutAtPatchCodesAutomaticallyAsync(enabled);
+            await vm.IntrayActions.SetCutAtPatchCodesAutomaticallyAsync(enabled);
         }
     });
 
     // Cut THIS batch at its separator sheets, now — addressed from the selected row's own rel, re-read at the
     // moment of acting rather than trusted from pane state (ADR 0559).
-    internal void OnInboxPatchCut(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnIntrayPatchCut(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm
-            || ServerInboxList.SelectedItem is not InboxItemViewModel item
-            || await vm.InboxActions.GetPagesAsync(item) is not { PatchCodesHref: { } patchCodesHref })
+            || ServerIntrayList.SelectedItem is not IntrayItemViewModel item
+            || await vm.IntrayActions.GetPagesAsync(item) is not { PatchCodesHref: { } patchCodesHref })
         {
             return;
         }
 
         // What happens to the batch is stated before it happens: it stays, under a name that says it can go.
         // A user who expects it to vanish and finds it still there concludes the cut did not work.
-        var prompt = string.Format(Strings.Get("InboxPatchCutConfirm"), item.Name);
-        if (await new ConfirmDialog(prompt, Strings.Get("InboxPatchCutNow")).ShowDialog<bool>(this))
+        var prompt = string.Format(Strings.Get("IntrayPatchCutConfirm"), item.Name);
+        if (await new ConfirmDialog(prompt, Strings.Get("IntrayPatchCutNow")).ShowDialog<bool>(this))
         {
-            await vm.InboxActions.CutAtPatchCodesAsync(item, patchCodesHref);
+            await vm.IntrayActions.CutAtPatchCodesAsync(item, patchCodesHref);
         }
     });
 
     // The separator sheet itself, opened in whatever the OS prints PDFs with. Nothing else in the app can
     // substitute for this step: without a printed sheet there is nothing to cut at.
-    internal void OnInboxPatchSheet(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnIntrayPatchSheet(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is MainWindowViewModel vm)
         {
-            await vm.InboxActions.OpenPatchCodeSheetAsync();
+            await vm.IntrayActions.OpenPatchCodeSheetAsync();
         }
     });
 
-    internal void OnInboxJoin(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnIntrayJoin(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
             return;
         }
 
-        var names = (ServerInboxList.SelectedItems ?? new List<object>())
-            .OfType<InboxItemViewModel>().Select(i => i.Name).ToList();
+        var names = (ServerIntrayList.SelectedItems ?? new List<object>())
+            .OfType<IntrayItemViewModel>().Select(i => i.Name).ToList();
         if (names.Count < 2)
         {
             return;
@@ -353,7 +353,7 @@ public partial class MainWindow : Window
 
         if (await new JoinItemsDialog(names).ShowDialog<JoinItemsDialog.Result?>(this) is { } result)
         {
-            await vm.InboxActions.JoinAsync(result.Names, result.Name);
+            await vm.IntrayActions.JoinAsync(result.Names, result.Name);
         }
     });
 
@@ -361,54 +361,54 @@ public partial class MainWindow : Window
 
     // A row-tagged call deletes THAT row (ADR 0559); the ribbon (no Tag) composes across the whole
     // multi-selection — N deletes, one confirm naming the count (the checkout bulk story; review finding).
-    internal void OnInboxDelete(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnIntrayDelete(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
             return;
         }
 
-        var items = (sender as Control)?.Tag is InboxItemViewModel tagged
-            ? new List<InboxItemViewModel> { tagged }
-            : ServerInboxList.SelectedItems?.OfType<InboxItemViewModel>().ToList() ?? [];
+        var items = (sender as Control)?.Tag is IntrayItemViewModel tagged
+            ? new List<IntrayItemViewModel> { tagged }
+            : ServerIntrayList.SelectedItems?.OfType<IntrayItemViewModel>().ToList() ?? [];
         if (items.Count == 0)
         {
             return;
         }
 
         var message = items.Count == 1
-            ? $"Delete '{items[0].Name}' from the inbox?"
-            : string.Format(Strings.Get("InboxDeleteManyConfirm"), items.Count);
+            ? $"Delete '{items[0].Name}' from the intray?"
+            : string.Format(Strings.Get("IntrayDeleteManyConfirm"), items.Count);
         if (await new ConfirmDialog(message, "Delete").ShowDialog<bool>(this))
         {
             foreach (var item in items)
             {
-                await vm.InboxActions.DeleteAsync(item);
+                await vm.IntrayActions.DeleteAsync(item);
             }
         }
     });
 
     // "Send to…" (ADR 0532): hand an own item to a chosen group or user via the picker dialog.
-    internal void OnInboxSend(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    internal void OnIntraySend(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
-        if (DataContext is not MainWindowViewModel vm || InboxItemFrom(sender) is not { } item)
+        if (DataContext is not MainWindowViewModel vm || IntrayItemFrom(sender) is not { } item)
         {
             return;
         }
 
-        var targets = await vm.InboxActions.GetSendTargetsAsync();
-        if (await new SendToInboxDialog(item.Name, targets).ShowDialog<InboxApi.InboxTargetInfo?>(this) is { } target)
+        var targets = await vm.IntrayActions.GetSendTargetsAsync();
+        if (await new SendToIntrayDialog(item.Name, targets).ShowDialog<IntrayApi.IntrayTargetInfo?>(this) is { } target)
         {
-            await vm.InboxActions.SendAsync(item, target);
+            await vm.IntrayActions.SendAsync(item, target);
         }
     });
 
-    // "Move to my inbox" (ADR 0532): claim a group / other-user item into my own inbox.
-    internal void OnInboxMoveToMine(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    // "Move to my intray" (ADR 0532): claim a group / other-user item into my own intray.
+    internal void OnIntrayMoveToMine(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
-        if (DataContext is MainWindowViewModel vm && InboxItemFrom(sender) is { } item)
+        if (DataContext is MainWindowViewModel vm && IntrayItemFrom(sender) is { } item)
         {
-            await vm.InboxActions.ClaimToMineAsync(item);
+            await vm.IntrayActions.ClaimToMineAsync(item);
         }
     });
 
@@ -435,15 +435,15 @@ public partial class MainWindow : Window
         }
     });
 
-    // Inbox mask pane's OCR-language picker (ADR "Inbox OCR-language staging") — mirrors OnEditOcrLanguages.
-    private void OnEditInboxOcrLanguages(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    // Intray mask pane's OCR-language picker (ADR "Inbox OCR-language staging") — mirrors OnEditOcrLanguages.
+    private void OnEditIntrayOcrLanguages(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm)
         {
             return;
         }
 
-        var (catalog, selected) = vm.InboxOcrPickerState();
+        var (catalog, selected) = vm.IntrayOcrPickerState();
         if (catalog.Count == 0)
         {
             return;
@@ -453,7 +453,7 @@ public partial class MainWindow : Window
         var codes = await new OcrLanguagePickerDialog { DataContext = picker }.ShowDialog<List<string>?>(this);
         if (codes is not null)
         {
-            vm.StageInboxOcrLanguages(codes); // staged into the pane; the pane's Save persists it
+            vm.StageIntrayOcrLanguages(codes); // staged into the pane; the pane's Save persists it
         }
     });
 

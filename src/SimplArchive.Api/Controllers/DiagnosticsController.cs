@@ -66,7 +66,7 @@ public class DiagnosticsController : ControllerBase
         public Guid? UserId { get; set; }
 
         // The tenant's and (for a User caller) the user's display names — clients use these for the desktop's
-        // local inbox/temp folder path `~/SimplArchive/{TenantName}/{UserName}/…` (ADR "S3-backed inbox").
+        // local intray/temp folder path `~/SimplArchive/{TenantName}/{UserName}/…` (ADR "S3-backed inbox").
         // Returned as data only; the API still identifies principals by id.
         public string? TenantName { get; set; }
 
@@ -126,9 +126,9 @@ public class DiagnosticsController : ControllerBase
 
         public bool CanImport { get; set; }
 
-        // Whether the User caller may manage other users' inboxes (ADR 0532) — gates the clients' inbox
-        // user-picker / cross-user triage. True for a User holding CanManageInboxes (own or via a group).
-        public bool CanManageInboxes { get; set; }
+        // Whether the User caller may manage other users' intrayes (ADR 0532) — gates the clients' intray
+        // user-picker / cross-user triage. True for a User holding CanManageIntrayes (own or via a group).
+        public bool CanManageIntrayes { get; set; }
 
         // The acting admin's display name when this is an impersonation session (else null) — drives the
         // clients' impersonation banner.
@@ -157,7 +157,7 @@ public class DiagnosticsController : ControllerBase
         var canImpersonate = false;
         var canExport = false;
         var canImport = false;
-        var canManageInboxes = false;
+        var canManageIntrayes = false;
         var hasPhoto = false;
         var mfaEnabled = false;
         if (_currentUserAccessor.UserId is { } userId)
@@ -182,7 +182,7 @@ public class DiagnosticsController : ControllerBase
             canImpersonate = rights.CanImpersonate;
             canExport = rights.CanExport;
             canImport = rights.CanImport;
-            canManageInboxes = rights.CanManageInboxes;
+            canManageIntrayes = rights.CanManageIntrayes;
             hasPhoto = await _dbContext.UserProfilePhotos.AnyAsync(p => p.UserId == userId, cancellationToken);
         }
 
@@ -213,7 +213,7 @@ public class DiagnosticsController : ControllerBase
             CanImpersonate = canImpersonate,
             CanExport = canExport,
             CanImport = canImport,
-            CanManageInboxes = canManageInboxes,
+            CanManageIntrayes = canManageIntrayes,
             ImpersonatedBy = impersonatedBy,
             HasPhoto = hasPhoto,
 

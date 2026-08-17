@@ -4,7 +4,7 @@ namespace SimplArchive.UnitTests;
 
 // A deterministic guard on PreviewPaneState.Clear() (ADR 0294), which PreviewPane.ClearAsync() delegates to.
 //
-// Written when the state was SHARED by the Repositories and Inbox tabs, where a missed field meant one tab's
+// Written when the state was SHARED by the Repositories and Intray tabs, where a missed field meant one tab's
 // preview leaking into the other's host. Each tab now owns a PreviewPane and therefore its own state (ADR
 // 0558), so that particular leak is gone — but the reset still has to be complete, because a pane is cleared
 // whenever its selection goes away and a half-reset one would render a stale document's text or find results

@@ -75,11 +75,11 @@ public interface IObjectStorageClient
     // images".
     Task PutObjectAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken = default);
 
-    // Lists every object under a key prefix — the S3-backed inbox (`{tenantId}/users/{userId}/inbox/`) enumerates
+    // Lists every object under a key prefix — the S3-backed intray (`{tenantId}/users/{userId}/inbox/`) enumerates
     // itself this way. See ADR "S3-backed inbox".
     Task<IReadOnlyList<StorageObject>> ListObjectsAsync(string prefix, CancellationToken cancellationToken = default);
 
-    // Server-side copy within the bucket (no bytes leave storage) — filing an inbox item moves its object to
+    // Server-side copy within the bucket (no bytes leave storage) — filing an intray item moves its object to
     // a document key with a copy + delete. See ADR "S3-backed inbox".
     Task CopyObjectAsync(string sourceKey, string destinationKey, CancellationToken cancellationToken = default);
 

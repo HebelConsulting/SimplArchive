@@ -36,11 +36,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // back to the workbench.
     [ObservableProperty] private int _selectedTab;
 
-    // The bottom tabs (Repositories/Inbox/Tasks/Search) are a TabControl in the view; only Repositories has
+    // The bottom tabs (Repositories/Intray/Tasks/Search) are a TabControl in the view; only Repositories has
     // content in this slice.
 
     // The Recycle bin tab (ADR "Desktop recycle bin parity") — its own master-detail VM with an INDEPENDENT
-    // preview (RecycleBin.Preview), so a deleted document's preview never entangles the Repositories/Inbox one.
+    // preview (RecycleBin.Preview), so a deleted document's preview never entangles the Repositories/Intray one.
     public RecycleBinTabViewModel RecycleBin { get; } = new();
 
     // The Check-out tab (ADR "Document check-out / check-in") — the caller's checked-out documents + their
@@ -54,18 +54,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         LoadLayout();
         Preview.StatusReporter = m => Status = m;
-        InboxPreview.StatusReporter = m => Status = m;
+        IntrayPreview.StatusReporter = m => Status = m;
         SearchPreview.StatusReporter = m => Status = m;
         RecycleBin.StatusReporter = m => Status = m;
         Checkout.StatusReporter = m => Status = m;
         Checkout.OnChanged = RefreshAfterCheckoutChangeAsync;
-        InboxActions.Connect(() => _api, RefreshInboxAsync, m => Status = m, () => _currentUserId);
+        IntrayActions.Connect(() => _api, RefreshIntrayAsync, m => Status = m, () => _currentUserId);
     }
 
-    // What a user can do TO a staged inbox item — send it on, claim it, delete it, and take its pages apart or
+    // What a user can do TO a staged intray item — send it on, claim it, delete it, and take its pages apart or
     // together (#487). Extracted from this class rather than added to it: the actions are one cohesive thing,
     // and this file is over the 1000-line ceiling, so growing it further is not on the table (ADR 0575).
-    public InboxItemActionsViewModel InboxActions { get; } = new();
+    public IntrayItemActionsViewModel IntrayActions { get; } = new();
 
     // Sets the authenticated api client for the whole workbench, including both preview surfaces + the Recycle
     // bin tab (so every surface shares the same session token).
@@ -73,13 +73,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         _api = api;
         Preview.Api = api;
-        InboxPreview.Api = api;
+        IntrayPreview.Api = api;
         SearchPreview.Api = api;
         RecycleBin.SetApi(api);
 
         // The straightening toggle's state belongs to the USER, not the machine, so it is read from the server
         // once per session rather than restored from local settings (#491).
-        Safe.Fire(async () => await InboxActions.LoadIngestPreferencesAsync());
+        Safe.Fire(async () => await IntrayActions.LoadIngestPreferencesAsync());
 
         // Read the API root's link relations once per session (ADR 0543): the root is the one URL a client may
         // know, and everything else is discovered from it. Fire-and-forget — a workbench that cannot reach the
@@ -226,15 +226,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
         IndexHeight = GridLength.Auto; // fits its content — there is no default proportion to restore
         ChatWidth = _chatSaved;
 
-        _inboxServerSaved = new GridLength(DefaultInboxServer, GridUnitType.Star);
-        _inboxLocalSaved = new GridLength(DefaultInboxLocal, GridUnitType.Star);
-        _inboxMaskSaved = new GridLength(DefaultInboxMask, GridUnitType.Star);
-        _inboxPreviewSaved = new GridLength(DefaultInboxPreview, GridUnitType.Star);
-        InboxServerCollapsed = InboxLocalCollapsed = InboxMaskCollapsed = InboxPreviewCollapsed = false;
-        InboxServerHeight = _inboxServerSaved;
-        InboxLocalHeight = _inboxLocalSaved;
-        InboxMaskHeight = _inboxMaskSaved;
-        InboxPreviewHeight = _inboxPreviewSaved;
+        _intrayServerSaved = new GridLength(DefaultIntrayServer, GridUnitType.Star);
+        _intrayLocalSaved = new GridLength(DefaultIntrayLocal, GridUnitType.Star);
+        _intrayMaskSaved = new GridLength(DefaultIntrayMask, GridUnitType.Star);
+        _intrayPreviewSaved = new GridLength(DefaultIntrayPreview, GridUnitType.Star);
+        IntrayServerCollapsed = IntrayLocalCollapsed = IntrayMaskCollapsed = IntrayPreviewCollapsed = false;
+        IntrayServerHeight = _intrayServerSaved;
+        IntrayLocalHeight = _intrayLocalSaved;
+        IntrayMaskHeight = _intrayMaskSaved;
+        IntrayPreviewHeight = _intrayPreviewSaved;
 
         ColNameWidth = DefaultColName;
         ColTypeWidth = DefaultColType;
@@ -266,20 +266,20 @@ public sealed partial class MainWindowViewModel : ObservableObject
         IndexHeight = IndexCollapsed ? new GridLength(0) : GridLength.Auto;
         ChatWidth = ChatCollapsed ? new GridLength(0) : _chatSaved;
 
-        _inboxServerSaved = ParseOrStar(settings.InboxServerHeight, DefaultInboxServer);
-        _inboxLocalSaved = ParseOrStar(settings.InboxLocalHeight, DefaultInboxLocal);
-        _inboxMaskSaved = ParseOrStar(settings.InboxMaskHeight, DefaultInboxMask);
-        _inboxPreviewSaved = ParseOrStar(settings.InboxPreviewHeight, DefaultInboxPreview);
+        _intrayServerSaved = ParseOrStar(settings.IntrayServerHeight, DefaultIntrayServer);
+        _intrayLocalSaved = ParseOrStar(settings.IntrayLocalHeight, DefaultIntrayLocal);
+        _intrayMaskSaved = ParseOrStar(settings.IntrayMaskHeight, DefaultIntrayMask);
+        _intrayPreviewSaved = ParseOrStar(settings.IntrayPreviewHeight, DefaultIntrayPreview);
 
-        InboxServerCollapsed = settings.InboxServerCollapsed;
-        InboxLocalCollapsed = settings.InboxLocalCollapsed;
-        InboxMaskCollapsed = settings.InboxMaskCollapsed;
-        InboxPreviewCollapsed = settings.InboxPreviewCollapsed;
+        IntrayServerCollapsed = settings.IntrayServerCollapsed;
+        IntrayLocalCollapsed = settings.IntrayLocalCollapsed;
+        IntrayMaskCollapsed = settings.IntrayMaskCollapsed;
+        IntrayPreviewCollapsed = settings.IntrayPreviewCollapsed;
 
-        InboxServerHeight = InboxServerCollapsed ? new GridLength(0) : _inboxServerSaved;
-        InboxLocalHeight = InboxLocalCollapsed ? new GridLength(0) : _inboxLocalSaved;
-        InboxMaskHeight = InboxMaskCollapsed ? new GridLength(0) : _inboxMaskSaved;
-        InboxPreviewHeight = InboxPreviewCollapsed ? new GridLength(0) : _inboxPreviewSaved;
+        IntrayServerHeight = IntrayServerCollapsed ? new GridLength(0) : _intrayServerSaved;
+        IntrayLocalHeight = IntrayLocalCollapsed ? new GridLength(0) : _intrayLocalSaved;
+        IntrayMaskHeight = IntrayMaskCollapsed ? new GridLength(0) : _intrayMaskSaved;
+        IntrayPreviewHeight = IntrayPreviewCollapsed ? new GridLength(0) : _intrayPreviewSaved;
 
         ColNameWidth = ParseDouble(settings.ColName, DefaultColName);
         ColTypeWidth = ParseDouble(settings.ColType, DefaultColType);
@@ -304,14 +304,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
             ListCollapsed = ListCollapsed,
             IndexCollapsed = IndexCollapsed,
             ChatCollapsed = ChatCollapsed,
-            InboxServerHeight = (InboxServerCollapsed ? _inboxServerSaved : InboxServerHeight).ToString(),
-            InboxLocalHeight = (InboxLocalCollapsed ? _inboxLocalSaved : InboxLocalHeight).ToString(),
-            InboxMaskHeight = (InboxMaskCollapsed ? _inboxMaskSaved : InboxMaskHeight).ToString(),
-            InboxPreviewHeight = (InboxPreviewCollapsed ? _inboxPreviewSaved : InboxPreviewHeight).ToString(),
-            InboxServerCollapsed = InboxServerCollapsed,
-            InboxLocalCollapsed = InboxLocalCollapsed,
-            InboxMaskCollapsed = InboxMaskCollapsed,
-            InboxPreviewCollapsed = InboxPreviewCollapsed,
+            IntrayServerHeight = (IntrayServerCollapsed ? _intrayServerSaved : IntrayServerHeight).ToString(),
+            IntrayLocalHeight = (IntrayLocalCollapsed ? _intrayLocalSaved : IntrayLocalHeight).ToString(),
+            IntrayMaskHeight = (IntrayMaskCollapsed ? _intrayMaskSaved : IntrayMaskHeight).ToString(),
+            IntrayPreviewHeight = (IntrayPreviewCollapsed ? _intrayPreviewSaved : IntrayPreviewHeight).ToString(),
+            IntrayServerCollapsed = IntrayServerCollapsed,
+            IntrayLocalCollapsed = IntrayLocalCollapsed,
+            IntrayMaskCollapsed = IntrayMaskCollapsed,
+            IntrayPreviewCollapsed = IntrayPreviewCollapsed,
             ColName = ColNameWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ColType = ColTypeWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ColDate = ColDateWidth.ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -329,62 +329,62 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private static double ParseDouble(string value, double fallback) =>
         double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) && v > 0 ? v : fallback;
 
-    // ---- Inbox tab: four collapsible/resizable panes (ADR "Collapsible inbox panes") ------------------
+    // ---- Intray tab: four collapsible/resizable panes (ADR "Collapsible inbox panes") ------------------
     // Same mechanism as the Repositories panes above — each pane's body row height is two-way bound, collapse
     // sets it to 0, and a header caret toggles it. Persisted in the same LayoutSettings.
 
-    [ObservableProperty] private GridLength _inboxServerHeight;
-    [ObservableProperty] private GridLength _inboxLocalHeight;
-    [ObservableProperty] private GridLength _inboxMaskHeight;
-    [ObservableProperty] private GridLength _inboxPreviewHeight;
+    [ObservableProperty] private GridLength _intrayServerHeight;
+    [ObservableProperty] private GridLength _intrayLocalHeight;
+    [ObservableProperty] private GridLength _intrayMaskHeight;
+    [ObservableProperty] private GridLength _intrayPreviewHeight;
 
-    [ObservableProperty] private bool _inboxServerCollapsed;
-    [ObservableProperty] private bool _inboxLocalCollapsed;
-    [ObservableProperty] private bool _inboxMaskCollapsed;
-    [ObservableProperty] private bool _inboxPreviewCollapsed;
+    [ObservableProperty] private bool _intrayServerCollapsed;
+    [ObservableProperty] private bool _intrayLocalCollapsed;
+    [ObservableProperty] private bool _intrayMaskCollapsed;
+    [ObservableProperty] private bool _intrayPreviewCollapsed;
 
-    private GridLength _inboxServerSaved, _inboxLocalSaved, _inboxMaskSaved, _inboxPreviewSaved;
-    private const double DefaultInboxServer = 1, DefaultInboxLocal = 1, DefaultInboxMask = 1.1, DefaultInboxPreview = 1.6;
+    private GridLength _intrayServerSaved, _intrayLocalSaved, _intrayMaskSaved, _intrayPreviewSaved;
+    private const double DefaultIntrayServer = 1, DefaultIntrayLocal = 1, DefaultIntrayMask = 1.1, DefaultIntrayPreview = 1.6;
 
-    public string InboxServerCaret => InboxServerCollapsed ? "mdi-chevron-down" : "mdi-chevron-up";
-    public string InboxLocalCaret => InboxLocalCollapsed ? "mdi-chevron-down" : "mdi-chevron-up";
-    public string InboxMaskCaret => InboxMaskCollapsed ? "mdi-chevron-down" : "mdi-chevron-up";
-    public string InboxPreviewCaret => InboxPreviewCollapsed ? "mdi-chevron-down" : "mdi-chevron-up";
+    public string IntrayServerCaret => IntrayServerCollapsed ? "mdi-chevron-down" : "mdi-chevron-up";
+    public string IntrayLocalCaret => IntrayLocalCollapsed ? "mdi-chevron-down" : "mdi-chevron-up";
+    public string IntrayMaskCaret => IntrayMaskCollapsed ? "mdi-chevron-down" : "mdi-chevron-up";
+    public string IntrayPreviewCaret => IntrayPreviewCollapsed ? "mdi-chevron-down" : "mdi-chevron-up";
 
-    partial void OnInboxServerCollapsedChanged(bool value) => OnPropertyChanged(nameof(InboxServerCaret));
-    partial void OnInboxLocalCollapsedChanged(bool value) => OnPropertyChanged(nameof(InboxLocalCaret));
-    partial void OnInboxMaskCollapsedChanged(bool value) => OnPropertyChanged(nameof(InboxMaskCaret));
-    partial void OnInboxPreviewCollapsedChanged(bool value) => OnPropertyChanged(nameof(InboxPreviewCaret));
+    partial void OnIntrayServerCollapsedChanged(bool value) => OnPropertyChanged(nameof(IntrayServerCaret));
+    partial void OnIntrayLocalCollapsedChanged(bool value) => OnPropertyChanged(nameof(IntrayLocalCaret));
+    partial void OnIntrayMaskCollapsedChanged(bool value) => OnPropertyChanged(nameof(IntrayMaskCaret));
+    partial void OnIntrayPreviewCollapsedChanged(bool value) => OnPropertyChanged(nameof(IntrayPreviewCaret));
 
     [RelayCommand]
-    private void ToggleInboxServer()
+    private void ToggleIntrayServer()
     {
-        if (InboxServerCollapsed) { InboxServerHeight = _inboxServerSaved; InboxServerCollapsed = false; }
-        else { _inboxServerSaved = InboxServerHeight; InboxServerHeight = new GridLength(0); InboxServerCollapsed = true; }
+        if (IntrayServerCollapsed) { IntrayServerHeight = _intrayServerSaved; IntrayServerCollapsed = false; }
+        else { _intrayServerSaved = IntrayServerHeight; IntrayServerHeight = new GridLength(0); IntrayServerCollapsed = true; }
         SaveLayout();
     }
 
     [RelayCommand]
-    private void ToggleInboxLocal()
+    private void ToggleIntrayLocal()
     {
-        if (InboxLocalCollapsed) { InboxLocalHeight = _inboxLocalSaved; InboxLocalCollapsed = false; }
-        else { _inboxLocalSaved = InboxLocalHeight; InboxLocalHeight = new GridLength(0); InboxLocalCollapsed = true; }
+        if (IntrayLocalCollapsed) { IntrayLocalHeight = _intrayLocalSaved; IntrayLocalCollapsed = false; }
+        else { _intrayLocalSaved = IntrayLocalHeight; IntrayLocalHeight = new GridLength(0); IntrayLocalCollapsed = true; }
         SaveLayout();
     }
 
     [RelayCommand]
-    private void ToggleInboxMask()
+    private void ToggleIntrayMask()
     {
-        if (InboxMaskCollapsed) { InboxMaskHeight = _inboxMaskSaved; InboxMaskCollapsed = false; }
-        else { _inboxMaskSaved = InboxMaskHeight; InboxMaskHeight = new GridLength(0); InboxMaskCollapsed = true; }
+        if (IntrayMaskCollapsed) { IntrayMaskHeight = _intrayMaskSaved; IntrayMaskCollapsed = false; }
+        else { _intrayMaskSaved = IntrayMaskHeight; IntrayMaskHeight = new GridLength(0); IntrayMaskCollapsed = true; }
         SaveLayout();
     }
 
     [RelayCommand]
-    private void ToggleInboxPreview()
+    private void ToggleIntrayPreview()
     {
-        if (InboxPreviewCollapsed) { InboxPreviewHeight = _inboxPreviewSaved; InboxPreviewCollapsed = false; }
-        else { _inboxPreviewSaved = InboxPreviewHeight; InboxPreviewHeight = new GridLength(0); InboxPreviewCollapsed = true; }
+        if (IntrayPreviewCollapsed) { IntrayPreviewHeight = _intrayPreviewSaved; IntrayPreviewCollapsed = false; }
+        else { _intrayPreviewSaved = IntrayPreviewHeight; IntrayPreviewHeight = new GridLength(0); IntrayPreviewCollapsed = true; }
         SaveLayout();
     }
 
@@ -552,17 +552,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private IReadOnlyList<string> _stagedOcrCodes = []; // picker-staged codes, persisted on Save
     private IReadOnlyList<SimplArchiveApiClient.OcrLanguageOption> _ocrCatalog = [];
 
-    // The Repositories + Inbox preview surface (state + render + find + hit-overlay + full-screen). Extracted to
+    // The Repositories + Intray preview surface (state + render + find + hit-overlay + full-screen). Extracted to
     // its own PreviewViewModel so the Recycle bin tab can own a SEPARATE instance (RecycleBin.Preview) and the
     // two previews are never entangled — see ADR "Desktop recycle bin parity". Bound by the PreviewPane control.
     public PreviewViewModel Preview { get; } = new();
 
-    // The Inbox tab owns a SEPARATE preview instance so its preview never entangles the Repositories one — a
-    // preview shown on one tab must not leak onto the other (mirrors RecycleBin.Preview). Bound by the Inbox
+    // The Intray tab owns a SEPARATE preview instance so its preview never entangles the Repositories one — a
+    // preview shown on one tab must not leak onto the other (mirrors RecycleBin.Preview). Bound by the Intray
     // PreviewPane.
-    public PreviewViewModel InboxPreview { get; } = new();
+    public PreviewViewModel IntrayPreview { get; } = new();
 
-    // The Search tab's own preview instance, for the same reason as the Inbox's (#462): a preview shown while
+    // The Search tab's own preview instance, for the same reason as the Intray's (#462): a preview shown while
     // browsing search results must not leak into the Repositories tab, and vice versa.
     public PreviewViewModel SearchPreview { get; } = new();
 
@@ -572,7 +572,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private void ExitPreviewFullscreen()
     {
         Preview.ExitFullscreen();
-        InboxPreview.ExitFullscreen();
+        IntrayPreview.ExitFullscreen();
         RecycleBin.Preview.ExitFullscreen();
     }
 
@@ -781,7 +781,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        // The Inbox / Check-out launcher nodes under Personal switch to their bottom tab (ADR "GUI-tree Personal
+        // The Intray / Check-out launcher nodes under Personal switch to their bottom tab (ADR "GUI-tree Personal
         // space grouping"), where the full staging / check-out UX lives.
         if (value is { IsLauncher: true })
         {
@@ -878,7 +878,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         _api = null;
         Preview.Api = null;
-        InboxPreview.Api = null;
+        IntrayPreview.Api = null;
         IsLoggedIn = false;
         _forceLoginNext = true;
         _ = StopRealtimeNotificationsAsync(); // drop the live hub connection with the session
@@ -979,7 +979,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var personal = await _api.Profile.GetPersonalRepositoryAsync();
         if (personal is not null)
         {
-            // Always expandable — it holds at least the Inbox + Check-out launcher nodes (ADR "GUI-tree Personal
+            // Always expandable — it holds at least the Intray + Check-out launcher nodes (ADR "GUI-tree Personal
             // space grouping"), even before any real subfolder exists.
             Tree.Add(new TreeNodeViewModel(personal.Id, personal.Name, hasSubfolders: true, LoadPersonalChildrenAsync, links: personal.Links, isPersonal: true));
         }
@@ -1047,14 +1047,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
             hasChildren: r.HasChildren));
     }
 
-    // The Personal repository nests the Inbox + Check-out launcher nodes above its real subfolders, mirroring
+    // The Personal repository nests the Intray + Check-out launcher nodes above its real subfolders, mirroring
     // /webdav/Personal (ADR "GUI-tree Personal space grouping"). Selecting a launcher switches to the matching
     // bottom tab (OnSelectedTreeNodeChanged), where the full staging / check-out UX lives.
     private async Task<IEnumerable<TreeNodeViewModel>> LoadPersonalChildrenAsync(TreeNodeViewModel node)
     {
         var launchers = new[]
         {
-            new TreeNodeViewModel(Guid.Empty, "Inbox", false, null, personalKind: "inbox"),
+            new TreeNodeViewModel(Guid.Empty, "Intray", false, null, personalKind: "intray"),
             new TreeNodeViewModel(Guid.Empty, "Check-out", false, null, personalKind: "checkout"),
         };
         return launchers.Concat(await LoadTreeChildrenAsync(node));
@@ -1373,7 +1373,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     // "Open (⌘O)" for the affordances that are a plain button rather than a menu entry — the ribbon's Open and
-    // the Inbox row's Open — since only a MenuItem can carry an InputGesture. Composed from the localized label
+    // the Intray row's Open — since only a MenuItem can carry an InputGesture. Composed from the localized label
     // plus the platform chord, so it needs no resource of its own.
     // Trailing after a dash, not in brackets: the ribbon's own label is already a parenthesised sentence, and a
     // second bracket inside a tooltip reads as a nested aside rather than as a shortcut.
@@ -1400,8 +1400,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
             case 0 when OpenCommand.CanExecute(null):
                 await OpenCommand.ExecuteAsync(null);
                 break;
-            case 1 when SelectedServerInboxItem is not null:
-                await OpenServerInboxItemCommand.ExecuteAsync(null);
+            case 1 when SelectedServerIntrayItem is not null:
+                await OpenServerIntrayItemCommand.ExecuteAsync(null);
                 break;
         }
     }
@@ -2062,33 +2062,33 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // ---- Inbox (ADR "S3-backed inbox", phase 2) -------------------------------------------------------
+    // ---- Intray (ADR "S3-backed inbox", phase 2) -------------------------------------------------------
 
-    // Still used by the Check-out tab (local working-copy folder) + native-open temp dir; the local INBOX half
+    // Still used by the Check-out tab (local working-copy folder) + native-open temp dir; the local INTRAY half
     // was removed in favour of the WebDAV mount (ADR "Desktop inbox via WebDAV").
     private LocalFolders? _localFolders;
-    public ObservableCollection<InboxItemViewModel> ServerInbox { get; } = [];
+    public ObservableCollection<IntrayItemViewModel> ServerIntray { get; } = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSelectedInboxItem))]
-    [NotifyPropertyChangedFor(nameof(CanSendSelectedInboxItem))]
-    [NotifyPropertyChangedFor(nameof(CanClaimSelectedInboxItem))]
-    private InboxItemViewModel? _selectedServerInboxItem;
+    [NotifyPropertyChangedFor(nameof(HasSelectedIntrayItem))]
+    [NotifyPropertyChangedFor(nameof(CanSendSelectedIntrayItem))]
+    [NotifyPropertyChangedFor(nameof(CanClaimSelectedIntrayItem))]
+    private IntrayItemViewModel? _selectedServerIntrayItem;
 
-    // What the Inbox ribbon's selected-item group is gated on (#521). Greyed rather than hidden when there is
+    // What the Intray ribbon's selected-item group is gated on (#521). Greyed rather than hidden when there is
     // no selection: the button is available to this user, it simply has nothing to act on yet, and hiding it
     // would make the ribbon reflow under the cursor as the selection changes (the Repositories tab's rule).
-    public bool HasSelectedInboxItem => SelectedServerInboxItem is not null;
+    public bool HasSelectedIntrayItem => SelectedServerIntrayItem is not null;
 
     /// <summary>"Send to…" is for your OWN item; somebody else's is claimed instead (ADR 0532).</summary>
-    public bool CanSendSelectedInboxItem => SelectedServerInboxItem?.IsOwn == true;
+    public bool CanSendSelectedIntrayItem => SelectedServerIntrayItem?.IsOwn == true;
 
-    /// <summary>And the mirror: a group or other-user item is the one you can move to your own inbox.</summary>
-    public bool CanClaimSelectedInboxItem => SelectedServerInboxItem is { IsOwn: false };
-    [ObservableProperty] private string _inboxStatus = "";
+    /// <summary>And the mirror: a group or other-user item is the one you can move to your own intray.</summary>
+    public bool CanClaimSelectedIntrayItem => SelectedServerIntrayItem is { IsOwn: false };
+    [ObservableProperty] private string _intrayStatus = "";
 
     // After login: resolve the tenant/user display names and create the local ~/SimplArchive/{Tenant}/{User}/
-    // {inbox,temp} folders; point native-open at the temp folder.
+    // {intray,temp} folders; point native-open at the temp folder.
     private async Task SetupUserContextAsync()
     {
         if (_api is null)
@@ -2112,7 +2112,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             CanImpersonate = me.CanImpersonate;
             HasExportRight = me.CanExport;
             HasImportRight = me.CanImport;
-            CanManageInboxes = me.CanManageInboxes;
+            CanManageIntrayes = me.CanManageIntrayes;
             IsImpersonating = me.ImpersonatedBy is not null;
             ImpersonatedName = me.ImpersonatedBy is not null ? me.UserName : null;
             _currentUserId = me.UserId;
@@ -2136,7 +2136,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
         catch (Exception)
         {
-            // Non-fatal — the inbox still works without the local folders.
+            // Non-fatal — the intray still works without the local folders.
         }
     }
 
@@ -2154,9 +2154,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty] private bool _hasImportRight;
 
-    // Whether the caller holds CanManageInboxes (own or via a group) — gates the inbox user-picker that opens
-    // another user's inbox for triage (ADR 0532); set from whoami on login.
-    [ObservableProperty] private bool _canManageInboxes;
+    // Whether the caller holds CanManageIntrayes (own or via a group) — gates the intray user-picker that opens
+    // another user's intray for triage (ADR 0532); set from whoami on login.
+    [ObservableProperty] private bool _canManageIntrayes;
 
     // User impersonation (ADR "User impersonation"): CanImpersonate gates the "Impersonate" action; while
     // IsImpersonating, a banner shows ImpersonatedName + a Stop button. _adminApi is the pre-impersonation client
@@ -2340,34 +2340,34 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task RefreshInboxAsync()
+    private async Task RefreshIntrayAsync()
     {
         if (_api is null)
         {
             return;
         }
 
-        ServerInbox.Clear();
+        ServerIntray.Clear();
         try
         {
-            // The admin user-picker's choices (CanManageInboxes only) — loaded once, "My inbox" first (null id).
-            if (CanManageInboxes && InboxUsers.Count == 0)
+            // The admin user-picker's choices (CanManageIntrayes only) — loaded once, "My intray" first (null id).
+            if (CanManageIntrayes && IntrayUsers.Count == 0)
             {
-                InboxUsers.Add(new InboxUserPickerItem(null, Strings.Get("InboxMine")));
-                foreach (var u in await _api.Inbox.GetInboxUsersAsync())
+                IntrayUsers.Add(new IntrayUserPickerItem(null, Strings.Get("IntrayMine")));
+                foreach (var u in await _api.Intray.GetIntrayUsersAsync())
                 {
-                    InboxUsers.Add(new InboxUserPickerItem(u.Id, u.Name));
+                    IntrayUsers.Add(new IntrayUserPickerItem(u.Id, u.Name));
                 }
             }
 
             // One read, many follows (ADR 0557): the listing carries the rows AND the collection's own `join`
             // address, so the Join action costs no extra request when a selection later enables it.
-            var listing = await _api.Inbox.ListAsync(InboxIncludeGroups, InboxViewUserId);
-            InboxActions.JoinHref = listing.Href("join");
-            InboxActions.PatchCodeSheetHref = listing.Href("patchCodeSheet");
+            var listing = await _api.Intray.ListAsync(IntrayIncludeGroups, IntrayViewUserId);
+            IntrayActions.JoinHref = listing.Href("join");
+            IntrayActions.PatchCodeSheetHref = listing.Href("patchCodeSheet");
             foreach (var item in listing.Items)
             {
-                ServerInbox.Add(new InboxItemViewModel
+                ServerIntray.Add(new IntrayItemViewModel
                 {
                     Name = item.Name,
                     Size = item.Size,
@@ -2385,75 +2385,75 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Status = string.Format(Strings.Get("StErrLoadInbox"), ex.Message);
+            Status = string.Format(Strings.Get("StErrLoadIntray"), ex.Message);
         }
 
-        InboxStatus = string.Format(Strings.Get("StItems"), ServerInbox.Count);
+        IntrayStatus = string.Format(Strings.Get("StItems"), ServerIntray.Count);
 
         // A refresh rebuilds the list, so nothing is focused — clear the right panes.
-        SelectedServerInboxItem = null;
+        SelectedServerIntrayItem = null;
     }
 
-    // ---- Inbox view filters (ADR 0532): own-items-only by default; a toggle reveals group inboxes, and a
-    // CanManageInboxes holder can open a specific user's inbox via the picker (mutually exclusive with groups). ----
+    // ---- Intray view filters (ADR 0532): own-items-only by default; a toggle reveals group intrayes, and a
+    // CanManageIntrayes holder can open a specific user's intray via the picker (mutually exclusive with groups). ----
 
-    [ObservableProperty] private bool _inboxIncludeGroups;
-    [ObservableProperty] private Guid? _inboxViewUserId;
+    [ObservableProperty] private bool _intrayIncludeGroups;
+    [ObservableProperty] private Guid? _intrayViewUserId;
 
-    // The user-picker choices (only populated for a CanManageInboxes holder); the first is "My inbox" (null id).
-    public ObservableCollection<InboxUserPickerItem> InboxUsers { get; } = [];
+    // The user-picker choices (only populated for a CanManageIntrayes holder); the first is "My intray" (null id).
+    public ObservableCollection<IntrayUserPickerItem> IntrayUsers { get; } = [];
 
-    [ObservableProperty] private InboxUserPickerItem? _selectedInboxUser;
+    [ObservableProperty] private IntrayUserPickerItem? _selectedIntrayUser;
 
     // Suppresses the reentrant refresh when one filter handler adjusts the other (the two are mutually exclusive).
-    private bool _adjustingInboxFilters;
+    private bool _adjustingIntrayFilters;
 
-    // The "Show group inboxes" checkbox — reveals my group inboxes; clears any admin user-view (they're exclusive).
-    async partial void OnInboxIncludeGroupsChanged(bool value)
+    // The "Show group intrayes" checkbox — reveals my group intrayes; clears any admin user-view (they're exclusive).
+    async partial void OnIntrayIncludeGroupsChanged(bool value)
     {
-        if (_adjustingInboxFilters)
+        if (_adjustingIntrayFilters)
         {
             return;
         }
 
-        _adjustingInboxFilters = true;
+        _adjustingIntrayFilters = true;
         if (value)
         {
-            InboxViewUserId = null;
-            SelectedInboxUser = InboxUsers.Count > 0 ? InboxUsers[0] : null; // back to "My inbox"
+            IntrayViewUserId = null;
+            SelectedIntrayUser = IntrayUsers.Count > 0 ? IntrayUsers[0] : null; // back to "My intray"
         }
 
-        _adjustingInboxFilters = false;
-        await RefreshInboxAsync();
+        _adjustingIntrayFilters = false;
+        await RefreshIntrayAsync();
     }
 
-    // The admin user-picker — open a chosen user's inbox, or (null id) back to my own.
-    async partial void OnSelectedInboxUserChanged(InboxUserPickerItem? value)
+    // The admin user-picker — open a chosen user's intray, or (null id) back to my own.
+    async partial void OnSelectedIntrayUserChanged(IntrayUserPickerItem? value)
     {
-        if (_adjustingInboxFilters)
+        if (_adjustingIntrayFilters)
         {
             return;
         }
 
-        _adjustingInboxFilters = true;
-        InboxViewUserId = value?.UserId;
+        _adjustingIntrayFilters = true;
+        IntrayViewUserId = value?.UserId;
         if (value is { UserId: not null })
         {
-            InboxIncludeGroups = false;
+            IntrayIncludeGroups = false;
         }
 
-        _adjustingInboxFilters = false;
-        await RefreshInboxAsync();
+        _adjustingIntrayFilters = false;
+        await RefreshIntrayAsync();
     }
 
-    // Upload OS files dropped onto the inbox file-list straight into the S3-backed inbox (ADR "Inbox file-list
+    // Upload OS files dropped onto the intray file-list straight into the S3-backed intray (ADR "Inbox file-list
     // drop-zone"). The view reads each dropped file into (name, bytes); this uploads them, then refreshes.
-    // Drops onto the Personal ▸ Inbox / Check-out tree launchers (#467). The work is in DropFiling — this class
+    // Drops onto the Personal ▸ Intray / Check-out tree launchers (#467). The work is in DropFiling — this class
     // is already the largest entry on the 1000-line debt list (#466) — and what stays here is what only the
     // view-model can do: own the status line and know what to refresh.
     private DropFiling? _dropFiling;
 
-    public async Task CopyDocumentsToInboxAsync(IReadOnlyList<Guid> documentIds)
+    public async Task CopyDocumentsToIntrayAsync(IReadOnlyList<Guid> documentIds)
     {
         if (_api is not { } api)
         {
@@ -2461,10 +2461,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         _dropFiling ??= new DropFiling(api);
-        if (await _dropFiling.CopyToInboxAsync(documentIds, message => Status = message) > 0)
+        if (await _dropFiling.CopyToIntrayAsync(documentIds, message => Status = message) > 0)
         {
-            await RefreshInboxAsync();
-            SelectedTab = 1;   // the Inbox tab: the tree lists FOLDERS and can never show what just landed
+            await RefreshIntrayAsync();
+            SelectedTab = 1;   // the Intray tab: the tree lists FOLDERS and can never show what just landed
         }
     }
 
@@ -2483,20 +2483,20 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    public async Task UploadFilesToInboxAsync(IReadOnlyList<(string Name, byte[] Bytes)> files)
+    public async Task UploadFilesToIntrayAsync(IReadOnlyList<(string Name, byte[] Bytes)> files)
     {
         if (_api is null || files.Count == 0)
         {
             return;
         }
 
-        InboxStatus = string.Format(Strings.Get("StUploadingN"), files.Count);
+        IntrayStatus = string.Format(Strings.Get("StUploadingN"), files.Count);
         var uploaded = 0;
         foreach (var (name, bytes) in files)
         {
             try
             {
-                await _api.Inbox.UploadAsync(name, bytes);
+                await _api.Intray.UploadAsync(name, bytes);
                 uploaded++;
             }
             catch (Exception ex)
@@ -2505,40 +2505,40 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
 
-        await RefreshInboxAsync();
+        await RefreshIntrayAsync();
         if (uploaded > 0)
         {
-            InboxStatus = string.Format(Strings.Get("StUploadedAndItems"), uploaded, ServerInbox.Count);
+            IntrayStatus = string.Format(Strings.Get("StUploadedAndItems"), uploaded, ServerIntray.Count);
         }
     }
 
-    // "Open in file manager" + "WebDAV settings" (Inbox tab) now live in the code-behind (MainWindow.axaml.cs
-    // OnOpenWebDavInbox / OnManageWebDav), since opening the settings dialog when WebDAV isn't configured needs
+    // "Open in file manager" + "WebDAV settings" (Intray tab) now live in the code-behind (MainWindow.axaml.cs
+    // OnOpenWebDavIntray / OnManageWebDav), since opening the settings dialog when WebDAV isn't configured needs
     // the Window (ADR "Desktop inbox WebDAV buttons"). The mount logic stays in Services/OsFileManager.
 
-    // ---- Inbox item detail (right panes): a mask/index-data editor + the shared preview -------------------
+    // ---- Intray item detail (right panes): a mask/index-data editor + the shared preview -------------------
     // The panes are driven by the focused server item; the mask edits are staged to a `{name}.mask.json`
     // sidecar (ADR "Inbox item classification + preview"). The mask pane is only editable for a server item.
 
-    [ObservableProperty] private bool _inboxItemFocused;
-    [ObservableProperty] private bool _inboxIsEmail; // .eml/.msg → classified by the system, no mask offered
-    [ObservableProperty] private string _inboxDetailTitle = "";
-    [ObservableProperty] private string _inboxName = "";
-    [ObservableProperty] private DateTime? _inboxDocumentDate;
-    [ObservableProperty] private MaskChoiceViewModel? _inboxSelectedMaskChoice;
+    [ObservableProperty] private bool _intrayItemFocused;
+    [ObservableProperty] private bool _intrayIsEmail; // .eml/.msg → classified by the system, no mask offered
+    [ObservableProperty] private string _intrayDetailTitle = "";
+    [ObservableProperty] private string _intrayName = "";
+    [ObservableProperty] private DateTime? _intrayDocumentDate;
+    [ObservableProperty] private MaskChoiceViewModel? _intraySelectedMaskChoice;
 
-    public ObservableCollection<MaskChoiceViewModel> InboxAvailableMasks { get; } = [];
-    public ObservableCollection<MaskFieldEditViewModel> InboxMaskEditFields { get; } = [];
+    public ObservableCollection<MaskChoiceViewModel> IntrayAvailableMasks { get; } = [];
+    public ObservableCollection<MaskFieldEditViewModel> IntrayMaskEditFields { get; } = [];
 
-    private Dictionary<Guid, IReadOnlyList<string>> _inboxDraftValues = [];
-    private bool _loadingInboxMask;
+    private Dictionary<Guid, IReadOnlyList<string>> _intrayDraftValues = [];
+    private bool _loadingIntrayMask;
 
-    // Loads the right panes when a server inbox item gains focus (or clears them when focus is lost).
-    async partial void OnSelectedServerInboxItemChanged(InboxItemViewModel? value)
+    // Loads the right panes when a server intray item gains focus (or clears them when focus is lost).
+    async partial void OnSelectedServerIntrayItemChanged(IntrayItemViewModel? value)
     {
         if (value is null)
         {
-            ClearInboxDetail();
+            ClearIntrayDetail();
             return;
         }
 
@@ -2547,25 +2547,25 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        InboxDetailTitle = value.Name;
-        InboxPreview.Reset("Loading…");
-        InboxPreview.FindQuery = "";
+        IntrayDetailTitle = value.Name;
+        IntrayPreview.Reset("Loading…");
+        IntrayPreview.FindQuery = "";
 
         // An email (.eml/.msg) is classified automatically by the system when filed — the mask isn't offered
-        // in the inbox for it (ADR "Consume the staged mask sidecar at filing").
+        // in the intray for it (ADR "Consume the staged mask sidecar at filing").
         var extension = Path.GetExtension(value.Name);
-        InboxIsEmail = extension.Equals(".eml", StringComparison.OrdinalIgnoreCase)
+        IntrayIsEmail = extension.Equals(".eml", StringComparison.OrdinalIgnoreCase)
             || extension.Equals(".msg", StringComparison.OrdinalIgnoreCase);
 
         try
         {
-            await InboxPreview.RenderAsync(await _api.Inbox.GetInboxPreviewAsync(value.Item!));
-            if (!InboxIsEmail)
+            await IntrayPreview.RenderAsync(await _api.Intray.GetIntrayPreviewAsync(value.Item!));
+            if (!IntrayIsEmail)
             {
-                await LoadInboxMaskAsync(value.Item!);
+                await LoadIntrayMaskAsync(value.Item!);
             }
 
-            InboxItemFocused = true;
+            IntrayItemFocused = true;
         }
         catch (Exception e)
         {
@@ -2573,63 +2573,63 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    private async Task LoadInboxMaskAsync(InboxApi.InboxItemInfo item)
+    private async Task LoadIntrayMaskAsync(IntrayApi.IntrayItemInfo item)
     {
-        _loadingInboxMask = true;
+        _loadingIntrayMask = true;
         try
         {
-            InboxAvailableMasks.Clear();
-            InboxAvailableMasks.Add(new MaskChoiceViewModel(null, "(No mask)"));
+            IntrayAvailableMasks.Clear();
+            IntrayAvailableMasks.Add(new MaskChoiceViewModel(null, "(No mask)"));
             foreach (var mask in await _api!.Documents.GetMasksAsync())
             {
-                InboxAvailableMasks.Add(new MaskChoiceViewModel(mask.Id, mask.Name, mask));
+                IntrayAvailableMasks.Add(new MaskChoiceViewModel(mask.Id, mask.Name, mask));
             }
 
             var name = item.Name;
-            var draft = await _api.Inbox.GetInboxMaskAsync(item);
-            _inboxDraftValues = draft.Fields.ToDictionary(f => f.FieldDefinitionId, f => f.Values);
-            InboxName = string.IsNullOrEmpty(draft.Name) ? Path.GetFileNameWithoutExtension(name) : draft.Name;
-            InboxDocumentDate = DateTime.TryParse(draft.DocumentDate, out var d) ? d.Date : null;
+            var draft = await _api.Intray.GetIntrayMaskAsync(item);
+            _intrayDraftValues = draft.Fields.ToDictionary(f => f.FieldDefinitionId, f => f.Values);
+            IntrayName = string.IsNullOrEmpty(draft.Name) ? Path.GetFileNameWithoutExtension(name) : draft.Name;
+            IntrayDocumentDate = DateTime.TryParse(draft.DocumentDate, out var d) ? d.Date : null;
 
             // OCR languages: only for a scannable item, staged + applied at filing (ADR "Inbox OCR-language
             // staging"). Load the catalog on demand so DescribeOcrLanguages can map codes → names.
-            InboxStgScannable = IsScannableExtension(name);
-            _inboxStgOcrCodes = draft.OcrLanguages.ToList();
-            if (InboxStgScannable && _ocrCatalog.Count == 0)
+            IntrayStgScannable = IsScannableExtension(name);
+            _intrayStgOcrCodes = draft.OcrLanguages.ToList();
+            if (IntrayStgScannable && _ocrCatalog.Count == 0)
             {
                 try { _ocrCatalog = await _api.GetOcrLanguageCatalogAsync(); }
                 catch { /* non-fatal — the picker just shows codes */ }
             }
-            InboxOcrDisplay = DescribeOcrLanguages(_inboxStgOcrCodes);
+            IntrayOcrDisplay = DescribeOcrLanguages(_intrayStgOcrCodes);
 
             // Preselect the staged mask, or default to "Basic Entry" for an un-classified item (the same
             // default auto-classification applies at filing).
-            InboxSelectedMaskChoice = draft.MaskId is { } staged
-                ? InboxAvailableMasks.FirstOrDefault(m => m.MaskId == staged) ?? InboxAvailableMasks[0]
-                : InboxAvailableMasks.FirstOrDefault(m => m.Name == "Basic Entry") ?? InboxAvailableMasks[0];
-            await LoadInboxMaskFieldsAsync(InboxSelectedMaskChoice?.Mask, useDraftValues: true);
+            IntraySelectedMaskChoice = draft.MaskId is { } staged
+                ? IntrayAvailableMasks.FirstOrDefault(m => m.MaskId == staged) ?? IntrayAvailableMasks[0]
+                : IntrayAvailableMasks.FirstOrDefault(m => m.Name == "Basic Entry") ?? IntrayAvailableMasks[0];
+            await LoadIntrayMaskFieldsAsync(IntraySelectedMaskChoice?.Mask, useDraftValues: true);
         }
         finally
         {
-            _loadingInboxMask = false;
+            _loadingIntrayMask = false;
         }
     }
 
     // Reloads the field editors when a different mask is picked (empty values); suppressed on the initial load,
     // which fills the staged draft values instead.
-    async partial void OnInboxSelectedMaskChoiceChanged(MaskChoiceViewModel? value)
+    async partial void OnIntraySelectedMaskChoiceChanged(MaskChoiceViewModel? value)
     {
-        if (_loadingInboxMask)
+        if (_loadingIntrayMask)
         {
             return;
         }
 
-        await LoadInboxMaskFieldsAsync(value?.Mask, useDraftValues: false);
+        await LoadIntrayMaskFieldsAsync(value?.Mask, useDraftValues: false);
     }
 
-    private async Task LoadInboxMaskFieldsAsync(DocumentsClient.MaskOptionInfo? mask, bool useDraftValues)
+    private async Task LoadIntrayMaskFieldsAsync(DocumentsClient.MaskOptionInfo? mask, bool useDraftValues)
     {
-        InboxMaskEditFields.Clear();
+        IntrayMaskEditFields.Clear();
         if (_api is null || mask is not { } chosen)
         {
             return;
@@ -2637,29 +2637,29 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         foreach (var field in await _api.Documents.GetMaskFieldsAsync(chosen))
         {
-            var values = useDraftValues && _inboxDraftValues.TryGetValue(field.Id, out var v) ? v : [];
-            InboxMaskEditFields.Add(MaskFieldEditViewModel.Create(field, values));
+            var values = useDraftValues && _intrayDraftValues.TryGetValue(field.Id, out var v) ? v : [];
+            IntrayMaskEditFields.Add(MaskFieldEditViewModel.Create(field, values));
         }
     }
 
     // Saves the staged mask/index-data to the focused item's `{name}.mask.json` sidecar (no filed Document yet,
     // so no required-field validation runs here). Updates the item's square-bracket indicator in place.
     [RelayCommand]
-    private async Task SaveInboxMaskAsync()
+    private async Task SaveIntrayMaskAsync()
     {
-        if (_api is null || SelectedServerInboxItem is not { } item)
+        if (_api is null || SelectedServerIntrayItem is not { } item)
         {
             return;
         }
 
         try
         {
-            var maskId = InboxSelectedMaskChoice?.MaskId;
-            var fields = InboxMaskEditFields.Select(f => (f.FieldDefinitionId, f.ToValues())).ToList();
-            var stagedName = string.IsNullOrWhiteSpace(InboxName) ? null : InboxName.Trim();
-            var docDate = InboxDocumentDate?.ToString("yyyy-MM-dd");
-            var ocr = InboxStgScannable && _inboxStgOcrCodes.Count > 0 ? _inboxStgOcrCodes : null;
-            await _api.Inbox.SetInboxMaskAsync(item.Item!, stagedName, docDate, maskId, fields, ocr);
+            var maskId = IntraySelectedMaskChoice?.MaskId;
+            var fields = IntrayMaskEditFields.Select(f => (f.FieldDefinitionId, f.ToValues())).ToList();
+            var stagedName = string.IsNullOrWhiteSpace(IntrayName) ? null : IntrayName.Trim();
+            var docDate = IntrayDocumentDate?.ToString("yyyy-MM-dd");
+            var ocr = IntrayStgScannable && _intrayStgOcrCodes.Count > 0 ? _intrayStgOcrCodes : null;
+            await _api.Intray.SetIntrayMaskAsync(item.Item!, stagedName, docDate, maskId, fields, ocr);
             item.HasMask = maskId is not null || fields.Any(f => f.Item2.Count > 0) || stagedName is not null || docDate is not null || ocr is not null;
             Status = Strings.Get("StMaskSaved");
         }
@@ -2669,46 +2669,46 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // The inbox mask pane's OCR-language picker (ADR "Inbox OCR-language staging") — shown only for a scannable
-    // item (.tif/.tiff/.pdf); edited via the view's OnEditInboxOcrLanguages (the shared OcrLanguagePickerDialog),
+    // The intray mask pane's OCR-language picker (ADR "Inbox OCR-language staging") — shown only for a scannable
+    // item (.tif/.tiff/.pdf); edited via the view's OnEditIntrayOcrLanguages (the shared OcrLanguagePickerDialog),
     // staged into the pane, and consumed at filing to OCR the searchable-PDF successor in the chosen languages.
-    [ObservableProperty] private bool _inboxStgScannable;
-    [ObservableProperty] private string _inboxOcrDisplay = "";
-    private List<string> _inboxStgOcrCodes = [];
+    [ObservableProperty] private bool _intrayStgScannable;
+    [ObservableProperty] private string _intrayOcrDisplay = "";
+    private List<string> _intrayStgOcrCodes = [];
 
-    public (IReadOnlyList<SimplArchiveApiClient.OcrLanguageOption> Catalog, IReadOnlyList<string> Selected) InboxOcrPickerState() =>
-        (_ocrCatalog, _inboxStgOcrCodes);
+    public (IReadOnlyList<SimplArchiveApiClient.OcrLanguageOption> Catalog, IReadOnlyList<string> Selected) IntrayOcrPickerState() =>
+        (_ocrCatalog, _intrayStgOcrCodes);
 
-    public void StageInboxOcrLanguages(IReadOnlyList<string> codes)
+    public void StageIntrayOcrLanguages(IReadOnlyList<string> codes)
     {
-        _inboxStgOcrCodes = codes.ToList();
-        InboxOcrDisplay = DescribeOcrLanguages(_inboxStgOcrCodes);
+        _intrayStgOcrCodes = codes.ToList();
+        IntrayOcrDisplay = DescribeOcrLanguages(_intrayStgOcrCodes);
     }
 
     private static bool IsScannableExtension(string name) =>
         Path.GetExtension(name).ToLowerInvariant() is ".tif" or ".tiff" or ".pdf";
 
-    private void ClearInboxDetail()
+    private void ClearIntrayDetail()
     {
-        InboxItemFocused = false;
-        InboxIsEmail = false;
-        InboxDetailTitle = "";
-        InboxName = "";
-        InboxDocumentDate = null;
-        InboxAvailableMasks.Clear();
-        InboxMaskEditFields.Clear();
-        _inboxDraftValues = [];
-        InboxPreview.Reset("Select a server inbox item.");
-        InboxPreview.PreviewConverted = false;
-        InboxPreview.CanFindInDocument = false;
-        InboxPreview.FindQuery = "";
+        IntrayItemFocused = false;
+        IntrayIsEmail = false;
+        IntrayDetailTitle = "";
+        IntrayName = "";
+        IntrayDocumentDate = null;
+        IntrayAvailableMasks.Clear();
+        IntrayMaskEditFields.Clear();
+        _intrayDraftValues = [];
+        IntrayPreview.Reset("Select a server intray item.");
+        IntrayPreview.PreviewConverted = false;
+        IntrayPreview.CanFindInDocument = false;
+        IntrayPreview.FindQuery = "";
     }
 
-    // Opens a server inbox item natively: download it to the temp folder, then hand it to its OS app.
+    // Opens a server intray item natively: download it to the temp folder, then hand it to its OS app.
     [RelayCommand]
-    private async Task OpenServerInboxItemAsync()
+    private async Task OpenServerIntrayItemAsync()
     {
-        if (SelectedServerInboxItem is not { } item)
+        if (SelectedServerIntrayItem is not { } item)
         {
             return;
         }
@@ -2724,8 +2724,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Files a server inbox item into a chosen folder (the view picks it), then refreshes.
-    public async Task FileServerInboxItemAsync(InboxItemViewModel item, Guid folderId, string? comment)
+    // Files a server intray item into a chosen folder (the view picks it), then refreshes.
+    public async Task FileServerIntrayItemAsync(IntrayItemViewModel item, Guid folderId, string? comment)
     {
         if (_api is null)
         {
@@ -2734,9 +2734,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.Inbox.FileInboxItemAsync(item.Item!, folderId, comment);
+            await _api.Intray.FileIntrayItemAsync(item.Item!, folderId, comment);
             Status = string.Format(Strings.Get("StFiled"), item.Name);
-            await RefreshInboxAsync();
+            await RefreshIntrayAsync();
         }
         catch (ApiActionException e)
         {
@@ -2744,8 +2744,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Files a server inbox item as a new version of an existing document (ADR "Context-aware inbox filing dialog").
-    public async Task FileServerInboxItemAsVersionAsync(InboxItemViewModel item, Guid documentId, string? comment)
+    // Files a server intray item as a new version of an existing document (ADR "Context-aware inbox filing dialog").
+    public async Task FileServerIntrayItemAsVersionAsync(IntrayItemViewModel item, Guid documentId, string? comment)
     {
         if (_api is null)
         {
@@ -2754,9 +2754,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.Inbox.FileInboxItemAsVersionAsync(item.Item!, documentId, comment);
+            await _api.Intray.FileIntrayItemAsVersionAsync(item.Item!, documentId, comment);
             Status = string.Format(Strings.Get("StFiledVersion"), item.Name);
-            await RefreshInboxAsync();
+            await RefreshIntrayAsync();
 
             // The server posts a feed comment on the filed document and adds a new version (ADR "Filing posts a
             // feed comment"). If that document is the one currently open on the Repositories tab, refresh its
@@ -2778,8 +2778,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // inbox items"). Set from the list's selection in code-behind.
     [ObservableProperty] private bool _canFileMultiple;
 
-    // Files several server inbox items into one folder, best-effort, each with the same optional feed comment.
-    public async Task FileMultipleServerItemsAsync(IReadOnlyList<InboxItemViewModel> items, Guid folderId, string? comment)
+    // Files several server intray items into one folder, best-effort, each with the same optional feed comment.
+    public async Task FileMultipleServerItemsAsync(IReadOnlyList<IntrayItemViewModel> items, Guid folderId, string? comment)
     {
         if (_api is null || items.Count == 0)
         {
@@ -2791,7 +2791,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             try
             {
-                await _api.Inbox.FileInboxItemAsync(item.Item!, folderId, comment);
+                await _api.Intray.FileIntrayItemAsync(item.Item!, folderId, comment);
                 filed++;
             }
             catch (Exception)
@@ -2801,7 +2801,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         Status = string.Format(Strings.Get("StFiledOf"), filed, items.Count);
-        await RefreshInboxAsync();
+        await RefreshIntrayAsync();
     }
     // Builds the filing dialog VM, passing the Repositories tab's selected document (if any) so the dialog can
     // offer filing as a new version of it / into its folder (ADR "Context-aware inbox filing dialog").
@@ -2883,10 +2883,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
     async partial void OnSelectedTabChanged(int value)
     {
         Preview.ExitFullscreen(); // leave full screen when switching tabs (the tab strip stays reachable while maximized)
-        InboxPreview.ExitFullscreen();
+        IntrayPreview.ExitFullscreen();
         RecycleBin.Preview.ExitFullscreen();
 
-        // Tab order: 0 Repositories · 1 Inbox · 2 Check-out · 3 Search · 4 Recycle bin · 5 Tasks · 6 Users/Groups
+        // Tab order: 0 Repositories · 1 Intray · 2 Check-out · 3 Search · 4 Recycle bin · 5 Tasks · 6 Users/Groups
         // · 7 Audit · 8 Legal holds · 9 Retention · 10 Tenant · 11 My work (added at the end to avoid re-indexing
         // the others, ADR "My work dashboard").
         if (value == 11)
@@ -2906,7 +2906,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         if (value == 1)
         {
-            await RefreshInboxAsync();
+            await RefreshIntrayAsync();
         }
 
         if (value == 2)
@@ -2967,7 +2967,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     // Returning to the Repositories tab reloads the open folder's contents — so a document filed or re-versioned
-    // from another tab (e.g. the Inbox) appears — while keeping focus on the selected document (re-selected by
+    // from another tab (e.g. the Intray) appears — while keeping focus on the selected document (re-selected by
     // id, which re-renders its detail + preview so a new version shows). See ADR "Desktop recycle bin parity".
     private async Task RefreshRepositoriesViewAsync()
     {
@@ -3676,7 +3676,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Status = string.Format(Strings.Get("StUploadedN"), uploaded) + (failed > 0 ? string.Format(Strings.Get("StFailedN"), failed) : "") + ".";
     }
 
-    // Dropping OS files onto a document row offers the inbox-style filing dialog (ADR "List-pane drop filing"):
+    // Dropping OS files onto a document row offers the intray-style filing dialog (ADR "List-pane drop filing"):
     // file as a new version of that document, or into its folder, with an optional feed comment. Builds the
     // picker VM (single-file → as-version available; multi-file → bulk, folder-only). The view shows the dialog
     // and calls FileDroppedFilesAsync with the result.
@@ -3919,7 +3919,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         "Tenant administrator", "Impersonate", "Override checkout", "Legal hold",
         "Manage classification", "Reset MFA", "Manage repositories", "Manage masks",
         "Manage service accounts", "Manage users & groups", "View audit log", "Export", "Import",
-        "Manage inboxes", "Create external links",
+        "Manage intrayes", "Create external links",
     ];
 
     async partial void OnSelectedPrincipalChanged(PrincipalRowViewModel? value)
@@ -4826,7 +4826,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         10 => r.CanViewAuditLog,
         11 => r.CanExport,
         12 => r.CanImport,
-        13 => r.CanManageInboxes,
+        13 => r.CanManageIntrayes,
         _ => r.CanCreateExternalLink,
     };
 
@@ -5826,7 +5826,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // The Repositories/Inbox preview render goes through the shared Preview surface (ADR "Desktop recycle bin
+    // The Repositories/Intray preview render goes through the shared Preview surface (ADR "Desktop recycle bin
     // parity" — the Recycle bin has its own).
     private async Task LoadPreviewAsync(string versionsHref) => await Preview.RenderAsync(await _api!.Documents.GetPreviewAsync(versionsHref));
 
@@ -6255,24 +6255,24 @@ public sealed partial class MainWindowViewModel : ObservableObject
         FiltersExpanded = true;
     }
 
-    internal void PopulateInboxDemoForScreenshot()
+    internal void PopulateIntrayDemoForScreenshot()
     {
         IsLoggedIn = true;
         UserEmail = "demo@simplarchive.local";
         SelectedTab = 1;
-        ServerInbox.Add(new InboxItemViewModel { Name = "invoice-2026-03.pdf", Size = 132_004, DownloadUrl = "", HasMask = true });
-        ServerInbox.Add(new InboxItemViewModel { Name = "meeting-notes.eml", Size = 8_942, DownloadUrl = "", HasMask = false });
-        InboxStatus = "2 item(s).";
+        ServerIntray.Add(new IntrayItemViewModel { Name = "invoice-2026-03.pdf", Size = 132_004, DownloadUrl = "", HasMask = true });
+        ServerIntray.Add(new IntrayItemViewModel { Name = "meeting-notes.eml", Size = 8_942, DownloadUrl = "", HasMask = false });
+        IntrayStatus = "2 item(s).";
 
         // Focus the first server item so the right panes (mask + preview) show in the screenshot.
-        InboxDetailTitle = "invoice-2026-03.pdf";
-        InboxItemFocused = true;
-        InboxName = "invoice-2026-03";
-        InboxDocumentDate = new DateTime(2026, 3, 31);
-        InboxAvailableMasks.Add(new MaskChoiceViewModel(null, "(No mask)"));
-        InboxAvailableMasks.Add(new MaskChoiceViewModel(Guid.NewGuid(), "Basic Entry"));
-        InboxSelectedMaskChoice = InboxAvailableMasks[1];
-        InboxMaskEditFields.Add(MaskFieldEditViewModel.Create(new DocumentsClient.MaskFieldInfo(Guid.NewGuid(), "Keywords", "MultiSelect", false), ["invoice", "march"]));
+        IntrayDetailTitle = "invoice-2026-03.pdf";
+        IntrayItemFocused = true;
+        IntrayName = "invoice-2026-03";
+        IntrayDocumentDate = new DateTime(2026, 3, 31);
+        IntrayAvailableMasks.Add(new MaskChoiceViewModel(null, "(No mask)"));
+        IntrayAvailableMasks.Add(new MaskChoiceViewModel(Guid.NewGuid(), "Basic Entry"));
+        IntraySelectedMaskChoice = IntrayAvailableMasks[1];
+        IntrayMaskEditFields.Add(MaskFieldEditViewModel.Create(new DocumentsClient.MaskFieldInfo(Guid.NewGuid(), "Keywords", "MultiSelect", false), ["invoice", "march"]));
         Preview.Reset("Preview renders here (PDF/image/text).");
     }
 
@@ -6691,60 +6691,60 @@ public sealed partial class MainWindowViewModel : ObservableObject
         return defaultIsDocDate && persisted && reflected;
     }
 
-    // Headless exercise of the inbox drop-zone upload (ADR "Inbox file-list drop-zone", see DesktopInboxDropTests):
-    // uploading dropped bytes puts a new item in the server inbox. Cleans up so the shared demo inbox stays tidy.
-    internal async Task<bool> InboxDropSelfTestAsync(string accessToken)
+    // Headless exercise of the intray drop-zone upload (ADR "Inbox file-list drop-zone", see DesktopIntrayDropTests):
+    // uploading dropped bytes puts a new item in the server intray. Cleans up so the shared demo intray stays tidy.
+    internal async Task<bool> IntrayDropSelfTestAsync(string accessToken)
     {
         UseApi(new SimplArchiveApiClient(accessToken));
-        var name = "inboxdrop-" + Guid.NewGuid().ToString("N")[..8] + ".txt";
-        await UploadFilesToInboxAsync(new[] { (name, System.Text.Encoding.UTF8.GetBytes("dropped into the inbox")) });
-        var present = ServerInbox.Any(i => i.Name == name);
-        if (ServerInbox.FirstOrDefault(i => i.Name == name) is { } uploaded)
+        var name = "intraydrop-" + Guid.NewGuid().ToString("N")[..8] + ".txt";
+        await UploadFilesToIntrayAsync(new[] { (name, System.Text.Encoding.UTF8.GetBytes("dropped into the intray")) });
+        var present = ServerIntray.Any(i => i.Name == name);
+        if (ServerIntray.FirstOrDefault(i => i.Name == name) is { } uploaded)
         {
-            await _api!.Inbox.DeleteInboxItemAsync(uploaded.Item!);
+            await _api!.Intray.DeleteIntrayItemAsync(uploaded.Item!);
         }
 
         return present;
     }
 
-    // Headless exercise of inbox send + admin triage (ADR 0532, see DesktopInboxSendTests): the admin uploads an
-    // own item, hands it to a freshly-created user via the send-target list, and — as a CanManageInboxes holder —
-    // sees it in that user's inbox via ?user=. Cleans up the item + the user so the shared demo stays tidy.
-    internal async Task<bool> InboxSendSelfTestAsync(string accessToken)
+    // Headless exercise of intray send + admin triage (ADR 0532, see DesktopIntraySendTests): the admin uploads an
+    // own item, hands it to a freshly-created user via the send-target list, and — as a CanManageIntrayes holder —
+    // sees it in that user's intray via ?user=. Cleans up the item + the user so the shared demo stays tidy.
+    internal async Task<bool> IntraySendSelfTestAsync(string accessToken)
     {
         UseApi(new SimplArchiveApiClient(accessToken));
-        CanManageInboxes = (await _api!.GetWhoAmIAsync()).CanManageInboxes;
+        CanManageIntrayes = (await _api!.GetWhoAmIAsync()).CanManageIntrayes;
 
         var recipient = await _api.Admin.CreateUserAsync($"send-{Guid.NewGuid():N}@e2e.local", "Send Recipient");
 
         var name = "send-" + Guid.NewGuid().ToString("N")[..8] + ".txt";
-        await UploadFilesToInboxAsync(new[] { (name, System.Text.Encoding.UTF8.GetBytes("hand-off")) });
-        if (ServerInbox.FirstOrDefault(i => i.Name == name) is not { } item)
+        await UploadFilesToIntrayAsync(new[] { (name, System.Text.Encoding.UTF8.GetBytes("hand-off")) });
+        if (ServerIntray.FirstOrDefault(i => i.Name == name) is not { } item)
         {
             return false;
         }
 
-        var target = (await InboxActions.GetSendTargetsAsync()).FirstOrDefault(t => !t.IsGroup && t.Id == recipient.Id);
+        var target = (await IntrayActions.GetSendTargetsAsync()).FirstOrDefault(t => !t.IsGroup && t.Id == recipient.Id);
         if (target is null)
         {
             return false;
         }
 
-        await InboxActions.SendAsync(item, target);
-        var leftOwnInbox = ServerInbox.All(i => i.Name != name);                                  // gone from mine
-        var inRecipientInbox = (await _api.Inbox.ListAsync(user: recipient.Id)).Items.Any(i => i.Name == name); // now theirs
+        await IntrayActions.SendAsync(item, target);
+        var leftOwnIntray = ServerIntray.All(i => i.Name != name);                                  // gone from mine
+        var inRecipientIntray = (await _api.Intray.ListAsync(user: recipient.Id)).Items.Any(i => i.Name == name); // now theirs
 
-        if ((await _api.Inbox.ListAsync(user: recipient.Id)).Items.FirstOrDefault(i => i.Name == name) is { } handedOver)
+        if ((await _api.Intray.ListAsync(user: recipient.Id)).Items.FirstOrDefault(i => i.Name == name) is { } handedOver)
         {
-            await _api.Inbox.DeleteInboxItemAsync(handedOver);
+            await _api.Intray.DeleteIntrayItemAsync(handedOver);
         }
 
         await _api.Admin.DeleteUserAsync(recipient);
-        return leftOwnInbox && inRecipientInbox;
+        return leftOwnIntray && inRecipientIntray;
     }
 
     // Headless exercise of the Personal-space grouping (ADR "GUI-tree Personal space grouping", see
-    // DesktopPersonalSpaceTreeTests): the Personal node nests the Inbox + Check-out launcher nodes above its real
+    // DesktopPersonalSpaceTreeTests): the Personal node nests the Intray + Check-out launcher nodes above its real
     // subfolders, and selecting a launcher switches to the matching bottom tab.
     internal async Task<List<string>> PersonalLaunchersSelfTestAsync(string accessToken)
     {
@@ -6760,15 +6760,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         var children = (await LoadPersonalChildrenAsync(new TreeNodeViewModel(personal.Id, personal.Name, false, null, links: personal.Links))).ToList();
-        log.Add(children is [{ PersonalKind: "inbox", IsLauncher: true, LauncherTab: 1, IconValue: "mdi-inbox-arrow-down" },
+        log.Add(children is [{ PersonalKind: "intray", IsLauncher: true, LauncherTab: 1, IconValue: "mdi-inbox-arrow-down" },
         { PersonalKind: "checkout", IsLauncher: true, LauncherTab: 2, IconValue: "mdi-lock-open-variant-outline" }, ..]
-            ? "OK: Inbox + Check-out launchers nested first under Personal."
+            ? "OK: Intray + Check-out launchers nested first under Personal."
             : "FAILED: launcher nodes missing or out of order.");
 
-        // Selecting the Inbox launcher switches to the Inbox bottom tab (index 1); the tab index is set
+        // Selecting the Intray launcher switches to the Intray bottom tab (index 1); the tab index is set
         // synchronously in the launcher branch before any await.
         SelectedTreeNode = children[0];
-        log.Add(SelectedTab == 1 ? "OK: selecting the Inbox launcher switched to tab 1." : $"FAILED: tab is {SelectedTab}.");
+        log.Add(SelectedTab == 1 ? "OK: selecting the Intray launcher switched to tab 1." : $"FAILED: tab is {SelectedTab}.");
 
         SelectedTreeNode = children[1];
         log.Add(SelectedTab == 2 ? "OK: selecting the Check-out launcher switched to tab 2." : $"FAILED: tab is {SelectedTab}.");

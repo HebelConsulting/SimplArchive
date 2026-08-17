@@ -161,7 +161,7 @@ if (!string.IsNullOrWhiteSpace(webAuthnBaseUrl))
 // seeding".
 builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
 
-// Confirms + auto-classifies an uploaded/filed DocumentVersion — shared by version finalize and inbox
+// Confirms + auto-classifies an uploaded/filed DocumentVersion — shared by version finalize and intray
 // filing (ADR "S3-backed inbox").
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentFinalizer>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.ChatSystemEntryRecorder>();
@@ -175,14 +175,14 @@ builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentAccessService>();
 // Restore of recycle-bin documents — shared by DocumentsController (per-item) and RecycleBinController (bulk).
 // See ADR "Bulk restore from the recycle bin".
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentRestorer>();
-// The inbox's page operations and the scope/authorization rule they share with InboxController (ADR 0575).
-builder.Services.AddScoped<SimplArchive.Api.Inbox.InboxScopeResolver>();
-builder.Services.AddScoped<SimplArchive.Api.Inbox.InboxPageService>();
+// The intray's page operations and the scope/authorization rule they share with IntrayController (ADR 0575).
+builder.Services.AddScoped<SimplArchive.Api.Intray.IntrayScopeResolver>();
+builder.Services.AddScoped<SimplArchive.Api.Intray.IntrayPageService>();
 builder.Services.AddScoped<SimplArchive.Api.Checkouts.CheckoutPageService>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.RepositoryExporter>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.RepositoryImporter>();
 // Get-or-create the caller's personal repository — shared by PersonalRepositoryController and the WebDAV
-// gateway (which nests Inbox / Check-out under Personal). See ADR "WebDAV Inbox/Check-out under Personal".
+// gateway (which nests Intray / Check-out under Personal). See ADR "WebDAV Inbox/Check-out under Personal".
 builder.Services.AddScoped<SimplArchive.Api.Documents.PersonalRepositoryProvisioner>();
 // Bulk clearance filtering for listings + search (ADR "Sensitivity clearance enforcement"); the per-document
 // CanSee authority is IEffectiveRightsCalculator.
@@ -457,7 +457,7 @@ using (var scope = app.Services.CreateScope())
 
     // Env-driven idempotent demo-data seed (Docker Compose / kiosk only) — provisions a demo tenant + admin
     // with a KNOWN password and a realistic sample tree (Business Years / Contracts / General, varied file types,
-    // references, two extra users + a shared group inbox), so a visitor can log straight in and see content
+    // references, two extra users + a shared group intray), so a visitor can log straight in and see content
     // (ADR "Compose demo-data seeding" / 0214; issue #354). No-op unless the Demo:* config is present and the
     // tenant doesn't already exist. The seeding logic lives in DemoDataSeeder (extracted from this file).
     await DemoDataSeeder.SeedIfConfiguredAsync(services, app.Configuration);

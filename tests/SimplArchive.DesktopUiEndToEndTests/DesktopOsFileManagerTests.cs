@@ -7,7 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // function — assert it for each OS.
 public class DesktopOsFileManagerTests
 {
-    private const string Url = "https://archive.example.com:8443/webdav/Inbox";
+    private const string Url = "https://archive.example.com:8443/webdav/Intray";
 
     [Fact]
     public void MacOs_only_mounts_and_names_no_volume_path()
@@ -59,7 +59,7 @@ public class DesktopOsFileManagerTests
         var scripts = new[]
         {
             string.Join("\n", OsFileManager.BuildOpenCommand(Url, OsFileManager.Platform.MacOs).Arguments),
-            string.Join("\n", OsFileManager.BuildOpenWebDavFileCommand(Url, "Personal/Inbox", OsFileManager.Platform.MacOs).Arguments),
+            string.Join("\n", OsFileManager.BuildOpenWebDavFileCommand(Url, "Personal/Intray", OsFileManager.Platform.MacOs).Arguments),
         };
 
         foreach (var script in scripts)
@@ -77,7 +77,7 @@ public class DesktopOsFileManagerTests
     {
         var (file, args) = OsFileManager.BuildOpenCommand(Url, OsFileManager.Platform.Linux);
         Assert.Equal("xdg-open", file);
-        Assert.Contains("davs://archive.example.com:8443/webdav/Inbox", args);
+        Assert.Contains("davs://archive.example.com:8443/webdav/Intray", args);
     }
 
     [Fact]
@@ -85,14 +85,14 @@ public class DesktopOsFileManagerTests
     {
         var (file, args) = OsFileManager.BuildOpenCommand(Url, OsFileManager.Platform.Windows);
         Assert.Equal("explorer.exe", file);
-        Assert.Contains(@"\\archive.example.com@SSL@8443\DavWWWRoot\webdav\Inbox", args);
+        Assert.Contains(@"\\archive.example.com@SSL@8443\DavWWWRoot\webdav\Intray", args);
     }
 
     [Fact]
     public void Http_url_uses_the_plain_dav_scheme_on_linux()
     {
-        var (_, args) = OsFileManager.BuildOpenCommand("http://localhost:8080/webdav/Inbox", OsFileManager.Platform.Linux);
-        Assert.Contains("dav://localhost:8080/webdav/Inbox", args);
+        var (_, args) = OsFileManager.BuildOpenCommand("http://localhost:8080/webdav/Intray", OsFileManager.Platform.Linux);
+        Assert.Contains("dav://localhost:8080/webdav/Intray", args);
         Assert.DoesNotContain(args, a => a.Contains("davs://"));
     }
 
@@ -128,7 +128,7 @@ public class DesktopOsFileManagerTests
         Assert.Contains(@"\\archive.example.com@SSL@8443\DavWWWRoot\SimplArchive\Personal\Check-out\Report Q1.txt", args);
     }
 
-    // The desktop Inbox / Check-out "Open in file manager" buttons deep-open a FOLDER within the single mount
+    // The desktop Intray / Check-out "Open in file manager" buttons deep-open a FOLDER within the single mount
     // (OpenWebDavFolderAsync → BuildOpenWebDavFileCommand with a folder relative path).
     [Fact]
     public void Folder_deep_open_targets_the_subfolder_within_the_single_mount()
@@ -137,8 +137,8 @@ public class DesktopOsFileManagerTests
         Assert.Equal("osascript", mac);
         Assert.Contains("/Volumes/SimplArchive/Personal/Check-out", string.Join("\n", macArgs));
 
-        var (_, linuxArgs) = OsFileManager.BuildOpenWebDavFileCommand(Base, "Personal/Inbox", OsFileManager.Platform.Linux);
-        Assert.Contains("davs://archive.example.com:8443/SimplArchive/Personal/Inbox", linuxArgs);
+        var (_, linuxArgs) = OsFileManager.BuildOpenWebDavFileCommand(Base, "Personal/Intray", OsFileManager.Platform.Linux);
+        Assert.Contains("davs://archive.example.com:8443/SimplArchive/Personal/Intray", linuxArgs);
 
         var (_, winArgs) = OsFileManager.BuildOpenWebDavFileCommand(Base, "Personal/Check-out", OsFileManager.Platform.Windows);
         Assert.Contains(@"\\archive.example.com@SSL@8443\DavWWWRoot\SimplArchive\Personal\Check-out", winArgs);
@@ -146,7 +146,7 @@ public class DesktopOsFileManagerTests
 
     // ---- Already mounted: open the folder on disk, do NOT re-mount ----------------------------------------
     //
-    // The Inbox / Check-out button's whole point is that a user who already has the volume lands in that tab's
+    // The Intray / Check-out button's whole point is that a user who already has the volume lands in that tab's
     // folder immediately (ADR "One WebDAV button per tab, deep-linked"). Re-issuing a mount would ask the OS to
     // redo work it has done, which on macOS is the difference between Finder coming forward and a spinner.
 
@@ -155,10 +155,10 @@ public class DesktopOsFileManagerTests
     [InlineData(OsFileManager.Platform.Linux, "xdg-open")]
     public void An_already_mounted_folder_is_opened_directly_without_mounting(OsFileManager.Platform platform, string expected)
     {
-        var (file, args) = OsFileManager.BuildOpenLocalFolderCommand("/Volumes/SimplArchive/Personal/Inbox", platform);
+        var (file, args) = OsFileManager.BuildOpenLocalFolderCommand("/Volumes/SimplArchive/Personal/Intray", platform);
 
         Assert.Equal(expected, file);
-        Assert.Contains("/Volumes/SimplArchive/Personal/Inbox", args);
+        Assert.Contains("/Volumes/SimplArchive/Personal/Intray", args);
 
         // The assertion that matters: nothing here mounts anything.
         Assert.DoesNotContain("mount volume", string.Join("\n", args));

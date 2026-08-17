@@ -12,7 +12,7 @@ namespace SimplArchive.Api.Documents;
 
 // Confirms a Pending DocumentVersion (server-side hash + version number), auto-classifies the document, and
 // files an email's attachments — the shared tail of an upload, used both by DocumentVersionsController's
-// finalize and by filing an inbox item (ADR "S3-backed inbox"), which arrives with its object already in
+// finalize and by filing an intray item (ADR "S3-backed inbox"), which arrives with its object already in
 // storage. Idempotent: a no-op on an already-Confirmed version.
 public class DocumentFinalizer
 {
@@ -122,17 +122,17 @@ public class DocumentFinalizer
         await _storageQuota.AdjustUsageAsync(version.TenantId, sizeBytes, cancellationToken);
 
         // The document's chat thread records that this was filed (ADR 0545). This method is the single point
-        // every interactive upload reaches — the versions endpoint, check-in, inbox filing and WebDAV all funnel
+        // every interactive upload reaches — the versions endpoint, check-in, intray filing and WebDAV all funnel
         // through it — and the early return above makes it idempotent, so a re-finalize can't post twice.
         await _chatEntries.RecordVersionFiledAsync(version, cancellationToken);
 
-        // Classification: a staged inbox draft (ADR "Consume the staged mask sidecar at filing") takes over
-        // when present — the user classified the item in the inbox, so its Name/Document date/mask/index-data
+        // Classification: a staged intray draft (ADR "Consume the staged mask sidecar at filing") takes over
+        // when present — the user classified the item in the intray, so its Name/Document date/mask/index-data
         // are applied and auto-classification is skipped. Otherwise a just-confirmed, still-unclassified
         // document gets its default mask — eMail (fields filled + named after the subject) for .eml/.msg else
         // Basic Entry (ADR "Email auto-classification") — and an email's attachments are filed as child
         // documents (ADR "Email attachments as child documents"). Emails are never staged (they aren't offered
-        // a mask in the inbox), so a staged draft only ever applies to a non-email.
+        // a mask in the intray), so a staged draft only ever applies to a non-email.
         if (staged is not null)
         {
             await ApplyStagedClassificationAsync(version, staged, cancellationToken);
@@ -178,11 +178,11 @@ public class DocumentFinalizer
             cancellationToken: cancellationToken);
     }
 
-    // Applies an inbox item's staged classification draft to the just-confirmed document (ADR "Consume the
+    // Applies an intray item's staged classification draft to the just-confirmed document (ADR "Consume the
     // staged mask sidecar at filing"). Name + Document date always apply; the mask + index-data are applied
     // best-effort — if the staged data fails the mask's required-field / format-range validation, the document
     // is filed WITHOUT the mask (logged via the thrown exception being swallowed) rather than failing the whole
-    // filing, since the object has already left the inbox. Never auto-classifies (the user took control).
+    // filing, since the object has already left the intray. Never auto-classifies (the user took control).
     private async Task ApplyStagedClassificationAsync(DocumentVersion version, StagedClassification staged, CancellationToken cancellationToken)
     {
         var document = await _dbContext.Documents.SingleAsync(d => d.Id == version.DocumentId, cancellationToken);
@@ -515,7 +515,7 @@ public class DocumentFinalizer
     }
 }
 
-// An inbox item's staged classification draft (from its `{name}.mask.json` sidecar), applied at filing time
+// An intray item's staged classification draft (from its `{name}.mask.json` sidecar), applied at filing time
 // (ADR "Consume the staged mask sidecar at filing"). DocumentDate is a "yyyy-MM-dd" string; MaskId null = none.
 public sealed record StagedClassification(
     string? Name, string? DocumentDate, Guid? MaskId,

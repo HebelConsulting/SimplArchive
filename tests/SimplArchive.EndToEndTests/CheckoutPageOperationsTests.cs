@@ -11,7 +11,7 @@ namespace SimplArchive.EndToEndTests;
 // (ADR 0543). The subject is the stash — created lazily from the archived version on the first operation — and
 // the archive is proven UNTOUCHED until a normal check-in promotes the result.
 //
-// Pages get DIFFERENT WIDTHS (the InboxPageOperationsTests identity trick): reading widths back out of the
+// Pages get DIFFERENT WIDTHS (the IntrayPageOperationsTests identity trick): reading widths back out of the
 // stash says which page actually went where, and PdfPig reports rotation through width/height swapping.
 [Collection(E2ECollection.Name)]
 public class CheckoutPageOperationsTests

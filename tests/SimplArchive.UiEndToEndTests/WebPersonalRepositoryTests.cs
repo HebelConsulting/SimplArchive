@@ -33,21 +33,21 @@ public class WebPersonalRepositoryTests
     }
 
     [Fact]
-    public async Task Personal_node_nests_inbox_and_checkout_launchers_that_switch_tabs()
+    public async Task Personal_node_nests_intray_and_checkout_launchers_that_switch_tabs()
     {
         var page = await Ui.LoginAsync(_app);
         var tree = page.Locator("[data-pane='tree']");
 
-        // Expanding the Personal node reveals the Inbox + Check-out launcher nodes (mirroring /webdav/Personal).
+        // Expanding the Personal node reveals the Intray + Check-out launcher nodes (mirroring /webdav/Personal).
         var personal = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Personal" }).First;
         await Expect(personal).ToBeVisibleAsync();
         await personal.Locator(".mud-treeview-item-arrow").ClickAsync();
 
-        var inbox = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Inbox" }).First;
-        await Expect(inbox).ToBeVisibleAsync();
+        var intray = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Intray" }).First;
+        await Expect(intray).ToBeVisibleAsync();
         await Expect(tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Check-out" }).First).ToBeVisibleAsync();
 
-        // Clicking the Inbox launcher switches to the Inbox bottom tab (its "Upload to inbox" action appears).
+        // Clicking the Intray launcher switches to the Intray bottom tab (its "Upload to intray" action appears).
         //
         // By aria-label, not by text: the toolbar shows icons only on a hover-capable device and carries the
         // label in `aria-label` + `title`, so the visible span is display:none here (ADR 0491 — touch, which
@@ -56,7 +56,7 @@ public class WebPersonalRepositoryTests
         //
         // And not by ROLE either, which finds nothing: this one is `HtmlTag="label"` (it opens the hidden file
         // input), so MudBlazor renders a <label>, and a label has no button role.
-        await inbox.ClickAsync();
-        await Expect(page.Locator("[aria-label='Upload to inbox']")).ToBeVisibleAsync();
+        await intray.ClickAsync();
+        await Expect(page.Locator("[aria-label='Upload to intray']")).ToBeVisibleAsync();
     }
 }

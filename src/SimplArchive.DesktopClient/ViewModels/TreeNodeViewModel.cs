@@ -74,7 +74,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
     public bool IsSynthetic => SyntheticIcon is not null;
 
-    // Non-null ("inbox" / "checkout") for the launcher nodes nested under Personal (ADR "GUI-tree Personal space
+    // Non-null ("intray" / "checkout") for the launcher nodes nested under Personal (ADR "GUI-tree Personal space
     // grouping") — selecting one switches to the matching bottom tab instead of loading folder contents.
     public string? PersonalKind { get; }
 
@@ -84,17 +84,17 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     // entry, exactly as SelectedHasReferences gates the contents-list one.
     public bool HasReferences { get; }
 
-    // The bottom-tab index the launcher activates: Inbox = 1, Check-out = 2 (ADR "Document check-out / check-in").
-    public int LauncherTab => PersonalKind switch { "inbox" => 1, "checkout" => 2, _ => 0 };
+    // The bottom-tab index the launcher activates: Intray = 1, Check-out = 2 (ADR "Document check-out / check-in").
+    public int LauncherTab => PersonalKind switch { "intray" => 1, "checkout" => 2, _ => 0 };
 
     // Whether this folder holds ANYTHING — a document, a subfolder, or a reference filed into it (issue #376).
-    // Defaults to true so the pseudo-nodes (Administration, the Inbox / Check-out launchers, the demo/screenshot
+    // Defaults to true so the pseudo-nodes (Administration, the Intray / Check-out launchers, the demo/screenshot
     // stubs) never render as "empty".
     public bool HasChildren { get; }
 
     // An EMPTY folder — nothing at all inside (ADR "Empty-folder tree icon", issue #352). Note this is NOT the
     // same as "no subfolders": a folder holding only documents is a leaf in the folders-only tree but is not
-    // empty. The caller's OWN Personal root is never empty (it always holds the Inbox / Check-out launchers) so
+    // empty. The caller's OWN Personal root is never empty (it always holds the Intray / Check-out launchers) so
     // it's constructed with the default hasChildren: true; an admin-browsed other user's personal repo has no
     // launchers and passes its real flag.
     public bool IsEmptyFolder => !HasChildren && !IsSynthetic && !IsLauncher;
@@ -110,13 +110,13 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
     private string BaseIconValue => PersonalKind switch
     {
-        "inbox" => "mdi-inbox-arrow-down",
+        "intray" => "mdi-inbox-arrow-down",
         "checkout" => "mdi-lock-open-variant-outline",
         _ => SyntheticIcon ?? (IsPersonal ? "mdi-account" : IsReference ? "mdi-folder-arrow-right" : "mdi-folder"),
     };
 
     // Which of App.axaml's theme brushes paints this glyph (ADR "Folder icon scheme"). Gold marks a place
-    // documents live — a folder, the personal root, a referenced folder. The Inbox / Check-out launchers and the
+    // documents live — a folder, the personal root, a referenced folder. The Intray / Check-out launchers and the
     // synthetic admin nodes are not containers and take the muted text colour, so the gold means something
     // rather than merely decorating every row.
     //

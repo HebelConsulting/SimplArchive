@@ -9,7 +9,7 @@ using SimplArchive.Localization;
 namespace SimplArchive.DesktopClient.ViewModels;
 
 /// <summary>
-/// What a drop onto the Personal ▸ Inbox or Personal ▸ Check-out tree launcher does (#467): copy a document in
+/// What a drop onto the Personal ▸ Intray or Personal ▸ Check-out tree launcher does (#467): copy a document in
 /// as a template, or bring an edited working copy back.
 /// </summary>
 /// <remarks>
@@ -27,20 +27,20 @@ namespace SimplArchive.DesktopClient.ViewModels;
 public sealed class DropFiling(SimplArchiveApiClient api)
 {
     /// <summary>
-    /// Copies documents into the caller's inbox as templates, carrying each one's mask and index values.
+    /// Copies documents into the caller's intray as templates, carrying each one's mask and index values.
     /// </summary>
     /// <remarks>
     /// The copy is server-side — one request per document, no bytes through the client — and nothing is created
     /// in the archive: the copy becomes a document only if the user files it.
     /// </remarks>
-    public async Task<int> CopyToInboxAsync(IReadOnlyList<Guid> documentIds, Action<string> report)
+    public async Task<int> CopyToIntrayAsync(IReadOnlyList<Guid> documentIds, Action<string> report)
     {
         var copied = 0;
         foreach (var id in documentIds)
         {
             try
             {
-                await api.Inbox.CopyDocumentToInboxAsync(id);
+                await api.Intray.CopyDocumentToIntrayAsync(id);
                 copied++;
             }
             catch (Exception)

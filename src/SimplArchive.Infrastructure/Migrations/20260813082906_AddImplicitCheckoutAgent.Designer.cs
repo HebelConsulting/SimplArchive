@@ -1055,7 +1055,7 @@ namespace SimplArchive.Infrastructure.Migrations
                     b.Property<bool>("CanManageClassification")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("CanManageInboxes")
+                    b.Property<bool>("CanManageIntrayes")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageMasks")
@@ -1548,7 +1548,7 @@ namespace SimplArchive.Infrastructure.Migrations
                     b.Property<bool>("CanImport")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("CanManageInboxes")
+                    b.Property<bool>("CanManageIntrayes")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageMasks")
@@ -1775,7 +1775,7 @@ namespace SimplArchive.Infrastructure.Migrations
                     b.Property<bool>("CanManageClassification")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("CanManageInboxes")
+                    b.Property<bool>("CanManageIntrayes")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageMasks")

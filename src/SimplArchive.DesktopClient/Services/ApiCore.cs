@@ -181,7 +181,7 @@ public sealed class ApiCore
 
     // The href a resource advertises for a rel, or null when it doesn't offer one. A missing rel is meaningful —
     // it means "not available here" — so callers branch on null rather than composing a URL (ADR 0543).
-    // internal: InboxApi follows rels too, since the inbox calls moved there (#443 direction).
+    // internal: IntrayApi follows rels too, since the intray calls moved there (#443 direction).
     public static string? RelHref(JsonElement resource, string rel)
     {
         if (!resource.TryGetProperty("links", out var links) || links.ValueKind != JsonValueKind.Array)

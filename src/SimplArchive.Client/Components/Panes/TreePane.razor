@@ -92,11 +92,11 @@
     private MudMenu? _menu;
     private BrowseNode? _menuNode;
 
-    // The synthetic Administration nodes and the Inbox / Check-out launchers aren't real folders — they have no
+    // The synthetic Administration nodes and the Intray / Check-out launchers aren't real folders — they have no
     // ACL and nothing to rename/delete, so they get no menu and no ⋮ button (the desktop suppresses these the
     // same way, in OnTreeContextRequested).
     private static bool IsMenuNode(BrowseNode? node) =>
-        node is not (null or { AdminKind: not "" } or { PersonalKind: "inbox" } or { PersonalKind: "checkout" });
+        node is not (null or { AdminKind: not "" } or { PersonalKind: "intray" } or { PersonalKind: "checkout" });
 
     private async Task OnContextMenuAsync(BrowseNode? node, MouseEventArgs e)
     {

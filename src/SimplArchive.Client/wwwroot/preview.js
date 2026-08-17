@@ -591,7 +591,7 @@ export function setFullscreen(dotNetRef, on) {
     }
 }
 
-// Page thumbnails as data URLs, for the inbox's sort-pages dialog (#487, ADR 0575).
+// Page thumbnails as data URLs, for the intray's sort-pages dialog (#487, ADR 0575).
 //
 // Here rather than in a module of its own because pdf.js is already imported and configured in this file, and a
 // second import would pull a second copy of the worker. The desktop does the same thing with PDFium — the two

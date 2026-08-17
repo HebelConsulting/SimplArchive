@@ -1,0 +1,95 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             x:Class="SimplArchive.DesktopClient.Views.IntrayRibbon"
+             x:DataType="vm:MainWindowViewModel">
+    <!-- Intray ribbon (ADR 0575) — the tab's own actions, in the same place the Repositories tab keeps
+         its own: grouped by concern in a WrapPanel so whole groups reflow rather than clip. The page
+         operations live here rather than on the row, because Join acts on a SELECTION and a per-row
+         button cannot express that. The WebDAV button moved up from the bottom-left corner, so every
+         intray action is in one place instead of two. -->
+    <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
+        <WrapPanel Orientation="Horizontal">
+            <!-- Selected-item group, FIRST (#521): what you can do to the row you picked, before the groups
+                 that act on batches. These are the same four actions the row's context menu offers — the two
+                 surfaces differ in SCOPE, not in content: a menu entry acts on the row it was opened from, a
+                 ribbon button on the current selection. Both address their target directly rather than from
+                 whatever the detail pane last finished loading (ADR 0559).
+
+                 Greyed rather than hidden when nothing is selected, which is the Repositories ribbon's rule:
+                 a right you do not hold is not advertised, but a button that merely has nothing to act on yet
+                 stays put, so the ribbon does not reflow under the cursor as the selection changes. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="intray-open" IsEnabled="{Binding HasSelectedIntrayItem}"
+                        Click="OnIntrayOpen" ToolTip.Tip="{x:Static vm:MainWindowViewModel.OpenTip}"><i:Icon Value="mdi-open-in-new" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="intray-send" IsEnabled="{Binding CanSendSelectedIntrayItem}"
+                        Click="OnIntraySend" ToolTip.Tip="{loc:Tr IntraySendTitle}"><i:Icon Value="mdi-send-outline" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="intray-claim" IsEnabled="{Binding CanClaimSelectedIntrayItem}"
+                        Click="OnIntrayMoveToMine" ToolTip.Tip="{loc:Tr IntrayClaimToMine}"><i:Icon Value="mdi-inbox-arrow-down-outline" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="intray-file" IsEnabled="{Binding HasSelectedIntrayItem}"
+                        Click="OnIntrayFile" ToolTip.Tip="{loc:Tr MwFileIntoFolder}"><i:Icon Value="mdi-file-move-outline" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="intray-delete" IsEnabled="{Binding HasSelectedIntrayItem}"
+                        Click="OnIntrayDelete" ToolTip.Tip="{loc:Tr UgDelete}"><i:Icon Value="mdi-delete-outline" FontSize="18" /></Button>
+            </StackPanel>
+            <!-- Pages group: what is INSIDE a staged scan (#487). Each is disabled until the server
+                 says it can succeed — a one-page file offers no split or sort (ADR 0554). -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button AutomationProperties.AutomationId="intray-split" IsEnabled="{Binding IntrayActions.CanSplit}"
+                        Click="OnIntraySplit" ToolTip.Tip="{loc:Tr IntraySplit}"><i:Icon Value="mdi-call-split" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="intray-sort" IsEnabled="{Binding IntrayActions.CanSort}"
+                        Click="OnIntraySortPages" ToolTip.Tip="{loc:Tr IntraySortTitle}"><i:Icon Value="mdi-sort" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="intray-join" IsEnabled="{Binding IntrayActions.CanJoin}"
+                        Click="OnIntrayJoin" ToolTip.Tip="{loc:Tr IntrayJoinTitle}"><i:Icon Value="mdi-call-merge" FontSize="18" /></Button>
+            </StackPanel>
+            <!-- Straightening group (#491): the sticky preference, held DOWN while on, beside the
+                 one-off action. A toggle that stays down is the affordance asked for — it says what
+                 the system will keep doing, where a menu item says only what it did once. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <ToggleButton AutomationProperties.AutomationId="intray-rotate-auto"
+                              IsChecked="{Binding IntrayActions.RotateAutomatically}"
+                              Click="OnIntrayRotateAutoToggled" ToolTip.Tip="{loc:Tr IntrayRotateAutoTip}"><i:Icon Value="mdi-rotate-right" FontSize="18" /></ToggleButton>
+                <ToggleButton AutomationProperties.AutomationId="intray-deskew-auto"
+                              IsChecked="{Binding IntrayActions.DeskewAutomatically}"
+                              Click="OnIntrayDeskewAutoToggled" ToolTip.Tip="{loc:Tr IntrayDeskewAutoTipTiff}"><i:Icon Value="mdi-image-auto-adjust" FontSize="18" /></ToggleButton>
+                <Button AutomationProperties.AutomationId="intray-deskew" IsEnabled="{Binding IntrayActions.CanDeskew}"
+                        Click="OnIntrayDeskew" ToolTip.Tip="{loc:Tr IntrayDeskewNow}"><i:Icon Value="mdi-angle-acute" FontSize="18" /></Button>
+            </StackPanel>
+            <!-- Separator-sheet group (#492): the same shape as straightening, and next to it,
+                 because the two are one story — a batch is straightened and then cut, in that
+                 order. The third button prints the sheet itself, which is the step nothing else
+                 in the app can substitute for. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <ToggleButton AutomationProperties.AutomationId="intray-patch-auto"
+                              IsChecked="{Binding IntrayActions.CutAtPatchCodesAutomatically}"
+                              Click="OnIntrayPatchAutoToggled" ToolTip.Tip="{loc:Tr IntrayPatchAutoTip}"><i:Icon Value="mdi-content-cut" FontSize="18" /></ToggleButton>
+                <Button AutomationProperties.AutomationId="intray-patch-cut" IsEnabled="{Binding IntrayActions.CanCutAtPatchCodes}"
+                        Click="OnIntrayPatchCut" ToolTip.Tip="{loc:Tr IntrayPatchCutNow}"><i:Icon Value="mdi-scissors-cutting" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="intray-patch-sheet"
+                        Click="OnIntrayPatchSheet" ToolTip.Tip="{loc:Tr IntrayPatchSheetTip}"><i:Icon Value="mdi-printer" FontSize="18" /></Button>
+            </StackPanel>
+            <!-- Item group: what to do with the staged file as a whole, and what the list is showing.
+                 "Show group intrayes" was a labelled CheckBox in a filter row under the ribbon; it is an on/off
+                 that changes this view, which is what a held-down toggle says and what its neighbours here
+                 already are (#521 — the web arrived at this first, and ADR 0511 says promote it rather than
+                 leave the two split). Its companion user-picker stays below: a picker chooses a value out of a
+                 list as long as the tenant has users, and cannot be a button.
+                 No Click handler — OnIntrayIncludeGroupsChanged already reloads on the property. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
+                <Button IsEnabled="{Binding CanFileMultiple}" Click="OnIntrayFileMultiple" ToolTip.Tip="{loc:Tr MwFileSelectedTip}"><i:Icon Value="mdi-file-move-outline" FontSize="18" /></Button>
+                <ToggleButton AutomationProperties.AutomationId="intray-show-groups"
+                              IsChecked="{Binding IntrayIncludeGroups}"
+                              IsEnabled="{Binding !IntrayViewUserId, FallbackValue=True}"
+                              ToolTip.Tip="{loc:Tr IntrayShowGroups}"><i:Icon Value="mdi-account-group-outline" FontSize="18" /></ToggleButton>
+                <Button Command="{Binding RefreshIntrayCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"><i:Icon Value="mdi-refresh" FontSize="18" /></Button>
+            </StackPanel>
+            <!-- General group: one WebDAV button that does the next useful thing — set up, mount, or
+                 open this tab's own folder (ADR "One WebDAV button per tab, deep-linked"). -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+                <Button Click="OnWebDavTabButton" Tag="Personal/Intray" AutomationProperties.AutomationId="intray-webdav"
+                        ToolTip.Tip="{Binding WebDav.Tooltip}"><i:Icon Value="mdi-folder-network-outline" FontSize="18" /></Button>
+            </StackPanel>
+        </WrapPanel>
+    </Border>
+</UserControl>

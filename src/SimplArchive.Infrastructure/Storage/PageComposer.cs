@@ -52,7 +52,7 @@ public static class PageComposer
     /// pages. A subset is allowed (the omitted pages are deleted); a duplicate, an out-of-range page, or an
     /// empty order is not — those are the shapes that mean the caller has made a mistake rather than a choice.
     /// A rotation of a page that is not being kept, or an angle that is not a quarter turn, is likewise a
-    /// mistake — never a partial application. Shared by every surface offering page surgery (inbox, check-out
+    /// mistake — never a partial application. Shared by every surface offering page surgery (intray, check-out
     /// working copy), so the rule cannot drift between them.
     /// </summary>
     public static bool IsValidOrder(int pageCount, IReadOnlyList<int> pageOrder, IReadOnlyDictionary<int, int>? rotations) =>

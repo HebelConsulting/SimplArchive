@@ -19,7 +19,7 @@ public sealed record SystemRightsSet(
     bool CanViewAuditLog,
     bool CanExport,
     bool CanImport,
-    bool CanManageInboxes,
+    bool CanManageIntrayes,
 
     // May share a document with someone who has no account (ADR 0546).
     bool CanCreateExternalLink)
@@ -41,6 +41,6 @@ public sealed record SystemRightsSet(
         CanViewAuditLog || other.CanViewAuditLog,
         CanExport || other.CanExport,
         CanImport || other.CanImport,
-        CanManageInboxes || other.CanManageInboxes,
+        CanManageIntrayes || other.CanManageIntrayes,
         CanCreateExternalLink || other.CanCreateExternalLink);
 }

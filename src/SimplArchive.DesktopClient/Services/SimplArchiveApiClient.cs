@@ -44,10 +44,10 @@ public sealed class ReviewerHasPendingReviewsException(string message) : Excepti
 // "Cross-platform desktop fat client (Avalonia)" and "Desktop workbench UI".
 public sealed class SimplArchiveApiClient
 {
-    // internal: InboxApi PUTs bytes to a presigned URL too, since the inbox calls moved there (#443).
+    // internal: IntrayApi PUTs bytes to a presigned URL too, since the intray calls moved there (#443).
     internal static HttpClient Anonymous => ApiCore.Anonymous;
     private readonly HttpClient _http;
-    private InboxApi? _inbox;
+    private IntrayApi? _intray;
     private CheckoutClient? _checkout;
     private SearchClient? _search;
     private AdminClient? _admin;
@@ -145,7 +145,7 @@ public sealed class SimplArchiveApiClient
 
     // The signed-in principal's ids + display names (ADR "S3-backed inbox") — names drive the local folder
     // path. IsTenantAdmin gates admin-only actions (e.g. the searchable-PDF backfill).
-    public sealed record WhoAmIInfo(Guid? UserId, Guid? TenantId, string? TenantName, string? UserName, bool IsTenantAdmin, bool CanManageUsers, bool HasPhoto, bool CanViewAuditLog, bool MfaEnabled, bool CanResetMfa, bool CanLegalHold, bool CanManageClassification, bool CanOverrideCheckout = false, bool CanImpersonate = false, string? ImpersonatedBy = null, bool CanExport = false, bool CanImport = false, bool CanManageInboxes = false, bool CanManageServiceAccounts = false);
+    public sealed record WhoAmIInfo(Guid? UserId, Guid? TenantId, string? TenantName, string? UserName, bool IsTenantAdmin, bool CanManageUsers, bool HasPhoto, bool CanViewAuditLog, bool MfaEnabled, bool CanResetMfa, bool CanLegalHold, bool CanManageClassification, bool CanOverrideCheckout = false, bool CanImpersonate = false, string? ImpersonatedBy = null, bool CanExport = false, bool CanImport = false, bool CanManageIntrayes = false, bool CanManageServiceAccounts = false);
 
 
     /// <summary>The essentials of a document reached by ADDRESS — what a cross-tab open needs in one read.</summary>
@@ -191,7 +191,7 @@ public sealed class SimplArchiveApiClient
             json.TryGetProperty("impersonatedBy", out var ib) && ib.ValueKind == JsonValueKind.String ? ib.GetString() : null,
             json.TryGetProperty("canExport", out var ce) && ce.ValueKind == JsonValueKind.True,
             json.TryGetProperty("canImport", out var cim) && cim.ValueKind == JsonValueKind.True,
-            json.TryGetProperty("canManageInboxes", out var cmi) && cmi.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("canManageIntrayes", out var cmi) && cmi.ValueKind == JsonValueKind.True,
             json.TryGetProperty("canManageServiceAccounts", out var cmsa) && cmsa.ValueKind == JsonValueKind.True);
     }
 
@@ -213,8 +213,8 @@ public sealed class SimplArchiveApiClient
         return json.TryGetProperty("count", out var c) ? c.GetInt32() : 0;
     }
 
-    /// <summary>The inbox's own api surface (ADR 0575) — its listing and its page operations.</summary>
-    public InboxApi Inbox => _inbox ??= new InboxApi(Core);
+    /// <summary>The intray's own api surface (ADR 0575) — its listing and its page operations.</summary>
+    public IntrayApi Intray => _intray ??= new IntrayApi(Core);
 
     // Turns a failed response into an ApiActionException carrying text the USER can read, in their language.
     //

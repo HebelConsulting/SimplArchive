@@ -10,7 +10,7 @@ namespace SimplArchive.DesktopClient.ViewModels;
 
 // The preview surface (pages/text + toolbar with find-in-document, hit-overlay and full-screen toggle),
 // extracted from MainWindowViewModel so each workbench surface can own an INDEPENDENT preview — the
-// Repositories/Inbox tabs share one instance, and the Recycle bin tab has its own, so their previews are never
+// Repositories/Intray tabs share one instance, and the Recycle bin tab has its own, so their previews are never
 // entangled (an explicit requirement of ADR "Desktop recycle bin parity"; mirrors the web's separate _rbPv,
 // ADR 0329). Reused by the PreviewPane UserControl (its DataContext) both docked and full-screen.
 public sealed partial class PreviewViewModel : ObservableObject
@@ -199,7 +199,7 @@ public sealed partial class PreviewViewModel : ObservableObject
 
     // --- Sticky notes / positional annotations (ADR "Document annotations") --------------------------------
     // Only a real document-version preview carries notes (the annotations link + a dialog provider must both be
-    // present); the Inbox and Recycle-bin previews don't. The dialog itself is supplied by the view (code-behind)
+    // present); the Intray and Recycle-bin previews don't. The dialog itself is supplied by the view (code-behind)
     // so the VM stays view-agnostic, mirroring StatusReporter.
     public Func<AnnotationDialogRequest, Task<AnnotationDialogResult?>>? AnnotationDialog { get; set; }
 
@@ -692,7 +692,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         ActivateCurrentMatch(); // jump to the first match (like a browser find)
     }
 
-    // Renders any preview (a document version's or an inbox item's — the Preview shape is shared) into the
+    // Renders any preview (a document version's or an intray item's — the Preview shape is shared) into the
     // preview pane, then attaches the hit-overlay.
     public async Task RenderAsync(Preview preview)
     {
@@ -704,7 +704,7 @@ public sealed partial class PreviewViewModel : ObservableObject
         PreviewConverted = preview.PreviewConverted;
 
         // Sticky notes are available only when the version resource offered an annotations link AND the view
-        // supplied a dialog provider (so the Inbox/Recycle-bin previews don't show note controls).
+        // supplied a dialog provider (so the Intray/Recycle-bin previews don't show note controls).
         _annotationsUrl = AnnotationDialog is not null ? preview.AnnotationsUrl : null;
         AddNoteMode = false;
 

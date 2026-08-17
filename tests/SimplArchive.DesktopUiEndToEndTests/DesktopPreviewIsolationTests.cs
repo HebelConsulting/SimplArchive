@@ -2,8 +2,8 @@ using SimplArchive.DesktopClient.ViewModels;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// The Repositories, Inbox, and Recycle-bin tabs each own a SEPARATE preview surface, so a preview shown on one
-// tab never leaks onto another (the Inbox preview was previously wired to the Repositories one). Pure VM guard.
+// The Repositories, Intray, and Recycle-bin tabs each own a SEPARATE preview surface, so a preview shown on one
+// tab never leaks onto another (the Intray preview was previously wired to the Repositories one). Pure VM guard.
 public class DesktopPreviewIsolationTests
 {
     [Fact]
@@ -11,14 +11,14 @@ public class DesktopPreviewIsolationTests
     {
         var vm = new MainWindowViewModel();
 
-        Assert.NotSame(vm.Preview, vm.InboxPreview);
+        Assert.NotSame(vm.Preview, vm.IntrayPreview);
         Assert.NotSame(vm.Preview, vm.RecycleBin.Preview);
-        Assert.NotSame(vm.InboxPreview, vm.RecycleBin.Preview);
+        Assert.NotSame(vm.IntrayPreview, vm.RecycleBin.Preview);
 
         // Mutating one preview's state must not affect the others.
         vm.Preview.FindQuery = "repo";
-        vm.InboxPreview.FindQuery = "inbox";
+        vm.IntrayPreview.FindQuery = "intray";
         Assert.Equal("repo", vm.Preview.FindQuery);
-        Assert.Equal("inbox", vm.InboxPreview.FindQuery);
+        Assert.Equal("intray", vm.IntrayPreview.FindQuery);
     }
 }

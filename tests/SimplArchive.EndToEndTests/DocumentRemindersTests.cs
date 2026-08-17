@@ -4,7 +4,7 @@ using System.Net.Http.Json;
 namespace SimplArchive.EndToEndTests;
 
 // End-to-end over the real API + Postgres, exercising document reminders (ADR "Document reminders"): a user
-// sets a reminder targeting a colleague; the sweep fires it into the target's inbox on the due date; cancel
+// sets a reminder targeting a colleague; the sweep fires it into the target's intray on the due date; cancel
 // removes a pending reminder; a ServiceAccount can't set one; a target who can't see the document is rejected.
 [Collection(E2ECollection.Name)]
 public class DocumentRemindersTests
@@ -37,7 +37,7 @@ public class DocumentRemindersTests
         var repoId = (await TestJson.Post(owner, "/api/repositories", new { name = $"Rem {Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
         var docId = (await TestJson.Post(owner, $"/api/documents/{repoId}/children", new { name = "rem-doc" })).GetProperty("id").GetGuid();
 
-        // A ServiceAccount can't set a reminder (no in-app inbox).
+        // A ServiceAccount can't set a reminder (no in-app intray).
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync($"/api/documents/{docId}/reminders", new { remindAt = DateTimeOffset.UtcNow.AddDays(1), recurrence = 0 })).StatusCode);
 
         // Targeting a user who can't see the document is rejected.
@@ -58,8 +58,8 @@ public class DocumentRemindersTests
         // Back-date it and run the sweep → B gets a DocumentReminder notification carrying the note.
         await _factory.BackdateReminderAsync(reminderId);
         Assert.True(await _factory.RunReminderSweepAsync() >= 1);
-        var bInbox = (await TestJson.Get(target, "/api/notifications")).GetProperty("notifications").EnumerateArray().ToList();
-        var fired = bInbox.Single(n => n.GetProperty("type").GetString() == "DocumentReminder" && n.GetProperty("documentId").GetGuid() == docId);
+        var bIntray = (await TestJson.Get(target, "/api/notifications")).GetProperty("notifications").EnumerateArray().ToList();
+        var fired = bIntray.Single(n => n.GetProperty("type").GetString() == "DocumentReminder" && n.GetProperty("documentId").GetGuid() == docId);
         Assert.Contains("Renewal due", fired.GetProperty("body").GetString());
 
         // The one-shot is done — it no longer appears as pending.

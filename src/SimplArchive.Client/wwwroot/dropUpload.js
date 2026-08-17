@@ -45,8 +45,8 @@ export function initDropRoot(root, dotNetRef) {
     root.addEventListener('dragover', (e) => {
         // Internal drag: only a folder (data-drop-folder) accepts it — never a document row.
         if (isInternalDrag(e)) {
-            // Personal ▸ Inbox takes a document as a TEMPLATE — a copy, not a move, so the effect says 'copy'.
-            const template = e.target.closest('[data-drop-inbox]');
+            // Personal ▸ Intray takes a document as a TEMPLATE — a copy, not a move, so the effect says 'copy'.
+            const template = e.target.closest('[data-drop-intray]');
             if (template) {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'copy';
@@ -64,7 +64,7 @@ export function initDropRoot(root, dotNetRef) {
         }
         // The Personal launchers accept an OS-file drag; the work itself happens on `drop`, never here —
         // dragover fires continuously while the pointer moves (#467).
-        const launcher = e.target.closest('[data-drop-inbox]') || e.target.closest('[data-drop-checkout]');
+        const launcher = e.target.closest('[data-drop-intray]') || e.target.closest('[data-drop-checkout]');
         if (launcher) {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'copy';
@@ -93,13 +93,13 @@ export function initDropRoot(root, dotNetRef) {
         if (isInternalDrag(e)) {
             const [draggedId] = (e.dataTransfer.getData(NODE_MIME) || '').split('|');
 
-            // Copy an existing document into the inbox as a template, carrying its mask + index values (#467).
-            const template = e.target.closest('[data-drop-inbox]');
+            // Copy an existing document into the intray as a template, carrying its mask + index values (#467).
+            const template = e.target.closest('[data-drop-intray]');
             if (template) {
                 e.preventDefault();
                 setActive(null);
                 if (draggedId) {
-                    await dotNetRef.invokeMethodAsync('CopyDocumentToInboxAsync', draggedId);
+                    await dotNetRef.invokeMethodAsync('CopyDocumentToIntrayAsync', draggedId);
                 }
                 return;
             }
@@ -118,14 +118,14 @@ export function initDropRoot(root, dotNetRef) {
         }
 
         // Personal ▸ Check-out takes an edited working copy back, matched to a checked-out document BY NAME;
-        // Personal ▸ Inbox takes the files as inbox items (#467).
+        // Personal ▸ Intray takes the files as intray items (#467).
         const checkout = e.target.closest('[data-drop-checkout]');
-        const inbox = e.target.closest('[data-drop-inbox]');
-        if (checkout || inbox) {
+        const intray = e.target.closest('[data-drop-intray]');
+        if (checkout || intray) {
             e.preventDefault();
             setActive(null);
             const dropped = [...(e.dataTransfer?.files ?? [])];
-            await (checkout ? uploadFilesToStash(dotNetRef, dropped) : uploadFilesToInbox(dotNetRef, dropped));
+            await (checkout ? uploadFilesToStash(dotNetRef, dropped) : uploadFilesToIntray(dotNetRef, dropped));
             return;
         }
 
@@ -163,17 +163,17 @@ export function openFilePicker(dotNetRef, folderId) {
     pickFiles(dotNetRef, folderId);
 }
 
-// Inbox file-list drop-zone (ADR "Inbox file-list drop-zone"): dropping OS files anywhere on the inbox list
-// uploads them straight into the S3-backed inbox (presign + PUT), the same direct-to-storage model as a
+// Intray file-list drop-zone (ADR "Inbox file-list drop-zone"): dropping OS files anywhere on the intray list
+// uploads them straight into the S3-backed intray (presign + PUT), the same direct-to-storage model as a
 // document upload but with no folder/document — the item is filed later. Idempotent + guarded like initDropRoot.
-export function initInboxDrop(zone, dotNetRef) {
+export function initIntrayDrop(zone, dotNetRef) {
     if (!zone || typeof zone.addEventListener !== 'function') {
         return false;
     }
-    if (zone._inboxDropWired) {
+    if (zone._intrayDropWired) {
         return true;
     }
-    zone._inboxDropWired = true;
+    zone._intrayDropWired = true;
 
     const hasFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
 
@@ -195,24 +195,24 @@ export function initInboxDrop(zone, dotNetRef) {
         }
         e.preventDefault();
         zone.classList.remove('drop-target-active');
-        await uploadFilesToInbox(dotNetRef, [...(e.dataTransfer.files ?? [])]);
+        await uploadFilesToIntray(dotNetRef, [...(e.dataTransfer.files ?? [])]);
     });
 
     return true;
 }
 
-async function uploadFilesToInbox(dotNetRef, files) {
+async function uploadFilesToIntray(dotNetRef, files) {
     if (files.length === 0) {
         return;
     }
 
-    await dotNetRef.invokeMethodAsync('OnInboxUploadsStartingAsync', files.length);
+    await dotNetRef.invokeMethodAsync('OnIntrayUploadsStartingAsync', files.length);
 
     let uploaded = 0;
     for (const file of files) {
         try {
-            // .NET returns a presigned inbox PUT URL (POST /api/inbox); the browser PUTs the bytes directly.
-            const url = await dotNetRef.invokeMethodAsync('CreateInboxUploadTargetAsync', file.name);
+            // .NET returns a presigned intray PUT URL (POST /api/intray); the browser PUTs the bytes directly.
+            const url = await dotNetRef.invokeMethodAsync('CreateIntrayUploadTargetAsync', file.name);
             if (!url) {
                 continue;
             }
@@ -227,7 +227,7 @@ async function uploadFilesToInbox(dotNetRef, files) {
         }
     }
 
-    await dotNetRef.invokeMethodAsync('OnInboxUploadsCompleteAsync', uploaded);
+    await dotNetRef.invokeMethodAsync('OnIntrayUploadsCompleteAsync', uploaded);
 }
 
 // Each file is matched to a checked-out document BY NAME; one that matches nothing is reported rather than
@@ -315,7 +315,7 @@ async function uploadFiles(dotNetRef, folderId, files) {
     await dotNetRef.invokeMethodAsync('OnUploadsCompleteAsync', folderId);
 }
 
-// Files dropped onto a document row (ADR "List-pane drop filing"): .NET shows the inbox-style filing dialog
+// Files dropped onto a document row (ADR "List-pane drop filing"): .NET shows the intray-style filing dialog
 // (file as a new version of the document, or into a folder, with an optional comment) and returns the choice.
 async function uploadFilesToDocument(dotNetRef, docId, files) {
     if (!docId || files.length === 0) {

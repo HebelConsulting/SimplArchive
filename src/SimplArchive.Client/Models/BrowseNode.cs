@@ -17,7 +17,7 @@ public record BrowseNode(Guid Id, string Name, bool HasChildren, bool HasVersion
     // "admin-users" load their children from the admin endpoint, not GET /documents/{id}/children.
     string AdminKind = "",
     // Synthetic Personal-space tree nodes (ADR "GUI-tree Personal space grouping"): "personal-root" (the
-    // Personal repository, which also injects Inbox/Check-out children) and the leaf launchers "inbox" /
+    // Personal repository, which also injects Intray/Check-out children) and the leaf launchers "intray" /
     // "checkout" (clicking them switches to the corresponding bottom tab, mirroring /webdav/Personal).
     string PersonalKind = "",
     // List-row columns (ADR "List-row columns and sorting").
@@ -47,16 +47,16 @@ public record BrowseNode(Guid Id, string Name, bool HasChildren, bool HasVersion
     // tints its glyph so you can see at a glance which folders hold nothing, without expanding them.
     // HasChildren (any child) is the right flag, not HasSubfolders (which only drives the expander caret): a
     // folder holding only documents is a tree leaf but is NOT empty. The pseudo-nodes are excluded — the
-    // Administration branch and the Inbox / Check-out launchers aren't folders, and the Personal root always
+    // Administration branch and the Intray / Check-out launchers aren't folders, and the Personal root always
     // holds those launchers.
     public bool IsEmptyFolder => IsFolder && !HasChildren && AdminKind == "" && PersonalKind == "";
 
     // Which glyph colour this node takes in the tree (ADR "Folder icon scheme"), as the CSS class that
-    // carries it. Gold is for containers only, so the Inbox / Check-out launchers and the Administration
+    // carries it. Gold is for containers only, so the Intray / Check-out launchers and the Administration
     // branch go muted — the Personal ROOT is a container and stays gold.
     public string TreeGlyphClass =>
         IsEmptyFolder ? "wb-tree-empty"
-        : AdminKind != "" || PersonalKind is "inbox" or "checkout" ? "wb-tree-muted"
+        : AdminKind != "" || PersonalKind is "intray" or "checkout" ? "wb-tree-muted"
         : "wb-tree-folder";
 
     // A checked-out document is shown as "[holder] name" (ADR "Check-out working-copy stash").

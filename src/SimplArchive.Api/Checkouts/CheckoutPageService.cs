@@ -11,7 +11,7 @@ namespace SimplArchive.Api.Checkouts;
 /// the result always lands in the stash, creating it lazily like any other first save.
 /// </summary>
 /// <remarks>
-/// The algebra itself is <see cref="PageComposer"/>, untouched. Unlike the inbox sibling there is no rendition
+/// The algebra itself is <see cref="PageComposer"/>, untouched. Unlike the intray sibling there is no rendition
 /// sweep here: the checkout preview is generated with <c>sourceMayHaveChanged</c> (the stash is rewritten under
 /// one key on every WebDAV save), so the next preview re-renders from what the file now is.
 /// </remarks>

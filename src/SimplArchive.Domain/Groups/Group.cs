@@ -32,8 +32,8 @@ public class Group : ITenantScoped
 
     public bool CanManageRepositories { get; set; }
 
-    // Manage other users' inboxes (ADR 0532) — flows to members like every other group system right.
-    public bool CanManageInboxes { get; set; }
+    // Manage other users' intrayes (ADR 0532) — flows to members like every other group system right.
+    public bool CanManageIntrayes { get; set; }
 
     public bool CanManageServiceAccounts { get; set; }
 

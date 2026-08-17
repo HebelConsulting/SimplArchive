@@ -5,7 +5,7 @@ using SimplArchive.DesktopClient.ViewModels;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// Dropping onto the Personal ▸ Inbox and Personal ▸ Check-out tree launchers (#467), over the real api client.
+// Dropping onto the Personal ▸ Intray and Personal ▸ Check-out tree launchers (#467), over the real api client.
 //
 // The OS drag itself cannot be exercised headlessly, so this drives DropFiling — which is where the work lives
 // precisely so it can be tested without a window. What the handler adds on top is routing (which launcher, which
@@ -24,7 +24,7 @@ public class DesktopTreeDropTests
     }
 
     [Fact]
-    public async Task A_document_dropped_on_the_inbox_arrives_as_a_template_with_its_index_data()
+    public async Task A_document_dropped_on_the_intray_arrives_as_a_template_with_its_index_data()
     {
         var api = await ApiAsync();
         var repo = (await api.Documents.GetRepositoriesAsync()).Single(n => n.Name == "Demo Repository");
@@ -33,14 +33,14 @@ public class DesktopTreeDropTests
         var docId = await api.Documents.UploadFileAsync(repo.Href("children"), docName, Encoding.UTF8.GetBytes("template body"));
 
         var messages = new List<string>();
-        var copied = await new DropFiling(api).CopyToInboxAsync([docId], messages.Add);
+        var copied = await new DropFiling(api).CopyToIntrayAsync([docId], messages.Add);
 
         Assert.Equal(1, copied);
 
         // It lands under the document's name plus the version's extension — the naming that later lets it be
         // dragged onto Check-out and matched back by filename.
         var stem = Path.GetFileNameWithoutExtension(docName);
-        var item = (await api.Inbox.ListAsync()).Items.SingleOrDefault(i => i.Name == stem + ".txt");
+        var item = (await api.Intray.ListAsync()).Items.SingleOrDefault(i => i.Name == stem + ".txt");
         Assert.NotNull(item);
 
         // The point of a template is the staged mask, not the bytes: a copy that arrived without it would look
@@ -57,11 +57,11 @@ public class DesktopTreeDropTests
 
         var filing = new DropFiling(api);
         var messages = new List<string>();
-        Assert.Equal(1, await filing.CopyToInboxAsync([docId], messages.Add));
+        Assert.Equal(1, await filing.CopyToIntrayAsync([docId], messages.Add));
 
-        // The inbox is addressed BY NAME, so a silent second copy would destroy the first item's staged edits.
+        // The intray is addressed BY NAME, so a silent second copy would destroy the first item's staged edits.
         messages.Clear();
-        Assert.Equal(0, await filing.CopyToInboxAsync([docId], messages.Add));
+        Assert.Equal(0, await filing.CopyToIntrayAsync([docId], messages.Add));
         Assert.Contains(messages, m => m.Contains("could not be copied", StringComparison.OrdinalIgnoreCase));
     }
 

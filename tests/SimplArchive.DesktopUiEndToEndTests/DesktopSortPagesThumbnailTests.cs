@@ -3,7 +3,7 @@ using SimplArchive.DesktopClient.Services;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// The sort dialog's page pictures (#522): InboxPageThumbnails is the desktop's whole supply line for them, and
+// The sort dialog's page pictures (#522): IntrayPageThumbnails is the desktop's whole supply line for them, and
 // it had no test — which is how "the sort dialog comes up empty" shipped. The dialog itself is deliberately
 // dumb (it renders the bitmaps it is handed), so pages arriving is the whole question — for both formats and
 // both of their routes: PDF rasterised locally by PDFium, TIFF via the server's preview-pages renditions.
@@ -36,7 +36,7 @@ public class DesktopSortPagesThumbnailTests
         var bytes = await http.GetByteArrayAsync($"{_app.BaseUrl}/download/samples/{sample}");
 
         var name = $"sort-{Guid.NewGuid():N}{Path.GetExtension(sample)}";
-        await api.Inbox.UploadAsync(name, bytes);
+        await api.Intray.UploadAsync(name, bytes);
 
         var (exitCode, output) = await DesktopProc.RunAsync(
             "--sort-thumbs-test", token, name, _app.BaseUrl);

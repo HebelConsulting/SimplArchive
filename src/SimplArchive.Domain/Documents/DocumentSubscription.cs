@@ -12,7 +12,7 @@ public class DocumentSubscription : ITenantScoped
 
     public Guid TenantId { get; set; }
 
-    // The follower — subscriptions are per-User (a ServiceAccount has no in-app inbox to notify).
+    // The follower — subscriptions are per-User (a ServiceAccount has no in-app intray to notify).
     public Guid UserId { get; set; }
 
     public Guid DocumentId { get; set; }

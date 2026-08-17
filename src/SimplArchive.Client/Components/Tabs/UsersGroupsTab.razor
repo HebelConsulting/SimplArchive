@@ -282,7 +282,7 @@
         new("View audit log", r => r.CanViewAuditLog, (r, v) => r.CanViewAuditLog = v),
         new("Export", r => r.CanExport, (r, v) => r.CanExport = v),
         new("Import", r => r.CanImport, (r, v) => r.CanImport = v),
-        new("Manage inboxes", r => r.CanManageInboxes, (r, v) => r.CanManageInboxes = v),
+        new("Manage intrayes", r => r.CanManageIntrayes, (r, v) => r.CanManageIntrayes = v),
         new("Create external links", r => r.CanCreateExternalLink, (r, v) => r.CanCreateExternalLink = v),
     ];
 
@@ -860,7 +860,7 @@
         public bool CanViewAuditLog { get; set; }
         public bool CanExport { get; set; }
         public bool CanImport { get; set; }
-        public bool CanManageInboxes { get; set; }
+        public bool CanManageIntrayes { get; set; }
         public bool CanCreateExternalLink { get; set; }
         public int ClearanceRank { get; set; }
     }

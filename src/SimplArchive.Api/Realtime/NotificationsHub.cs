@@ -8,7 +8,7 @@ namespace SimplArchive.Api.Realtime;
 // access token arrives via the ?access_token= query string (copied into the Authorization header by middleware,
 // since a browser WebSocket handshake can't set headers). Connections are keyed to the User by SubjectUserIdProvider
 // so the broadcaster targets Clients.User(userId); a ServiceAccount/PlatformAdministrator connection simply never
-// gets pushed to (they have no in-app inbox).
+// gets pushed to (they have no in-app intray).
 [Authorize]
 public sealed class NotificationsHub : Hub
 {

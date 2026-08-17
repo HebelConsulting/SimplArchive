@@ -6,7 +6,7 @@ namespace SimplArchive.EndToEndTests;
 
 // End-to-end over the real API + Postgres, exercising notification email preferences (ADR "Notification
 // preferences"): a User reads their defaults (all mutable types emailed), mutes a type, reads it back, can't
-// mute a deadline/compliance escalation, and a ServiceAccount has no inbox.
+// mute a deadline/compliance escalation, and a ServiceAccount has no intray.
 [Collection(E2ECollection.Name)]
 public class NotificationPreferencesTests
 {
@@ -49,7 +49,7 @@ public class NotificationPreferencesTests
         Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
         Assert.Equal("INVALID_NOTIFICATION_PREFERENCE", await ErrorCodeAsync(bad));
 
-        // A ServiceAccount has no inbox → no preferences.
+        // A ServiceAccount has no intray → no preferences.
         using var service = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
         Assert.Equal(HttpStatusCode.Forbidden, (await service.GetAsync("/api/notifications/preferences")).StatusCode);
     }

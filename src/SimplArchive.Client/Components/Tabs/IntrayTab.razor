@@ -1,0 +1,1418 @@
+@using System.Net
+@using Microsoft.AspNetCore.Components.Forms
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
+@inject SimplArchive.Client.Services.IntrayUploads IntrayUploads
+@inject SimplArchive.Client.Services.OcrLanguageCatalog OcrLanguages
+@inject SimplArchive.Client.Services.WebDavMountLink WebDavLink
+@implements IAsyncDisposable
+
+@* The Intray tab of the workbench (ADR "S3-backed inbox"), extracted from Home.razor per ADR 0558.
+
+   Staged files waiting to be filed into a repository: uploaded by picker or by dropping onto the list, given a
+   mask + index data here, then filed. Self-contained — it owns its list, its staging form, its drop-zone and
+   the DotNetObjectReference dropUpload.js calls back into, so nothing about it lives in the shell any more.
+
+   Two facts arrive as parameters rather than being re-fetched (ADR 0557): whether the caller may triage other
+   people's intrayes, and which folder the Repositories tree has selected, which pre-fills the filing target. *@
+
+@* Only this tab has a filter row, so its rule lives here rather than in the shell, which may only shrink
+   (ADR 0558). Bottom-aligned because the switch and the select have different label geometry and would
+   otherwise sit at different heights. *@
+<style>
+    .wb-intray-filters { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 16px; padding: 2px 2px 8px; }
+    /* Both filters size to themselves: a MudSelect's root is a block, so in a flex row it otherwise grows to
+       the full width of the list and reads as an input you are meant to type a whole line into. */
+    .wb-intray-filters > * { flex: 0 0 auto; }
+    .wb-intray-filters .mud-select { width: 240px; }
+</style>
+
+@* Per-user S3-backed intray (ADR "S3-backed inbox") — staged files to file into a repository. *@
+<div class="wb-search">
+    <div class="wb-search-bar">
+        @* Flat, like every other button here. It used to carry a filled accent to say "start here", which was
+           unambiguous while it was a rounded rect with a label — but in a row of circles whose toggles show ON
+           as filled primary, a filled circle says "pressed", not "primary". The tab already says where to
+           start: this is the first button, and the list below it is a drop-zone that says so in words. *@
+        <MudButton Class="wb-rib-btn" Size="Size.Small"
+                   HtmlTag="label" for="intray-file-input"
+                   title="@Strings.Get("IntrayUpload")" aria-label="@Strings.Get("IntrayUpload")">
+            <MudIcon Icon="@Icons.Material.Filled.Upload" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayUpload")</span>
+        </MudButton>
+        <InputFile id="intray-file-input" OnChange="OnIntrayInputChangeAsync" multiple style="display:none" />
+        <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="LoadIntrayAsync"
+                   title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
+            <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="@(() => WebDavLink.CopyAsync(WebDavFolder))"
+                   title="@Strings.Get("IntrayCopyDav")" aria-label="@Strings.Get("IntrayCopyDav")">
+            <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayCopyDav")</span>
+        </MudButton>
+        @* Own-items-only by default; held DOWN it reveals my group intrayes (ADR 0532). A toggle rather than the
+           switch it used to be: it is a sticky on/off that belongs beside the other actions on this view, and a
+           switch with a written label set the height of every button next to it. Disabled while viewing another
+           user's intray — the two selectors are mutually exclusive. *@
+        <MudToggleIconButton Toggled="_intrayIncludeGroups" ToggledChanged="ToggleIntrayGroupsAsync" Size="Size.Small"
+                             Icon="@Icons.Material.Outlined.Groups" ToggledIcon="@Icons.Material.Filled.Groups"
+                             Color="Color.Default" ToggledColor="Color.Primary" Class="ml-1"
+                             Disabled="@(_intrayViewUserId is not null)"
+                             title="@Strings.Get("IntrayShowGroups")" />
+        @* Selected-item group, FIRST — the desktop's shape (#521, ADR 0511). The same actions the row's ⋮ menu
+           offers, differing only in SCOPE: the menu acts on the row it was opened from, these on the current
+           selection. Disabled rather than hidden when nothing is selected, which is the Repositories ribbon's
+           rule: a right you do not hold is not advertised, but a button that merely has nothing to act on yet
+           stays put, so the bar does not reflow under the cursor. *@
+        @* ONE file button, and its scope is the checked set. There used to be two — a "File to folder…" acting
+           on the single selection and a "File N items" that appeared beside it once two rows were checked —
+           which put two buttons carrying the same glyph next to each other, differing only in a scope the user
+           could not see. Now that a plain click makes the clicked row the whole checked set, "the selection"
+           and "what is checked" are the same thing, so one button says it: it files what is highlighted,
+           however many that is, and the tooltip carries the count when there is more than one. *@
+        <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" Disabled="@(_intrayChecked.Count == 0)"
+                   OnClick="FileCheckedAsync" title="@FileCheckedLabel" aria-label="@FileCheckedLabel">
+            <MudIcon Icon="@Icons.Material.Filled.DriveFileMove" Size="Size.Small" /><span class="wb-rib-label">@FileCheckedLabel</span>
+        </MudButton>
+        @if (_selectedIntrayItem?.IsOwn != false)
+        {
+            <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selectedIntrayItem is null)"
+                       OnClick="@(() => SendIntrayItemAsync(_selectedIntrayItem!))"
+                       title="@Strings.Get("IntraySendTitle")" aria-label="@Strings.Get("IntraySendTitle")">
+                <MudIcon Icon="@Icons.Material.Filled.Send" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntraySendTitle")</span>
+            </MudButton>
+        }
+        else
+        {
+            <MudButton Class="wb-rib-btn ml-1" Size="Size.Small"
+                       OnClick="@(() => MoveToMyIntrayAsync(_selectedIntrayItem!))"
+                       title="@Strings.Get("IntrayClaimToMine")" aria-label="@Strings.Get("IntrayClaimToMine")">
+                <MudIcon Icon="@Icons.Material.Filled.MoveToInbox" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayClaimToMine")</span>
+            </MudButton>
+        }
+        <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selectedIntrayItem is null)"
+                   OnClick="@(() => DownloadIntrayItemAsync(_selectedIntrayItem!))"
+                   title="@Strings.Get("Download")" aria-label="@Strings.Get("Download")">
+            <MudIcon Icon="@Icons.Material.Filled.Download" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("Download")</span>
+        </MudButton>
+        @* Delete composes across the CHECKED set like File selected does (N deletes, one confirm naming the
+           count, one summary — the checkout tab's bulk story); with nothing checked it acts on the selected
+           row (review finding). The row's ⋮ twin stays single — it acts on its own row (ADR 0559). *@
+        <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_selectedIntrayItem is null && _intrayChecked.Count == 0)"
+                   OnClick="DeleteIntraySelectionAsync"
+                   title="@Strings.Get("RibbonDelete")" aria-label="@Strings.Get("RibbonDelete")">
+            <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonDelete")</span>
+        </MudButton>
+
+        @* Page operations (#487, ADR 0575), matching the desktop ribbon's group. Each appears only when the
+           server said it can succeed: one checked item with more than one page for split/sort, two or more for
+           join. A missing rel means "not available to you, here, now" (ADR 0543/0554). *@
+        @if (_pages is { CanSplit: true })
+        {
+            <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="SplitPagesAsync"
+                       title="@Strings.Get("IntraySplit")" aria-label="@Strings.Get("IntraySplit")">
+                <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntraySplit")</span>
+            </MudButton>
+        }
+        @if (_pages is { CanSort: true })
+        {
+            <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="SortPagesAsync"
+                       title="@Strings.Get("IntraySortTitle")" aria-label="@Strings.Get("IntraySortTitle")">
+                <MudIcon Icon="@Icons.Material.Filled.Sort" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntraySortTitle")</span>
+            </MudButton>
+        }
+        @if (_intrayChecked.Count >= 2 && _joinHref is not null)
+        {
+            <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="JoinItemsAsync"
+                       title="@Strings.Get("IntrayJoinTitle")" aria-label="@Strings.Get("IntrayJoinTitle")">
+                <MudIcon Icon="@Icons.Material.Filled.CallMerge" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayJoinTitle")</span>
+            </MudButton>
+        }
+        @if (_pages is { CanDeskew: true })
+        {
+            <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="DeskewAsync"
+                       title="@Strings.Get("IntrayDeskewNow")" aria-label="@Strings.Get("IntrayDeskewNow")">
+                <MudIcon Icon="@Icons.Material.Filled.Straighten" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayDeskewNow")</span>
+            </MudButton>
+        }
+        @if (_pages is { CanCutAtPatchCodes: true })
+        {
+            <MudButton Class="wb-rib-btn ml-2" Size="Size.Small" OnClick="CutAtPatchCodesAsync"
+                       title="@Strings.Get("IntrayPatchCutNow")" aria-label="@Strings.Get("IntrayPatchCutNow")">
+                <MudIcon Icon="@Icons.Material.Filled.ContentCut" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayPatchCutNow")</span>
+            </MudButton>
+        }
+        @* The sticky preferences, held DOWN while on — the desktop's ribbon toggles, in this tab's toolbar
+           (ADR 0511). Server-side per user, because the Worker's sweep reads them for WebDAV arrivals.
+
+           Size.Small on every one of these: an icon button defaults to Medium (a 24px glyph in a 48px button)
+           while a Size.Small MudButton is a 20px glyph in a 28px one — mixing the two made this bar 52px tall
+           against the Repositories ribbon's 41px, which reads as "the Intray has bigger icons". A toolbar is one
+           row of one size. *@
+        <MudToggleIconButton Toggled="_rotateAutomatically" ToggledChanged="SetRotateAutomaticallyAsync" Size="Size.Small"
+                             Icon="@Icons.Material.Outlined.RotateRight" ToggledIcon="@Icons.Material.Filled.RotateRight"
+                             Color="Color.Default" ToggledColor="Color.Primary" Class="ml-2"
+                             title="@Strings.Get("IntrayRotateAutoTip")" />
+        <MudToggleIconButton Toggled="_deskewAutomatically" ToggledChanged="SetDeskewAutomaticallyAsync" Size="Size.Small"
+                             Icon="@Icons.Material.Outlined.AutoFixHigh" ToggledIcon="@Icons.Material.Filled.AutoFixHigh"
+                             Color="Color.Default" ToggledColor="Color.Primary" Class="ml-1"
+                             title="@Strings.Get("IntrayDeskewAutoTipTiff")" />
+        <MudToggleIconButton Toggled="_cutAtPatchCodesAutomatically" ToggledChanged="SetCutAtPatchCodesAutomaticallyAsync" Size="Size.Small"
+                             Icon="@Icons.Material.Outlined.ContentCut" ToggledIcon="@Icons.Material.Filled.ContentCut"
+                             Color="Color.Default" ToggledColor="Color.Primary" Class="ml-1"
+                             title="@Strings.Get("IntrayPatchAutoTip")" />
+        @if (_patchCodeSheetHref is { } sheetHref)
+        {
+            @* A plain link, because the browser already knows how to show a PDF and then print it — a fetch
+               into a blob would take that away and give nothing back. *@
+            <MudIconButton Href="@sheetHref" Target="_blank" Icon="@Icons.Material.Filled.Print" Class="ml-1" Size="Size.Small"
+                           title="@Strings.Get("IntrayPatchSheetTip")" />
+        }
+        @if (_intrayBusy)
+        {
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="ml-2" />
+        }
+    </div>
+    <div class="wb-search-status">@_intrayStatus</div>
+    @if (CanManageIntrayes)
+    {
+        @* The one filter that cannot be a button: it picks a value out of a list, and the list is as long as
+           the tenant has users. So it sits BELOW the action bar and directly above the list it filters — where
+           the desktop already puts it (ADR 0511) — rather than setting the bar's height for every button beside
+           it. Its companion, "show group intrayes", is an on/off and went to the bar as a toggle.
+
+           CanManageIntrayes: open any user's intray for triage; "My intray" resets to own. *@
+        <div class="wb-intray-filters">
+            <MudSelect T="Guid?" Value="_intrayViewUserId" ValueChanged="ViewUserIntrayAsync" Dense="true"
+                       Margin="Margin.Dense" Variant="Variant.Outlined"
+                       Label="@Strings.Get("IntrayUserPicker")">
+                <MudSelectItem T="Guid?" Value="@((Guid?)null)">@Strings.Get("IntrayMine")</MudSelectItem>
+                @foreach (var u in _intrayUsers)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)u.Id)">@u.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+    }
+    <div style="display:flex; flex:1 1 auto; min-height:0;">
+        @* Drop-zone: dropping OS files anywhere on this list uploads them straight into the intray
+           (ADR "Inbox file-list drop-zone"). *@
+        <div class="wb-search-results wb-intray-drop" style="flex:1 1 40%; min-width:0;" @ref="_dropZone">
+            <div class="wb-intray-drophint"><MudIcon Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Small" /> @Strings.Get("IntrayDropHint")</div>
+            @foreach (var item in _intrayItems)
+            {
+                <div class="wb-list-row @(item == _selectedIntrayItem || _intrayChecked.Contains(item) ? "wb-list-row-selected" : "")" @onclick="e => OnIntrayRowClickAsync(item, e)">
+                    @* The checkbox is the TOUCH affordance only. On a device with a hover and a fine pointer
+                       the list multi-selects natively — Ctrl/Cmd-click toggles a row in, Shift-click takes a
+                       range — which is what the Repositories list has always done, and what anyone who selects
+                       files in their own OS expects. Touch has neither modifier keys nor a right-click, so
+                       there the checkbox IS the affordance; the same input-device query that decides whether a
+                       toolbar shows labels decides this (ADR 0491). *@
+                    <div class="wb-touch-only" @onclick:stopPropagation="true">
+                        <MudCheckBox T="bool" Value="_intrayChecked.Contains(item)" ValueChanged="@(v => ToggleIntrayCheck(item, v))" Dense="true" Size="Size.Small" />
+                    </div>
+                    <MudIcon Icon="@(item.GroupId is not null ? Icons.Material.Filled.Group : item.UserId is not null ? Icons.Material.Filled.Person : Icons.Material.Filled.InsertDriveFile)" Size="Size.Small" />
+                    <span style="flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@item.DisplayName</span>
+                    @if (!item.IsOwn && item.SourceLabel is { } src)
+                    {
+                        @* Whose queue this item came from (a group, or — for an admin view — another user). *@
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default" Class="ma-0">@src</MudChip>
+                    }
+                    @if (item.Signed)
+                    {
+                        @* Every page operation would void a signature, so none is offered on this row (#491). *@
+                        <MudTooltip Text="@Strings.Get("SignedBadgeTip")">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined"
+                                     Icon="@Icons.Material.Filled.WorkspacePremium" Class="ma-0">@Strings.Get("SignedBadge")</MudChip>
+                        </MudTooltip>
+                    }
+                    <span class="mud-text-secondary" style="font-size:.8em;">@SimplArchive.Client.Services.ByteSize.Format(item.Size)</span>
+                    <div @onclick:stopPropagation="true">
+                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomLeft">
+                            <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => FileIntrayItemAsync(item)">@Strings.Get("IntrayFileToFolder")</MudMenuItem>
+                            @if (item.IsOwn)
+                            {
+                                @* Own items can be handed to a group or another user (ADR 0532). *@
+                                <MudMenuItem Icon="@Icons.Material.Filled.Send" OnClick="() => SendIntrayItemAsync(item)">@Strings.Get("IntraySendTitle")</MudMenuItem>
+                            }
+                            else
+                            {
+                                @* A group/other-user item can be claimed into my own intray. *@
+                                <MudMenuItem Icon="@Icons.Material.Filled.MoveToInbox" OnClick="() => MoveToMyIntrayAsync(item)">@Strings.Get("IntrayClaimToMine")</MudMenuItem>
+                            }
+                            <MudMenuItem Icon="@Icons.Material.Filled.Download" OnClick="() => DownloadIntrayItemAsync(item)">@Strings.Get("Download")</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error" OnClick="() => DeleteIntrayItemAsync(item)">@Strings.Get("RibbonDelete")</MudMenuItem>
+                        </MudMenu>
+                    </div>
+                </div>
+            }
+        </div>
+        @if (_selectedIntrayItem is not null)
+        {
+            <div style="flex:1 1 60%; min-width:0; border-left:1px solid var(--mud-palette-lines-default); display:flex; flex-direction:column;">
+                @* Mask/index-data staging pane (ADRs 0279/0281/0285). *@
+                <div style="flex:0 0 auto; max-height:46%; overflow:auto; padding:10px 14px; border-bottom:1px solid var(--mud-palette-lines-default);">
+                    <MudText Typo="Typo.subtitle2">@_selectedIntrayItem.Name</MudText>
+                    @if (_intrayIsEmail)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
+                            <MudIcon Icon="@Icons.Material.Filled.MarkEmailRead" Size="Size.Small" /> @Strings.Get("IntrayEmailAutoMask")
+                        </MudText>
+                    }
+                    else
+                    {
+                        <table class="wb-sysfields">
+                            <tr><td>@Strings.Get("Name")</td><td><MudTextField @bind-Value="_intrayStgName" Margin="Margin.Dense" Variant="Variant.Outlined" /></td></tr>
+                            <tr><td>@Strings.Get("VerColDocDate")</td><td><MudDatePicker @bind-Date="_intrayStgDate" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" /></td></tr>
+                            @if (_intrayStgScannable)
+                            {
+                                @* OCR languages for a scannable item — staged + applied to the searchable-PDF conversion at filing (ADR "Inbox OCR-language staging"). *@
+                                <tr>
+                                    <td>@Strings.Get("SysOcrLanguages")</td>
+                                    <td>
+                                        <div class="wb-ocr-chips">
+                                            @foreach (var lang in _ocrCatalog)
+                                            {
+                                                var idx = _intrayStgOcrCodes.IndexOf(lang.Code);
+                                                <button type="button" class="wb-ocr-chip @(idx >= 0 ? "wb-ocr-chip-on" : "")" @onclick="() => ToggleIntrayOcr(lang.Code)">@(idx >= 0 ? $"{idx + 1}. " : "")@lang.DisplayName</button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </table>
+                        <div class="wb-mask-edit">
+                            <div class="wb-mask-row">
+                                <span class="wb-mask-label">@Strings.Get("MaskLabel")</span>
+                                <MudSelect T="Guid?" Value="_intrayStgMaskId" ValueChanged="OnIntrayStgMaskChanged" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
+                                    <MudSelectItem T="Guid?" Value="@((Guid?)null)">@Strings.Get("NoMask")</MudSelectItem>
+                                    @foreach (var m in _intrayStgMasks)
+                                    {
+                                        <MudSelectItem T="Guid?" Value="@((Guid?)m.Id)">@m.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </div>
+                            @foreach (var f in _intrayStgFields)
+                            {
+                                <div class="wb-mask-row">
+                                    <span class="wb-mask-label">@f.Label</span>
+                                    @if (f.IsDate)
+                                    {
+                                        <MudDatePicker @bind-Date="f.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                                    }
+                                    else if (f.IsBoolean)
+                                    {
+                                        <MudCheckBox T="bool" @bind-Value="f.BoolValue" />
+                                    }
+                                    else if (f.IsMultiSelect)
+                                    {
+                                        <MudTextField @bind-Value="f.TextValue" Lines="3" Placeholder="@Strings.Get("OneValuePerLine")" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                                    }
+                                    else
+                                    {
+                                        <MudTextField @bind-Value="f.TextValue" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                                    }
+                                </div>
+                            }
+                        </div>
+                        <div class="wb-detail-actions">
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveIntrayMaskAsync" Disabled="_intrayStgBusy">@Strings.Get("Save")</MudButton>
+                        </div>
+                    }
+                </div>
+                @* The intray previews a STAGED file — nothing to annotate, so no Toolbar and no
+                   annotation host; the gestures become no-ops rather than missing features. *@
+                <PreviewPane @ref="_preview"
+                             Style="flex:1 1 auto; min-height:0; position:relative; display:flex; flex-direction:column;"
+                             EmptyText="@(_selectedIntrayItem is null ? Strings.Get("NoItemSelected") : Strings.Get("NoPreview"))"
+                             ConvertedBadgeTooltip="This is a generated preview, not the original file." />
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+
+    /// <summary>
+    /// The folder currently selected in the Repositories tree, used to pre-fill the filing dialog. Arrives as a
+    /// parameter because the shell already holds it — asking the server again would be a request spent learning
+    /// something known (ADR 0557).
+    /// </summary>
+    [Parameter]
+    public Guid? CurrentFolderId { get; set; }
+
+    /// <summary>The selected folder's name, shown in the filing dialog beside its id.</summary>
+    [Parameter]
+    public string? CurrentFolderName { get; set; }
+
+    /// <summary>Whether the caller may open another user's intray for triage (the CanManageIntrayes right).</summary>
+    [Parameter]
+    public bool CanManageIntrayes { get; set; }
+
+    /// <summary>
+    /// Copies the WebDAV mount URL. Stays in the shell because the Check-out tab offers the same action, and it
+    /// is stateless — a candidate for a small shared service when the shell is finally thinned (PR 4).
+    /// </summary>
+    /// <summary>This tab's folder inside the WebDAV mount — the desktop's button opens it; the web copies it.</summary>
+    private const string WebDavFolder = "Personal/Intray";
+
+    /// <summary>
+    /// The document selected on the Repositories tab, offered as "file as a new version of it" (ADR 0286).
+    /// Null unless a real document is selected — the shell decides that, since it owns the selection.
+    /// </summary>
+    [Parameter]
+    public Guid? CurrentDocumentId { get; set; }
+
+    /// <summary>That document's name, shown in the filing dialog.</summary>
+    [Parameter]
+    public string? CurrentDocumentName { get; set; }
+
+    /// <summary>The signed-in user's id, used to tell own items from a group's.</summary>
+    [Parameter]
+    public Guid? MyUserId { get; set; }
+
+    // The tenant's OCR languages, fetched on demand the first time a scannable item is selected. The tab keeps
+    // its own copy rather than sharing the shell's: it is a small catalogue, read at most once per session here,
+    // and a cache shared across tabs is the coupling this decomposition is unwinding.
+    private IReadOnlyList<OcrLanguageOption> _ocrCatalog = [];
+
+    private ElementReference _dropZone;
+    private bool _dropWired;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<IntrayTab>? _selfRef;
+    private PreviewPane? _preview;
+
+    // A preview requested before the pane existed. The pane sits inside "is an item selected?", so the FIRST
+    // selection is what creates it — and rendering into a null ref would lose the preview silently (ADR 0558).
+    private (string? Url, string? Layout, bool Converted)? _pendingPreview;
+
+    protected override async Task OnInitializedAsync() => await LoadIntrayAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _selfRef = DotNetObjectReference.Create(this);
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./dropUpload.js");
+        }
+
+        // Wire the file-list drop-zone once its element is real (ADR "Inbox file-list drop-zone"). initIntrayDrop
+        // returns false until then, so simply retry on each render.
+        if (!_dropWired && _module is not null)
+        {
+            _dropWired = await _module.InvokeAsync<bool>("initIntrayDrop", _dropZone, _selfRef);
+        }
+
+        // Last, after the wiring: this is the only await here that can take real time.
+        if (_pendingPreview is { } pending && _preview is not null)
+        {
+            _pendingPreview = null;
+            await ShowPreviewAsync(pending.Url, pending.Layout, pending.Converted);
+            StateHasChanged();
+        }
+    }
+
+    // Renders into the pane, or remembers the request until the pane exists (see _pendingPreview).
+    private async Task ShowPreviewAsync(string? url, string? layout, bool converted)
+    {
+        if (_preview is null)
+        {
+            _pendingPreview = (url, layout, converted);
+            return;
+        }
+
+        await _preview.RenderAsync(url, layout, converted);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _selfRef?.Dispose();
+        if (_module is not null)
+        {
+            try
+            {
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException) { /* page is going away */ }
+            catch (JSException) { /* module already torn down */ }
+        }
+    }
+
+    private List<IntrayItem> _intrayItems = [];
+    private string _intrayStatus = "";
+    private bool _intrayBusy;
+    private IntrayItem? _selectedIntrayItem;
+    // Intray view filters (ADR 0532): own-items-only by default; a toggle reveals my group intrayes, and a
+    // CanManageIntrayes holder can open a specific user's intray via the user-picker (mutually exclusive with groups).
+    private bool _intrayIncludeGroups;
+    private Guid? _intrayViewUserId;
+    private List<IntrayUserOption> _intrayUsers = []; // the admin user-picker's choices (CanManageIntrayes only)
+    private sealed record IntrayUserOption(Guid Id, string Name);
+    // Every address this row acts on comes from the listing that drew it (ADR 0555) — including `mask` and
+    // `preview`, which the row had been carrying all along while the tab rebuilt them from Name plus a
+    // hand-written `?group=`/`?user=` query. The server's own hrefs already carry that source query, so the
+    // SourceQuery property that existed to re-append it is gone (ADR 0532/0543, #416).
+    private record IntrayItem(string Name, long Size, bool HasMask, string DownloadHref, string PreviewHref, string FileHref, string DeleteHref, string MoveHref, string MaskHref, Guid? GroupId, string? GroupName, Guid? UserId, string? UserName, string? PagesHref, bool Signed)
+    {
+        // Un-classified items (no staged mask sidecar) show in square brackets (ADRs 0279/0281).
+        public string DisplayName => HasMask ? Name : $"[{Name}]";
+
+        // True for the caller's own items (no group/user source) — they get the "Send to…" action; non-own items
+        // get "Move to my intray".
+        public bool IsOwn => GroupId is null && UserId is null;
+
+        // The `[GroupName]` / `[UserName]` source label shown before the name; null for own items.
+        public string? SourceLabel => GroupName ?? UserName;
+    }
+
+    private async Task LoadIntrayAsync()
+    {
+        // The toggle's state belongs to the USER, not the browser, so it is read from the server rather than
+        // restored from layout persistence (#491).
+        try
+        {
+            var me = await Http.GetFromJsonAsync<MeResponse>(await ApiRoot.RequireAsync("me"));
+            _deskewAutomatically = me?.DeskewIntrayUploads ?? true;
+            _rotateAutomatically = me?.RotateIntrayUploads ?? true;
+            _cutAtPatchCodesAutomatically = me?.CutIntrayUploadsAtPatchCodes ?? true;
+        }
+        catch (Exception)
+        {
+            // Leave it at its default; the ribbon still works and the server remains the authority.
+        }
+
+        _intrayBusy = true;
+        _intrayStatus = "Loading…";
+        _intrayChecked.Clear();
+        try
+        {
+            // A CanManageIntrayes holder gets a user-picker; load the tenant's users once for it.
+            if (CanManageIntrayes && _intrayUsers.Count == 0)
+            {
+                var users = await Http.GetFromJsonAsync<IntrayUsersResponse>(await ApiRoot.RequireAsync("intrayUsers"));
+                _intrayUsers = users?.Users ?? [];
+            }
+
+            // The server owns the path, the caller owns the filter: appending a QUERY to the advertised href is
+            // FOLLOWING it, where appending a path segment would be composing in disguise (ADR 0557).
+            var intray = await ApiRoot.RequireAsync("intray");
+            var url = _intrayViewUserId is { } viewUser ? $"{intray}?user={viewUser}"
+                : _intrayIncludeGroups ? $"{intray}?includeGroups=true"
+                : intray;
+            var response = await Http.GetFromJsonAsync<IntrayResponse>(url);
+            _joinHref = Links.Href(response?.Links, "join");
+            _patchCodeSheetHref = Links.Href(response?.Links, "patchCodeSheet");
+            _intrayItems = (response?.Items ?? []).Select(i => new IntrayItem(
+                i.Name, i.Size, i.HasMask,
+                Links.Href(i.Links, "download") ?? "", Links.Href(i.Links, "preview") ?? "",
+                Links.Href(i.Links, "file") ?? "", Links.Href(i.Links, "self") ?? "",
+                Links.Href(i.Links, "move") ?? "", Links.Href(i.Links, "mask") ?? "",
+                // A null `pages` means the server offered no page operations for this row's format (ADR 0554).
+                i.GroupId, i.GroupName, i.UserId, i.UserName, Links.Href(i.Links, "pages"), i.Signed)).ToList();
+            _intrayStatus = _intrayItems.Count == 0 ? "Your intray is empty. Upload files to file them into a repository." : $"{_intrayItems.Count} item(s).";
+        }
+        catch (Exception)
+        {
+            _intrayStatus = "Could not load the intray.";
+        }
+        finally
+        {
+            _intrayBusy = false;
+        }
+    }
+
+    private async Task OnIntrayInputChangeAsync(InputFileChangeEventArgs e) => await OnIntrayFilesSelectedAsync(e.GetMultipleFiles(100));
+
+    // Uploads each selected file straight into the S3 intray: POST /api/intray for a presigned URL, then PUT the
+    // bytes to it (cross-origin, unauthenticated — same direct-to-storage model as document upload).
+    private async Task OnIntrayFilesSelectedAsync(IReadOnlyList<IBrowserFile> files)
+    {
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        _intrayBusy = true;
+        _intrayStatus = "Uploading…";
+        StateHasChanged();
+        try
+        {
+            foreach (var file in files)
+            {
+                var target = await (await Http.PostAsJsonAsync(await ApiRoot.RequireAsync("intray"), new { fileName = file.Name })).Content.ReadFromJsonAsync<UploadIntrayResponse>();
+                if (target is null)
+                {
+                    continue;
+                }
+
+                using var buffer = new MemoryStream();
+                await file.OpenReadStream(maxAllowedSize: 200L * 1024 * 1024).CopyToAsync(buffer);
+                using var content = new ByteArrayContent(buffer.ToArray());
+                if (!string.IsNullOrWhiteSpace(file.ContentType))
+                {
+                    content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+                }
+
+                (await PresignedTransfer.Anonymous.PutAsync(target.UploadUrl, content)).EnsureSuccessStatusCode();
+            }
+
+            Snackbar.Add(string.Format(Strings.Get("StUploadedToIntray"), files.Count), Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StSomeUploadsFailed"), Severity.Error);
+        }
+        finally
+        {
+            _intrayBusy = false;
+            await LoadIntrayAsync();
+        }
+    }
+
+    // ---- Intray drop-zone upload (called from dropUpload.js, ADR "Inbox file-list drop-zone") --------------
+    // The browser reads the dropped files and PUTs them straight to storage; .NET only mints the presigned URL
+    // and refreshes, mirroring the document-upload drop path.
+    [JSInvokable]
+    public Task OnIntrayUploadsStartingAsync(int count)
+    {
+        _intrayBusy = true;
+        _intrayStatus = $"Uploading {count} file(s)…";
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task<string?> CreateIntrayUploadTargetAsync(string fileName) => IntrayUploads.CreateTargetAsync(fileName);
+
+    [JSInvokable]
+    public async Task OnIntrayUploadsCompleteAsync(int count)
+    {
+        if (count > 0)
+        {
+            Snackbar.Add(string.Format(Strings.Get("StUploadedToIntray"), count), Severity.Success);
+        }
+
+        // Signal ingest BEFORE dropping the busy state and reloading: deskew and the patch-code cut run in
+        // that call, so reloading first would show the un-straightened, un-split file and then change it
+        // under the user — or, before this was wired at all, not until the sweep worker's five-minute poll.
+        // The busy flag clears in finally: a failure here must not leave the spinner running forever, and it
+        // must be SAID — a swallowed ingest failure means deskew/cut silently did not run.
+        try
+        {
+            await IntrayUploads.SignalProcessedAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrIntrayProcessing"), Severity.Warning);
+        }
+        finally
+        {
+            _intrayBusy = false;
+        }
+
+        await LoadIntrayAsync();
+        // A [JSInvokable] call doesn't auto-render (unlike a Blazor event handler): without this, the busy
+        // spinner kept spinning INDEFINITELY after a successful upload — every request 200, the list even
+        // refreshed, and the user staring at a stale render of it.
+        StateHasChanged();
+    }
+
+    // ---- Intray mask/index-data staging pane (ADRs 0279/0281/0285) ------------------------------------
+
+    private bool _intrayIsEmail;
+    private bool _intrayStgBusy;
+    private string _intrayStgName = "";
+    private DateTime? _intrayStgDate;
+    private Guid? _intrayStgMaskId;
+    private readonly List<EditField> _intrayStgFields = [];
+    private List<MaskSummary> _intrayStgMasks = [];
+    private Dictionary<Guid, List<string>> _intrayDraftValues = [];
+    // Staged OCR languages for a scannable item (.tif/.tiff/.pdf) — consumed at filing (ADR "Inbox OCR-language staging").
+    private List<string> _intrayStgOcrCodes = [];
+    private bool _intrayStgScannable;
+
+    private async Task SelectIntrayItemAsync(IntrayItem item)
+    {
+        _selectedIntrayItem = item;
+        _preview?.Clear();
+        _intrayStgFields.Clear();
+        _intrayStgMasks = [];
+        _preview?.Clear();
+
+        // Resolve the rendition-backed preview URL (the `preview` link is an endpoint returning JSON, ADR 0279,
+        // not a direct file URL — so fetch it and use its previewUrl) plus its text-layout link, then render via
+        // the shared pdf.js host with the hit-overlay. 204 = no preview available.
+        try
+        {
+            using var r = await Http.GetAsync(item.PreviewHref);
+            if (r.IsSuccessStatusCode && r.StatusCode != HttpStatusCode.NoContent)
+            {
+                var preview = await r.Content.ReadFromJsonAsync<IntrayPreviewResponse>();
+
+                var textLayoutUrl = Links.Href(preview?.Links, "text-layout");
+                await ShowPreviewAsync(preview?.PreviewUrl, textLayoutUrl, preview?.PreviewConverted ?? false);
+            }
+        }
+        catch (Exception)
+        {
+            // Non-fatal — no preview.
+        }
+
+        // Emails are classified automatically by the system on filing — not offered a mask here (ADR 0285).
+        _intrayIsEmail = item.Name.EndsWith(".eml", StringComparison.OrdinalIgnoreCase) || item.Name.EndsWith(".msg", StringComparison.OrdinalIgnoreCase);
+        if (_intrayIsEmail)
+        {
+            return;
+        }
+
+        try
+        {
+            _intrayStgMasks = (await Http.GetFromJsonAsync<MaskListResponse>(await ApiRoot.RequireAsync("masks")))?.Masks ?? [];
+            var draft = await Http.GetFromJsonAsync<IntrayMaskDraft>(item.MaskHref);
+            _intrayStgName = string.IsNullOrEmpty(draft?.Name) ? System.IO.Path.GetFileNameWithoutExtension(item.Name) : draft.Name;
+            _intrayStgDate = DateTime.TryParse(draft?.DocumentDate, out var d) ? d.Date : null;
+            _intrayDraftValues = (draft?.Fields ?? []).ToDictionary(f => f.FieldDefinitionId, f => f.Values);
+
+            // OCR languages: only offered for a scannable item, staged + consumed at filing (ADR "Inbox
+            // OCR-language staging"). Load the catalog on demand.
+            _intrayStgScannable = IsScannableExtension(item.Name);
+            _intrayStgOcrCodes = draft?.OcrLanguages ?? [];
+            if (_intrayStgScannable && _ocrCatalog.Count == 0)
+            {
+                _ocrCatalog = await OcrLanguages.GetAsync();
+            }
+
+            // Preselect the staged mask, or default to "Basic Entry" for an un-classified item (ADR 0284).
+            _intrayStgMaskId = draft?.MaskId ?? _intrayStgMasks.FirstOrDefault(m => m.Name == "Basic Entry")?.Id;
+            await LoadIntrayStgFieldsAsync(_intrayStgMaskId, useDraftValues: true);
+        }
+        catch (HttpRequestException)
+        {
+            // Non-fatal — the pane just shows an empty form.
+        }
+    }
+
+    private async Task LoadIntrayStgFieldsAsync(Guid? maskId, bool useDraftValues)
+    {
+        _intrayStgFields.Clear();
+        if (maskId is not { } id)
+        {
+            return;
+        }
+
+        // The picker's rows are the catalogue listing, and each row carries its own address (ADR 0555) — the
+        // fields live behind the chosen row's `self`, not behind a path rebuilt from its id.
+        if (Links.Href(_intrayStgMasks.FirstOrDefault(m => m.Id == id)?.Links, "self") is not { } maskHref)
+        {
+            return;
+        }
+
+        var fields = await Http.GetFromJsonAsync<MaskFieldsResponse>(maskHref);
+        foreach (var f in fields?.Fields ?? [])
+        {
+            var values = useDraftValues && _intrayDraftValues.TryGetValue(f.Id, out var v) ? v : [];
+            _intrayStgFields.Add(EditField.Create(f, values));
+        }
+    }
+
+    private async Task OnIntrayStgMaskChanged(Guid? maskId)
+    {
+        _intrayStgMaskId = maskId;
+        await LoadIntrayStgFieldsAsync(maskId, useDraftValues: false);
+    }
+
+    // Toggle a staged OCR language (ordered: click appends the next priority, click again removes + renumbers).
+    private void ToggleIntrayOcr(string code)
+    {
+        if (!_intrayStgOcrCodes.Remove(code))
+        {
+            _intrayStgOcrCodes.Add(code);
+        }
+    }
+
+    // OCR-language staging only applies to the scannable types the searchable-PDF conversion runs on at filing.
+    private static bool IsScannableExtension(string name) =>
+        System.IO.Path.GetExtension(name).ToLowerInvariant() is ".tif" or ".tiff" or ".pdf";
+
+    // Saves the staged Name/Document date/mask/index-data to the item's {name}.mask.json sidecar (ADR 0281).
+    private async Task SaveIntrayMaskAsync()
+    {
+        if (_selectedIntrayItem is not { } item)
+        {
+            return;
+        }
+
+        _intrayStgBusy = true;
+        try
+        {
+            var body = new
+            {
+                name = string.IsNullOrWhiteSpace(_intrayStgName) ? null : _intrayStgName.Trim(),
+                documentDate = _intrayStgDate?.ToString("yyyy-MM-dd"),
+                maskId = _intrayStgMaskId,
+                fields = _intrayStgFields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.ToValues() }),
+                ocrLanguages = _intrayStgScannable && _intrayStgOcrCodes.Count > 0 ? _intrayStgOcrCodes : null,
+            };
+
+            var resp = await Http.PutAsJsonAsync(item.MaskHref, body);
+            if (resp.IsSuccessStatusCode)
+            {
+                Snackbar.Add(Strings.Get("StMaskSaved"), Severity.Success);
+                var name = item.Name;
+                await LoadIntrayAsync();                 // refresh the square-bracket indicator
+                var fresh = _intrayItems.FirstOrDefault(i => i.Name == name);
+                if (fresh is not null)
+                {
+                    await SelectIntrayItemAsync(fresh);
+                }
+            }
+            else
+            {
+                Snackbar.Add(Strings.Get("StErrMaskSave"), Severity.Error);
+            }
+        }
+        finally
+        {
+            _intrayStgBusy = false;
+        }
+    }
+
+    private readonly HashSet<IntrayItem> _intrayChecked = [];
+
+    // The row the next Shift-click ranges from. Set by every click that establishes a position — a plain
+    // single-select and a Ctrl-click both do; a Shift-click extends and leaves it where it was, so shifting
+    // twice grows the same range instead of walking the anchor along behind the cursor.
+    private IntrayItem? _intrayAnchor;
+
+    // Native multi-selection, the same shape the Repositories list uses (ADR "Bulk actions on selected
+    // documents"): Ctrl/Cmd-click toggles a row into the checked set, Shift-click takes the range from the
+    // anchor, and a plain click clears the set and single-selects. The checked set is what the page operations
+    // and "file N items" already act on, so this is the pointer-device way to build it — the checkbox column
+    // stays for touch, where there are no modifier keys.
+    private async Task OnIntrayRowClickAsync(IntrayItem item, Microsoft.AspNetCore.Components.Web.MouseEventArgs e)
+    {
+        if (e.CtrlKey || e.MetaKey)
+        {
+            if (!_intrayChecked.Remove(item))
+            {
+                _intrayChecked.Add(item);
+            }
+
+            _intrayAnchor = item;
+            await LoadPagesAsync();
+            return;
+        }
+
+        if (e.ShiftKey && _intrayAnchor is { } anchor)
+        {
+            var a = _intrayItems.IndexOf(anchor);
+            var b = _intrayItems.IndexOf(item);
+            if (a >= 0 && b >= 0)
+            {
+                for (var i = Math.Min(a, b); i <= Math.Max(a, b); i++)
+                {
+                    _intrayChecked.Add(_intrayItems[i]);
+                }
+
+                await LoadPagesAsync();
+                return;
+            }
+        }
+
+        // A plain click makes this row the whole selection — it does not merely EMPTY the checked set. The page
+        // operations (split, sort, straighten, cut) each need exactly one checked item, so a click that cleared
+        // the set would take them off the toolbar on every pointer device: you would have to tick a hidden
+        // checkbox to get them back. "Selected" and "checked" are one thing here; the checkbox column, where it
+        // shows, is a second way to reach the same set.
+        _intrayChecked.Clear();
+        _intrayChecked.Add(item);
+        _intrayAnchor = item;
+        await SelectIntrayItemAsync(item);
+        await LoadPagesAsync();
+    }
+
+    // One button, one scope. The count is in the name whenever there is more than one thing to move, because
+    // the label is hidden on a pointer device and the tooltip is then the only place it can say how many.
+    private string FileCheckedLabel => _intrayChecked.Count > 1
+        ? string.Format(Strings.Get("IntrayFileN"), _intrayChecked.Count)
+        : Strings.Get("IntrayFileToFolder");
+
+    // Exactly one checked item takes the single-item dialog (it names the file); more take the bulk one. Both
+    // read the CHECKED set rather than _selectedIntrayItem: after Ctrl-clicking a row back out, the detail pane
+    // still shows whatever it last loaded, and filing what the pane shows rather than what is highlighted is
+    // the mistake ADR 0559 is about.
+    private Task FileCheckedAsync() => _intrayChecked.Count switch
+    {
+        0 => Task.CompletedTask,
+        1 => FileIntrayItemAsync(_intrayChecked.Single()),
+        _ => FileMultipleAsync(),
+    };
+
+    private void ToggleIntrayCheck(IntrayItem item, bool on)
+    {
+        if (on) { _intrayChecked.Add(item); } else { _intrayChecked.Remove(item); }
+        _intrayAnchor = item;
+        _ = LoadPagesAsync();
+    }
+
+    // ---- Page operations (#487, ADR 0575) -------------------------------------------------------------
+    // Every address here was advertised: the row's `pages` rel, and the split/sort rels that resource itself
+    // returns. Nothing is composed (ADR 0543), and each resource is read once and followed many times (0557).
+
+    private string? _joinHref;
+    private PagesInfo? _pages;
+
+    private sealed record PagesInfo(
+        int PageCount,
+        string? SplitHref,
+        string? SortHref,
+        string? DeskewHref,
+        string? PatchCodesHref)
+    {
+        public bool CanSplit => SplitHref is not null;
+
+        public bool CanSort => SortHref is not null;
+
+        public bool CanDeskew => DeskewHref is not null;
+
+        public bool CanCutAtPatchCodes => PatchCodesHref is not null;
+    }
+
+    private bool _deskewAutomatically = true;
+    private bool _rotateAutomatically = true;
+
+    private bool _cutAtPatchCodesAutomatically = true;
+
+    // The printable separator sheet, captured from the intray listing that advertised it (ADR 0557).
+    private string? _patchCodeSheetHref;
+
+    // Asked whenever the checked set changes, and CLEARED first: a rel that has not arrived means "not
+    // available here, now", which during the request is exactly true — so the buttons never describe the
+    // previously checked item while a newer one is loading (ADR 0559).
+    private async Task LoadPagesAsync()
+    {
+        _pages = null;
+        if (_intrayChecked.Count != 1 || _intrayChecked.Single().PagesHref is not { } pagesHref)
+        {
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            var response = await Http.GetFromJsonAsync<IntrayPagesResponse>(pagesHref);
+            _pages = new PagesInfo(
+                response?.PageCount ?? 0,
+                Links.Href(response?.Links, "split"),
+                Links.Href(response?.Links, "sort"),
+                Links.Href(response?.Links, "deskew"),
+                Links.Href(response?.Links, "patchCodes"));
+        }
+        catch (Exception)
+        {
+            _pages = null;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task SplitPagesAsync()
+    {
+        if (_pages is not { SplitHref: { } splitHref } pages || _intrayChecked.SingleOrDefault() is not { } item)
+        {
+            return;
+        }
+
+        // Splitting adds N items and keeps the source, so the count is worth stating BEFORE it happens: on a
+        // 40-page scan the difference between "split" and "what have I done" is knowing it was 40.
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = Strings.Get("IntraySplit"),
+            Message = string.Format(Strings.Get("IntraySplitConfirm"), item.Name, pages.PageCount),
+            YesText = Strings.Get("IntraySplit"),
+            CancelText = Strings.Get("Cancel"),
+        });
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(async () =>
+        {
+            var response = await Http.PostAsJsonAsync(splitHref, new { });
+            await ThrowIfRefusedAsync(response);
+            var written = await response.Content.ReadFromJsonAsync<IntrayPageItemsResponse>();
+            _intrayStatus = string.Format(Strings.Get("StIntraySplit"), item.Name, written?.Names.Count ?? 0);
+        });
+    }
+
+    private async Task SortPagesAsync()
+    {
+        if (_pages is not { SortHref: { } sortHref } pages || _intrayChecked.SingleOrDefault() is not { } item)
+        {
+            return;
+        }
+
+        // Thumbnails come from pdf.js, which this client already loads for the preview — the same trade the
+        // desktop makes with PDFium. A failure here costs the pictures, not the dialog: it falls back to
+        // numbered tiles rather than refusing to open.
+        var images = new List<string>();
+        try
+        {
+            var module = await JS.InvokeAsync<IJSObjectReference>("import", "./preview.js");
+            await using (module)
+            {
+                images = (await module.InvokeAsync<string[]>("pageThumbnails", item.DownloadHref, 260)).ToList();
+            }
+        }
+        catch (Exception)
+        {
+            images = [];
+        }
+
+        var parameters = new DialogParameters<Dialogs.SortPagesDialog>
+        {
+            { d => d.ItemName, item.Name },
+            { d => d.PageImages, images },
+            { d => d.PageCount, pages.PageCount },
+        };
+
+        var dialog = await DialogService.ShowAsync<Dialogs.SortPagesDialog>(Strings.Get("IntraySortTitle"), parameters);
+        if (await dialog.Result is not { Canceled: false, Data: Dialogs.SortPagesDialog.Result arrangement })
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(async () =>
+        {
+            // One request writes the whole arrangement — order and turns together (#522).
+            object body = arrangement.Rotations.Count > 0
+                ? new
+                {
+                    pageOrder = arrangement.Order,
+                    rotations = arrangement.Rotations.Select(r => new { page = r.Key, degrees = r.Value }).ToList(),
+                }
+                : new { pageOrder = arrangement.Order };
+            var response = await Http.PostAsJsonAsync(sortHref, body);
+            await ThrowIfRefusedAsync(response);
+            _intrayStatus = string.Format(Strings.Get("StIntraySorted"), item.Name);
+        });
+    }
+
+    // Straighten THIS item, now. The format change is stated before it happens: a TIFF comes back a PDF,
+    // because straightening re-renders the pages, and discovering that afterwards is how a user concludes the
+    // archive is unreliable.
+    private async Task DeskewAsync()
+    {
+        if (_pages is not { DeskewHref: { } deskewHref } || _intrayChecked.SingleOrDefault() is not { } item)
+        {
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = Strings.Get("IntrayDeskewNow"),
+            Message = string.Format(Strings.Get("IntrayDeskewConfirm"), item.Name),
+            YesText = Strings.Get("IntrayDeskewNow"),
+            CancelText = Strings.Get("Cancel"),
+        });
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(async () =>
+        {
+            var response = await Http.PostAsJsonAsync(deskewHref, new { });
+            await ThrowIfRefusedAsync(response);
+            var written = await response.Content.ReadFromJsonAsync<IntrayPageItemsResponse>();
+            var name = written?.Names.FirstOrDefault() ?? string.Empty;
+            _intrayStatus = string.Format(
+                Strings.Get(name.Length > 0 ? "StIntrayDeskewed" : "StIntrayDeskewNothing"),
+                name.Length > 0 ? name : item.Name);
+        });
+    }
+
+    // Cut THIS batch at its separator sheets, now. What happens to the batch is stated before it happens: it
+    // stays, under a name that says it can go — a user who expects it to vanish and finds it still there
+    // concludes the cut did not work.
+    private async Task CutAtPatchCodesAsync()
+    {
+        if (_pages is not { PatchCodesHref: { } patchCodesHref } || _intrayChecked.SingleOrDefault() is not { } item)
+        {
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = Strings.Get("IntrayPatchCutNow"),
+            Message = string.Format(Strings.Get("IntrayPatchCutConfirm"), item.Name),
+            YesText = Strings.Get("IntrayPatchCutNow"),
+            CancelText = Strings.Get("Cancel"),
+        });
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(async () =>
+        {
+            var response = await Http.PostAsJsonAsync(patchCodesHref, new { });
+            await ThrowIfRefusedAsync(response);
+            var written = await response.Content.ReadFromJsonAsync<IntrayPageItemsResponse>();
+            _intrayStatus = string.Format(
+                Strings.Get("StIntrayCutAtPatchCodes"), item.Name, written?.Names.Count ?? 0);
+        });
+    }
+
+    // Writes a toggle through, putting the button back if the server refuses — a control showing a state the
+    // server does not hold is worse than one that failed visibly. Which rel and which field differ; the shape
+    // does not, so the difference arrives as two lambdas rather than as a second copy.
+    private Task SetDeskewAutomaticallyAsync(bool enabled) =>
+        SetPreferenceAsync("deskewPreference", enabled, _deskewAutomatically, value => _deskewAutomatically = value);
+
+    private Task SetRotateAutomaticallyAsync(bool enabled) =>
+        SetPreferenceAsync("rotatePreference", enabled, _rotateAutomatically, value => _rotateAutomatically = value);
+
+    private Task SetCutAtPatchCodesAutomaticallyAsync(bool enabled) =>
+        SetPreferenceAsync("patchCodePreference", enabled, _cutAtPatchCodesAutomatically, value => _cutAtPatchCodesAutomatically = value);
+
+    private async Task SetPreferenceAsync(string rel, bool enabled, bool previous, Action<bool> set)
+    {
+        set(enabled);
+        try
+        {
+            var me = await Http.GetFromJsonAsync<MeResponse>(await ApiRoot.RequireAsync("me"));
+            if (Links.Href(me?.Links, rel) is not { } href)
+            {
+                return;
+            }
+
+            (await Http.PutAsJsonAsync(href, new { enabled })).EnsureSuccessStatusCode();
+        }
+        catch (Exception)
+        {
+            set(previous);
+            _intrayStatus = ApiErrorText.For(null);
+        }
+    }
+
+    private record MeResponse
+    {
+        public bool DeskewIntrayUploads { get; set; }
+
+        public bool RotateIntrayUploads { get; set; }
+
+        public bool CutIntrayUploadsAtPatchCodes { get; set; }
+
+        public List<LinkResponse> Links { get; set; } = [];
+    }
+
+    private async Task JoinItemsAsync()
+    {
+        if (_joinHref is not { } joinHref || _intrayChecked.Count < 2)
+        {
+            return;
+        }
+
+        var names = _intrayChecked.Select(i => i.Name).ToList();
+        var parameters = new DialogParameters<Dialogs.JoinItemsDialog> { { d => d.Names, names } };
+        var dialog = await DialogService.ShowAsync<Dialogs.JoinItemsDialog>(Strings.Get("IntrayJoinTitle"), parameters);
+        if (await dialog.Result is not { Canceled: false, Data: Dialogs.JoinItemsDialog.Result result })
+        {
+            return;
+        }
+
+        await RunPageOperationAsync(async () =>
+        {
+            var response = await Http.PostAsJsonAsync(joinHref, new { names = result.Names, name = result.Name });
+            await ThrowIfRefusedAsync(response);
+            var written = await response.Content.ReadFromJsonAsync<IntrayPageItemsResponse>();
+            _intrayStatus = string.Format(Strings.Get("StIntrayJoined"), result.Names.Count, written?.Names.FirstOrDefault() ?? "");
+        });
+    }
+
+    // Every page operation ends the same way: the server's own words on refusal, and a reload either way — a
+    // failed operation can still have followed one that succeeded, so the list must not be left describing a
+    // state that no longer exists.
+    private async Task RunPageOperationAsync(Func<Task> action)
+    {
+        _intrayBusy = true;
+        try
+        {
+            await action();
+        }
+        catch (Exception e)
+        {
+            _intrayStatus = e.Message;
+        }
+        finally
+        {
+            _intrayBusy = false;
+        }
+
+        await LoadIntrayAsync();
+    }
+
+    // The refusal's ERROR CODE, mapped to words this client owns — never the Problem Details `detail`, which is
+    // English whatever the user's language, because the Api's exception classes carry their message as a
+    // constructor literal (issue #424). The code is the stable, language-neutral contract (ADR 0543).
+    private static async Task ThrowIfRefusedAsync(HttpResponseMessage response)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        string? errorCode = null;
+        try
+        {
+            errorCode = (await response.Content.ReadFromJsonAsync<ProblemResponse>())?.ErrorCode;
+        }
+        catch (Exception)
+        {
+            // No problem body at all (a proxy error page, a connection reset) — the generic text below covers it.
+        }
+
+        throw new InvalidOperationException(ApiErrorText.For(errorCode));
+    }
+
+    private record IntrayPagesResponse { public string? Format { get; set; } public int PageCount { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+
+    private record IntrayPageItemsResponse { public List<string> Names { get; set; } = []; }
+
+    private record ProblemResponse { public string? ErrorCode { get; set; } }
+
+    // Shows the context-aware filing dialog seeded with the Repositories tab's current selection (ADR 0286).
+    private async Task<FilingDialog.FilingChoice?> ShowFilingDialogAsync(string title, bool bulk)
+    {
+        var parameters = new DialogParameters<FilingDialog>
+        {
+            { x => x.DocumentId, bulk ? null : CurrentDocumentId },
+            { x => x.DocumentName, CurrentDocumentId is null ? null : CurrentDocumentName },
+            { x => x.FolderId, CurrentFolderId },
+            { x => x.FolderName, CurrentFolderName },
+            { x => x.Bulk, bulk },
+        };
+        var dialog = await DialogService.ShowAsync<FilingDialog>(title, parameters);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: FilingDialog.FilingChoice choice } ? choice : null;
+    }
+
+    // Posts one file request (as a new version, or into a folder), with the optional feed comment (ADR 0287).
+    private async Task<bool> PostFileAsync(IntrayItem item, FilingDialog.FilingChoice choice)
+    {
+        object body = choice.Mode == FilingDialog.FilingMode.AsVersion
+            ? new { documentId = choice.TargetId, comment = choice.Comment }
+            : new { folderId = choice.TargetId, comment = choice.Comment };
+
+        var response = await Http.PostAsJsonAsync(item.FileHref, body);
+        if (response.IsSuccessStatusCode)
+        {
+            return true;
+        }
+
+        Snackbar.Add(string.Format(
+            Strings.Get(response.StatusCode == HttpStatusCode.Forbidden ? "StNoPermFileThere" : "StErrFileItem"),
+            item.Name), Severity.Warning);
+        return false;
+    }
+
+    private async Task FileIntrayItemAsync(IntrayItem item)
+    {
+        var choice = await ShowFilingDialogAsync($"File '{item.Name}'", bulk: false);
+        if (choice is null)
+        {
+            return;
+        }
+
+        if (await PostFileAsync(item, choice))
+        {
+            Snackbar.Add(string.Format(
+                Strings.Get(choice.Mode == FilingDialog.FilingMode.AsVersion ? "StFiledAsVersion" : "StFiledItem"),
+                item.Name), Severity.Success);
+            ClearIntraySelection(item);
+            await LoadIntrayAsync();
+        }
+    }
+
+    // Bulk-file the checked items into one folder, each with the same optional comment (ADR 0288).
+    private async Task FileMultipleAsync()
+    {
+        var items = _intrayItems.Where(_intrayChecked.Contains).ToList();
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        var choice = await ShowFilingDialogAsync($"File {items.Count} items", bulk: true);
+        if (choice is null)
+        {
+            return;
+        }
+
+        var filed = 0;
+        foreach (var it in items)
+        {
+            if (await PostFileAsync(it, choice))
+            {
+                filed++;
+            }
+        }
+
+        Snackbar.Add(string.Format(Strings.Get("StFiledOf"), filed, items.Count), Severity.Success);
+        _intrayChecked.Clear();
+        await LoadIntrayAsync();
+    }
+
+    private async Task DownloadIntrayItemAsync(IntrayItem item) => await JS.InvokeVoidAsync("open", item.DownloadHref, "_blank");
+
+    // Send an OWN item into another intray (ADR 0532): pick a group or a user, then move it there.
+    private async Task SendIntrayItemAsync(IntrayItem item)
+    {
+        var parameters = new DialogParameters<Dialogs.IntraySendDialog> { { x => x.ItemName, item.Name } };
+        var dialog = await DialogService.ShowAsync<Dialogs.IntraySendDialog>(Strings.Get("IntraySendTitle"), parameters);
+        if ((await dialog.Result) is { Canceled: false, Data: Dialogs.IntraySendDialog.SendTarget t })
+        {
+            await MoveIntrayItemAsync(item, t.TargetGroupId, t.TargetUserId);
+        }
+    }
+
+    // Move a NON-own item (a group's, or another user's for an admin) into my own intray to work it privately.
+    private async Task MoveToMyIntrayAsync(IntrayItem item)
+    {
+        if (MyUserId is { } me)
+        {
+            await MoveIntrayItemAsync(item, null, me);
+        }
+    }
+
+    private async Task MoveIntrayItemAsync(IntrayItem item, Guid? targetGroupId, Guid? targetUserId)
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync(item.MoveHref, new { targetGroupId, targetUserId });
+            if (!response.IsSuccessStatusCode)
+            {
+                Snackbar.Add(string.Format(Strings.Get("StErrMoveItemStatus"), (int)response.StatusCode), Severity.Error);
+                return;
+            }
+
+            Snackbar.Add(string.Format(Strings.Get("StMoved"), item.Name), Severity.Success);
+            ClearIntraySelection(item);
+            await LoadIntrayAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("StErrMoveItem"), Severity.Error);
+        }
+    }
+
+    // The "show group intrayes" filter (ADR 0532) — off by default; clears any admin user-view when toggled.
+    private async Task ToggleIntrayGroupsAsync(bool on)
+    {
+        _intrayIncludeGroups = on;
+        _intrayViewUserId = null;
+        await LoadIntrayAsync();
+    }
+
+    // The admin user-picker (CanManageIntrayes) — open a chosen user's intray, or back to my own (null).
+    private async Task ViewUserIntrayAsync(Guid? userId)
+    {
+        _intrayViewUserId = userId;
+        if (userId is not null)
+        {
+            _intrayIncludeGroups = false;
+        }
+
+        await LoadIntrayAsync();
+    }
+
+    private async Task DeleteIntraySelectionAsync()
+    {
+        var items = _intrayChecked.Count > 0 ? _intrayChecked.ToList()
+            : _selectedIntrayItem is { } one ? new List<IntrayItem> { one } : [];
+        if (items.Count <= 1)
+        {
+            if (items.Count == 1)
+            {
+                await DeleteIntrayItemAsync(items[0]);
+            }
+
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = "Delete intray items",
+            Message = string.Format(Strings.Get("IntrayDeleteManyConfirm"), items.Count),
+            YesText = "Delete",
+            CancelText = "Cancel",
+        });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        var deleted = 0;
+        foreach (var item in items)
+        {
+            if ((await Http.DeleteAsync(item.DeleteHref)).IsSuccessStatusCode)
+            {
+                deleted++;
+                ClearIntraySelection(item);
+            }
+        }
+
+        Snackbar.Add(
+            deleted == items.Count ? string.Format(Strings.Get("StDeletedItems"), deleted) : Strings.Get("StErrDeleteSelection"),
+            deleted == items.Count ? Severity.Success : Severity.Warning);
+        await LoadIntrayAsync();
+    }
+
+    private async Task DeleteIntrayItemAsync(IntrayItem item)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = "Delete intray item",
+            Message = $"Delete '{item.Name}' from your intray?",
+            YesText = "Delete",
+            CancelText = "Cancel",
+        });
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        if ((await Http.DeleteAsync(item.DeleteHref)).IsSuccessStatusCode)
+        {
+            ClearIntraySelection(item);
+            await LoadIntrayAsync();
+        }
+        else
+        {
+            Snackbar.Add(string.Format(Strings.Get("StErrDeleteNamed"), item.Name), Severity.Error);
+        }
+    }
+
+    private void ClearIntraySelection(IntrayItem item)
+    {
+        if (_selectedIntrayItem == item)
+        {
+            _selectedIntrayItem = null;
+            _preview?.Clear();
+        }
+    }
+
+    private record IntrayResponse { public List<IntrayItemDto> Items { get; set; } = []; public List<LinkResponse> Links { get; set; } = []; }
+    private record IntrayItemDto { public string Name { get; set; } = ""; public long Size { get; set; } public bool HasMask { get; set; } public bool Signed { get; set; } public Guid? GroupId { get; set; } public string? GroupName { get; set; } public Guid? UserId { get; set; } public string? UserName { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record IntrayMaskDraft { public string? Name { get; set; } public string? DocumentDate { get; set; } public Guid? MaskId { get; set; } public List<IntrayDraftField> Fields { get; set; } = []; public List<string>? OcrLanguages { get; set; } }
+    private record IntrayPreviewResponse { public string? PreviewUrl { get; set; } public bool PreviewConverted { get; set; } public List<LinkResponse> Links { get; set; } = []; }
+    private record IntrayDraftField { public Guid FieldDefinitionId { get; set; } public List<string> Values { get; set; } = []; }
+    private record UploadIntrayResponse { public string Name { get; set; } = ""; public string UploadUrl { get; set; } = ""; }
+    private record IntrayUsersResponse { public List<IntrayUserOption> Users { get; set; } = []; }
+}

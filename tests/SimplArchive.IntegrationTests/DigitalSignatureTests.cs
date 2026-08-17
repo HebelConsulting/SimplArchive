@@ -3,7 +3,7 @@ using UglyToad.PdfPig.Writer;
 
 namespace SimplArchive.IntegrationTests;
 
-// A digitally signed document is the one thing the inbox refuses to touch (#491). Any rewrite voids a
+// A digitally signed document is the one thing the intray refuses to touch (#491). Any rewrite voids a
 // signature — it covers a byte range, so re-encoding, straightening, splitting or merely re-saving all break
 // it, silently: the file still opens and still looks right, and only announces itself as broken when somebody
 // tries to verify it.

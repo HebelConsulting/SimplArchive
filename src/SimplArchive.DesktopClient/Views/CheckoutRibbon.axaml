@@ -5,14 +5,14 @@
              xmlns:loc="using:SimplArchive.DesktopClient.Localization"
              x:Class="SimplArchive.DesktopClient.Views.CheckoutRibbon"
              x:DataType="vm:MainWindowViewModel">
-    <!-- Check-out ribbon (#500) — the same shape as the Inbox's, because the two tabs are the same kind of
+    <!-- Check-out ribbon (#500) — the same shape as the Intray's, because the two tabs are the same kind of
          place: a staging area you also reach from your file manager. Its two actions already existed; what
          they lacked was a home. Refresh sat beside the heading and WebDAV in the bottom-left corner, so the
-         tab's own actions were in two places and neither looked like the Inbox's.
+         tab's own actions were in two places and neither looked like the Intray's.
 
          Deliberately NOT here: split, join and sort. A checked-out document is a version of a FILED document,
          so reshaping its pages is a records question, not a clerical one — which is why ADR 0575 confined the
-         page algebra to the Inbox. The route for someone who needs it is to drag the file into the Inbox,
+         page algebra to the Intray. The route for someone who needs it is to drag the file into the Intray,
          reshape it there, and check it in as a new version. -->
     <Border Classes="ribbon" Padding="8,6" BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
         <WrapPanel Orientation="Horizontal">
@@ -32,7 +32,7 @@
                 <!-- Rotate/Sort the WORKING COPY (ADR 0593) — greyed until the selected row's pages resource
                      offered `sort` (a signed or non-paged working copy never does, ADR 0543/0554). -->
                 <Button AutomationProperties.AutomationId="checkout-sort" IsEnabled="{Binding Checkout.SelectedCanSortPages}"
-                        Click="OnCheckoutSortPages" ToolTip.Tip="{loc:Tr InboxSortTitle}"><i:Icon Value="mdi-sort" FontSize="18" /></Button>
+                        Click="OnCheckoutSortPages" ToolTip.Tip="{loc:Tr IntraySortTitle}"><i:Icon Value="mdi-sort" FontSize="18" /></Button>
             </StackPanel>
             <!-- Finish: the two ways a check-out ENDS well — commit the work, or release it unchanged.
                  Check in composes across a multi-selection (N check-ins, one summary), so it routes through

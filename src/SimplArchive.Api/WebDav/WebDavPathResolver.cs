@@ -33,7 +33,7 @@ internal sealed class WebDavNode
         Modified = document.CreatedAt,
     };
 
-    // A special top-level folder (Inbox / Check-out) — a collection not backed by a Document.
+    // A special top-level folder (Intray / Check-out) — a collection not backed by a Document.
     public static WebDavNode Special(string name) => new()
     {
         IsCollection = true,
@@ -109,7 +109,7 @@ internal static class WebDavPathResolver
         if (node.IsRoot)
         {
             // The root lists the repositories the caller can see (ADR "WebDAV hardening"): the Personal repo is
-            // always the user's own; shared roots are CanSee-filtered. Inbox / Check-out live under Personal now.
+            // always the user's own; shared roots are CanSee-filtered. Intray / Check-out live under Personal now.
             var visible = new List<WebDavNode>();
             foreach (var root in await RootsAsync(db, user))
             {
@@ -128,9 +128,9 @@ internal static class WebDavPathResolver
         // The Personal repository holds the two virtual special folders, which shadow any real same-named child.
         if (node.Document!.PersonalOfUserId == user.Id)
         {
-            result.Add(WebDavNode.Special(WebDavMiddleware.InboxName));   // the per-user Inbox staging folder
+            result.Add(WebDavNode.Special(WebDavMiddleware.IntrayName));   // the per-user Intray staging folder
             result.Add(WebDavNode.Special(WebDavMiddleware.CheckoutName)); // the caller's checked-out documents
-            children = children.Where(c => c.Name is not (WebDavMiddleware.InboxName or WebDavMiddleware.CheckoutName)).ToList();
+            children = children.Where(c => c.Name is not (WebDavMiddleware.IntrayName or WebDavMiddleware.CheckoutName)).ToList();
         }
 
         // ACL-filter each child by CanSee (ADR "WebDAV hardening").

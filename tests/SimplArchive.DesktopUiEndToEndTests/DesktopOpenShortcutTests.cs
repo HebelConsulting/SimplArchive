@@ -35,7 +35,7 @@ public class DesktopOpenShortcutTests
     {
         var vm = new MainWindowViewModel();
 
-        // Pressed on an empty folder, an empty inbox, or a tab with no notion of a selected document at all —
+        // Pressed on an empty folder, an empty intray, or a tab with no notion of a selected document at all —
         // the handler marks the key handled either way, so this must not throw.
         for (var tab = 0; tab <= 3; tab++)
         {
@@ -50,7 +50,7 @@ public class DesktopOpenShortcutTests
     public void The_chord_is_advertised_on_the_affordances_that_are_not_menu_entries()
     {
         // A MenuItem carries an InputGesture and renders it itself; a plain button cannot, so the ribbon's and
-        // the Inbox row's Open put the chord in the tooltip. A shortcut nobody can discover is one nobody uses.
+        // the Intray row's Open put the chord in the tooltip. A shortcut nobody can discover is one nobody uses.
         var chord = OperatingSystem.IsMacOS() ? "Cmd+O" : "Ctrl+O";
 
         Assert.EndsWith(chord, MainWindowViewModel.OpenTip);

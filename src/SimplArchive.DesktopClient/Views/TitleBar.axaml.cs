@@ -9,7 +9,7 @@ namespace SimplArchive.DesktopClient.Views;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Its own control since ADR 0578, for the same reason as the Inbox ribbon: it kept gaining responsibilities —
+/// Its own control since ADR 0578, for the same reason as the Intray ribbon: it kept gaining responsibilities —
 /// notifications, MFA, passkeys, WebDAV, the profile, and now the light/dark choice — while living in a file
 /// already on the 1000-line standing-debt list with no headroom left. Chrome is a responsibility, not a region.
 /// </para>

@@ -21,16 +21,16 @@
    which may only shrink (ADR 0558). The shared `flex: 1 1 auto; min-height: 0` stays in the shell with the
    other tab roots — that one is what keeps the bottom tab bar pinned, and it is asserted per tab. *@
 <style>
-    /* Two-pane shape like the Inbox: without a column axis the inner panes have nothing to grow along. */
+    /* Two-pane shape like the Intray: without a column axis the inner panes have nothing to grow along. */
     .wb-checkout { display: flex; flex-direction: column; padding: 12px 16px; }
 </style>
 
 <div class="wb-checkout">
-    @* The tab's own actions, grouped left in one bar — the Inbox's shape, because the two tabs are the same
+    @* The tab's own actions, grouped left in one bar — the Intray's shape, because the two tabs are the same
        kind of place (#500). The heading is gone from the bar: the tab strip already names the tab, the count
        is the line below, and a title inside the action bar pushed the actions apart for no information.
 
-       Split and join stay Inbox-only (ADR 0575). Rotate/Sort IS here since ADR 0593 (#549) — it operates on
+       Split and join stay Intray-only (ADR 0575). Rotate/Sort IS here since ADR 0593 (#549) — it operates on
        the WORKING COPY (the stash), never the archived version, so the records question 0575 confined the
        algebra for does not arise: the result reaches the archive only through a normal check-in. *@
     <div class="wb-search-bar">
@@ -74,8 +74,8 @@
            `sort` (a signed or non-paged working copy never does, ADR 0543/0554). *@
         <MudButton Class="wb-rib-btn ml-1" Size="Size.Small" Disabled="@(_pages is not { CanSort: true } || _selectedIds.Count > 1)"
                    OnClick="@(() => SortPagesAsync(_selected!))"
-                   title="@Strings.Get("InboxSortTitle")" aria-label="@Strings.Get("InboxSortTitle")">
-            <MudIcon Icon="@Icons.Material.Filled.Sort" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("InboxSortTitle")</span>
+                   title="@Strings.Get("IntraySortTitle")" aria-label="@Strings.Get("IntraySortTitle")">
+            <MudIcon Icon="@Icons.Material.Filled.Sort" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntraySortTitle")</span>
         </MudButton>
         <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(!SelectedRows.Any(r => r.IsModified))"
                    OnClick="CheckInSelectionAsync"
@@ -101,8 +101,8 @@
            browser is not allowed to mount a drive, so the nearest web-native equivalent is to hand over the
            address of that same folder (ADR 0560: a capability the browser lacks is a divergence, not a gap). *@
         <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="() => WebDavLink.CopyAsync(WebDavFolder)"
-                   title="@Strings.Get("InboxCopyDav")" aria-label="@Strings.Get("InboxCopyDav")">
-            <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("InboxCopyDav")</span>
+                   title="@Strings.Get("IntrayCopyDav")" aria-label="@Strings.Get("IntrayCopyDav")">
+            <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayCopyDav")</span>
         </MudButton>
     </div>
     <div class="wb-search-status">@(Checkouts.Count == 0 ? Strings.Get("CoEmpty") : string.Format(Strings.Get("CoHeldN"), Checkouts.Count))</div>
@@ -112,7 +112,7 @@
             @foreach (var c in Checkouts)
             {
                 @* The row is the SUBJECT of the detail panes, so selecting it is what drives them. Same shape as
-                   the Inbox list: name over path, the state that matters as a chip, actions in a menu. *@
+                   the Intray list: name over path, the state that matters as a chip, actions in a menu. *@
                 <div class="wb-list-row @(_selectedIds.Contains(c.Id) ? "wb-list-row-selected" : "")" @onclick="e => OnRowClickAsync(c, e)">
                     <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" />
                     <span style="flex:1 1 auto; min-width:0; overflow:hidden;">
@@ -153,7 +153,7 @@
                             }
                             @if (Links.Href(c.Links, "pages") is not null)
                             {
-                                <MudMenuItem Icon="@Icons.Material.Filled.Sort" OnClick="() => SortPagesAsync(c)">@Strings.Get("InboxSortTitle")</MudMenuItem>
+                                <MudMenuItem Icon="@Icons.Material.Filled.Sort" OnClick="() => SortPagesAsync(c)">@Strings.Get("IntraySortTitle")</MudMenuItem>
                             }
                             @if (c.ExpiresAt is not null)
                             {
@@ -211,7 +211,7 @@
 
     private CheckoutDto? _selected;
 
-    // Native multi-selection, the Repositories/Inbox shape (#521's last piece): Ctrl/Cmd-click toggles a row
+    // Native multi-selection, the Repositories/Intray shape (#521's last piece): Ctrl/Cmd-click toggles a row
     // into the set, Shift-click takes the range from the anchor, a plain click makes the clicked row the whole
     // set (and the detail pane's subject). _selected stays the single detail subject; _selectedIds is what the
     // bulk verbs act on.
@@ -342,7 +342,7 @@
     }
 
     // The @ref is null until the pane has rendered, which it has not on the first selection — so remember the
-    // request and replay it in OnAfterRenderAsync (the same shape the Inbox tab uses, for the same reason).
+    // request and replay it in OnAfterRenderAsync (the same shape the Intray tab uses, for the same reason).
     private async Task ShowPreviewAsync(string? url, bool converted)
     {
         if (_preview is null)
@@ -472,7 +472,7 @@
             { d => d.PageCount, pages.PageCount },
         };
 
-        var dialog = await DialogService.ShowAsync<Dialogs.SortPagesDialog>(Strings.Get("InboxSortTitle"), parameters);
+        var dialog = await DialogService.ShowAsync<Dialogs.SortPagesDialog>(Strings.Get("IntraySortTitle"), parameters);
         if (await dialog.Result is not { Canceled: false, Data: Dialogs.SortPagesDialog.Result arrangement })
         {
             return;
@@ -496,7 +496,7 @@
                 return;
             }
 
-            Snackbar.Add(string.Format(Strings.Get("StInboxSorted"), c.Name + c.FileExtension), Severity.Success);
+            Snackbar.Add(string.Format(Strings.Get("StIntraySorted"), c.Name + c.FileExtension), Severity.Success);
             await Refresh.InvokeAsync();
         }
         catch (Exception)

@@ -19,9 +19,9 @@
    that owns its markup and its state should own its appearance too, and these classes are used nowhere else.
 
    Four rules deliberately STAY in the shell — `.wb-search`, `.wb-search-bar`, `.wb-search-status` and
-   `.wb-search-results` — because InboxTab reuses them. A rule that only exists while THIS tab is rendered takes
-   the Inbox's layout with it when the user is anywhere else, and `.wb-search` is what makes the tab fill its
-   space: without it the Inbox's content panel collapses and the bottom tab bar rides up off the workbench.
+   `.wb-search-results` — because IntrayTab reuses them. A rule that only exists while THIS tab is rendered takes
+   the Intray's layout with it when the user is anywhere else, and `.wb-search` is what makes the tab fill its
+   space: without it the Intray's content panel collapses and the bottom tab bar rides up off the workbench.
    That is not hypothetical — moving them was this change's one regression, caught by WebTabBarTests. *@
 <style>
     .wb-search-filters { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 4px 2px 8px; }
@@ -37,7 +37,7 @@
     .wb-search-snippet em { font-style: normal; font-weight: 600; background: var(--mud-palette-warning-lighten); color: var(--mud-palette-text-primary); border-radius: 2px; padding: 0 1px; }
 
     /* Results beside their preview (#462). The sizing is scoped to children of the body rather than set on
-       `.wb-search-results` itself, because that class is shared with the Inbox — widening it there would have
+       `.wb-search-results` itself, because that class is shared with the Intray — widening it there would have
        been an invisible change to another tab's layout. */
     .wb-search-body { flex: 1 1 auto; min-height: 0; display: flex; gap: 6px; }
     .wb-search-body > .wb-search-results { flex: 1 1 42%; min-width: 0; }

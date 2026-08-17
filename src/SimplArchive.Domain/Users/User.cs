@@ -57,9 +57,9 @@ public class User : ITenantScoped
 
     public bool CanManageRepositories { get; set; }
 
-    // Manage other users' inboxes (ADR 0532): see + move any user's inbox items tenant-wide (a triage right). Not
+    // Manage other users' intrayes (ADR 0532): see + move any user's intray items tenant-wide (a triage right). Not
     // implied by IsTenantAdmin, same as every other right here.
-    public bool CanManageInboxes { get; set; }
+    public bool CanManageIntrayes { get; set; }
 
     public bool CanManageServiceAccounts { get; set; }
 
@@ -103,7 +103,7 @@ public class User : ITenantScoped
 
     public DateTimeOffset? MfaEnabledAt { get; set; }
 
-    // Straighten crooked scans arriving in this user's inbox (#491, ADR 0576). A per-USER preference rather
+    // Straighten crooked scans arriving in this user's intray (#491, ADR 0576). A per-USER preference rather
     // than a tenant policy, because it is the person feeding the scanner who knows whether their scans come out
     // crooked — but stored server-side rather than in a client's local settings, because the Worker's backstop
     // sweep has to read it for items that arrived over WebDAV, where no client is involved at all.
@@ -111,7 +111,7 @@ public class User : ITenantScoped
     // Defaults to true here and via a backfill default in its migration — deliberately NOT via HasDefaultValue
     // in the model: a store default makes the CLR default unstorable, because EF omits a property that equals
     // it on INSERT, so a user created with `false` would silently be written as `true`.
-    public bool DeskewInboxUploads { get; set; } = true;
+    public bool DeskewIntrayUploads { get; set; } = true;
 
     // Correct a page that arrived 90 or 180 degrees round. A SEPARATE setting from deskew above, because the
     // two cost differently: rotation on a PDF is only the page's /Rotate attribute, so it is lossless and may
@@ -119,12 +119,12 @@ public class User : ITenantScoped
     // flag, and the TIFF-only gate deskew needs was silently inherited by rotation, which needs no such thing.
     //
     // Same reasons as its siblings for being per-user, stored here, and carrying no HasDefaultValue.
-    public bool RotateInboxUploads { get; set; } = true;
+    public bool RotateIntrayUploads { get; set; } = true;
 
     // Cut an arriving batch scan into one item per document, at the Patch 3 separator sheets between them
     // (#492, ADR 0577). A sibling of the flag above in every respect — same reason it is per-user, same reason
     // it is stored here rather than in a client, and the same reason it carries no HasDefaultValue.
-    public bool CutInboxUploadsAtPatchCodes { get; set; } = true;
+    public bool CutIntrayUploadsAtPatchCodes { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; }
 }

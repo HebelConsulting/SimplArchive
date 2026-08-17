@@ -12,7 +12,7 @@ namespace SimplArchive.DesktopClient.Views;
 /// <remarks>
 /// <para>
 /// "The sort dialog comes up empty" (#522) could not be reproduced by a plain unit test, because
-/// <see cref="InboxPageThumbnails"/> decodes into Avalonia bitmaps, and a bare test process has no render
+/// <see cref="IntrayPageThumbnails"/> decodes into Avalonia bitmaps, and a bare test process has no render
 /// platform — every load fails there with <c>IPlatformRenderInterface</c> missing, which says nothing about
 /// the product. So the check runs where the product runs: headless Avalonia + Skia, the same platform the
 /// screenshot hooks use, against the real Api. It loads the named staged item's thumbnails, hands them to the
@@ -43,13 +43,13 @@ public static class SortThumbnailsCheck
         var (name, thumbnails, failure) = Task.Run(async () =>
         {
             var api = new SimplArchiveApiClient(accessToken);
-            var item = (await api.Inbox.ListAsync()).Items.SingleOrDefault(i => i.Name == itemName);
+            var item = (await api.Intray.ListAsync()).Items.SingleOrDefault(i => i.Name == itemName);
             if (item is null)
             {
-                return (itemName, (IReadOnlyList<Bitmap>)[], $"no inbox item named '{itemName}'");
+                return (itemName, (IReadOnlyList<Bitmap>)[], $"no intray item named '{itemName}'");
             }
 
-            return (item.Name, await InboxPageThumbnails.LoadAsync(api, item), (string?)null);
+            return (item.Name, await IntrayPageThumbnails.LoadAsync(api, item), (string?)null);
         }).GetAwaiter().GetResult();
 
         if (failure is not null)

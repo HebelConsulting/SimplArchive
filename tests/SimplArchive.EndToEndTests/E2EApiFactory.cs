@@ -259,7 +259,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
     }
 
     // Seeds an active User (with a password) into a tenant, for the interactive-login flow. Returns the user id.
-    public async Task<Guid> SeedUserAsync(Guid tenantId, string email, string password, string displayName, bool canViewAuditLog = false, bool canManageUsers = false, bool canResetMfa = false, bool canExport = false, bool canImport = false, bool canManageServiceAccounts = false, bool canManageRepositories = false, bool canManageInboxes = false, bool canCreateExternalLink = false, bool isTenantAdmin = false)
+    public async Task<Guid> SeedUserAsync(Guid tenantId, string email, string password, string displayName, bool canViewAuditLog = false, bool canManageUsers = false, bool canResetMfa = false, bool canExport = false, bool canImport = false, bool canManageServiceAccounts = false, bool canManageRepositories = false, bool canManageIntrayes = false, bool canCreateExternalLink = false, bool isTenantAdmin = false)
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
@@ -277,7 +277,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
             CanImport = canImport,
             CanManageServiceAccounts = canManageServiceAccounts,
             CanManageRepositories = canManageRepositories,
-            CanManageInboxes = canManageInboxes,
+            CanManageIntrayes = canManageIntrayes,
             CanCreateExternalLink = canCreateExternalLink,
             IsTenantAdmin = isTenantAdmin,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -301,7 +301,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         return group.Id;
     }
 
-    // Adds another member to an existing group (for a multi-member group-inbox test).
+    // Adds another member to an existing group (for a multi-member group-intray test).
     public async Task AddGroupMemberAsync(Guid tenantId, Guid groupId, Guid userId)
     {
         using var scope = Services.CreateScope();

@@ -58,7 +58,7 @@ public class MeController : ControllerBase
         public string? Email { get; set; }
 
         /// <summary>
-        /// Whether crooked scans arriving in this user's inbox are straightened automatically (#491).
+        /// Whether crooked scans arriving in this user's intray are straightened automatically (#491).
         /// </summary>
         /// <remarks>
         /// A per-USER preference, because it is the person feeding the scanner who knows whether their scans
@@ -66,29 +66,29 @@ public class MeController : ControllerBase
         /// Worker's backstop sweep has to read it for items that arrive over WebDAV, where no client is
         /// involved at all.
         /// </remarks>
-        public bool DeskewInboxUploads { get; set; }
+        public bool DeskewIntrayUploads { get; set; }
 
         /// <summary>
-        /// Whether a batch scan arriving in this user's inbox is cut into one item per document, at the Patch 3
+        /// Whether a batch scan arriving in this user's intray is cut into one item per document, at the Patch 3
         /// separator sheets between them (#492).
         /// </summary>
         /// <remarks>A sibling of the flag above in every respect — see its remarks for why it lives here.</remarks>
-        public bool CutInboxUploadsAtPatchCodes { get; set; }
+        public bool CutIntrayUploadsAtPatchCodes { get; set; }
 
         /// <summary>
         /// Whether a page arriving 90 or 180 degrees round is turned the right way up automatically (#492).
         /// </summary>
         /// <remarks>
-        /// Separate from <see cref="DeskewInboxUploads"/> because the two cost differently: rotation on a PDF
+        /// Separate from <see cref="DeskewIntrayUploads"/> because the two cost differently: rotation on a PDF
         /// is only the page's <c>/Rotate</c> attribute and is therefore lossless, so it may run on PDFs as
         /// well as TIFFs — while deskew cannot happen without re-rendering the page. They shared one flag
         /// until the TIFF-only gate deskew needs was noticed to have been inherited by rotation, which needs
         /// no such thing.
         /// </remarks>
-        public bool RotateInboxUploads { get; set; }
+        public bool RotateIntrayUploads { get; set; }
     }
 
-    /// <summary>The intended state of one on/off inbox-ingest preference. Shared, because they are all this.</summary>
+    /// <summary>The intended state of one on/off intray-ingest preference. Shared, because they are all this.</summary>
     public class PreferenceRequest
     {
         public bool Enabled { get; set; }
@@ -109,16 +109,16 @@ public class MeController : ControllerBase
         // screen asking "who am I" should not cost a full entity load.
         var me = await _dbContext.Users
             .Where(u => u.Id == userId)
-            .Select(u => new { u.Email, u.DeskewInboxUploads, u.CutInboxUploadsAtPatchCodes, u.RotateInboxUploads })
+            .Select(u => new { u.Email, u.DeskewIntrayUploads, u.CutIntrayUploadsAtPatchCodes, u.RotateIntrayUploads })
             .FirstOrDefaultAsync(cancellationToken);
 
         return Ok(new MeResource
         {
             UserId = userId,
             Email = me?.Email,
-            DeskewInboxUploads = me?.DeskewInboxUploads ?? true,
-            RotateInboxUploads = me?.RotateInboxUploads ?? true,
-            CutInboxUploadsAtPatchCodes = me?.CutInboxUploadsAtPatchCodes ?? true,
+            DeskewIntrayUploads = me?.DeskewIntrayUploads ?? true,
+            RotateIntrayUploads = me?.RotateIntrayUploads ?? true,
+            CutIntrayUploadsAtPatchCodes = me?.CutIntrayUploadsAtPatchCodes ?? true,
             Links =
             [
                 new Link("self", "/api/me", "GET"),
@@ -133,7 +133,7 @@ public class MeController : ControllerBase
                 new Link("webdavPassword", "/api/me/webdav-password", "GET"),
                 new Link("personalRepository", "/api/me/personal-repository", "GET"),
                 new Link("notificationPreferences", "/api/notifications/preferences", "GET"),
-                // The inbox ribbon's toggles follow these rather than composing them (ADR 0543).
+                // The intray ribbon's toggles follow these rather than composing them (ADR 0543).
                 new Link("deskewPreference", "/api/me/deskew", "PUT"),
                 new Link("patchCodePreference", "/api/me/patch-codes", "PUT"),
                 new Link("rotatePreference", "/api/me/rotate", "PUT"),
@@ -141,7 +141,7 @@ public class MeController : ControllerBase
         });
     }
 
-    /// <summary>Turns automatic straightening of inbox scans on or off for the caller (#491).</summary>
+    /// <summary>Turns automatic straightening of intray scans on or off for the caller (#491).</summary>
     /// <remarks>
     /// A PUT of the intended value rather than a toggle: a toggle applied twice by a retry lands where it
     /// started, and the client already knows which state it wants.
@@ -150,21 +150,21 @@ public class MeController : ControllerBase
     public Task<IActionResult> SetDeskewPreference(
         [FromBody] PreferenceRequest request,
         CancellationToken cancellationToken) =>
-        SetPreferenceAsync((user, enabled) => user.DeskewInboxUploads = enabled, request, cancellationToken);
+        SetPreferenceAsync((user, enabled) => user.DeskewIntrayUploads = enabled, request, cancellationToken);
 
-    /// <summary>Turns automatic rotation of upside-down inbox pages on or off for the caller (#492).</summary>
+    /// <summary>Turns automatic rotation of upside-down intray pages on or off for the caller (#492).</summary>
     [HttpPut("rotate")]
     public Task<IActionResult> SetRotatePreference(
         [FromBody] PreferenceRequest request,
         CancellationToken cancellationToken) =>
-        SetPreferenceAsync((user, enabled) => user.RotateInboxUploads = enabled, request, cancellationToken);
+        SetPreferenceAsync((user, enabled) => user.RotateIntrayUploads = enabled, request, cancellationToken);
 
     /// <summary>Turns automatic cutting of batch scans at their separator sheets on or off for the caller (#492).</summary>
     [HttpPut("patch-codes")]
     public Task<IActionResult> SetPatchCodePreference(
         [FromBody] PreferenceRequest request,
         CancellationToken cancellationToken) =>
-        SetPreferenceAsync((user, enabled) => user.CutInboxUploadsAtPatchCodes = enabled, request, cancellationToken);
+        SetPreferenceAsync((user, enabled) => user.CutIntrayUploadsAtPatchCodes = enabled, request, cancellationToken);
 
     // Which flag differs; nothing else does. Passed as a lambda at the call site so the difference and the
     // delegation read on one line, rather than as a second copy of the load-check-save.

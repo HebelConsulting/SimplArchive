@@ -6,7 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 
 // A UI flow (ADRs 0216/0292): the ribbon Upload button uploads a file straight into the selected folder (browser
 // → presigned PUT to MinIO → finalize) and the new document appears in the contents list, previewable. Distinct
-// from the inbox-filing path already covered.
+// from the intray-filing path already covered.
 [Collection(UiCollection.Name)]
 [Trait("Area", "ui-1")]
 public class WebUploadTests

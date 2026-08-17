@@ -81,7 +81,7 @@ public static partial class WebCapture
         await CaptureExternalLinksAsync(context, page, outDir);
     }
 
-    // The Personal space expanded, showing the Inbox and Check-out launchers — the figure for the manual's
+    // The Personal space expanded, showing the Intray and Check-out launchers — the figure for the manual's
     // "How documents get in" section (#467).
     //
     // Worth a bespoke capture rather than reusing the repositories shot: those two nodes are what a reader has to
@@ -99,7 +99,7 @@ public static partial class WebCapture
             // Expanding is the arrow, not the node — clicking the node SELECTS it (and a launcher click would
             // switch tabs, which is the opposite of what this figure shows).
             await personal.Locator(".mud-treeview-item-arrow").ClickAsync();
-            await page.Locator("[data-drop-inbox]").First.WaitForAsync(new() { Timeout = 10000 });
+            await page.Locator("[data-drop-intray]").First.WaitForAsync(new() { Timeout = 10000 });
             await page.WaitForTimeoutAsync(500);
 
             await ShotAsync(page, outDir, "personal-launchers");

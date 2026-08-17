@@ -411,7 +411,7 @@ public class AclEntriesController : ControllerBase
         var docName = await DocumentNameAsync(documentId, cancellationToken);
         await _audit.RecordAsync(AuditActions.AclGranted, "Document", documentId, docName, $"{principalType} {principalId}: {DescribeAclRights(entry)}", cancellationToken: cancellationToken);
 
-        // A grant to a User notifies them of the new access (group / service-account grants have no inbox).
+        // A grant to a User notifies them of the new access (group / service-account grants have no intray).
         if (principalType == "users")
         {
             await _notifications.NotifyAsync(principalId, NotificationType.AccessGranted, "Access granted", $"You were granted access to '{docName}'.", documentId, cancellationToken);

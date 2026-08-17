@@ -5,7 +5,7 @@ namespace SimplArchive.EndToEndTests;
 
 // End-to-end over the real API + Postgres, exercising document subscriptions (ADR "Document subscriptions"):
 // a user follows a document, a new version by someone else produces a SubscribedActivity notification, and
-// after unfollowing the next change is silent. A ServiceAccount can't subscribe (no in-app inbox).
+// after unfollowing the next change is silent. A ServiceAccount can't subscribe (no in-app intray).
 [Collection(E2ECollection.Name)]
 public class DocumentSubscriptionsTests
 {
@@ -30,7 +30,7 @@ public class DocumentSubscriptionsTests
         var docId = (await TestJson.Post(owner, $"/api/documents/{repoId}/children", new { name = "sub-doc" })).GetProperty("id").GetGuid();
         await AddVersionAsync(owner, docId);
 
-        // A ServiceAccount can't subscribe (no in-app inbox).
+        // A ServiceAccount can't subscribe (no in-app intray).
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.PutAsync($"/api/documents/{docId}/subscription", null)).StatusCode);
 
         // The follower subscribes.

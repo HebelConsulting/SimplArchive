@@ -42,7 +42,7 @@ public class S3ObjectStorageClient : IObjectStorageClient
     }
 
     // The bucket an object key/prefix belongs to (ADR "Per-tenant object-storage bucket"). Every key/prefix is
-    // tenant-scoped — `tenants/{tenantId}/...` (ObjectKeyBuilder, CheckoutStashKey, AuditWormArchiver, the inbox
+    // tenant-scoped — `tenants/{tenantId}/...` (ObjectKeyBuilder, CheckoutStashKey, AuditWormArchiver, the intray
     // prefix, and derived artifacts inherit it) — so the tenant, and thus the bucket, is derived from the key with
     // no call-site changes. A non-tenant-scoped key is a programming error.
     private string BucketFor(string keyOrPrefix)

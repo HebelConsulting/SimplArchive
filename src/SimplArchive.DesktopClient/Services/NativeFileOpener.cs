@@ -21,7 +21,7 @@ public static class NativeFileOpener
         OpenPath(path);
     }
 
-    // Writes already-fetched bytes to the temp folder and opens them — used for archive entries and inbox
+    // Writes already-fetched bytes to the temp folder and opens them — used for archive entries and intray
     // items whose bytes come from an authenticated Api endpoint, not a presigned URL.
     public static async Task OpenBytesAsync(byte[] bytes, string fileName, CancellationToken cancellationToken = default)
     {
@@ -53,7 +53,7 @@ public static class NativeFileOpener
         return new string(fileName.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
     }
 
-    // Opens a directory in the OS file manager (used for the local inbox folder).
+    // Opens a directory in the OS file manager (used for the local intray folder).
     public static void RevealDirectory(string path) => OpenPath(path);
 
     private static void OpenPath(string path)

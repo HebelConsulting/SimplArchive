@@ -689,7 +689,7 @@ public class DocumentVersionsController : ControllerBase
 
         // Confirms (server-side hash + version number), auto-classifies, and files email attachments —
         // idempotent, a no-op on an already-Confirmed version (ADR "DocumentVersionsController
-        // resource-oriented redesign"). Shared with inbox filing via DocumentFinalizer.
+        // resource-oriented redesign"). Shared with intray filing via DocumentFinalizer.
         var wasPending = version.Status == DocumentVersionStatus.Pending;
         await _finalizer.FinalizeAsync(version, cancellationToken);
 

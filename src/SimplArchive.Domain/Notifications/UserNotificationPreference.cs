@@ -12,7 +12,7 @@ public class UserNotificationPreference : ITenantScoped
 
     public Guid TenantId { get; set; }
 
-    // The User whose preference this is; an in-app inbox (and therefore an email) is per-User.
+    // The User whose preference this is; an in-app intray (and therefore an email) is per-User.
     public Guid UserId { get; set; }
 
     public NotificationType Type { get; set; }

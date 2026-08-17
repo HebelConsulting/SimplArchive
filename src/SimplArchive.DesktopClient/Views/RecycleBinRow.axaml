@@ -12,7 +12,7 @@
          ribbon's twins act on the selection (ADR 0559 — never on pane state).
 
          The checkbox column and select-all went with them: the list multi-selects natively (Ctrl/Shift), the
-         way Repositories, Inbox and Check-out already do on the desktop. The menu HIDES what is unavailable
+         way Repositories, Intray and Check-out already do on the desktop. The menu HIDES what is unavailable
          (hard delete for a non-admin) while the ribbon GREYS it — the #521 split. -->
     <Grid ColumnDefinitions="*,*,130,120" Margin="0,2">
         <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />

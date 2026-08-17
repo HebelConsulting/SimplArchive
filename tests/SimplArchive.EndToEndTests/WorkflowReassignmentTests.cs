@@ -35,7 +35,7 @@ public class WorkflowReassignmentTests
         Assert.Equal("In Review", reassigned.GetProperty("statusName").GetString());
         Assert.Equal("Reviewer Bravo", reassigned.GetProperty("assignedToName").GetString());
 
-        // The task moved: B's inbox has it, A's no longer does.
+        // The task moved: B's intray has it, A's no longer does.
         using var reviewerA = _factory.CreateAuthedClient(s.ReviewerAToken);
         using var reviewerB = _factory.CreateAuthedClient(b.Token);
         Assert.Contains((await TestJson.Get(reviewerB, "/api/tasks")).GetProperty("tasks").EnumerateArray(),

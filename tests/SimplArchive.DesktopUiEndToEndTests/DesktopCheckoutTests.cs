@@ -79,15 +79,15 @@ public class DesktopCheckoutTests
         var row = vm.Items.Single(i => i.Id == doc.Id);
         Assert.True(row.CanSortPages);
 
-        var pages = await api.Inbox.GetAsync(row.Item!.Href("pages")!);
+        var pages = await api.Intray.GetAsync(row.Item!.Href("pages")!);
         Assert.True(pages is { CanSort: true, PageCount: 7 });
 
         // Keep the last two pages, reversed — ONE request writes the stash; the archive is untouched until check-in.
-        await api.Inbox.SortAsync(pages!.SortHref!, [7, 6]);
+        await api.Intray.SortAsync(pages!.SortHref!, [7, 6]);
         var item = (await api.Checkout.GetCheckoutsAsync()).Single(c => c.Id == doc.Id);
         Assert.True(item.HasStash);
         Assert.True(item.IsModified);
-        Assert.Equal(2, (await api.Inbox.GetAsync(item.Href("pages")!))!.PageCount);
+        Assert.Equal(2, (await api.Intray.GetAsync(item.Href("pages")!))!.PageCount);
         Assert.Equal(pdf, await api.Documents.DownloadCurrentVersionAsync(doc.Href("versions")));
 
         await api.Checkout.CheckInViaDocumentAsync(doc.Href("self")); // release + drop the stash — leaves the shared fixture clean

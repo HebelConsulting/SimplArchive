@@ -1,7 +1,7 @@
 namespace SimplArchive.Infrastructure.Storage;
 
 /// <summary>
-/// Whether a document carries a digital signature — the one condition under which the inbox leaves a file
+/// Whether a document carries a digital signature — the one condition under which the intray leaves a file
 /// completely alone (issue #491).
 /// </summary>
 /// <remarks>

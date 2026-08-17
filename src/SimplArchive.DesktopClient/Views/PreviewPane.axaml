@@ -15,7 +15,7 @@
     </UserControl.KeyBindings>
     <!-- The preview surface (toolbar + pages/text/placeholder). Reused both docked and in the full-screen
          overlay (ADR "Desktop preview full-screen toggle"); each instance binds to a PreviewViewModel — the
-         Repositories/Inbox tabs use MainWindowViewModel.Preview, the Recycle bin tab uses RecycleBin.Preview,
+         Repositories/Intray tabs use MainWindowViewModel.Preview, the Recycle bin tab uses RecycleBin.Preview,
          so the previews are never entangled (ADR "Desktop recycle bin parity"). -->
     <DockPanel LastChildFill="True">
         <!-- Toolbar: find-in-document (when a text layout exists) + the full-screen toggle (always, when there's

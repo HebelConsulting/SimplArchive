@@ -12,7 +12,7 @@ namespace SimplArchive.Api.Controllers;
 /// <summary>
 /// Subscribe to (follow) a document to be notified when it changes — a new confirmed version, a new
 /// comment/reply, or the approval workflow reaching Released (ADR "Document subscriptions"). Per-User only (a
-/// ServiceAccount has no in-app inbox). Subscribing requires CanSee on the document; the subscription is the
+/// ServiceAccount has no in-app intray). Subscribing requires CanSee on the document; the subscription is the
 /// caller's own, so reading its state / unsubscribing needs no further right.
 /// </summary>
 [ApiController]
@@ -46,7 +46,7 @@ public class DocumentSubscriptionsController : ControllerBase
     {
         if (_currentUserAccessor.UserId is not { } userId)
         {
-            return Forbid(); // a ServiceAccount has no in-app inbox to notify
+            return Forbid(); // a ServiceAccount has no in-app intray to notify
         }
 
         if (!await _dbContext.Documents.AnyAsync(d => d.Id == documentId, cancellationToken))

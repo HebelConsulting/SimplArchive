@@ -8,7 +8,7 @@ namespace SimplArchive.Api.Checkouts;
 /// <summary>
 /// Resolves a check-out THIS caller holds — the stash key + the current confirmed version — or the refusal.
 /// Extracted, not copied, when the working-copy page operations became a second controller needing the same
-/// holder-only rule (the <c>InboxScopeResolver</c> precedent, ADR 0575): an authorization rule with two
+/// holder-only rule (the <c>IntrayScopeResolver</c> precedent, ADR 0575): an authorization rule with two
 /// implementations is one that gets tightened in only one of them.
 /// </summary>
 public static class HeldCheckout

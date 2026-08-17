@@ -12,7 +12,7 @@ namespace SimplArchive.Client.Services;
 /// <para>
 /// A browser may not mount a drive, so where the desktop's button MOUNTS and OPENS the folder, the web client's
 /// nearest honest equivalent is to hand over the address of that same folder (ADR 0560: a capability the browser
-/// lacks is a divergence, not a gap). Both the Inbox and Check-out tabs offer it, each for its own folder.
+/// lacks is a divergence, not a gap). Both the Intray and Check-out tabs offer it, each for its own folder.
 /// </para>
 /// <para>
 /// Its own service rather than a method on the workbench page: two tabs need it, and the shell is being
@@ -35,7 +35,7 @@ public sealed class WebDavMountLink
         _snackbar = snackbar;
     }
 
-    /// <param name="subFolder">The folder within the single mount ("Personal/Inbox"), or empty for the whole tree.</param>
+    /// <param name="subFolder">The folder within the single mount ("Personal/Intray"), or empty for the whole tree.</param>
     public async Task CopyAsync(string subFolder)
     {
         try
@@ -48,7 +48,7 @@ public sealed class WebDavMountLink
             }
 
             // The single "SimplArchive" resource (ADR 0509) — mounting it lists the whole tree (Personal, with
-            // Inbox/Check-out, + the shared repositories). Appending the tab's folder is FOLLOWING the address
+            // Intray/Check-out, + the shared repositories). Appending the tab's folder is FOLLOWING the address
             // the server advertised, not composing one: the server owns the path, the caller adds only the
             // folder within it.
             var mountUrl = status.Url.TrimEnd('/');

@@ -12,8 +12,8 @@ using SimplArchive.Infrastructure.Persistence;
 namespace SimplArchive.Api.Controllers;
 
 /// <summary>
-/// The caller's in-app notification inbox (ADR "Notifications (in-app, first slice)"). Every User sees only
-/// their own notifications — no special right; a ServiceAccount / PlatformAdministrator has no inbox. Written
+/// The caller's in-app notification intray (ADR "Notifications (in-app, first slice)"). Every User sees only
+/// their own notifications — no special right; a ServiceAccount / PlatformAdministrator has no intray. Written
 /// by <see cref="INotificationService"/> at the workflow / comment / ACL trigger sites; read here.
 /// </summary>
 [ApiController]

@@ -3,7 +3,7 @@ using static Microsoft.Playwright.Assertions;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// The Personal ▸ Inbox and Personal ▸ Check-out tree launchers as drop targets (#467).
+// The Personal ▸ Intray and Personal ▸ Check-out tree launchers as drop targets (#467).
 //
 // Both used to ADVERTISE a drop and do nothing: they are synthetic nodes with Guid.Empty as their id, so the
 // generic folder branch handed them data-drop-folder="00000000-…" and every drop 404'd. An inert drop zone is
@@ -39,22 +39,22 @@ public class WebTreeLauncherDropTests
             new { name = fileName, body });
 
     [Fact]
-    public async Task Dropping_a_file_on_the_inbox_launcher_files_it_and_opens_the_inbox()
+    public async Task Dropping_a_file_on_the_intray_launcher_files_it_and_opens_the_intray()
     {
         var page = await Ui.LoginAsync(_app);
         var name = "treedrop-" + Guid.NewGuid().ToString("N")[..8];
 
         var tree = await ExpandPersonalAsync(page);
-        var inbox = tree.Locator("[data-drop-inbox]").First;
-        await Expect(inbox).ToBeVisibleAsync();
+        var intray = tree.Locator("[data-drop-intray]").First;
+        await Expect(intray).ToBeVisibleAsync();
 
         var dt = await FileTransferAsync(page, name + ".txt", "filed via the tree launcher");
-        await inbox.DispatchEventAsync("dragover", new Dictionary<string, object> { ["dataTransfer"] = dt });
-        await inbox.DispatchEventAsync("drop", new Dictionary<string, object> { ["dataTransfer"] = dt });
+        await intray.DispatchEventAsync("dragover", new Dictionary<string, object> { ["dataTransfer"] = dt });
+        await intray.DispatchEventAsync("drop", new Dictionary<string, object> { ["dataTransfer"] = dt });
 
         // The tree shows FOLDERS, so it can never show what just landed — which is why the drop opens the tab
         // that can. Without this the user is left staring at a node that cannot confirm anything.
-        await Expect(page.Locator(".wb-inbox-drop")).ToBeVisibleAsync(new() { Timeout = 15000 });
+        await Expect(page.Locator(".wb-intray-drop")).ToBeVisibleAsync(new() { Timeout = 15000 });
         await Expect(page.Locator(".wb-list-row").Filter(new() { HasText = name })).ToBeVisibleAsync(new() { Timeout = 15000 });
     }
 
@@ -78,7 +78,7 @@ public class WebTreeLauncherDropTests
     }
 
     [Fact]
-    public async Task Dragging_a_document_onto_the_inbox_copies_it_as_a_template_with_its_index_data()
+    public async Task Dragging_a_document_onto_the_intray_copies_it_as_a_template_with_its_index_data()
     {
         var page = await Ui.LoginAsync(_app);
 
@@ -101,23 +101,23 @@ public class WebTreeLauncherDropTests
         await Expect(source).ToBeVisibleAsync(new() { Timeout = 15000 });
 
         var tree = await ExpandPersonalAsync(page);
-        var inbox = tree.Locator("[data-drop-inbox]").First;
-        await Expect(inbox).ToBeVisibleAsync();
+        var intray = tree.Locator("[data-drop-intray]").First;
+        await Expect(intray).ToBeVisibleAsync();
 
         // An INTERNAL drag carries the app's own MIME type rather than files; dropping it on a folder moves or
-        // references, and on the Inbox launcher it copies the document in as a template.
+        // references, and on the Intray launcher it copies the document in as a template.
         var nodeId = (await source.GetAttributeAsync("data-node-id"))!;
         var dt = await page.EvaluateHandleAsync(
             @"id => { const dt = new DataTransfer();
                       dt.setData('application/x-simplarchive-node', id + '|false');
                       return dt; }",
             nodeId);
-        await inbox.DispatchEventAsync("dragover", new Dictionary<string, object> { ["dataTransfer"] = dt });
-        await inbox.DispatchEventAsync("drop", new Dictionary<string, object> { ["dataTransfer"] = dt });
+        await intray.DispatchEventAsync("dragover", new Dictionary<string, object> { ["dataTransfer"] = dt });
+        await intray.DispatchEventAsync("drop", new Dictionary<string, object> { ["dataTransfer"] = dt });
 
-        // It lands in the Inbox, and the Inbox tab opens to show it. Crucially it is NOT square-bracketed:
+        // It lands in the Intray, and the Intray tab opens to show it. Crucially it is NOT square-bracketed:
         // brackets mean "un-classified", and a template that arrived without its mask would show them.
-        await Expect(page.Locator(".wb-inbox-drop")).ToBeVisibleAsync(new() { Timeout = 15000 });
+        await Expect(page.Locator(".wb-intray-drop")).ToBeVisibleAsync(new() { Timeout = 15000 });
         var staged = page.Locator(".wb-list-row").Filter(new() { HasText = sourceName });
         await Expect(staged).ToBeVisibleAsync(new() { Timeout = 15000 });
         await Expect(staged.First).Not.ToContainTextAsync($"[{sourceName}]");

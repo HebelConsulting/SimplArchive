@@ -34,7 +34,7 @@ public static class SystemRightsMapping
         CanViewAuditLog = u.CanViewAuditLog,
         CanExport = u.CanExport,
         CanImport = u.CanImport,
-        CanManageInboxes = u.CanManageInboxes,
+        CanManageIntrayes = u.CanManageIntrayes,
         CanCreateExternalLink = u.CanCreateExternalLink,
         ClearanceRank = u.ClearanceRank,
     };
@@ -55,7 +55,7 @@ public static class SystemRightsMapping
         u.CanViewAuditLog = r.CanViewAuditLog;
         u.CanExport = r.CanExport;
         u.CanImport = r.CanImport;
-        u.CanManageInboxes = r.CanManageInboxes;
+        u.CanManageIntrayes = r.CanManageIntrayes;
         u.CanCreateExternalLink = r.CanCreateExternalLink;
         u.ClearanceRank = r.ClearanceRank;
     }

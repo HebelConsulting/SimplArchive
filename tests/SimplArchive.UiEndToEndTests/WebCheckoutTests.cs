@@ -42,7 +42,7 @@ public class WebCheckoutTests
         await page.Locator(".wb-tab[aria-label=\"Check-out\"]").First.ClickAsync();
         var checkout = page.Locator(".wb-checkout");
         await Expect(checkout).ToBeVisibleAsync();
-        // Rows are list rows, not table rows: the tab now has the Inbox's two-pane shape, so the list shares
+        // Rows are list rows, not table rows: the tab now has the Intray's two-pane shape, so the list shares
         // half the width with the detail panes and a wide table no longer fits.
         var checkoutRow = checkout.Locator(".wb-list-row").Filter(new() { HasText = name });
         await Expect(checkoutRow).ToBeVisibleAsync();

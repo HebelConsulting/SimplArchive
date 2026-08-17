@@ -5,7 +5,7 @@ using System.Text.Json;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Images;
-using SimplArchive.Api.Inbox;
+using SimplArchive.Api.Intray;
 using SimplArchive.Infrastructure.Storage;
 
 namespace SimplArchive.EndToEndTests;

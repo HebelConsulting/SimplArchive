@@ -27,7 +27,7 @@ public class UserSystemRightsResolver : IUserSystemRightsResolver
                 u.IsTenantAdmin, u.CanImpersonate, u.CanOverrideCheckout, u.CanLegalHold,
                 u.CanManageClassification, u.CanResetMfa, u.CanManageRepositories, u.CanManageMasks,
                 u.CanManageServiceAccounts, u.CanManageUsers, u.CanViewAuditLog, u.CanExport, u.CanImport,
-                u.CanManageInboxes, u.CanCreateExternalLink))
+                u.CanManageIntrayes, u.CanCreateExternalLink))
             .SingleAsync(cancellationToken);
 
         var effectiveGroupIds = await GroupMembershipExpansion.GetEffectiveGroupIdsForUserAsync(_dbContext, userId, cancellationToken);
@@ -43,7 +43,7 @@ public class UserSystemRightsResolver : IUserSystemRightsResolver
                 g.IsTenantAdmin, g.CanImpersonate, g.CanOverrideCheckout, g.CanLegalHold,
                 g.CanManageClassification, g.CanResetMfa, g.CanManageRepositories, g.CanManageMasks,
                 g.CanManageServiceAccounts, g.CanManageUsers, g.CanViewAuditLog, g.CanExport, g.CanImport,
-                g.CanManageInboxes, g.CanCreateExternalLink))
+                g.CanManageIntrayes, g.CanCreateExternalLink))
             .ToListAsync(cancellationToken);
 
         return groupRights.Aggregate(own, (acc, rights) => acc.Union(rights));

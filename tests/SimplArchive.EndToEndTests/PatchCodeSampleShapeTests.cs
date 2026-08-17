@@ -1,4 +1,4 @@
-using SimplArchive.Api.Inbox;
+using SimplArchive.Api.Intray;
 using SimplArchive.Infrastructure.Storage;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.Content;

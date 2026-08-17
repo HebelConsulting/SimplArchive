@@ -10,7 +10,7 @@ namespace SimplArchive.Infrastructure.Storage;
 /// <para>
 /// This exists because automatic straightening is not free for the wrong file. Deskew runs through OCRmyPDF,
 /// which only ever emits PDF, so an automatically-processed TIFF <b>changes format whether or not anything was
-/// corrected</b>. For a scan that is the point; for a photograph someone dropped in the inbox it is a
+/// corrected</b>. For a scan that is the point; for a photograph someone dropped in the intray it is a
 /// conversion that gains nothing.
 /// </para>
 /// <para>

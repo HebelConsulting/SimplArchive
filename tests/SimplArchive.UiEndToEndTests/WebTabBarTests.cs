@@ -17,7 +17,7 @@ public class WebTabBarTests
 
     [Theory]
     [InlineData("Repositories")]
-    [InlineData("Inbox")]
+    [InlineData("Intray")]
     [InlineData("Check-out")]
     [InlineData("Search")]
     [InlineData("Recycle bin")]

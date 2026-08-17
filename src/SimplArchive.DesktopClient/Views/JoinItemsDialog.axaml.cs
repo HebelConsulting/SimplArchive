@@ -9,7 +9,7 @@ using SimplArchive.Localization;
 namespace SimplArchive.DesktopClient.Views;
 
 /// <summary>
-/// Joins several staged inbox items into one (issue #487). <c>ShowDialog&lt;JoinItemsDialog.Result?&gt;</c>
+/// Joins several staged intray items into one (issue #487). <c>ShowDialog&lt;JoinItemsDialog.Result?&gt;</c>
 /// returns the item names in the order chosen plus an optional name for the result, or null if cancelled.
 /// </summary>
 /// <remarks>
@@ -37,7 +37,7 @@ public partial class JoinItemsDialog : Window
             _names.Add(name);
         }
 
-        PromptText.Text = string.Format(Strings.Get("InboxJoinPrompt"), _names.Count);
+        PromptText.Text = string.Format(Strings.Get("IntrayJoinPrompt"), _names.Count);
         ItemList.ItemsSource = _names;
         if (_names.Count > 0)
         {

@@ -19,7 +19,7 @@ namespace SimplArchive.Api.Provisioning;
 // TenantAdministrator with a KNOWN password and a realistic sample tree, so a visitor can browse straight to the
 // UI, log in, and actually see content (ADR "Compose demo-data seeding" / 0214). Extracted from Program.cs
 // (issue #354) as it grew a full Business Years / Contracts / General tree with varied document types, references,
-// two extra users and a shared "Scan Team" group inbox (the group-inbox showcase, ADR 0532).
+// two extra users and a shared "Scan Team" group intray (the group-intray showcase, ADR 0532).
 //
 // Gated on the demo config being present AND the tenant not already existing, so it's a no-op on restart and in
 // every environment that doesn't configure it (default appsettings ships the keys empty). All content is
@@ -171,7 +171,7 @@ public static class DemoDataSeeder
 
         await dbContext.SaveChangesAsync();
 
-        // ── Two extra users + a shared "Scan Team" group inbox (the group-inbox showcase, ADR 0532). ─────────────
+        // ── Two extra users + a shared "Scan Team" group intray (the group-intray showcase, ADR 0532). ─────────────
         var (annaId, _) = await SeedTeamAsync(
             dbContext, objectStorage, assembly, tenantId, repositoryId, adminId, now, demoPassword, provisioned.AdministratorEmail);
 
@@ -325,9 +325,9 @@ public static class DemoDataSeeder
         return (acmeCorp, monthFolders[3], telekomAgreement);
     }
 
-    // Two extra users (an editor + a clerk) and a shared "Scan Team" group with a seeded group-inbox item — so the
-    // group-inbox feature (ADR 0532) is live on the demo login: the admin (CanManageInboxes) can open the users'
-    // inboxes and the Scan Team group inbox shows an unfiled scan waiting to be picked up.
+    // Two extra users (an editor + a clerk) and a shared "Scan Team" group with a seeded group-intray item — so the
+    // group-intray feature (ADR 0532) is live on the demo login: the admin (CanManageIntrayes) can open the users'
+    // intrayes and the Scan Team group intray shows an unfiled scan waiting to be picked up.
     private static async Task<(Guid AnnaId, Guid TomId)> SeedTeamAsync(
         SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
         Guid tenantId, Guid repositoryId, Guid adminId, DateTimeOffset now, string demoPassword, string adminEmail)
@@ -355,7 +355,7 @@ public static class DemoDataSeeder
         dbContext.Groups.Add(scanTeam);
         await dbContext.SaveChangesAsync();
 
-        // Admin + both users are members, so the admin sees the Scan Team group inbox on the demo login.
+        // Admin + both users are members, so the admin sees the Scan Team group intray on the demo login.
         foreach (var userId in new[] { adminId, anna.Id, tom.Id })
         {
             dbContext.GroupMemberships.Add(new GroupMembership { TenantId = tenantId, UserId = userId, GroupId = scanTeam.Id });
@@ -377,11 +377,11 @@ public static class DemoDataSeeder
         });
         await dbContext.SaveChangesAsync();
 
-        // One unfiled scan sitting in the Scan Team group inbox (a raw object under the group's inbox prefix, ADR
-        // 0532) — so the group-inbox view isn't empty and "pick it up" / Send-to are demonstrable live.
+        // One unfiled scan sitting in the Scan Team group intray (a raw object under the group's intray prefix, ADR
+        // 0532) — so the group-intray view isn't empty and "pick it up" / Send-to are demonstrable live.
         var scanBytes = await ReadResourceAsync(assembly, "DemoTelekomInvoiceMar.pdf");
         using var content = new MemoryStream(scanBytes);
-        await storage.PutObjectAsync($"tenants/{tenantId}/groups/{scanTeam.Id}/inbox/scan-2026-03-inbox.pdf", content, "application/pdf");
+        await storage.PutObjectAsync($"tenants/{tenantId}/groups/{scanTeam.Id}/inbox/scan-2026-03-intray.pdf", content, "application/pdf");
 
         return (anna.Id, tom.Id);
     }

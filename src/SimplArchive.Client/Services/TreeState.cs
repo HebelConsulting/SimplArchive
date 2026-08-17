@@ -94,13 +94,13 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
             .Where(c => !c.HasVersions)
             .OrderBy(c => c.DisplayName, StringComparer.OrdinalIgnoreCase).Select(BrowseService.ToTreeItem).ToList();
 
-        // The Personal repository nests the Inbox + Check-out launcher nodes above its real subfolders,
+        // The Personal repository nests the Intray + Check-out launcher nodes above its real subfolders,
         // mirroring /webdav/Personal (ADR "GUI-tree Personal space grouping"). Clicking a launcher switches to
         // the corresponding bottom tab, where the full staging / check-out UX lives.
         if (node.PersonalKind == "personal-root")
         {
             children.Insert(0, PersonalLauncherItem("checkout", "Check-out", Icons.Material.Filled.LockOpen));
-            children.Insert(0, PersonalLauncherItem("inbox", "Inbox", Icons.Material.Filled.Inbox));
+            children.Insert(0, PersonalLauncherItem("intray", "Intray", Icons.Material.Filled.Inbox));
         }
 
         return children;
@@ -150,7 +150,7 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
     private static TreeItemData<BrowseNode> PersonalTreeItem(PersonalRepositoryResponse personal) => new()
     {
         Value = new BrowseNode(personal.Id, personal.Name, personal.HasChildren, false, personal.HasSubfolders, RepositoryId: personal.Id, PersonalKind: "personal-root"),
-        // Always expandable — it holds at least the Inbox + Check-out launcher nodes (ADR "GUI-tree Personal
+        // Always expandable — it holds at least the Intray + Check-out launcher nodes (ADR "GUI-tree Personal
         // space grouping"), even before any real subfolder exists.
         Expandable = true,
         Text = personal.Name,

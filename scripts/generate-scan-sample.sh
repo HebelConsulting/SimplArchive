@@ -2,7 +2,7 @@
 #
 # generate-scan-sample.sh — rebuild the patch-code sample batch as a SCAN (issue #492).
 #
-# The PDF sample is composed at request time from embedded documents (Api/Inbox/PatchCodeSampleBatch). The TIFF
+# The PDF sample is composed at request time from embedded documents (Api/Intray/PatchCodeSampleBatch). The TIFF
 # cannot be: building it means rasterising PDFs, and the Api image has no PDF rasteriser — that is what the OCR
 # sidecar exists for. So the TIFF is generated here, once, and checked in beside the other demo documents.
 #
@@ -31,7 +31,7 @@ command -v magick   >/dev/null || { echo "ImageMagick (magick) is required." >&2
 
 # The separator sheet comes from the running API rather than being drawn here: it is the sheet the detector is
 # taught to find, and a lookalike would let the two drift.
-curl -fsS -o "$work/sep.pdf" "$api/api/inbox/patch-code-sheet" \
+curl -fsS -o "$work/sep.pdf" "$api/api/intray/patch-code-sheet" \
   || { echo "Could not fetch the separator sheet from $api — is the API running?" >&2; exit 2; }
 
 page() { pdftoppm -r 200 -gray -png -f "$3" -l "$3" -singlefile "$1" "$work/$2"; }
@@ -64,8 +64,8 @@ printf 'wrote %s (%s bytes, %s pages)\n' \
 # composition change fails the build until this script is re-run.
 samples="$repo_root/src/SimplArchive.Api/wwwroot/download/samples"
 mkdir -p "$samples"
-curl -fsS -o "$samples/SimplArchive-Patch3-Separator.pdf"    "$api/api/inbox/patch-code-sheet"
-curl -fsS -o "$samples/SimplArchive-Patch3-Sample-Batch.pdf" "$api/api/inbox/patch-code-sample"
+curl -fsS -o "$samples/SimplArchive-Patch3-Separator.pdf"    "$api/api/intray/patch-code-sheet"
+curl -fsS -o "$samples/SimplArchive-Patch3-Sample-Batch.pdf" "$api/api/intray/patch-code-sample"
 cp "$demo/patch-code-sample-batch.tif" "$samples/SimplArchive-Patch3-Sample-Scan.tif"
 
 printf 'wrote %s browsable copies to %s\n' 3 "$samples"

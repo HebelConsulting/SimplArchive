@@ -512,7 +512,7 @@ public class GroupsController : ControllerBase
         CanViewAuditLog = g.CanViewAuditLog,
         CanExport = g.CanExport,
         CanImport = g.CanImport,
-        CanManageInboxes = g.CanManageInboxes,
+        CanManageIntrayes = g.CanManageIntrayes,
         CanCreateExternalLink = g.CanCreateExternalLink,
         ClearanceRank = g.ClearanceRank,
     };
@@ -532,7 +532,7 @@ public class GroupsController : ControllerBase
         g.CanViewAuditLog = r.CanViewAuditLog;
         g.CanExport = r.CanExport;
         g.CanImport = r.CanImport;
-        g.CanManageInboxes = r.CanManageInboxes;
+        g.CanManageIntrayes = r.CanManageIntrayes;
         g.CanCreateExternalLink = r.CanCreateExternalLink;
         g.ClearanceRank = r.ClearanceRank;
     }
@@ -545,7 +545,7 @@ public class GroupsController : ControllerBase
         {
             var sa = await _dbContext.ServiceAccounts
                 .Where(s => s.Id == serviceAccountId)
-                .Select(s => new { s.CanManageRepositories, s.CanManageMasks, s.CanManageServiceAccounts, s.CanManageUsers, s.CanViewAuditLog, s.CanExport, s.CanImport, s.CanManageInboxes })
+                .Select(s => new { s.CanManageRepositories, s.CanManageMasks, s.CanManageServiceAccounts, s.CanManageUsers, s.CanViewAuditLog, s.CanExport, s.CanImport, s.CanManageIntrayes })
                 .SingleAsync(cancellationToken);
 
             return new SystemRights
@@ -557,7 +557,7 @@ public class GroupsController : ControllerBase
                 CanViewAuditLog = sa.CanViewAuditLog,
                 CanExport = sa.CanExport,
                 CanImport = sa.CanImport,
-                CanManageInboxes = sa.CanManageInboxes,
+                CanManageIntrayes = sa.CanManageIntrayes,
                 ClearanceRank = (await _clearanceResolver.GetForServiceAccountAsync(serviceAccountId, cancellationToken)).Rank,
             };
         }
@@ -582,7 +582,7 @@ public class GroupsController : ControllerBase
                 CanViewAuditLog = r.CanViewAuditLog,
                 CanExport = r.CanExport,
                 CanImport = r.CanImport,
-                CanManageInboxes = r.CanManageInboxes,
+                CanManageIntrayes = r.CanManageIntrayes,
                 CanCreateExternalLink = r.CanCreateExternalLink,
                 ClearanceRank = (await _clearanceResolver.GetForUserAsync(userId, cancellationToken)).Rank,
             };

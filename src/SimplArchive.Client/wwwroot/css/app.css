@@ -76,7 +76,7 @@ h1:focus {
         content: var(--blazor-load-percentage-text, "Loading");
     }
 
-/* Drag-and-drop upload feedback (ADR "Drag-and-drop document upload" / "Inbox file-list drop-zone"). A JS
+/* Drag-and-drop upload feedback (ADR "Drag-and-drop document upload" / "Intray file-list drop-zone"). A JS
    handler toggles .drop-target-active on the hovered drop target. */
 .drop-target-active {
     outline: 2px dashed var(--sa-accent);
@@ -84,12 +84,12 @@ h1:focus {
     background: rgba(91, 78, 229, 0.06);
 }
 
-/* The inbox file-list is itself a drop-zone; a persistent hint sits above the items. */
-.wb-inbox-drop {
+/* The intray file-list is itself a drop-zone; a persistent hint sits above the items. */
+.wb-intray-drop {
     position: relative;
 }
 
-.wb-inbox-drophint {
+.wb-intray-drophint {
     display: flex;
     align-items: center;
     gap: 6px;

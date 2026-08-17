@@ -6,7 +6,7 @@ namespace SimplArchive.DesktopClient.Views;
 
 /// <summary>
 /// The Recycle bin's ribbon (#530 tranche 1). The two destructive handlers stay on the window — each needs a
-/// parent for its I-AGREE modal, which only the window has (the InboxRibbon/CheckoutRibbon shape); restore and
+/// parent for its I-AGREE modal, which only the window has (the IntrayRibbon/CheckoutRibbon shape); restore and
 /// refresh bind to the view-model directly and have no forwarder here at all.
 /// </summary>
 public partial class RecycleBinRibbon : UserControl
