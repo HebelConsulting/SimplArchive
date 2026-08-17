@@ -4230,4 +4230,37 @@
   <data name="WfNotStarted" xml:space="preserve">
     <value>non avviato</value>
   </data>
+  <data name="AccountImap" xml:space="preserve">
+    <value>Accesso e-mail (IMAP)…</value>
+  </data>
+  <data name="ImTitle" xml:space="preserve">
+    <value>Accesso e-mail (IMAP)</value>
+  </data>
+  <data name="ImBody" xml:space="preserve">
+    <value>Consulta il tuo archivio da un client di posta via IMAP. Genera una password IMAP dedicata — la password di accesso non entra mai nel client di posta.</value>
+  </data>
+  <data name="ImServer" xml:space="preserve">
+    <value>Server</value>
+  </data>
+  <data name="ImCopyServerTip" xml:space="preserve">
+    <value>Copia l'indirizzo del server</value>
+  </data>
+  <data name="ImShowAll" xml:space="preserve">
+    <value>Mostra tutti i documenti (i non-e-mail come messaggi con allegato)</value>
+  </data>
+  <data name="ImUnavailable" xml:space="preserve">
+    <value>IMAP non è attivo su questo server.</value>
+  </data>
+  <data name="ImGenerateError" xml:space="preserve">
+    <value>Impossibile generare la password IMAP.</value>
+  </data>
+  <data name="ImRevokeError" xml:space="preserve">
+    <value>Impossibile revocare l'accesso IMAP.</value>
+  </data>
+  <data name="ImSettingsSaved" xml:space="preserve">
+    <value>Salvato.</value>
+  </data>
+  <data name="ImSettingsError" xml:space="preserve">
+    <value>Impossibile salvare l'impostazione.</value>
+  </data>
 </root>

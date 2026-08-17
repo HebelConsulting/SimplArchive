@@ -4230,4 +4230,37 @@
   <data name="WfNotStarted" xml:space="preserve">
     <value>not started</value>
   </data>
+  <data name="AccountImap" xml:space="preserve">
+    <value>Email access (IMAP)…</value>
+  </data>
+  <data name="ImTitle" xml:space="preserve">
+    <value>Email access (IMAP)</value>
+  </data>
+  <data name="ImBody" xml:space="preserve">
+    <value>Browse your archive from a mail client over IMAP. Generate a dedicated IMAP password — your login password never goes into the mail client.</value>
+  </data>
+  <data name="ImServer" xml:space="preserve">
+    <value>Server</value>
+  </data>
+  <data name="ImCopyServerTip" xml:space="preserve">
+    <value>Copy the server address</value>
+  </data>
+  <data name="ImShowAll" xml:space="preserve">
+    <value>Show every document (non-emails as attachment messages)</value>
+  </data>
+  <data name="ImUnavailable" xml:space="preserve">
+    <value>IMAP is not enabled on this server.</value>
+  </data>
+  <data name="ImGenerateError" xml:space="preserve">
+    <value>Could not generate the IMAP password.</value>
+  </data>
+  <data name="ImRevokeError" xml:space="preserve">
+    <value>Could not revoke IMAP access.</value>
+  </data>
+  <data name="ImSettingsSaved" xml:space="preserve">
+    <value>Saved.</value>
+  </data>
+  <data name="ImSettingsError" xml:space="preserve">
+    <value>Could not save the setting.</value>
+  </data>
 </root>

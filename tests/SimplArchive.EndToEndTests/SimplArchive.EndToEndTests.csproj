@@ -33,6 +33,7 @@
          Testcontainers bump; remove once its own floor moves past 2026.0.0. -->
     <PackageReference Include="SSH.NET" Version="2026.0.0" />
     <PackageReference Include="AWSSDK.S3" Version="4.0.100.3" />
+    <PackageReference Include="MailKit" Version="4.17.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>

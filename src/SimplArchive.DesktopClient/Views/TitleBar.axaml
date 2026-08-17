@@ -106,6 +106,7 @@
                     <MenuItem Header="{loc:Tr AccountDisableTwoFactor}" Click="OnDisableMfa" IsVisible="{Binding MfaEnabled}" />
                     <MenuItem Header="{loc:Tr AccountPasskeys}" Click="OnManagePasskeys" />
                     <MenuItem Header="{loc:Tr AccountWebDav}" Click="OnManageWebDav" />
+                    <MenuItem Header="{loc:Tr AccountImap}" Click="OnManageImap" />
                     <MenuItem Header="{loc:Tr AccountNotificationPrefs}" Click="OnNotificationPreferences" />
                     <Separator />
                     <MenuItem Header="{loc:Tr AccountLogout}" Command="{Binding LogoutCommand}" />

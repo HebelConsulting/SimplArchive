@@ -63,6 +63,10 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<SimplArchive.Domain.LegalHolds.LegalHold> LegalHolds => Set<SimplArchive.Domain.LegalHolds.LegalHold>();
 
+    public DbSet<SimplArchive.Domain.Imap.ImapMailbox> ImapMailboxes => Set<SimplArchive.Domain.Imap.ImapMailbox>();
+
+    public DbSet<SimplArchive.Domain.Imap.ImapMessageUid> ImapMessageUids => Set<SimplArchive.Domain.Imap.ImapMessageUid>();
+
     public DbSet<SimplArchive.Domain.LegalHolds.LegalHoldItem> LegalHoldItems => Set<SimplArchive.Domain.LegalHolds.LegalHoldItem>();
 
     public DbSet<SimplArchive.Domain.Audit.AuditEvent> AuditEvents => Set<SimplArchive.Domain.Audit.AuditEvent>();

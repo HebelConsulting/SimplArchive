@@ -145,6 +145,45 @@ public sealed class ProfileClient(ApiCore core)
     public async Task RevokeWebDavPasswordAsync(CancellationToken cancellationToken = default) =>
         (await _core.Http.DeleteAsync(await MeHrefAsync("webdavPassword", cancellationToken), cancellationToken)).EnsureSuccessStatusCode();
 
+    // ---- IMAP endpoint access (ADR "IMAP endpoint (read-only, first slice)", #562) ------------------
+
+    // The status resource advertises generate/revoke/settings; the follows below take them from one read
+    // (ADR 0557) rather than re-resolving the me resource per action.
+    public sealed record ImapAccessInfo(bool Available, bool Enabled, string Username, string Host, int? Port, int? TlsPort, bool ShowAllDocuments, string? Password, IReadOnlyDictionary<string, string>? Links = null)
+    {
+        public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+    }
+
+    public async Task<ImapAccessInfo> GetImapAccessAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _core.Http.GetFromJsonAsync<JsonElement>(await MeHrefAsync("imapAccess", cancellationToken), cancellationToken);
+        return ParseImapAccess(json);
+    }
+
+    public async Task<ImapAccessInfo> GenerateImapPasswordAsync(ImapAccessInfo status, CancellationToken cancellationToken = default)
+    {
+        using var response = await _core.Http.PostAsync(status.Href("generate") ?? throw new InvalidOperationException("The IMAP access resource advertised no 'generate' rel (ADR 0543)."), null, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return ParseImapAccess(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken));
+    }
+
+    public async Task RevokeImapPasswordAsync(ImapAccessInfo status, CancellationToken cancellationToken = default) =>
+        (await _core.Http.DeleteAsync(status.Href("revoke") ?? throw new InvalidOperationException("The IMAP access resource advertised no 'revoke' rel (ADR 0543)."), cancellationToken)).EnsureSuccessStatusCode();
+
+    public async Task SetImapShowAllDocumentsAsync(ImapAccessInfo status, bool showAllDocuments, CancellationToken cancellationToken = default) =>
+        (await _core.Http.PutAsJsonAsync(status.Href("settings") ?? throw new InvalidOperationException("The IMAP access resource advertised no 'settings' rel (ADR 0543)."), new { showAllDocuments }, cancellationToken)).EnsureSuccessStatusCode();
+
+    private static ImapAccessInfo ParseImapAccess(JsonElement json) => new(
+        json.TryGetProperty("available", out var av) && av.ValueKind == JsonValueKind.True,
+        json.TryGetProperty("enabled", out var en) && en.ValueKind == JsonValueKind.True,
+        json.TryGetProperty("username", out var u) ? u.GetString() ?? "" : "",
+        json.TryGetProperty("host", out var h) ? h.GetString() ?? "" : "",
+        json.TryGetProperty("port", out var pp) && pp.ValueKind == JsonValueKind.Number ? pp.GetInt32() : null,
+        json.TryGetProperty("tlsPort", out var tp) && tp.ValueKind == JsonValueKind.Number ? tp.GetInt32() : null,
+        json.TryGetProperty("showAllDocuments", out var sd) && sd.ValueKind == JsonValueKind.True,
+        SimplArchiveApiClient.StrOrNull(json, "password"),
+        ApiCore.ParseLinks(json));
+
     // ---- Two-factor authentication (ADR "MFA (interactive login, TOTP)") ----------------------------
 
     public sealed record MfaEnrollInfo(string Secret, string OtpauthUri, string QrDataUrl);

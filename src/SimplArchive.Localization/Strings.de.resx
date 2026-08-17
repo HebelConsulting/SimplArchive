@@ -4230,4 +4230,37 @@
   <data name="WfNotStarted" xml:space="preserve">
     <value>nicht gestartet</value>
   </data>
+  <data name="AccountImap" xml:space="preserve">
+    <value>E-Mail-Zugriff (IMAP) …</value>
+  </data>
+  <data name="ImTitle" xml:space="preserve">
+    <value>E-Mail-Zugriff (IMAP)</value>
+  </data>
+  <data name="ImBody" xml:space="preserve">
+    <value>Greifen Sie per IMAP aus einem E-Mail-Programm auf Ihr Archiv zu. Erzeugen Sie ein eigenes IMAP-Passwort — Ihr Anmeldepasswort bleibt dem E-Mail-Programm fern.</value>
+  </data>
+  <data name="ImServer" xml:space="preserve">
+    <value>Server</value>
+  </data>
+  <data name="ImCopyServerTip" xml:space="preserve">
+    <value>Serveradresse kopieren</value>
+  </data>
+  <data name="ImShowAll" xml:space="preserve">
+    <value>Alle Dokumente anzeigen (Nicht-E-Mails als Anhang-Nachrichten)</value>
+  </data>
+  <data name="ImUnavailable" xml:space="preserve">
+    <value>IMAP ist auf diesem Server nicht aktiviert.</value>
+  </data>
+  <data name="ImGenerateError" xml:space="preserve">
+    <value>Das IMAP-Passwort konnte nicht erzeugt werden.</value>
+  </data>
+  <data name="ImRevokeError" xml:space="preserve">
+    <value>Der IMAP-Zugriff konnte nicht widerrufen werden.</value>
+  </data>
+  <data name="ImSettingsSaved" xml:space="preserve">
+    <value>Gespeichert.</value>
+  </data>
+  <data name="ImSettingsError" xml:space="preserve">
+    <value>Die Einstellung konnte nicht gespeichert werden.</value>
+  </data>
 </root>

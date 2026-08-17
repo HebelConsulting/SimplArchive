@@ -456,6 +456,15 @@ public partial class MainWindow
         }
     });
 
+    // The IMAP account dialog (#562) — connection values, the generated password, and the view toggle.
+    internal void OnManageImap(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is MainWindowViewModel { Api: { } api })
+        {
+            await new ImapDialog(api).ShowDialog(this);
+        }
+    });
+
     // The Intray / Check-out tabs' single WebDAV button (ADR "One WebDAV button per tab, deep-linked"). It does
     // the same next-useful-thing the ribbon button does — set up credentials, else mount, else open what is
     // already mounted — with one difference that is the whole point of it being on a tab: when the volume is

@@ -44,6 +44,8 @@ public partial class TitleBar : UserControl
 
     private void OnManageWebDav(object? sender, RoutedEventArgs e) => Window()?.OnManageWebDav(sender, e);
 
+    private void OnManageImap(object? sender, RoutedEventArgs e) => Window()?.OnManageImap(sender, e);
+
     private void OnNotificationPreferences(object? sender, RoutedEventArgs e) => Window()?.OnNotificationPreferences(sender, e);
 
     private void OnOpenManual(object? sender, RoutedEventArgs e) => Window()?.OnOpenManual(sender, e);

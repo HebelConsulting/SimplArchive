@@ -142,6 +142,13 @@ if (!string.IsNullOrWhiteSpace(valkeyConnection))
 builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, SimplArchive.Api.Realtime.SubjectUserIdProvider>();
 builder.Services.AddSingleton<SimplArchive.Application.Abstractions.IRealtimeNotifier, SimplArchive.Api.Realtime.SignalRRealtimeNotifier>();
 
+// The IMAP endpoint (ADR "IMAP endpoint (read-only, first slice)", #562) — a raw TCP hosted service, off
+// unless Imap:Enabled. Registered as a singleton FIRST so tests (and the dialog surface) can read the bound
+// ports back from the same instance the host runs.
+builder.Services.Configure<SimplArchive.Api.Imap.ImapOptions>(builder.Configuration.GetSection(SimplArchive.Api.Imap.ImapOptions.SectionName));
+builder.Services.AddSingleton<SimplArchive.Api.Imap.ImapServer>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SimplArchive.Api.Imap.ImapServer>());
+
 // WebAuthn / passkeys (ADR "WebAuthn passkeys as a second factor"). The Relying Party id is the registrable
 // domain (host of App:BaseUrl, e.g. "localhost"); the expected origin is the full base URL. Fido2NetLib (MIT).
 var webAuthnBaseUrl = builder.Configuration["App:BaseUrl"];

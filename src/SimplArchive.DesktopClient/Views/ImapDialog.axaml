@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        x:Class="SimplArchive.DesktopClient.Views.ImapDialog"
+        Title="{loc:Tr ImTitle}" Width="480" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="18" Spacing="10">
+        <TextBlock TextWrapping="Wrap" Text="{loc:Tr ImBody}" />
+
+        <!-- Same copy-per-value shape as the WebDAV dialog (#461): these are exactly the values a user pastes
+             into a mail client's account form. -->
+        <TextBlock Text="{loc:Tr ImServer}" FontWeight="SemiBold" FontSize="12" />
+        <DockPanel LastChildFill="True">
+            <Button DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnCopyServer"
+                    Content="{loc:Tr WdCopy}" ToolTip.Tip="{loc:Tr ImCopyServerTip}" />
+            <TextBox x:Name="ServerBox" IsReadOnly="True" />
+        </DockPanel>
+        <TextBlock Text="{loc:Tr WdUsername}" FontWeight="SemiBold" FontSize="12" />
+        <DockPanel LastChildFill="True">
+            <Button DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnCopyUsername"
+                    Content="{loc:Tr WdCopy}" ToolTip.Tip="{loc:Tr WdCopyUserTip}" />
+            <TextBox x:Name="UsernameBox" IsReadOnly="True" />
+        </DockPanel>
+
+        <Border x:Name="PasswordPanel" IsVisible="False" Background="#2e7d32" CornerRadius="3" Padding="8" >
+            <StackPanel Spacing="4">
+                <TextBlock Foreground="White" FontSize="12" Text="{loc:Tr WdCopyPw}" />
+                <DockPanel LastChildFill="True">
+                    <Button DockPanel.Dock="Right" Margin="6,0,0,0" Click="OnCopyPassword"
+                            Content="{loc:Tr WdCopy}" ToolTip.Tip="{loc:Tr WdCopyPwTip}" />
+                    <TextBox x:Name="PasswordBox" IsReadOnly="True" />
+                </DockPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- The user's own view choice (#562): emails only, or every visible document as an attachment message. -->
+        <CheckBox x:Name="ShowAllBox" Content="{loc:Tr ImShowAll}" IsCheckedChanged="OnShowAllChanged" />
+
+        <TextBlock x:Name="StatusText" Foreground="{DynamicResource WbMuted}" FontSize="12" TextWrapping="Wrap" />
+
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button x:Name="RevokeButton" Content="{loc:Tr WdRevoke}" IsVisible="False" Click="OnRevoke" />
+            <Button x:Name="GenerateButton" Content="{loc:Tr WdGenerate}" Click="OnGenerate" />
+            <Button Content="{loc:Tr Close}" Click="OnClose" IsCancel="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

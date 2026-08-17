@@ -1,0 +1,162 @@
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
+
+@* Manage the app-specific IMAP password + view toggle (ADR "IMAP endpoint (read-only, first slice)", #562) —
+   the WebDAV dialog's shape: connection values with one-click copy, generate/regenerate (shown once), revoke,
+   and the emails-only/everything switch. Desktop is canonical (ADR 0511); this mirrors its ImapDialog. *@
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 440px;">
+            <MudText Typo="Typo.body2" Class="mb-3">
+                @Strings.Get("ImBody")
+            </MudText>
+
+            <MudTextField T="string" Label="@Strings.Get("ImServer")" Value="@_server" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy" OnAdornmentClick="() => CopyAsync(_server)" />
+            <MudTextField T="string" Label="@Strings.Get("WebDavUsername")" Value="@_username" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2"
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy" OnAdornmentClick="() => CopyAsync(_username)" />
+
+            @if (_generatedPassword is not null)
+            {
+                <MudAlert Severity="Severity.Success" Dense="true" Class="mt-3">@Strings.Get("WebDavCopyNow")</MudAlert>
+                <MudTextField T="string" Label="@Strings.Get("WebDavPassword")" Value="@_generatedPassword" ReadOnly="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2"
+                              Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy" OnAdornmentClick="() => CopyAsync(_generatedPassword!)" />
+            }
+            else if (_enabled)
+            {
+                <MudText Typo="Typo.body2" Class="mt-3 mud-text-secondary">@Strings.Get("WebDavEnabled")</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="mt-3 mud-text-secondary">@(_available ? Strings.Get("WebDavNotSetUp") : Strings.Get("ImUnavailable"))</MudText>
+            }
+
+            @* The user's own view choice (#562): only emails, or every visible document as an attachment message. *@
+            <MudSwitch T="bool" Class="mt-3" Color="Color.Primary" Value="_showAll" ValueChanged="SetShowAllAsync" Disabled="!_available"
+                       Label="@Strings.Get("ImShowAll")" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        @if (_enabled)
+        {
+            <MudButton Color="Color.Error" OnClick="RevokeAsync" Disabled="_busy">@Strings.Get("WebDavRevoke")</MudButton>
+        }
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="GenerateAsync" Disabled="@(_busy || !_available)">@(_enabled ? Strings.Get("WebDavRegenerate") : Strings.Get("WebDavGenerate"))</MudButton>
+        <MudButton OnClick="Close">@Strings.Get("Close")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    private bool _available;
+    private bool _enabled;
+    private bool _showAll;
+    private string _username = "";
+    private string _server = "";
+    private string? _generatedPassword;
+    private string? _settingsHref;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            Apply(await Http.GetFromJsonAsync<StatusDto>(await ApiRoot.RequireMeAsync("imapAccess")));
+        }
+        catch (Exception) { /* leave defaults */ }
+    }
+
+    private void Apply(StatusDto? status)
+    {
+        _available = status?.Available ?? false;
+        _enabled = status?.Enabled ?? false;
+        _showAll = status?.ShowAllDocuments ?? false;
+        _username = status?.Username ?? "";
+        var port = status?.TlsPort ?? status?.Port;
+        _server = port is { } p ? $"{status?.Host}:{p}" : status?.Host ?? "";
+        _settingsHref = status?.Links?.FirstOrDefault(l => l.Rel == "settings")?.Href;
+    }
+
+    private async Task GenerateAsync()
+    {
+        _busy = true;
+        try
+        {
+            var response = await Http.PostAsync(await ApiRoot.RequireMeAsync("imapAccess"), null);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<StatusDto>();
+            Apply(result);
+            _generatedPassword = result?.Password;
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("ImGenerateError"), Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RevokeAsync()
+    {
+        _busy = true;
+        try
+        {
+            (await Http.DeleteAsync(await ApiRoot.RequireMeAsync("imapAccess"))).EnsureSuccessStatusCode();
+            _enabled = false;
+            _generatedPassword = null;
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("ImRevokeError"), Severity.Error);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task SetShowAllAsync(bool value)
+    {
+        _showAll = value;
+        try
+        {
+            // The settings address comes from the status resource's own advertised rel (ADR 0543).
+            if (_settingsHref is { } href)
+            {
+                (await Http.PutAsJsonAsync(href, new { showAllDocuments = value })).EnsureSuccessStatusCode();
+                Snackbar.Add(Strings.Get("ImSettingsSaved"), Severity.Info);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add(Strings.Get("ImSettingsError"), Severity.Error);
+        }
+    }
+
+    private async Task CopyAsync(string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value);
+            Snackbar.Add(Strings.Get("CopiedClipboard"), Severity.Info);
+        }
+        catch (Exception) { /* clipboard may be unavailable */ }
+    }
+
+    private void Close() => Dialog.Close();
+
+    private record LinkDto { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
+
+    private record StatusDto
+    {
+        public bool Available { get; set; }
+        public bool Enabled { get; set; }
+        public bool ShowAllDocuments { get; set; }
+        public string Username { get; set; } = "";
+        public string Host { get; set; } = "";
+        public int? Port { get; set; }
+        public int? TlsPort { get; set; }
+        public string? Password { get; set; }
+        public List<LinkDto>? Links { get; set; }
+    }
+}

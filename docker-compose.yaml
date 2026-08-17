@@ -351,6 +351,10 @@ services:
         condition: service_completed_successfully
     ports:
       - "8080:8080"
+      # The IMAP endpoint's dev plaintext port (ADR 0594) — point a mail client at localhost:143 with the
+      # generated IMAP password from the account menu. Plaintext is Development-only; production uses
+      # Imap__TlsPort with a real certificate and the readiness gate refuses this port.
+      - "143:143"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       # Secrets come from OpenBao (ADR "Secrets management with OpenBao"): ConnectionStrings:Default is built
@@ -366,6 +370,11 @@ services:
       # The browser-facing origin — must match the host port mapping above so the blazor-client's seeded
       # redirect URIs and OpenIddict's issuer line up with what the browser actually loads.
       App__BaseUrl: "http://localhost:8080"
+      # The IMAP endpoint (ADR 0594, #562): enabled on the dev plaintext port; the dialog shows localhost.
+      Imap__Enabled: "true"
+      Imap__Port: "143"
+      Imap__PublicHost: "localhost"
+
       # LAN reverse-proxy origin (ADR "Reverse proxy for LAN testing"): when other devices reach the app over
       # HTTPS via the caddy proxy at https://<PROXY_HOST>:9443, the blazor-client's seeded OIDC redirect URIs
       # must include that origin too. PROXY_HOST is the host's LAN IP/hostname (default localhost).

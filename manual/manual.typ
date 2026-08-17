@@ -380,6 +380,26 @@ edit, and documents frozen by a legal hold, behave in the mount exactly as they 
   will typically work in another on the same machine.
 ]
 
+== Reading the archive in your mail program (IMAP)
+
+Where WebDAV turns the archive into a network drive, *IMAP*#idx("IMAP") turns it into a mail account: point
+Apple Mail, Thunderbird or any IMAP-speaking client at your SimplArchive server and browse the same
+ACL-filtered tree as mailboxes. *INBOX* is your personal folder; the shared repositories you can see appear
+beside it. Archived e-mails read natively; every *other* document can appear too — as a message carrying the
+file as an attachment — if you switch that on.
+
+Open *Email access (IMAP)…* in the account menu. The dialog shows the *server* and your *username* (your
+e-mail), each with a *Copy* button, and *Generate* issues a dedicated *IMAP password* — like the WebDAV one:
+separate from your login password, shown only once, revocable on its own. The *Show every document* switch is
+yours per account: off (the default) lists only e-mails; on lists everything you may see, with the file
+attached to open straight from the mail client.
+
+#note[
+  *The mail client cannot rearrange the archive.* Folders are created, renamed and deleted in SimplArchive —
+  an IMAP client trying the same is politely refused. In this first version the mailboxes are read-only;
+  filing e-mails into the archive from the mail client arrives with a later version.
+]
+
 = Metadata & classification
 
 Each document has a *mask* (document type) that defines its *index fields* — typed metadata such as an invoice

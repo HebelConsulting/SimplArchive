@@ -45,6 +45,13 @@ public static class ProductionReadinessValidator
             violations.Add("App:ApplyMigrationsAtStartup is true — run migrations as a one-off step instead (it races across replicas).");
         }
 
+        // A plaintext IMAP port ships credentials unencrypted — dev only; production uses the implicit-TLS
+        // port with a real certificate (ADR "IMAP endpoint (read-only, first slice)").
+        if (configuration.GetValue<bool>("Imap:Enabled") && configuration.GetValue<int>("Imap:Port") != 0)
+        {
+            violations.Add("Imap:Port (plaintext IMAP) is configured — production must use Imap:TlsPort with a certificate only.");
+        }
+
         // Demo-data seeding provisions a tenant admin with a known password — never in production.
         if (!string.IsNullOrWhiteSpace(configuration["Demo:Administrator:Password"]))
         {

@@ -194,6 +194,10 @@ public sealed class SelfHostedApp : IAsyncDisposable
             // on a wall clock it cannot see.
             ["Retention__InitialDelay"] = "02:00:00",
             ["App__BaseUrl"] = BaseUrl, // blazor-client redirect URIs must match the served origin for login
+            // The IMAP endpoint (ADR 0594) on an ephemeral plaintext port, so the account dialog is fully
+            // exercisable (available=true) without a fixed port racing parallel fixtures.
+            ["Imap__Enabled"] = "true",
+            ["Imap__Port"] = "-1",
             // Hermetic in-memory OpenIddict keys — the dev-cert store fails in a headless CI runner environment
             // (ADR "Continuous integration"); ephemeral keys need no store.
             ["OpenIddict__UseEphemeralKeys"] = "true",

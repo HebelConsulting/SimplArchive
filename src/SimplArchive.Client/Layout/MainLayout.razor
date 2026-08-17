@@ -188,6 +188,7 @@
                     }
                     <MudMenuItem Icon="@Icons.Material.Filled.Key" OnClick="ManagePasskeysAsync">@Strings.Get("AccountPasskeys")</MudMenuItem>
                     <MudMenuItem Icon="@Icons.Material.Filled.Storage" OnClick="ManageWebDavAsync">@Strings.Get("AccountWebDav")</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Email" OnClick="ManageImapAsync">@Strings.Get("AccountImap")</MudMenuItem>
                     <MudMenuItem Icon="@Icons.Material.Filled.NotificationsActive" OnClick="NotificationPreferencesAsync">@Strings.Get("AccountNotificationPrefs")</MudMenuItem>
                     <MudDivider />
                     @* Promote the desktop fat-client (ADR 0505): resolve the visitor's OS → /download/clients/<os>/. *@
@@ -506,6 +507,9 @@
 
     private async Task ManageWebDavAsync() =>
         await (await DialogService.ShowAsync<WebDavDialog>(Strings.Get("DlgWebDav"))).Result;
+
+    private async Task ManageImapAsync() =>
+        await (await DialogService.ShowAsync<ImapDialog>(Strings.Get("ImTitle"))).Result;
 
     private async Task NotificationPreferencesAsync() =>
         await (await DialogService.ShowAsync<NotificationPreferencesDialog>(Strings.Get("DlgNotificationPrefs"))).Result;

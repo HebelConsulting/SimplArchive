@@ -131,6 +131,7 @@ public class MeController : ControllerBase
                 new Link("passkeyRegisterOptions", "/api/users/me/passkeys/register/options", "POST"),
                 new Link("passkeyRegister", "/api/users/me/passkeys/register", "POST"),
                 new Link("webdavPassword", "/api/me/webdav-password", "GET"),
+                new Link("imapAccess", "/api/me/imap-access", "GET"),
                 new Link("personalRepository", "/api/me/personal-repository", "GET"),
                 new Link("notificationPreferences", "/api/notifications/preferences", "GET"),
                 // The intray ribbon's toggles follow these rather than composing them (ADR 0543).

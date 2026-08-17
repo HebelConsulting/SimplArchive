@@ -128,6 +128,10 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         Environment.SetEnvironmentVariable("ObjectStorage__BucketName", Bucket);
         Environment.SetEnvironmentVariable("ObjectStorage__AccessKey", StorageUser);
         Environment.SetEnvironmentVariable("ObjectStorage__SecretKey", StoragePassword);
+        // The IMAP endpoint (#562): on, plaintext, on an OS-assigned ephemeral port — tests read the bound
+        // port back from the ImapServer singleton and drive it with a real mail-client library (MailKit).
+        Environment.SetEnvironmentVariable("Imap__Enabled", "true");
+        Environment.SetEnvironmentVariable("Imap__Port", "-1");
         // OpenSearch + Tika → the real full-text path (name + index-field values + document-content). Configured
         // for the whole collection; the round-trip/workflow tests don't search, so this only adds startup cost.
         Environment.SetEnvironmentVariable("OpenSearch__Url", $"http://{_openSearch.Hostname}:{_openSearch.GetMappedPublicPort(9200)}");

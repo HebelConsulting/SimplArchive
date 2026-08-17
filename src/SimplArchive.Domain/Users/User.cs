@@ -35,6 +35,16 @@ public class User : ITenantScoped
     // null = WebDAV access disabled for this user; revoke = clear it.
     public string? WebDavPasswordHash { get; set; }
 
+    // The IMAP endpoint's app-specific password (ADR "IMAP endpoint (read-only, first slice)") — the exact
+    // WebDAV pattern: PasswordHasher<User>-hashed, generated once and shown, null = IMAP disabled, revoke =
+    // clear. A separate credential per protocol surface, so revoking one does not cut the others.
+    public string? ImapPasswordHash { get; set; }
+
+    // The user's own IMAP view choice (interviewed on #562): false = only email documents appear in the
+    // mailboxes; true = every visible document appears, non-emails as a synthetic message carrying the file
+    // as an attachment. Self-service (set from the IMAP dialog), deliberately not an admin-granted right.
+    public bool ImapShowAllDocuments { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     // Bypasses the repository ACL layer entirely — see ADR "Tenant admin ACL bypass". Not a Role
