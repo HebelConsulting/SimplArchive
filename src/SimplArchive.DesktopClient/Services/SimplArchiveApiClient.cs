@@ -61,6 +61,7 @@ public sealed class SimplArchiveApiClient
     private RecycleBinClient? _recycleBin;
     private ExternalLinksClient? _externalLinks;
     private ProfileClient? _profile;
+    private DavCollectionsClient? _davCollections;
     private LegalHoldsClient? _legalHolds;
 
     public SimplArchiveApiClient(string accessToken)
@@ -110,6 +111,9 @@ public sealed class SimplArchiveApiClient
 
     /// <summary>The signed-in account's own area (#443, ops tranche).</summary>
     public ProfileClient Profile => _profile ??= new ProfileClient(Core);
+
+    /// <summary>The caller's addressbooks and calendars, for the Contacts/Calendar tabs (#564).</summary>
+    public DavCollectionsClient DavCollections => _davCollections ??= new DavCollectionsClient(Core, Profile);
 
     /// <summary>The legal-holds + retention area (#443, ops tranche).</summary>
     public LegalHoldsClient LegalHolds => _legalHolds ??= new LegalHoldsClient(Core);

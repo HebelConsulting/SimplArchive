@@ -648,6 +648,12 @@ internal static class Program
                 viewModel.PopulateTenantSettingsDemoForScreenshot();
                 viewModel.SelectedTab = 10; // Tenant tab
             }
+            else if (Environment.GetCommandLineArgs().Contains("--contacts"))
+            {
+                viewModel.IsLoggedIn = true;
+                viewModel.ContactsTab.PopulateDemoForScreenshot();
+                viewModel.SelectedTab = 13; // Contacts tab
+            }
             else if (Environment.GetCommandLineArgs().Contains("--checkout"))
             {
                 viewModel.IsLoggedIn = true;

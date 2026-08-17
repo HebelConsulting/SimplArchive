@@ -1,0 +1,101 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:i="using:Projektanker.Icons.Avalonia"
+             xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+             xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:v="using:SimplArchive.DesktopClient.Views"
+             x:Class="SimplArchive.DesktopClient.Views.ContactsTab"
+             x:DataType="vm:ContactsTabViewModel">
+
+  <!-- The Contacts tab (#564): addressbooks │ contacts │ detail. SimplCalCon's concept translated to the
+       workbench's panes, with the Repositories tab as the reference (ADR 0511) — a flat CHECKBOX list of
+       collections rather than a tree, because a client picks collections from a list and several overlay. -->
+  <DockPanel LastChildFill="True" Margin="8">
+
+    <!-- Ribbon: icons only where a hover can explain them, icon+label on touch (ADR 0491 via .ribbon). -->
+    <Border DockPanel.Dock="Top" Classes="ribbon">
+      <StackPanel Orientation="Horizontal" Spacing="4">
+        <Button Command="{Binding LoadCommand}" ToolTip.Tip="{loc:Tr RibbonRefresh}"
+                AutomationProperties.Name="{loc:Tr RibbonRefresh}">
+          <i:Icon Value="mdi-refresh" FontSize="18" />
+        </Button>
+        <!-- New contact belongs on THIS tab, per the epic's decision; disabled until a writable
+             addressbook is ticked, so the affordance never lies about what it can do. -->
+        <Button Command="{Binding NewContactCommand}" IsEnabled="{Binding CanCreate}"
+                ToolTip.Tip="{loc:Tr ContactsNew}" AutomationProperties.Name="{loc:Tr ContactsNew}">
+          <i:Icon Value="mdi-account-plus-outline" FontSize="18" />
+        </Button>
+      </StackPanel>
+    </Border>
+
+    <Grid ColumnDefinitions="220,4,*,4,320">
+
+      <!-- Collections: tick to overlay. The swatch is the collection's colour (ADR 0620), which is what
+           tells overlaid collections apart once more than one is ticked. -->
+      <DockPanel Grid.Column="0" LastChildFill="True">
+        <TextBlock DockPanel.Dock="Top" Text="{loc:Tr ContactsCollections}" FontWeight="SemiBold" Margin="2,0,0,6" />
+        <ListBox ItemsSource="{Binding Collections}" Background="Transparent" BorderThickness="0">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ContactCollectionViewModel">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <CheckBox IsChecked="{Binding IsChecked}" VerticalAlignment="Center" />
+                <Border Width="10" Height="10" CornerRadius="5" VerticalAlignment="Center"
+                        Background="{Binding Color, TargetNullValue=#8a8a8a}" />
+                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="{DynamicResource WbBorder}" />
+
+      <!-- Contacts of the ticked addressbooks, merged. -->
+      <DockPanel Grid.Column="2" LastChildFill="True">
+        <TextBox DockPanel.Dock="Top" Text="{Binding Filter}" Watermark="{loc:Tr FilterHint}" Margin="0,0,0,6"
+                 v:SearchField.Clearable="True" />
+        <TextBlock DockPanel.Dock="Top" Text="{loc:Tr ContactsNoneSelected}"
+                   Foreground="{DynamicResource WbMuted}" Margin="2,4,0,0" TextWrapping="Wrap"
+                   IsVisible="{Binding !Contacts.Count}" />
+        <!-- A ListBox with a column-shaped template rather than a DataGrid: this project does not reference
+             Avalonia's DataGrid, and the rest of the client renders its lists this way. -->
+        <ListBox ItemsSource="{Binding VisibleContacts}" SelectedItem="{Binding Selected}"
+                 Background="Transparent" BorderThickness="0">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ContactRowViewModel">
+              <Grid ColumnDefinitions="14,2*,*,*,*" Margin="0,2">
+                <Border Grid.Column="0" Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center"
+                        Background="{Binding CollectionColor}" ToolTip.Tip="{Binding CollectionName}" />
+                <TextBlock Grid.Column="1" Text="{Binding FullName}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Text="{Binding Organization}" TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource WbMuted}" />
+                <TextBlock Grid.Column="3" Text="{Binding Email}" TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource WbMuted}" />
+                <TextBlock Grid.Column="4" Text="{Binding Phone}" TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource WbMuted}" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+
+      <GridSplitter Grid.Column="3" ResizeDirection="Columns" Background="{DynamicResource WbBorder}" />
+
+      <!-- Detail. Sized to its content: this pane must not claim space it is not using (ADR 0550). -->
+      <ScrollViewer Grid.Column="4">
+        <StackPanel Spacing="8" Margin="8,0,0,0" IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
+          <TextBlock Text="{Binding Selected.FullName}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding Selected.CollectionName}" Foreground="{DynamicResource WbMuted}" />
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" >
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr ContactsOrg}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,4" />
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Selected.Organization}" TextWrapping="Wrap" Margin="0,0,0,4" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr ContactsEmail}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,4" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.Email}" TextWrapping="Wrap" Margin="0,0,0,4" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr ContactsPhone}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,4" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Selected.Phone}" TextWrapping="Wrap" Margin="0,0,0,4" />
+          </Grid>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </DockPanel>
+</UserControl>

@@ -637,7 +637,7 @@ public class DocumentsController : ControllerBase
 
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -755,7 +755,7 @@ public class DocumentsController : ControllerBase
 
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {

@@ -35,7 +35,13 @@ public class OverLimitFileCeilingTests
     // this entry is a patch over one instance of the gap rather than a fix for it.
     private static readonly Dictionary<string, int> Ceilings = new()
     {
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_009,
+        // 7,009 → 7,025: the Contacts tab's wiring (#564) — OWNER-CONFIRMED as a deliberate raise
+        // (2026-08-17), on the reasoning that these four lines are genuinely this class's: the tab's VM, its
+        // status reporter, Setup(api), and the tab-13 branch of OnSelectedTabChanged, which is where
+        // SelectedTab lives. The tab itself is its own VM and its own view, so what landed here is the wiring
+        // and nothing else. Paid for later by extracting the tab-activation dispatch — the if-chain is now 13
+        // branches and grows with every tab, which is the seam this file keeps asking for (#517).
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_025,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —

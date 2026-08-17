@@ -474,14 +474,12 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
         {
             if (!typeUndetermined && parentMaskId == pair.FolderMaskId && ownMaskId != pair.ItemMaskId)
             {
-                throw new InvalidOperationException(
-                    $"'{document.Name}' cannot live in a {pair.FolderName} — only {pair.ItemName}-masked documents can (typed-folder containment, #562/#564).");
+                throw Domain.Masks.TypedFolderContainmentException.FolderAdmitsOnly(document.Name, pair);
             }
 
             if (ownMaskId == pair.ItemMaskId && parentMaskId != pair.FolderMaskId)
             {
-                throw new InvalidOperationException(
-                    $"'{document.Name}' wears the {pair.ItemName} mask and can only live in a {pair.FolderName} (typed-folder containment, #562/#564).");
+                throw Domain.Masks.TypedFolderContainmentException.ItemBelongsIn(document.Name, pair);
             }
         }
     }

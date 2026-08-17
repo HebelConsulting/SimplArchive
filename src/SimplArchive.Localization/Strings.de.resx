@@ -4266,4 +4266,34 @@
   <data name="ImSettingsError" xml:space="preserve">
     <value>Die Einstellung konnte nicht gespeichert werden.</value>
   </data>
+  <data name="StErrLoadContacts" xml:space="preserve">
+    <value>Kontakte konnten nicht geladen werden: {0}</value>
+  </data>
+  <data name="TabContacts" xml:space="preserve">
+    <value>Kontakte</value>
+  </data>
+  <data name="ContactsCollections" xml:space="preserve">
+    <value>Adressbücher</value>
+  </data>
+  <data name="ContactsNoneSelected" xml:space="preserve">
+    <value>Wählen Sie ein Adressbuch, um dessen Kontakte zu sehen.</value>
+  </data>
+  <data name="ContactsNew" xml:space="preserve">
+    <value>Neuer Kontakt</value>
+  </data>
+  <data name="ContactsName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="ContactsOrg" xml:space="preserve">
+    <value>Organisation</value>
+  </data>
+  <data name="ContactsEmail" xml:space="preserve">
+    <value>E-Mail</value>
+  </data>
+  <data name="ContactsPhone" xml:space="preserve">
+    <value>Telefon</value>
+  </data>
+  <data name="ContactsNewNotYet" xml:space="preserve">
+    <value>Kontakte können noch nicht in der App erstellt werden — bitte vorerst über einen CardDAV-Client anlegen.</value>
+  </data>
 </root>

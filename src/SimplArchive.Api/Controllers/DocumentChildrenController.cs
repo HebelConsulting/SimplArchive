@@ -346,12 +346,24 @@ public class DocumentChildrenController : ControllerBase
         ["notes"] = WellKnownMaskIds.NoteFolder,
     };
 
+    // The typed-folder family this mask version belongs to as a FOLDER, or null for an ordinary folder. The
+    // pairs are data (WellKnownMaskIds.TypedFolderPairs), so a new typed family needs no change here.
+    private async Task<TypedFolderPair?> TypedFolderPairOfAsync(Guid maskVersionId, CancellationToken cancellationToken)
+    {
+        var maskId = await _dbContext.MaskVersions
+            .Where(v => v.Id == maskVersionId)
+            .Select(v => (Guid?)v.MaskId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return maskId is { } id ? WellKnownMaskIds.TypedFolderPairs.FirstOrDefault(p => p.FolderMaskId == id) : null;
+    }
+
     [HttpPost("children")]
     public async Task<IActionResult> CreateChild(Guid documentId, [FromBody] CreateChildRequest request, CancellationToken cancellationToken)
     {
         var parent = await _dbContext.Documents
             .Where(d => d.Id == documentId)
-            .Select(d => new { d.TenantId })
+            .Select(d => new { d.TenantId, d.MaskVersionId })
             .SingleOrDefaultAsync(cancellationToken);
 
         if (parent is null)
@@ -362,10 +374,30 @@ public class DocumentChildrenController : ControllerBase
         // Resolve the requested folder kind before doing anything else — an unknown one is the caller's mistake,
         // not a half-created folder.
         var folderMaskId = WellKnownMaskIds.Folder;
+        var folderMaskRequested = request.FolderMask is { Length: > 0 };
         if (request.FolderMask is { Length: > 0 } requestedMask
             && !CreatableFolderMasks.TryGetValue(requestedMask, out folderMaskId))
         {
             throw new InvalidFolderMaskException(requestedMask);
+        }
+
+        // Is the PARENT a typed folder (Notes / Addressbook / Calendar)? It admits only its own item type, and
+        // an item is typed by the finalizer once it has bytes to read — so a child created here must be left
+        // MASKLESS, exactly as the CardDAV/IMAP write paths leave theirs.
+        //
+        // Stamping the Folder mask unconditionally is what made an upload into a typed folder impossible: the
+        // containment rule exempts a document whose type is not determined yet (its own comment says so, and
+        // names .vcf/.ics), and this endpoint was defeating that exemption before the finalizer ever ran.
+        var parentTypedPair = parent.MaskVersionId is { } parentMaskVersionId
+            ? await TypedFolderPairOfAsync(parentMaskVersionId, cancellationToken)
+            : null;
+
+        if (parentTypedPair is { } typedPair && folderMaskRequested)
+        {
+            // A folder inside a typed folder can never be valid, so say that rather than creating it and
+            // letting the containment rule refuse the very next save.
+            throw new Errors.Exceptions.Documents.TypedFolderContainmentException(
+                $"A {typedPair.FolderName} holds only {typedPair.ItemName} items — it cannot contain folders.");
         }
 
         var rights = await _access.GetCallerRightsAsync(documentId, cancellationToken);
@@ -386,8 +418,11 @@ public class DocumentChildrenController : ControllerBase
             // Assigned the Folder mask now; if a version is later added, finalize reclassifies it (ADR "Folder mask on folders").
             // A typed folder (#564) instead wears the mask the request named — resolved tenant-explicitly, so a
             // caller with no ambient tenant can't produce a maskless folder (ADR 0590's defect).
-            MaskVersionId = await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, parent.TenantId, folderMaskId, cancellationToken)
-                ?? await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken),
+            // Inside a typed folder, null: the finalizer decides what this is (see above).
+            MaskVersionId = parentTypedPair is not null
+                ? null
+                : await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, parent.TenantId, folderMaskId, cancellationToken)
+                    ?? await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken),
             CreatedByUserId = createdByUserId,
             CreatedByServiceAccountId = createdByServiceAccountId,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -397,7 +432,7 @@ public class DocumentChildrenController : ControllerBase
 
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
         }
         catch (InvalidOperationException)
         {

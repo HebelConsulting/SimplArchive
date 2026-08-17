@@ -47,6 +47,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // local working-copy status.
     public CheckoutTabViewModel Checkout { get; } = new();
 
+    // The Contacts tab (#564) — the caller's addressbooks and their contacts. Its own VM, like Check-out
+    // above: a tab's worth of state belongs to the tab, and this file is far over the 1000-line ceiling.
+    public ContactsTabViewModel ContactsTab { get; } = new();
+
     // The environment strip (#501) — set from the chosen server profile at login, empty for the normal case.
     public EnvironmentBannerViewModel EnvBanner { get; } = new();
 
@@ -59,6 +63,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         RecycleBin.StatusReporter = m => Status = m;
         Checkout.StatusReporter = m => Status = m;
         Checkout.OnChanged = RefreshAfterCheckoutChangeAsync;
+        ContactsTab.StatusReporter = m => Status = m;
         IntrayActions.Connect(() => _api, RefreshIntrayAsync, m => Status = m, () => _currentUserId);
     }
 
@@ -76,6 +81,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         IntrayPreview.Api = api;
         SearchPreview.Api = api;
         RecycleBin.SetApi(api);
+        ContactsTab.Setup(api);
 
         // The straightening toggle's state belongs to the USER, not the machine, so it is read from the server
         // once per session rather than restored from local settings (#491).
@@ -2887,8 +2893,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         RecycleBin.Preview.ExitFullscreen();
 
         // Tab order: 0 Repositories · 1 Intray · 2 Check-out · 3 Search · 4 Recycle bin · 5 Tasks · 6 Users/Groups
-        // · 7 Audit · 8 Legal holds · 9 Retention · 10 Tenant · 11 My work (added at the end to avoid re-indexing
-        // the others, ADR "My work dashboard").
+        // · 7 Audit · 8 Legal holds · 9 Retention · 10 Tenant · 11 My work · 12 Tag catalog · 13 Contacts (each
+        // added at the end to avoid re-indexing the others, ADR "My work dashboard").
         if (value == 11)
         {
             await LoadMyWorkAsync();
@@ -2897,6 +2903,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
         if (value == 12)
         {
             await LoadTagCatalogAsync();
+        }
+
+        // 13 Contacts — appended, same as My work and the tag catalog before it, so the indices above stay put.
+        // Loaded on activation rather than at login: it costs a request per addressbook, and most sessions
+        // never open the tab.
+        if (value == 13)
+        {
+            await ContactsTab.LoadAsync();
         }
 
         if (value == 0)

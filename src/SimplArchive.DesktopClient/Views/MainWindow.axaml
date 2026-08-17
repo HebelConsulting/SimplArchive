@@ -1997,6 +1997,13 @@
                 </DockPanel>
             </TabItem>
 
+            <!-- Contacts (#564) — the caller's addressbooks, which CardDAV also serves. Added last to avoid
+                 re-indexing the other tabs; its whole body is its own control with its own view-model. -->
+            <TabItem ToolTip.Tip="{loc:Tr TabContacts}">
+                <TabItem.Header><i:Icon Value="mdi-account-box-outline" FontSize="20" /></TabItem.Header>
+                <v:ContactsTab DataContext="{Binding ContactsTab}" />
+            </TabItem>
+
         </TabControl>
     </DockPanel>
 </Window>

@@ -4266,4 +4266,34 @@
   <data name="ImSettingsError" xml:space="preserve">
     <value>No se pudo guardar la configuración.</value>
   </data>
+  <data name="StErrLoadContacts" xml:space="preserve">
+    <value>No se pudieron cargar los contactos: {0}</value>
+  </data>
+  <data name="TabContacts" xml:space="preserve">
+    <value>Contactos</value>
+  </data>
+  <data name="ContactsCollections" xml:space="preserve">
+    <value>Libretas de direcciones</value>
+  </data>
+  <data name="ContactsNoneSelected" xml:space="preserve">
+    <value>Marque una libreta para ver sus contactos.</value>
+  </data>
+  <data name="ContactsNew" xml:space="preserve">
+    <value>Nuevo contacto</value>
+  </data>
+  <data name="ContactsName" xml:space="preserve">
+    <value>Nombre</value>
+  </data>
+  <data name="ContactsOrg" xml:space="preserve">
+    <value>Organización</value>
+  </data>
+  <data name="ContactsEmail" xml:space="preserve">
+    <value>Correo</value>
+  </data>
+  <data name="ContactsPhone" xml:space="preserve">
+    <value>Teléfono</value>
+  </data>
+  <data name="ContactsNewNotYet" xml:space="preserve">
+    <value>Crear contactos en la aplicación aún no está disponible — por ahora use un cliente CardDAV.</value>
+  </data>
 </root>

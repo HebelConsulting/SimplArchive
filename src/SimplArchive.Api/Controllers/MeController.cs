@@ -133,6 +133,9 @@ public class MeController : ControllerBase
                 new Link("webdavPassword", "/api/me/webdav-password", "GET"),
                 new Link("imapAccess", "/api/me/imap-access", "GET"),
                 new Link("personalRepository", "/api/me/personal-repository", "POST"),
+            // The caller's addressbooks and calendars, for the Calendar/Contacts tabs (#564). The DAV home set
+            // answers the same question for external clients; our own clients follow this rel and get JSON.
+            new Link("davCollections", "/api/dav-collections", "GET"),
                 new Link("notificationPreferences", "/api/notifications/preferences", "GET"),
                 // The intray ribbon's toggles follow these rather than composing them (ADR 0543).
                 new Link("deskewPreference", "/api/me/deskew", "PUT"),

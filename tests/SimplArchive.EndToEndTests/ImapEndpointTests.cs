@@ -304,8 +304,15 @@ public class ImapEndpointTests
         var notesId = notes.GetProperty("id").GetGuid();
 
         // Typed containment: a non-Note document cannot LIVE in the Notes folder (the SaveChanges invariant).
-        var refused = await api.PostAsJsonAsync($"/api/documents/{notesId}/children", new { name = "not-a-note" });
+        //
+        // Asked for as a FOLDER — a bare create no longer proves this and must not (ADR 0623): the endpoint
+        // serves both "make a folder" and step one of an upload with the same body, so inside a typed folder a
+        // bare create is an item-to-be that the finalizer classifies. Naming the mask is the unambiguous ask,
+        // and it earns the reason rather than a name conflict for a name that is free.
+        var refused = await api.PostAsJsonAsync(
+            $"/api/documents/{notesId}/children", new { name = "not-a-note", folderMask = "folder" });
         Assert.False(refused.IsSuccessStatusCode);
+        Assert.Contains("TYPED_FOLDER_CONTAINMENT", await refused.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
         var port = ((ImapServer)_factory.Services.GetService(typeof(ImapServer))!).BoundPort!.Value;
         using var client = new ImapClient();

@@ -2,6 +2,7 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SimplArchive.Api.Documents;
 using SimplArchive.Api.Errors;
 using SimplArchive.Api.Errors.Exceptions.Documents;
 using SimplArchive.Api.Hypermedia;
@@ -318,7 +319,7 @@ public class RepositoriesController : ControllerBase
 
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
         }
         catch (InvalidOperationException)
         {
@@ -560,7 +561,7 @@ public class RepositoriesController : ControllerBase
 
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
         }
         catch (InvalidOperationException)
         {
