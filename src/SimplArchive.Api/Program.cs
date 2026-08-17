@@ -548,6 +548,11 @@ app.UseMiddleware<SimplArchive.Api.WebDav.WebDavMiddleware>();
 
 // The CalDAV/CardDAV gateway (#564, ADR 0619) handles /caldav + /carddav and the two well-known discovery
 // URIs, with the same HTTP Basic auth against the SHARED DAV password; it passes everything else through.
+// DAV observability (ported from SimplCalCon, ADR 0621) — a pass-through unless the SimplArchive.Dav.Wire
+// category is at Trace, except for one Warning it always emits: a DAV request that fell through unhandled,
+// which is what a native-client compatibility gap looks like from the server side.
+app.UseMiddleware<SimplArchive.Api.CalDav.DavWireTraceMiddleware>();
+
 app.UseMiddleware<SimplArchive.Api.CalDav.CalDavMiddleware>();
 
 app.UseBlazorFrameworkFiles();
