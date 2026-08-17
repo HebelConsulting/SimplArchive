@@ -109,6 +109,21 @@ public sealed class RepositoryImporter
             throw new ImportTargetNotFoundException();
         }
 
+        // An import is ONE unit of work (ADR 0614). The phases below need several SaveChanges — a document must
+        // exist before its child can parent onto it, index values before the mask assignment that validates
+        // against them — and without a transaction each of those is a point where a failure leaves a partial tree
+        // behind: half an archive, filed, with no record of what was missing. A real migration hit this three
+        // times. The transaction starts HERE rather than at the top so it doesn't span the zip parsing above.
+        //
+        // Two consequences worth knowing. The outbox queues and the quota adjuster run on this same scoped
+        // DbContext, so they enrol automatically and roll back with everything else — no index or OCR job is left
+        // pointing at a document that no longer exists, and the quota doesn't count bytes that went away. But the
+        // BLOBS are already in object storage by then (written before the rows that reference them, so the
+        // ordering can never produce a row pointing at a missing object), and a rollback cannot recall them: a
+        // failed import leaks orphaned objects. That is the deliberate trade — an invisible, sweepable object
+        // costs storage, whereas a half-imported tree costs the operator their confidence in the archive.
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
         await _seeder.EnsureWellKnownMasksAsync(tenantId, cancellationToken);
 
         // Sensitivity labels (ADR "Classification in export/import"): merge the archive's label catalog into the
@@ -506,6 +521,10 @@ public sealed class RepositoryImporter
         // Trigger the TIFF/PDF → searchable-PDF (OCR) conversion for the imported versions (ADR 0527) — the same
         // successor an uploaded TIFF/PDF gets; the worker does the OCR off the request path.
         await _searchablePdfQueue.EnqueueManyAsync(_searchablePdfJobs, cancellationToken);
+
+        // Everything above becomes visible at once, or not at all. Committing last — after the outbox rows — is
+        // what makes the queued work and the documents it refers to appear in the same instant.
+        await transaction.CommitAsync(cancellationToken);
 
         return new ImportResult(docMap[rootDoc.Id], rootDoc.Name, docMap.Count, versions.Count(v => createdIds.Contains(v.DocumentId)), messageMap.Count, existingByOrigin.Count);
     }
