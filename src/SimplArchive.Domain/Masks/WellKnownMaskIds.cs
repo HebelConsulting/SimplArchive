@@ -24,16 +24,18 @@ public static class WellKnownMaskIds
 
     public static readonly Guid Note = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E37");
 
-    // The CalDAV/CardDAV pairs (#564, ADR 0619): a Contact Folder admits only Contact-masked children, a
-    // Calendar Folder only Calendar-masked ones — the same containment as the Notes pair above, and unlike
+    // The CalDAV/CardDAV pairs (#564, ADR 0619): an Addressbook admits only Contact-masked children, a
+    // Calendar only Appointment-masked ones — the same containment as the Notes pair above, and unlike
     // Notes these folders may sit ANYWHERE in the archive tree, each subscribable where the ACL allows.
-    public static readonly Guid ContactFolder = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E38");
+    // Named for what a user calls them rather than for their role in the model: the item of a Calendar is an
+    // Appointment (DE Termin), mirroring Addressbook → Contact, and no mask carries a "Folder" suffix.
+    public static readonly Guid Addressbook = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E38");
 
-    public static readonly Guid CalendarFolder = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E39");
+    public static readonly Guid Calendar = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E39");
 
     public static readonly Guid Contact = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E3A");
 
-    public static readonly Guid Calendar = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E3B");
+    public static readonly Guid Appointment = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E3B");
 
     /// <summary>
     /// The typed-folder pairs, as data: a folder mask admits ONLY children wearing its item mask, and an item
@@ -44,8 +46,8 @@ public static class WellKnownMaskIds
     public static readonly IReadOnlyList<TypedFolderPair> TypedFolderPairs =
     [
         new(NoteFolder, Note, "Note Folder", "Note"),
-        new(ContactFolder, Contact, "Contact Folder", "Contact"),
-        new(CalendarFolder, Calendar, "Calendar Folder", "Calendar"),
+        new(Addressbook, Contact, "Addressbook", "Contact"),
+        new(Calendar, Appointment, "Calendar", "Appointment"),
     ];
 }
 

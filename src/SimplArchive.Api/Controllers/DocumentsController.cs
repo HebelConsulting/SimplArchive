@@ -239,6 +239,11 @@ public class DocumentsController : ControllerBase
             // itself (is this a folder, a zip, a root, does the tenant allow external links).
             new("export", Url.Action(nameof(DocumentTransferController.Export), "DocumentTransfer", new { documentId })!, "GET"),
             new("set-primary-location", Url.Action(nameof(SetPrimaryLocation), new { documentId })!, "PUT"),
+            // The caller's PERSONAL colour for this collection (#564 slice 2, ADR 0620). Unconditional for the
+            // same reason as tags/reminders below: anyone who may see a folder may choose how they see it, and
+            // it is meaningless on a non-collection — a client draws the affordance only for a typed folder,
+            // which it can tell from the mask it already has.
+            new("collection-color", $"/api/documents/{documentId}/collection-color", "PUT"),
             new("assignable-reviewers", Url.Action(nameof(AssignableReviewers), new { documentId })!, "GET"),
             // The caller's own relationship to this document. UNCONDITIONAL: anyone who may see a document may
             // read its tags, its own reminders and its own subscription. The rights that differ govern WRITING,

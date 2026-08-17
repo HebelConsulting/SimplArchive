@@ -14,7 +14,7 @@ namespace SimplArchive.Api.Documents;
 /// because <see cref="DocumentFinalizer"/> is already at the size the standing rule guards.
 /// </summary>
 /// <remarks>
-/// It runs on ANY upload of such a file, not only on a DAV write: a contact dragged into a Contact Folder
+/// It runs on ANY upload of such a file, not only on a DAV write: a contact dragged into a Addressbook
 /// through the workbench must end up indistinguishable from one a phone synced there, and the typed-folder
 /// containment invariant would otherwise refuse it (the document would wear Basic Entry, not Contact).
 /// Parsing is best-effort — an unparseable file falls through to the finalizer's default mask rather than
@@ -145,7 +145,7 @@ public sealed class CalendarContactClassifier
             ("Location", Nonempty(occurrence.Location)),
         };
 
-        await ApplyAsync(document, WellKnownMaskIds.Calendar, values, Nonempty(occurrence.Summary), cancellationToken);
+        await ApplyAsync(document, WellKnownMaskIds.Appointment, values, Nonempty(occurrence.Summary), cancellationToken);
 
         if (start is { } startDate)
         {

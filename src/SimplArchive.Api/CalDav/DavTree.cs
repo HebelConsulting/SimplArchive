@@ -6,10 +6,10 @@ using SimplArchive.Infrastructure.Persistence;
 namespace SimplArchive.Api.CalDav;
 
 /// <summary>A typed folder the caller may subscribe to, with the display name the client shows.</summary>
-internal sealed record DavCollection(Guid FolderId, string DisplayName, bool Writable);
+internal sealed record DavCollection(Guid FolderId, string DisplayName, bool Writable, string? Color);
 
 /// <summary>An item inside such a folder: the document, its current version, and its DAV resource name.</summary>
-internal sealed record DavItem(Guid DocumentId, string ResourceName, string ObjectKey, string ETag, DateTimeOffset LastModified);
+internal sealed record DavItem(Guid DocumentId, string ResourceName, string ObjectKey, string ETag, DateTimeOffset LastModified, long? SizeBytes);
 
 /// <summary>
 /// Resolves what a CalDAV/CardDAV caller can see (#564, ADR 0619): the typed folders they hold CanSee on,
@@ -53,16 +53,18 @@ internal static class DavTree
 
             var parent = candidate.ParentId is { } parentId ? parents.GetValueOrDefault(parentId) : null;
             collections.Add((
-                new DavCollection(candidate.Id, DisplayName(candidate, parent), effective.CanEditContent),
+                new DavCollection(candidate.Id, DisplayName(candidate, parent), effective.CanEditContent, Color: null),
                 // The caller's own personal defaults sort first; another user's personal folder shared with
                 // the caller is a normal collection.
                 parent?.PersonalOfUserId == userId));
         }
 
+        var colors = await ColorsAsync(db, userId, protocol, collections.Select(c => c.Collection.FolderId).ToList(), cancellationToken);
+
         return collections
             .OrderByDescending(c => c.IsPersonalDefault)
             .ThenBy(c => c.Collection.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .Select(c => c.Collection)
+            .Select(c => c.Collection with { Color = colors.GetValueOrDefault(c.Collection.FolderId) })
             .ToList();
     }
 
@@ -94,7 +96,8 @@ internal static class DavTree
                 .FirstOrDefaultAsync(cancellationToken)
             : null;
 
-        return new DavCollection(folder.Id, DisplayName(folder, parent), effective.CanEditContent);
+        var colors = await ColorsAsync(db, userId, protocol, [folder.Id], cancellationToken);
+        return new DavCollection(folder.Id, DisplayName(folder, parent), effective.CanEditContent, colors.GetValueOrDefault(folder.Id));
     }
 
     /// <summary>
@@ -155,7 +158,40 @@ internal static class DavTree
         return document is null ? null : await ToItemAsync(db, protocol, document, uid, cancellationToken);
     }
 
+    /// <summary>
+    /// The colour a given user sees for these collections: their own override when they set one, otherwise the
+    /// collection's own "Colour" field. Absence of an override is what makes the default apply, so a reset is a
+    /// delete rather than a write (ADR 0620).
+    /// </summary>
+    private static async Task<Dictionary<Guid, string>> ColorsAsync(
+        SimplArchiveDbContext db, Guid userId, DavProtocol protocol, IReadOnlyList<Guid> folderIds, CancellationToken cancellationToken)
+    {
+        var colorFieldIds = await db.FieldDefinitions
+            .Where(f => f.Name == ColorFieldName
+                && db.MaskVersions.Any(v => v.Id == f.MaskVersionId && v.MaskId == protocol.FolderMaskId))
+            .Select(f => f.Id)
+            .ToListAsync(cancellationToken);
+
+        var defaults = await db.FieldValues
+            .Where(fv => folderIds.Contains(fv.DocumentId) && colorFieldIds.Contains(fv.FieldDefinitionId))
+            .Select(fv => new { fv.DocumentId, fv.Value })
+            .ToDictionaryAsync(fv => fv.DocumentId, fv => fv.Value, cancellationToken);
+
+        var overrides = await db.DavCollectionColors
+            .Where(c => c.UserId == userId && folderIds.Contains(c.DocumentId))
+            .Select(c => new { c.DocumentId, c.Color })
+            .ToDictionaryAsync(c => c.DocumentId, c => c.Color, cancellationToken);
+
+        return folderIds
+            .Select(id => (Id: id, Color: overrides.GetValueOrDefault(id) ?? defaults.GetValueOrDefault(id)))
+            .Where(x => x.Color is { Length: > 0 })
+            .ToDictionary(x => x.Id, x => x.Color!);
+    }
+
     // ---- Shared shapes + queries ---------------------------------------------------------------------
+
+    /// <summary>The folder masks' colour field — the collection's own default (ADR 0620).</summary>
+    internal const string ColorFieldName = "Colour";
 
     private sealed record FolderRow(Guid Id, string Name, Guid? ParentId);
 
@@ -200,9 +236,12 @@ internal static class DavTree
             DocumentId: document.Id,
             ResourceName: resourceUid + protocol.Extension,
             ObjectKey: objectKey,
-            // The document's concurrency token is already the API's ETag for it (ADR 0188); reusing it means a
-            // DAV If-Match and an API If-Match are the same value for the same resource.
-            ETag: document.ConcurrencyToken.ToString(),
-            LastModified: version.CreatedAt);
+            // The CURRENT VERSION's id, not the document's concurrency token (which ADR 0619 chose and slice 2
+            // corrected): an ETag must change exactly when the served bytes change, and filing a new version
+            // does not touch the Document row — so the token stayed put while the content changed. That made
+            // If-Match collision detection inert and would have made a sync client believe nothing had moved.
+            ETag: version.Id.ToString(),
+            LastModified: version.CreatedAt,
+            SizeBytes: version.SizeBytes);
     }
 }

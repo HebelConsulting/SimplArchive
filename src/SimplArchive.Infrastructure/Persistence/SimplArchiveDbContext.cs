@@ -69,6 +69,8 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<SimplArchive.Domain.Imap.ImapSeenMark> ImapSeenMarks => Set<SimplArchive.Domain.Imap.ImapSeenMark>();
 
+    public DbSet<SimplArchive.Domain.CalDav.DavCollectionColor> DavCollectionColors => Set<SimplArchive.Domain.CalDav.DavCollectionColor>();
+
     public DbSet<SimplArchive.Domain.LegalHolds.LegalHoldItem> LegalHoldItems => Set<SimplArchive.Domain.LegalHolds.LegalHoldItem>();
 
     public DbSet<SimplArchive.Domain.Audit.AuditEvent> AuditEvents => Set<SimplArchive.Domain.Audit.AuditEvent>();

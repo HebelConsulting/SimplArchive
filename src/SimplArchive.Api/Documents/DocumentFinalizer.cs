@@ -329,7 +329,7 @@ public class DocumentFinalizer
         }
 
         // A .vcf/.ics becomes a Contact/Calendar (#564, ADR 0619) — required, not decorative: the typed-folder
-        // containment invariant refuses a Basic-Entry-masked child of a Contact/Calendar Folder, so without
+        // containment invariant refuses a Basic-Entry-masked child of a Contact/Calendar, so without
         // this an upload into one of those folders could not be saved at all.
         if (CalendarContactClassifier.Handles(extension)
             && await _calendarContactClassifier.TryClassifyAsync(document, version, cancellationToken))

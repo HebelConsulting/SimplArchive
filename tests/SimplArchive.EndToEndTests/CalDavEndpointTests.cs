@@ -195,19 +195,24 @@ public class CalDavEndpointTests
 
     [Theory]
     [MemberData(nameof(Protocols))]
-    public async Task Writes_are_refused_in_this_read_only_slice(string protocolName)
+    public async Task Structure_changing_verbs_are_refused(string protocolName)
     {
+        // Slice 2 made items writable (PUT/DELETE — CalDavWriteTests), but the archive TREE is still shaped in
+        // the app, not by a sync client: creating, moving or renaming a collection over the protocol stays
+        // refused, the same rule the IMAP endpoint applies to mailboxes.
         var protocol = Of(protocolName);
         var (client, auth, _) = await SeedAsync();
         using var _1 = client;
 
-        using var put = new HttpRequestMessage(HttpMethod.Put, $"{protocol.Base}/{protocol.Collections}/{Guid.NewGuid()}/x{protocol.Extension}")
+        var collection = $"{protocol.Base}/{protocol.Collections}/{Guid.NewGuid()}/";
+        foreach (var method in new[] { "MKCOL", "MOVE", "PROPPATCH" })
         {
-            Content = new ByteArrayContent(Item(protocol, "uid-1", "T")),
-            Headers = { Authorization = auth },
-        };
-        var response = await client.SendAsync(put);
-        Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
-        Assert.Contains("PROPFIND", response.Content.Headers.Allow.Count > 0 ? string.Join(',', response.Content.Headers.Allow) : string.Join(',', response.Headers.GetValues("Allow")));
+            var response = await SendAsync(client, auth, method, collection);
+            Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
+        }
+
+        // A PUT addressed at the COLLECTION rather than an item inside it is equally not a thing.
+        Assert.Equal(HttpStatusCode.MethodNotAllowed,
+            (await SendAsync(client, auth, "PUT", collection, "x")).StatusCode);
     }
 }

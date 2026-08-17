@@ -49,8 +49,8 @@ public sealed class PersonalRepositoryProvisioner
         var root = await EnsureRootAsync(userId, tenantId, cancellationToken);
         await EnsureMyDocumentsAsync(root, tenantId, userId, cancellationToken);
         await EnsureTypedFolderAsync(root, tenantId, userId, NotesFolderName, WellKnownMaskIds.NoteFolder, cancellationToken);
-        await EnsureTypedFolderAsync(root, tenantId, userId, MyCalendarFolderName, WellKnownMaskIds.CalendarFolder, cancellationToken);
-        await EnsureTypedFolderAsync(root, tenantId, userId, MyContactsFolderName, WellKnownMaskIds.ContactFolder, cancellationToken);
+        await EnsureTypedFolderAsync(root, tenantId, userId, MyCalendarFolderName, WellKnownMaskIds.Calendar, cancellationToken);
+        await EnsureTypedFolderAsync(root, tenantId, userId, MyContactsFolderName, WellKnownMaskIds.Addressbook, cancellationToken);
         return root;
     }
 

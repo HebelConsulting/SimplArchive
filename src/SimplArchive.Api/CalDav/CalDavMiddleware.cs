@@ -11,8 +11,8 @@ namespace SimplArchive.Api.CalDav;
 
 /// <summary>
 /// The CalDAV + CardDAV gateway (#564 slice 1, ADR 0619) — read-only in this slice. One implementation over
-/// <see cref="DavProtocol"/>, so the two protocols cannot drift: /caldav serves Calendar Folders as calendar
-/// collections, /carddav serves Contact Folders as address books, each listing every typed folder the caller
+/// <see cref="DavProtocol"/>, so the two protocols cannot drift: /caldav serves Calendars as calendar
+/// collections, /carddav serves Addressbooks as address books, each listing every typed folder the caller
 /// holds CanSee on, wherever it sits in the archive tree.
 /// </summary>
 /// <remarks>
@@ -23,7 +23,7 @@ namespace SimplArchive.Api.CalDav;
 public sealed class CalDavMiddleware
 {
     private const string DavNamespaceDeclarations =
-        "xmlns:D=\"DAV:\" xmlns:C=\"urn:ietf:params:xml:ns:caldav\" xmlns:CARD=\"urn:ietf:params:xml:ns:carddav\" xmlns:CS=\"http://calendarserver.org/ns/\"";
+        "xmlns:D=\"DAV:\" xmlns:C=\"urn:ietf:params:xml:ns:caldav\" xmlns:CARD=\"urn:ietf:params:xml:ns:carddav\" xmlns:CS=\"http://calendarserver.org/ns/\" xmlns:IC=\"http://apple.com/ns/ical/\"";
 
     private readonly RequestDelegate _next;
     private readonly PasswordHasher<User> _passwordHasher = new();
@@ -92,8 +92,11 @@ public sealed class CalDavMiddleware
             case "HEAD":
                 await HandleGetAsync(context, db, rights, services, user, protocol, segments, body: method == "GET");
                 break;
+            case "PUT":
+            case "DELETE":
+                await HandleWriteAsync(context, db, rights, services, user, protocol, segments, method);
+                break;
             default:
-                // Slice 1 is read-only; writes (PUT/DELETE) arrive in slice 2 and answer 405 until then.
                 WriteAllowHeaders(context, protocol);
                 context.Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
                 break;
@@ -103,7 +106,7 @@ public sealed class CalDavMiddleware
     private static void WriteAllowHeaders(HttpContext context, DavProtocol protocol)
     {
         context.Response.Headers["DAV"] = $"1, 3, {protocol.DavCompliance}";
-        context.Response.Headers["Allow"] = "OPTIONS, PROPFIND, REPORT, GET, HEAD";
+        context.Response.Headers["Allow"] = "OPTIONS, PROPFIND, REPORT, GET, HEAD, PUT, DELETE";
     }
 
     // The SHARED DAV password (epic decision): the WebDAV credential authenticates all three DAV surfaces.
@@ -314,6 +317,41 @@ public sealed class CalDavMiddleware
         return hrefs;
     }
 
+    // ---- PUT / DELETE --------------------------------------------------------------------------------
+
+    private static async Task HandleWriteAsync(
+        HttpContext context, SimplArchiveDbContext db, IEffectiveRightsCalculator rights, IServiceProvider services,
+        User user, DavProtocol protocol, List<string> segments, string method)
+    {
+        // Both verbs address ONE item: /{protocol}/{collections}/{folderId}/{resourceName}. A write to the
+        // collection itself is not offered — the archive tree is shaped in the app, not by a sync client
+        // (the same rule the IMAP endpoint applies to mailboxes).
+        if (segments is not [var collections, var folderSegment, var resourceSegment]
+            || !collections.Equals(protocol.CollectionsSegment, StringComparison.OrdinalIgnoreCase)
+            || !Guid.TryParse(folderSegment, out var folderId))
+        {
+            context.Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
+            return;
+        }
+
+        // The collection must be one the caller can see, and really wear the protocol's folder mask.
+        if (await DavTree.CollectionAsync(db, rights, user.Id, protocol, folderId, context.RequestAborted) is null)
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        var resourceName = Uri.UnescapeDataString(resourceSegment);
+        if (method == "PUT")
+        {
+            await DavWrites.PutAsync(context, db, rights, services, user, protocol, folderId, resourceName);
+        }
+        else
+        {
+            await DavWrites.DeleteAsync(context, db, rights, services, user, protocol, folderId, resourceName);
+        }
+    }
+
     // ---- GET -----------------------------------------------------------------------------------------
 
     private static async Task HandleGetAsync(
@@ -409,12 +447,31 @@ public sealed class CalDavMiddleware
         + (protocol == DavProtocol.CalDav
             ? "<C:supported-calendar-component-set><C:comp name=\"VEVENT\"/></C:supported-calendar-component-set>"
             : string.Empty)
-        // Slice 1 is read-only for every caller; slice 2 relaxes this to the collection's own writability.
-        + "<D:current-user-privilege-set><D:privilege><D:read/></D:privilege></D:current-user-privilege-set>";
+        // What REPORTs this collection answers. A client (DAVx⁵ among them) probes this before deciding
+        // whether it may use multiget at all — omitting it makes a capable server look incapable, so it is
+        // advertised even though slice 2 has no sync-collection yet (that arrives with slice 3).
+        + $"<D:supported-report-set><D:supported-report><D:report><{protocol.NamespacePrefix}:{protocol.MultigetReport}/></D:report></D:supported-report>"
+        + $"<D:supported-report><D:report><{protocol.NamespacePrefix}:{protocol.QueryReport}/></D:report></D:supported-report></D:supported-report-set>"
+        // The colour, in the namespace every calendar/contacts client actually reads it from (ADR 0620).
+        + (collection.Color is { Length: > 0 } color
+            ? $"<IC:calendar-color>{WebDavXml.Xml(color)}</IC:calendar-color>"
+            : string.Empty)
+        // What the caller actually holds on this collection (#564 slice 2) — a client that sees only <read/>
+        // disables its own new/edit affordances, which is exactly right for a read-only collection.
+        // The privileges the caller actually holds. A client checks for BIND before offering "new item" and
+        // UNBIND before offering delete — reporting only <write/> (as a first cut did) leaves some clients
+        // read-only despite the rights; the sister project's DavPrivileges maps the same way.
+        + "<D:current-user-privilege-set><D:privilege><D:read/></D:privilege>"
+        + (collection.Writable
+            ? "<D:privilege><D:write/></D:privilege><D:privilege><D:write-content/></D:privilege>"
+              + "<D:privilege><D:bind/></D:privilege><D:privilege><D:unbind/></D:privilege>"
+            : string.Empty)
+        + "</D:current-user-privilege-set>";
 
     private static string ItemProps(DavProtocol protocol, DavItem item) =>
         $"<D:resourcetype/><D:getetag>\"{WebDavXml.Xml(item.ETag)}\"</D:getetag>"
         + $"<D:getcontenttype>{WebDavXml.Xml(protocol.ContentType)}</D:getcontenttype>"
+        + (item.SizeBytes is { } size ? $"<D:getcontentlength>{size}</D:getcontentlength>" : string.Empty)
         + $"<D:getlastmodified>{item.LastModified.UtcDateTime:R}</D:getlastmodified>";
 
     // The DAV: multistatus, with the CalDAV/CardDAV namespaces declared up front — WebDavXml's writer declares

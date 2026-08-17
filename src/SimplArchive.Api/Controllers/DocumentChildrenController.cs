@@ -327,7 +327,24 @@ public class DocumentChildrenController : ControllerBase
     public class CreateChildRequest
     {
         public string Name { get; set; } = "";
+
+        /// <summary>
+        /// Which kind of folder to create (#564 slice 2, ADR 0620) — omitted means a plain folder, as before.
+        /// Only FOLDER masks can be asked for: what an item is gets decided by classifying its content, not
+        /// by a caller asserting it.
+        /// </summary>
+        public string? FolderMask { get; set; }
     }
+
+    // The folder kinds a caller may name, mapped to their well-known mask. Kept here rather than exposing raw
+    // mask ids: the wire stays readable, and the set is exactly the typed folders a client can create.
+    private static readonly Dictionary<string, Guid> CreatableFolderMasks = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["folder"] = WellKnownMaskIds.Folder,
+        ["calendar"] = WellKnownMaskIds.Calendar,
+        ["addressbook"] = WellKnownMaskIds.Addressbook,
+        ["notes"] = WellKnownMaskIds.NoteFolder,
+    };
 
     [HttpPost("children")]
     public async Task<IActionResult> CreateChild(Guid documentId, [FromBody] CreateChildRequest request, CancellationToken cancellationToken)
@@ -340,6 +357,15 @@ public class DocumentChildrenController : ControllerBase
         if (parent is null)
         {
             return NotFound();
+        }
+
+        // Resolve the requested folder kind before doing anything else — an unknown one is the caller's mistake,
+        // not a half-created folder.
+        var folderMaskId = WellKnownMaskIds.Folder;
+        if (request.FolderMask is { Length: > 0 } requestedMask
+            && !CreatableFolderMasks.TryGetValue(requestedMask, out folderMaskId))
+        {
+            throw new InvalidFolderMaskException(requestedMask);
         }
 
         var rights = await _access.GetCallerRightsAsync(documentId, cancellationToken);
@@ -358,7 +384,10 @@ public class DocumentChildrenController : ControllerBase
             ParentId = documentId,
             Name = request.Name,
             // Assigned the Folder mask now; if a version is later added, finalize reclassifies it (ADR "Folder mask on folders").
-            MaskVersionId = await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken),
+            // A typed folder (#564) instead wears the mask the request named — resolved tenant-explicitly, so a
+            // caller with no ambient tenant can't produce a maskless folder (ADR 0590's defect).
+            MaskVersionId = await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, parent.TenantId, folderMaskId, cancellationToken)
+                ?? await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken),
             CreatedByUserId = createdByUserId,
             CreatedByServiceAccountId = createdByServiceAccountId,
             CreatedAt = DateTimeOffset.UtcNow,

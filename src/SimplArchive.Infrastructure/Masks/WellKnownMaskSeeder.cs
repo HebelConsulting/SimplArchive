@@ -22,6 +22,8 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
 
     private record FieldSpec(string Name, FieldDataType DataType, bool IsRequired);
 
+    private static readonly FieldSpec ColourField = new("Colour", FieldDataType.Text, IsRequired: false);
+
     public async Task EnsureWellKnownMasksAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Folder, "Folder", [], cancellationToken);
@@ -85,12 +87,15 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("Modified", FieldDataType.Date, IsRequired: false),
         ], cancellationToken);
 
+        // The collection's DEFAULT colour is an ordinary optional field on the FOLDER mask (#564 slice 2,
+        // ADR 0620), so every collection carries its own and a per-user override (DavCollectionColors) sits
+        // on top. Optional, so #579's field-healing can add it to tenants seeded before this slice.
         // The CalDAV/CardDAV pairs (#564, ADR 0619) — same shape as the Notes pair: the folder masks are
         // fieldless (they type the folder, and unlike Notes they may sit anywhere in the tree), the item masks
         // carry the fields extracted from the stored .vcf/.ics. The UID fields are the correlation keys a DAV
         // PUT matches on to make a new version rather than a second document. Recurrence stays opaque in the
         // .ics — "Start"/"End" are the first occurrence's, for search and listing only.
-        await EnsureMaskAsync(tenantId, WellKnownMaskIds.ContactFolder, "Contact Folder", [], cancellationToken);
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Addressbook, "Addressbook", [ColourField], cancellationToken);
 
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Contact, "Contact",
         [
@@ -101,15 +106,18 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("Organization", FieldDataType.Text, IsRequired: false),
         ], cancellationToken);
 
-        await EnsureMaskAsync(tenantId, WellKnownMaskIds.CalendarFolder, "Calendar Folder", [], cancellationToken);
-
-        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Calendar, "Calendar",
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Appointment, "Appointment",
         [
             new FieldSpec("Event UID", FieldDataType.Text, IsRequired: true),
             new FieldSpec("Start", FieldDataType.Date, IsRequired: false),
             new FieldSpec("End", FieldDataType.Date, IsRequired: false),
             new FieldSpec("Location", FieldDataType.Text, IsRequired: false),
         ], cancellationToken);
+
+        // AFTER the item, deliberately: MaskVersions has a unique (TenantId, Name) index, and this folder mask
+        // is taking the name "Calendar" that the ITEM mask held before the rename to Appointment. Renaming the
+        // item out of the way first is what stops the heal colliding with itself on every existing tenant.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Calendar, "Calendar", [ColourField], cancellationToken);
     }
 
     private async Task EnsureMaskAsync(Guid tenantId, Guid maskId, string name, IReadOnlyList<FieldSpec> fields, CancellationToken cancellationToken)
@@ -122,6 +130,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // report "not found" regardless of the real data.
         if (await _dbContext.Masks.IgnoreQueryFilters(["TenantFilter"]).AnyAsync(m => m.TenantId == tenantId && m.Id == maskId, cancellationToken))
         {
+            await RenameIfNeededAsync(tenantId, maskId, name, cancellationToken);
             await AddMissingFieldsAsync(tenantId, maskId, fields, cancellationToken);
             return;
         }
@@ -213,6 +222,30 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         _logger.LogInformation("Added {Count} missing field(s) to well-known mask {MaskId} for tenant {TenantId}: {Fields}",
             missing.Count, maskId, tenantId, string.Join(", ", missing.Select(f => f.Name)));
 
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Heals a well-known mask's NAME on an upgrade. A tenant seeded before a rename keeps the old name
+    /// forever otherwise — the field-heal beside this covers what a mask CONTAINS but never what it is
+    /// CALLED, and "Contact Folder"/"Calendar Folder" were renamed to "Addressbook"/"Calendar" (with their
+    /// items "Contact"/"Appointment") after the first tenants had already been seeded. Renamed in place on
+    /// the current version rather than minting a new one, for the same reason the field-heal does: a
+    /// well-known mask stays on exactly one version.
+    /// </summary>
+    private async Task RenameIfNeededAsync(Guid tenantId, Guid maskId, string name, CancellationToken cancellationToken)
+    {
+        var current = await _dbContext.MaskVersions.IgnoreQueryFilters(["TenantFilter"])
+            .Where(v => v.TenantId == tenantId && v.MaskId == maskId && v.IsCurrent)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (current is null || current.Name == name)
+        {
+            return;
+        }
+
+        _logger.LogInformation("Renaming well-known mask {MaskId} for tenant {TenantId} from {OldName} to {NewName}",
+            maskId, tenantId, current.Name, name);
+        current.Name = name;
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }
