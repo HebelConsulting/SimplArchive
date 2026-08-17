@@ -292,7 +292,7 @@
     /* Fill the space between the ribbon and the bottom tab bar (and scroll internally), so the tab bar stays
        pinned — same as .wb-cols/.wb-search. Without this the content-sized panel lets the tab bar ride up or
        get pushed off-screen. */
-    .wb-tasks, .wb-checkout, .wb-tenant, .wb-mywork, .wb-tags { flex: 1 1 auto; min-height: 0; }
+    .wb-tasks, .wb-checkout, .wb-tenant, .wb-mywork, .wb-tags, .wb-contacts, .wb-calendar { flex: 1 1 auto; min-height: 0; }
     .wb-setting-row { display: flex; align-items: flex-start; gap: 4px; }
     .wb-setting-row .mud-icon-button { margin-top: 6px; }
     /* Users & groups admin tab: principal list | rights matrix. Fills to the tab bar, same as .wb-cols. */
@@ -787,6 +787,16 @@
             {
                 <RecycleBinTab IsTenantAdmin="_isTenantAdmin" />
             }
+            else if (_activeTab == Tab.Contacts)
+            {
+                @* Self-contained: it reads its own collections from the davCollections rel and owns its
+                   selection, so the shell hands it nothing (ADR 0558). *@
+                <ContactsTab />
+            }
+            else if (_activeTab == Tab.Calendar)
+            {
+                <CalendarTab />
+            }
             else
             {
                 <div class="wb-placeholder">
@@ -799,78 +809,54 @@
                `aria-label`; touch devices (no hover → no tooltip) keep the visible label via the .wb-tab-label span.
                Check-out/Tasks show their live count as a small badge overlaid on the icon (mirrors the desktop). *@
             <div class="wb-tabs" data-tour="tab-bar">
-                <div class="wb-tab @(_activeTab == Tab.Repositories ? "wb-tab-active" : "")" data-tour="tab-repositories" data-tour-active="@(_activeTab == Tab.Repositories ? "true" : "false")" title="@Strings.Get("TabRepositories")" aria-label="@Strings.Get("TabRepositories")" @onclick="() => SetTab(Tab.Repositories)">
-                    <span class="wb-tab-ico"><MudIcon Icon="@Icons.Material.Filled.Folder" Size="Size.Small" /></span>
-                    <span class="wb-tab-label">@Strings.Get("TabRepositories")</span>
-                </div>
-                <div class="wb-tab @(_activeTab == Tab.Intray ? "wb-tab-active" : "")" data-tour="tab-intray" data-tour-active="@(_activeTab == Tab.Intray ? "true" : "false")" title="@Strings.Get("TabIntray")" aria-label="@Strings.Get("TabIntray")" @onclick="() => SetTab(Tab.Intray)">
-                    <span class="wb-tab-ico"><MudIcon Icon="@Icons.Material.Filled.Inbox" Size="Size.Small" /></span>
-                    <span class="wb-tab-label">@Strings.Get("TabIntray")</span>
-                </div>
-                <div class="wb-tab @(_activeTab == Tab.Checkout ? "wb-tab-active" : "")" data-tour="tab-checkout" data-tour-active="@(_activeTab == Tab.Checkout ? "true" : "false")" title="@Strings.Get("TabCheckout")" aria-label="@Strings.Get("TabCheckout")" @onclick="() => SetTab(Tab.Checkout)">
-                    <span class="wb-tab-ico">
-                        <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" />
-                        @if (_checkouts.Count > 0) { <span class="wb-tab-badge">@_checkouts.Count</span> }
-                    </span>
-                    <span class="wb-tab-label">@Strings.Get("TabCheckout")</span>
-                </div>
-                <div class="wb-tab @(_activeTab == Tab.Search ? "wb-tab-active" : "")" data-tour="tab-search" data-tour-active="@(_activeTab == Tab.Search ? "true" : "false")" title="@Strings.Get("TabSearch")" aria-label="@Strings.Get("TabSearch")" @onclick="() => SetTab(Tab.Search)">
-                    <span class="wb-tab-ico"><MudIcon Icon="@Icons.Material.Filled.Search" Size="Size.Small" /></span>
-                    <span class="wb-tab-label">@Strings.Get("TabSearch")</span>
-                </div>
-                <div class="wb-tab @(_activeTab == Tab.RecycleBin ? "wb-tab-active" : "")" data-tour="tab-recycle-bin" data-tour-active="@(_activeTab == Tab.RecycleBin ? "true" : "false")" title="@Strings.Get("TabRecycleBin")" aria-label="@Strings.Get("TabRecycleBin")" @onclick="() => SetTab(Tab.RecycleBin)">
-                    <span class="wb-tab-ico"><MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" /></span>
-                    <span class="wb-tab-label">@Strings.Get("TabRecycleBin")</span>
-                </div>
-                <div class="wb-tab @(_activeTab == Tab.Tasks ? "wb-tab-active" : "")" data-tour="tab-tasks" data-tour-active="@(_activeTab == Tab.Tasks ? "true" : "false")" title="@Strings.Get("TabTasks")" aria-label="@Strings.Get("TabTasks")" @onclick="() => SetTab(Tab.Tasks)">
-                    <span class="wb-tab-ico">
-                        <MudIcon Icon="@Icons.Material.Filled.Task" Size="Size.Small" />
-                        @if (_taskCount > 0) { <span class="wb-tab-badge">@_taskCount</span> }
-                    </span>
-                    <span class="wb-tab-label">@Strings.Get("TabTasks")</span>
-                </div>
-                <div class="wb-tab @(_activeTab == Tab.MyWork ? "wb-tab-active" : "")" data-tour="tab-my-work" data-tour-active="@(_activeTab == Tab.MyWork ? "true" : "false")" title="@Strings.Get("TabMyWork")" aria-label="@Strings.Get("TabMyWork")" @onclick="() => SetTab(Tab.MyWork)">
-                    <span class="wb-tab-ico"><MudIcon Icon="@Icons.Material.Filled.Dashboard" Size="Size.Small" /></span>
-                    <span class="wb-tab-label">@Strings.Get("TabMyWork")</span>
-                </div>
+                <WorkbenchTab Icon="@Icons.Material.Filled.Folder" Label="@Strings.Get("TabRepositories")" Tour="tab-repositories"
+                              Active="@(_activeTab == Tab.Repositories)" OnClick="@(() => SetTab(Tab.Repositories))" />
+                <WorkbenchTab Icon="@Icons.Material.Filled.Inbox" Label="@Strings.Get("TabIntray")" Tour="tab-intray"
+                              Active="@(_activeTab == Tab.Intray)" OnClick="@(() => SetTab(Tab.Intray))" />
+                <WorkbenchTab Icon="@Icons.Material.Filled.Lock" Label="@Strings.Get("TabCheckout")" Tour="tab-checkout"
+                              Active="@(_activeTab == Tab.Checkout)" OnClick="@(() => SetTab(Tab.Checkout))">
+                    <Badge>@if (_checkouts.Count > 0) { <span class="wb-tab-badge">@_checkouts.Count</span> }</Badge>
+                </WorkbenchTab>
+                <WorkbenchTab Icon="@Icons.Material.Filled.Search" Label="@Strings.Get("TabSearch")" Tour="tab-search"
+                              Active="@(_activeTab == Tab.Search)" OnClick="@(() => SetTab(Tab.Search))" />
+                <WorkbenchTab Icon="@Icons.Material.Filled.Delete" Label="@Strings.Get("TabRecycleBin")" Tour="tab-recycle-bin"
+                              Active="@(_activeTab == Tab.RecycleBin)" OnClick="@(() => SetTab(Tab.RecycleBin))" />
+                <WorkbenchTab Icon="@Icons.Material.Filled.Task" Label="@Strings.Get("TabTasks")" Tour="tab-tasks"
+                              Active="@(_activeTab == Tab.Tasks)" OnClick="@(() => SetTab(Tab.Tasks))">
+                    <Badge>@if (_taskCount > 0) { <span class="wb-tab-badge">@_taskCount</span> }</Badge>
+                </WorkbenchTab>
+                <WorkbenchTab Icon="@Icons.Material.Filled.ContactPage" Label="@Strings.Get("TabContacts")" Tour="tab-contacts"
+                              Active="@(_activeTab == Tab.Contacts)" OnClick="@(() => SetTab(Tab.Contacts))" />
+                <WorkbenchTab Icon="@Icons.Material.Filled.CalendarMonth" Label="@Strings.Get("TabCalendar")" Tour="tab-calendar"
+                              Active="@(_activeTab == Tab.Calendar)" OnClick="@(() => SetTab(Tab.Calendar))" />
+                <WorkbenchTab Icon="@Icons.Material.Filled.Dashboard" Label="@Strings.Get("TabMyWork")" Tour="tab-my-work"
+                              Active="@(_activeTab == Tab.MyWork)" OnClick="@(() => SetTab(Tab.MyWork))" />
                 @if (_canManageUsers)
                 {
-                    <div class="wb-tab @(_activeTab == Tab.UsersGroups ? "wb-tab-active" : "")" data-tour="tab-users-groups" data-tour-active="@(_activeTab == Tab.UsersGroups ? "true" : "false")" title="@Strings.Get("TabUsersGroups")" aria-label="@Strings.Get("TabUsersGroups")" @onclick="() => SetTab(Tab.UsersGroups)">
-                        <span class="wb-tab-ico"><MudIcon Icon="@Icons.Material.Filled.ManageAccounts" Size="Size.Small" /></span>
-                        <span class="wb-tab-label">@Strings.Get("TabUsersGroups")</span>
-                    </div>
+                    <WorkbenchTab Icon="@Icons.Material.Filled.ManageAccounts" Label="@Strings.Get("TabUsersGroups")" Tour="tab-users-groups"
+                                  Active="@(_activeTab == Tab.UsersGroups)" OnClick="@(() => SetTab(Tab.UsersGroups))" />
                 }
                 @if (_canViewAuditLog)
                 {
-                    <div class="wb-tab @(_activeTab == Tab.Audit ? "wb-tab-active" : "")" data-tour="tab-audit" data-tour-active="@(_activeTab == Tab.Audit ? "true" : "false")" title="@Strings.Get("TabAudit")" aria-label="@Strings.Get("TabAudit")" @onclick="() => SetTab(Tab.Audit)">
-                        <span class="wb-tab-ico"><MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" /></span>
-                        <span class="wb-tab-label">@Strings.Get("TabAudit")</span>
-                    </div>
+                    <WorkbenchTab Icon="@Icons.Material.Filled.History" Label="@Strings.Get("TabAudit")" Tour="tab-audit"
+                                  Active="@(_activeTab == Tab.Audit)" OnClick="@(() => SetTab(Tab.Audit))" />
                 }
                 @if (_canLegalHold)
                 {
-                    <div class="wb-tab @(_activeTab == Tab.LegalHolds ? "wb-tab-active" : "")" data-tour="tab-legal-holds" data-tour-active="@(_activeTab == Tab.LegalHolds ? "true" : "false")" title="@Strings.Get("TabLegalHolds")" aria-label="@Strings.Get("TabLegalHolds")" @onclick="() => SetTab(Tab.LegalHolds)">
-                        <span class="wb-tab-ico"><MudIcon Icon="@Icons.Material.Filled.Gavel" Size="Size.Small" /></span>
-                        <span class="wb-tab-label">@Strings.Get("TabLegalHolds")</span>
-                    </div>
+                    <WorkbenchTab Icon="@Icons.Material.Filled.Gavel" Label="@Strings.Get("TabLegalHolds")" Tour="tab-legal-holds"
+                                  Active="@(_activeTab == Tab.LegalHolds)" OnClick="@(() => SetTab(Tab.LegalHolds))" />
                 }
                 @if (_canManageClassification)
                 {
-                    <div class="wb-tab @(_activeTab == Tab.Retention ? "wb-tab-active" : "")" data-tour="tab-retention" data-tour-active="@(_activeTab == Tab.Retention ? "true" : "false")" title="@Strings.Get("TabRetention")" aria-label="@Strings.Get("TabRetention")" @onclick="() => SetTab(Tab.Retention)">
-                        <span class="wb-tab-ico"><MudIcon Icon="@Icons.Material.Filled.EventBusy" Size="Size.Small" /></span>
-                        <span class="wb-tab-label">@Strings.Get("TabRetention")</span>
-                    </div>
+                    <WorkbenchTab Icon="@Icons.Material.Filled.EventBusy" Label="@Strings.Get("TabRetention")" Tour="tab-retention"
+                                  Active="@(_activeTab == Tab.Retention)" OnClick="@(() => SetTab(Tab.Retention))" />
                 }
                 @if (_isTenantAdmin)
                 {
-                    <div class="wb-tab @(_activeTab == Tab.Tags ? "wb-tab-active" : "")" data-tour="tab-tags" data-tour-active="@(_activeTab == Tab.Tags ? "true" : "false")" title="@Strings.Get("TabTags")" aria-label="@Strings.Get("TabTags")" @onclick="() => SetTab(Tab.Tags)">
-                        <span class="wb-tab-ico"><MudIcon Icon="@Icons.Material.Filled.Label" Size="Size.Small" /></span>
-                        <span class="wb-tab-label">@Strings.Get("TabTags")</span>
-                    </div>
-                    <div class="wb-tab @(_activeTab == Tab.Tenant ? "wb-tab-active" : "")" data-tour="tab-tenant" data-tour-active="@(_activeTab == Tab.Tenant ? "true" : "false")" title="@Strings.Get("TabTenant")" aria-label="@Strings.Get("TabTenant")" @onclick="() => SetTab(Tab.Tenant)">
-                        <span class="wb-tab-ico"><MudIcon Icon="@Icons.Material.Filled.Business" Size="Size.Small" /></span>
-                        <span class="wb-tab-label">@Strings.Get("TabTenant")</span>
-                    </div>
+                    <WorkbenchTab Icon="@Icons.Material.Filled.Label" Label="@Strings.Get("TabTags")" Tour="tab-tags"
+                                  Active="@(_activeTab == Tab.Tags)" OnClick="@(() => SetTab(Tab.Tags))" />
+                    <WorkbenchTab Icon="@Icons.Material.Filled.Business" Label="@Strings.Get("TabTenant")" Tour="tab-tenant"
+                                  Active="@(_activeTab == Tab.Tenant)" OnClick="@(() => SetTab(Tab.Tenant))" />
                 }
             </div>
         </div>
@@ -887,7 +873,7 @@
 </AuthorizeView>
 
 @code {
-    private enum Tab { Repositories, Intray, Checkout, Tasks, Search, RecycleBin, MyWork, UsersGroups, Audit, LegalHolds, Retention, Tenant, Tags }
+    private enum Tab { Repositories, Intray, Checkout, Tasks, Search, RecycleBin, MyWork, UsersGroups, Audit, LegalHolds, Retention, Tenant, Tags, Contacts, Calendar }
 
 
     // Reference (shortcut) metadata mirrors the desktop client: for a reference, Id is the TARGET's id (so

@@ -4296,4 +4296,37 @@
   <data name="ContactsNewNotYet" xml:space="preserve">
     <value>Crear contactos en la aplicación aún no está disponible — por ahora use un cliente CardDAV.</value>
   </data>
+  <data name="TabCalendar" xml:space="preserve">
+    <value>Calendario</value>
+  </data>
+  <data name="CalendarCollections" xml:space="preserve">
+    <value>Calendarios</value>
+  </data>
+  <data name="CalendarNoneSelected" xml:space="preserve">
+    <value>Marca un calendario para ver sus citas.</value>
+  </data>
+  <data name="CalendarNew" xml:space="preserve">
+    <value>Nueva cita</value>
+  </data>
+  <data name="CalendarNewNotYet" xml:space="preserve">
+    <value>Crear citas aún no está disponible.</value>
+  </data>
+  <data name="CalendarWhen" xml:space="preserve">
+    <value>Cuándo</value>
+  </data>
+  <data name="CalendarStarts" xml:space="preserve">
+    <value>Inicio</value>
+  </data>
+  <data name="CalendarWhere" xml:space="preserve">
+    <value>Dónde</value>
+  </data>
+  <data name="StErrLoadCalendars" xml:space="preserve">
+    <value>No se pudieron cargar los calendarios: {0}</value>
+  </data>
+  <data name="ContactsEmpty" xml:space="preserve">
+    <value>No hay contactos en las libretas marcadas.</value>
+  </data>
+  <data name="CalendarEmpty" xml:space="preserve">
+    <value>No hay citas en los calendarios marcados.</value>
+  </data>
 </root>

@@ -4296,4 +4296,37 @@
   <data name="ContactsNewNotYet" xml:space="preserve">
     <value>Kontakte können noch nicht in der App erstellt werden — bitte vorerst über einen CardDAV-Client anlegen.</value>
   </data>
+  <data name="TabCalendar" xml:space="preserve">
+    <value>Kalender</value>
+  </data>
+  <data name="CalendarCollections" xml:space="preserve">
+    <value>Kalender</value>
+  </data>
+  <data name="CalendarNoneSelected" xml:space="preserve">
+    <value>Kalender ankreuzen, um dessen Termine zu sehen.</value>
+  </data>
+  <data name="CalendarNew" xml:space="preserve">
+    <value>Neuer Termin</value>
+  </data>
+  <data name="CalendarNewNotYet" xml:space="preserve">
+    <value>Termine anlegen ist noch nicht verfügbar.</value>
+  </data>
+  <data name="CalendarWhen" xml:space="preserve">
+    <value>Wann</value>
+  </data>
+  <data name="CalendarStarts" xml:space="preserve">
+    <value>Beginn</value>
+  </data>
+  <data name="CalendarWhere" xml:space="preserve">
+    <value>Wo</value>
+  </data>
+  <data name="StErrLoadCalendars" xml:space="preserve">
+    <value>Kalender konnten nicht geladen werden: {0}</value>
+  </data>
+  <data name="ContactsEmpty" xml:space="preserve">
+    <value>Keine Kontakte in den angekreuzten Adressbüchern.</value>
+  </data>
+  <data name="CalendarEmpty" xml:space="preserve">
+    <value>Keine Termine in den angekreuzten Kalendern.</value>
+  </data>
 </root>

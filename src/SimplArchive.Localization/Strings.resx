@@ -4296,4 +4296,37 @@
   <data name="ContactsNewNotYet" xml:space="preserve">
     <value>Creating a contact in the app is not available yet — add it from a CardDAV client for now.</value>
   </data>
+  <data name="TabCalendar" xml:space="preserve">
+    <value>Calendar</value>
+  </data>
+  <data name="CalendarCollections" xml:space="preserve">
+    <value>Calendars</value>
+  </data>
+  <data name="CalendarNoneSelected" xml:space="preserve">
+    <value>Tick a calendar to see its appointments.</value>
+  </data>
+  <data name="CalendarNew" xml:space="preserve">
+    <value>New appointment</value>
+  </data>
+  <data name="CalendarNewNotYet" xml:space="preserve">
+    <value>Creating appointments is not available yet.</value>
+  </data>
+  <data name="CalendarWhen" xml:space="preserve">
+    <value>When</value>
+  </data>
+  <data name="CalendarStarts" xml:space="preserve">
+    <value>Starts</value>
+  </data>
+  <data name="CalendarWhere" xml:space="preserve">
+    <value>Where</value>
+  </data>
+  <data name="StErrLoadCalendars" xml:space="preserve">
+    <value>Could not load calendars: {0}</value>
+  </data>
+  <data name="ContactsEmpty" xml:space="preserve">
+    <value>No contacts in the ticked addressbooks.</value>
+  </data>
+  <data name="CalendarEmpty" xml:space="preserve">
+    <value>No appointments in the ticked calendars.</value>
+  </data>
 </root>

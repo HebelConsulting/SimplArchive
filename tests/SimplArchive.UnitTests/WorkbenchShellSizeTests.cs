@@ -36,7 +36,12 @@ public class WorkbenchShellSizeTests
     // caught +16, most of which was commentary that belonged in the commit message, and only the 11 lines that
     // are actually code survived the trim. That is the intended interaction: growth has to be argued for, not
     // noticed later.
-    private const int Ceiling = 3_204;
+    // 3,204 → 3,190 with the Contacts and Calendar tabs ADDED (#564, ADR 0624): their markup would have cost
+    // +18, so the bottom tab bar was extracted into <WorkbenchTab> first. It was fifteen copies of the same
+    // four lines differing in an icon, a label and a tour id — which is why every tab added cost the shell
+    // another four. Paying rather than raising is the point of this guard: the growth got argued for, and the
+    // argument produced a component instead of a bigger number.
+    private const int Ceiling = 3_190;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

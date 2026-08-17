@@ -1,0 +1,65 @@
+@using SimplArchive.Client.Services
+
+@* The collection pane the Contacts and Calendar tabs share (#564): a FLAT checkbox list, because a client
+   picks collections from a list and several OVERLAY — a tree would imply one choice at a time.
+
+   Shared rather than written twice: the two tabs differ in what they LIST (contacts versus appointments) but
+   not at all in how collections are picked, and a copy would be the one that stops getting the fix (CLAUDE.md
+   reaches for the shared implementation at the second occurrence, not the fourth). What differs per tab — the
+   heading, and what to do when a tick changes — arrives as parameters. *@
+
+<div style="height:100%; display:flex; flex-direction:column; min-width:0;">
+    <div class="pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+        <MudText Typo="Typo.subtitle2">@Heading</MudText>
+    </div>
+    <div style="flex:1 1 auto; overflow:auto;" class="pa-1">
+        @foreach (var collection in Collections)
+        {
+            <div class="d-flex align-center" style="gap:6px; min-width:0;">
+                <MudCheckBox T="bool" Dense="true" Size="Size.Small"
+                             Value="@Checked.Contains(collection.Id)"
+                             ValueChanged="@(async (bool v) => await ToggleAsync(collection, v))"
+                             aria-label="@collection.DisplayName" />
+                @* The swatch is what tells overlaid collections apart once more than one is ticked (ADR 0620). *@
+                <span style="@SwatchStyle(collection.Color)"></span>
+                <MudText Typo="Typo.body2" Style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                         title="@collection.DisplayName">@collection.DisplayName</MudText>
+            </div>
+        }
+        @if (Collections.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-2">@EmptyText</MudText>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<DavCollection> Collections { get; set; } = [];
+
+    /// <summary>The ids currently ticked. Held by the TAB, since it is what re-reads on a change.</summary>
+    [Parameter, EditorRequired] public HashSet<Guid> Checked { get; set; } = [];
+
+    [Parameter, EditorRequired] public string Heading { get; set; } = string.Empty;
+
+    [Parameter] public string EmptyText { get; set; } = string.Empty;
+
+    /// <summary>Raised after the tick is applied, so the tab re-reads its merged list.</summary>
+    [Parameter] public EventCallback ChangedAsync { get; set; }
+
+    private static string SwatchStyle(string? color) =>
+        $"display:inline-block; width:10px; height:10px; border-radius:5px; flex:0 0 auto; background:{color ?? "#8a8a8a"};";
+
+    private async Task ToggleAsync(DavCollection collection, bool ticked)
+    {
+        if (ticked)
+        {
+            Checked.Add(collection.Id);
+        }
+        else
+        {
+            Checked.Remove(collection.Id);
+        }
+
+        await ChangedAsync.InvokeAsync();
+    }
+}

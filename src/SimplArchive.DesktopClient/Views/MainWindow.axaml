@@ -2004,6 +2004,13 @@
                 <v:ContactsTab DataContext="{Binding ContactsTab}" />
             </TabItem>
 
+            <!-- Calendar (#564) — the twin of Contacts, which CalDAV also serves. Same shape, same reasoning:
+                 appended so no other tab's index moves, and its own control with its own view-model. -->
+            <TabItem ToolTip.Tip="{loc:Tr TabCalendar}">
+                <TabItem.Header><i:Icon Value="mdi-calendar-month-outline" FontSize="20" /></TabItem.Header>
+                <v:CalendarTab DataContext="{Binding CalendarTab}" />
+            </TabItem>
+
         </TabControl>
     </DockPanel>
 </Window>

@@ -4296,4 +4296,37 @@
   <data name="ContactsNewNotYet" xml:space="preserve">
     <value>La creazione di contatti nell'app non è ancora disponibile — per ora usa un client CardDAV.</value>
   </data>
+  <data name="TabCalendar" xml:space="preserve">
+    <value>Calendario</value>
+  </data>
+  <data name="CalendarCollections" xml:space="preserve">
+    <value>Calendari</value>
+  </data>
+  <data name="CalendarNoneSelected" xml:space="preserve">
+    <value>Seleziona un calendario per vederne gli appuntamenti.</value>
+  </data>
+  <data name="CalendarNew" xml:space="preserve">
+    <value>Nuovo appuntamento</value>
+  </data>
+  <data name="CalendarNewNotYet" xml:space="preserve">
+    <value>La creazione di appuntamenti non è ancora disponibile.</value>
+  </data>
+  <data name="CalendarWhen" xml:space="preserve">
+    <value>Quando</value>
+  </data>
+  <data name="CalendarStarts" xml:space="preserve">
+    <value>Inizio</value>
+  </data>
+  <data name="CalendarWhere" xml:space="preserve">
+    <value>Dove</value>
+  </data>
+  <data name="StErrLoadCalendars" xml:space="preserve">
+    <value>Impossibile caricare i calendari: {0}</value>
+  </data>
+  <data name="ContactsEmpty" xml:space="preserve">
+    <value>Nessun contatto negli indirizzari selezionati.</value>
+  </data>
+  <data name="CalendarEmpty" xml:space="preserve">
+    <value>Nessun appuntamento nei calendari selezionati.</value>
+  </data>
 </root>

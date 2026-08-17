@@ -1,0 +1,172 @@
+@using SimplArchive.Client.Services
+@inject DavCollections DavCollections
+@inject BrowseService Browse
+@inject ISnackbar Snackbar
+
+@* The Contacts tab of the workbench (#564) — the web twin of the desktop tab, which is the reference
+   (ADR 0511): addressbooks │ contacts │ detail, with the collections picked from a flat checkbox list because
+   several OVERLAY. Nothing here composes an API URL; every address comes from the listing that carried it. *@
+
+<div class="wb-contacts" style="height:100%; display:flex; flex-direction:column; flex:1 1 auto; min-height:0;">
+    <div class="wb-search-bar pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="LoadAsync"
+                   title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
+            <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
+        </MudButton>
+        @* Disabled until a writable addressbook is ticked, so the affordance never lies about what it can do. *@
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(!CanCreate)" OnClick="NewContactAsync"
+                   title="@Strings.Get("ContactsNew")" aria-label="@Strings.Get("ContactsNew")">
+            <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("ContactsNew")</span>
+        </MudButton>
+    </div>
+
+    <div style="flex:1 1 auto; min-height:0; display:flex;">
+        <div style="flex:0 0 220px; border-right:1px solid var(--mud-palette-lines-default); min-width:0;">
+            <DavCollectionPicker Collections="_collections" Checked="_checked"
+                                 Heading="@Strings.Get("ContactsCollections")"
+                                 EmptyText="@Strings.Get("ContactsNoneSelected")"
+                                 ChangedAsync="ReloadContactsAsync" />
+        </div>
+
+        <div style="flex:1 1 auto; min-width:0; display:flex; flex-direction:column;">
+            <div class="pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+                <SearchField @bind-Value="_filter" Placeholder="@Strings.Get("FilterHint")" />
+            </div>
+            <div style="flex:1 1 auto; overflow:auto;">
+                @if (_contacts.Count == 0)
+                {
+                    @* Two different empty states, deliberately: telling someone to tick an addressbook when
+                       they already have one ticked instructs them to do what they just did, and reads as the
+                       tab being broken. *@
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary pa-3">
+                        @(_checked.Count == 0 ? Strings.Get("ContactsNoneSelected") : Strings.Get("ContactsEmpty"))
+                    </MudText>
+                }
+                else
+                {
+                    <MudTable Items="Visible" Dense="true" Hover="true" Bordered="false" Elevation="0" T="ContactRow"
+                              OnRowClick="@((TableRowClickEventArgs<ContactRow> e) => _selected = e.Item)"
+                              RowClassFunc="@((row, _) => row == _selected ? "wb-list-row-selected" : "")">
+                        <HeaderContent>
+                            <MudTh Style="width:1px;"></MudTh>
+                            <MudTh>@Strings.Get("Name")</MudTh>
+                            <MudTh>@Strings.Get("ContactsOrg")</MudTh>
+                            <MudTh>@Strings.Get("ContactsEmail")</MudTh>
+                            <MudTh>@Strings.Get("ContactsPhone")</MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="row">
+                            <MudTd><span style="@Swatch(row.CollectionColor)" title="@row.CollectionName"></span></MudTd>
+                            <MudTd>@row.FullName</MudTd>
+                            <MudTd Class="mud-text-secondary">@row.Organization</MudTd>
+                            <MudTd Class="mud-text-secondary">@row.Email</MudTd>
+                            <MudTd Class="mud-text-secondary">@row.Phone</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </div>
+        </div>
+
+        @* Detail. Sized to its content: this pane must not claim space it is not using (ADR 0550). *@
+        <div style="flex:0 0 320px; border-left:1px solid var(--mud-palette-lines-default); overflow:auto;" class="pa-3">
+            @if (_selected is { } selected)
+            {
+                <MudText Typo="Typo.h6">@selected.FullName</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">@selected.CollectionName</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("ContactsOrg")</MudText>
+                <MudText Typo="Typo.body2" Class="mb-2">@selected.Organization</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("ContactsEmail")</MudText>
+                <MudText Typo="Typo.body2" Class="mb-2">@selected.Email</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("ContactsPhone")</MudText>
+                <MudText Typo="Typo.body2">@selected.Phone</MudText>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<DavCollection> _collections = [];
+    private readonly HashSet<Guid> _checked = [];
+    private List<ContactRow> _contacts = [];
+    private ContactRow? _selected;
+    private string _filter = string.Empty;
+
+    public sealed record ContactRow(
+        Guid Id, string CollectionColor, string CollectionName, string FullName,
+        string Organization, string Email, string Phone);
+
+    private bool CanCreate => _collections.Any(c => _checked.Contains(c.Id) && c.Writable);
+
+    private IEnumerable<ContactRow> Visible =>
+        _filter is { Length: > 0 }
+            ? _contacts.Where(c =>
+                c.FullName.Contains(_filter, StringComparison.CurrentCultureIgnoreCase)
+                || c.Organization.Contains(_filter, StringComparison.CurrentCultureIgnoreCase)
+                || c.Email.Contains(_filter, StringComparison.CurrentCultureIgnoreCase))
+            : _contacts;
+
+    private static string Swatch(string color) =>
+        $"display:inline-block; width:8px; height:8px; border-radius:4px; background:{color};";
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    /// <summary>Loads the addressbooks; the caller's own is ticked so the tab opens with content.</summary>
+    public async Task LoadAsync()
+    {
+        try
+        {
+            _collections = await DavCollections.ListAsync("addressbook");
+            _checked.Clear();
+            foreach (var collection in _collections.Where(c => c.IsPersonalDefault))
+            {
+                _checked.Add(collection.Id);
+            }
+
+            await ReloadContactsAsync();
+        }
+        catch (Exception e)
+        {
+            Snackbar.Add(string.Format(Strings.Get("StErrLoadContacts"), e.Message), Severity.Error);
+        }
+    }
+
+    private async Task ReloadContactsAsync()
+    {
+        var rows = new List<ContactRow>();
+        foreach (var collection in _collections.Where(c => _checked.Contains(c.Id)))
+        {
+            if (collection.Href("children") is not { } childrenHref)
+            {
+                continue; // a rel the server did not advertise means "not available here" (ADR 0543)
+            }
+
+            try
+            {
+                var contents = await Browse.LoadContentsAsync(collection.Id, collection.Id, childrenHref);
+                foreach (var node in contents.Nodes.Where(n => n.HasVersions))
+                {
+                    // Organization/Email/Phone come from the Contact mask's index data, which this listing does
+                    // not carry — the same gap the desktop tab has, and it closes the same way for both.
+                    rows.Add(new ContactRow(
+                        node.Id, collection.Color ?? "#8a8a8a", collection.DisplayName, node.Name,
+                        string.Empty, string.Empty, string.Empty));
+                }
+            }
+            catch (Exception e)
+            {
+                // One unreadable addressbook must not blank the whole tab — the others still have contacts.
+                Snackbar.Add(string.Format(Strings.Get("StErrLoadContacts"), e.Message), Severity.Error);
+            }
+        }
+
+        _contacts = [.. rows.OrderBy(r => r.FullName, StringComparer.CurrentCultureIgnoreCase)];
+        StateHasChanged();
+    }
+
+    private Task NewContactAsync()
+    {
+        // NOT YET IMPLEMENTED: a contact IS a .vcf, so this needs the editor that composes one. Saying so
+        // beats a button that silently does nothing.
+        Snackbar.Add(Strings.Get("ContactsNewNotYet"), Severity.Info);
+        return Task.CompletedTask;
+    }
+}

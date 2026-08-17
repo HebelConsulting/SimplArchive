@@ -66,6 +66,11 @@ builder.Services.AddScoped<SimplArchive.Client.Services.BulkActions>();
 // pane and the contents list, extracted before either of them so neither had to copy it (see BrowseService).
 builder.Services.AddScoped<SimplArchive.Client.Services.BrowseService>();
 
+// The caller's addressbooks and calendars, for the Contacts and Calendar tabs (#564). One reader for both:
+// the two tabs ask the same endpoint with a different kind, so a client per tab would be one copy to keep in
+// step with the other.
+builder.Services.AddScoped<SimplArchive.Client.Services.DavCollections>();
+
 // The repository tree's nodes. Outside the pane component for the same reason as SearchState: the workbench
 // renders one tab at a time, so roots kept in the component would be re-fetched — and every expanded folder
 // collapsed — every time the user visits another tab (see TreeState).

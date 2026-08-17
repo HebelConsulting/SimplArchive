@@ -25,6 +25,8 @@ public class WebTabBarTests
     [InlineData("My work")]
     [InlineData("Tenant")]
     [InlineData("Tags")]
+    [InlineData("Contacts")]
+    [InlineData("Calendar")]
     public async Task Bottom_tab_bar_is_pinned_to_the_bottom_of_the_workbench(string tab)
     {
         var page = await Ui.LoginAsync(_app);

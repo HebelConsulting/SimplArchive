@@ -654,6 +654,12 @@ internal static class Program
                 viewModel.ContactsTab.PopulateDemoForScreenshot();
                 viewModel.SelectedTab = 13; // Contacts tab
             }
+            else if (Environment.GetCommandLineArgs().Contains("--calendar"))
+            {
+                viewModel.IsLoggedIn = true;
+                viewModel.CalendarTab.PopulateDemoForScreenshot();
+                viewModel.SelectedTab = 14; // Calendar tab
+            }
             else if (Environment.GetCommandLineArgs().Contains("--checkout"))
             {
                 viewModel.IsLoggedIn = true;

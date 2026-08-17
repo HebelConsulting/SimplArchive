@@ -1,0 +1,186 @@
+@using SimplArchive.Client.Services
+@inject DavCollections DavCollections
+@inject BrowseService Browse
+@inject ISnackbar Snackbar
+
+@* The Calendar tab of the workbench (#564) — the web twin of the desktop tab, which is the reference
+   (ADR 0511). Same shape as Contacts beside it, differing only where a calendar genuinely differs: the list
+   leads with TIME and is ordered by it, and undated appointments sort LAST rather than into the top rows. *@
+
+<div class="wb-calendar" style="height:100%; display:flex; flex-direction:column; flex:1 1 auto; min-height:0;">
+    <div class="wb-search-bar pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="LoadAsync"
+                   title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
+            <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
+        </MudButton>
+        <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(!CanCreate)" OnClick="NewAppointmentAsync"
+                   title="@Strings.Get("CalendarNew")" aria-label="@Strings.Get("CalendarNew")">
+            <MudIcon Icon="@Icons.Material.Filled.EventAvailable" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CalendarNew")</span>
+        </MudButton>
+    </div>
+
+    <div style="flex:1 1 auto; min-height:0; display:flex;">
+        <div style="flex:0 0 220px; border-right:1px solid var(--mud-palette-lines-default); min-width:0;">
+            <DavCollectionPicker Collections="_collections" Checked="_checked"
+                                 Heading="@Strings.Get("CalendarCollections")"
+                                 EmptyText="@Strings.Get("CalendarNoneSelected")"
+                                 ChangedAsync="ReloadAppointmentsAsync" />
+        </div>
+
+        <div style="flex:1 1 auto; min-width:0; display:flex; flex-direction:column;">
+            <div class="pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+                <SearchField @bind-Value="_filter" Placeholder="@Strings.Get("FilterHint")" />
+            </div>
+            <div style="flex:1 1 auto; overflow:auto;">
+                @if (_appointments.Count == 0)
+                {
+                    @* See ContactsTab: "tick a calendar" is wrong once one IS ticked. *@
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary pa-3">
+                        @(_checked.Count == 0 ? Strings.Get("CalendarNoneSelected") : Strings.Get("CalendarEmpty"))
+                    </MudText>
+                }
+                else
+                {
+                    <MudTable Items="Visible" Dense="true" Hover="true" Bordered="false" Elevation="0" T="AppointmentRow"
+                              OnRowClick="@((TableRowClickEventArgs<AppointmentRow> e) => _selected = e.Item)"
+                              RowClassFunc="@((row, _) => row == _selected ? "wb-list-row-selected" : "")">
+                        <HeaderContent>
+                            <MudTh Style="width:1px;"></MudTh>
+                            <MudTh>@Strings.Get("CalendarWhen")</MudTh>
+                            <MudTh>@Strings.Get("Name")</MudTh>
+                            <MudTh>@Strings.Get("CalendarWhere")</MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="row">
+                            <MudTd><span style="@Swatch(row.CollectionColor)" title="@row.CollectionName"></span></MudTd>
+                            @* Time leads: a calendar row is read by WHEN before WHAT. *@
+                            <MudTd Class="mud-text-secondary" Style="font-variant-numeric:tabular-nums;">@row.TimeRange</MudTd>
+                            <MudTd>@row.Title</MudTd>
+                            <MudTd Class="mud-text-secondary">@row.Location</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </div>
+        </div>
+
+        @* Detail. Sized to its content: this pane must not claim space it is not using (ADR 0550). *@
+        <div style="flex:0 0 320px; border-left:1px solid var(--mud-palette-lines-default); overflow:auto;" class="pa-3">
+            @if (_selected is { } selected)
+            {
+                <MudText Typo="Typo.h6">@selected.Title</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">@selected.CollectionName</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("CalendarWhen")</MudText>
+                <MudText Typo="Typo.body2" Class="mb-2">@selected.TimeRange</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("CalendarStarts")</MudText>
+                <MudText Typo="Typo.body2" Class="mb-2">@selected.StartsOn</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("CalendarWhere")</MudText>
+                <MudText Typo="Typo.body2">@selected.Location</MudText>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<DavCollection> _collections = [];
+    private readonly HashSet<Guid> _checked = [];
+    private List<AppointmentRow> _appointments = [];
+    private AppointmentRow? _selected;
+    private string _filter = string.Empty;
+
+    public sealed record AppointmentRow(
+        Guid Id, string CollectionColor, string CollectionName, string Title,
+        DateTimeOffset? Start, DateTimeOffset? End, string Location)
+    {
+        /// <summary>"09:00–10:00", or empty when the appointment carries no time at all.</summary>
+        public string TimeRange => (Start, End) switch
+        {
+            ({ } s, { } e) => $"{s.LocalDateTime:HH:mm}–{e.LocalDateTime:HH:mm}",
+            ({ } s, null) => $"{s.LocalDateTime:HH:mm}",
+            _ => string.Empty,
+        };
+
+        /// <summary>
+        /// The full start in the reader's own time zone. Its own property for the same reason as the desktop's:
+        /// formatting the raw DateTimeOffset shows the STORED OFFSET while TimeRange converts to local, so one
+        /// appointment read "When 11:00–12:00" and "Starts 09:00" two lines apart. One instant, one answer.
+        /// </summary>
+        public string StartsOn => Start is { } s ? s.LocalDateTime.ToString("g") : string.Empty;
+    }
+
+    private bool CanCreate => _collections.Any(c => _checked.Contains(c.Id) && c.Writable);
+
+    private IEnumerable<AppointmentRow> Visible =>
+        _filter is { Length: > 0 }
+            ? _appointments.Where(a =>
+                a.Title.Contains(_filter, StringComparison.CurrentCultureIgnoreCase)
+                || a.Location.Contains(_filter, StringComparison.CurrentCultureIgnoreCase))
+            : _appointments;
+
+    private static string Swatch(string color) =>
+        $"display:inline-block; width:8px; height:8px; border-radius:4px; background:{color};";
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    /// <summary>Loads the calendars; the caller's own is ticked so the tab opens with content.</summary>
+    public async Task LoadAsync()
+    {
+        try
+        {
+            _collections = await DavCollections.ListAsync("calendar");
+            _checked.Clear();
+            foreach (var collection in _collections.Where(c => c.IsPersonalDefault))
+            {
+                _checked.Add(collection.Id);
+            }
+
+            await ReloadAppointmentsAsync();
+        }
+        catch (Exception e)
+        {
+            Snackbar.Add(string.Format(Strings.Get("StErrLoadCalendars"), e.Message), Severity.Error);
+        }
+    }
+
+    private async Task ReloadAppointmentsAsync()
+    {
+        var rows = new List<AppointmentRow>();
+        foreach (var collection in _collections.Where(c => _checked.Contains(c.Id)))
+        {
+            if (collection.Href("children") is not { } childrenHref)
+            {
+                continue; // a rel the server did not advertise means "not available here" (ADR 0543)
+            }
+
+            try
+            {
+                var contents = await Browse.LoadContentsAsync(collection.Id, collection.Id, childrenHref);
+                foreach (var node in contents.Nodes.Where(n => n.HasVersions))
+                {
+                    // Start/End/Location come from the Appointment mask's index data, which this listing does
+                    // not carry — the same gap the desktop tab has, and it closes the same way for both.
+                    rows.Add(new AppointmentRow(
+                        node.Id, collection.Color ?? "#8a8a8a", collection.DisplayName, node.Name,
+                        null, null, string.Empty));
+                }
+            }
+            catch (Exception e)
+            {
+                // One unreadable calendar must not blank the whole tab — the others still have appointments.
+                Snackbar.Add(string.Format(Strings.Get("StErrLoadCalendars"), e.Message), Severity.Error);
+            }
+        }
+
+        // Undated last: a null start ordering to the top would put the least informative rows where the eye lands.
+        _appointments = [.. rows
+            .OrderBy(r => r.Start is null)
+            .ThenBy(r => r.Start)
+            .ThenBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase)];
+        StateHasChanged();
+    }
+
+    private Task NewAppointmentAsync()
+    {
+        // NOT YET IMPLEMENTED: an appointment IS an .ics, so this needs the editor that composes one.
+        Snackbar.Add(Strings.Get("CalendarNewNotYet"), Severity.Info);
+        return Task.CompletedTask;
+    }
+}

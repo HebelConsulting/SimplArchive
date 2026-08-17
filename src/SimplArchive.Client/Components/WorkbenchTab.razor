@@ -1,0 +1,39 @@
+@* One entry in the workbench's bottom tab bar (#298), extracted from Home.razor per ADR 0558.
+
+   It was fifteen copies of the same four lines, differing in an icon, a label, a tour id and a badge — so
+   every tab added cost the shell another four, and the shell is the file being decomposed. Written once, a
+   tab is one line at the call site and the behaviour it carries is stated in one place:
+
+   - icon-only where the device can hover, with the label in `title`; touch keeps the visible label, since a
+     tooltip does not exist without a hover (ADR 0491)
+   - `aria-label` regardless, so hiding the text does not cost the accessible name
+   - the tour attributes, which the guided tour locates tabs by
+
+   The badge is a RenderFragment rather than an int?: Check-out and Tasks show a live count, but nothing says
+   the next one to want a badge shows a number. *@
+
+<div class="wb-tab @(Active ? "wb-tab-active" : "")"
+     data-tour="@Tour" data-tour-active="@(Active ? "true" : "false")"
+     title="@Label" aria-label="@Label" @onclick="OnClick">
+    <span class="wb-tab-ico">
+        <MudIcon Icon="@Icon" Size="Size.Small" />
+        @Badge
+    </span>
+    <span class="wb-tab-label">@Label</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    /// <summary>The `data-tour` id the guided tour locates this tab by.</summary>
+    [Parameter, EditorRequired] public string Tour { get; set; } = string.Empty;
+
+    [Parameter] public bool Active { get; set; }
+
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    /// <summary>Overlaid on the icon — a live count, or whatever a future tab needs.</summary>
+    [Parameter] public RenderFragment? Badge { get; set; }
+}

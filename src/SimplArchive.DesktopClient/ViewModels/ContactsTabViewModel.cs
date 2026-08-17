@@ -72,6 +72,15 @@ public sealed partial class ContactsTabViewModel : ObservableObject
     [ObservableProperty] private bool _busy;
     [ObservableProperty] private string _filter = "";
 
+    /// <summary>
+    /// What the list says when it has nothing to show. Two different sentences, deliberately: telling someone
+    /// to tick a collection when they already have one ticked instructs them to do what they just did, and
+    /// reads as the tab being broken rather than as the collection being empty.
+    /// </summary>
+    public string EmptyMessage => Collections.Any(c => c.IsChecked)
+        ? Strings.Get("ContactsEmpty")
+        : Strings.Get("ContactsNoneSelected");
+
     /// <summary>True when at least one CHECKED collection accepts writes — gates New/Edit.</summary>
     public bool CanCreate => Collections.Any(c => c.IsChecked && c.Writable);
 
@@ -142,6 +151,7 @@ public sealed partial class ContactsTabViewModel : ObservableObject
         {
             Busy = false;
             OnPropertyChanged(nameof(CanCreate));
+            OnPropertyChanged(nameof(EmptyMessage));
         }
     }
 
@@ -191,6 +201,7 @@ public sealed partial class ContactsTabViewModel : ObservableObject
         // list would keep rendering the previous addressbook's rows until the filter happened to change.
         OnPropertyChanged(nameof(VisibleContacts));
         OnPropertyChanged(nameof(CanCreate));
+        OnPropertyChanged(nameof(EmptyMessage));
     }
 
     /// <summary>Re-reads the list when a collection is checked or unchecked.</summary>
@@ -249,6 +260,7 @@ public sealed partial class ContactsTabViewModel : ObservableObject
         Selected = Contacts[0];
         OnPropertyChanged(nameof(VisibleContacts));
         OnPropertyChanged(nameof(CanCreate));
+        OnPropertyChanged(nameof(EmptyMessage));
     }
 
     private void Report(string message) => StatusReporter?.Invoke(message);

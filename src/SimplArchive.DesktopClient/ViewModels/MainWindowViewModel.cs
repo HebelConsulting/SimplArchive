@@ -47,9 +47,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // local working-copy status.
     public CheckoutTabViewModel Checkout { get; } = new();
 
-    // The Contacts tab (#564) — the caller's addressbooks and their contacts. Its own VM, like Check-out
-    // above: a tab's worth of state belongs to the tab, and this file is far over the 1000-line ceiling.
+    // The Contacts and Calendar tabs (#564) — the caller's addressbooks and calendars. Their own VMs, like
+    // Check-out above: a tab's worth of state belongs to the tab, and this file is far over the 1000-line
+    // ceiling. Treated as ONE surface in review (ADR 0511), so they are declared together.
     public ContactsTabViewModel ContactsTab { get; } = new();
+
+    public CalendarTabViewModel CalendarTab { get; } = new();
 
     // The environment strip (#501) — set from the chosen server profile at login, empty for the normal case.
     public EnvironmentBannerViewModel EnvBanner { get; } = new();
@@ -64,6 +67,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Checkout.StatusReporter = m => Status = m;
         Checkout.OnChanged = RefreshAfterCheckoutChangeAsync;
         ContactsTab.StatusReporter = m => Status = m;
+        CalendarTab.StatusReporter = m => Status = m;
         IntrayActions.Connect(() => _api, RefreshIntrayAsync, m => Status = m, () => _currentUserId);
     }
 
@@ -82,6 +86,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SearchPreview.Api = api;
         RecycleBin.SetApi(api);
         ContactsTab.Setup(api);
+        CalendarTab.Setup(api);
 
         // The straightening toggle's state belongs to the USER, not the machine, so it is read from the server
         // once per session rather than restored from local settings (#491).
@@ -2886,97 +2891,67 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public bool CanAddFieldFilter => _availableFieldNames.Count > 0;
 
+    // Tab order: 0 Repositories · 1 Intray · 2 Check-out · 3 Search · 4 Recycle bin · 5 Tasks · 6 Users/Groups
+    // · 7 Audit · 8 Legal holds · 9 Retention · 10 Tenant · 11 My work · 12 Tag catalog · 13 Contacts
+    // · 14 Calendar. Each new tab is APPENDED so the indices above stay put — they are also written out in
+    // Program.cs and the tour deep-links, and renumbering them silently opens the wrong tab.
+    //
+    // A switch expression rather than the if-chain this grew into: fourteen `if (value == n)` blocks read as
+    // fourteen independent decisions when they are one, and the chain is what made every added tab cost this
+    // file another dozen lines (#517). Each arm hands back the Task the activation needs; anything with more
+    // than one statement gets a local function rather than being flattened into the arm.
     async partial void OnSelectedTabChanged(int value)
     {
         Preview.ExitFullscreen(); // leave full screen when switching tabs (the tab strip stays reachable while maximized)
         IntrayPreview.ExitFullscreen();
         RecycleBin.Preview.ExitFullscreen();
 
-        // Tab order: 0 Repositories · 1 Intray · 2 Check-out · 3 Search · 4 Recycle bin · 5 Tasks · 6 Users/Groups
-        // · 7 Audit · 8 Legal holds · 9 Retention · 10 Tenant · 11 My work · 12 Tag catalog · 13 Contacts (each
-        // added at the end to avoid re-indexing the others, ADR "My work dashboard").
-        if (value == 11)
+        await (value switch
         {
-            await LoadMyWorkAsync();
-        }
+            0 => RefreshRepositoriesViewAsync(),
+            1 => RefreshIntrayAsync(),
+            2 => ActivateCheckoutAsync(),
+            3 => ActivateSearchAsync(),
+            4 => LoadRecycleBinAsync(),
+            5 => LoadTasksAsync(),
+            6 => LoadPrincipalsAsync(),
+            7 => ActivateAuditAsync(),
+            8 => LoadLegalHoldsAsync(),
+            9 => LoadRetentionScheduleAsync(),
+            10 => LoadTenantSettingsAsync(),
+            11 => LoadMyWorkAsync(),
+            12 => LoadTagCatalogAsync(),
+            // Contacts and Calendar load on ACTIVATION, not at login: each costs a request per collection and
+            // most sessions never open either tab.
+            13 => ContactsTab.LoadAsync(),
+            14 => CalendarTab.LoadAsync(),
+            _ => Task.CompletedTask,
+        });
+    }
 
-        if (value == 12)
-        {
-            await LoadTagCatalogAsync();
-        }
+    private async Task ActivateCheckoutAsync()
+    {
+        await Checkout.LoadAsync();
+        OnPropertyChanged(nameof(CheckoutCount));
+        OnPropertyChanged(nameof(HasCheckouts));
+    }
 
-        // 13 Contacts — appended, same as My work and the tag catalog before it, so the indices above stay put.
-        // Loaded on activation rather than at login: it costs a request per addressbook, and most sessions
-        // never open the tab.
-        if (value == 13)
-        {
-            await ContactsTab.LoadAsync();
-        }
-
-        if (value == 0)
-        {
-            await RefreshRepositoriesViewAsync();
-        }
-
-        if (value == 1)
-        {
-            await RefreshIntrayAsync();
-        }
-
-        if (value == 2)
-        {
-            await Checkout.LoadAsync();
-            OnPropertyChanged(nameof(CheckoutCount));
-            OnPropertyChanged(nameof(HasCheckouts));
-        }
-
-        if (value == 3 && !_searchMetadataLoaded)
+    private async Task ActivateSearchAsync()
+    {
+        if (!_searchMetadataLoaded)
         {
             await LoadSearchMetadataAsync();
         }
 
-        if (value == 3)
-        {
-            await LoadSavedSearchesAsync();
-        }
+        await LoadSavedSearchesAsync();
+    }
 
-        if (value == 4)
+    private async Task ActivateAuditAsync()
+    {
+        await LoadRetentionAsync();
+        if (AuditEvents.Count == 0)
         {
-            await LoadRecycleBinAsync();
-        }
-
-        if (value == 5)
-        {
-            await LoadTasksAsync();
-        }
-
-        if (value == 6)
-        {
-            await LoadPrincipalsAsync();
-        }
-
-        if (value == 7)
-        {
-            await LoadRetentionAsync();
-            if (AuditEvents.Count == 0)
-            {
-                await LoadAuditPageAsync(reset: true);
-            }
-        }
-
-        if (value == 8)
-        {
-            await LoadLegalHoldsAsync();
-        }
-
-        if (value == 9)
-        {
-            await LoadRetentionScheduleAsync();
-        }
-
-        if (value == 10)
-        {
-            await LoadTenantSettingsAsync();
+            await LoadAuditPageAsync(reset: true);
         }
     }
 
