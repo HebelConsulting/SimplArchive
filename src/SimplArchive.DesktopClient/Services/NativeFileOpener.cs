@@ -56,19 +56,35 @@ public static class NativeFileOpener
     // Opens a directory in the OS file manager (used for the local intray folder).
     public static void RevealDirectory(string path) => OpenPath(path);
 
+    // Handing a path to the OS is the point of this client (ADR 0236) and the most common "nothing happened"
+    // report: no association, a sandbox refusal, a path that is not where the user thinks. The log records WHICH
+    // path went to WHICH launcher, and the failure with it — the launcher's own error goes to a console that a
+    // packaged build does not have (ADR 0613).
     private static void OpenPath(string path)
     {
-        if (OperatingSystem.IsWindows())
+        try
         {
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            if (OperatingSystem.IsWindows())
+            {
+                DesktopLog.Debug("Opening {Path} via the shell", path);
+                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                DesktopLog.Debug("Opening {Path} via open(1)", path);
+                Process.Start("open", [path]);
+            }
+            else
+            {
+                DesktopLog.Debug("Opening {Path} via xdg-open", path);
+                Process.Start("xdg-open", [path]);
+            }
         }
-        else if (OperatingSystem.IsMacOS())
+        catch (Exception e)
         {
-            Process.Start("open", [path]);
-        }
-        else
-        {
-            Process.Start("xdg-open", [path]);
+            // Warning: the user sees nothing open, which they will report as "it did nothing" — this is the line
+            // that answers it. Not rethrown: a failed hand-off to the OS must not take the client down.
+            DesktopLog.Warn(e, "The operating system did not open {Path}", path);
         }
     }
 }

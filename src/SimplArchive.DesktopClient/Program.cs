@@ -39,18 +39,27 @@ internal static class Program
             AttachConsole(AttachParentProcess); // false simply means there was no parent console — nothing to do
         }
 
+        // The log comes up before anything that might want to write to it (ADR 0613).
+        Services.DesktopLog.Initialize();
+
         // Crash guard (ADR "Desktop crash guard"): surface unhandled background/unobserved exceptions in the
         // "lost connection" modal instead of taking the app down. UI-thread async-void handlers are guarded
         // separately via Safe.Fire.
+        //
+        // The dialog tells the user; the log keeps the DETAIL. Before this, the exception died with the dialog —
+        // so "it crashed and I clicked OK" was the entire available evidence.
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
             if (e.ExceptionObject is Exception ex)
             {
+                Services.DesktopLog.Fatal(ex, "Unhandled exception on {Thread}", Environment.CurrentManagedThreadId);
+                Services.DesktopLog.Shutdown(); // the process may be going down; flush what we have
                 Services.AppExceptions.Report(ex);
             }
         };
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
+            Services.DesktopLog.Error(e.Exception, "Unobserved task exception");
             Services.AppExceptions.Report(e.Exception);
             e.SetObserved();
         };

@@ -26,6 +26,11 @@ public sealed class OidcLoopbackAuthenticator
         var state = Base64Url(RandomBytes(16));
 
         // Discover the endpoints rather than hardcoding /connect/* paths.
+        //
+        // Logged because a login that fails here fails BEFORE the browser opens, which the user experiences as
+        // "nothing happened when I clicked sign in" — indistinguishable, without a log, from a browser problem
+        // or a wrong password (ADR 0613). The URL is safe to record; nothing below it is.
+        DesktopLog.Debug("Discovering the identity endpoints at {ApiBaseUrl}", DesktopClientOptions.ApiBaseUrl);
         var discovery = await Http.GetFromJsonAsync<JsonElement>(
             $"{DesktopClientOptions.ApiBaseUrl}/.well-known/openid-configuration", cancellationToken);
         var authorizationEndpoint = discovery.GetProperty("authorization_endpoint").GetString()!;
@@ -42,6 +47,9 @@ public sealed class OidcLoopbackAuthenticator
             $"&code_challenge={codeChallenge}&code_challenge_method=S256&state={state}" +
             (forceLogin ? "&prompt=login" : string.Empty) +
             (string.IsNullOrWhiteSpace(loginHint) ? string.Empty : $"&login_hint={Uri.EscapeDataString(loginHint)}");
+        // The authorize URL itself is NOT logged: it carries the PKCE challenge and the state, and a log a user
+        // pastes into a support mail must not contain either (ADR 0430's rule, which is easier to break here).
+        DesktopLog.Debug("Waiting for the loopback redirect on port {Port}", DesktopClientOptions.LoopbackPort);
         SystemBrowser.Open(authorizeUrl);
 
         var context = await listener.GetContextAsync().WaitAsync(cancellationToken);

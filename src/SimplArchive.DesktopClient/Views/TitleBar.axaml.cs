@@ -52,6 +52,8 @@ public partial class TitleBar : UserControl
 
     private void OnShowAbout(object? sender, RoutedEventArgs e) => Window()?.OnShowAbout(sender, e);
 
+    private void OnShowLogs(object? sender, RoutedEventArgs e) => Window()?.OnShowLogs(sender, e);
+
     // Null in the headless screenshot renders, which host panes without a window — so every forwarder tolerates
     // it rather than throwing where nothing could have been clicked anyway.
     private MainWindow? Window() => TopLevel.GetTopLevel(this) as MainWindow;

@@ -143,7 +143,9 @@ public sealed partial class LogonViewModel : ObservableObject
         // name rather than the missing one.
         foreach (var note in ThemeApplier.Apply(value?.Theme))
         {
-            Console.Error.WriteLine($"SimplArchive style: {note}");
+            // Warning, not Error: falling back to the shipped design is a degraded outcome, not a failure —
+            // but it is exactly the kind of silent degradation somebody later asks about (ADR 0613).
+            Services.DesktopLog.Warn("Style not applied as configured: {Note}", note);
         }
 
         if (_activated)

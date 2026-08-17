@@ -26,6 +26,13 @@ public class OverLimitFileCeilingTests
 {
     // File → its ceiling, measured when the guard was added (or last lowered). Growth fails; a deliberate
     // tranche lowers the number in the same commit. When a file passes under 1000, delete its entry.
+    //
+    // …and a file that crosses back over RE-ENTERS. Deleting an entry is what the list is for, but it also
+    // removes the only thing watching that file: this guard tracks known offenders, not every file, so a file
+    // burned down to 967 can climb back over 1000 with nothing objecting — which is exactly what
+    // MainWindow.axaml.cs did (967 → 1,156, unnoticed, ADR 0613). Re-entering it restores the ratchet for that
+    // file; the general rule (every authored file measured against 1000) is still the open backlog item, and
+    // this entry is a patch over one instance of the gap rather than a fix for it.
     private static readonly Dictionary<string, int> Ceilings = new()
     {
         ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_009,
@@ -35,6 +42,12 @@ public class OverLimitFileCeilingTests
         // OWNER-CONFIRMED as an accepted exception (2026-08-17, on #443's close): split further only if a real
         // seam appears; the finale already took the obvious ones (#518 owns any future burn-down).
         ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_498,
+
+        // Re-entered 2026-08-17 (ADR 0613): burned down to 967 in an earlier pass, back to 1,156 since — the
+        // handlers here are what #519 moves into per-tab UserControls, which is what takes it under again.
+        // The +4 for Help ▸ Show log folder is OWNER-CONFIRMED (2026-08-17): the handler belongs beside
+        // OnOpenManual and OnShowAbout, and #519's tranche moves all three together.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_156,
 
         // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).

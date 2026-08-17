@@ -38,6 +38,11 @@
     <!-- Headless render-to-PNG mode (Program screenshot flag), so the UI can be verified without a display. -->
     <PackageReference Include="Avalonia.Headless" Version="11.3.18" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- The client's own log (ADR 0613): a rolling text file beside its settings, because stderr goes nowhere in
+         a packaged build. Same Serilog the server uses, so the levels mean one thing across the product. -->
+    <PackageReference Include="Serilog" Version="4.2.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
     <!-- Material Design icons for the ribbon/buttons (matches the web app's Material icons). Both packages
          MIT; the bundled Material Design Icons font is Apache-2.0. See ADR "Desktop client icon buttons". -->
     <PackageReference Include="Projektanker.Icons.Avalonia" Version="9.6.2" />

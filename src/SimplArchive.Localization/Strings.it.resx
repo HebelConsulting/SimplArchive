@@ -225,6 +225,9 @@
   <data name="HelpAbout" xml:space="preserve">
     <value>Informazioni…</value>
   </data>
+  <data name="HelpShowLogs" xml:space="preserve">
+    <value>Mostra cartella dei log</value>
+  </data>
   <data name="AboutHeading" xml:space="preserve">
     <value>Informazioni su SimplArchive</value>
   </data>

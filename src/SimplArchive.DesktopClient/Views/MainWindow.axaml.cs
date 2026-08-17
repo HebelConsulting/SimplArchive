@@ -146,6 +146,10 @@ public partial class MainWindow : Window
     internal void OnOpenManual(object? sender, RoutedEventArgs e) =>
         SystemBrowser.Open($"{DesktopClientOptions.ApiBaseUrl}/download/manual/SimplArchive-Manual.pdf");
 
+    // Help ▸ Show log folder (ADR 0613). A log the user cannot find when support asks for it is a log that does
+    // not exist — and asking somebody to launch a .app from a terminal is not a support procedure.
+    internal void OnShowLogs(object? sender, RoutedEventArgs e) => NativeFileOpener.RevealDirectory(DesktopLog.Directory);
+
     // Help ▸ About (ADR 0504): the vendor block + the running client version.
     internal void OnShowAbout(object? sender, RoutedEventArgs e) =>
         Safe.Fire(async () => await new AboutDialog().ShowDialog(this));
