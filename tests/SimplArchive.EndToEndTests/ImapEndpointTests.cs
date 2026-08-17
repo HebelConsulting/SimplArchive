@@ -146,4 +146,69 @@ public class ImapEndpointTests
             await Assert.ThrowsAsync<MailKit.Security.AuthenticationException>(() => client.AuthenticateAsync(email, imapPassword));
         }
     }
+
+    [Fact]
+    public async Task Seen_state_persists_per_user_across_reconnects()
+    {
+        // Arrange: a repo with one email, a user with IMAP credentials.
+        var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+        var repoName = $"Seen{Guid.NewGuid():N}"[..12];
+        await TestJson.Post(owner, "/api/repositories", new { name = repoName });
+
+        var email = $"imap-seen-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, email, "seen-1234", "Seen User");
+        await _factory.GrantTenantAdminAsync(email);
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "seen-1234"));
+        var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
+
+        var davPw = (await TestJson.Post(api, "/api/me/webdav-password", new { })).GetProperty("password").GetString()!;
+        var basic = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{email}:{davPw}")));
+        using var dav = _factory.CreateClient();
+        using var put = new HttpRequestMessage(HttpMethod.Put, $"/webdav/{repoName}/note.eml")
+        {
+            Content = new ByteArrayContent(Encoding.ASCII.GetBytes("From: a@b.test\r\nSubject: Mark me\r\n\r\nbody\r\n")),
+            Headers = { Authorization = basic },
+        };
+        Assert.Equal(System.Net.HttpStatusCode.Created, (await dav.SendAsync(put)).StatusCode);
+
+        var port = ((ImapServer)_factory.Services.GetService(typeof(ImapServer))!).BoundPort!.Value;
+
+        // Fresh message: unseen; the mailbox opens READ-WRITE and \Seen is a permanent flag.
+        MailKit.UniqueId uid;
+        using (var client = new ImapClient())
+        {
+            await client.ConnectAsync("127.0.0.1", port, SecureSocketOptions.None);
+            await client.AuthenticateAsync(email, imapPassword);
+            var repo = await client.GetFolderAsync(repoName);
+            Assert.Equal(FolderAccess.ReadWrite, await repo.OpenAsync(FolderAccess.ReadWrite));
+
+            var summary = (await repo.FetchAsync(new[] { 0 }, MessageSummaryItems.UniqueId | MessageSummaryItems.Flags)).Single();
+            Assert.False(summary.Flags!.Value.HasFlag(MessageFlags.Seen));
+            uid = summary.UniqueId;
+
+            await repo.AddFlagsAsync(uid, MessageFlags.Seen, silent: true);
+            await client.DisconnectAsync(true);
+        }
+
+        // The mark survives the reconnect — it is a row, not session memory (#562 slice 2).
+        using (var client = new ImapClient())
+        {
+            await client.ConnectAsync("127.0.0.1", port, SecureSocketOptions.None);
+            await client.AuthenticateAsync(email, imapPassword);
+            var repo = await client.GetFolderAsync(repoName);
+            await repo.OpenAsync(FolderAccess.ReadWrite);
+            var summary = (await repo.FetchAsync(new[] { uid }, MessageSummaryItems.Flags)).Single();
+            Assert.True(summary.Flags!.Value.HasFlag(MessageFlags.Seen));
+
+            // STATUS reports a real unseen count: 0 now, 1 again after removing the flag.
+            Assert.Equal(0, (await client.GetFolderAsync(repoName)).Unread);
+            await repo.RemoveFlagsAsync(uid, MessageFlags.Seen, silent: true);
+            var status = await client.GetFolderAsync(repoName);
+            await status.StatusAsync(StatusItems.Unread);
+            Assert.Equal(1, status.Unread);
+            await client.DisconnectAsync(true);
+        }
+    }
 }
+

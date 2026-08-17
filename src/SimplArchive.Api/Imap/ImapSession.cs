@@ -176,6 +176,18 @@ public sealed class ImapSession
                 var fetchArguments = uidMode ? arguments["FETCH ".Length..] : arguments;
                 await RunScopedAsync(scope => ImapFetch.FetchAsync(this, scope, tag, _selected, fetchArguments, uidMode));
                 return true;
+            case "STORE":
+            case "UID" when arguments.StartsWith("STORE ", StringComparison.OrdinalIgnoreCase):
+                if (_selected is null)
+                {
+                    await WriteLineAsync($"{tag} NO no mailbox selected");
+                    return true;
+                }
+
+                var storeUidMode = command == "UID";
+                var storeArguments = storeUidMode ? arguments["STORE ".Length..] : arguments;
+                await RunScopedAsync(scope => ImapStore.StoreAsync(this, scope, tag, _selected, storeArguments, storeUidMode));
+                return true;
             case "CREATE":
             case "DELETE":
             case "RENAME":
@@ -184,7 +196,6 @@ public sealed class ImapSession
                 await WriteLineAsync($"{tag} NO the folder structure is managed in SimplArchive, not over IMAP");
                 return true;
             case "APPEND":
-            case "STORE":
             case "EXPUNGE":
             case "MOVE":
             case "COPY":

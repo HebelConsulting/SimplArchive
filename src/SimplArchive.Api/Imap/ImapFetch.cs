@@ -23,6 +23,7 @@ internal static class ImapFetch
         var set = arguments[..setEnd];
         var items = ParseItems(arguments[(setEnd + 1)..], uidMode);
         var storage = scope.ServiceProvider.GetRequiredService<IObjectStorageClient>();
+        var seen = await ImapMailboxes.SeenSetAsync(scope, selected.Messages);
 
         for (var index = 0; index < selected.Messages.Count; index++)
         {
@@ -33,7 +34,15 @@ internal static class ImapFetch
                 continue;
             }
 
-            await WriteMessageAsync(session, storage, message, sequence, items);
+            // A non-PEEK body fetch implicitly sets \Seen (RFC 3501 §6.4.5) — recorded BEFORE the response so
+            // the FLAGS item in the same reply already reflects it.
+            if (items.Any(i => i.StartsWith("BODY[", StringComparison.OrdinalIgnoreCase)) && !seen.Contains(message.DocumentId))
+            {
+                await ImapMailboxes.MarkSeenAsync(scope, message.DocumentId, seen: true);
+                seen.Add(message.DocumentId);
+            }
+
+            await WriteMessageAsync(session, storage, message, sequence, items, seen.Contains(message.DocumentId));
         }
 
         await session.OkAsync(tag, uidMode ? "UID FETCH" : "FETCH");
@@ -44,7 +53,7 @@ internal static class ImapFetch
 
     // ---- Sequence sets -------------------------------------------------------------------------------
 
-    private static bool InSet(string set, int value, int star)
+    internal static bool InSet(string set, int value, int star)
     {
         foreach (var part in set.Split(','))
         {
@@ -119,7 +128,7 @@ internal static class ImapFetch
     // ---- Response ------------------------------------------------------------------------------------
 
     private static async Task WriteMessageAsync(
-        ImapSession session, IObjectStorageClient storage, ImapMessageEntry message, int sequence, List<string> items)
+        ImapSession session, IObjectStorageClient storage, ImapMessageEntry message, int sequence, List<string> items, bool seen)
     {
         byte[]? bytes = null;
         MimeMessage? mime = null;
@@ -155,7 +164,8 @@ internal static class ImapFetch
             switch (upper)
             {
                 case "FLAGS":
-                    parts.Add("FLAGS (\\Seen)"); // read state persists in slice 2; until then everything reads as seen
+                    // The caller's persisted read state (#562 slice 2) — per user + document.
+                    parts.Add($"FLAGS ({(seen ? "\\Seen" : string.Empty)})");
                     break;
                 case "UID":
                     parts.Add($"UID {message.Uid}");

@@ -76,8 +76,9 @@ internal static class ImapMailboxes
         }
 
         var (mailbox, messages) = resolved.Value;
+        var unseen = await UnseenCountAsync(scope, messages);
         await session.WriteLineAsync(
-            $"* STATUS {ImapProtocol.QuoteMailbox(tokens[0])} (MESSAGES {messages.Count} UIDNEXT {mailbox.NextUid} UIDVALIDITY {mailbox.UidValidity} UNSEEN 0 RECENT 0)");
+            $"* STATUS {ImapProtocol.QuoteMailbox(tokens[0])} (MESSAGES {messages.Count} UIDNEXT {mailbox.NextUid} UIDVALIDITY {mailbox.UidValidity} UNSEEN {unseen} RECENT 0)");
         await session.OkAsync(tag, "STATUS");
     }
 
@@ -106,9 +107,10 @@ internal static class ImapMailboxes
         await session.WriteLineAsync("* FLAGS (\\Seen)");
         await session.WriteLineAsync($"* OK [UIDVALIDITY {mailbox.UidValidity}] UIDs valid");
         await session.WriteLineAsync($"* OK [UIDNEXT {mailbox.NextUid}] predicted next UID");
-        // Read-only slice: nothing is writable, and PERMANENTFLAGS () says a client shouldn't try to store any.
-        await session.WriteLineAsync("* OK [PERMANENTFLAGS ()] no flags stored in this slice");
-        await session.WriteLineAsync($"{tag} OK [READ-ONLY] SELECT completed");
+        // \Seen persists per user + document (#562 slice 2) — the one storable flag; everything else stays
+        // read-only until the write slice.
+        await session.WriteLineAsync("* OK [PERMANENTFLAGS (\\Seen)] seen state persists");
+        await session.WriteLineAsync($"{tag} OK [READ-WRITE] SELECT completed");
     }
 
     // ---- Catalog + resolution ------------------------------------------------------------------------
@@ -236,5 +238,40 @@ internal static class ImapMailboxes
 
         await db.SaveChangesAsync();
         return (mailbox, messages.OrderBy(m => m.Uid).ToList());
+    }
+
+    /// <summary>The documents of <paramref name="messages"/> the CALLER has not seen (#562 slice 2).</summary>
+    internal static async Task<int> UnseenCountAsync(IServiceScope scope, IReadOnlyList<ImapMessageEntry> messages)
+    {
+        var seen = await SeenSetAsync(scope, messages);
+        return messages.Count(m => !seen.Contains(m.DocumentId));
+    }
+
+    /// <summary>The caller's seen-document set for one message list — the row IS the flag.</summary>
+    internal static async Task<HashSet<Guid>> SeenSetAsync(IServiceScope scope, IReadOnlyList<ImapMessageEntry> messages)
+    {
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+        var userId = scope.ServiceProvider.GetRequiredService<ICurrentUserAccessor>().UserId!.Value;
+        var ids = messages.Select(m => m.DocumentId).ToList();
+        return (await db.ImapSeenMarks.Where(s => s.UserId == userId && ids.Contains(s.DocumentId)).Select(s => s.DocumentId).ToListAsync()).ToHashSet();
+    }
+
+    /// <summary>Upserts the caller's \Seen mark for one document; no-op when already seen.</summary>
+    internal static async Task MarkSeenAsync(IServiceScope scope, Guid documentId, bool seen)
+    {
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+        var userId = scope.ServiceProvider.GetRequiredService<ICurrentUserAccessor>().UserId!.Value;
+        var tenantId = scope.ServiceProvider.GetRequiredService<ICurrentTenantAccessor>().TenantId!.Value;
+        var existing = await db.ImapSeenMarks.FirstOrDefaultAsync(s => s.UserId == userId && s.DocumentId == documentId);
+        if (seen && existing is null)
+        {
+            db.ImapSeenMarks.Add(new Domain.Imap.ImapSeenMark { UserId = userId, DocumentId = documentId, TenantId = tenantId, SeenAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync();
+        }
+        else if (!seen && existing is not null)
+        {
+            db.ImapSeenMarks.Remove(existing);
+            await db.SaveChangesAsync();
+        }
     }
 }
