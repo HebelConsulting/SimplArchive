@@ -21,7 +21,7 @@ public class RepositoryClassificationTests
         new(new DbContextOptionsBuilder<SimplArchiveDbContext>().UseSqlite(c).Options, a);
 
     private static RepositoryImporter Importer(SimplArchiveDbContext db, InMemoryObjectStorage storage, CurrentTenantAccessor accessor) =>
-        new(db, storage, accessor, new WellKnownMaskSeeder(db),
+        new(db, storage, accessor, new WellKnownMaskSeeder(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Masks.WellKnownMaskSeeder>.Instance),
             new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance), NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance, new SimplArchive.Api.Documents.PersonalRepositoryProvisioner(db, NoOpAuditRecorder.Instance));
 
     // Seeds tenant A: a "Confidential" label (rank 3, watermarked), a custom "Contract" mask defaulting to it, and a

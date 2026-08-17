@@ -29,7 +29,7 @@ public class FolderMaskTenantScopeTests
         await context.SaveChangesAsync();
 
         // The same seeder tenant provisioning uses, so the masks are seeded exactly as they are in production.
-        await new WellKnownMaskSeeder(context).EnsureWellKnownMasksAsync(tenantId);
+        await new WellKnownMaskSeeder(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Masks.WellKnownMaskSeeder>.Instance).EnsureWellKnownMasksAsync(tenantId);
 
         return tenantId;
     }

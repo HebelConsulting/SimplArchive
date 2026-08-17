@@ -22,7 +22,7 @@ public class RepositoryImportAtomicityTests
         new(new DbContextOptionsBuilder<SimplArchiveDbContext>().UseSqlite(c).Options, a);
 
     private static RepositoryImporter Importer(SimplArchiveDbContext db, IObjectStorageClient storage, CurrentTenantAccessor accessor) =>
-        new(db, storage, accessor, new WellKnownMaskSeeder(db),
+        new(db, storage, accessor, new WellKnownMaskSeeder(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Masks.WellKnownMaskSeeder>.Instance),
             new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance),
             NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance,
             new PersonalRepositoryProvisioner(db, NoOpAuditRecorder.Instance));

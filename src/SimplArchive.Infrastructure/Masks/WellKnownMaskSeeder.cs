@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Masks;
 using SimplArchive.Infrastructure.Persistence;
@@ -11,10 +12,12 @@ namespace SimplArchive.Infrastructure.Masks;
 public class WellKnownMaskSeeder : IWellKnownMaskSeeder
 {
     private readonly SimplArchiveDbContext _dbContext;
+    private readonly ILogger<WellKnownMaskSeeder> _logger;
 
-    public WellKnownMaskSeeder(SimplArchiveDbContext dbContext)
+    public WellKnownMaskSeeder(SimplArchiveDbContext dbContext, ILogger<WellKnownMaskSeeder> logger)
     {
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     private record FieldSpec(string Name, FieldDataType DataType, bool IsRequired);
@@ -93,6 +96,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // report "not found" regardless of the real data.
         if (await _dbContext.Masks.IgnoreQueryFilters(["TenantFilter"]).AnyAsync(m => m.TenantId == tenantId && m.Id == maskId, cancellationToken))
         {
+            await AddMissingFieldsAsync(tenantId, maskId, fields, cancellationToken);
             return;
         }
 
@@ -114,6 +118,74 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
                 CreatedAt = DateTimeOffset.UtcNow,
             });
         }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    // A well-known mask that already exists may still be MISSING FIELDS: its field set is fixed at the moment the
+    // tenant was seeded, and every field added to a well-known mask afterwards reached only tenants provisioned
+    // later. That is how ADR 0587's three e-mail fields (`Conversation ID`, `Mailbox path`, `Reference`) never
+    // arrived anywhere they were needed — the mask existed, so the check above returned and the fields were never
+    // looked at. The startup loop in Program.cs already visits every tenant for exactly this class of drift; this
+    // extends the probe it performs from "does the mask exist" to "does it have all of its fields".
+    //
+    // The fields are added to the mask's CURRENT version rather than by minting a new one. Well-known masks are
+    // app-owned schema, not user-authored masks, and an OPTIONAL field is purely additive: no existing document
+    // becomes invalid, no stored value changes meaning, and nothing needs re-pointing. That is why the guard below
+    // matters — a REQUIRED field is not additive. It would retroactively invalidate every document already on the
+    // mask (the required-field validation, ADR 0176, runs on mask (re)assignment), so this refuses to add one
+    // silently. Adding a required field to a well-known mask is a deliberate data migration, not a startup probe.
+    private async Task AddMissingFieldsAsync(Guid tenantId, Guid maskId, IReadOnlyList<FieldSpec> fields, CancellationToken cancellationToken)
+    {
+        if (fields.Count == 0)
+        {
+            return;
+        }
+
+        var currentVersion = await _dbContext.MaskVersions.IgnoreQueryFilters(["TenantFilter"])
+            .Where(mv => mv.TenantId == tenantId && mv.MaskId == maskId && mv.IsCurrent)
+            .Select(mv => mv.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (currentVersion == Guid.Empty)
+        {
+            return; // a mask with no current version is a broken row this probe must not compound
+        }
+
+        var existing = await _dbContext.FieldDefinitions.IgnoreQueryFilters(["TenantFilter"])
+            .Where(f => f.TenantId == tenantId && f.MaskVersionId == currentVersion)
+            .Select(f => f.Name)
+            .ToListAsync(cancellationToken);
+
+        var missing = fields.Where(f => !existing.Contains(f.Name, StringComparer.OrdinalIgnoreCase)).ToList();
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        var required = missing.Where(f => f.IsRequired).Select(f => f.Name).ToList();
+        if (required.Count > 0)
+        {
+            // Loud rather than silent: the alternative is invalidating documents at startup, and the alternative
+            // to that is skipping quietly, which would leave the mask permanently wrong with nobody told.
+            throw new RequiredFieldAddedToWellKnownMaskException(maskId, tenantId, required);
+        }
+
+        foreach (var field in missing)
+        {
+            _dbContext.FieldDefinitions.Add(new FieldDefinition
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                MaskVersionId = currentVersion,
+                Name = field.Name,
+                DataType = field.DataType,
+                IsRequired = false,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
+        _logger.LogInformation("Added {Count} missing field(s) to well-known mask {MaskId} for tenant {TenantId}: {Fields}",
+            missing.Count, maskId, tenantId, string.Join(", ", missing.Select(f => f.Name)));
 
         await _dbContext.SaveChangesAsync(cancellationToken);
     }

@@ -51,7 +51,7 @@ public class PersonalNotesMaskHealTests
         // The upgrade arrives: the startup backfill seeds the well-known masks for the existing tenant.
         using (var db = Ctx(connection, accessor))
         {
-            await new WellKnownMaskSeeder(db).EnsureWellKnownMasksAsync(_tenantId);
+            await new WellKnownMaskSeeder(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Masks.WellKnownMaskSeeder>.Instance).EnsureWellKnownMasksAsync(_tenantId);
         }
 
         // The next ensure heals the folder onto the NoteFolder mask's current version.
