@@ -132,6 +132,15 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         // port back from the ImapServer singleton and drive it with a real mail-client library (MailKit).
         Environment.SetEnvironmentVariable("Imap__Enabled", "true");
         Environment.SetEnvironmentVariable("Imap__Port", "-1");
+        // Session-hygiene caps scaled for testability (ADR 0618): the pre-auth timeout short enough that a
+        // test can wait it out, the caps low enough to hit with a handful of sockets — but all with headroom
+        // over what the MailKit-driven tests actually hold open (≤3 concurrent sessions, logins < 1 s).
+        // IdleTimeoutSeconds deliberately stays at its 30-minute default: the writes/Notes tests keep a
+        // MailKit client idle while they poll HTTP APIs, which on a slow runner can exceed any value small
+        // enough to be worth asserting on.
+        Environment.SetEnvironmentVariable("Imap__PreAuthTimeoutSeconds", "10");
+        Environment.SetEnvironmentVariable("Imap__MaxConnectionsPerUser", "5");
+        Environment.SetEnvironmentVariable("Imap__MaxConnections", "8");
         // OpenSearch + Tika → the real full-text path (name + index-field values + document-content). Configured
         // for the whole collection; the round-trip/workflow tests don't search, so this only adds startup cost.
         Environment.SetEnvironmentVariable("OpenSearch__Url", $"http://{_openSearch.Hostname}:{_openSearch.GetMappedPublicPort(9200)}");

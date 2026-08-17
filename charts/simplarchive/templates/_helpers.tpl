@@ -106,6 +106,14 @@ rolls the Deployment automatically (the pod template changes). Secrets come from
   value: "true"
 - name: Imap__TlsPort
   value: {{ .Values.imap.tlsPort | quote }}
+- name: Imap__IdleTimeoutSeconds
+  value: {{ .Values.imap.idleTimeoutSeconds | quote }}
+- name: Imap__PreAuthTimeoutSeconds
+  value: {{ .Values.imap.preAuthTimeoutSeconds | quote }}
+- name: Imap__MaxConnectionsPerUser
+  value: {{ .Values.imap.maxConnectionsPerUser | quote }}
+- name: Imap__MaxConnections
+  value: {{ .Values.imap.maxConnections | quote }}
 {{- end }}
 - name: ObjectStorage__ServiceUrl
   value: {{ include "simplarchive.objectStorageServiceUrl" . | quote }}

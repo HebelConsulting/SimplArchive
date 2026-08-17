@@ -81,9 +81,41 @@ internal static class ImapMailboxes
         }
 
         var (mailbox, messages) = resolved.Value;
-        var unseen = await UnseenCountAsync(scope, messages);
+
+        // RFC 3501 §6.3.10: echo only the requested items (a bare mailbox with no list gets them all —
+        // lenient, since we know clients that omit it). UNSEEN is the only one that costs a query, so it
+        // is computed only when asked for.
+        HashSet<string> requested = tokens.Count > 1
+            ? tokens[1].Trim('(', ')').Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(t => t.ToUpperInvariant()).ToHashSet()
+            : ["MESSAGES", "UIDNEXT", "UIDVALIDITY", "UNSEEN", "RECENT"];
+        var items = new List<string>();
+        if (requested.Contains("MESSAGES"))
+        {
+            items.Add($"MESSAGES {messages.Count}");
+        }
+
+        if (requested.Contains("UIDNEXT"))
+        {
+            items.Add($"UIDNEXT {mailbox.NextUid}");
+        }
+
+        if (requested.Contains("UIDVALIDITY"))
+        {
+            items.Add($"UIDVALIDITY {mailbox.UidValidity}");
+        }
+
+        if (requested.Contains("UNSEEN"))
+        {
+            items.Add($"UNSEEN {await UnseenCountAsync(scope, messages)}");
+        }
+
+        if (requested.Contains("RECENT"))
+        {
+            items.Add("RECENT 0");
+        }
+
         await session.WriteLineAsync(
-            $"* STATUS {ImapProtocol.QuoteMailbox(tokens[0])} (MESSAGES {messages.Count} UIDNEXT {mailbox.NextUid} UIDVALIDITY {mailbox.UidValidity} UNSEEN {unseen} RECENT 0)");
+            $"* STATUS {ImapProtocol.QuoteMailbox(tokens[0])} ({string.Join(' ', items)})");
         await session.OkAsync(tag, "STATUS");
     }
 

@@ -20,6 +20,7 @@ public sealed class ImapServer : IHostedService
     private readonly ILoggerFactory _loggerFactory;
     private readonly List<(TcpListener Listener, bool Tls)> _listeners = [];
     private readonly CancellationTokenSource _stopping = new();
+    private readonly ImapConnectionRegistry _registry = new();
     private X509Certificate2? _certificate;
 
     public ImapServer(IServiceScopeFactory scopeFactory, IOptions<ImapOptions> options, ILogger<ImapServer> logger, ILoggerFactory loggerFactory)
@@ -98,7 +99,7 @@ public sealed class ImapServer : IHostedService
                 return; // listener stopped
             }
 
-            var session = new ImapSession(_scopeFactory, _loggerFactory.CreateLogger<ImapSession>(), tls ? _certificate : null);
+            var session = new ImapSession(_scopeFactory, _loggerFactory.CreateLogger<ImapSession>(), tls ? _certificate : null, _options.Value, _registry);
             _ = session.RunAsync(client, stopping);
         }
     }

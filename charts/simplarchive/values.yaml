@@ -143,6 +143,13 @@ service:
 imap:
   enabled: false
   tlsPort: 993
+  # Session hygiene (ADR 0618). idleTimeoutSeconds keeps RFC 3501's 30-minute autologout floor;
+  # preAuthTimeoutSeconds is the short leash for sockets that never authenticate. maxConnectionsPerUser
+  # defaults to 16 — 8 is the recommended value for small deployments (Apple Mail alone opens ~5).
+  idleTimeoutSeconds: 1800
+  preAuthTimeoutSeconds: 60
+  maxConnectionsPerUser: 16
+  maxConnections: 200
 
 ingress:
   enabled: false

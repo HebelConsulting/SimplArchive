@@ -23,4 +23,20 @@ public class ImapOptions
     /// <summary>What the IMAP dialog shows as the server host — split-network deployments (compose: internal
     /// name vs localhost) mirror ObjectStorage's PublicServiceUrl idea.</summary>
     public string? PublicHost { get; set; }
+
+    /// <summary>Seconds an AUTHENTICATED session may sit between commands before autologout (ADR 0618).
+    /// Default 1800 — RFC 3501's "SHOULD NOT be less than 30 minutes" floor.</summary>
+    public int IdleTimeoutSeconds { get; set; } = 1800;
+
+    /// <summary>Seconds a connection gets from accept to successful authentication before it is dropped —
+    /// unauthenticated sockets are the cheapest to hold open, so they get the short leash (ADR 0618).</summary>
+    public int PreAuthTimeoutSeconds { get; set; } = 60;
+
+    /// <summary>Concurrent connections one user may hold. Apple Mail alone opens ~4–5; the default leaves
+    /// room for several devices, 8 is the recommended value for small deployments (ADR 0618).</summary>
+    public int MaxConnectionsPerUser { get; set; } = 16;
+
+    /// <summary>Concurrent connections across all users — process protection; the excess connection gets a
+    /// BYE at the greeting (ADR 0618).</summary>
+    public int MaxConnections { get; set; } = 200;
 }

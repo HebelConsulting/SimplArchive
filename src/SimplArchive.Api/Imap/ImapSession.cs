@@ -25,6 +25,8 @@ public sealed class ImapSession
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ImapSession> _logger;
     private readonly X509Certificate2? _tlsCertificate;
+    private readonly ImapOptions _options;
+    private readonly ImapConnectionRegistry _registry;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     private Stream _stream = Stream.Null;
@@ -34,15 +36,18 @@ public sealed class ImapSession
     private bool _authenticated;
     private ImapSelectedMailbox? _selected;
 
-    public ImapSession(IServiceScopeFactory scopeFactory, ILogger<ImapSession> logger, X509Certificate2? tlsCertificate)
+    internal ImapSession(IServiceScopeFactory scopeFactory, ILogger<ImapSession> logger, X509Certificate2? tlsCertificate, ImapOptions options, ImapConnectionRegistry registry)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _tlsCertificate = tlsCertificate;
+        _options = options;
+        _registry = registry;
     }
 
     public async Task RunAsync(TcpClient client, CancellationToken stopping)
     {
+        var counted = _registry.TryAddConnection(_options.MaxConnections);
         try
         {
             using var _ = client;
@@ -58,16 +63,38 @@ public sealed class ImapSession
             // IMAP is line-oriented ASCII with explicit {n} literals; Latin-1 keeps raw bytes round-trippable.
             _reader = new StreamReader(raw, Encoding.Latin1, false, 4096, leaveOpen: true);
 
+            if (!counted)
+            {
+                // The total cap (ADR 0618) refuses at the greeting — a polite BYE instead of a silent close,
+                // after the TLS handshake so a TLS client can actually read it.
+                _logger.LogWarning("IMAP connection refused: total connection cap ({MaxConnections}) reached", _options.MaxConnections);
+                await WriteLineAsync("* BYE too many connections");
+                return;
+            }
+
             await WriteLineAsync("* OK SimplArchive IMAP4rev1 ready");
             await CommandLoopAsync(stopping);
         }
         catch (Exception e) when (e is IOException or ObjectDisposedException or OperationCanceledException)
         {
-            // A dropped connection is a client's normal way to leave.
+            // A dropped connection is a client's normal way to leave; the idle/pre-auth autologout (ADR 0618)
+            // also lands here after its BYE.
         }
         catch (Exception e)
         {
             _logger.LogError(e, "IMAP session failed");
+        }
+        finally
+        {
+            if (_authenticated)
+            {
+                _registry.RemoveUser(_userId);
+            }
+
+            if (counted)
+            {
+                _registry.RemoveConnection();
+            }
         }
     }
 
@@ -265,7 +292,7 @@ public sealed class ImapSession
         if (string.IsNullOrEmpty(initial))
         {
             await WriteLineAsync("+ ");
-            initial = await _reader.ReadLineAsync();
+            initial = await ReadTimedLineAsync();
             if (initial is null)
             {
                 return;
@@ -295,6 +322,14 @@ public sealed class ImapSession
 
     private async Task AuthenticateAsync(string tag, string email, string password)
     {
+        // Re-authenticating an authenticated session would double-count it in the per-user registry (its
+        // release happens once, at session end) — and RFC 3501 forbids it anyway.
+        if (_authenticated)
+        {
+            await WriteLineAsync($"{tag} NO already authenticated");
+            return;
+        }
+
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
 
@@ -315,6 +350,15 @@ public sealed class ImapSession
             // have IMAP enabled. The failed attempt is Warning-logged for SIEM aggregation, like a failed login.
             _logger.LogWarning("IMAP authentication failed for {Email}", email);
             await WriteLineAsync($"{tag} NO authentication failed");
+            return;
+        }
+
+        // The per-user cap counts at successful authentication (ADR 0618) — before it the user is unknown.
+        // The refused session stays unauthenticated, so the pre-auth timeout keeps it on the short leash.
+        if (!_registry.TryAddUser(user.Id, _options.MaxConnectionsPerUser))
+        {
+            _logger.LogDebug("IMAP connection refused for {Email}: per-user connection cap ({MaxConnectionsPerUser}) reached", email, _options.MaxConnectionsPerUser);
+            await WriteLineAsync($"{tag} NO too many connections for this user");
             return;
         }
 
@@ -363,6 +407,25 @@ public sealed class ImapSession
         await _stream.FlushAsync();
     }
 
+    // Every read waits under a budget (ADR 0618): the short pre-auth leash until login succeeds, RFC 3501's
+    // 30-minute autologout floor after. On expiry the session says BYE and leaves through the same IOException
+    // path as a dropped connection. The abandoned read's later fault (when the socket closes under it) is
+    // observed so it can't surface as an unobserved task exception.
+    private async Task<T> WithReadTimeoutAsync<T>(Task<T> read)
+    {
+        var timeout = TimeSpan.FromSeconds(_authenticated ? _options.IdleTimeoutSeconds : _options.PreAuthTimeoutSeconds);
+        if (await Task.WhenAny(read, Task.Delay(timeout)) != read)
+        {
+            _ = read.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+            await WriteLineAsync(_authenticated ? "* BYE autologout; idle for too long" : "* BYE login timed out");
+            throw new IOException("IMAP read timed out");
+        }
+
+        return await read;
+    }
+
+    private Task<string?> ReadTimedLineAsync() => WithReadTimeoutAsync(_reader.ReadLineAsync());
+
     // Reads one command line, absorbing {n}-byte literals (RFC 3501 §4.3): on a trailing {n}, answer the
     // continuation, read exactly n raw characters, and keep reading the rest of the same command.
     private async Task<string?> ReadCommandLineAsync()
@@ -370,7 +433,7 @@ public sealed class ImapSession
         var buffer = new StringBuilder();
         while (true)
         {
-            var line = await _reader.ReadLineAsync();
+            var line = await ReadTimedLineAsync();
             if (line is null)
             {
                 return buffer.Length == 0 ? null : buffer.ToString();
@@ -388,7 +451,7 @@ public sealed class ImapSession
             var read = 0;
             while (read < n)
             {
-                var got = await _reader.ReadAsync(chars.AsMemory(read, n - read));
+                var got = await WithReadTimeoutAsync(_reader.ReadAsync(chars.AsMemory(read, n - read)).AsTask());
                 if (got == 0)
                 {
                     return null;
