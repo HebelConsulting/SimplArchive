@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SimplArchive.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using SimplArchive.Infrastructure.Persistence;
 namespace SimplArchive.Infrastructure.Migrations
 {
     [DbContext(typeof(SimplArchiveDbContext))]
-    partial class SimplArchiveDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260817074713_NotificationEmailRetryBookkeeping")]
+    partial class NotificationEmailRetryBookkeeping
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1173,29 +1176,6 @@ namespace SimplArchive.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("ImapMessageUids");
-                });
-
-            modelBuilder.Entity("SimplArchive.Domain.Imap.ImapSeenMark", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("DocumentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("SeenAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("UserId", "DocumentId");
-
-                    b.HasIndex("DocumentId");
-
-                    b.HasIndex("TenantId", "DocumentId");
-
-                    b.ToTable("ImapSeenMarks");
                 });
 
             modelBuilder.Entity("SimplArchive.Domain.LegalHolds.LegalHold", b =>
@@ -2657,27 +2637,6 @@ namespace SimplArchive.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("SimplArchive.Domain.Imap.ImapSeenMark", b =>
-                {
-                    b.HasOne("SimplArchive.Domain.Documents.Document", null)
-                        .WithMany()
-                        .HasForeignKey("DocumentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("SimplArchive.Domain.Tenants.Tenant", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SimplArchive.Domain.Users.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

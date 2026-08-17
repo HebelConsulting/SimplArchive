@@ -21,6 +21,10 @@ public sealed class SmtpEmailSender : IEmailSender
         _logger = logger;
     }
 
+    // 5xx = permanent per RFC 5321; 4xx is a transient failure the sender is invited to retry, which is exactly
+    // what the dispatcher's retry budget is for.
+    private static bool IsPermanent(SmtpStatusCode status) => (int)status >= 500;
+
     public async Task SendAsync(string toAddress, string toName, string subject, string body, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Sending mail to {Recipient}.", toAddress);
@@ -42,7 +46,19 @@ public sealed class SmtpEmailSender : IEmailSender
             await client.AuthenticateAsync(_options.User, _options.Password ?? string.Empty, cancellationToken);
         }
 
-        await client.SendAsync(message, cancellationToken);
+        try
+        {
+            await client.SendAsync(message, cancellationToken);
+        }
+        catch (SmtpCommandException e) when (IsPermanent(e.StatusCode))
+        {
+            // 5xx is the server saying "not now and not ever" — no such mailbox, no such domain, refused.
+            // Translated at the boundary so the dispatcher can decide policy without catching a mail-library
+            // type through the IEmailSender abstraction (ADR 0612).
+            throw new PermanentEmailFailureException(
+                $"The mail server permanently rejected {toAddress} ({(int)e.StatusCode} {e.ErrorCode}): {e.Message}", e);
+        }
+
         await client.DisconnectAsync(quit: true, cancellationToken);
         _logger.LogDebug("Sent mail to {Recipient}.", toAddress);
     }

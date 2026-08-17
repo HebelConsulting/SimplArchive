@@ -77,4 +77,20 @@ public class Notification : ITenantScoped
     // Email delivery bookkeeping (ADR "Email notifications (SMTP)"): null = not yet emailed; set to the send
     // instant once EmailNotificationWorker delivers it. A failed send leaves it null so the next sweep retries.
     public DateTimeOffset? EmailedAt { get; set; }
+
+    /// <summary>
+    /// How many times emailing this notification has been attempted and failed (ADR 0612). A failed send
+    /// deliberately leaves <see cref="EmailedAt"/> null so the next sweep retries — at-least-once — but without
+    /// a count there is nothing to distinguish "the server was down for a minute" from "this address cannot
+    /// receive mail", and the second kind never leaves the pending set.
+    /// </summary>
+    public int EmailAttempts { get; set; }
+
+    /// <summary>
+    /// When the system gave up emailing this notification: the retry budget was spent, or the server rejected
+    /// the address permanently. Set means it leaves the pending set for good — which is the point, because a
+    /// bounded batch made entirely of hopeless rows stalls every legitimate notification behind it. The in-app
+    /// notification is unaffected; only the email is abandoned.
+    /// </summary>
+    public DateTimeOffset? EmailFailedAt { get; set; }
 }

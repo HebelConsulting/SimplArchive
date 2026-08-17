@@ -67,7 +67,7 @@ public class EmailNotificationDispatcherTests
         int sent;
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance);
+            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
             sent = await dispatcher.DispatchPendingAsync();
         }
 
@@ -85,7 +85,7 @@ public class EmailNotificationDispatcherTests
         // A second pass sends nothing (the first is now stamped, the other was already emailed).
         using (var again = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(again, sender, NullLogger<EmailNotificationDispatcher>.Instance);
+            var dispatcher = new EmailNotificationDispatcher(again, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
             Assert.Equal(0, await dispatcher.DispatchPendingAsync());
         }
 
@@ -116,7 +116,7 @@ public class EmailNotificationDispatcherTests
         var sender = new RecordingEmailSender();
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance);
+            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
             Assert.Equal(1, await dispatcher.DispatchPendingAsync()); // only the non-muted one counts as sent
         }
 
@@ -148,7 +148,7 @@ public class EmailNotificationDispatcherTests
         var sender = new RecordingEmailSender();
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance);
+            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
             Assert.Equal(2, await dispatcher.DispatchPendingAsync());
         }
 
@@ -174,7 +174,7 @@ public class EmailNotificationDispatcherTests
         sender.FailFor.Add("bad@acme.test");
         using (var act = CreateContext(connection))
         {
-            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance);
+            var dispatcher = new EmailNotificationDispatcher(act, sender, NullLogger<EmailNotificationDispatcher>.Instance, NoOpAuditRecorder.Instance);
             Assert.Equal(1, await dispatcher.DispatchPendingAsync()); // only the good one counts as sent
         }
 

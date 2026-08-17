@@ -20,6 +20,15 @@ public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
         // notifications carry 1.
         builder.Property(n => n.EventCount).HasDefaultValue(1);
 
+        // Email retry bookkeeping (ADR 0612). Default 0 so existing rows read as "never attempted" rather than
+        // null-and-ambiguous; EmailFailedAt stays nullable because "gave up" is genuinely an absent state for
+        // almost every row.
+        builder.Property(n => n.EmailAttempts).HasDefaultValue(0);
+
+        // The pending-email sweep's exact predicate: un-emailed, not given up, oldest first. Without this it is a
+        // scan of every notification ever created, on a table that only grows.
+        builder.HasIndex(n => new { n.EmailedAt, n.EmailFailedAt, n.Id });
+
         builder.HasIndex(n => new { n.TenantId, n.RecipientUserId, n.CreatedAt, n.Id });
 
         builder.HasOne<Tenant>()
