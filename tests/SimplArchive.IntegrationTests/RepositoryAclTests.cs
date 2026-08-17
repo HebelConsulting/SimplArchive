@@ -18,38 +18,12 @@ namespace SimplArchive.IntegrationTests;
 // import toggle off, the archived grants are ignored.
 public class RepositoryAclTests
 {
-    private sealed class DictStorage : IObjectStorageClient
-    {
-        public Dictionary<string, byte[]> Objects { get; } = [];
-        public Task<Stream> GetObjectAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult<Stream>(new MemoryStream(Objects[objectKey]));
-        public Task PutObjectAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken = default)
-        {
-            using var ms = new MemoryStream();
-            content.CopyTo(ms);
-            Objects[objectKey] = ms.ToArray();
-            return Task.CompletedTask;
-        }
-        public Task<Uri> GetPresignedUploadUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default) => Task.FromResult(new Uri("http://x"));
-        public Task<Uri> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default) => Task.FromResult(new Uri("http://x"));
-        public Task<Uri> GetPresignedPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, string? contentType = null, CancellationToken cancellationToken = default) => Task.FromResult(new Uri("http://x"));
-        public Task EnsureTenantBucketAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetBucketLifecycleAsync(Guid tenantId, int incompleteUploadCleanupDays, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<bool> ExistsAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult(Objects.ContainsKey(objectKey));
-        public Task<long> GetObjectSizeAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult((long)(Objects.TryGetValue(objectKey, out var __b) ? __b.Length : 0));
-        public Task<IReadOnlyList<StorageObject>> ListObjectsAsync(string prefix, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<StorageObject>>([]);
-        public Task CopyObjectAsync(string sourceKey, string destinationKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task DeleteObjectAsync(string objectKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetRetentionAsync(string objectKey, DateTimeOffset retainUntil, WormLockMode mode, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetLegalHoldAsync(string objectKey, bool held, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<ObjectLockStatus> GetLockStatusAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult(new ObjectLockStatus(null, false));
-    }
-
     private readonly Guid _tenantA = Guid.NewGuid();
     private SimplArchiveDbContext Ctx(SqliteConnection c, CurrentTenantAccessor a) =>
         new(new DbContextOptionsBuilder<SimplArchiveDbContext>().UseSqlite(c).Options, a);
 
     // Seeds tenant A (repo with BreaksInheritance + a user grant + a group grant) and returns the export bytes.
-    private async Task<MemoryStream> SeedAndExportAsync(SqliteConnection c, CurrentTenantAccessor accessor, DictStorage storage, Guid tenantB)
+    private async Task<MemoryStream> SeedAndExportAsync(SqliteConnection c, CurrentTenantAccessor accessor, InMemoryObjectStorage storage, Guid tenantB)
     {
         accessor.TenantId = _tenantA;
         Guid repoId;
@@ -90,7 +64,7 @@ public class RepositoryAclTests
         using (var setup = Ctx(connection, accessor)) await setup.Database.EnsureCreatedAsync();
 
         var tenantB = Guid.NewGuid();
-        var storage = new DictStorage();
+        var storage = new InMemoryObjectStorage();
         var zip = await SeedAndExportAsync(connection, accessor, storage, tenantB);
 
         accessor.TenantId = tenantB;
@@ -133,7 +107,7 @@ public class RepositoryAclTests
         using (var setup = Ctx(connection, accessor)) await setup.Database.EnsureCreatedAsync();
 
         var tenantB = Guid.NewGuid();
-        var storage = new DictStorage();
+        var storage = new InMemoryObjectStorage();
         var zip = await SeedAndExportAsync(connection, accessor, storage, tenantB);
 
         accessor.TenantId = tenantB;

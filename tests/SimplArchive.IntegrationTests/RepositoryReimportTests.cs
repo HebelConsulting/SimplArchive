@@ -17,32 +17,6 @@ namespace SimplArchive.IntegrationTests;
 // version-adding sync with updateExisting=true.
 public class RepositoryReimportTests
 {
-    private sealed class DictStorage : IObjectStorageClient
-    {
-        public Dictionary<string, byte[]> Objects { get; } = [];
-        public Task<Stream> GetObjectAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult<Stream>(new MemoryStream(Objects[objectKey]));
-        public Task PutObjectAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken = default)
-        {
-            using var ms = new MemoryStream();
-            content.CopyTo(ms);
-            Objects[objectKey] = ms.ToArray();
-            return Task.CompletedTask;
-        }
-        public Task<Uri> GetPresignedUploadUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default) => Task.FromResult(new Uri("http://x"));
-        public Task<Uri> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default) => Task.FromResult(new Uri("http://x"));
-        public Task<Uri> GetPresignedPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, string? contentType = null, CancellationToken cancellationToken = default) => Task.FromResult(new Uri("http://x"));
-        public Task EnsureTenantBucketAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetBucketLifecycleAsync(Guid tenantId, int incompleteUploadCleanupDays, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<bool> ExistsAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult(Objects.ContainsKey(objectKey));
-        public Task<long> GetObjectSizeAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult((long)(Objects.TryGetValue(objectKey, out var __b) ? __b.Length : 0));
-        public Task<IReadOnlyList<StorageObject>> ListObjectsAsync(string prefix, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<StorageObject>>([]);
-        public Task CopyObjectAsync(string sourceKey, string destinationKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task DeleteObjectAsync(string objectKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetRetentionAsync(string objectKey, DateTimeOffset retainUntil, WormLockMode mode, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetLegalHoldAsync(string objectKey, bool held, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<ObjectLockStatus> GetLockStatusAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult(new ObjectLockStatus(null, false));
-    }
-
     private readonly Guid _tenantA = Guid.NewGuid();
     private readonly Guid _tenantB = Guid.NewGuid();
     private SimplArchiveDbContext Ctx(SqliteConnection c, CurrentTenantAccessor a) =>
@@ -56,7 +30,7 @@ public class RepositoryReimportTests
         var accessor = new CurrentTenantAccessor();
         using (var setup = Ctx(connection, accessor)) await setup.Database.EnsureCreatedAsync();
 
-        var storage = new DictStorage();
+        var storage = new InMemoryObjectStorage();
         var userId = Guid.NewGuid();
         Guid srcId, docAId;
 
@@ -103,7 +77,7 @@ public class RepositoryReimportTests
         Assert.Equal(2, await VersionCountAsync(connection, accessor, "DocA")); // the new version was synced in
     }
 
-    private static void AddVersion(SimplArchiveDbContext db, DictStorage storage, Guid tenantId, Guid docId, int number, string content, string key, Guid userId)
+    private static void AddVersion(SimplArchiveDbContext db, InMemoryObjectStorage storage, Guid tenantId, Guid docId, int number, string content, string key, Guid userId)
     {
         var bytes = Encoding.UTF8.GetBytes(content);
         storage.Objects[key] = bytes;
@@ -122,7 +96,7 @@ public class RepositoryReimportTests
         });
     }
 
-    private async Task<MemoryStream> ExportAsync(SqliteConnection c, DictStorage storage, CurrentTenantAccessor accessor, Guid tenantId, Guid rootId)
+    private async Task<MemoryStream> ExportAsync(SqliteConnection c, InMemoryObjectStorage storage, CurrentTenantAccessor accessor, Guid tenantId, Guid rootId)
     {
         var saved = accessor.TenantId;
         accessor.TenantId = tenantId;
@@ -136,7 +110,7 @@ public class RepositoryReimportTests
         return zip;
     }
 
-    private async Task<RepositoryImporter.ImportResult> ImportAsync(SqliteConnection c, DictStorage storage, CurrentTenantAccessor accessor, MemoryStream zip, bool updateExisting)
+    private async Task<RepositoryImporter.ImportResult> ImportAsync(SqliteConnection c, InMemoryObjectStorage storage, CurrentTenantAccessor accessor, MemoryStream zip, bool updateExisting)
     {
         using var db = Ctx(c, accessor);
         return await new RepositoryImporter(db, storage, accessor, new WellKnownMaskSeeder(db), new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance), NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance, new SimplArchive.Api.Documents.PersonalRepositoryProvisioner(db, NoOpAuditRecorder.Instance)).ImportAsync(zip, null, updateExisting, includePermissions: false, merge: false, SimplArchive.Api.Documents.LeafMergeMode.Rename, CancellationToken.None);

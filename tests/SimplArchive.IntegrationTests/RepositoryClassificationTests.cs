@@ -16,43 +16,17 @@ namespace SimplArchive.IntegrationTests;
 // principal's clearance travels too, applied max-never-lower so a re-import never downgrades a destination user.
 public class RepositoryClassificationTests
 {
-    private sealed class DictStorage : IObjectStorageClient
-    {
-        public Dictionary<string, byte[]> Objects { get; } = [];
-        public Task<Stream> GetObjectAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult<Stream>(new MemoryStream(Objects.GetValueOrDefault(objectKey, [])));
-        public Task PutObjectAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken = default)
-        {
-            using var ms = new MemoryStream();
-            content.CopyTo(ms);
-            Objects[objectKey] = ms.ToArray();
-            return Task.CompletedTask;
-        }
-        public Task<Uri> GetPresignedUploadUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default) => Task.FromResult(new Uri("http://x"));
-        public Task<Uri> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default) => Task.FromResult(new Uri("http://x"));
-        public Task<Uri> GetPresignedPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, string? contentType = null, CancellationToken cancellationToken = default) => Task.FromResult(new Uri("http://x"));
-        public Task EnsureTenantBucketAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetBucketLifecycleAsync(Guid tenantId, int incompleteUploadCleanupDays, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<bool> ExistsAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult(Objects.ContainsKey(objectKey));
-        public Task<long> GetObjectSizeAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult(0L);
-        public Task<IReadOnlyList<StorageObject>> ListObjectsAsync(string prefix, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<StorageObject>>([]);
-        public Task CopyObjectAsync(string sourceKey, string destinationKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task DeleteObjectAsync(string objectKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetRetentionAsync(string objectKey, DateTimeOffset retainUntil, WormLockMode mode, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetLegalHoldAsync(string objectKey, bool held, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<ObjectLockStatus> GetLockStatusAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult(new ObjectLockStatus(null, false));
-    }
-
     private readonly Guid _tenantA = Guid.NewGuid();
     private SimplArchiveDbContext Ctx(SqliteConnection c, CurrentTenantAccessor a) =>
         new(new DbContextOptionsBuilder<SimplArchiveDbContext>().UseSqlite(c).Options, a);
 
-    private static RepositoryImporter Importer(SimplArchiveDbContext db, DictStorage storage, CurrentTenantAccessor accessor) =>
+    private static RepositoryImporter Importer(SimplArchiveDbContext db, InMemoryObjectStorage storage, CurrentTenantAccessor accessor) =>
         new(db, storage, accessor, new WellKnownMaskSeeder(db),
             new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance), NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance, new SimplArchive.Api.Documents.PersonalRepositoryProvisioner(db, NoOpAuditRecorder.Instance));
 
     // Seeds tenant A: a "Confidential" label (rank 3, watermarked), a custom "Contract" mask defaulting to it, and a
     // root document labelled Confidential + created by jane (clearance 5). Returns the export bytes (permissions on).
-    private async Task<MemoryStream> SeedAndExportAsync(SqliteConnection c, CurrentTenantAccessor accessor, DictStorage storage, Guid tenantB)
+    private async Task<MemoryStream> SeedAndExportAsync(SqliteConnection c, CurrentTenantAccessor accessor, InMemoryObjectStorage storage, Guid tenantB)
     {
         accessor.TenantId = _tenantA;
         Guid repoId;
@@ -97,7 +71,7 @@ public class RepositoryClassificationTests
         using (var setup = Ctx(connection, accessor)) await setup.Database.EnsureCreatedAsync();
 
         var tenantB = Guid.NewGuid();
-        var storage = new DictStorage();
+        var storage = new InMemoryObjectStorage();
         var zip = await SeedAndExportAsync(connection, accessor, storage, tenantB);
 
         accessor.TenantId = tenantB;
@@ -136,7 +110,7 @@ public class RepositoryClassificationTests
         using (var setup = Ctx(connection, accessor)) await setup.Database.EnsureCreatedAsync();
 
         var tenantB = Guid.NewGuid();
-        var storage = new DictStorage();
+        var storage = new InMemoryObjectStorage();
         var zip = await SeedAndExportAsync(connection, accessor, storage, tenantB);
 
         // Tenant B already has jane at a HIGHER clearance (7) than the archive's (5).
@@ -169,7 +143,7 @@ public class RepositoryClassificationTests
         using (var setup = Ctx(connection, accessor)) await setup.Database.EnsureCreatedAsync();
 
         var tenantB = Guid.NewGuid();
-        var storage = new DictStorage();
+        var storage = new InMemoryObjectStorage();
         var zip = await SeedAndExportAsync(connection, accessor, storage, tenantB);
 
         accessor.TenantId = tenantB;

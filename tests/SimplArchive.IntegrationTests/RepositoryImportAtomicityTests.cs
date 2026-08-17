@@ -18,44 +18,6 @@ namespace SimplArchive.IntegrationTests;
 // was missing. These tests fail a real import midway and assert the destination tenant is untouched.
 public class RepositoryImportAtomicityTests
 {
-    // Stores blobs in a dictionary, but throws on the Nth upload — standing in for the object store going away
-    // partway through (a network drop, a full disk, an expired credential), which is when the partial tree used to
-    // appear. FailOnPut = 0 never fails.
-    private sealed class FlakyStorage : IObjectStorageClient
-    {
-        public Dictionary<string, byte[]> Objects { get; } = [];
-        public int FailOnPut { get; set; }
-        public int Puts { get; private set; }
-
-        public Task PutObjectAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken = default)
-        {
-            if (++Puts == FailOnPut)
-            {
-                throw new IOException("object storage went away mid-import");
-            }
-
-            using var ms = new MemoryStream();
-            content.CopyTo(ms);
-            Objects[objectKey] = ms.ToArray();
-            return Task.CompletedTask;
-        }
-
-        public Task<Stream> GetObjectAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult<Stream>(new MemoryStream(Objects[objectKey]));
-        public Task<Uri> GetPresignedUploadUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default) => Task.FromResult(new Uri("http://x"));
-        public Task<Uri> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default) => Task.FromResult(new Uri("http://x"));
-        public Task<Uri> GetPresignedPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, string? contentType = null, CancellationToken cancellationToken = default) => Task.FromResult(new Uri("http://x"));
-        public Task EnsureTenantBucketAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetBucketLifecycleAsync(Guid tenantId, int incompleteUploadCleanupDays, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<bool> ExistsAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult(Objects.ContainsKey(objectKey));
-        public Task<long> GetObjectSizeAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult((long)(Objects.TryGetValue(objectKey, out var b) ? b.Length : 0));
-        public Task<IReadOnlyList<StorageObject>> ListObjectsAsync(string prefix, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<StorageObject>>([]);
-        public Task CopyObjectAsync(string sourceKey, string destinationKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task DeleteObjectAsync(string objectKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetRetentionAsync(string objectKey, DateTimeOffset retainUntil, WormLockMode mode, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetLegalHoldAsync(string objectKey, bool held, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<ObjectLockStatus> GetLockStatusAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult(new ObjectLockStatus(null, false));
-    }
-
     private static SimplArchiveDbContext Ctx(SqliteConnection c, CurrentTenantAccessor a) =>
         new(new DbContextOptionsBuilder<SimplArchiveDbContext>().UseSqlite(c).Options, a);
 
@@ -67,7 +29,7 @@ public class RepositoryImportAtomicityTests
 
     // Exports a two-leaf repository from tenant A and returns the archive. Two leaves is the point: the importer
     // uploads their blobs one after another, so failing the second means the first document is already written.
-    private static async Task<MemoryStream> SeedAndExportAsync(SqliteConnection connection, CurrentTenantAccessor accessor, Guid tenantA, Guid tenantB, FlakyStorage storage)
+    private static async Task<MemoryStream> SeedAndExportAsync(SqliteConnection connection, CurrentTenantAccessor accessor, Guid tenantA, Guid tenantB, InMemoryObjectStorage storage)
     {
         accessor.TenantId = tenantA;
         Guid srcId;
@@ -126,7 +88,7 @@ public class RepositoryImportAtomicityTests
 
         var tenantA = Guid.NewGuid();
         var tenantB = Guid.NewGuid();
-        var storage = new FlakyStorage();
+        var storage = new InMemoryObjectStorage();
         var zip = await SeedAndExportAsync(connection, accessor, tenantA, tenantB, storage);
 
         // Fail the SECOND blob upload: by then the first document and version are written, the placeholder author
@@ -167,7 +129,7 @@ public class RepositoryImportAtomicityTests
 
         var tenantA = Guid.NewGuid();
         var tenantB = Guid.NewGuid();
-        var storage = new FlakyStorage();
+        var storage = new InMemoryObjectStorage();
         var zip = await SeedAndExportAsync(connection, accessor, tenantA, tenantB, storage);
 
         storage.FailOnPut = 2;

@@ -17,32 +17,6 @@ namespace SimplArchive.IntegrationTests;
 // reused (its documents land alongside the existing ones) rather than creating a duplicate folder.
 public class RepositoryMergeImportTests
 {
-    private sealed class DictStorage : IObjectStorageClient
-    {
-        public Dictionary<string, byte[]> Objects { get; } = [];
-        public Task<Stream> GetObjectAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult<Stream>(new MemoryStream(Objects[objectKey]));
-        public Task PutObjectAsync(string objectKey, Stream content, string contentType, CancellationToken cancellationToken = default)
-        {
-            using var ms = new MemoryStream();
-            content.CopyTo(ms);
-            Objects[objectKey] = ms.ToArray();
-            return Task.CompletedTask;
-        }
-        public Task<Uri> GetPresignedUploadUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default) => Task.FromResult(new Uri("http://x"));
-        public Task<Uri> GetPresignedDownloadUrlAsync(string objectKey, TimeSpan expiry, string? downloadFileName = null, CancellationToken cancellationToken = default) => Task.FromResult(new Uri("http://x"));
-        public Task<Uri> GetPresignedPreviewUrlAsync(string objectKey, TimeSpan expiry, string? fileName = null, string? contentType = null, CancellationToken cancellationToken = default) => Task.FromResult(new Uri("http://x"));
-        public Task EnsureTenantBucketAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetBucketLifecycleAsync(Guid tenantId, int incompleteUploadCleanupDays, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<bool> ExistsAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult(Objects.ContainsKey(objectKey));
-        public Task<long> GetObjectSizeAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult((long)(Objects.TryGetValue(objectKey, out var __b) ? __b.Length : 0));
-        public Task<IReadOnlyList<StorageObject>> ListObjectsAsync(string prefix, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<StorageObject>>([]);
-        public Task CopyObjectAsync(string sourceKey, string destinationKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task DeleteObjectAsync(string objectKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetRetentionAsync(string objectKey, DateTimeOffset retainUntil, WormLockMode mode, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SetLegalHoldAsync(string objectKey, bool held, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<ObjectLockStatus> GetLockStatusAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult(new ObjectLockStatus(null, false));
-    }
-
     private readonly Guid _tenantA = Guid.NewGuid();
     private readonly Guid _tenantB = Guid.NewGuid();
     private SimplArchiveDbContext Ctx(SqliteConnection c, CurrentTenantAccessor a) =>
@@ -56,7 +30,7 @@ public class RepositoryMergeImportTests
         var accessor = new CurrentTenantAccessor();
         using (var setup = Ctx(connection, accessor)) await setup.Database.EnsureCreatedAsync();
 
-        var storage = new DictStorage();
+        var storage = new InMemoryObjectStorage();
 
         // ---- Tenant A: a "Shared" folder (export root) containing DocA (v1) ----
         accessor.TenantId = _tenantA;
@@ -132,7 +106,7 @@ public class RepositoryMergeImportTests
         await connection.OpenAsync();
         var accessor = new CurrentTenantAccessor();
         using (var setup = Ctx(connection, accessor)) await setup.Database.EnsureCreatedAsync();
-        var storage = new DictStorage();
+        var storage = new InMemoryObjectStorage();
 
         // Tenant A: "Shared" / "DocA" (v1, content "a-v1").
         accessor.TenantId = _tenantA;
