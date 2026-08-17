@@ -123,6 +123,12 @@ builder.Services.AddDataProtection()
 
 builder.Services.AddAuthServer(builder.Configuration, builder.Environment);
 
+// The DAV surfaces authenticate with the SHARED DAV password as a real authentication scheme (ADR 0621), so
+// the CalDAV/CardDAV controllers can carry [Authorize] instead of hand-rolling Basic parsing per request.
+builder.Services.AddAuthentication()
+    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, SimplArchive.Api.CalDav.Authentication.DavBasicAuthenticationHandler>(
+        SimplArchive.Api.CalDav.Authentication.DavAuthenticationDefaults.Scheme, _ => { });
+
 // Real-time in-app notifications (ADR "Real-time notifications (SignalR)"): a hub the clients subscribe to, plus
 // a hub-context broadcaster overriding the default NullRealtimeNotifier so the DbContext choke point delivers
 // live. SubjectUserIdProvider keys connections to the User id.
@@ -552,8 +558,6 @@ app.UseMiddleware<SimplArchive.Api.WebDav.WebDavMiddleware>();
 // category is at Trace, except for one Warning it always emits: a DAV request that fell through unhandled,
 // which is what a native-client compatibility gap looks like from the server side.
 app.UseMiddleware<SimplArchive.Api.CalDav.DavWireTraceMiddleware>();
-
-app.UseMiddleware<SimplArchive.Api.CalDav.CalDavMiddleware>();
 
 app.UseBlazorFrameworkFiles();
 

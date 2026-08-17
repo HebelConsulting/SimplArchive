@@ -77,6 +77,14 @@ internal sealed record DavProtocol(
             path.Equals(p.BasePath, StringComparison.OrdinalIgnoreCase)
             || path.StartsWith(p.BasePath + "/", StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>The home-set property as an XName, for the ported XML builders.</summary>
+    internal System.Xml.Linq.XName HomeSetName =>
+        (this == CalDav ? Xml.DavNames.CalDav : Xml.DavNames.CardDav) + HomeSetProperty;
+
+    /// <summary>The element marking a collection as this protocol's kind, as an XName.</summary>
+    internal System.Xml.Linq.XName CollectionTypeName =>
+        (this == CalDav ? Xml.DavNames.CalDav : Xml.DavNames.CardDav) + CollectionResourceType;
+
     internal string PrincipalHref(Guid userId) => $"{BasePath}/principals/{userId}/";
 
     internal string HomeSetHref() => $"{BasePath}/{CollectionsSegment}/";

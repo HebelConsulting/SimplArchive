@@ -62,11 +62,14 @@ public class ArchitectureTests
     [Fact]
     public void Controllers_end_with_Controller()
     {
-        var predicate = Types.InAssembly(Api).That().Inherit(typeof(ControllerBase));
-        AssertMatchedSomething(predicate, "ControllerBase subclasses");
+        // ABSTRACT bases are excluded: the rule exists so a routable controller is recognisable by name, and an
+        // abstract type serves no request — the DAV controllers share `DavControllerBase`, which is shared
+        // plumbing, not an endpoint. A concrete controller still has to end in Controller.
+        var predicate = Types.InAssembly(Api).That().Inherit(typeof(ControllerBase)).And().AreNotAbstract();
+        AssertMatchedSomething(predicate, "concrete ControllerBase subclasses");
 
         AssertOk(predicate.Should().HaveNameEndingWith("Controller").GetResult(),
-            "Every MVC controller (a ControllerBase subclass) must be named *Controller");
+            "Every MVC controller (a concrete ControllerBase subclass) must be named *Controller");
     }
 
     [Fact]

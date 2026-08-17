@@ -115,6 +115,14 @@ public static class DavNames
     // calendarserver.org (CTag)
     public static readonly XName GetCTag = CalendarServer + "getctag";
 
+    // ADDED for SimplArchive: the colour lives in Apple's ical namespace, which is where calendar and
+    // contacts clients read it from (ADR 0620); getlastmodified is plain DAV: and simply was not needed there.
+    public static readonly XNamespace AppleIcal = "http://apple.com/ns/ical/";
+
+    public static readonly XName CalendarColor = AppleIcal + "calendar-color";
+
+    public static readonly XName GetLastModified = Dav + "getlastmodified";
+
     public const string Ok = "HTTP/1.1 200 OK";
     public const string NotFound = "HTTP/1.1 404 Not Found";
 }

@@ -157,12 +157,16 @@ public class CalDavEndpointTests
         var report = $"""
             <?xml version="1.0" encoding="utf-8"?>
             <R:{(protocol == CalDav ? "calendar" : "addressbook")}-multiget xmlns:D="DAV:" xmlns:R="{(protocol == CalDav ? "urn:ietf:params:xml:ns:caldav" : "urn:ietf:params:xml:ns:carddav")}">
-              <D:prop><D:getetag/></D:prop>
+              <D:prop><D:getetag/><R:{(protocol == CalDav ? "calendar-data" : "address-data")}/></D:prop>
               <D:href>{itemHref}</D:href>
             </R:{(protocol == CalDav ? "calendar" : "addressbook")}-multiget>
             """;
+        // NOTE the property name: the CardDAV report is `addressbook-multiget` but its data property is
+        // `address-data` (RFC 6352) — not `addressbook-data`. The pre-port middleware derived the name from the
+        // collection type and so emitted a property no CardDAV client reads; the ported DavNames has it right.
         var multiget = await MultiStatusAsync(await SendAsync(client, auth, "REPORT", collectionHref, report));
-        var data = multiget.Descendants().Single(e => e.Name.LocalName.EndsWith("-data", StringComparison.Ordinal)).Value;
+        var data = multiget.Descendants()
+            .Single(e => e.Name.LocalName is "calendar-data" or "address-data").Value;
         Assert.Contains(uid, data);
 
         // Reaching here already proves classification ran: the typed-folder containment invariant REFUSES a
@@ -205,11 +209,18 @@ public class CalDavEndpointTests
         using var _1 = client;
 
         var collection = $"{protocol.Base}/{protocol.Collections}/{Guid.NewGuid()}/";
-        foreach (var method in new[] { "MKCOL", "MOVE", "PROPPATCH" })
+        foreach (var method in new[] { "MKCOL", "MOVE" })
         {
             var response = await SendAsync(client, auth, method, collection);
             Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
         }
+
+        // PROPPATCH is the deliberate exception: it is ACKNOWLEDGED and ignored, never refused. Apple's
+        // dataaccessd sets collection metadata during account setup and aborts on a 405, so refusing it means
+        // the account never finishes (ADR 0621 — the port's most consequential fix).
+        var propPatch = await SendAsync(client, auth, "PROPPATCH", collection,
+            """<?xml version="1.0" encoding="utf-8"?><D:propertyupdate xmlns:D="DAV:"><D:set><D:prop><D:displayname>x</D:displayname></D:prop></D:set></D:propertyupdate>""");
+        Assert.Equal(207, (int)propPatch.StatusCode);
 
         // A PUT addressed at the COLLECTION rather than an item inside it is equally not a thing.
         Assert.Equal(HttpStatusCode.MethodNotAllowed,

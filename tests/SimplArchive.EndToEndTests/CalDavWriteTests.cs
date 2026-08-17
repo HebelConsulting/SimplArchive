@@ -162,8 +162,13 @@ public class CalDavWriteTests
 
         // My own collection reports write privilege …
         var listing = await SendAsync(mine, myAuth, "PROPFIND", $"{protocol.Base}/{protocol.Collections}/");
-        var body = await listing.Content.ReadAsStringAsync();
-        Assert.Contains("<D:write/>", body);
+        var privileges = XDocument.Parse(await listing.Content.ReadAsStringAsync())
+            .Descendants(Dav + "privilege").Elements().Select(e => e.Name.LocalName).ToList();
+        // bind/unbind matter as much as write: a client checks BIND before offering "new item" and UNBIND
+        // before offering delete, so reporting only write leaves a capable client read-only (ADR 0621).
+        Assert.Contains("write", privileges);
+        Assert.Contains("bind", privileges);
+        Assert.Contains("unbind", privileges);
 
         // … and someone else's collection is not addressable at all (404, not an empty listing).
         var theirCollection = await CollectionHrefAsync(theirs, theirAuth, protocol);

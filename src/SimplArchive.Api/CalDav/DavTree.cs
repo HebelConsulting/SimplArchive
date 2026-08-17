@@ -9,7 +9,7 @@ namespace SimplArchive.Api.CalDav;
 internal sealed record DavCollection(Guid FolderId, string DisplayName, bool Writable, string? Color);
 
 /// <summary>An item inside such a folder: the document, its current version, and its DAV resource name.</summary>
-internal sealed record DavItem(Guid DocumentId, string ResourceName, string ObjectKey, string ETag, DateTimeOffset LastModified, long? SizeBytes);
+internal sealed record DavItem(Guid DocumentId, Guid FolderId, string ResourceName, string ObjectKey, string ETag, DateTimeOffset LastModified, long? SizeBytes);
 
 /// <summary>
 /// Resolves what a CalDAV/CardDAV caller can see (#564, ADR 0619): the typed folders they hold CanSee on,
@@ -123,7 +123,7 @@ internal static class DavTree
         var items = new List<DavItem>();
         foreach (var document in documents)
         {
-            if (await ToItemAsync(db, protocol, document, uids.GetValueOrDefault(document.Id), cancellationToken) is { } item)
+            if (await ToItemAsync(db, protocol, folderId, document, uids.GetValueOrDefault(document.Id), cancellationToken) is { } item)
             {
                 items.Add(item);
             }
@@ -155,7 +155,7 @@ internal static class DavTree
             .Select(d => new ItemRow(d.Id, d.CurrentVersionId, d.ConcurrencyToken))
             .FirstOrDefaultAsync(cancellationToken);
 
-        return document is null ? null : await ToItemAsync(db, protocol, document, uid, cancellationToken);
+        return document is null ? null : await ToItemAsync(db, protocol, folderId, document, uid, cancellationToken);
     }
 
     /// <summary>
@@ -220,7 +220,7 @@ internal static class DavTree
             .ToListAsync(cancellationToken);
 
     private static async Task<DavItem?> ToItemAsync(
-        SimplArchiveDbContext db, DavProtocol protocol, ItemRow document, string? uid, CancellationToken cancellationToken)
+        SimplArchiveDbContext db, DavProtocol protocol, Guid folderId, ItemRow document, string? uid, CancellationToken cancellationToken)
     {
         var version = await CurrentVersion.ResolveAsync(db.DocumentVersions, document.Id, document.CurrentVersionId, cancellationToken);
         if (version?.ObjectKey is not { Length: > 0 } objectKey)
@@ -234,6 +234,7 @@ internal static class DavTree
 
         return new DavItem(
             DocumentId: document.Id,
+            FolderId: folderId,
             ResourceName: resourceUid + protocol.Extension,
             ObjectKey: objectKey,
             // The CURRENT VERSION's id, not the document's concurrency token (which ADR 0619 chose and slice 2

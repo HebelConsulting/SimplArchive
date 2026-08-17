@@ -1,10 +1,9 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Controllers;
 using SimplArchive.Api.Documents;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
-using SimplArchive.Domain.Users;
-using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.CalDav;
 
@@ -21,54 +20,48 @@ namespace SimplArchive.Api.CalDav;
 /// </remarks>
 internal static class DavWrites
 {
-    internal static async Task PutAsync(
-        HttpContext context, SimplArchiveDbContext db, IEffectiveRightsCalculator rights, IServiceProvider services,
-        User user, DavProtocol protocol, Guid folderId, string resourceName)
+    internal static async Task<IActionResult> PutAsync(
+        DavControllerContext context, IServiceProvider services, Guid folderId, string resourceName)
     {
-        var folder = await db.Documents.FirstOrDefaultAsync(d => d.Id == folderId, context.RequestAborted);
+        var (db, rights, protocol) = (context.Db, context.Rights, context.Protocol);
+        var folder = await db.Documents.FirstOrDefaultAsync(d => d.Id == folderId, context.Cancellation);
         if (folder is null)
         {
-            context.Response.StatusCode = StatusCodes.Status404NotFound;
-            return;
+            return new NotFoundResult();
         }
 
-        var existing = await DavTree.ItemAsync(db, protocol, folderId, resourceName, context.RequestAborted);
-        var folderRights = await rights.GetEffectiveRightsAsync(user.Id, folderId);
+        var existing = await DavTree.ItemAsync(db, protocol, folderId, resourceName, context.Cancellation);
+        var folderRights = await rights.GetEffectiveRightsAsync(context.UserId, folderId);
 
         // Creating needs CanCreateSubItems on the collection; replacing needs CanEditContent on the item.
         if (existing is null)
         {
-            if (folder.PersonalOfUserId != user.Id && !folderRights.CanCreateSubItems)
+            if (folder.PersonalOfUserId != context.UserId && !folderRights.CanCreateSubItems)
             {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                return;
+                return new ForbidResult(Authentication.DavAuthenticationDefaults.Scheme);
             }
         }
-        else if (!(await rights.GetEffectiveRightsAsync(user.Id, existing.DocumentId)).CanEditContent)
+        else if (!(await rights.GetEffectiveRightsAsync(context.UserId, existing.DocumentId)).CanEditContent)
         {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            return;
+            return new ForbidResult(Authentication.DavAuthenticationDefaults.Scheme);
         }
 
         if (PreconditionFailed(context, existing?.ETag))
         {
-            context.Response.StatusCode = StatusCodes.Status412PreconditionFailed;
-            return;
+            return new StatusCodeResult(StatusCodes.Status412PreconditionFailed);
         }
 
         await using var buffered = new MemoryStream();
-        await context.Request.Body.CopyToAsync(buffered, context.RequestAborted);
+        await context.Request.Body.CopyToAsync(buffered, context.Cancellation);
         buffered.Position = 0;
         if (buffered.Length == 0)
         {
-            context.Response.StatusCode = StatusCodes.Status400BadRequest;
-            return;
+            return new BadRequestResult();
         }
 
-        if (!await services.GetRequiredService<IStorageQuotaService>().CanStoreAsync(user.TenantId, buffered.Length, context.RequestAborted))
+        if (!await services.GetRequiredService<IStorageQuotaService>().CanStoreAsync(context.TenantId, buffered.Length, context.Cancellation))
         {
-            context.Response.StatusCode = StatusCodes.Status507InsufficientStorage;
-            return;
+            return new StatusCodeResult(StatusCodes.Status507InsufficientStorage);
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -79,7 +72,7 @@ internal static class DavWrites
         Document document;
         if (existing is not null)
         {
-            document = await db.Documents.FirstAsync(d => d.Id == existing.DocumentId, context.RequestAborted);
+            document = await db.Documents.FirstAsync(d => d.Id == existing.DocumentId, context.Cancellation);
         }
         else
         {
@@ -88,106 +81,101 @@ internal static class DavWrites
             document = new Document
             {
                 Id = Guid.NewGuid(),
-                TenantId = user.TenantId,
+                TenantId = context.TenantId,
                 ParentId = folderId,
                 Name = Path.GetFileNameWithoutExtension(resourceName),
-                CreatedByUserId = user.Id,
+                CreatedByUserId = context.UserId,
                 CreatedAt = now,
                 StorageFolderId = Guid.NewGuid(),
             };
             db.Documents.Add(document);
             try
             {
-                await db.SaveChangesAsync(context.RequestAborted);
+                await db.SaveChangesAsync(context.Cancellation);
             }
             catch (InvalidOperationException)
             {
-                context.Response.StatusCode = StatusCodes.Status409Conflict; // sibling-name clash
-                return;
+                return new ConflictResult(); // sibling-name clash
             }
         }
 
-        var objectKey = ObjectKeyBuilder.Build(user.TenantId, document.CreatedAt, document.StorageFolderId, versionId, protocol.Extension);
+        var objectKey = ObjectKeyBuilder.Build(context.TenantId, document.CreatedAt, document.StorageFolderId, versionId, protocol.Extension);
         await services.GetRequiredService<IObjectStorageClient>()
-            .PutObjectAsync(objectKey, buffered, protocol.ContentType, context.RequestAborted);
+            .PutObjectAsync(objectKey, buffered, protocol.ContentType, context.Cancellation);
 
         var version = new DocumentVersion
         {
             Id = versionId,
-            TenantId = user.TenantId,
+            TenantId = context.TenantId,
             DocumentId = document.Id,
             Status = DocumentVersionStatus.Pending,
             ObjectKey = objectKey,
-            CreatedByUserId = user.Id,
+            CreatedByUserId = context.UserId,
             CreatedAt = now,
             DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
         };
         db.DocumentVersions.Add(version);
-        await db.SaveChangesAsync(context.RequestAborted);
+        await db.SaveChangesAsync(context.Cancellation);
 
         // The finalizer confirms the version, classifies the content into the Contact/Calendar mask and fills
         // its fields — the same path every other upload takes.
-        await services.GetRequiredService<DocumentFinalizer>().FinalizeAsync(version, context.RequestAborted);
+        await services.GetRequiredService<DocumentFinalizer>().FinalizeAsync(version, context.Cancellation);
 
         await services.GetRequiredService<IAuditRecorder>().RecordAsync(
             existing is null ? AuditActions.DocumentFiled : AuditActions.DocumentVersionAdded,
             "Document", document.Id, document.Name,
             existing is null ? $"Filed over {protocol.NamespacePrefix}DAV" : $"New version over {protocol.NamespacePrefix}DAV",
-            cancellationToken: context.RequestAborted);
+            cancellationToken: context.Cancellation);
 
         // Re-read the document for the ETag: the finalizer's save regenerated the concurrency token.
-        var stored = await DavTree.ItemAsync(db, protocol, folderId, resourceName, context.RequestAborted);
+        var stored = await DavTree.ItemAsync(db, protocol, folderId, resourceName, context.Cancellation);
         if (stored is not null)
         {
             context.Response.Headers.ETag = $"\"{stored.ETag}\"";
         }
 
-        context.Response.StatusCode = existing is null ? StatusCodes.Status201Created : StatusCodes.Status204NoContent;
+        return new StatusCodeResult(existing is null ? StatusCodes.Status201Created : StatusCodes.Status204NoContent);
     }
 
-    internal static async Task DeleteAsync(
-        HttpContext context, SimplArchiveDbContext db, IEffectiveRightsCalculator rights, IServiceProvider services,
-        User user, DavProtocol protocol, Guid folderId, string resourceName)
+    internal static async Task<IActionResult> DeleteAsync(
+        DavControllerContext context, IServiceProvider services, Guid folderId, string resourceName)
     {
-        var item = await DavTree.ItemAsync(db, protocol, folderId, resourceName, context.RequestAborted);
+        var (db, rights, protocol) = (context.Db, context.Rights, context.Protocol);
+        var item = await DavTree.ItemAsync(db, protocol, folderId, resourceName, context.Cancellation);
         if (item is null)
         {
-            context.Response.StatusCode = StatusCodes.Status404NotFound;
-            return;
+            return new NotFoundResult();
         }
 
-        if (!(await rights.GetEffectiveRightsAsync(user.Id, item.DocumentId)).CanDelete)
+        if (!(await rights.GetEffectiveRightsAsync(context.UserId, item.DocumentId)).CanDelete)
         {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            return;
+            return new ForbidResult(Authentication.DavAuthenticationDefaults.Scheme);
         }
 
         if (PreconditionFailed(context, item.ETag))
         {
-            context.Response.StatusCode = StatusCodes.Status412PreconditionFailed;
-            return;
+            return new StatusCodeResult(StatusCodes.Status412PreconditionFailed);
         }
 
         // A document under a legal hold cannot be deleted by any door (ADR 0326) — the DAV client is told so
         // rather than silently succeeding.
         var held = await db.LegalHoldItems.AnyAsync(
             i => i.DocumentId == item.DocumentId && db.LegalHolds.Any(h => h.Id == i.LegalHoldId && h.ReleasedAt == null),
-            context.RequestAborted);
+            context.Cancellation);
         if (held)
         {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            return;
+            return new ForbidResult(Authentication.DavAuthenticationDefaults.Scheme);
         }
 
-        var document = await db.Documents.FirstAsync(d => d.Id == item.DocumentId, context.RequestAborted);
+        var document = await db.Documents.FirstAsync(d => d.Id == item.DocumentId, context.Cancellation);
         document.DeletedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(context.RequestAborted);
+        await db.SaveChangesAsync(context.Cancellation);
 
         await services.GetRequiredService<IAuditRecorder>().RecordAsync(
             AuditActions.DocumentDeleted, "Document", document.Id, document.Name,
-            $"Deleted over {protocol.NamespacePrefix}DAV", cancellationToken: context.RequestAborted);
+            $"Deleted over {protocol.NamespacePrefix}DAV", cancellationToken: context.Cancellation);
 
-        context.Response.StatusCode = StatusCodes.Status204NoContent;
+        return new NoContentResult();
     }
 
     /// <summary>
@@ -197,7 +185,7 @@ internal static class DavWrites
     /// nothing is there" — without it, a first-write race silently overwrites the winner.
     /// </summary>
     /// <param name="currentETag">The item's current tag, or null when nothing is stored at this address.</param>
-    private static bool PreconditionFailed(HttpContext context, string? currentETag)
+    private static bool PreconditionFailed(DavControllerContext context, string? currentETag)
     {
         // "Only if absent" — the client is creating, not replacing.
         if (context.Request.Headers.IfNoneMatch.ToString().Trim() == "*" && currentETag is not null)
