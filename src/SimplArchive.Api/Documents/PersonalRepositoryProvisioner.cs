@@ -127,7 +127,9 @@ public sealed class PersonalRepositoryProvisioner
             TenantId = tenantId,
             ParentId = root.Id,
             Name = MyDocumentsFolderName,
-            MaskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken),
+            // Tenant-EXPLICIT for the same reason as the root above (ADR 0590) — the ambient-tenant overload
+            // yields a maskless folder whenever the caller has no current tenant set.
+            MaskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, cancellationToken),
             CreatedByUserId = userId,
             CreatedAt = DateTimeOffset.UtcNow,
         });
@@ -152,10 +154,20 @@ public sealed class PersonalRepositoryProvisioner
     /// </summary>
     private async Task EnsureNotesAsync(Document root, Guid tenantId, Guid userId, CancellationToken cancellationToken)
     {
-        var exists = await _dbContext.Documents
-            .AnyAsync(d => d.ParentId == root.Id && d.Name == NotesFolderName, cancellationToken);
-        if (exists)
+        var noteFolderMaskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, WellKnownMaskIds.NoteFolder, cancellationToken);
+
+        var existing = await _dbContext.Documents
+            .FirstOrDefaultAsync(d => d.ParentId == root.Id && d.Name == NotesFolderName, cancellationToken);
+        if (existing is not null)
         {
+            // Heal a maskless Notes folder: a provisioning run whose tenant predated the NoteFolder mask
+            // (an upgraded deployment) created the folder with no mask at all — in which state it neither
+            // projects as the root "Notes" IMAP mailbox nor enforces its typed containment.
+            if (existing.MaskVersionId is null && noteFolderMaskVersionId is not null)
+            {
+                existing.MaskVersionId = noteFolderMaskVersionId;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
             return;
         }
 
@@ -165,7 +177,7 @@ public sealed class PersonalRepositoryProvisioner
             TenantId = tenantId,
             ParentId = root.Id,
             Name = NotesFolderName,
-            MaskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, WellKnownMaskIds.NoteFolder, cancellationToken),
+            MaskVersionId = noteFolderMaskVersionId,
             CreatedByUserId = userId,
             CreatedAt = DateTimeOffset.UtcNow,
         });

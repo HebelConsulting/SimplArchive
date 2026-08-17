@@ -314,6 +314,20 @@ using (var scope = app.Services.CreateScope())
         await ApplyMigrationsAsync(services);
     }
 
+    // Idempotent well-known-mask backfill for every EXISTING tenant — a newly added well-known mask (the
+    // NoteFolder/Note pair, #562 slice 5, was the first since launch) is otherwise seeded only at tenant
+    // provisioning, so tenants created before an upgrade silently miss it; the demo stack's Personal/Notes
+    // folder came out maskless because of exactly that. WellKnownMaskSeeder checks each mask individually,
+    // so this is a handful of cheap existence probes per tenant per startup.
+    {
+        var dbContext = services.GetRequiredService<SimplArchiveDbContext>();
+        var maskSeeder = services.GetRequiredService<IWellKnownMaskSeeder>();
+        foreach (var tenantId in await dbContext.Tenants.Select(t => t.Id).ToListAsync())
+        {
+            await maskSeeder.EnsureWellKnownMasksAsync(tenantId);
+        }
+    }
+
     var applicationManager = services.GetRequiredService<IOpenIddictApplicationManager>();
 
     // Idempotently seeds the Blazor Client's OpenIddict application — a fixed, one-per-deployment public
