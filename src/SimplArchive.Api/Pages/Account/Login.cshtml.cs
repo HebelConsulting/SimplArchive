@@ -290,6 +290,12 @@ public class LoginModel : PageModel
 
         if (user is null || !user.IsActive || user.MfaEnabledAt is null || user.TotpSecret is null)
         {
+            // A valid MFA ticket that no longer resolves to an MFA-eligible user: deactivated mid-login, MFA
+            // turned off, or a tampered ticket. Rare and worth seeing — the caller is told only "invalid
+            // credentials", so without this the event exists nowhere.
+            _logger.LogWarning(
+                "Second-factor ticket rejected for user {UserId}: no active user with MFA configured", userId);
+
             Error = SimplArchive.Localization.Strings.Get("LoginErrInvalidCreds");
 
             return Page();
@@ -297,6 +303,15 @@ public class LoginModel : PageModel
 
         if (string.IsNullOrWhiteSpace(Code) || !await VerifySecondFactorAsync(user, Code))
         {
+            // A wrong SECOND factor is a failed authentication with exactly the SIEM value of a wrong
+            // password (logged above) — and it is the more interesting half: reaching here means the password
+            // already succeeded, so repeated failures are somebody brute-forcing six digits with a credential
+            // they hold. Until this line, that produced no signal at all (#595, ADR 0626).
+            //
+            // The code itself is never logged. It is a credential for its window, and a log is the wrong place
+            // for it even after it expires.
+            _logger.LogWarning("Failed second factor for user {UserId}: incorrect or missing code", user.Id);
+
             Error = SimplArchive.Localization.Strings.Get("LoginErrInvalidCode");
             // Re-issue a fresh ticket + re-render the challenge (incl. the passkey option) for a retry.
             MfaTicket = _ticketProtector.Protect($"{user.Id}|{ReturnUrl}", MfaTicketLifetime);

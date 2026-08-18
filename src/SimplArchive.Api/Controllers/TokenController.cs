@@ -32,19 +32,48 @@ public class TokenController : ControllerBase
     private readonly CurrentTenantAccessor _tenantAccessor;
     private readonly IAuditRecorder _audit;
     private readonly OpenIddictValidationService _validation;
+    private readonly ILogger<TokenController> _logger;
 
     public TokenController(
         SimplArchiveDbContext dbContext,
         IUserSystemRightsResolver systemRights,
         CurrentTenantAccessor tenantAccessor,
         IAuditRecorder audit,
-        OpenIddictValidationService validation)
+        OpenIddictValidationService validation,
+        ILogger<TokenController> logger)
     {
         _dbContext = dbContext;
         _systemRights = systemRights;
         _tenantAccessor = tenantAccessor;
         _audit = audit;
         _validation = validation;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// A refused token request, logged once at Warning and answered with the opaque OAuth error.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The response deliberately says almost nothing — an unknown client, a wrong secret and a deactivated
+    /// account are all <c>invalid_client</c>, so a prober learns nothing about which accounts exist. That is
+    /// correct, and it is exactly why the SERVER has to say something: with no log, a refusal here is
+    /// invisible from both sides, and neither an operator diagnosing a misconfigured integration nor a SIEM
+    /// watching for a brute-force run has anything to work with (ADR 0626, ADR 0430's Warning definition —
+    /// "a failed login").
+    /// </para>
+    /// <para>
+    /// The <c>client_id</c> is an identifier, not a credential, so it is logged. The secret, the subject
+    /// token and the authorization code never are.
+    /// </para>
+    /// </remarks>
+    private IActionResult Refuse(string error, string reason, string? clientId = null)
+    {
+        _logger.LogWarning(
+            "Token request refused ({Error}) for client {ClientId}: {Reason}",
+            error, clientId ?? "(none)", reason);
+
+        return BadRequest(new OpenIddictResponse { Error = error });
     }
 
     [HttpPost("~/connect/token")]
@@ -89,10 +118,8 @@ public class TokenController : ControllerBase
         {
             if (!serviceAccount.IsActive)
             {
-                return BadRequest(new OpenIddictResponse
-                {
-                    Error = OpenIddictConstants.Errors.InvalidClient,
-                });
+                return Refuse(OpenIddictConstants.Errors.InvalidClient,
+                    "the service account is deactivated", request.ClientId);
             }
 
             var serviceAccountIdentity = new ClaimsIdentity(
@@ -118,10 +145,8 @@ public class TokenController : ControllerBase
         {
             if (!platformAdministrator.IsActive)
             {
-                return BadRequest(new OpenIddictResponse
-                {
-                    Error = OpenIddictConstants.Errors.InvalidClient,
-                });
+                return Refuse(OpenIddictConstants.Errors.InvalidClient,
+                    "the platform administrator is deactivated", request.ClientId);
             }
 
             var platformAdministratorIdentity = new ClaimsIdentity(
@@ -136,10 +161,8 @@ public class TokenController : ControllerBase
             return SignIn(new ClaimsPrincipal(platformAdministratorIdentity), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
-        return BadRequest(new OpenIddictResponse
-        {
-            Error = OpenIddictConstants.Errors.InvalidClient,
-        });
+        return Refuse(OpenIddictConstants.Errors.InvalidClient,
+            "no service account or platform administrator has this client id", request.ClientId);
     }
 
     // RFC 8693 token exchange for User impersonation (ADR "User impersonation"). The acting admin authenticates
@@ -219,9 +242,25 @@ public class TokenController : ControllerBase
         return SignIn(new ClaimsPrincipal(identity), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 
-    private BadRequestObjectResult TokenError(string error, string description) => BadRequest(new OpenIddictResponse
+    /// <summary>
+    /// A refused IMPERSONATION exchange. Unlike <see cref="Refuse"/> the caller is told the reason — this
+    /// grant is used by an administrator with a valid token, so a precise error is a diagnostic, not an oracle
+    /// for a prober.
+    /// </summary>
+    /// <remarks>
+    /// Logged at Warning regardless, because impersonation is the one grant where a REFUSAL is itself
+    /// security-relevant: somebody with a valid administrative token asked to act as another user and was told
+    /// no. A SIEM wants those whether or not they succeeded, and until now none of them were recorded
+    /// anywhere (ADR 0626).
+    /// </remarks>
+    private BadRequestObjectResult TokenError(string error, string description)
     {
-        Error = error,
-        ErrorDescription = description,
-    });
+        _logger.LogWarning("Impersonation exchange refused ({Error}): {Reason}", error, description);
+
+        return BadRequest(new OpenIddictResponse
+        {
+            Error = error,
+            ErrorDescription = description,
+        });
+    }
 }
