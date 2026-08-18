@@ -14,8 +14,15 @@
 # It also fails when the README is ahead of the deployment — a credential change merged but not yet released.
 # That is a real finding, not noise: until the release lands, the front door lists a login that does not work.
 #
+# A REACHABILITY failure is reported as itself, never as a bad password. When the API was crash-looping after a
+# rollout, every request answered 502 and this script printed three "FAIL <email>" lines and advised changing a
+# password on the host — a confident, specific, wrong cause, for a site that was simply not serving. The two
+# have completely different remedies, so they get different messages and different exit codes.
+#
 # Usage:  scripts/verify-kiosk-logins.sh [base-url]      (default https://demo.simplarchive.dev)
-# Exit:   0 = every advertised credential logged in;  1 = at least one did not (or none were found).
+# Exit:   0 = every advertised credential logged in
+#         1 = the site served, but at least one advertised credential was rejected (or none were parsed)
+#         2 = the site could not be reached — nothing was learned about the credentials
 
 set -u
 
@@ -71,9 +78,28 @@ if [ "$COUNT" = "0" ]; then
   exit 1
 fi
 
+# PREFLIGHT — ask whether the site is serving at all, once, before asking anything about credentials. Without
+# this the answer arrives as N credential failures, which is the wrong question answered confidently.
+PRE_STATUS=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$BASE_URL/Account/Login" 2>/dev/null)
+case "$PRE_STATUS" in
+  2*|3*) ;;
+  000)
+    echo "UNREACHABLE: no response from $BASE_URL (DNS, TLS, or nothing listening)." >&2
+    echo "Nothing was learned about the advertised credentials — this is not a password problem." >&2
+    exit 2
+    ;;
+  *)
+    echo "UNREACHABLE: $BASE_URL/Account/Login answered HTTP $PRE_STATUS, so the login form never rendered." >&2
+    echo "A 502/503 here usually means the API container is down or crash-looping, NOT that a password is wrong:" >&2
+    echo "  ssh kiosk 'docker ps -a --filter name=api --format \"{{.Status}}\"; docker logs --tail 30 \$(docker ps -aqf name=api)'" >&2
+    exit 2
+    ;;
+esac
+
 echo "Verifying $COUNT advertised login(s) against $BASE_URL"
 
 FAILED=0
+UNREACHABLE=0
 while IFS="$(printf '\t')" read -r EMAIL PASSWORD; do
   [ -z "$EMAIL" ] && continue
 
@@ -82,9 +108,11 @@ while IFS="$(printf '\t')" read -r EMAIL PASSWORD; do
 
   # The app issues no password grant (client-credentials + auth-code/PKCE only), so the only honest test of a
   # human's credential is the human's form: GET it for an antiforgery token + cookie, then POST.
+  # A fetch failure mid-run means the site stopped serving (it passed the preflight moments ago), so it is
+  # counted as UNREACHABLE rather than as this credential being wrong.
   if ! curl -fsS -c "$JAR" "$BASE_URL/Account/Login" -o "$WORK/login.html"; then
-    echo "  FAIL  $EMAIL — could not fetch $BASE_URL/Account/Login" >&2
-    FAILED=1
+    echo "  ????  $EMAIL — could not fetch the login form; the site stopped responding mid-run" >&2
+    UNREACHABLE=1
     continue
   fi
 
@@ -115,9 +143,16 @@ while IFS="$(printf '\t')" read -r EMAIL PASSWORD; do
   fi
 done < "$WORK/creds.tsv"
 
+if [ "$UNREACHABLE" != "0" ]; then
+  echo
+  echo "$BASE_URL stopped responding partway through — the credentials it did not reach are UNVERIFIED." >&2
+  echo "Check the API container before reading anything into this run." >&2
+  exit 2
+fi
+
 if [ "$FAILED" != "0" ]; then
   echo
-  echo "At least one credential on the public README does not work on $BASE_URL." >&2
+  echo "The site served the login form and REJECTED at least one credential the public README advertises." >&2
   echo "Usual cause: the host's /opt/simplarchive/docker-compose.yml still carries the OLD Demo__Administrator__" >&2
   echo "Password — a release ships the IMAGE only. Copy deploy/kiosk/docker-compose.yml to the host, then reset." >&2
   exit 1
