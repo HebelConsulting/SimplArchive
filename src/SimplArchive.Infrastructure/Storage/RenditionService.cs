@@ -226,13 +226,13 @@ public class RenditionService : IDocumentPreviewService
         }
 
         var originalBytes = await DownloadBytesAsync(objectKey, cancellationToken);
-        var pages = ConvertToPngPages(originalBytes);
+        var pages = ConvertToPngPages(originalBytes, _logger, objectKey);
 
         var keys = new List<string>();
         if (pages.Count <= 1)
         {
             var single = RenditionKey(objectKey, RenditionKind.ImageToPng);
-            await PutBytesAsync(single, pages.Count == 1 ? pages[0] : ConvertToPng(originalBytes), "image/png", cancellationToken);
+            await PutBytesAsync(single, pages.Count == 1 ? pages[0] : ConvertToPng(originalBytes, _logger, objectKey), "image/png", cancellationToken);
             keys.Add(single);
         }
         else
@@ -280,7 +280,7 @@ public class RenditionService : IDocumentPreviewService
     // case the single-image "stack all pages" path (ConvertToPng) can't handle. Loads the page count from the
     // first page's `n-pages` metadata, then decodes each page individually; a page that fails to decode is
     // skipped rather than failing the whole document. Falls back to the whole image if nothing decoded.
-    private static List<byte[]> ConvertToPngPages(byte[] originalBytes)
+    private static List<byte[]> ConvertToPngPages(byte[] originalBytes, ILogger logger, string objectKey)
     {
         var pages = new List<byte[]>();
 
@@ -302,9 +302,16 @@ public class RenditionService : IDocumentPreviewService
                 using var page = Image.NewFromBuffer(originalBytes, kwargs: new VOption { { "page", i }, { "n", 1 } });
                 pages.Add(page.WriteToBuffer(".png"));
             }
-            catch (VipsException)
+            catch (VipsException e)
             {
-                // skip an undecodable page
+                // A dropped page is a SILENT loss of content: the preview simply has fewer pages than the
+                // document, and nothing distinguishes that from a document which really is shorter. Skipping
+                // is still right — one bad page should not cost the whole preview — but it is said out loud
+                // (#595, ADR 0626), with the page number so the complaint "page 3 is missing" can be matched
+                // to it.
+                logger.LogWarning(
+                    e, "Page {Page} of {ObjectKey} could not be decoded and is omitted from the preview.",
+                    i + 1, objectKey);
             }
         }
 
@@ -333,7 +340,7 @@ public class RenditionService : IDocumentPreviewService
 
         var (renditionBytes, contentType) = kind switch
         {
-            RenditionKind.ImageToPng => (ConvertToPng(originalBytes), "image/png"),
+            RenditionKind.ImageToPng => (ConvertToPng(originalBytes, _logger, objectKey), "image/png"),
             RenditionKind.OfficeToPdf => (await _officeConverter.ConvertToPdfAsync(originalBytes, $"source{extension}", cancellationToken), "application/pdf"),
             RenditionKind.EmailToPdf => (await _emailConverter.ConvertToPdfAsync(originalBytes, extension, cancellationToken), "application/pdf"),
             RenditionKind.MarkdownToPdf => (await _markdownConverter.ConvertToPdfAsync(originalBytes, cancellationToken), "application/pdf"),
@@ -351,15 +358,22 @@ public class RenditionService : IDocumentPreviewService
     // with n=-1 as one "toilet-roll" image stacked vertically, so the workbench preview shows page 1 at the
     // top and you scroll down through the rest (continuous view). Pages with differing sizes can't be stacked
     // into one image (libvips throws), so we fall back to the first page only rather than a broken preview.
-    private static byte[] ConvertToPng(byte[] originalBytes)
+    private static byte[] ConvertToPng(byte[] originalBytes, ILogger logger, string objectKey)
     {
         try
         {
             using var allPages = Image.NewFromBuffer(originalBytes, kwargs: new VOption { { "n", -1 } });
             return allPages.WriteToBuffer(".png");
         }
-        catch (VipsException)
+        catch (VipsException e)
         {
+            // The whole-document decode failed, so this falls back to the FIRST PAGE ONLY — a multi-page
+            // document silently renders as one page. Worth saying for the same reason as the per-page skip:
+            // the user cannot tell a truncated preview from a short document.
+            logger.LogWarning(
+                e, "Could not decode all pages of {ObjectKey}; the preview falls back to the first page only.",
+                objectKey);
+
             using var firstPage = Image.NewFromBuffer(originalBytes);
             return firstPage.WriteToBuffer(".png");
         }
