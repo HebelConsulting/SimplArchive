@@ -173,10 +173,12 @@ public class DocumentContactCardController : ControllerBase
 
         // The UID is the correlation key a later DAV PUT matches on, so it is taken from the STORED card and
         // never from the request: a client that sent a different one would fork the contact into a duplicate.
-        var uid = _dbContext.FieldValues.IgnoreQueryFilters()
-            .Where(f => f.DocumentId == documentId)
-            .Select(f => f.Value)
-            .FirstOrDefault() ?? documentId.ToString();
+        //
+        // It must be read by field NAME. This originally selected the first FieldValue on the document with no
+        // filter at all, which returns an arbitrary one of the contact's five — the organisation, the phone or
+        // the e-mail just as readily as the UID — and, without an ORDER BY, not necessarily the same one twice.
+        var uid = await _dbContext.FieldValueAsync(documentId, "Contact UID", cancellationToken)
+                  ?? documentId.ToString();
 
         var merged = _composer.Merge(blob, FromResource(request), uid);
 

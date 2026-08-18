@@ -177,6 +177,50 @@ public class ContactCardEndpointTests
     }
 
     [Fact]
+    public async Task The_uid_survives_a_save_so_the_contact_does_not_fork_on_the_next_sync()
+    {
+        // A regression test for a bug this suite could not see. The UID was read as "the first FieldValue on
+        // this document" with no filter naming the field — and a contact carries five of them (Contact UID,
+        // Full name, Email, Phone, Organization), with no ORDER BY to say which comes back. So a save could
+        // write the organisation or the phone number into the card as its UID.
+        //
+        // That is the correlation key a DAV client matches on, so the consequence is not a wrong string in a
+        // field nobody reads: the contact FORKS into a duplicate on the next sync, or lands on top of a
+        // different entry. Every existing test here passed throughout, because none of them looked at the UID
+        // after a PUT — they asserted the properties the merge was written to protect, and the UID is supplied
+        // to the composer as an argument, so the unit tests could not see it either.
+        var (api, dav, auth, documentId, itemHref) = await ContactAsync();
+        using var _a = api;
+        using var _d = dav;
+
+        var uidBefore = UidOf(await RawCardAsync(dav, auth, itemHref));
+        Assert.StartsWith("uid-", uidBefore);
+
+        var get = await api.GetAsync($"/api/documents/{documentId}/contact-card");
+        using var put = new HttpRequestMessage(HttpMethod.Put, $"/api/documents/{documentId}/contact-card")
+        {
+            // Organization is the value most likely to be picked up in the UID's place, so it is set to
+            // something unmistakable: if it appears as the UID, the assertion below names the actual defect.
+            Content = JsonContent.Create(new
+            {
+                formattedName = "Anna Meyer",
+                givenName = "Anna",
+                familyName = "Meyer",
+                organization = "Contoso",
+                note = "Edited once.",
+            }),
+        };
+        put.Headers.TryAddWithoutValidation("If-Match", get.Headers.ETag!.Tag);
+        Assert.Equal(HttpStatusCode.NoContent, (await api.SendAsync(put)).StatusCode);
+
+        var uidAfter = UidOf(await RawCardAsync(dav, auth, itemHref));
+        Assert.Equal(uidBefore, uidAfter);
+    }
+
+    private static string UidOf(string card) =>
+        card.Replace("\r\n ", string.Empty).Split("\r\n").Single(l => l.StartsWith("UID:", StringComparison.Ordinal))["UID:".Length..];
+
+    [Fact]
     public async Task A_save_writes_a_new_version_rather_than_mutating_the_stored_object()
     {
         var (api, _, _, documentId, _) = await ContactAsync();

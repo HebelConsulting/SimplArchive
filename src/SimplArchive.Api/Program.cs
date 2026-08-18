@@ -162,6 +162,7 @@ builder.Services.AddScoped<SimplArchive.Api.Lmtp.LmtpDelivery>();
 
 // The lossless vCard merge behind the contact editor (#564, ported from SimplCalCon's ADR 0082).
 builder.Services.AddSingleton<SimplArchive.Api.Documents.IContactCardComposer, SimplArchive.Api.Documents.ContactCardComposer>();
+builder.Services.AddSingleton<SimplArchive.Api.Documents.IAppointmentComposer, SimplArchive.Api.Documents.AppointmentComposer>();
 builder.Services.AddSingleton<SimplArchive.Api.Lmtp.LmtpServer>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SimplArchive.Api.Lmtp.LmtpServer>());
 
