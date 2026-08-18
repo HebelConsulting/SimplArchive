@@ -45,6 +45,9 @@ public static class DavNames
     public static readonly XName Owner = Dav + "owner";
     public static readonly XName SupportedReportSet = Dav + "supported-report-set";
     public static readonly XName SupportedReport = Dav + "supported-report";
+
+    /// <summary>The error document's root (RFC 4918 §14.5) — wraps the precondition a refusal violated.</summary>
+    public static readonly XName Error = Dav + "error";
     public static readonly XName Report = Dav + "report";
     public static readonly XName SyncToken = Dav + "sync-token";
     public static readonly XName SyncCollection = Dav + "sync-collection";

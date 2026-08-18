@@ -226,4 +226,78 @@ public class CalDavEndpointTests
         Assert.Equal(HttpStatusCode.MethodNotAllowed,
             (await SendAsync(client, auth, "PUT", collection, "x")).StatusCode);
     }
+
+    // A REPORT we do not implement must be REFUSED, not answered with something plausible (#595, ADR 0626).
+    //
+    // Before this, ReportAsync handled sync-collection and then treated every other body identically — so an
+    // unrecognised report fell through and was answered with a 207 full of collection data. The client believed
+    // it had succeeded, which is the exact shape ADR 0626 exists to forbid: a wrong answer that looks like a
+    // right one, with nothing in the log to say otherwise.
+    [Theory]
+    [MemberData(nameof(Protocols))]
+    public async Task An_unsupported_report_is_refused_with_the_precondition_that_says_why(string protocolName)
+    {
+        var protocol = Of(protocolName);
+        var (client, auth, _) = await SeedAsync();
+        using var _1 = client;
+
+        var collectionHref = await DefaultCollectionAsync(client, auth, protocol);
+
+        // free-busy-query is real CalDAV (RFC 4791 §7.10) and we do not implement it — the honest case. Its
+        // response shape is an iCalendar body, so answering with a multistatus would be nonsense a client
+        // cannot detect.
+        var response = await SendAsync(client, auth, "REPORT", collectionHref,
+            """<?xml version="1.0"?><C:free-busy-query xmlns:C="urn:ietf:params:xml:ns:caldav"><C:time-range start="20260101T000000Z" end="20261231T000000Z"/></C:free-busy-query>""");
+
+        // 403 with the DAV:supported-report precondition (RFC 3253 §3.6) — which rule was broken, not merely
+        // that something was.
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var error = XDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(Dav + "error", error.Root!.Name);
+        Assert.Single(error.Root.Elements(Dav + "supported-report"));
+    }
+
+    // The other direction, and the one that keeps the refusal honest: EVERY report we advertise must actually
+    // work. A server that advertises a capability it refuses is worse than one that never advertised it, because
+    // the client trusts the advertisement — "a capability we advertise is a promise" (ADR 0626).
+    [Theory]
+    [MemberData(nameof(Protocols))]
+    public async Task Every_advertised_report_is_actually_served(string protocolName)
+    {
+        var protocol = Of(protocolName);
+        var (client, auth, _) = await SeedAsync();
+        using var _1 = client;
+
+        var collectionHref = await DefaultCollectionAsync(client, auth, protocol);
+
+        // Read the advertisement from the server rather than restating it here — a copy in the test would keep
+        // passing after the server's list changed, which is the failure this test exists to catch.
+        var props = await MultiStatusAsync(await SendAsync(client, auth, "PROPFIND", collectionHref, depth: "0"));
+        var advertised = props.Descendants(Dav + "supported-report")
+            .Select(r => r.Element(Dav + "report")?.Elements().FirstOrDefault()?.Name)
+            .Where(n => n is not null)
+            .Select(n => n!)
+            .ToList();
+
+        Assert.NotEmpty(advertised);
+
+        foreach (var report in advertised)
+        {
+            // A minimal, valid body for each: enough to be dispatched, nothing that needs real data.
+            var body = $"""<?xml version="1.0"?><R:{report.LocalName} xmlns:R="{report.NamespaceName}" xmlns:D="DAV:"><D:prop><D:getetag/></D:prop></R:{report.LocalName}>""";
+            var response = await SendAsync(client, auth, "REPORT", collectionHref, body);
+
+            Assert.True(
+                response.StatusCode != HttpStatusCode.Forbidden,
+                $"{protocol.Base} advertises {report} in supported-report-set but refuses it with 403");
+        }
+    }
+
+    private static async Task<string> DefaultCollectionAsync(HttpClient client, AuthenticationHeaderValue auth, Protocol protocol)
+    {
+        var homeSet = await MultiStatusAsync(await SendAsync(client, auth, "PROPFIND", $"{protocol.Base}/{protocol.Collections}/"));
+        return homeSet.Descendants(Dav + "response")
+            .Single(r => r.Descendants(Dav + "displayname").Any(d => d.Value.EndsWith(protocol.DefaultFolder, StringComparison.Ordinal)))
+            .Element(Dav + "href")!.Value;
+    }
 }

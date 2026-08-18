@@ -158,6 +158,35 @@ internal static class DavEndpoints
     /// collection (no server-side filtering yet — poll-based clients re-filter locally anyway). Both carry the
     /// item data inline, which is what saves the per-item GET round trips.
     /// </summary>
+    /// <summary>
+    /// The REPORT bodies this server actually answers. <c>sync-collection</c> is handled before this set is
+    /// consulted, so it is not listed here.
+    /// </summary>
+    /// <remarks>
+    /// Both protocols' names are in one set on purpose: sending a calendar-query to an addressbook is a client
+    /// bug we would rather answer generously than refuse, and the collection it reads is the right one either
+    /// way. What must NOT be generous is a report we do not implement at all.
+    /// </remarks>
+    private static readonly HashSet<System.Xml.Linq.XName> ServedReports =
+    [
+        DavNames.CalendarMultiget,
+        DavNames.CalendarQuery,
+        DavNames.AddressBookMultiget,
+        DavNames.AddressBookQuery,
+    ];
+
+    /// <summary>
+    /// The same log category the wire-trace middleware uses, so the warning and the switch it names are one
+    /// knob rather than two an operator has to discover separately (ADR 0626).
+    /// </summary>
+    private const string WireCategory = "SimplArchive.Dav.Wire";
+
+    private static ILogger Wire(DavControllerContext context) =>
+        context.Request.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(WireCategory);
+
+    private static string UserAgent(DavControllerContext context) =>
+        context.Request.Headers.UserAgent.ToString() is { Length: > 0 } ua ? ua : "(unknown)";
+
     internal static async Task<IActionResult> ReportAsync(DavControllerContext context, Guid folderId)
     {
         if (await DavTree.CollectionAsync(context.Db, context.Rights, context.UserId, context.Protocol, folderId, context.Cancellation) is null)
@@ -169,6 +198,25 @@ internal static class DavEndpoints
         if (body?.Name == DavNames.SyncCollection)
         {
             return await SyncAsync(context, folderId, body);
+        }
+
+        // Everything past here answers a multiget/query with the collection's items — so the REPORT type has to
+        // be one we actually serve. Without this check an UNRECOGNISED report fell through to the same code and
+        // was answered with a 207 full of collection data: we replied "here is your data" to a question we had
+        // not understood, and the client believed it had succeeded (ADR 0626). A free-busy-query expects an
+        // iCalendar body, not a multistatus; a principal search expects principals.
+        //
+        // RFC 3253 §3.6 says what to do instead: 403 with the DAV:supported-report precondition, which tells the
+        // client WHICH rule it broke and lets it fall back.
+        if (body is not null && !ServedReports.Contains(body.Name))
+        {
+            Wire(context).LogWarning(
+                "Unsupported DAV REPORT {Report} from client {UserAgent} on {Protocol} — refused with 403 "
+                + "supported-report. The client will not get what it asked for; set {Category}=Verbose to log "
+                + "the full request/response.",
+                body.Name.ToString(), UserAgent(context), context.Protocol.BasePath, WireCategory);
+
+            return DavXml.PreconditionFailure(DavNames.SupportedReport);
         }
 
         var request = PropRequest.FromProp(body?.Element(DavNames.Prop));

@@ -39,6 +39,22 @@ public static class DavXml
         Content = Serialize(document),
     };
 
+    /// <summary>
+    /// A DAV precondition failure: <c>403</c> carrying <c>&lt;D:error&gt;</c> with the violated precondition
+    /// element (RFC 4918 §16), e.g. <c>DAV:supported-report</c> for a REPORT we do not implement.
+    /// </summary>
+    /// <remarks>
+    /// The body is what makes the refusal machine-readable: a bare 403 tells a client it may not, while the
+    /// precondition tells it <i>which rule</i> it broke, which is the difference between a client that can
+    /// fall back and one that just fails.
+    /// </remarks>
+    public static IActionResult PreconditionFailure(XName precondition) => new ContentResult
+    {
+        StatusCode = 403,
+        ContentType = "application/xml; charset=utf-8",
+        Content = Serialize(new XDocument(new XElement(Xml.DavNames.Error, new XElement(precondition)))),
+    };
+
     public static string Serialize(XDocument document)
     {
         var settings = new XmlWriterSettings
