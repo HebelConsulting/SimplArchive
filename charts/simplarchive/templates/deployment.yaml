@@ -42,6 +42,11 @@ spec:
               containerPort: {{ .Values.imap.tlsPort }}
               protocol: TCP
             {{- end }}
+            {{- if .Values.lmtp.enabled }}
+            - name: lmtp
+              containerPort: {{ .Values.lmtp.port }}
+              protocol: TCP
+            {{- end }}
           env:
             {{- include "simplarchive.appConfigEnv" . | nindent 12 }}
             {{- with .Values.extraEnv }}

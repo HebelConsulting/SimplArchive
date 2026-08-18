@@ -24,12 +24,15 @@ jobs:
     permissions:
       contents: read
       packages: write
-    # Both custom images: the API + the OCR sidecar (k8s pulls it — it can't `build ./ocr` like Compose).
+    # Every custom image: the API, the OCR sidecar, and the MTA (ADR 0630). Kubernetes pulls them — it cannot
+    # `build ./ocr` or `build ./postfix` the way Compose does, so an image the chart references must be
+    # published here or the chart installs a Deployment that can never start.
     strategy:
       matrix:
         include:
           - { image: simplarchive, context: ., file: Dockerfile }
           - { image: simplarchive-ocr, context: ./ocr, file: ./ocr/Dockerfile }
+          - { image: simplarchive-postfix, context: ./postfix, file: ./postfix/Dockerfile }
     steps:
       - uses: actions/checkout@v7
 

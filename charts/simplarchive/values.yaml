@@ -151,6 +151,54 @@ imap:
   maxConnectionsPerUser: 16
   maxConnections: 200
 
+# Mail ingress (ADR 0628/0630). The LMTP listener the MTA delivers to. In-cluster only: LMTP has no
+# authentication of its own — RFC 2033 assumes the MTA on a private network is its only client — so the Service
+# port stays ClusterIP and nothing should route to it from outside the cluster.
+lmtp:
+  enabled: false
+  port: 2525
+  # 0.0.0.0 because the MTA is a different pod and cannot reach this one's loopback. The API logs a Warning
+  # whenever this is not loopback, naming the consequence.
+  bindAddress: "0.0.0.0"
+  maxMessageBytes: 36700160
+
+# The MTA itself (ADR 0630). Off by default, and READ ITS PREREQUISITES BEFORE ENABLING — see
+# docs/deploy/README.md. Receiving internet mail needs ALL of:
+#   * a public IP whose port 25 is not blocked (most clouds and effectively all residential ISPs block it),
+#   * a reverse-DNS (PTR) record for that IP matching myHostname, or most receivers will reject your bounces,
+#   * an MX record for each tenant domain pointing at that name,
+#   * a TLS certificate, or inbound mail is accepted in plaintext.
+# Enabling this without them produces a service that starts cleanly and receives nothing, which is the most
+# expensive way to be wrong.
+postfix:
+  enabled: false
+  image:
+    repository: ghcr.io/hebelconsulting/simplarchive-postfix
+    tag: ""
+    pullPolicy: IfNotPresent
+  # The name this MTA calls itself. MUST match the PTR record of the address it sends from.
+  myHostname: mail.example.com
+  service:
+    # LoadBalancer, because port 25 must be reachable from the internet with a STABLE address — a PTR record
+    # points at an IP, so an ephemeral one cannot be made to match.
+    type: LoadBalancer
+    port: 25
+    loadBalancerIP: ""
+    annotations: {}
+  # The read-only database role Postfix uses for the accepted-domain lookup (scripts/db-init.sql). It needs
+  # SELECT on TenantMailDomains and nothing else; do not reuse the application's credentials here.
+  database:
+    host: ""
+    name: simplarchive
+    user: simplarchive_postfix
+    # Read from this secret's `postfix-db-password` key rather than values, so it never lands in a release
+    # manifest or `helm get values`.
+    existingSecret: ""
+  tls:
+    # Mounts a TLS secret (tls.crt/tls.key) into the MTA. Empty means inbound mail is accepted in PLAINTEXT.
+    existingSecret: ""
+  resources: {}
+
 ingress:
   enabled: false
   className: ""

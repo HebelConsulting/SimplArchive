@@ -19,5 +19,13 @@ spec:
       protocol: TCP
       name: imaps
     {{- end }}
+    {{- if .Values.lmtp.enabled }}
+    # ClusterIP only: the LMTP listener has no authentication of its own, so the MTA pod is the only thing
+    # that should ever reach it (ADR 0630).
+    - port: {{ .Values.lmtp.port }}
+      targetPort: lmtp
+      protocol: TCP
+      name: lmtp
+    {{- end }}
   selector:
     {{- include "simplarchive.selectorLabels" . | nindent 4 }}

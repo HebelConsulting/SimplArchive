@@ -1,0 +1,108 @@
+{{- if .Values.postfix.enabled }}
+{{- if not .Values.lmtp.enabled }}
+{{- fail "postfix.enabled requires lmtp.enabled: the MTA delivers over LMTP, and with the listener off every message would be deferred until its sender gave up." }}
+{{- end }}
+{{- if not .Values.postfix.database.existingSecret }}
+{{- fail "postfix.database.existingSecret is required: the MTA's database password must not live in values, where it reaches release manifests and `helm get values`." }}
+{{- end }}
+# The MTA (ADR 0628/0630) — it terminates SMTP from the open internet so the application never does, and hands
+# it to the LMTP listener in-cluster.
+#
+# Its accepted-domain list is not configured here. Postfix reads TenantMailDomains directly through a pgsql
+# map, which is what makes drift impossible: the alternative is a second list that disagrees with the
+# application silently, in both directions.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-postfix
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mta
+spec:
+  # ONE replica, deliberately. Each would need its own PTR record and its own address in the MX set, and two
+  # MTAs behind one LoadBalancer address is not the way mail scales — the queue is the buffer, not replicas.
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "simplarchive.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mta
+  template:
+    metadata:
+      labels:
+        {{- include "simplarchive.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: mta
+    spec:
+      containers:
+        - name: postfix
+          image: "{{ .Values.postfix.image.repository }}:{{ .Values.postfix.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.postfix.image.pullPolicy }}
+          ports:
+            - name: smtp
+              containerPort: 25
+              protocol: TCP
+          env:
+            - name: LMTP_TARGET
+              value: "{{ include "simplarchive.fullname" . }}:{{ .Values.lmtp.port }}"
+            - name: MYHOSTNAME
+              value: {{ .Values.postfix.myHostname | quote }}
+            - name: DB_HOST
+              value: {{ .Values.postfix.database.host | quote }}
+            - name: DB_NAME
+              value: {{ .Values.postfix.database.name | quote }}
+            - name: DB_USER
+              value: {{ .Values.postfix.database.user | quote }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postfix.database.existingSecret }}
+                  key: postfix-db-password
+            - name: MAX_MESSAGE_BYTES
+              value: {{ .Values.lmtp.maxMessageBytes | quote }}
+            {{- if .Values.postfix.tls.existingSecret }}
+            - name: TLS_CERT_FILE
+              value: /tls/tls.crt
+            - name: TLS_KEY_FILE
+              value: /tls/tls.key
+            {{- end }}
+          {{- if .Values.postfix.tls.existingSecret }}
+          volumeMounts:
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+          {{- end }}
+          resources:
+            {{- toYaml .Values.postfix.resources | nindent 12 }}
+      {{- if .Values.postfix.tls.existingSecret }}
+      volumes:
+        - name: tls
+          secret:
+            secretName: {{ .Values.postfix.tls.existingSecret }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-postfix
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mta
+  {{- with .Values.postfix.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.postfix.service.type }}
+  {{- with .Values.postfix.service.loadBalancerIP }}
+  # A PTR record points at an IP, so the address must be STABLE — an ephemeral one cannot be made to match the
+  # reverse DNS that receiving mail servers check.
+  loadBalancerIP: {{ . | quote }}
+  {{- end }}
+  ports:
+    - port: {{ .Values.postfix.service.port }}
+      targetPort: smtp
+      protocol: TCP
+      name: smtp
+  selector:
+    {{- include "simplarchive.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mta
+{{- end }}

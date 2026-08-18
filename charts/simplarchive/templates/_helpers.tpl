@@ -115,6 +115,16 @@ rolls the Deployment automatically (the pod template changes). Secrets come from
 - name: Imap__MaxConnections
   value: {{ .Values.imap.maxConnections | quote }}
 {{- end }}
+{{- if .Values.lmtp.enabled }}
+- name: Lmtp__Enabled
+  value: "true"
+- name: Lmtp__Port
+  value: {{ .Values.lmtp.port | quote }}
+- name: Lmtp__BindAddress
+  value: {{ .Values.lmtp.bindAddress | quote }}
+- name: Lmtp__MaxMessageBytes
+  value: {{ .Values.lmtp.maxMessageBytes | quote }}
+{{- end }}
 - name: ObjectStorage__ServiceUrl
   value: {{ include "simplarchive.objectStorageServiceUrl" . | quote }}
 - name: ObjectStorage__PublicServiceUrl
