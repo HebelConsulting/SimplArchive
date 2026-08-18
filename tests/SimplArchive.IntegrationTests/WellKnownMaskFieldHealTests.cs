@@ -119,8 +119,12 @@ public class WellKnownMaskFieldHealTests
             //
             // Note the Notebook itself is NOT a new mask here — "Note Folder" → "Notebook" is a rename on the
             // same id, which is what keeps the upgrade free of any document movement.
+            //
+            // 11 → 12 with Repository (ADR 0627, #596), which unlike the Notebook case IS a genuinely new mask:
+            // a repository previously wore the plain Folder mask, so this one has its own id and existing
+            // repositories are moved onto it by the seeder's backfill.
             var maskCount = await db.Masks.IgnoreQueryFilters().CountAsync(m => m.TenantId == _tenantId);
-            Assert.Equal(11, maskCount);
+            Assert.Equal(12, maskCount);
             Assert.Equal(maskCount, await db.MaskVersions.IgnoreQueryFilters().CountAsync(v => v.TenantId == _tenantId));
         }
     }

@@ -10,6 +10,24 @@ public static class WellKnownMaskIds
 
     public static readonly Guid Folder = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E31");
 
+    /// <summary>The mask a REPOSITORY wears — a document with no parent (ADR 0627, #596).</summary>
+    /// <remarks>
+    /// <para>
+    /// Identical to <see cref="Folder"/> in shape; it differs in name and id so that a repository can be
+    /// recognised as one. ADR 0200 already defines a repository positionally — <c>ParentId == null</c> — and
+    /// this does not replace that. The two are kept in LOCKSTEP, enforced both ways in
+    /// <c>SaveChanges</c>: a document wearing this mask must be a root, and a root must wear this mask unless
+    /// it is a personal space (which wears <see cref="UserFolder"/>, ADR 0590).
+    /// </para>
+    /// <para>
+    /// Lockstep is what makes the duplication safe. Two representations of one fact can normally disagree —
+    /// which is the objection to storing a derived value — so the invariant removes the possibility rather
+    /// than trusting callers. What it buys is that <c>documentType</c> says "Repository" in a listing and over
+    /// IMAP with no extra query, which is the whole reason it exists.
+    /// </para>
+    /// </remarks>
+    public static readonly Guid Repository = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E3D");
+
     public static readonly Guid EMail = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E32");
 
     // The mask a per-user personal space wears (ADR 0590). A personal repository is not a plain folder: it is

@@ -290,7 +290,11 @@ public class RepositoriesController : ControllerBase
             TenantId = tenantId,
             ParentId = null,
             Name = request.Name,
-            MaskVersionId = await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, cancellationToken), // a repository root is a folder (ADR "Folder mask on folders")
+            // A repository wears the Repository mask, kept in lockstep with ParentId == null (ADR 0627). It was
+            // the plain Folder mask, which made a repository indistinguishable from any folder in a listing or
+            // over IMAP without a second query.
+            MaskVersionId = await Documents.FolderMask.CurrentVersionIdAsync(
+                _dbContext, tenantId, SimplArchive.Domain.Masks.WellKnownMaskIds.Repository, cancellationToken),
             CreatedByUserId = createdByUserId,
             CreatedByServiceAccountId = createdByServiceAccountId,
             CreatedAt = DateTimeOffset.UtcNow,

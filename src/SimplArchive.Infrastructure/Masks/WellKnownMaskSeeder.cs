@@ -28,6 +28,10 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
     {
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Folder, "Folder", [], cancellationToken);
 
+        // A repository is a root document (ADR 0200). The mask carries no fields — like Folder, which it is a
+        // copy of in everything but identity — and exists so a repository can SAY it is one (ADR 0627).
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Repository, "Repository", [], cancellationToken);
+
         // "Short Description" and "Doc Date" were removed — the former duplicates Document.Name (a document
         // is named after its file, ADR "Drag-and-drop document upload"), the latter duplicates the real
         // DocumentVersion.DocumentDate issuing date (ADR "System-field search"). See ADR "Drop redundant
@@ -124,6 +128,11 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // is taking the name "Calendar" that the ITEM mask held before the rename to Appointment. Renaming the
         // item out of the way first is what stops the heal colliding with itself on every existing tenant.
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Calendar, "Calendar", [ColourField], cancellationToken);
+
+        // Last, because it needs every mask above to exist: move repositories that predate the Repository mask
+        // off Folder and onto it. Idempotent, and it is what makes the lockstep invariant true of the data that
+        // is already there rather than only of what is created from now on.
+        await BackfillRepositoryMaskAsync(tenantId, cancellationToken);
     }
 
     private async Task EnsureMaskAsync(Guid tenantId, Guid maskId, string name, IReadOnlyList<FieldSpec> fields, CancellationToken cancellationToken)
@@ -252,6 +261,65 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         _logger.LogInformation("Renaming well-known mask {MaskId} for tenant {TenantId} from {OldName} to {NewName}",
             maskId, tenantId, current.Name, name);
         current.Name = name;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Moves existing repositories off the Folder mask and onto Repository (ADR 0627, #596).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every repository created before that ADR wears <c>Folder</c>, which the lockstep invariant now forbids
+    /// — so this is not an optional tidy-up, it is what makes the invariant true of data that already exists.
+    /// A seed that only ever grows would leave every pre-existing tenant behind, and a fresh-volume test
+    /// cannot see it because the only tenants it creates are new ones. That is exactly how #574 was missed.
+    /// </para>
+    /// <para>
+    /// Only roots wearing <c>Folder</c> are touched. A personal space wears <c>User Folder</c> (ADR 0590) and
+    /// is left alone; a root that is already <c>Repository</c> is a no-op, so this is idempotent and safe to
+    /// run on every startup.
+    /// </para>
+    /// </remarks>
+    private async Task BackfillRepositoryMaskAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var folderVersionIds = await _dbContext.MaskVersions.IgnoreQueryFilters(["TenantFilter"])
+            .Where(v => v.TenantId == tenantId && v.MaskId == WellKnownMaskIds.Folder)
+            .Select(v => v.Id)
+            .ToListAsync(cancellationToken);
+        if (folderVersionIds.Count == 0)
+        {
+            return;
+        }
+
+        var repositoryVersionId = await _dbContext.MaskVersions.IgnoreQueryFilters(["TenantFilter"])
+            .Where(v => v.TenantId == tenantId && v.MaskId == WellKnownMaskIds.Repository && v.IsCurrent)
+            .Select(v => v.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (repositoryVersionId == Guid.Empty)
+        {
+            return;
+        }
+
+        var roots = await _dbContext.Documents.IgnoreQueryFilters(["TenantFilter", "SoftDeleteFilter"])
+            .Where(d => d.TenantId == tenantId
+                && d.ParentId == null
+                && d.MaskVersionId != null
+                && folderVersionIds.Contains(d.MaskVersionId.Value))
+            .ToListAsync(cancellationToken);
+        if (roots.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var root in roots)
+        {
+            root.MaskVersionId = repositoryVersionId;
+        }
+
+        _logger.LogInformation(
+            "Moved {Count} existing repositories in tenant {TenantId} from the Folder mask to Repository.",
+            roots.Count, tenantId);
+
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }
