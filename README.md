@@ -75,6 +75,33 @@ scripts/package-windows-linux.sh      # Win/Linux x64 → dist/SimplArchive-<ver
 
 All are self-contained and **unsigned** (a showcase build): macOS Gatekeeper warns on first open (right-click → **Open**); Windows SmartScreen warns on first run ("More info" → "Run anyway"); the Linux launcher may need `chmod +x`. The Windows/Linux script cross-builds from any OS with the .NET SDK.
 
+## Connect your own apps — calendars, contacts, notes, files
+
+> **Under development.** These endpoints work and are worth trying, but they are still being built out — expect rough edges and changes.
+
+Your archive also speaks the protocols your existing apps already know, so calendars, contacts, notes and files show up alongside everything else on your devices rather than only in the workbench:
+
+| What | Where to point the app | Username | Password to use |
+|---|---|---|---|
+| **Calendars** (CalDAV) | `https://demo.simplarchive.dev/caldav` | your email | *WebDAV access…* |
+| **Contacts** (CardDAV) | `https://demo.simplarchive.dev/carddav` | your email | *WebDAV access…* |
+| **Notes** (IMAP) | `demo.simplarchive.dev`, port **993**, TLS | your email | *Email access (IMAP)…* |
+| **Files** (WebDAV) | `https://demo.simplarchive.dev/SimplArchive` | your email | *WebDAV access…* |
+
+**Use an app-specific password, never your login password.** Both are generated in the account menu (top right): *WebDAV access…* issues one secret shared by files, calendars and contacts, and *Email access (IMAP)…* issues a separate one for notes. Each is shown once, and either can be revoked on its own without touching your login.
+
+Discovery is supported, so on most apps the host alone is enough and the paths above are the fallback when it asks for a full URL.
+
+**Where your documents show up over IMAP.** Every folder is a mailbox, and each document in it is a message with the file attached. **`INBOX` is your personal space's root**, which normally holds only folders — so an empty inbox is the expected first impression, not a broken sync. The archive's contents are in the *sibling* mailboxes (`Demo Repository/Invoices`, `Templates`, …). By default a mail app shows only emails; turn on **Email access (IMAP) ▸ show all documents** in the account menu to have every file appear as well.
+
+- **Apple devices** — *System Settings ▸ Internet Accounts ▸ Add Account ▸ Other*, then add a CalDAV or CardDAV account. For notes, add a Mail account and enable **Notes** on it. Worth knowing: the accounts framework quietly refuses plaintext IMAP *and* untrusted certificates — no error is shown, the account simply never syncs — so the TLS port and a trusted certificate are requirements here, not preferences.
+- **Android** — the built-in accounts do not speak CalDAV/CardDAV; install a sync app that does and give it the URL, username and app password above. Notes need no extra app: any mail client that supports IMAP will show them.
+- **Desktop mail/calendar clients** — usually the smoothest route on any operating system, since one client covers all three protocols. Add a calendar/address book by URL, and a mail account for notes.
+
+**Files (WebDAV) is not universal.** A desktop file manager mounts it directly; **iPhone/iPad have no built-in WebDAV support**, so a third-party file client is needed there.
+
+Running your own instance instead of the demo? Substitute your host; the paths and the account-menu steps are identical.
+
 ## Install in production
 
 Production deploys via the **Helm chart** in [`charts/simplarchive`](charts/simplarchive) — an API Deployment/Service/Ingress/HPA/PDB with health probes, non-root containers, and secret wiring; dependencies (Postgres, object storage, OpenSearch, …) are external/managed. The chart's [`values.yaml`](charts/simplarchive/values.yaml) documents the full configuration surface, and pre-install/pre-upgrade migration hooks apply schema changes off the app's startup path.
