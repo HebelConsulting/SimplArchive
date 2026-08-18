@@ -159,6 +159,9 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<SimplArchive.Api.I
 // must not open a listener that accepts mail without authentication.
 builder.Services.Configure<SimplArchive.Api.Lmtp.LmtpOptions>(builder.Configuration.GetSection("Lmtp"));
 builder.Services.AddScoped<SimplArchive.Api.Lmtp.LmtpDelivery>();
+
+// The lossless vCard merge behind the contact editor (#564, ported from SimplCalCon's ADR 0082).
+builder.Services.AddSingleton<SimplArchive.Api.Documents.IContactCardComposer, SimplArchive.Api.Documents.ContactCardComposer>();
 builder.Services.AddSingleton<SimplArchive.Api.Lmtp.LmtpServer>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SimplArchive.Api.Lmtp.LmtpServer>());
 
