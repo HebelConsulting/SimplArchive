@@ -382,11 +382,23 @@ edit, and documents frozen by a legal hold, behave in the mount exactly as they 
 
 == Reading the archive in your mail program (IMAP)
 
-Where WebDAV turns the archive into a network drive, *IMAP*#idx("IMAP") turns it into a mail account: point
+Where WebDAV turns the archive into a network drive, *IMAP*#idx("IMAP") lets a mail program browse it: point
 Apple Mail, Thunderbird or any IMAP-speaking client at your SimplArchive server and browse the same
 ACL-filtered tree as mailboxes. *INBOX* is your personal folder; the shared repositories you can see appear
 beside it. Archived e-mails read natively; every *other* document can appear too — as a message carrying the
 file as an attachment — if you switch that on.
+
+#note[
+  *This is your archive wearing an IMAP face — it is not a mail service.* SimplArchive does not collect your
+  mail from your provider, does not send mail, and is not a replacement for your e-mail account. Nothing here
+  changes where your mail lives. What it gives you is the second account in your mail program: keep your real
+  one alongside it, and *file* mail across from one to the other, which is what the drag described below is
+  for.
+]
+
+*Shortcuts show up as mailboxes too.* A folder you have filed a reference#idx("Reference") to appears in the
+list wherever the reference sits, with everything beneath it — so the destinations you file into most can be
+gathered in your personal folder and reached from the mail program without hunting through the whole tree.
 
 Open *Email access (IMAP)…* in the account menu. The dialog shows the *server* and your *username* (your
 e-mail), each with a *Copy* button, and *Generate* issues a dedicated *IMAP password* — like the WebDAV one:

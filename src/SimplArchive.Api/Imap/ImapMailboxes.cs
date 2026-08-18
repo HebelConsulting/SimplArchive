@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Imap;
@@ -163,6 +164,9 @@ internal static class ImapMailboxes
         var calculator = scope.ServiceProvider.GetRequiredService<IEffectiveRightsCalculator>();
         var userId = scope.ServiceProvider.GetRequiredService<ICurrentUserAccessor>().UserId!.Value;
 
+        // The catalog's own source, so an administrator raises exactly this walk rather than every IMAP line.
+        var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("SimplArchive.Api.Imap");
+
         // Root documents: the caller's own personal repository plus the shared ones (tenant filter scopes the
         // tenant; other users' personal spaces are excluded here and by ACL).
         var roots = await db.Documents
@@ -200,22 +204,27 @@ internal static class ImapMailboxes
                     // Its sections are then walked from here, so they surface as Notes/Work/2026. Before
                     // sections existed this said HasChildren: false and the subtree was never visited — which
                     // is exactly why Apple Notes could see no subfolders.
-                    var hasSections = await db.Documents.AnyAsync(
-                        d => d.ParentId == nid && !db.DocumentVersions.Any(v => v.DocumentId == d.Id));
+                    var hasSections = await HasSubfoldersAsync(db, nid);
                     entries.Add(new ImapMailboxEntry("Notes", nid, hasSections));
-                    await AddSubfoldersAsync(db, calculator, userId, nid, "Notes", entries);
+                    await AddSubfoldersAsync(db, calculator, logger, userId, nid, "Notes", entries);
                 }
             }
 
-            await AddSubfoldersAsync(db, calculator, userId, root.Id, rootName, entries, notesFolderId);
+            await AddSubfoldersAsync(db, calculator, logger, userId, root.Id, rootName, entries, notesFolderId);
         }
 
         return entries;
     }
 
     private static async Task AddSubfoldersAsync(
-        SimplArchiveDbContext db, IEffectiveRightsCalculator calculator, Guid userId, Guid parentId, string parentName, List<ImapMailboxEntry> entries, Guid? skipFolderId = null)
+        SimplArchiveDbContext db, IEffectiveRightsCalculator calculator, ILogger logger, Guid userId, Guid parentId, string parentName, List<ImapMailboxEntry> entries, Guid? skipFolderId = null, IReadOnlySet<Guid>? ancestors = null)
     {
+        // The folders on the path to here, so a reference pointing back up one stops instead of recursing for
+        // ever. It must be the ANCESTOR CHAIN rather than a global visited-set: the same folder legitimately
+        // appears in more than one place (that is what a reference IS), and a global set would silently drop
+        // every appearance after the first.
+        var path = ancestors is null ? new HashSet<Guid> { parentId } : new HashSet<Guid>(ancestors) { parentId };
+
         // A mailbox is a FOLDER — a child document with no versions. Names carrying the hierarchy delimiter
         // are skipped defensively (the WebDAV gateway refuses them for the same mis-addressing reason).
         var folders = await db.Documents
@@ -223,19 +232,73 @@ internal static class ImapMailboxes
             .OrderBy(d => d.Name)
             .ToListAsync();
 
-        foreach (var folder in folders.Where(f => !f.Name.Contains('/') && f.Id != skipFolderId))
+        // …and the folders REFERENCED into this one (ADR 0627). A reference is another appearance of a folder,
+        // so it projects as a mailbox exactly like a child does — without it, a filing destination a user put
+        // in their personal space is invisible to their mail client, which is the whole point of Goal 1(b).
+        // The clients already show these (DocumentReferencesController lists them alongside the children);
+        // this brings IMAP into line. The soft-delete query filter drops references to deleted targets.
+        var referencedIds = await db.DocumentReferences
+            .Where(r => r.ParentFolderId == parentId)
+            .Select(r => r.TargetDocumentId)
+            .ToListAsync();
+
+        var referenced = await db.Documents
+            .Where(d => referencedIds.Contains(d.Id) && !db.DocumentVersions.Any(v => v.DocumentId == d.Id))
+            .OrderBy(d => d.Name)
+            .ToListAsync();
+
+        foreach (var folder in folders.Concat(referenced).Where(f => !f.Name.Contains('/') && f.Id != skipFolderId))
         {
+            // A reference back to somewhere on our own path, or to this folder's own parent chain. Following it
+            // would produce Personal/My eMails/Personal/My eMails/… until the client or the stack gave up.
+            //
+            // Skipping is silent to the client — the mailbox is simply absent, and nothing distinguishes that
+            // from "there was never anything there", which is the shape ADR 0626 exists to forbid. So it says
+            // so, and names the switch.
+            if (path.Contains(folder.Id))
+            {
+                logger.LogWarning(
+                    "IMAP catalog: reference to {FolderName} under {ParentName} points back into its own path and "
+                    + "is OMITTED from the mailbox list; the client sees no such mailbox and cannot tell it was "
+                    + "skipped. Set Serilog:MinimumLevel:Override:SimplArchive.Api.Imap to Trace for the walk",
+                    folder.Name, parentName);
+                continue;
+            }
+
             if (!(await calculator.GetEffectiveRightsAsync(userId, folder.Id)).CanSee)
             {
                 continue;
             }
 
             var name = $"{parentName}/{folder.Name}";
-            var hasSubfolders = await db.Documents.AnyAsync(d => d.ParentId == folder.Id && !db.DocumentVersions.Any(v => v.DocumentId == d.Id));
-            entries.Add(new ImapMailboxEntry(name, folder.Id, hasSubfolders));
-            await AddSubfoldersAsync(db, calculator, userId, folder.Id, name, entries);
+
+            // A referenced folder whose name matches a real child would emit the SAME wire name twice, and a
+            // mail client resolving one of them gets whichever it saw last. Names must be unique in the
+            // catalog, so the first appearance wins — deterministic because children are walked before
+            // references.
+            if (entries.Any(e => e.Name == name))
+            {
+                logger.LogWarning(
+                    "IMAP catalog: {Name} is claimed by more than one folder (a child and a reference share a "
+                    + "name); the LATER one is OMITTED and its messages are unreachable over IMAP. Rename one, "
+                    + "or set Serilog:MinimumLevel:Override:SimplArchive.Api.Imap to Trace for the walk",
+                    name);
+                continue;
+            }
+
+            entries.Add(new ImapMailboxEntry(name, folder.Id, await HasSubfoldersAsync(db, folder.Id)));
+            await AddSubfoldersAsync(db, calculator, logger, userId, folder.Id, name, entries, skipFolderId: null, path);
         }
     }
+
+    // "Is there anything below this that is itself a mailbox?" — a child folder OR a folder referenced into it,
+    // since both now project. Answering with children alone was what made \HasNoChildren a lie for a folder
+    // holding only references, and a client that trusts the flag never looks inside.
+    private static async Task<bool> HasSubfoldersAsync(SimplArchiveDbContext db, Guid folderId) =>
+        await db.Documents.AnyAsync(d => d.ParentId == folderId && !db.DocumentVersions.Any(v => v.DocumentId == d.Id))
+        || await db.DocumentReferences
+            .Where(r => r.ParentFolderId == folderId)
+            .AnyAsync(r => db.Documents.Any(d => d.Id == r.TargetDocumentId && !db.DocumentVersions.Any(v => v.DocumentId == d.Id)));
 
     /// <summary>Resolves a wire mailbox name to its folder + message snapshot, assigning missing UIDs.</summary>
     internal static async Task<(ImapMailbox Mailbox, List<ImapMessageEntry> Messages)?> ResolveAsync(
@@ -320,6 +383,9 @@ internal static class ImapMailboxes
     {
         var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
         var userId = scope.ServiceProvider.GetRequiredService<ICurrentUserAccessor>().UserId!.Value;
+
+        // The catalog's own source, so an administrator raises exactly this walk rather than every IMAP line.
+        var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("SimplArchive.Api.Imap");
         var ids = messages.Select(m => m.DocumentId).ToList();
         return (await db.ImapSeenMarks.Where(s => s.UserId == userId && ids.Contains(s.DocumentId)).Select(s => s.DocumentId).ToListAsync()).ToHashSet();
     }
@@ -329,6 +395,9 @@ internal static class ImapMailboxes
     {
         var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
         var userId = scope.ServiceProvider.GetRequiredService<ICurrentUserAccessor>().UserId!.Value;
+
+        // The catalog's own source, so an administrator raises exactly this walk rather than every IMAP line.
+        var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("SimplArchive.Api.Imap");
         var tenantId = scope.ServiceProvider.GetRequiredService<ICurrentTenantAccessor>().TenantId!.Value;
         var existing = await db.ImapSeenMarks.FirstOrDefaultAsync(s => s.UserId == userId && s.DocumentId == documentId);
         if (seen && existing is null)
