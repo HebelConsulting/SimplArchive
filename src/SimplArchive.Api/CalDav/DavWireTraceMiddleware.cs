@@ -55,6 +55,28 @@ public sealed class DavWireTraceMiddleware
 
         WarnOnceThatTracingIsActive();
 
+        // A file transfer is summarised, never captured — and it must not be buffered either, or a large
+        // download would sit in memory before its first byte reached the client. The sizes are the diagnostic
+        // fact here; the content is somebody's document.
+        if (CarriesFileContent(context.Request))
+        {
+            await _next(context);
+
+            _logger.LogTrace(
+                "DAV {Method} {Path}{Query} ua={UserAgent} -> {StatusCode} "
+                + "(request {RequestBytes} bytes, response {ResponseBytes} bytes; file content not logged)",
+                context.Request.Method,
+                context.Request.Path,
+                context.Request.QueryString,
+                UserAgent(context.Request),
+                context.Response.StatusCode,
+                context.Request.ContentLength ?? 0,
+                context.Response.ContentLength ?? -1);
+
+            WarnIfUnhandled(context);
+            return;
+        }
+
         context.Request.EnableBuffering();
         var requestBody = await ReadRequestBodyAsync(context.Request);
 
@@ -138,10 +160,32 @@ public sealed class DavWireTraceMiddleware
     // ADAPTED: SimplArchive serves the two protocols under their own roots rather than one /dav, and the
     // WebDAV gateway has its own (/SimplArchive). The verb list keeps a DAV request visible wherever it lands,
     // which is exactly the case worth a warning — a client addressing a path we do not serve.
-    private static bool IsDav(HttpRequest request) =>
+    internal static bool IsDav(HttpRequest request) =>
         DavProtocol.ForPath(request.Path.Value ?? string.Empty) is not null
+        || WebDav.WebDavMiddleware.IsGatewayPath(request.Path.Value ?? string.Empty)
         || request.Path.StartsWithSegments("/.well-known")
         || request.Method is "PROPFIND" or "REPORT" or "PROPPATCH" or "MKCOL" or "MKCALENDAR";
+
+    /// <summary>
+    /// A request whose body is a FILE rather than protocol — the WebDAV gateway's GET/HEAD/PUT.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These are traced as a summary and never as content, for two independent reasons. <b>Privacy:</b> the body
+    /// is a user's document, and unlike a vCard it is not a small text item whose exact bytes settle an interop
+    /// question. <b>Memory:</b> the verbose path reads the whole request into a `string` and buffers the whole
+    /// response in a `MemoryStream` — fine for XML, ruinous for a 200 MB scan, and it would delay the first byte
+    /// of every download until the last had been buffered.
+    /// </para>
+    /// <para>
+    /// CalDAV/CardDAV item bodies stay verbatim: they are small, textual, and seeing the exact vCard a client
+    /// sent is usually the whole of the diagnosis. The distinction is what the payload IS, not which verb
+    /// carried it — the same line IMAP had to draw between a protocol line and an APPEND'd message.
+    /// </para>
+    /// </remarks>
+    internal static bool CarriesFileContent(HttpRequest request) =>
+        WebDav.WebDavMiddleware.IsGatewayPath(request.Path.Value ?? string.Empty)
+        && request.Method is "GET" or "HEAD" or "PUT";
 
     private static async Task<string> ReadRequestBodyAsync(HttpRequest request)
     {

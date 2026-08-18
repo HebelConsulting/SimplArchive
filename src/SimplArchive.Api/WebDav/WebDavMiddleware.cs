@@ -29,6 +29,12 @@ public sealed class WebDavMiddleware
 
     // The gateway answers at /SimplArchive (canonical) and /webdav (legacy). Returns whichever prefix the request
     // used, or null when the path isn't the gateway's.
+    /// <summary>
+    /// Whether this path is the WebDAV gateway's — asked by the DAV wire trace, which must cover this surface
+    /// too (#595). One matcher, so the trace cannot disagree with the gateway about what it serves.
+    /// </summary>
+    internal static bool IsGatewayPath(string path) => MatchedBase(path) is not null;
+
     private static string? MatchedBase(string path) =>
         path.Equals(BasePath, StringComparison.OrdinalIgnoreCase) || path.StartsWith(BasePath + "/", StringComparison.OrdinalIgnoreCase) ? BasePath
         : path.Equals(LegacyBasePath, StringComparison.OrdinalIgnoreCase) || path.StartsWith(LegacyBasePath + "/", StringComparison.OrdinalIgnoreCase) ? LegacyBasePath
