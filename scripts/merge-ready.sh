@@ -87,7 +87,15 @@ e2e_pass="$(e2e_in_bucket pass)"
 e2e_fail="$(e2e_in_bucket fail)"
 e2e_skip="$(e2e_in_bucket skipping)"
 e2e_pending="$(e2e_in_bucket pending)"
-e2e_cancel="$(jq -r '[.[] | select(.name | startswith("E2E (")) | select(.name | contains("${{") | not) | select(.bucket == "cancel")] | length' <<<"$checks")"
+e2e_cancel="$(jq -r '
+    . as $all
+    | [$all[] | select(.bucket == "pass" or .bucket == "pending") | .name] as $passed
+    | [$all[]
+        | select(.name | startswith("E2E ("))
+        | select(.name | contains("${{") | not)
+        | select(.bucket == "cancel")
+        | select(.name as $n | ($passed | index($n)) | not)]
+    | length' <<<"$checks")"
 
 failing="$(count_bucket fail)"
 pending="$(count_bucket pending)"
@@ -99,13 +107,30 @@ pending="$(count_bucket pending)"
 # matters is not failed-vs-cancelled but ANSWERED-vs-NOT: a cancelled check never ran to completion, so it
 # verified nothing. Same family as the skipped-check trap this script was written for, one bucket over.
 #
-# ONE carve-out, and it is narrow. A duplicate run cancelled by `concurrency` before its matrix expanded
-# leaves a check literally named `E2E (${{ matrix.name }})` — an UNEXPANDED workflow expression, which is
-# never a real job name. That artifact appears whenever a PR is opened with a label (`opened` and `labeled`
-# both fire), and #601/#602 carried it while being genuinely verified 6/6. Flagging it would make this
-# script cry wolf on every labelled PR, which is how a guard gets ignored and then deleted. A cancellation
-# with a REAL name — "Build the user manual" — is still a gate that never ran, and still blocks.
-cancelled="$(jq -r '[.[] | select(.bucket == "cancel") | select(.name | contains("${{") | not)] | length' <<<"$checks")"
+# The carve-out is SUPERSESSION, not a name. Opening a PR with a label fires `opened` AND `labeled`, so two
+# runs start and `concurrency` kills one — cancelling every job it had already begun. That leaves cancelled
+# checks with perfectly ordinary names ("E2E verdict") beside the unexpanded `E2E (${{ matrix.name }})`
+# placeholder, while the surviving run re-runs the same jobs and passes them.
+#
+# So the question is not what a cancelled check is CALLED, it is whether anything else answered it:
+#
+#   a cancelled check blocks ONLY if no check of the same name is passing OR still running.
+#
+# A superseded "E2E verdict" has a twin from the live run — passing, or still running while the live run
+# re-does it — so it is an artifact; ignore it. A genuinely
+# cancelled gate, like a manual build stopped by hand, has no twin and still blocks. The `${{` clause remains
+# because that name never expands, so it can never acquire a twin.
+#
+# The first version of this check used the NAME as the test, and would have refused three PRs (#606-#608)
+# that were entirely healthy — which is how a guard earns a reputation for crying wolf and then gets ignored.
+cancelled="$(jq -r '
+    . as $all
+    | [$all[] | select(.bucket == "pass" or .bucket == "pending") | .name] as $passed
+    | [$all[]
+        | select(.bucket == "cancel")
+        | select(.name | contains("${{") | not)
+        | select(.name as $n | ($passed | index($n)) | not)]
+    | length' <<<"$checks")"
 
 # Per-check listing, skips called out as their own state rather than folded into "not failing".
 jq -r '.[] | "  \(if .bucket == "pass" then "✓" elif .bucket == "fail" then "✗" elif .bucket == "pending" then "…" elif .bucket == "cancel" then "⊗" else "⊘" end)  \(.name)  [\(.bucket)]"' <<<"$checks" | sort -k2
@@ -121,9 +146,20 @@ if [ "$failing" -gt 0 ]; then
     ready=1
 fi
 
-if [ "$cancelled" -gt 0 ]; then
+# Only judged once NOTHING is pending. A superseded check's twin may not exist yet — "E2E verdict" is
+# `needs: [fast, heavy]`, so the live run does not create it until the legs finish, and until then the
+# cancelled one looks twinless. While anything is still running the answer is "wait" regardless, so claiming
+# a blocking cancellation here would be both premature and wrong.
+if [ "$cancelled" -gt 0 ] && [ "$pending" -eq 0 ]; then
     printf '⊗ NOT READY — %s check(s) CANCELLED. A cancelled check never ran, so it verified nothing.\n' "$cancelled"
-    jq -r '.[] | select(.bucket == "cancel") | select(.name | contains("${{") | not) | "    \(.name)  \(.link)"' <<<"$checks"
+    jq -r '
+        . as $all
+        | [$all[] | select(.bucket == "pass" or .bucket == "pending") | .name] as $passed
+        | $all[]
+        | select(.bucket == "cancel")
+        | select(.name | contains("${{") | not)
+        | select(.name as $n | ($passed | index($n)) | not)
+        | "    \(.name)  \(.link)"' <<<"$checks"
     printf '    Re-run them (gh run rerun <id>) or push a commit; do not merge past a cancellation.\n'
     ready=1
 fi
