@@ -17,8 +17,18 @@ public class LmtpOptions
 {
     public bool Enabled { get; set; }
 
-    /// <summary>The port the MTA delivers to. 0 binds an ephemeral port, which is what the E2E suite uses.</summary>
+    /// <summary>The port the MTA delivers to. -1 binds an ephemeral port, which is what the E2E suite uses.</summary>
     public int Port { get; set; } = 2525;
+
+    /// <summary>The address to bind. Loopback by default — deliberately the one that cannot be reached remotely.</summary>
+    /// <remarks>
+    /// A container deployment MUST widen this, because the MTA runs in its own container and cannot reach this
+    /// one's loopback. That is the intended shape: opening the listener beyond the host is a decision an
+    /// operator makes explicitly, having read why it must stay on a private network, rather than a default
+    /// they inherit without noticing. Compose sets it to <c>0.0.0.0</c> on an internal network with no host
+    /// port published.
+    /// </remarks>
+    public string BindAddress { get; set; } = "127.0.0.1";
 
     /// <summary>The largest message accepted, in bytes. Beyond this the reply is a permanent 552.</summary>
     /// <remarks>

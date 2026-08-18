@@ -81,3 +81,35 @@ ALTER DEFAULT PRIVILEGES FOR ROLE simplarchive IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO simplarchive_app;
 ALTER DEFAULT PRIVILEGES FOR ROLE simplarchive IN SCHEMA public
   GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO simplarchive_app;
+
+-- The MTA's read-only role (ADR 0628). Postfix asks one question of this database — "is this domain one we
+-- accept?" — so it gets exactly the privilege to ask it and nothing else. A single shared credential would
+-- have let the component most exposed to the internet read every document row in the archive.
+--
+-- The grant is deliberately per-table rather than schema-wide: TenantMailDomains is created by a migration, so
+-- the grant is applied idempotently below once the table exists, and stays absent (harmlessly) until then.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'simplarchive_postfix') THEN
+    EXECUTE 'CREATE ROLE simplarchive_postfix WITH LOGIN PASSWORD ''postfix''';
+  END IF;
+END
+$$;
+
+GRANT CONNECT ON DATABASE simplarchive TO simplarchive_postfix;
+GRANT USAGE ON SCHEMA public TO simplarchive_postfix;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables
+             WHERE table_schema = 'public' AND table_name = 'TenantMailDomains') THEN
+    EXECUTE 'GRANT SELECT ON public."TenantMailDomains" TO simplarchive_postfix';
+  END IF;
+END
+$$;
+
+-- NOTE: deliberately NO `ALTER DEFAULT PRIVILEGES … GRANT SELECT ON TABLES` for this role. That would have
+-- been the convenient way to cover the run where the table does not exist yet, and it would have granted read
+-- on every table the migrations create from then on — handing the most internet-exposed component in the
+-- stack the whole archive, under a comment claiming least privilege. The grant above is conditional instead,
+-- and `postfix-grant` in the compose stack re-applies it once the migration has created the table.

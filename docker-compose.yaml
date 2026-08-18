@@ -161,6 +161,54 @@ services:
       context: ./ocr
     restart: unless-stopped
 
+  # The MTA (ADR 0628): terminates SMTP from the world and hands the Api LMTP on this internal network. Built
+  # from ./postfix using Alpine's own package (ADR 0611) rather than a community image — this is the most
+  # exposed service in the stack, so its provenance is the distribution's package database.
+  #
+  # NO host port. Reaching this from the internet needs `ports: ["25:25"]`, a public IP whose port 25 is not
+  # blocked, correct reverse DNS and an MX record — a deliberate act by an operator who controls all four, not
+  # a default. The Api container runs non-root and a compose overlay binding a privileged port is what took the
+  # live kiosk down; the default stack must not be able to fail that way.
+  postfix:
+    build:
+      context: ./postfix
+    depends_on:
+      postfix-grant:
+        condition: service_completed_successfully
+    environment:
+      LMTP_TARGET: "api:2525"
+      MYHOSTNAME: "mail.localhost"
+      DB_HOST: "db"
+      DB_NAME: "simplarchive"
+      # Reads ONE table (see scripts/db-init.sql). A shared credential here would give the internet-facing
+      # component read access to every document row in the archive.
+      DB_USER: "simplarchive_postfix"
+      DB_PASSWORD: "postfix"
+    restart: unless-stopped
+
+  # One-shot: grants the MTA's read-only role SELECT on TenantMailDomains, which only exists once the Api has
+  # run its migrations. db-init cannot do it — it runs before the schema exists — and granting it there
+  # speculatively would have meant a blanket future-tables grant, i.e. the whole archive.
+  postfix-grant:
+    image: postgres:16.14-alpine
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: postgres
+    entrypoint:
+      - psql
+      - "-h"
+      - db
+      - "-U"
+      - postgres
+      - "-d"
+      - simplarchive
+      - "-v"
+      - "ON_ERROR_STOP=1"
+      - "-c"
+      - 'GRANT SELECT ON public."TenantMailDomains" TO simplarchive_postfix;'
+
   # Dev SMTP catcher (ADR "Email notifications (SMTP)"): Mailpit accepts the notification emails on :1025 and
   # shows them in a web inbox on :8025 — so the demo's workflow/escalation emails are visible in a browser
   # (http://localhost:8025) without a real mail server. Dev-only; captures mail, never delivers it.
@@ -419,6 +467,14 @@ services:
       # SignalR Valkey backplane (ADR "SignalR Valkey backplane"): when set, real-time notification pushes fan out
       # across API replicas. Unset ⇒ in-process only. Reached over the compose network.
       ConnectionStrings__Valkey: "valkey:6379"
+
+      # LMTP delivery (ADR 0628). BindAddress is widened to 0.0.0.0 because the MTA is in its own container and
+      # cannot reach this one's loopback — the Api logs a Warning when it is not loopback, since the listener
+      # has no authentication of its own and relies on nothing routing to it from outside the compose network.
+      # No host port is published for it.
+      Lmtp__Enabled: "true"
+      Lmtp__BindAddress: "0.0.0.0"
+      Lmtp__Port: "2525"
       # First PlatformAdministrator, seeded idempotently on startup (no-op once one exists). The ClientSecret
       # now comes from OpenBao KV (secret/simplarchive/bootstrap); only the non-secret Name/ClientId stay here.
       Bootstrap__PlatformAdministrator__Name: "bootstrap-admin"

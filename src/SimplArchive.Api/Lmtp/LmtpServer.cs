@@ -40,12 +40,22 @@ public sealed class LmtpServer : IHostedService
             return Task.CompletedTask;
         }
 
-        // Loopback, not Any. The listener is unauthenticated by design (see LmtpOptions), so the default bind
-        // must be the one that cannot be reached from off the host; a deployment that needs the MTA in another
-        // container overrides it deliberately rather than inheriting an open port.
+        // Loopback by DEFAULT: the listener is unauthenticated by design (see LmtpOptions), so the default
+        // bind is the one that cannot be reached from off the host. A container deployment must widen it —
+        // the MTA is in its own container — which is a decision an operator makes rather than inherits.
         // -1 means "pick an ephemeral port", the same convention ImapServer uses so a test run never
         // collides with a real one.
-        _listener = new TcpListener(IPAddress.Loopback, options.Port == -1 ? 0 : options.Port);
+        var address = IPAddress.TryParse(options.BindAddress, out var parsed) ? parsed : IPAddress.Loopback;
+        if (!Equals(address, IPAddress.Loopback))
+        {
+            _logger.LogWarning(
+                "LMTP is bound to {Address}, not loopback. This listener has NO authentication — RFC 2033 "
+                + "assumes an MTA on a private network is its only client. Ensure nothing routes to it from "
+                + "outside the deployment; anything that reaches it can inject mail as any local recipient",
+                options.BindAddress);
+        }
+
+        _listener = new TcpListener(address, options.Port == -1 ? 0 : options.Port);
         _listener.Start();
         BoundPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
 
