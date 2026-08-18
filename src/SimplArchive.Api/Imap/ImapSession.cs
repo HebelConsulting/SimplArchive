@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
@@ -36,6 +37,14 @@ public sealed class ImapSession
     private bool _authenticated;
     private ImapSelectedMailbox? _selected;
 
+    // Counters for the ONE summary line a finished session emits (below). A protocol session is the IMAP
+    // analogue of an HTTP request, so it is summarised the way UseSerilogRequestLogging summarises those —
+    // one line with an outcome, rather than a running commentary at Information.
+    private readonly long _startedAt = Stopwatch.GetTimestamp();
+    private string _email = "anonymous";
+    private int _commands;
+    private int _refused;
+
     internal ImapSession(IServiceScopeFactory scopeFactory, ILogger<ImapSession> logger, X509Certificate2? tlsCertificate, ImapOptions options, ImapConnectionRegistry registry)
     {
         _scopeFactory = scopeFactory;
@@ -72,6 +81,10 @@ public sealed class ImapSession
                 return;
             }
 
+            _logger.LogDebug(
+                "IMAP connection from {RemoteEndPoint} ({Transport})",
+                client.Client.RemoteEndPoint, _tlsCertificate is null ? "plaintext" : "TLS");
+
             await WriteLineAsync("* OK SimplArchive IMAP4rev1 ready");
             await CommandLoopAsync(stopping);
         }
@@ -95,6 +108,15 @@ public sealed class ImapSession
             {
                 _registry.RemoveConnection();
             }
+
+            // The session summary. {Refused} earns its place in the template rather than being left to the
+            // per-command Debug line: a client that cannot work because we answer NO to something it needs
+            // looks IDENTICAL to a healthy one at Information, which is how an unimplemented mandatory command
+            // stayed invisible while a device silently showed empty folders.
+            _logger.LogInformation(
+                "IMAP session {Email} ended: {Commands} commands, {Refused} refused, in {ElapsedMs} ms",
+                _email, _commands, _refused,
+                (int)Stopwatch.GetElapsedTime(_startedAt).TotalMilliseconds);
         }
     }
 
@@ -115,9 +137,17 @@ public sealed class ImapSession
                 continue;
             }
 
+            var verb = command.ToUpperInvariant();
+            _commands++;
+
+            // Per command, at Debug: the verb and its ARGUMENTS, which for IMAP are the mailbox, the sequence
+            // set or the fetch items — i.e. exactly what a client-interop question turns on. Redacted, because
+            // LOGIN and AUTHENTICATE carry the password in that same position.
+            _logger.LogDebug("IMAP {Email} > {Command} {Arguments}", _email, verb, Redact(verb, arguments));
+
             try
             {
-                if (!await DispatchAsync(tag, command.ToUpperInvariant(), arguments))
+                if (!await DispatchAsync(tag, verb, arguments))
                 {
                     return; // LOGOUT
                 }
@@ -259,15 +289,116 @@ public sealed class ImapSession
                 // workbench, where the ACL and naming rules live.
                 await WriteLineAsync($"{tag} NO the folder structure is managed in SimplArchive, not over IMAP");
                 return true;
+            // SEARCH is MANDATORY in the IMAP4rev1 we advertise, and refusing it is what made a mail client
+            // that enumerates with UID SEARCH show every folder as empty (ADR 0626).
             case "SEARCH":
+            case "UID" when arguments.StartsWith("SEARCH ", StringComparison.OrdinalIgnoreCase):
+                if (_selected is null)
+                {
+                    await WriteLineAsync($"{tag} NO no mailbox selected");
+                    return true;
+                }
+
+                var searchUidMode = command == "UID";
+                var searchArguments = searchUidMode ? arguments["SEARCH ".Length..] : arguments;
+                await RunScopedAsync(scope => ImapSearch.SearchAsync(this, scope, tag, _selected, searchArguments, searchUidMode));
+                return true;
             case "UID":
-                await WriteLineAsync($"{tag} NO not supported in this slice");
+                await RefuseAsync(tag, command, "not implemented in this slice");
                 return true;
             default:
-                await WriteLineAsync($"{tag} BAD unknown command");
+                await RefuseAsync(tag, command, "unknown command", bad: true);
                 return true;
         }
     }
+
+    /// <summary>
+    /// Answers a command we do not serve, and says so in the log at <b>Warning</b>.
+    /// </summary>
+    /// <remarks>
+    /// Warning rather than Debug because this is the definition of it: an administrator very likely needs to
+    /// act. A refusal here is not the client's mistake — we advertise <c>IMAP4rev1</c>, whose mandatory command
+    /// set a client is entitled to rely on, so a client asking for one of those and being told NO will simply
+    /// not work, and will not say why. That is not hypothetical: <c>SEARCH</c> is mandatory and unimplemented,
+    /// and a mail client that enumerates with <c>UID SEARCH</c> showed every folder as EMPTY while another
+    /// client on the same account worked perfectly, because it enumerated with FETCH instead. Nothing in the
+    /// log distinguished the two. This line does.
+    /// </remarks>
+    private async Task RefuseAsync(string tag, string command, string reason, bool bad = false)
+    {
+        _refused++;
+
+        // Names the SWITCH, not just the problem (ADR 0626). An administrator reading "refused SEARCH" still
+        // has to guess which knob shows more; naming the source override removes the guess, and it is the
+        // difference between a note and an instruction.
+        _logger.LogWarning(
+            "IMAP {Email}: refused {Command} — {Reason}. A client relying on it will misbehave SILENTLY; "
+            + "set Serilog:MinimumLevel:Override:{LogSource} to Trace to see the exchange",
+            _email, command, reason, TraceSource);
+        await WriteLineAsync($"{tag} {(bad ? "BAD" : "NO")} {reason}");
+    }
+
+    /// <summary>The arguments as they may be LOGGED — never the credential ones, never a whole payload.</summary>
+    /// <remarks>
+    /// <para>
+    /// LOGIN and AUTHENTICATE carry the password in the argument position, so the whole argument string is
+    /// dropped for them rather than parsed and partially kept: a redactor that has to be right about the
+    /// format is one that leaks the first time the format varies.
+    /// </para>
+    /// <para>
+    /// Everything else is TRUNCATED rather than passed through, because APPEND's argument is the entire
+    /// message — the untruncated line wrote document content, and therefore personal data, into a log that is
+    /// on by default in Development. Found by reading the real output, not by reasoning about it. The cap is
+    /// generous enough for what this line exists to answer: a mailbox name, a sequence set and a fetch-item
+    /// list all fit well inside it.
+    /// </para>
+    /// </remarks>
+    internal static string Redact(string command, string arguments)
+    {
+        if (command is "LOGIN" or "AUTHENTICATE")
+        {
+            return "***";
+        }
+
+        // APPEND carries a whole message, so it is handled like a credential: keep the one part that is
+        // addressing (the mailbox) and drop everything after it, whatever the encoding.
+        //
+        // Two weaker rules were tried and both leaked. A 120-character cap leaks, because a message's first
+        // bytes ARE its headers — `From:` and `Subject:` fit inside any cap worth having. Cutting at IMAP's
+        // literal marker `{n}` leaks too, because a client may send the message as a QUOTED STRING instead,
+        // and a real one does. Both were caught by reading actual output; neither was caught by a unit test
+        // written from the same assumption as the code. So the rule keeps a whitelist rather than trying to
+        // find where the payload starts.
+        if (command is "APPEND")
+        {
+            var mailbox = arguments.AsSpan().TrimStart();
+            var end = mailbox.IndexOf(' ');
+            return $"{(end < 0 ? mailbox : mailbox[..end]).ToString()} {{…}}";
+        }
+
+        var oneLine = arguments.ReplaceLineEndings(" ").Trim();
+        return oneLine.Length <= MaxLoggedArgumentLength
+            ? oneLine
+            : $"{oneLine[..MaxLoggedArgumentLength]}…";
+    }
+
+    private const int MaxLoggedArgumentLength = 120;
+
+    /// <summary>
+    /// A SEARCH we could not evaluate because one of its keys is unimplemented. Loud and switch-naming like
+    /// any other fall-through — but scoped to the key, so the client learns this search failed rather than
+    /// concluding the mailbox is empty.
+    /// </summary>
+    internal Task RefuseSearchAsync(string tag, string criterion) =>
+        RefuseAsync(tag, $"SEARCH {criterion}", $"unsupported search key {criterion}");
+
+    /// <summary>The Serilog source an administrator raises to Trace to see the whole exchange (ADR 0626).</summary>
+    /// <remarks>
+    /// Spelled out rather than taken from <c>typeof(ImapSession).FullName</c> so that renaming or moving this
+    /// class cannot silently change the instruction we print — a wrong switch name is worse than none, because
+    /// it is followed.
+    /// </remarks>
+    private const string TraceSource = "SimplArchive.Api.Imap";
 
     // ---- Authentication ------------------------------------------------------------------------------
 
@@ -369,7 +500,17 @@ public sealed class ImapSession
         _userId = user.Id;
         _tenantId = user.TenantId;
         _authenticated = true;
+        _email = user.Email;
         ShowAllDocuments = user.ImapShowAllDocuments;
+
+        // A sign-in is a security-relevant SUCCESS, which is Information by the logging convention — the
+        // counterpart of the Warning a failure already emits, so a SIEM sees both sides. ShowAllDocuments
+        // rides along because it decides whether this session can see anything but emails, and "the folders
+        // are empty" is the first thing it is asked about.
+        _logger.LogInformation(
+            "IMAP sign-in for {Email} (tenant {TenantId}, all documents: {ShowAllDocuments})",
+            _email, _tenantId, ShowAllDocuments);
+
         await OkAsync(tag, "authenticated");
     }
 
@@ -400,6 +541,15 @@ public sealed class ImapSession
 
     internal async Task WriteLineAsync(string line)
     {
+        // The SERVER half of the exchange, at Trace (ADR 0626). The client half is already the per-command
+        // Debug line, and Debug is above Trace — so turning Trace on for this source yields BOTH halves and
+        // therefore the whole conversation, without either being logged twice.
+        //
+        // Verbatim is safe HERE and only here: message bodies do not travel this path. A FETCH writes its
+        // protocol line through this method and the content itself through WriteRawAsync below, which is what
+        // lets the response lines be recorded exactly as sent while the payload never is.
+        _logger.LogTrace("IMAP {Email} S: {Line}", _email, line);
+
         var bytes = Encoding.Latin1.GetBytes(line + "\r\n");
         await _stream.WriteAsync(bytes);
         await _stream.FlushAsync();
@@ -407,6 +557,10 @@ public sealed class ImapSession
 
     internal async Task WriteRawAsync(byte[] bytes)
     {
+        // A payload: its SIZE is the diagnostic fact, its content is somebody's document. Never the content —
+        // not even at Trace, which is the one place a "raw payloads" reading of the levels would allow it.
+        _logger.LogTrace("IMAP {Email} S: <{Bytes} bytes of content>", _email, bytes.Length);
+
         await _stream.WriteAsync(bytes);
         await _stream.FlushAsync();
     }

@@ -134,25 +134,7 @@ internal static class ImapFetch
         byte[]? bytes = null;
         MimeMessage? mime = null;
 
-        async Task<byte[]> BytesAsync()
-        {
-            if (bytes is null)
-            {
-                if (message.Extension.Equals(".eml", StringComparison.OrdinalIgnoreCase))
-                {
-                    await using var stream = await storage.GetObjectAsync(message.ObjectKey);
-                    using var buffer = new MemoryStream();
-                    await stream.CopyToAsync(buffer);
-                    bytes = buffer.ToArray();
-                }
-                else
-                {
-                    bytes = await BuildSyntheticAsync(storage, message);
-                }
-            }
-
-            return bytes;
-        }
+        async Task<byte[]> BytesAsync() => bytes ??= await MessageBytesAsync(storage, message);
 
         async Task<MimeMessage> MimeAsync() => mime ??= MimeMessage.Load(new MemoryStream(await BytesAsync()));
 
@@ -274,6 +256,28 @@ internal static class ImapFetch
     }
 
     // ---- Synthetic messages --------------------------------------------------------------------------
+
+    /// <summary>
+    /// The RFC-822 bytes of one message: the stored <c>.eml</c> as filed, or the synthetic wrapper built around
+    /// any other document.
+    /// </summary>
+    /// <remarks>
+    /// Shared with SEARCH rather than reimplemented there, so the two cannot disagree about what a message IS.
+    /// A search that matched on different bytes than the fetch returns would produce hits a user cannot find —
+    /// the same class of silent wrongness that made SEARCH worth implementing in the first place.
+    /// </remarks>
+    internal static async Task<byte[]> MessageBytesAsync(IObjectStorageClient storage, ImapMessageEntry message)
+    {
+        if (!message.Extension.Equals(".eml", StringComparison.OrdinalIgnoreCase))
+        {
+            return await BuildSyntheticAsync(storage, message);
+        }
+
+        await using var stream = await storage.GetObjectAsync(message.ObjectKey);
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+        return buffer.ToArray();
+    }
 
     private static async Task<byte[]> BuildSyntheticAsync(IObjectStorageClient storage, ImapMessageEntry message)
     {
