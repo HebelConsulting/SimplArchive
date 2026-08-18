@@ -130,6 +130,8 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         Environment.SetEnvironmentVariable("ObjectStorage__SecretKey", StoragePassword);
         // The IMAP endpoint (#562): on, plaintext, on an OS-assigned ephemeral port — tests read the bound
         // port back from the ImapServer singleton and drive it with a real mail-client library (MailKit).
+        Environment.SetEnvironmentVariable("Lmtp__Enabled", "true");
+        Environment.SetEnvironmentVariable("Lmtp__Port", "-1");
         Environment.SetEnvironmentVariable("Imap__Enabled", "true");
         Environment.SetEnvironmentVariable("Imap__Port", "-1");
         // Session-hygiene caps scaled for testability (ADR 0618): the pre-auth timeout short enough that a

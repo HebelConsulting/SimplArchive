@@ -53,6 +53,10 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
+    // The mail domains a tenant receives for (ADR 0628). Resolved BEFORE the tenant is known, so every
+    // lookup here needs IgnoreQueryFilters(["TenantFilter"]).
+    public DbSet<TenantMailDomain> TenantMailDomains => Set<TenantMailDomain>();
+
     public DbSet<User> Users => Set<User>();
 
     public DbSet<UserProfilePhoto> UserProfilePhotos => Set<UserProfilePhoto>();

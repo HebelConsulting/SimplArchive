@@ -155,6 +155,13 @@ builder.Services.Configure<SimplArchive.Api.Imap.ImapOptions>(builder.Configurat
 builder.Services.AddSingleton<SimplArchive.Api.Imap.ImapServer>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SimplArchive.Api.Imap.ImapServer>());
 
+// The LMTP delivery listener (ADR 0628). Off unless configured: an installation with no MTA in front of it
+// must not open a listener that accepts mail without authentication.
+builder.Services.Configure<SimplArchive.Api.Lmtp.LmtpOptions>(builder.Configuration.GetSection("Lmtp"));
+builder.Services.AddScoped<SimplArchive.Api.Lmtp.LmtpDelivery>();
+builder.Services.AddSingleton<SimplArchive.Api.Lmtp.LmtpServer>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SimplArchive.Api.Lmtp.LmtpServer>());
+
 // WebAuthn / passkeys (ADR "WebAuthn passkeys as a second factor"). The Relying Party id is the registrable
 // domain (host of App:BaseUrl, e.g. "localhost"); the expected origin is the full base URL. Fido2NetLib (MIT).
 var webAuthnBaseUrl = builder.Configuration["App:BaseUrl"];
