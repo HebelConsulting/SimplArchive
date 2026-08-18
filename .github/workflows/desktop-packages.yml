@@ -15,6 +15,7 @@ on:
 jobs:
   # Windows + Linux x64 — self-contained portable archives, cross-built on ubuntu (ADR 0478).
   win-linux:
+    timeout-minutes: 30
     if: ${{ github.repository == 'HebelConsulting/SimplArchive' }}
     runs-on: ubuntu-latest
     permissions:
@@ -37,6 +38,7 @@ jobs:
 
   # macOS .dmg (arm64 + x64) — OPT-IN (needs a macos runner). Set repo variable BUILD_MACOS_DMG=true to enable.
   macos:
+    timeout-minutes: 45
     if: ${{ github.repository == 'HebelConsulting/SimplArchive' && vars.BUILD_MACOS_DMG == 'true' }}
     runs-on: macos-latest
     permissions:

@@ -31,6 +31,7 @@ permissions:
 
 jobs:
   analyze:
+    timeout-minutes: 20
     name: CodeQL analyze (C#)
     runs-on: ubuntu-latest
     # On the public repo (HebelConsulting/SimplArchive), and only while it is actually public, GitHub Advanced

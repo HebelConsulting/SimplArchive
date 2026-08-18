@@ -24,6 +24,7 @@ permissions:
 
 jobs:
   scan:
+    timeout-minutes: 10
     name: gitleaks secret scan
     runs-on: ubuntu-latest
     steps:

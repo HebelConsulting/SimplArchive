@@ -33,6 +33,7 @@ env:
 
 jobs:
   manual:
+    timeout-minutes: 30
     name: Build the user manual
     if: ${{ github.repository == 'HebelConsulting/SimplArchivePrivate' }}
     runs-on: ubuntu-latest
@@ -84,8 +85,35 @@ jobs:
 
       # The desktop client renders headless via Avalonia + Skia; on a Linux runner that needs fontconfig + fonts
       # (the app embeds Inter via WithInterFont, but fall back to DejaVu/Noto for any other glyphs).
+      # Bounded and retried, because this step HUNG twice on 2026-08-18 (manual runs #659 and #661) while
+      # sibling runs minutes either side passed it — the signature of a stalled package mirror rather than a
+      # broken command. Two things follow:
+      #
+      #   timeout-minutes  — without it the job inherits GitHub's SIX HOUR default, so an apt stall burns a
+      #                      runner all day and the PR simply never reports. A fast failure is strictly better
+      #                      than a silent one; 5 minutes is ~10x the step's normal duration.
+      #   the retry loop   — a mirror stall is transient, so one retry usually turns a lost run into a slow one.
+      #
+      # DEBIAN_FRONTEND/NEEDRESTART_MODE remove the other way this can wait forever: a debconf or needrestart
+      # prompt on a runner where nothing can answer it.
       - name: Install fonts for headless desktop rendering
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libfontconfig1 fonts-dejavu-core fonts-noto-core
+        timeout-minutes: 5
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if sudo -E apt-get update -qq \
+              && sudo -E apt-get install -y -qq --no-install-recommends \
+                   libfontconfig1 fonts-dejavu-core fonts-noto-core; then
+              exit 0
+            fi
+            echo "::warning::font install attempt $attempt failed — retrying"
+            sleep 5
+          done
+          echo "::error::could not install the rendering fonts after 3 attempts"
+          exit 1
 
       # Builds the harness and — via its project references — the API + desktop client, so the capture subprocesses
       # can run with --no-build.

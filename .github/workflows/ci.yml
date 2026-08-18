@@ -22,6 +22,7 @@ concurrency:
 
 jobs:
   fast:
+    timeout-minutes: 20
     name: Build + unit + integration
     runs-on: ubuntu-latest
     steps:
@@ -254,6 +255,7 @@ jobs:
   # reads. It carries the warning in the job summary instead, and `scripts/merge-ready.sh` is the actual gate —
   # it asserts the expected number of E2E legs are in `pass`, not merely that none failed.
   verdict:
+    timeout-minutes: 5
     name: E2E verdict
     needs: [fast, heavy]
     if: always() && needs.fast.result == 'success'

@@ -26,6 +26,7 @@ jobs:
   # (the inline visibility context is null on cron). Name-gated, so it's skipped outright on the private canonical,
   # which cascades to skip `mutate`.
   gate:
+    timeout-minutes: 10
     if: ${{ github.repository == 'HebelConsulting/SimplArchive' }}
     runs-on: ubuntu-latest
     outputs:
@@ -40,6 +41,7 @@ jobs:
           echo "public=$([ "$vis" = public ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
   mutate:
+    timeout-minutes: 120
     name: Stryker (${{ matrix.project }})
     needs: gate
     if: ${{ needs.gate.outputs.public == 'true' }}

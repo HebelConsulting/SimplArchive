@@ -23,6 +23,7 @@ permissions:
 
 jobs:
   scan:
+    timeout-minutes: 20
     name: Trivy image scan
     runs-on: ubuntu-latest
     steps:
