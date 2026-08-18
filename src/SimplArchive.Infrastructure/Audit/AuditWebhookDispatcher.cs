@@ -88,7 +88,44 @@ public sealed class AuditWebhookDispatcher : IAuditWebhookDispatcher
                 tenant.AuditWebhookLastError = Truncate(result.Error);
                 tenant.AuditWebhookNextAttemptAt = now + Backoff(tenant.AuditWebhookConsecutiveFailures);
                 await _dbContext.SaveChangesAsync(cancellationToken);
+
+                // Until now this failure existed ONLY as columns on the tenant row. The audit trail's whole
+                // point is to reach somebody else's SIEM, so a broken feed is the one failure that cannot
+                // announce itself through the channel it broke — an operator watching logs saw nothing while
+                // events silently stopped arriving (#595, ADR 0626).
+                //
+                // The event is NOT lost: delivery resumes from AuditWebhookDeliveredThrough, so this is a
+                // stalled feed rather than a gap in the record. That distinction belongs in the message,
+                // because "audit delivery failed" otherwise reads as data loss.
+                _logger.LogWarning(
+                    "Audit webhook delivery to tenant {TenantId} failed ({Failures} consecutive): {Error}. "
+                    + "Event {Sequence} and everything after it is undelivered and will be retried after "
+                    + "{NextAttempt:u}; nothing is lost.",
+                    tenant.Id, tenant.AuditWebhookConsecutiveFailures, tenant.AuditWebhookLastError,
+                    e.Sequence, tenant.AuditWebhookNextAttemptAt);
+
+                // Past the point where the backoff has stretched to its cap, the feed is not "retrying" in any
+                // useful sense — it is down, and an hour of audit events is queuing per attempt. That is an
+                // admin's problem to act on, not a transient blip.
+                if (Backoff(tenant.AuditWebhookConsecutiveFailures) >= BackoffCap)
+                {
+                    _logger.LogError(
+                        "Audit webhook for tenant {TenantId} has failed {Failures} times in a row and is now "
+                        + "retrying at the maximum interval ({Cap}). Audit events are NOT reaching the "
+                        + "configured SIEM.",
+                        tenant.Id, tenant.AuditWebhookConsecutiveFailures, BackoffCap);
+                }
+
                 break;
+            }
+
+            // Recovery is worth one line: an operator who saw the Warnings needs to know they stopped for a
+            // good reason rather than because the sweep gave up.
+            if (tenant.AuditWebhookConsecutiveFailures > 0)
+            {
+                _logger.LogInformation(
+                    "Audit webhook delivery to tenant {TenantId} recovered after {Failures} consecutive failures.",
+                    tenant.Id, tenant.AuditWebhookConsecutiveFailures);
             }
 
             tenant.AuditWebhookDeliveredThrough = e.Sequence;
