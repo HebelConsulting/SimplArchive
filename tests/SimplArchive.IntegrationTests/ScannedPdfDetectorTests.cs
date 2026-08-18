@@ -134,4 +134,30 @@ public class ScannedPdfDetectorTests
             return ms.ToArray();
         }
     }
+
+    // The distinction wave 3 added (#595, ADR 0626): "read it, and it is not a scan" versus "could not read it
+    // at all". Both leave the file alone — that is the conservative and correct behaviour — but only one of
+    // them means a document the user expected to become searchable silently never will.
+    [Fact]
+    public void An_unreadable_pdf_is_reported_as_unreadable_not_as_not_a_scan()
+    {
+        // Bytes that announce themselves as a PDF and then are not one: the shape a truncated upload or a
+        // partially-written object takes, which is exactly when this matters.
+        var corrupt = Encoding.ASCII.GetBytes("%PDF-1.7\n%\xE2\xE3\xCF\xD3\nthis is not a real pdf body");
+
+        Assert.Equal(ScannedPdfDetector.ScanVerdict.Unreadable, ScannedPdfDetector.Detect(corrupt));
+
+        // The old bool contract is unchanged for every caller that only asks "should I OCR this?".
+        Assert.False(ScannedPdfDetector.IsConvertibleScan(corrupt));
+    }
+
+    [Fact]
+    public void A_readable_non_scan_is_reported_as_not_a_scan()
+    {
+        // The counterpart assertion, and the one that keeps the verdict honest: a PDF we read successfully and
+        // decided against must NOT be reported as unreadable, or the new Warning fires on every ordinary
+        // born-digital document and stops meaning anything.
+        Assert.Equal(ScannedPdfDetector.ScanVerdict.NotAScan, ScannedPdfDetector.Detect(PdfFixtures.TextPdf()));
+        Assert.Equal(ScannedPdfDetector.ScanVerdict.ConvertibleScan, ScannedPdfDetector.Detect(PdfFixtures.ImageOnlyPdf()));
+    }
 }

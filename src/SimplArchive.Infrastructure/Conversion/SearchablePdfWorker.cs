@@ -121,12 +121,29 @@ public sealed class SearchablePdfWorker : BackgroundService
             sourceBytes = buffer.ToArray();
         }
 
-        if (kind == SearchablePdfSourceKind.Pdf && !ScannedPdfDetector.IsConvertibleScan(sourceBytes))
+        if (kind == SearchablePdfSourceKind.Pdf)
         {
-            // Not a scan we should OCR (has a text layer, no bitmap, signed, or unparseable) — no successor.
-            dbContext.SearchablePdfOutbox.Remove(row);
-            await dbContext.SaveChangesAsync(cancellationToken);
-            return true;
+            var verdict = ScannedPdfDetector.Detect(sourceBytes);
+
+            // UNREADABLE is not the same outcome as "not a scan", even though both end here. An encrypted or
+            // corrupt PDF is one we WANTED to OCR and could not read at all, so the document silently never
+            // becomes searchable and the user's search simply never finds it. Left alone either way — that is
+            // the conservative and correct behaviour — but said out loud (#595, ADR 0626).
+            if (verdict == ScannedPdfDetector.ScanVerdict.Unreadable)
+            {
+                _logger.LogWarning(
+                    "Source version {VersionId} in tenant {TenantId}: the PDF could not be read (encrypted, "
+                    + "corrupt, or unsupported), so it will NOT be made searchable and no successor is produced.",
+                    row.SourceVersionId, row.TenantId);
+            }
+
+            if (verdict != ScannedPdfDetector.ScanVerdict.ConvertibleScan)
+            {
+                // Not a scan we should OCR (has a text layer, no bitmap, signed) or unreadable — no successor.
+                dbContext.SearchablePdfOutbox.Remove(row);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return true;
+            }
         }
 
         // OCR languages: the version override, else the tenant default (ADR "Per-tenant / per-version OCR

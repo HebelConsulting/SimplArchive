@@ -11,11 +11,34 @@ namespace SimplArchive.Infrastructure.Conversion;
 // signature), encrypted PDFs (can't inspect), and anything PdfPig can't parse are conservatively left alone.
 public static class ScannedPdfDetector
 {
-    public static bool IsConvertibleScan(byte[] pdfBytes)
+    /// <summary>Why a PDF is, or is not, a convertible scan — so a caller can tell the two NOs apart.</summary>
+    /// <remarks>
+    /// The distinction exists because it could not be made before: every failure returned plain <c>false</c>,
+    /// identical to a confident "this is born-digital". So a corrupt or encrypted PDF was silently never
+    /// OCR'd, the document never became searchable, and nothing anywhere said why — the user's search simply
+    /// did not find it (#595, ADR 0626). Leaving such a file alone is still the right behaviour; being quiet
+    /// about it was not.
+    /// </remarks>
+    public enum ScanVerdict
+    {
+        /// <summary>An image-only scan with nothing extractable — convert it.</summary>
+        ConvertibleScan,
+
+        /// <summary>Read successfully, and deliberately not a candidate (has text, is signed, has no image).</summary>
+        NotAScan,
+
+        /// <summary>Could not be read at all — encrypted, corrupt, or beyond the parser. Left alone, and worth saying.</summary>
+        Unreadable,
+    }
+
+    public static bool IsConvertibleScan(byte[] pdfBytes) => Detect(pdfBytes) == ScanVerdict.ConvertibleScan;
+
+    /// <summary>The verdict, including whether the file could be read at all.</summary>
+    public static ScanVerdict Detect(byte[] pdfBytes)
     {
         if (pdfBytes is null || pdfBytes.Length == 0)
         {
-            return false;
+            return ScanVerdict.NotAScan;
         }
 
         try
@@ -26,7 +49,7 @@ public static class ScannedPdfDetector
 
             if (IsSigned(document))
             {
-                return false;
+                return ScanVerdict.NotAScan;
             }
 
             var hasImage = false;
@@ -35,7 +58,7 @@ public static class ScannedPdfDetector
                 // Any extractable text anywhere ⇒ not an image-only scan (born-digital or already searchable).
                 if (page.GetWords().Any(w => !string.IsNullOrWhiteSpace(w.Text)))
                 {
-                    return false;
+                    return ScanVerdict.NotAScan;
                 }
 
                 if (!hasImage && page.GetImages().Any())
@@ -44,11 +67,13 @@ public static class ScannedPdfDetector
                 }
             }
 
-            return hasImage;
+            return hasImage ? ScanVerdict.ConvertibleScan : ScanVerdict.NotAScan;
         }
         catch (Exception)
         {
-            return false;
+            // Encrypted, corrupt, or beyond PdfPig. Still left alone — but now the caller can SAY so instead
+            // of reporting it as an ordinary "not a scan".
+            return ScanVerdict.Unreadable;
         }
     }
 
