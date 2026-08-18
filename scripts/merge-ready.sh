@@ -87,15 +87,31 @@ e2e_pass="$(e2e_in_bucket pass)"
 e2e_fail="$(e2e_in_bucket fail)"
 e2e_skip="$(e2e_in_bucket skipping)"
 e2e_pending="$(e2e_in_bucket pending)"
+e2e_cancel="$(jq -r '[.[] | select(.name | startswith("E2E (")) | select(.name | contains("${{") | not) | select(.bucket == "cancel")] | length' <<<"$checks")"
 
 failing="$(count_bucket fail)"
 pending="$(count_bucket pending)"
 
-# Per-check listing, skips called out as their own state rather than folded into "not failing".
-jq -r '.[] | "  \(if .bucket == "pass" then "✓" elif .bucket == "fail" then "✗" elif .bucket == "pending" then "…" else "⊘" end)  \(.name)  [\(.bucket)]"' <<<"$checks" | sort -k2
+# CANCELLED is its own answer, and counting it as "not failing" is how this script nearly waved a PR
+# through on 2026-08-18. A run cancelled by hand (or superseded by concurrency) reports bucket `cancel`,
+# which `gh pr checks` renders exactly like a failure while the JSON calls it something else — so a
+# `select(.bucket == "fail")` count says zero while the PR page shows two red marks. The distinction that
+# matters is not failed-vs-cancelled but ANSWERED-vs-NOT: a cancelled check never ran to completion, so it
+# verified nothing. Same family as the skipped-check trap this script was written for, one bucket over.
+#
+# ONE carve-out, and it is narrow. A duplicate run cancelled by `concurrency` before its matrix expanded
+# leaves a check literally named `E2E (${{ matrix.name }})` — an UNEXPANDED workflow expression, which is
+# never a real job name. That artifact appears whenever a PR is opened with a label (`opened` and `labeled`
+# both fire), and #601/#602 carried it while being genuinely verified 6/6. Flagging it would make this
+# script cry wolf on every labelled PR, which is how a guard gets ignored and then deleted. A cancellation
+# with a REAL name — "Build the user manual" — is still a gate that never ran, and still blocks.
+cancelled="$(jq -r '[.[] | select(.bucket == "cancel") | select(.name | contains("${{") | not)] | length' <<<"$checks")"
 
-printf '\nE2E legs: %s/%s passed, %s failed, %s skipped, %s pending\n\n' \
-    "$e2e_pass" "$expected" "$e2e_fail" "$e2e_skip" "$e2e_pending"
+# Per-check listing, skips called out as their own state rather than folded into "not failing".
+jq -r '.[] | "  \(if .bucket == "pass" then "✓" elif .bucket == "fail" then "✗" elif .bucket == "pending" then "…" elif .bucket == "cancel" then "⊗" else "⊘" end)  \(.name)  [\(.bucket)]"' <<<"$checks" | sort -k2
+
+printf '\nE2E legs: %s/%s passed, %s failed, %s skipped, %s pending, %s cancelled\n\n' \
+    "$e2e_pass" "$expected" "$e2e_fail" "$e2e_skip" "$e2e_pending" "$e2e_cancel"
 
 ready=0
 
@@ -105,12 +121,19 @@ if [ "$failing" -gt 0 ]; then
     ready=1
 fi
 
+if [ "$cancelled" -gt 0 ]; then
+    printf '⊗ NOT READY — %s check(s) CANCELLED. A cancelled check never ran, so it verified nothing.\n' "$cancelled"
+    jq -r '.[] | select(.bucket == "cancel") | select(.name | contains("${{") | not) | "    \(.name)  \(.link)"' <<<"$checks"
+    printf '    Re-run them (gh run rerun <id>) or push a commit; do not merge past a cancellation.\n'
+    ready=1
+fi
+
 if [ "$pending" -gt 0 ]; then
     printf '… NOT READY — %s check(s) still running. Wait for them.\n' "$pending"
     ready=1
 fi
 
-if [ "$e2e_pass" -lt "$expected" ] && [ "$e2e_fail" -eq 0 ] && [ "$e2e_pending" -eq 0 ]; then
+if [ "$e2e_pass" -lt "$expected" ] && [ "$e2e_fail" -eq 0 ] && [ "$e2e_pending" -eq 0 ] && [ "$e2e_cancel" -eq 0 ]; then
     cat <<EOF
 ✗ NOT READY — this branch is UNVERIFIED.
 
