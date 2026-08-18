@@ -59,6 +59,24 @@ public static class WellKnownMaskIds
 
     public static readonly Guid Appointment = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E3B");
 
+    /// <summary>The mask a user's MAILBOX wears — the node their delivered mail lives under (ADR 0628, #596).</summary>
+    /// <remarks>
+    /// <para>
+    /// Fieldless. ADR 0627 designed this as an <c>IMAP Account</c> carrying host, username and an encrypted
+    /// password, because we were then an IMAP client fetching from somebody's provider. ADR 0628 made us the
+    /// DESTINATION — mail is delivered by an MTA over LMTP — so there is no account of anyone's to log into and
+    /// nothing to configure: the address is derived (domain identifies the tenant, local part the user) rather
+    /// than stored. The name follows the model rather than the history, since a node called "IMAP Account" with
+    /// no credentials on it invites exactly the question ADR 0628 removed.
+    /// </para>
+    /// <para>
+    /// A personal space admits at most ONE (see <see cref="ChildCardinalityRules"/>). That is a capacity rule on
+    /// the FOLDER, not a placement rule on the mailbox: a personal space still holds ordinary documents, and the
+    /// constraint is only that it never holds two mailboxes.
+    /// </para>
+    /// </remarks>
+    public static readonly Guid Mailbox = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E3E");
+
     /// <summary>A section INSIDE a notebook: a folder that holds notes and further sections (#564).</summary>
     /// <remarks>
     /// Fieldless, like the Notebook it lives in — it types the folder, and the fields live on the notes.
@@ -82,6 +100,25 @@ public static class WellKnownMaskIds
         new(NotebookSection, "Section", [(NotebookSection, "Section"), (Note, "Note")]),
         new(Addressbook, "Addressbook", [(Contact, "Contact")]),
         new(Calendar, "Calendar", [(Appointment, "Appointment")]),
+    ];
+
+    /// <summary>How MANY children wearing a given mask a folder admits — a capacity rule, not an admission one.</summary>
+    /// <remarks>
+    /// <para>
+    /// Deliberately its own table rather than a column on <see cref="TypedFolderRules"/>, because it answers a
+    /// different question about a different kind of folder. Admission asks "may this child be here at all?" and
+    /// applies to folders that admit ONLY their listed masks; capacity asks "is there already one?" and applies
+    /// to a folder that otherwise admits anything. A personal space is the latter: it holds whatever documents
+    /// its owner puts there, and the single restriction is that it never holds two mailboxes.
+    /// </para>
+    /// <para>
+    /// Folding this into <c>TypedFolderRules</c> would have required a flag saying "this rule constrains only
+    /// half of what the others constrain", which is a table describing two rules while pretending to be one.
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlyList<ChildCardinalityRule> ChildCardinalityRules =
+    [
+        new(UserFolder, "Personal space", Mailbox, "Mailbox", 1),
     ];
 
     /// <summary>The masks that may only ever live inside a typed folder, with the folders that admit each.</summary>
@@ -117,6 +154,17 @@ public static class WellKnownMaskIds
             .Select(f => (Guid)f.GetValue(null)!)
             .ToHashSet();
 }
+
+/// <summary>A cap on how many children wearing one mask a folder may hold (#596).</summary>
+/// <param name="FolderMaskId">The mask the folder wears.</param>
+/// <param name="FolderName">The folder mask's display name, for the invariant's message.</param>
+/// <param name="ChildMaskId">The mask being counted.</param>
+/// <param name="ChildName">The counted mask's display name, for the invariant's message.</param>
+/// <param name="Max">The most a folder may hold. Soft-deleted children do not count — consistent with sibling
+/// name uniqueness, and the reason the check belongs in <c>SaveChanges</c>: a RESTORE is a save too, so
+/// restoring a mailbox alongside a replacement is refused at the same point rather than needing its own rule.</param>
+public sealed record ChildCardinalityRule(
+    Guid FolderMaskId, string FolderName, Guid ChildMaskId, string ChildName, int Max);
 
 /// <summary>A typed folder and the masks it admits (#562 slice 5, set-valued for #564's notebook sections).</summary>
 /// <param name="FolderMaskId">The mask the folder wears.</param>

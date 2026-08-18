@@ -544,6 +544,77 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
         {
             throw Domain.Masks.TypedFolderContainmentException.ItemBelongsIn(document.Name, ownId, admittingRules);
         }
+
+        // …and does the folder have ROOM for it? A separate question from admission: the folder here admits
+        // anything, and the only limit is how many of ONE mask it holds (a personal space, one mailbox).
+        if (ownMaskId is { } countedId
+            && document.ParentId is { } folderId
+            && Domain.Masks.WellKnownMaskIds.ChildCardinalityRules
+                .FirstOrDefault(r => r.FolderMaskId == parentMaskId && r.ChildMaskId == countedId) is { } capacityRule)
+        {
+            await EnforceChildCardinalityAsync(document, folderId, countedId, capacityRule, cancellationToken);
+        }
+    }
+
+    // Counted at the same point as every other document invariant, which is what makes a RESTORE safe: clearing
+    // DeletedAt is a save like any other, so a mailbox coming back out of the recycle bin beside a replacement
+    // is refused here rather than needing a rule of its own on the restore path.
+    private async Task EnforceChildCardinalityAsync(
+        Document document,
+        Guid folderId,
+        Guid childMaskId,
+        Domain.Masks.ChildCardinalityRule rule,
+        CancellationToken cancellationToken)
+    {
+        var maskVersionIds = await MaskVersions.IgnoreQueryFilters()
+            .Where(v => v.TenantId == document.TenantId && v.MaskId == childMaskId)
+            .Select(v => v.Id)
+            .ToListAsync(cancellationToken);
+
+        // Counting the tracked entries and the persisted rows SEPARATELY and adding them is wrong twice over: a
+        // sibling that is merely touched is in both and counts twice, and one being moved OUT in this same save
+        // is still in the database and counts as occupying a slot it is leaving. So collect IDS and let the set
+        // resolve the overlap. (The sibling-name check gets away with two independent queries because it asks
+        // for ANY rather than HOW MANY, and a double-counted boolean is still that boolean.)
+        //
+        // Soft-deleted siblings are excluded by the SoftDeleteFilter — the "only live ones count" reading, so
+        // deleting a mailbox frees the slot at once, exactly as deleting a document frees its name.
+        var occupants = (await Documents
+            .Where(d => d.Id != document.Id
+                && d.ParentId == folderId
+                && d.MaskVersionId != null
+                && maskVersionIds.Contains(d.MaskVersionId.Value))
+            .Select(d => d.Id)
+            .ToListAsync(cancellationToken))
+            .ToHashSet();
+
+        // The change tracker holds the INTENDED state, so it overrides the database in both directions: a
+        // sibling arriving in this save is added (two mailboxes created at once would otherwise each see none
+        // of the other), and one leaving, being deleted, or being restamped is removed.
+        foreach (var tracked in ChangeTracker.Entries<Document>()
+            .Where(e => e.State != EntityState.Detached)
+            .Select(e => e.Entity)
+            .Where(other => other.Id != document.Id))
+        {
+            var occupies = tracked.ParentId == folderId
+                && tracked.DeletedAt == null
+                && tracked.MaskVersionId is { } mv
+                && maskVersionIds.Contains(mv);
+
+            if (occupies)
+            {
+                occupants.Add(tracked.Id);
+            }
+            else
+            {
+                occupants.Remove(tracked.Id);
+            }
+        }
+
+        if (occupants.Count >= rule.Max)
+        {
+            throw Domain.Masks.TypedFolderContainmentException.FolderAlreadyHolds(document.Name, rule);
+        }
     }
 
     private async Task DetectDocumentCycleAndCrossTenantParentAsync(

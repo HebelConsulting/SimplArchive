@@ -23,6 +23,19 @@ public sealed class TypedFolderContainmentException : InvalidOperationException
         new($"'{documentName}' cannot live in a {rule.FolderName} — only {rule.AdmittedNames} can "
             + "(typed-folder containment, #562/#564).");
 
+    /// <summary>The folder is full: it admits this mask, but not another one of them (#596).</summary>
+    /// <remarks>
+    /// Distinct from <see cref="FolderAdmitsOnly"/> on purpose. "A personal space holds only one Mailbox" and
+    /// "a personal space cannot hold a Mailbox" would send the reader looking for two different mistakes, and
+    /// only one of them is real — the user's second mailbox is refused because they already have one, which is
+    /// a fact they can act on.
+    /// </remarks>
+    public static TypedFolderContainmentException FolderAlreadyHolds(
+        string documentName, ChildCardinalityRule rule) =>
+        new($"'{documentName}' cannot be added: a {rule.FolderName} holds at most {rule.Max} "
+            + $"{rule.ChildName}{(rule.Max == 1 ? string.Empty : "s")}, and one is already there "
+            + "(child cardinality, #596).");
+
     /// <summary>
     /// The child refuses the folder: a typed item's primary location is only a folder that admits it. Plural
     /// because a Note lives in a Notebook OR a Section, and naming just one of them would send the reader to

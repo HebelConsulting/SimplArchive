@@ -91,6 +91,12 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
 
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.NotebookSection, "Section", [], cancellationToken);
 
+        // Fieldless by consequence, not by omission: ADR 0627 gave this mask host/username/password fields
+        // because we were an IMAP client then, and ADR 0628 made us the destination, so there is no account to
+        // log into and the address is derived rather than stored. A personal space admits at most one
+        // (WellKnownMaskIds.ChildCardinalityRules), which the DbContext enforces.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Mailbox, "Mailbox", [], cancellationToken);
+
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Note, "Note",
         [
             new FieldSpec("Note UUID", FieldDataType.Text, IsRequired: true),

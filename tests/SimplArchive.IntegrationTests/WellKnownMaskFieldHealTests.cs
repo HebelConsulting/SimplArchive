@@ -122,9 +122,9 @@ public class WellKnownMaskFieldHealTests
             //
             // 11 → 12 with Repository (ADR 0627, #596), which unlike the Notebook case IS a genuinely new mask:
             // a repository previously wore the plain Folder mask, so this one has its own id and existing
-            // repositories are moved onto it by the seeder's backfill.
+            // repositories are moved onto it by the seeder's backfill. 12 → 13 with Mailbox (ADR 0628).
             var maskCount = await db.Masks.IgnoreQueryFilters().CountAsync(m => m.TenantId == _tenantId);
-            Assert.Equal(12, maskCount);
+            Assert.Equal(13, maskCount);
             Assert.Equal(maskCount, await db.MaskVersions.IgnoreQueryFilters().CountAsync(v => v.TenantId == _tenantId));
         }
     }
