@@ -448,8 +448,12 @@ public sealed class RepositoryExporter
 
     private sealed record GroupLite(Guid Id, string Name, int ClearanceRank);
 
-    private static bool IsWellKnown(Guid maskId) =>
-        maskId == WellKnownMaskIds.BasicEntry || maskId == WellKnownMaskIds.Folder || maskId == WellKnownMaskIds.EMail;
+    // Asks the single source of truth rather than restating it. The previous hand-written list named three of
+    // the eleven well-known masks and had not been touched since the other eight arrived — so a Note, Contact
+    // or Appointment exported as NOT well-known, and the importer creates a fresh mask for anything not well
+    // known. The imported documents then wore a duplicate mask with a different id, invisible to every
+    // WellKnownMaskIds check: containment, the IMAP projection, the clients' type column.
+    private static bool IsWellKnown(Guid maskId) => WellKnownMaskIds.All.Contains(maskId);
 
     private static async Task WriteJsonAsync(ZipArchive archive, string name, object payload, CancellationToken cancellationToken)
     {

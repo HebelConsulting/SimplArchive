@@ -77,6 +77,27 @@ public static class WellKnownMaskIds
             .SelectMany(rule => rule.Admits.Select(a => (a.MaskId, Rule: rule)))
             .GroupBy(x => x.MaskId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<TypedFolderRule>)[.. g.Select(x => x.Rule)]);
+
+    /// <summary>Every well-known mask id, derived from the declarations above rather than restated.</summary>
+    /// <remarks>
+    /// <para>
+    /// Reflection, deliberately. The alternative — a hand-maintained list — is what caused the bug this was
+    /// added for: <c>RepositoryExporter.IsWellKnown</c> carried its own copy naming three of the eleven, and
+    /// was never updated as the other eight arrived. Export then marked a Note, Contact or Appointment as NOT
+    /// well-known, and import creates a fresh mask for anything not well-known — so the imported documents
+    /// wore a DUPLICATE mask with a different id, and every <c>WellKnownMaskIds.Note</c> check (typed-folder
+    /// containment, the IMAP projection, the clients' type column) stopped recognising them.
+    /// </para>
+    /// <para>
+    /// A list derived from the fields cannot fall behind the fields. Adding a mask id above adds it here.
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlySet<Guid> All =
+        typeof(WellKnownMaskIds)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.FieldType == typeof(Guid))
+            .Select(f => (Guid)f.GetValue(null)!)
+            .ToHashSet();
 }
 
 /// <summary>A typed folder and the masks it admits (#562 slice 5, set-valued for #564's notebook sections).</summary>
