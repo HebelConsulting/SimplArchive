@@ -21,7 +21,7 @@ public class CalDavSyncTests
     private sealed record Protocol(string Base, string Collections, string Extension, string DefaultFolder);
 
     private static readonly Protocol CalDav = new("/caldav", "calendars", ".ics", "My Calendar");
-    private static readonly Protocol CardDav = new("/carddav", "addressbooks", ".vcf", "My Contacts");
+    private static readonly Protocol CardDav = new("/carddav", "addressbooks", ".vcf", "My Addressbook");
 
     public static TheoryData<string> Protocols => ["caldav", "carddav"];
 

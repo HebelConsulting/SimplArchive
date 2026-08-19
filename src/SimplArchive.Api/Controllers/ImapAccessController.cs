@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using SimplArchive.Api.Documents;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Api.Imap;
 using SimplArchive.Application.Abstractions;
@@ -28,15 +29,24 @@ public class ImapAccessController : ControllerBase
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IOptions<ImapOptions> _options;
     private readonly IConfiguration _configuration;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
+    private readonly PersonalMailboxProvisioner _mailbox;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
     public ImapAccessController(
-        SimplArchiveDbContext dbContext, ICurrentUserAccessor currentUserAccessor, IOptions<ImapOptions> options, IConfiguration configuration)
+        SimplArchiveDbContext dbContext,
+        ICurrentUserAccessor currentUserAccessor,
+        ICurrentTenantAccessor currentTenantAccessor,
+        IOptions<ImapOptions> options,
+        IConfiguration configuration,
+        PersonalMailboxProvisioner mailbox)
     {
         _dbContext = dbContext;
         _currentUserAccessor = currentUserAccessor;
+        _currentTenantAccessor = currentTenantAccessor;
         _options = options;
         _configuration = configuration;
+        _mailbox = mailbox;
     }
 
     public class ImapStatusResource : HypermediaResource
@@ -90,6 +100,16 @@ public class ImapAccessController : ControllerBase
         var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         user.ImapPasswordHash = _passwordHasher.HashPassword(user, password);
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // The SECOND trigger for the mailbox (#562). The first is a delivered message, and on its own it leaves
+        // a user who has just configured their mail client with nothing to subscribe to — from which they
+        // conclude the feature is broken, when the archive is only waiting for mail that may be days away.
+        // Generating a credential is an unambiguous statement of intent to use the mailbox, so it counts as
+        // demand in its own right; whichever trigger fires first creates the node and the other finds it.
+        if (_currentTenantAccessor.TenantId is { } tenantId)
+        {
+            await _mailbox.EnsureMailboxAsync(tenantId, user.Id, cancellationToken);
+        }
 
         var resource = Status<ImapPasswordResource>(user);
         resource.Password = password;

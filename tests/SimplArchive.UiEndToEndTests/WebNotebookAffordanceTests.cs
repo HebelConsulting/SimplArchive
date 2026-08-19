@@ -1,3 +1,6 @@
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.Playwright;
 using static Microsoft.Playwright.Assertions;
 
@@ -36,14 +39,62 @@ public class WebNotebookAffordanceTests
     private static ILocator Node(ILocator tree, string name) =>
         tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = name }).First;
 
-    [Fact]
-    public async Task The_notebook_offers_both_creates_and_an_ordinary_folder_offers_neither()
+    // A notebook lives under the MAILBOX and nowhere else, and is not provisioned (#596, ADR 0634) — so these
+    // tests make one over HTTP first. Two steps, both the real path: generating an IMAP credential materialises
+    // the mailbox (the second of its two triggers, and the only one that does not require waiting for mail),
+    // and the notebook is then asked for by mask.
+    //
+    // Deliberately NOT through the UI: neither client offers a "new notebook" affordance, because a notebook
+    // without a notes client speaking IMAP is a folder whose purpose is unreachable.
+    private async Task EnsureNotebookAsync()
     {
-        var page = await Ui.LoginAsync(_app);
-        var tree = await ExpandPersonalAsync(page);
+        using var http = new HttpClient { BaseAddress = new Uri(_app.BaseUrl) };
+        http.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", await Ui.GetUserTokenAsync(_app.BaseUrl));
+
+        (await http.PostAsJsonAsync("/api/me/imap-access", new { })).EnsureSuccessStatusCode();
+        var personalId = (await (await http.PostAsJsonAsync("/api/me/personal-repository", new { }))
+            .Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var mailboxId = (await http.GetFromJsonAsync<JsonElement>($"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Mailbox")
+            .GetProperty("id").GetGuid();
+
+        // Get-or-create: a mailbox holds at most ONE notebook, so the second test to run must find the first
+        // test's rather than be refused. These tests share the demo user.
+        var existing = (await http.GetFromJsonAsync<JsonElement>($"/api/documents/{mailboxId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Any(c => c.GetProperty("name").GetString() == "Notebook");
+
+        if (!existing)
+        {
+            (await http.PostAsJsonAsync($"/api/documents/{mailboxId}/children",
+                new { name = "Notebook", folderMask = "notes" })).EnsureSuccessStatusCode();
+        }
+    }
+
+    // Personal → My Mailbox → Notebook. The notebook is a GRANDCHILD now, so the mailbox has to be expanded
+    // too before its child is in the tree at all.
+    private static async Task<ILocator> ExpandToNotebookAsync(IPage page, ILocator tree)
+    {
+        var mailbox = Node(tree, "My Mailbox");
+        await Expect(mailbox).ToBeVisibleAsync();
+        await mailbox.Locator(".mud-treeview-item-arrow").ClickAsync();
 
         var notebook = Node(tree, "Notebook");
         await Expect(notebook).ToBeVisibleAsync();
+        return notebook;
+    }
+
+    [Fact]
+    public async Task The_notebook_offers_both_creates_and_an_ordinary_folder_offers_neither()
+    {
+        await EnsureNotebookAsync();
+        var page = await Ui.LoginAsync(_app);
+        var tree = await ExpandPersonalAsync(page);
+
+        var notebook = await ExpandToNotebookAsync(page, tree);
         await notebook.ClickAsync(new() { Button = MouseButton.Right });
 
         var menu = page.Locator(".mud-menu-item");
@@ -77,11 +128,11 @@ public class WebNotebookAffordanceTests
     [Fact]
     public async Task A_note_is_created_from_the_menu_with_a_title_and_a_body()
     {
+        await EnsureNotebookAsync();
         var page = await Ui.LoginAsync(_app);
         var tree = await ExpandPersonalAsync(page);
 
-        var notebook = Node(tree, "Notebook");
-        await Expect(notebook).ToBeVisibleAsync();
+        var notebook = await ExpandToNotebookAsync(page, tree);
         await notebook.ClickAsync(); // select it, so the contents list is showing when the note lands
         await notebook.ClickAsync(new() { Button = MouseButton.Right });
         await page.Locator(".mud-menu-item").Filter(new() { HasText = "New note" }).First.ClickAsync();

@@ -21,7 +21,7 @@ public class CalDavEndpointTests
     private sealed record Protocol(string Base, string Collections, string Extension, string DefaultFolder, string ContentType);
 
     private static readonly Protocol CalDav = new("/caldav", "calendars", ".ics", "My Calendar", "text/calendar");
-    private static readonly Protocol CardDav = new("/carddav", "addressbooks", ".vcf", "My Contacts", "text/vcard");
+    private static readonly Protocol CardDav = new("/carddav", "addressbooks", ".vcf", "My Addressbook", "text/vcard");
 
     public static TheoryData<string> Protocols => ["caldav", "carddav"];
 
@@ -43,7 +43,7 @@ public class CalDavEndpointTests
         await _factory.SeedUserAsync(tenantId, email, password, "Dav User");
         using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, password));
 
-        // Get-or-create the personal repository — that is what provisions My Calendar / My Contacts.
+        // Get-or-create the personal repository — that is what provisions My Calendar / My Addressbook.
         await TestJson.Post(api, "/api/me/personal-repository", new { });
         var generated = await TestJson.Post(api, "/api/me/webdav-password", new { });
         var auth = new AuthenticationHeaderValue("Basic",

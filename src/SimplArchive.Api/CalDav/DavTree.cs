@@ -25,7 +25,7 @@ internal sealed record DavItem(Guid DocumentId, Guid FolderId, string ResourceNa
 internal static class DavTree
 {
     /// <summary>
-    /// Every ACL-visible folder wearing the protocol's folder mask, "My Calendar"/"My Contacts" first (the
+    /// Every ACL-visible folder wearing the protocol's folder mask, "My Calendar"/"My Addressbook" first (the
     /// personal defaults a client should see at the top), then alphabetically by display name.
     /// </summary>
     internal static async Task<List<DavCollection>> CollectionsAsync(

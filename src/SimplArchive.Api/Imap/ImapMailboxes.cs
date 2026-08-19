@@ -182,9 +182,14 @@ internal static class ImapMailboxes
                 continue;
             }
 
-            // INBOX is the personal repository root (#562) — the name every mail client knows. Its Notebook
-            // child projects as a ROOT-level mailbox instead, where Apple Notes discovers it — one folder, two
-            // projections, so it is skipped below.
+            // INBOX is the personal repository root (#562) — the name every mail client knows. The notebook
+            // projects as a ROOT-level mailbox instead, where Apple Notes discovers it — one folder, two
+            // projections, so it is skipped from the ordinary walk below.
+            //
+            // It is a GRANDCHILD now (#596): the notebook lives under the mailbox node, not loose in the
+            // personal space, so finding it means walking Personal → My Mailbox → Notebook. Both hops go by
+            // MASK rather than by name — the folders were renamed on 2026-08-19 and a name-based walk would
+            // have gone quietly blind on every space provisioned before that.
             var rootName = root.PersonalOfUserId == userId ? "INBOX" : root.Name;
             entries.Add(new ImapMailboxEntry(rootName, root.Id, HasChildren: true));
 
@@ -192,7 +197,11 @@ internal static class ImapMailboxes
             if (root.PersonalOfUserId == userId)
             {
                 notesFolderId = await db.Documents
-                    .Where(d => d.ParentId == root.Id && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.Notebook))
+                    .Where(d => db.Documents.Any(m =>
+                            m.Id == d.ParentId
+                            && m.ParentId == root.Id
+                            && db.MaskVersions.Any(v => v.Id == m.MaskVersionId && v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.Mailbox))
+                        && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.Notebook))
                     .Select(d => (Guid?)d.Id)
                     .FirstOrDefaultAsync();
                 if (notesFolderId is { } nid)
@@ -250,7 +259,7 @@ internal static class ImapMailboxes
         foreach (var folder in folders.Concat(referenced).Where(f => !f.Name.Contains('/') && f.Id != skipFolderId))
         {
             // A reference back to somewhere on our own path, or to this folder's own parent chain. Following it
-            // would produce Personal/My eMails/Personal/My eMails/… until the client or the stack gave up.
+            // would produce Personal/My Mailbox/Personal/My Mailbox/… until the client or the stack gave up.
             //
             // Skipping is silent to the client — the mailbox is simply absent, and nothing distinguishes that
             // from "there was never anything there", which is the shape ADR 0626 exists to forbid. So it says
@@ -287,7 +296,10 @@ internal static class ImapMailboxes
             }
 
             entries.Add(new ImapMailboxEntry(name, folder.Id, await HasSubfoldersAsync(db, folder.Id)));
-            await AddSubfoldersAsync(db, calculator, logger, userId, folder.Id, name, entries, skipFolderId: null, path);
+            // The skip PROPAGATES rather than stopping at the first level: the notebook it names is a
+            // grandchild of the personal root (#596), so dropping it here would list it twice — once as the
+            // root-level `Notes` Apple Notes expects, and again as `INBOX/My Mailbox/Notebook`.
+            await AddSubfoldersAsync(db, calculator, logger, userId, folder.Id, name, entries, skipFolderId, path);
         }
     }
 

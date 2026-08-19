@@ -19,7 +19,7 @@ public sealed class PersonalRepositoryProvisioner
     public const string PersonalRepositoryName = "Personal";
 
     /// <summary>The default subfolder every personal repository is seeded with (ADR "My Documents in the personal space").</summary>
-    public const string MyDocumentsFolderName = "My Documents";
+    public const string MyDocumentsFolderName = PersonalFolders.MyDocuments;
 
     // The typed notebook (#562 slice 5, renamed with its mask by #564). The IMAP layer keeps projecting it as
     // the root mailbox literally named "Notes" — that name is Apple's convention for where notes live, not
@@ -33,9 +33,25 @@ public sealed class PersonalRepositoryProvisioner
 
     // The typed calendar/contact folders (#564) — every user gets one of each, and CalDAV/CardDAV list them
     // first in the home set. Unlike these defaults, further typed folders may be created anywhere in the tree.
-    public const string MyCalendarFolderName = "My Calendar";
+    public const string MyCalendarFolderName = PersonalFolders.MyCalendar;
 
-    public const string MyContactsFolderName = "My Contacts";
+    /// <summary>
+    /// The mailbox node LMTP creates on first delivery (#617). Named here with the other personal folders
+    /// rather than as a literal at its one call site, so the set of names a personal space can hold is
+    /// readable in one place.
+    /// </summary>
+    public const string MyMailboxFolderName = PersonalFolders.MyMailbox;
+
+    /// <summary>What the mailbox was called before 2026-08-19.</summary>
+    public const string LegacyMyEmailsFolderName = "My eMails";
+
+    public const string MyAddressbookFolderName = PersonalFolders.MyAddressbook;
+
+    /// <summary>
+    /// What the addressbook folder was called before 2026-08-19. Matched so an already-provisioned space is
+    /// RENAMED rather than given a second, empty folder beside the one holding the user's contacts (#574).
+    /// </summary>
+    public const string LegacyMyContactsFolderName = "My Contacts";
 
     private readonly SimplArchiveDbContext _dbContext;
     private readonly IAuditRecorder _audit;
@@ -55,9 +71,8 @@ public sealed class PersonalRepositoryProvisioner
     {
         var root = await EnsureRootAsync(userId, tenantId, cancellationToken);
         await EnsureMyDocumentsAsync(root, tenantId, userId, cancellationToken);
-        await EnsureTypedFolderAsync(root, tenantId, userId, NotebookFolderName, WellKnownMaskIds.Notebook, cancellationToken, LegacyNotesFolderName);
         await EnsureTypedFolderAsync(root, tenantId, userId, MyCalendarFolderName, WellKnownMaskIds.Calendar, cancellationToken);
-        await EnsureTypedFolderAsync(root, tenantId, userId, MyContactsFolderName, WellKnownMaskIds.Addressbook, cancellationToken);
+        await EnsureTypedFolderAsync(root, tenantId, userId, MyAddressbookFolderName, WellKnownMaskIds.Addressbook, cancellationToken, LegacyMyContactsFolderName);
         return root;
     }
 
@@ -164,7 +179,7 @@ public sealed class PersonalRepositoryProvisioner
 
     /// <summary>
     /// Idempotently ensures the personal repository has a TYPED child folder wearing <paramref name="folderMaskId"/>
-    /// — "Notes" for the IMAP notes mailbox (#562 slice 5), "My Calendar"/"My Contacts" for CalDAV/CardDAV
+    /// — "Notes" for the IMAP notes mailbox (#562 slice 5), "My Calendar"/"My Addressbook" for CalDAV/CardDAV
     /// (#564). One implementation for all three: they differ only in name and mask. Same concurrency posture
     /// as "My Documents".
     /// </summary>

@@ -15,7 +15,7 @@ public class WebContactsCalendarTests
     public WebContactsCalendarTests(SelfHostedAppFixture app) => _app = app;
 
     [Theory]
-    [InlineData("Contacts", "My Contacts", "New contact")]
+    [InlineData("Contacts", "My Addressbook", "New contact")]
     [InlineData("Calendar", "My Calendar", "New appointment")]
     public async Task The_tab_opens_on_the_personal_collection_with_it_ticked(string tab, string collection, string newLabel)
     {
@@ -35,7 +35,7 @@ public class WebContactsCalendarTests
     }
 
     [Theory]
-    [InlineData("Contacts", "My Contacts")]
+    [InlineData("Contacts", "My Addressbook")]
     [InlineData("Calendar", "My Calendar")]
     public async Task Unticking_the_last_collection_disables_creating(string tab, string collection)
     {
@@ -61,11 +61,11 @@ public class WebContactsCalendarTests
         var page = await Ui.LoginAsync(_app);
 
         await page.Locator(".wb-tab[aria-label='Contacts']").First.ClickAsync();
-        await Expect(page.Locator("text=/Personal / My Contacts/").First).ToBeVisibleAsync();
+        await Expect(page.Locator("text=/Personal / My Addressbook/").First).ToBeVisibleAsync();
         await Expect(page.Locator("text=/Personal / My Calendar/")).ToHaveCountAsync(0);
 
         await page.Locator(".wb-tab[aria-label='Calendar']").First.ClickAsync();
         await Expect(page.Locator("text=/Personal / My Calendar/").First).ToBeVisibleAsync();
-        await Expect(page.Locator("text=/Personal / My Contacts/")).ToHaveCountAsync(0);
+        await Expect(page.Locator("text=/Personal / My Addressbook/")).ToHaveCountAsync(0);
     }
 }

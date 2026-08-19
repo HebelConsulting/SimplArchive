@@ -38,6 +38,9 @@ public class ImapSearchTests
         await client.ConnectAsync("127.0.0.1", port, SecureSocketOptions.None);
         await client.AuthenticateAsync(email, imapPassword);
 
+        // CREATE it first, exactly as a notes client does on an account it has not used before: the notebook
+        // is not provisioned, and `CREATE "Notes"` is the call that brings it into being (#596).
+        await client.GetFolder(client.PersonalNamespaces[0]).CreateAsync("Notes", true);
         var notes = await client.GetFolderAsync("Notes");
 
         MimeKit.MimeMessage Note(string subject, string body)

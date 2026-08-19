@@ -9,7 +9,7 @@ namespace SimplArchive.DesktopClient.Services;
 /// <param name="Kind"><c>addressbook</c> or <c>calendar</c>.</param>
 /// <param name="Color">The caller's effective colour — their override if set, else the collection's own.</param>
 /// <param name="Writable">False ⇒ the tab shows the collection but disables its editors.</param>
-/// <param name="IsPersonalDefault">The caller's own My Contacts / My Calendar, listed first.</param>
+/// <param name="IsPersonalDefault">The caller's own My Addressbook / My Calendar, listed first.</param>
 /// <param name="Links">Its advertised addresses; the tab follows these and composes nothing (ADR 0543).</param>
 public sealed record DavCollection(
     Guid Id, string DisplayName, string Name, string Kind, string? Color, bool Writable, bool IsPersonalDefault,

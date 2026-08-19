@@ -456,9 +456,19 @@ internal static class ImapWrites
 
         var name = ImapProtocol.DecodeModifiedUtf7(tokens[0]).TrimEnd('/');
         var segments = name.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length < 2 || !string.Equals(segments[0], "Notes", StringComparison.Ordinal))
+        if (segments.Length < 1 || !string.Equals(segments[0], "Notes", StringComparison.Ordinal))
         {
             await session.WriteLineAsync($"{tag} NO the folder structure is managed in SimplArchive, not over IMAP");
+            return;
+        }
+
+        // `CREATE "Notes"` — the FIRST thing a notes client does on an account it has not used before, and the
+        // reason notes were unavailable at all: the notebook is not provisioned, so without this the client
+        // asks for the one folder it needs and is refused (#596). It lands under the mailbox, which the user's
+        // IMAP credential has already materialised, and the cardinality rule keeps it at one.
+        if (segments.Length == 1)
+        {
+            await CreateNotebookAsync(session, scope, tag);
             return;
         }
 
@@ -513,4 +523,29 @@ internal static class ImapWrites
 
         await session.WriteLineAsync($"{tag} OK CREATE completed");
     }
+
+    // The notebook itself, as opposed to a section inside it. Separate from the path above because there is no
+    // parent to resolve and nothing to name: where it goes and what it is called are both fixed, so the whole
+    // of the work is "make sure it exists", which is what makes re-issuing CREATE harmless.
+    private static async Task CreateNotebookAsync(ImapSession session, IServiceScope scope, string tag)
+    {
+        var userId = scope.ServiceProvider.GetRequiredService<ICurrentUserAccessor>().UserId!.Value;
+        var tenantId = scope.ServiceProvider.GetRequiredService<ICurrentTenantAccessor>().TenantId!.Value;
+        var mailbox = scope.ServiceProvider.GetRequiredService<SimplArchive.Api.Documents.PersonalMailboxProvisioner>();
+
+        try
+        {
+            await mailbox.EnsureNotebookAsync(tenantId, userId, CancellationToken.None);
+        }
+        catch (InvalidOperationException)
+        {
+            // Containment or cardinality refused it — a second notebook, or a personal space in a shape the
+            // invariants do not allow. The client's remedy is the same either way, and IMAP has one status.
+            await session.WriteLineAsync($"{tag} NO could not create 'Notes'");
+            return;
+        }
+
+        await session.WriteLineAsync($"{tag} OK CREATE completed");
+    }
+
 }

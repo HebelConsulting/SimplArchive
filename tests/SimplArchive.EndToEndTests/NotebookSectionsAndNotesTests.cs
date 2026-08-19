@@ -24,9 +24,19 @@ public class NotebookSectionsAndNotesTests
 
         var personal = await TestJson.Post(api, "/api/me/personal-repository", new { });
         var personalId = personal.GetProperty("id").GetGuid();
-        var children = (await TestJson.Get(api, $"/api/documents/{personalId}/children"))
-            .GetProperty("children").EnumerateArray().ToList();
-        var notebook = children.Single(c => c.GetProperty("name").GetString() == "Notebook");
+
+        // The notebook is created the way the product creates one, rather than found: it is not provisioned,
+        // and it lives under the MAILBOX rather than loose in Personal (#596). Generating an IMAP credential
+        // materialises the mailbox — the second of the two triggers — so this is also the shortest honest way
+        // to have one at all.
+        await TestJson.Post(api, "/api/me/imap-access", new { });
+        var mailboxId = (await TestJson.Get(api, $"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Mailbox")
+            .GetProperty("id").GetGuid();
+
+        var notebook = await TestJson.Post(api, $"/api/documents/{mailboxId}/children",
+            new { name = $"NB {Guid.NewGuid():N}"[..12], folderMask = "notes" });
         return (api, notebook.GetProperty("id").GetGuid(), personalId);
     }
 
@@ -56,7 +66,7 @@ public class NotebookSectionsAndNotesTests
         // An addressbook is typed too, but holds Contacts — it must not offer notebook affordances.
         var book = (await TestJson.Get(api, $"/api/documents/{personalId}/children"))
             .GetProperty("children").EnumerateArray()
-            .Single(c => c.GetProperty("name").GetString() == "My Contacts");
+            .Single(c => c.GetProperty("name").GetString() == "My Addressbook");
         var bookRels = await RelsAsync(api, book.GetProperty("id").GetGuid());
         Assert.DoesNotContain("sections", bookRels);
         Assert.DoesNotContain("notes", bookRels);

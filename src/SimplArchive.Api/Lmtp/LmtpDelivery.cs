@@ -19,7 +19,7 @@ public class LmtpDelivery
     private readonly ICurrentTenantAccessor _tenantAccessor;
     private readonly IObjectStorageClient _storage;
     private readonly DocumentFinalizer _finalizer;
-    private readonly PersonalRepositoryProvisioner _personalSpace;
+    private readonly PersonalMailboxProvisioner _mailbox;
     private readonly ILogger<LmtpDelivery> _logger;
 
     public LmtpDelivery(
@@ -27,14 +27,14 @@ public class LmtpDelivery
         ICurrentTenantAccessor tenantAccessor,
         IObjectStorageClient storage,
         DocumentFinalizer finalizer,
-        PersonalRepositoryProvisioner personalSpace,
+        PersonalMailboxProvisioner mailbox,
         ILogger<LmtpDelivery> logger)
     {
         _dbContext = dbContext;
         _tenantAccessor = tenantAccessor;
         _storage = storage;
         _finalizer = finalizer;
-        _personalSpace = personalSpace;
+        _mailbox = mailbox;
         _logger = logger;
     }
 
@@ -93,7 +93,9 @@ public class LmtpDelivery
             // MTA is the caller. Setting it here is what puts every query below inside the right tenant.
             ((CurrentTenantAccessor)_tenantAccessor).TenantId = tenantId;
 
-            var inboxId = await EnsureInboxAsync(tenantId, userId, cancellationToken);
+            // Lazily rather than eagerly, and shared with the credential trigger: the mailbox exists exactly
+            // when it has something to hold, and whichever of the two demands arrives first creates it (#562).
+            var inboxId = await _mailbox.EnsureInboxAsync(tenantId, userId, cancellationToken);
 
             var now = DateTimeOffset.UtcNow;
             var versionId = Guid.NewGuid();
@@ -150,68 +152,6 @@ public class LmtpDelivery
                 address);
             return "451 temporary failure storing the message";
         }
-    }
-
-    /// <summary>The user's ephemeral inbox, created on first delivery.</summary>
-    /// <remarks>
-    /// Lazily rather than eagerly: a mailbox provisioned for every user would put an empty "My eMails" in the
-    /// personal space of everyone who never receives mail. Creating it when the first message arrives means
-    /// the node exists exactly when it has something to hold, and the Mailbox cardinality rule (ADR 0629)
-    /// guarantees a personal space never ends up with two.
-    /// </remarks>
-    private async Task<Guid> EnsureInboxAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken)
-    {
-        var personal = await _personalSpace.EnsureAsync(userId, tenantId, cancellationToken);
-
-        var mailboxVersionIds = await _dbContext.MaskVersions.IgnoreQueryFilters(["TenantFilter"])
-            .Where(v => v.TenantId == tenantId && v.MaskId == WellKnownMaskIds.Mailbox)
-            .Select(v => v.Id)
-            .ToListAsync(cancellationToken);
-
-        var mailboxId = await _dbContext.Documents
-            .Where(d => d.ParentId == personal.Id && d.MaskVersionId != null && mailboxVersionIds.Contains(d.MaskVersionId.Value))
-            .Select(d => (Guid?)d.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (mailboxId is null)
-        {
-            var mailbox = new Document
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                ParentId = personal.Id,
-                Name = "My eMails",
-                MaskVersionId = mailboxVersionIds.FirstOrDefault(),
-                CreatedByUserId = userId,
-                CreatedAt = DateTimeOffset.UtcNow,
-            };
-            _dbContext.Documents.Add(mailbox);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            mailboxId = mailbox.Id;
-        }
-
-        var inboxId = await _dbContext.Documents
-            .Where(d => d.ParentId == mailboxId && d.Name == "INBOX")
-            .Select(d => (Guid?)d.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (inboxId is { } existing)
-        {
-            return existing;
-        }
-
-        var inbox = new Document
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            ParentId = mailboxId.Value,
-            Name = "INBOX",
-            CreatedByUserId = userId,
-            CreatedAt = DateTimeOffset.UtcNow,
-        };
-        _dbContext.Documents.Add(inbox);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return inbox.Id;
     }
 
     /// <summary>The message's Subject, or a stand-in — the document's name, as an appended message gets.</summary>

@@ -36,6 +36,16 @@ public sealed class TypedFolderContainmentException : InvalidOperationException
             + $"{rule.ChildName}{(rule.Max == 1 ? string.Empty : "s")}, and one is already there "
             + "(child cardinality, #596).");
 
+    /// <summary>The folder holds items, never other folders (#596).</summary>
+    /// <remarks>
+    /// Its own message because the reason is neither admission nor capacity: an ephemeral folder may hold any
+    /// number of messages, and refuses a folder specifically. Saying "only eMail can live here" would be a
+    /// lie the moment a second item mask arrives.
+    /// </remarks>
+    public static TypedFolderContainmentException FolderHoldsNoSubfolders(string documentName, string folderName) =>
+        new($"'{documentName}' cannot be created in a {folderName}: it holds messages, not folders. "
+            + "A folder there would be part of the archive while its parent is not (#596).");
+
     /// <summary>
     /// The child refuses the folder: a typed item's primary location is only a folder that admits it. Plural
     /// because a Note lives in a Notebook OR a Section, and naming just one of them would send the reader to

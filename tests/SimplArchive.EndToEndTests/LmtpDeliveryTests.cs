@@ -1,3 +1,4 @@
+using SimplArchive.Domain.Documents;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net.Sockets;
@@ -120,7 +121,7 @@ public class LmtpDeliveryTests
         var inbox = db.Documents.IgnoreQueryFilters().Single(d => d.Id == filed!.ParentId);
         Assert.Equal("INBOX", inbox.Name);
         var mailbox = db.Documents.IgnoreQueryFilters().Single(d => d.Id == inbox.ParentId);
-        Assert.Equal("My eMails", mailbox.Name);
+        Assert.Equal("My Mailbox", mailbox.Name);
     }
 
     [Fact]
@@ -186,4 +187,113 @@ public class LmtpDeliveryTests
         await lmtp.ReadAsync();
         Assert.StartsWith("500", await lmtp.ExchangeAsync("EHLO mta.test"));
     }
+
+
+
+    [Fact]
+    public async Task A_mailbox_created_under_the_old_name_is_renamed_on_the_next_delivery()
+    {
+        // The mailbox node is located by its MASK, so the 2026-08-19 rename of "My eMails" → "My Mailbox"
+        // cannot orphan one. What it CAN do is let the names drift: a space that already had a mailbox would
+        // keep the old name forever while newly created ones got the new one, and nothing would report it.
+        //
+        // A fresh-tenant run never sees this — it only ever creates the node under the new name — so the
+        // pre-rename state is built deliberately here (#574's lesson).
+        var (_, address, _) = await RecipientAsync();
+
+        // Scoped to THIS user's mailbox by walking up from the message just delivered. Querying by name
+        // globally passes in isolation and fails in the class run, because sibling tests have mailboxes too —
+        // the test would then be reporting on somebody else's folder.
+        var first = await DeliverOneAsync(address);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+
+        var mailbox = MailboxOf(db, first);
+        Assert.Equal("My Mailbox", mailbox.Name);
+
+        mailbox.Name = "My eMails";
+        await db.SaveChangesAsync();
+
+        var second = await DeliverOneAsync(address);
+
+        using var after = _factory.Services.CreateScope();
+        var db2 = after.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+
+        // Renamed in place: the SECOND message lands in the same node, now under the new name.
+        var again = MailboxOf(db2, second);
+        Assert.Equal(mailbox.Id, again.Id);
+        Assert.Equal("My Mailbox", again.Name);
+    }
+
+    /// <summary>The mailbox node holding the message with this subject: message → INBOX → mailbox.</summary>
+    private static Document MailboxOf(SimplArchiveDbContext db, string subject)
+    {
+        var filed = db.Documents.IgnoreQueryFilters().Single(d => d.Name == subject);
+        var inbox = db.Documents.IgnoreQueryFilters().Single(d => d.Id == filed.ParentId);
+        return db.Documents.IgnoreQueryFilters().Single(d => d.Id == inbox.ParentId);
+    }
+
+    /// <summary>One delivered message, for tests that care about the mailbox rather than the exchange.</summary>
+    private async Task<string> DeliverOneAsync(string address)
+    {
+        using var lmtp = new Lmtp(Port);
+        await lmtp.ReadAsync();
+        await lmtp.ExchangeAsync("LHLO mta.test");
+        await lmtp.ExchangeAsync("MAIL FROM:<sender@example.test>");
+        await lmtp.ExchangeAsync($"RCPT TO:<{address}>");
+        await lmtp.ExchangeAsync("DATA");
+
+        var subject = $"Msg {Guid.NewGuid():N}"[..16];
+        foreach (var line in Message("sender@example.test", address, subject).Split("\r\n"))
+        {
+            await lmtp.SendAsync(line);
+        }
+
+        Assert.StartsWith("250", await lmtp.ExchangeAsync("."));
+        await lmtp.ExchangeAsync("QUIT");
+        return subject;
+    }
+
+    [Fact]
+    public async Task The_inbox_wears_the_ephemeral_mask_and_an_older_one_is_healed()
+    {
+        // The mask is what marks an INBOX EPHEMERAL (#596): its content lives under the `mail/` prefix and is
+        // swept, and an `IMAP Folder` may never sit beneath it precisely because archive content must not hang
+        // off an ephemeral parent. A maskless INBOX is therefore not just untyped — it is indistinguishable
+        // from archive content to anything keying off the mask.
+        var (_, address, _) = await RecipientAsync();
+
+        var first = await DeliverOneAsync(address);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+
+        var filed = db.Documents.IgnoreQueryFilters().Single(d => d.Name == first);
+        var inbox = db.Documents.IgnoreQueryFilters().Single(d => d.Id == filed.ParentId);
+        Assert.Equal("INBOX", inbox.Name);
+        Assert.NotNull(inbox.MaskVersionId);
+        Assert.True(await IsImapSpecialAsync(db, inbox.MaskVersionId));
+
+        // An INBOX created before the mask existed: a grow-only seed never revisits it, so the heal has to
+        // happen on the next delivery.
+        inbox.MaskVersionId = null;
+        await db.SaveChangesAsync();
+
+        var second = await DeliverOneAsync(address);
+
+        using var after = _factory.Services.CreateScope();
+        var db2 = after.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+        var healed = db2.Documents.IgnoreQueryFilters().Single(d => d.Id == inbox.Id);
+        Assert.True(await IsImapSpecialAsync(db2, healed.MaskVersionId));
+
+        // …and the second message landed in that same healed INBOX rather than a new one beside it.
+        var secondFiled = db2.Documents.IgnoreQueryFilters().Single(d => d.Name == second);
+        Assert.Equal(inbox.Id, secondFiled.ParentId);
+    }
+
+    private static async Task<bool> IsImapSpecialAsync(SimplArchiveDbContext db, Guid? maskVersionId) =>
+        maskVersionId is { } id
+        && await db.MaskVersions.IgnoreQueryFilters()
+            .AnyAsync(v => v.Id == id && v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.ImapSpecial);
 }

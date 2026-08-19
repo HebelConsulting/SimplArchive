@@ -33,7 +33,7 @@ public class DesktopCalendarTabTests
 
         // Only calendars — the addressbooks answer the same shape and must not leak in.
         Assert.All(vm.Collections, c => Assert.Equal("calendar", c.Collection.Kind));
-        Assert.DoesNotContain(vm.Collections, c => c.Collection.Name == "My Contacts");
+        Assert.DoesNotContain(vm.Collections, c => c.Collection.Name == "My Addressbook");
 
         // Every collection carries the addresses the tab acts from, so it never composes one (ADR 0543).
         Assert.All(vm.Collections, c =>

@@ -267,7 +267,7 @@ public sealed partial class ContactsTabViewModel : ObservableObject
     {
         var books = new[]
         {
-            ("Personal / My Contacts", "#1e88e5", true),
+            ("Personal / My Addressbook", "#1e88e5", true),
             ("Sales / Customers", "#43a047", false),
         };
 

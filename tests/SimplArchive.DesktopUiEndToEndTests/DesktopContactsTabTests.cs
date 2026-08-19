@@ -25,7 +25,7 @@ public class DesktopContactsTabTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
-        // The personal space is provisioned on demand, and brings "My Contacts" with it.
+        // The personal space is provisioned on demand, and brings "My Addressbook" with it.
         Assert.NotNull(await api.Profile.GetPersonalRepositoryAsync());
 
         var vm = new ContactsTabViewModel();
@@ -33,8 +33,8 @@ public class DesktopContactsTabTests
         await vm.LoadAsync();
 
         var mine = Assert.Single(vm.Collections, c => c.Collection.IsPersonalDefault);
-        Assert.Equal("My Contacts", mine.Collection.Name);
-        Assert.EndsWith("My Contacts", mine.DisplayName, StringComparison.Ordinal); // parent-qualified
+        Assert.Equal("My Addressbook", mine.Collection.Name);
+        Assert.EndsWith("My Addressbook", mine.DisplayName, StringComparison.Ordinal); // parent-qualified
         Assert.True(mine.Writable);
 
         // The personal book opens ticked: a tab that needs a click before it shows anything reads as broken.

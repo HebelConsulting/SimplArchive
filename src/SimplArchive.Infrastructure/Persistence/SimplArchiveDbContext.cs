@@ -442,8 +442,100 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
             await EnsureUniqueSiblingDocumentNameAsync(document, trackedDocuments.Values, cancellationToken);
             await EnforceTypedFolderContainmentAsync(document, cancellationToken);
             await EnforceRepositoryMaskLockstepAsync(document, cancellationToken);
+            await EnforcePersonalSpaceStructureAsync(document, cancellationToken);
         }
     }
+
+    // The personal space's first level is CLOSED (#596): the four provisioned folders cannot be deleted or
+    // moved out, and the only thing a user may add beside them is a plain Folder.
+    //
+    // Both halves live here for the same reason as every other document invariant: the personal space is
+    // written by the workbench, WebDAV, CalDAV/CardDAV, IMAP, LMTP, import and move, and a check in any one of
+    // them is a check the other six skip. The protection half is the one with teeth today — nothing else stops
+    // a user deleting the calendar a CalDAV client is subscribed to.
+    private async Task EnforcePersonalSpaceStructureAsync(Document document, CancellationToken cancellationToken)
+    {
+        var entry = Entry(document);
+
+        // A protected folder may not LEAVE the personal space. Checked against the ORIGINAL parent, because by
+        // the time this runs the document already claims its new one.
+        var originalParentId = entry.State == EntityState.Modified
+            ? entry.Property(d => d.ParentId).OriginalValue
+            : document.ParentId;
+
+        if (PersonalFolders.IsProtected(document.Name)
+            && originalParentId is { } from
+            && await IsPersonalRootAsync(from, cancellationToken))
+        {
+            if (entry.Property(d => d.ParentId).IsModified && document.ParentId != from)
+            {
+                throw new InvalidOperationException(
+                    $"'{document.Name}' is part of the personal space and cannot be moved out of it.");
+            }
+
+            // Soft delete is the deletion that matters here: a folder in the recycle bin is just as absent
+            // from the tree, and just as gone from a subscribed client's point of view.
+            if (entry.Property(d => d.DeletedAt).IsModified && document.DeletedAt is not null)
+            {
+                throw new InvalidOperationException(
+                    $"'{document.Name}' is part of the personal space and cannot be deleted.");
+            }
+        }
+
+        // Admission applies when something ARRIVES at the first level — created there, or moved there — and not
+        // on every later edit of what is already sitting there. That distinction is load-bearing rather than
+        // tidy: a pre-upgrade personal space holds MASKLESS folders waiting to be healed, and a rule that
+        // re-validated them on modification would refuse the very writes that fix them, in exactly the
+        // deployments the heal exists for.
+        var arriving = entry.State == EntityState.Added
+                       || (entry.Property(d => d.ParentId).IsModified
+                           && entry.Property(d => d.ParentId).OriginalValue != document.ParentId);
+
+        if (!arriving
+            || document.ParentId is not { } parentId
+            || !await IsPersonalRootAsync(parentId, cancellationToken))
+        {
+            return;
+        }
+
+        // Admission is decided by MASK, not by name. Deciding it by name looked equivalent and is not: a
+        // provisioned folder caught mid-rename still wears its mask but not yet its new name, so a name-based
+        // rule refuses the very migration that renames it — which is how this was found.
+        // A MASKLESS document is admitted. It is not "an unknown kind" but the pre-upgrade state: a tenant
+        // provisioned before a mask existed gets its folders with no mask at all, and the provisioner itself
+        // creates them that way when the seed has not run. Refusing them makes provisioning fail on precisely
+        // the deployments the mask-heal exists to repair — found by the heal test, not by reasoning.
+        //
+        // The consequence is that an unclassified upload is admitted here too, so "no loose files in the
+        // personal space" is NOT yet enforced (#596 leaves that question open).
+        var admitted = document.MaskVersionId is not { } maskVersionId
+            || await MaskVersions.IgnoreQueryFilters(["TenantFilter"])
+                .AnyAsync(
+                    v => v.Id == maskVersionId && PersonalFirstLevelMasks.Contains(v.MaskId),
+                    cancellationToken);
+
+        if (!admitted)
+        {
+            throw new InvalidOperationException(
+                $"Only folders may be placed directly in the personal space; '{document.Name}' cannot. "
+                + "Put it inside a folder instead.");
+        }
+    }
+
+    // What may sit at the first level of a personal space: a plain Folder, which is all a USER may add, plus
+    // the masks the three provisioned typed folders wear. Their own uniqueness is the sibling-name rule and,
+    // for the mailbox, the cardinality cap — this set only says which KINDS belong there at all.
+    private static readonly Guid[] PersonalFirstLevelMasks =
+    [
+        WellKnownMaskIds.Folder,
+        WellKnownMaskIds.Calendar,
+        WellKnownMaskIds.Addressbook,
+        WellKnownMaskIds.Mailbox,
+    ];
+
+    private async Task<bool> IsPersonalRootAsync(Guid documentId, CancellationToken cancellationToken) =>
+        await Documents.IgnoreQueryFilters(["TenantFilter", "SoftDeleteFilter"])
+            .AnyAsync(d => d.Id == documentId && d.PersonalOfUserId != null, cancellationToken);
 
     // A repository is a root document (ADR 0200) AND wears the Repository mask (ADR 0627) — the two are kept in
     // LOCKSTEP, which is the only thing that makes storing the same fact twice safe. Enforced both ways, here,
@@ -547,6 +639,18 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
             && !admittingRules.Any(r => r.FolderMaskId == parentMaskId))
         {
             throw Domain.Masks.TypedFolderContainmentException.ItemBelongsIn(document.Name, ownId, admittingRules);
+        }
+
+        // …and if the parent holds no subfolders, is this child one? A third question, and deliberately not a
+        // TypedFolderRules row: that table is two-directional, so admitting eMail into an IMAP Special folder
+        // would also confine every eMail in the archive to one. Folder-ness comes from the MASK because the
+        // usual tell — does it have versions — cannot be read here: a folder and a just-delivered message are
+        // both version-less at the instant this runs.
+        if (ownMaskId is { } childMaskId
+            && Domain.Masks.WellKnownMaskIds.FolderMasks.Contains(childMaskId)
+            && Domain.Masks.WellKnownMaskIds.NoSubfolderMasks.FirstOrDefault(m => m.FolderMaskId == parentMaskId) is { FolderName: not null } leafRule)
+        {
+            throw Domain.Masks.TypedFolderContainmentException.FolderHoldsNoSubfolders(document.Name, leafRule.FolderName);
         }
 
         // …and does the folder have ROOM for it? A separate question from admission: the folder here admits

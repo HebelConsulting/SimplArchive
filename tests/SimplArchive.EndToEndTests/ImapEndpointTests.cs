@@ -295,15 +295,28 @@ public class ImapEndpointTests
         using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(email, "note-1234"));
         var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
 
-        // Get-or-create the personal space — Personal/Notebook arrives with it, wearing the Notebook mask.
+        // The notebook is not provisioned and does not sit loose in Personal: it lives under the MAILBOX, and
+        // generating the IMAP credential above has already materialised that (the second of the two triggers,
+        // #562). Creating the notebook there is what a notes client's `CREATE "Notes"` does.
         //
         // The TREE says "Notebook" while IMAP says "Notes", and holding both in one test is the point: they
         // are one folder with two projections, so the wire name a notes client looks for must survive a
         // rename of what the workbench displays (#564).
         var personal = await TestJson.Post(api, "/api/me/personal-repository", new { });
         var personalId = personal.GetProperty("id").GetGuid();
-        var children = (await TestJson.Get(api, $"/api/documents/{personalId}/children")).GetProperty("children").EnumerateArray().ToList();
-        var notes = children.Single(c => c.GetProperty("name").GetString() == "Notebook");
+        var mailboxId = (await TestJson.Get(api, $"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Mailbox")
+            .GetProperty("id").GetGuid();
+
+        await TestJson.Post(api, $"/api/documents/{mailboxId}/children",
+            new { name = "Notebook", folderMask = "notes" });
+
+        // Read back from the LISTING rather than trusting the create response: documentType is what the two
+        // clients key their type column off, and the create response does not carry it.
+        var notes = (await TestJson.Get(api, $"/api/documents/{mailboxId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "Notebook");
         Assert.Equal("Notebook", notes.GetProperty("documentType").GetString());
         var notesId = notes.GetProperty("id").GetGuid();
 

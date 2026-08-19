@@ -97,6 +97,10 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // (WellKnownMaskIds.ChildCardinalityRules), which the DbContext enforces.
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Mailbox, "Mailbox", [], cancellationToken);
 
+        // Fieldless like the Mailbox it lives in — it types the folder as ephemeral (#596), and what is worth
+        // indexing lives on the messages inside it.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.ImapSpecial, "IMAP Special", [], cancellationToken);
+
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Note, "Note",
         [
             new FieldSpec("Note UUID", FieldDataType.Text, IsRequired: true),

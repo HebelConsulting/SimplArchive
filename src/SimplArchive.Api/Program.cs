@@ -219,6 +219,7 @@ builder.Services.AddScoped<SimplArchive.Api.Documents.RepositoryImporter>();
 // Get-or-create the caller's personal repository — shared by PersonalRepositoryController and the WebDAV
 // gateway (which nests Intray / Check-out under Personal). See ADR "WebDAV Inbox/Check-out under Personal".
 builder.Services.AddScoped<SimplArchive.Api.Documents.PersonalRepositoryProvisioner>();
+builder.Services.AddScoped<SimplArchive.Api.Documents.PersonalMailboxProvisioner>();
 // Bulk clearance filtering for listings + search (ADR "Sensitivity clearance enforcement"); the per-document
 // CanSee authority is IEffectiveRightsCalculator.
 builder.Services.AddScoped<SimplArchive.Api.Documents.IClearanceScopeResolver, SimplArchive.Api.Documents.ClearanceScopeResolver>();

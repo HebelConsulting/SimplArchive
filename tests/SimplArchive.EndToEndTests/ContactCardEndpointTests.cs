@@ -65,7 +65,7 @@ public class ContactCardEndpointTests
         var listing = XDocument.Parse(await (await dav.SendAsync(probe)).Content.ReadAsStringAsync());
         XNamespace davNs = "DAV:";
         var collectionHref = listing.Descendants(davNs + "response")
-            .Single(r => r.Descendants(davNs + "displayname").Any(d => d.Value.EndsWith("My Contacts", StringComparison.Ordinal)))
+            .Single(r => r.Descendants(davNs + "displayname").Any(d => d.Value.EndsWith("My Addressbook", StringComparison.Ordinal)))
             .Element(davNs + "href")!.Value;
 
         var uid = $"uid-{Guid.NewGuid():N}";

@@ -114,7 +114,7 @@ public class MailboxCardinalityTests
 
         using (var db = Ctx(connection))
         {
-            db.Documents.Add(Doc("My eMails", personalId, mailboxVersionId));
+            db.Documents.Add(Doc("Shared Mailbox", personalId, mailboxVersionId));
             await db.SaveChangesAsync();
         }
 
@@ -157,7 +157,7 @@ public class MailboxCardinalityTests
         var (connection, personalId, mailboxVersionId, _) = await PersonalSpaceAsync();
         using var _c = connection;
 
-        var first = Doc("My eMails", personalId, mailboxVersionId);
+        var first = Doc("Shared Mailbox", personalId, mailboxVersionId);
         using (var db = Ctx(connection))
         {
             db.Documents.Add(first);
@@ -173,7 +173,7 @@ public class MailboxCardinalityTests
 
         using (var db = Ctx(connection))
         {
-            db.Documents.Add(Doc("My eMails", personalId, mailboxVersionId));
+            db.Documents.Add(Doc("Shared Mailbox", personalId, mailboxVersionId));
             await db.SaveChangesAsync();
         }
 
@@ -192,7 +192,7 @@ public class MailboxCardinalityTests
         var (connection, personalId, mailboxVersionId, _) = await PersonalSpaceAsync();
         using var _c = connection;
 
-        var original = Doc("My eMails", personalId, mailboxVersionId);
+        var original = Doc("Shared Mailbox", personalId, mailboxVersionId);
         using (var db = Ctx(connection))
         {
             db.Documents.Add(original);
@@ -231,7 +231,7 @@ public class MailboxCardinalityTests
         using var _c = connection;
 
         var elsewhere = Doc("Archive", null, folderVersionId);
-        var existing = Doc("My eMails", personalId, mailboxVersionId);
+        var existing = Doc("Shared Mailbox", personalId, mailboxVersionId);
         using (var db = Ctx(connection))
         {
             db.Documents.Add(elsewhere);

@@ -77,6 +77,24 @@ public static class WellKnownMaskIds
     /// </remarks>
     public static readonly Guid Mailbox = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E3E");
 
+    /// <summary>
+    /// A mailbox's standing IMAP folder — `INBOX` today, `SENT`/`DRAFTS`/`JUNK` when they arrive (#596).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The mask is what makes these folders <b>ephemeral</b>: their content is a staging area, stored under the
+    /// `mail/` key prefix rather than as members of the repository, and swept accordingly. That is why an
+    /// `IMAP Folder` — which IS archive — may never live inside one: an archive folder beneath an ephemeral
+    /// parent leaves the archive holding folders whose parent is not in the archive, and nothing downstream
+    /// could detect it.
+    /// </para>
+    /// <para>
+    /// Fieldless: it types the folder, and everything worth indexing lives on the messages inside it. Slot 3F
+    /// rather than the free 33/34 — those are retired ids, and a returning id is worse than a gap.
+    /// </para>
+    /// </remarks>
+    public static readonly Guid ImapSpecial = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E3F");
+
     /// <summary>A section INSIDE a notebook: a folder that holds notes and further sections (#564).</summary>
     /// <remarks>
     /// Fieldless, like the Notebook it lives in — it types the folder, and the fields live on the notes.
@@ -96,6 +114,12 @@ public static class WellKnownMaskIds
     /// </remarks>
     public static readonly IReadOnlyList<TypedFolderRule> TypedFolderRules =
     [
+        // The mailbox holds its standing IMAP folders and, at most, the one notebook (#596). Both directions
+        // of this row matter: the mailbox admits nothing else, and — through AdmittingFolders — an
+        // `IMAP Special` folder or a `Notebook` may exist NOWHERE ELSE in the archive. The second direction is
+        // the one that was asked for: a Notebook needs Apple Notes and the IMAP projection to mean anything,
+        // so loose in a repository it is a folder whose whole purpose is unreachable.
+        new(Mailbox, "Mailbox", [(ImapSpecial, "IMAP Special"), (Notebook, "Notebook")]),
         new(Notebook, "Notebook", [(NotebookSection, "Section"), (Note, "Note")]),
         new(NotebookSection, "Section", [(NotebookSection, "Section"), (Note, "Note")]),
         new(Addressbook, "Addressbook", [(Contact, "Contact")]),
@@ -119,7 +143,54 @@ public static class WellKnownMaskIds
     public static readonly IReadOnlyList<ChildCardinalityRule> ChildCardinalityRules =
     [
         new(UserFolder, "Personal space", Mailbox, "Mailbox", 1),
+
+        // One notebook per mailbox (#596). Admission above already says a Notebook lives only under a Mailbox;
+        // this says how many, and the two are separate questions for the same reason the mailbox rule is: a
+        // second notebook is not a placement error, it is one too many. IMAP projects it as `NOTES`, and a
+        // client that discovers two of them has no way to choose.
+        new(Mailbox, "Mailbox", Notebook, "Notebook", 1),
     ];
+
+    /// <summary>
+    /// The well-known masks a FOLDER wears, as opposed to an item that lives in one (#596).
+    /// </summary>
+    /// <remarks>
+    /// Needed because <see cref="NoSubfolderMasks"/> asks a question no other table asks — "is this child a
+    /// folder at all?" — and folder-ness is not otherwise a property of a mask. The alternative, deriving it
+    /// from whether the document has versions, is not available where the rule runs: a folder and a freshly
+    /// delivered message are both version-less at the instant <c>SaveChanges</c> validates them.
+    /// <para>
+    /// Hand-written, and therefore guarded: <c>WellKnownMaskPartitionTests</c> asserts every mask in
+    /// <see cref="All"/> is classified here or in <see cref="ItemMasks"/> and never both, so adding a mask
+    /// without saying which it is fails the build rather than silently landing on the item side — where it
+    /// would be admitted into an ephemeral folder by default, which is the one outcome this exists to prevent.
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlySet<Guid> FolderMasks =
+        new HashSet<Guid> { Folder, Repository, UserFolder, Mailbox, ImapSpecial, Notebook, NotebookSection, Addressbook, Calendar };
+
+    /// <summary>The well-known masks an ITEM wears — the complement of <see cref="FolderMasks"/>.</summary>
+    /// <remarks>Stated rather than derived, so the partition guard has two sides to compare instead of one.</remarks>
+    public static readonly IReadOnlySet<Guid> ItemMasks =
+        new HashSet<Guid> { BasicEntry, EMail, Note, Contact, Appointment };
+
+    /// <summary>Folder masks that admit no subfolders at all — only items (#596).</summary>
+    /// <remarks>
+    /// <para>
+    /// An <c>IMAP Special</c> folder is <b>ephemeral</b>: its content is a staging area under the mail key
+    /// prefix, not a member of the repository. An archive folder beneath it would therefore be an archive
+    /// folder whose parent is not in the archive — a shape nothing else in the model can produce and no
+    /// invariant downstream could detect.
+    /// </para>
+    /// <para>
+    /// Expressed as "no subfolders" rather than as a <see cref="TypedFolderRules"/> row admitting only
+    /// <see cref="EMail"/>, because that table is <b>two-directional</b>: admitting eMail there would also
+    /// confine every eMail in the archive to an ephemeral folder, which is the opposite of what filing means.
+    /// This rule constrains the parent only.
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlyList<(Guid FolderMaskId, string FolderName)> NoSubfolderMasks =
+        [(ImapSpecial, "IMAP Special")];
 
     /// <summary>The masks that may only ever live inside a typed folder, with the folders that admit each.</summary>
     /// <remarks>

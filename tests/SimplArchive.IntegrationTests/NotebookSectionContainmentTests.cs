@@ -43,6 +43,17 @@ public class NotebookSectionContainmentTests
         return (connection, accessor, userId);
     }
 
+    // A notebook lives under a MAILBOX and nowhere else (#596, ADR 0634), so these tests need one to hang it
+    // from. Built through the product's own provisioner rather than by hand: the mailbox is itself constrained
+    // (one per personal space, admitted only there), and a hand-built stand-in would drift from those rules.
+    private async Task<Guid> MailboxAsync(SimplArchiveDbContext db, Guid userId)
+    {
+        var provisioner = new PersonalMailboxProvisioner(
+            db, new PersonalRepositoryProvisioner(db, NoOpAuditRecorder.Instance));
+
+        return (await provisioner.EnsureMailboxAsync(_tenantId, userId, CancellationToken.None)).Id;
+    }
+
     private static async Task<Guid> MaskVersionAsync(SimplArchiveDbContext db, Guid maskId) =>
         (await db.MaskVersions.SingleAsync(v => v.MaskId == maskId && v.IsCurrent)).Id;
 
@@ -95,7 +106,7 @@ public class NotebookSectionContainmentTests
         var sectionMask = await MaskVersionAsync(db, WellKnownMaskIds.NotebookSection);
         var noteMask = await MaskVersionAsync(db, WellKnownMaskIds.Note);
 
-        var notebook = Doc(_tenantId, null, "Notebook", notebookMask, userId);
+        var notebook = Doc(_tenantId, await MailboxAsync(db, userId), "Notebook", notebookMask, userId);
         db.Documents.Add(notebook);
         await db.SaveChangesAsync();
 
@@ -114,7 +125,11 @@ public class NotebookSectionContainmentTests
         await AddWithRequiredFieldsAsync(db, Doc(_tenantId, nested.Id, "Deep note", noteMask, userId));
         await db.SaveChangesAsync();
 
-        Assert.Equal(5, await db.Documents.CountAsync());
+        // Scoped to what this test created. The mailbox the notebook hangs from brings a provisioned personal
+        // space with it (#596), so counting the whole table would turn this into an assertion about
+        // provisioning — and it would break again the next time a folder is added there.
+        string[] created = ["Notebook", "Work", "Loose note", "2026", "Deep note"];
+        Assert.Equal(5, await db.Documents.CountAsync(d => created.Contains(d.Name)));
     }
 
     [Fact]
@@ -153,7 +168,7 @@ public class NotebookSectionContainmentTests
         var notebookMask = await MaskVersionAsync(db, WellKnownMaskIds.Notebook);
         var basicMask = await MaskVersionAsync(db, WellKnownMaskIds.BasicEntry);
 
-        var notebook = Doc(_tenantId, null, "Notebook", notebookMask, userId);
+        var notebook = Doc(_tenantId, await MailboxAsync(db, userId), "Notebook", notebookMask, userId);
         db.Documents.Add(notebook);
         await db.SaveChangesAsync();
 

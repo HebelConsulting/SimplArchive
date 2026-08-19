@@ -91,26 +91,48 @@ jobs:
       #
       #   timeout-minutes  — without it the job inherits GitHub's SIX HOUR default, so an apt stall burns a
       #                      runner all day and the PR simply never reports. A fast failure is strictly better
-      #                      than a silent one; 5 minutes is ~10x the step's normal duration.
+      #                      than a silent one.
       #   the retry loop   — a mirror stall is transient, so one retry usually turns a lost run into a slow one.
+      #
+      # THE BOUND IS PER ATTEMPT, and that is the whole point (#635). It was on the STEP, so all three attempts
+      # shared one five-minute budget: a stall on attempt 1 consumed it and attempts 2 and 3 never ran — the
+      # loop could not retry the one failure it exists for. It failed exactly that way twice on 2026-08-19,
+      # and the tell was in the log: NEITHER failing run contained the loop's own ::warning:: line, so no
+      # iteration ever completed. A retry whose budget is shared with the thing it is retrying is decoration.
+      #
+      # `timeout` runs INSIDE sudo, so it parents apt-get directly — outside it, the signal goes to sudo and
+      # only reaches apt if sudo forwards it. `--kill-after` because ignoring SIGTERM is one of the ways apt
+      # hangs; SIGKILL follows ten seconds later. The step timeout stays as a BACKSTOP, sized above
+      # the loop's worst case (3 x 180s + backoff) so it only ever fires if the loop itself is wedged.
       #
       # DEBIAN_FRONTEND/NEEDRESTART_MODE remove the other way this can wait forever: a debconf or needrestart
       # prompt on a runner where nothing can answer it.
       - name: Install fonts for headless desktop rendering
-        timeout-minutes: 5
+        timeout-minutes: 10
         env:
           DEBIAN_FRONTEND: noninteractive
           NEEDRESTART_MODE: a
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
-            if sudo -E apt-get update -qq \
-              && sudo -E apt-get install -y -qq --no-install-recommends \
+            if sudo -E timeout --kill-after=10 90 apt-get update -qq \
+              && sudo -E timeout --kill-after=10 90 apt-get install -y -qq --no-install-recommends \
                    libfontconfig1 fonts-dejavu-core fonts-noto-core; then
               exit 0
+            else
+              # Captured in the ELSE, not after the `fi`: past the end of an if-statement `$?` is the status of
+              # the STATEMENT (0 when the condition merely failed), so reading it there would label every
+              # failure identically and the distinction below would be silently inert.
+              rc=$?
             fi
-            echo "::warning::font install attempt $attempt failed — retrying"
-            sleep 5
+            # 124 is timeout's own exit code, so a stalled mirror is named as one rather than reported as a
+            # generic failure — the two want different responses, and only one of them is worth retrying.
+            case $rc in
+              124|137) reason="timed out" ;;
+              *)       reason="failed" ;;
+            esac
+            echo "::warning::font install attempt $attempt $reason — retrying"
+            sleep $((attempt * 5))
           done
           echo "::error::could not install the rendering fonts after 3 attempts"
           exit 1
