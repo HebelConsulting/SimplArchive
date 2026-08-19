@@ -32,5 +32,12 @@ public static class TypedFolderSave
         {
             throw new Errors.Exceptions.Documents.TypedFolderContainmentException(e.Message);
         }
+        catch (Domain.Documents.PersonalSpaceStructureException e)
+        {
+            // Translated here for the same reason as the line above, and it is the same bug twice: a caller
+            // that catches InvalidOperationException wholesale reports whatever cause it happens to assume —
+            // which for DocumentChildrenController is a name clash, on a name that is a fresh GUID.
+            throw new Errors.Exceptions.Documents.PersonalSpaceStructureException(e.Message);
+        }
     }
 }

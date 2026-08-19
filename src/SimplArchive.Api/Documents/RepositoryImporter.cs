@@ -53,9 +53,11 @@ public sealed class RepositoryImporter
     // Imported versions eligible for a searchable-PDF successor (ADR 0527) — enqueued once at the end.
     private readonly List<SearchablePdfJob> _searchablePdfJobs = [];
 
-    public RepositoryImporter(SimplArchiveDbContext dbContext, IObjectStorageClient objectStorage, ICurrentTenantAccessor tenant, IWellKnownMaskSeeder seeder, IStorageQuotaService storageQuota, IDocumentIndexQueue indexQueue, ISearchablePdfQueue searchablePdfQueue, PersonalRepositoryProvisioner personalRepositories)
+    public RepositoryImporter(SimplArchiveDbContext dbContext, IObjectStorageClient objectStorage, ICurrentTenantAccessor tenant, IWellKnownMaskSeeder seeder, IStorageQuotaService storageQuota, IDocumentIndexQueue indexQueue, ISearchablePdfQueue searchablePdfQueue, PersonalRepositoryProvisioner personalRepositories, PersonalMailboxProvisioner personalMailboxes, ILogger<RepositoryImporter> logger)
     {
         _personalRepositories = personalRepositories;
+        _personalMailboxes = personalMailboxes;
+        _logger = logger;
         _dbContext = dbContext;
         _objectStorage = objectStorage;
         _tenant = tenant;
@@ -66,8 +68,15 @@ public sealed class RepositoryImporter
     }
 
     private readonly PersonalRepositoryProvisioner _personalRepositories;
+    private readonly PersonalMailboxProvisioner _personalMailboxes;
+    private readonly ILogger<RepositoryImporter> _logger;
 
-    public sealed record ImportResult(Guid RootDocumentId, string RootName, int Documents, int Versions, int Comments, int Skipped);
+    /// <param name="Relocated">
+    /// How many documents were placed somewhere other than where the archive put them, because the personal
+    /// space's first level would not hold them (#630). Reported rather than silent: a migration that moves a
+    /// user's folder without saying so is indistinguishable from data loss to the user whose folder moved.
+    /// </param>
+    public sealed record ImportResult(Guid RootDocumentId, string RootName, int Documents, int Versions, int Comments, int Skipped, int Relocated = 0);
 
     // targetFolderId == null → the archive root becomes a new repository (a root document); otherwise the root is
     // grafted as a child of that folder. updateExisting: on a re-import (a document matched by its origin key),
@@ -221,6 +230,14 @@ public sealed class RepositoryImporter
         // round creates every one whose parent is now resolvable, commits so it can parent the next round, and
         // repeats. The root's parent is the target folder (graft/merge) or null (new repository). Sibling-name
         // clashes at the destination are auto-renamed.
+        // Which target ids are personal roots, and whose. Collected as they are mapped rather than queried
+        // back, because the mapping happens in this same loop and a query would not see an uncommitted one.
+        var personalRootOwners = new Dictionary<Guid, Guid>();
+        var maskIdByArchiveVersion = masks.ToDictionary(m => m.Version.MaskVersionId, m => m.MaskId);
+        Guid? MaskIdOf(ArchiveDocument d) =>
+            d.MaskVersionId is { } mv && maskIdByArchiveVersion.TryGetValue(mv, out var id) ? id : null;
+        var relocated = 0;
+
         var toCreate = createdDocs.ToList();
         while (toCreate.Count > 0)
         {
@@ -247,6 +264,7 @@ public sealed class RepositoryImporter
                 {
                     var personal = await _personalRepositories.EnsureAsync(ownerId, tenantId, cancellationToken);
                     docMap[doc.Id] = personal.Id;
+                    personalRootOwners[personal.Id] = ownerId;
 
                     // The archive's mask travels onto the existing root (ADR 0590). Without this the personal
                     // repository keeps the Folder mask it was created with while its INDEX VALUES — which follow
@@ -263,6 +281,40 @@ public sealed class RepositoryImporter
                 }
 
                 var parentTargetId = doc.Id == rootDoc.Id ? targetFolderId : docMap[doc.ParentId!.Value];
+
+                // The personal space's first level holds only what it was provisioned with (#596), so an archive
+                // that puts anything else there describes a placement this tenant will refuse. Re-parent rather
+                // than emit-and-fail — the alternative is an import that dies partway on somebody's home folder.
+                if (parentTargetId is { } personalRootId
+                    && personalRootOwners.TryGetValue(personalRootId, out var spaceOwnerId)
+                    && MaskIdOf(doc) is { } childMaskId)
+                {
+                    // A Notebook or a Mailbox is MAPPED onto the space's existing one rather than re-parented,
+                    // which is the move already made for the personal root itself a few lines up. Its children
+                    // then flow in behind it, and the one-per-space cardinality cap is never reached — where
+                    // re-parenting a second Notebook under My Documents would only be refused again, since a
+                    // Notebook may live nowhere but under a Mailbox (ADR 0634).
+                    if (childMaskId == WellKnownMaskIds.Mailbox)
+                    {
+                        docMap[doc.Id] = (await _personalMailboxes.EnsureMailboxAsync(tenantId, spaceOwnerId, cancellationToken)).Id;
+                        relocated++;
+                        continue;
+                    }
+
+                    if (childMaskId == WellKnownMaskIds.Notebook)
+                    {
+                        docMap[doc.Id] = await _personalMailboxes.EnsureNotebookAsync(tenantId, spaceOwnerId, cancellationToken);
+                        relocated++;
+                        continue;
+                    }
+
+                    if (!PersonalFolders.FirstLevelMasks.Contains(childMaskId))
+                    {
+                        parentTargetId = await MyDocumentsIdAsync(personalRootId, cancellationToken);
+                        relocated++;
+                    }
+                }
+
                 var name = await UniqueChildNameAsync(parentTargetId, doc.Name, cancellationToken);
                 AddDocument(doc, docMap, tenantId, originTenant, parentTargetId, name, userMap);
             }
@@ -526,7 +578,17 @@ public sealed class RepositoryImporter
         // what makes the queued work and the documents it refers to appear in the same instant.
         await transaction.CommitAsync(cancellationToken);
 
-        return new ImportResult(docMap[rootDoc.Id], rootDoc.Name, docMap.Count, versions.Count(v => createdIds.Contains(v.DocumentId)), messageMap.Count, existingByOrigin.Count);
+        if (relocated > 0)
+        {
+            // Warning, not Information: a document is not where the archive said it would be, and the operator
+            // is the only one who can tell whether that matters (ADR 0626 — a silent degrade says so).
+            _logger.LogWarning(
+                "Import: {Relocated} document(s) could not be placed at a personal space's first level and were "
+                + "moved into {Fallback} or merged onto the space's existing notebook/mailbox",
+                relocated, PersonalFolders.MyDocuments);
+        }
+
+        return new ImportResult(docMap[rootDoc.Id], rootDoc.Name, docMap.Count, versions.Count(v => createdIds.Contains(v.DocumentId)), messageMap.Count, existingByOrigin.Count, relocated);
     }
 
     // Matches each archived group by name, creating a deactivated (empty) placeholder if absent — so an ACL grant
@@ -593,6 +655,19 @@ public sealed class RepositoryImporter
         await _dbContext.SaveChangesAsync(cancellationToken);
         return map;
     }
+
+    // The personal space's landing folder for anything its first level will not hold. Looked up by NAME today
+    // because it wears the plain Folder mask and is indistinguishable from a user folder by mask alone; #634
+    // gives it one of its own, at which point this becomes a mask lookup like every other.
+    private async Task<Guid> MyDocumentsIdAsync(Guid personalRootId, CancellationToken cancellationToken) =>
+        await _dbContext.Documents
+            .Where(d => d.ParentId == personalRootId && d.Name == PersonalFolders.MyDocuments)
+            .Select(d => d.Id)
+            .FirstOrDefaultAsync(cancellationToken) is { } id && id != Guid.Empty
+            ? id
+            : throw new InvalidOperationException(
+                $"The personal space {personalRootId} has no '{PersonalFolders.MyDocuments}' folder to file an "
+                + "inadmissible imported document into (#630).");
 
     private void AddDocument(ArchiveDocument doc, Dictionary<Guid, Guid> docMap, Guid tenantId, Guid originTenant, Guid? parentId, string name, IReadOnlyDictionary<Guid, PrincipalRef> userMap)
     {

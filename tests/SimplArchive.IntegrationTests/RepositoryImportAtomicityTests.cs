@@ -25,7 +25,9 @@ public class RepositoryImportAtomicityTests
         new(db, storage, accessor, new WellKnownMaskSeeder(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Masks.WellKnownMaskSeeder>.Instance),
             new SimplArchive.Infrastructure.Storage.StorageQuotaService(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<SimplArchive.Infrastructure.Storage.StorageQuotaService>.Instance),
             NoOpDocumentIndexQueue.Instance, NoOpSearchablePdfQueue.Instance,
-            new PersonalRepositoryProvisioner(db, NoOpAuditRecorder.Instance));
+            new PersonalRepositoryProvisioner(db, NoOpAuditRecorder.Instance),
+            new SimplArchive.Api.Documents.PersonalMailboxProvisioner(db, new PersonalRepositoryProvisioner(db, NoOpAuditRecorder.Instance)),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<RepositoryImporter>.Instance);
 
     // Exports a two-leaf repository from tenant A and returns the archive. Two leaves is the point: the importer
     // uploads their blobs one after another, so failing the second means the first document is already written.

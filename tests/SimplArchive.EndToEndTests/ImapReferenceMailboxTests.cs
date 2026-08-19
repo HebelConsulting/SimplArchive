@@ -88,9 +88,10 @@ public class ImapReferenceMailboxTests
         using var _o = owner;
 
         var personalId = (await TestJson.Post(api, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
-        var holder = await TestJson.Post(api, $"/api/documents/{personalId}/children", new { name = "Holder" });
+        var myDocumentsId = await MyDocumentsAsync(api, personalId);
+        var holder = await TestJson.Post(api, $"/api/documents/{myDocumentsId}/children", new { name = "Holder" });
         var holderId = holder.GetProperty("id").GetGuid();
-        var target = await TestJson.Post(api, $"/api/documents/{personalId}/children", new { name = "Target" });
+        var target = await TestJson.Post(api, $"/api/documents/{myDocumentsId}/children", new { name = "Target" });
         var targetId = target.GetProperty("id").GetGuid();
 
         // Legal today: they are siblings, so neither is the other's ancestor.
@@ -108,11 +109,14 @@ public class ImapReferenceMailboxTests
 
         var mailboxes = await MailboxesAsync(Port, email, imapPassword);
 
-        Assert.Contains("INBOX/Target", mailboxes);
-        Assert.Contains("INBOX/Target/Holder", mailboxes);
+        // One level deeper than it used to be: Holder and Target live in My Documents, because the personal
+        // space's first level holds only its provisioned folders (#634). The mailbox NAMES follow the tree,
+        // which is the property this test is really about.
+        Assert.Contains("INBOX/My Documents/Target", mailboxes);
+        Assert.Contains("INBOX/My Documents/Target/Holder", mailboxes);
 
         // The looping appearance is omitted rather than followed.
-        Assert.DoesNotContain(mailboxes, m => m.StartsWith("INBOX/Target/Holder/", StringComparison.Ordinal));
+        Assert.DoesNotContain(mailboxes, m => m.StartsWith("INBOX/My Documents/Target/Holder/", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -153,4 +157,13 @@ public class ImapReferenceMailboxTests
         // …but the reference itself resolves to nothing they may see.
         Assert.DoesNotContain(mailboxes, m => m.Contains(secretName, StringComparison.Ordinal));
     }
+
+    // The personal space's first level holds only the folders it was provisioned with (#634), so a test that
+    // wants somewhere to put things asks for My Documents — which is where a user's own content goes.
+    private static async Task<Guid> MyDocumentsAsync(HttpClient api, Guid personalId) =>
+        (await TestJson.Get(api, $"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Documents")
+            .GetProperty("id").GetGuid();
+
 }

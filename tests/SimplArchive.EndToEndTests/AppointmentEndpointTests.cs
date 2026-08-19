@@ -280,7 +280,7 @@ public class AppointmentEndpointTests
         using var _a = api;
 
         var personal = await TestJson.Post(api, "/api/me/personal-repository", new { });
-        var folder = await TestJson.Post(api, $"/api/documents/{personal.GetProperty("id").GetGuid()}/children",
+        var folder = await TestJson.Post(api, $"/api/documents/{await MyDocumentsAsync(api, personal.GetProperty("id").GetGuid())}/children",
             new { name = $"Plain {Guid.NewGuid():N}"[..14] });
 
         var response = await api.GetAsync($"/api/documents/{folder.GetProperty("id").GetGuid()}/appointment");
@@ -303,4 +303,13 @@ public class AppointmentEndpointTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return await response.Content.ReadAsStringAsync();
     }
+
+    // The personal space's first level holds only the folders it was provisioned with (#634), so a test that
+    // wants somewhere to put things asks for My Documents — which is where a user's own content goes.
+    private static async Task<Guid> MyDocumentsAsync(HttpClient api, Guid personalId) =>
+        (await TestJson.Get(api, $"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Documents")
+            .GetProperty("id").GetGuid();
+
 }

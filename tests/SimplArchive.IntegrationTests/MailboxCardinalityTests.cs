@@ -90,19 +90,29 @@ public class MailboxCardinalityTests
     {
         // The capacity rule must not have quietly turned the personal space into a TYPED folder. If it had, this
         // is what would break — and it would break for every user, not just one with a mailbox.
+        //
+        // Inside My Documents rather than beside it since #634: the FIRST level is closed, which is a different
+        // rule from the capacity one under test here, and putting these at the root would make this test fail
+        // for a reason that has nothing to do with mailboxes.
         var (connection, personalId, _, folderVersionId) = await PersonalSpaceAsync();
         using var _c = connection;
 
+        var myDocumentsId = Guid.NewGuid();
         using (var db = Ctx(connection))
         {
-            db.Documents.Add(Doc("Invoices", personalId, folderVersionId));
-            db.Documents.Add(Doc("Notes to self", personalId, folderVersionId));
+            // This fixture builds its space by hand rather than through the provisioner, so My Documents has to
+            // be made here too — wearing its own mask (#634), which is what the closed first level admits.
+            var myDocuments = Doc(PersonalFolders.MyDocuments, personalId, await MaskVersionAsync(connection, WellKnownMaskIds.MyDocuments));
+            myDocuments.Id = myDocumentsId;
+            db.Documents.Add(myDocuments);
+            db.Documents.Add(Doc("Invoices", myDocumentsId, folderVersionId));
+            db.Documents.Add(Doc("Notes to self", myDocumentsId, folderVersionId));
             await db.SaveChangesAsync();
         }
 
         using (var db = Ctx(connection))
         {
-            Assert.Equal(2, await db.Documents.CountAsync(d => d.ParentId == personalId));
+            Assert.Equal(2, await db.Documents.CountAsync(d => d.ParentId == myDocumentsId));
         }
     }
 

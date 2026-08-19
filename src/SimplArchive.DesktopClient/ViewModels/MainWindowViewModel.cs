@@ -787,6 +787,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty] private bool _treeContextCanAddNote;
 
+    // …and "New subfolder" the same way, which it was NOT until #634. It showed unconditionally, so it appeared
+    // on a notebook (which holds sections and notes), on the personal space's first level (which holds only the
+    // folders it was provisioned with), on an ephemeral staging folder, and to a caller with no right to create
+    // anything — each time offering an action the server refuses. The rel's absence says "not available to you,
+    // here, now" (ADR 0543), which is the whole point of asking the server rather than guessing.
+    [ObservableProperty] private bool _treeContextCanAddFolder;
+
     // Set while a search-hit reveal selects the parent folder's tree node after it has *already* loaded the folder
     // contents + selected the document itself (issue #340) — so the reactive load below doesn't re-fetch the folder
     // and clobber that document selection.
@@ -1128,7 +1135,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var isReload = _currentFolderId == folderId;
         _archiveDocumentId = null; // leave any archive-browsing view
         _currentFolderId = folderId;
-        CanCreateFolder = true;
+        // Cleared here, decided below once the folder's links are in hand: the `folders` rel is what says whether
+        // this folder takes a subfolder (#634). Leaving the PREVIOUS folder's answer standing across the load is
+        // the ADR 0559 mistake — the button stays clickable throughout it.
+        CanCreateFolder = false;
         CanExport = true;
         Status = Strings.Get("StLoading");
         try
@@ -1147,6 +1157,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                         ? stored
                         : throw new InvalidOperationException($"No advertised address for folder '{folderId}' (ADR 0543).");
             _currentFolderLinks = links;
+            CanCreateFolder = links.ContainsKey("folders");
             // The folder's persisted default contents order (ADR "Per-folder contents sort order") arrives with
             // the contents; opening a fresh folder resets any ephemeral column-header sort back to that default.
             var (children, sortOrder) = await _api.Documents.GetFolderContentsAsync(links["children"]);
@@ -1601,7 +1612,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _api.Documents.CreateFolderAsync(folderLinks["children"], name);
+            // The `folders` rel the button is gated on, not `children` (#634): same address, different method,
+            // and following the one that enabled the affordance keeps gate and action from drifting.
+            await _api.Documents.CreateFolderAsync(folderLinks["folders"], name);
             Status = string.Format(Strings.Get("StCreatedFolder"), name);
             await ShowNewChildInTreeAsync(folderId); // refresh the parent's children in the tree, keep it expanded
             await LoadFolderContentsAsync(folderId);
@@ -6214,6 +6227,21 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     // Headless exercise of breadcrumb building/navigation against a running Api (see Program --breadcrumb-test).
+    // The self-tests' scratch parent, and the reason it is not simply Tree[0].
+    //
+    // Tree[0] is the PERSONAL space, whose first level holds only the folders it was provisioned with (#634) —
+    // so a scratch folder created there is refused, exactly as a user's would be. It goes inside My Documents
+    // instead, which is where a user's own folders go, so these self-tests exercise the path a user takes.
+    //
+    // The name is a literal because this project does not reference the Domain (it is a client, and talks to
+    // the API over HTTP); it is a server-side folder name rather than a localized label, so it does not move.
+    private async Task<TreeNodeViewModel> ScratchParentAsync()
+    {
+        var personal = Tree[0];
+        await personal.ReloadChildrenAsync();
+        return personal.Children.First(c => c.Name == "My Documents");
+    }
+
     internal async Task<List<string>> BreadcrumbSelfTestAsync(string accessToken)
     {
         UseApi(new SimplArchiveApiClient(accessToken));
@@ -6354,11 +6382,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // handler's target) is what closes that gap. Ordering is controlled here so the async-void selection
     // handler can't race the deterministic loads. Returns the folder shown after the list-drill and after the
     // re-tap, plus the repo's re-listed item names.
-    internal async Task<(Guid AfterDrill, Guid AfterRetap, string[] Items)> TreeReselectSelfTestAsync(string accessToken)
+    internal async Task<(Guid Parent, Guid AfterDrill, Guid AfterRetap, string[] Items)> TreeReselectSelfTestAsync(string accessToken)
     {
         UseApi(new SimplArchiveApiClient(accessToken));
         await LoadRootAsync();
-        var repo = Tree[0];
+        var repo = await ScratchParentAsync();
 
         // The user selects the repo in the tree (loads its contents). Set the selection directly rather than
         // via the property, so the async-void OnSelectedTreeNodeChanged handler's load can't race the loads
@@ -6383,7 +6411,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         // Re-tap the still-selected repo node in the tree: the fix reloads the list back to the repo.
         await ReselectTreeFolderAsync(repo);
-        return (afterDrill, _currentFolderId!.Value, Items.Select(n => n.Name).ToArray());
+        // The parent is RETURNED rather than left for the caller to guess: it is the personal space's
+        // My Documents (#634), not Tree[0], and a test asserting against the root would be asserting
+        // about a folder this self-test never touched.
+        return (repo.Id, afterDrill, _currentFolderId!.Value, Items.Select(n => n.Name).ToArray());
     }
 
     // Search-hit reveal-in-tree (issue #340): activating a document search hit expands + selects its parent folder
@@ -6394,7 +6425,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         UseApi(new SimplArchiveApiClient(accessToken));
         await LoadRootAsync();
-        var repo = Tree[0];
+        var repo = await ScratchParentAsync();
 
         // Seed a subfolder + a document inside it (independent of test ordering).
         var subName = "reveal-" + Guid.NewGuid().ToString("N")[..8];
@@ -6437,7 +6468,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         UseApi(new SimplArchiveApiClient(accessToken));
         await LoadRootAsync();
-        var repo = Tree[0];
+        var repo = await ScratchParentAsync();
 
         // A document filed at the repo root (its primary location) and a subfolder that references it.
         var refFolderName = "refopen-" + Guid.NewGuid().ToString("N")[..8];
@@ -6466,7 +6497,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         UseApi(new SimplArchiveApiClient(accessToken));
         await LoadRootAsync();
-        var repo = Tree[0];
+        var repo = await ScratchParentAsync();
 
         var parentName = "sort-" + Guid.NewGuid().ToString("N")[..8];
         await _api!.Documents.CreateFolderAsync(repo.Href("children"), parentName);
@@ -6501,7 +6532,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         UseApi(new SimplArchiveApiClient(accessToken));
         await LoadRootAsync();
-        var repo = Tree[0];
+        var repo = await ScratchParentAsync();
         await LoadFolderContentsAsync(repo.Id, repo.Links);
 
         // A guaranteed different folder to navigate into — create one if the shared demo tenant has none.
@@ -6630,7 +6661,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         UseApi(new SimplArchiveApiClient(accessToken));
         await LoadRootAsync();
-        var repo = Tree[0];
+        var repo = await ScratchParentAsync();
 
         var name = "treeact-" + Guid.NewGuid().ToString("N")[..8];
         await CreateSubfolderAsync(repo.Id, repo.Href("children"), name);
@@ -6658,13 +6689,16 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         UseApi(new SimplArchiveApiClient(accessToken));
         await LoadRootAsync();
-        var repo = Tree[0];
-        await repo.ReloadChildrenAsync(); // materialise + expand the repository node, as navigating into it would
+        var repo = await ScratchParentAsync();
+        await repo.ReloadChildrenAsync(); // materialise + expand the folder node, as navigating into it would
 
         var name = "treeexp-" + Guid.NewGuid().ToString("N")[..8];
         await CreateSubfolderAsync(repo.Id, repo.Href("children"), name);
 
-        var stillExpanded = Tree.Contains(repo) && repo.IsExpanded && repo.Children.Any(c => c.Name == name);
+        // Reference-equality on the node is the whole point — it distinguishes the targeted reload from the old
+        // full rebuild, which replaced every node. The scratch parent is a CHILD of the personal space now
+        // (#634), so "still in the tree" is asked of its parent's children rather than of the roots.
+        var stillExpanded = Tree[0].Children.Contains(repo) && repo.IsExpanded && repo.Children.Any(c => c.Name == name);
 
         var created = (await _api!.Documents.GetChildrenAsync(repo.Href("children"))).FirstOrDefault(c => c.Name == name);
         if (created is not null)
@@ -6681,7 +6715,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         UseApi(new SimplArchiveApiClient(accessToken));
         await LoadRootAsync();
-        var repo = Tree[0];
+        var repo = await ScratchParentAsync();
 
         var name = "fsort-" + Guid.NewGuid().ToString("N")[..8];
         await _api!.Documents.CreateFolderAsync(repo.Href("children"), name);

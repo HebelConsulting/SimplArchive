@@ -138,8 +138,10 @@ public class MailboxContainmentTests
         using var _c = connection;
 
         using var db = Ctx(connection, accessor);
+        // Inside My Documents, because the personal space's first level no longer takes a plain folder (#634).
         var personalId = (await db.Documents.SingleAsync(d => d.Id == mailboxId)).ParentId!.Value;
-        var folder = await AddAsync(db, personalId, userId, "Filed", WellKnownMaskIds.Folder);
+        var myDocumentsId = (await db.Documents.SingleAsync(d => d.ParentId == personalId && d.Name == PersonalFolders.MyDocuments)).Id;
+        var folder = await AddAsync(db, myDocumentsId, userId, "Filed", WellKnownMaskIds.Folder);
         await db.SaveChangesAsync();
 
         await AddMessageAsync(db, folder.Id, userId, "Quarterly numbers");
@@ -170,8 +172,10 @@ public class MailboxContainmentTests
         using var _c = connection;
 
         using var db = Ctx(connection, accessor);
+        // Inside My Documents, because the personal space's first level no longer takes a plain folder (#634).
         var personalId = (await db.Documents.SingleAsync(d => d.Id == mailboxId)).ParentId!.Value;
-        var folder = await AddAsync(db, personalId, userId, "Somewhere", WellKnownMaskIds.Folder);
+        var myDocumentsId = (await db.Documents.SingleAsync(d => d.ParentId == personalId && d.Name == PersonalFolders.MyDocuments)).Id;
+        var folder = await AddAsync(db, myDocumentsId, userId, "Somewhere", WellKnownMaskIds.Folder);
         await db.SaveChangesAsync();
 
         await AddAsync(db, folder.Id, userId, "Notebook", WellKnownMaskIds.Notebook);

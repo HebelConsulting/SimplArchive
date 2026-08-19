@@ -72,6 +72,9 @@ public class PersonalRepositoryController : ControllerBase
             [
                 new Link("self", "/api/me/personal-repository", "POST"),
                 new Link("children", $"/api/documents/{id}/children", "GET"),
+                // Deliberately NO "folders" rel: the personal space's first level holds only the folders it was
+                // provisioned with (#634), so both clients leave "New subfolder" off its menu rather than
+                // offering an action the server refuses. Its absence is the statement (ADR 0543).
                 // Opening the personal space lists its children AND the shortcuts filed in it, exactly as any
                 // other folder — the same pair the repositories listing carries (#443).
                 new Link("references", $"/api/documents/{id}/references", "GET"),

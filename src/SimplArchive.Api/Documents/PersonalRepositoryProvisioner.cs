@@ -70,7 +70,11 @@ public sealed class PersonalRepositoryProvisioner
     public async Task<Document> EnsureAsync(Guid userId, Guid tenantId, CancellationToken cancellationToken)
     {
         var root = await EnsureRootAsync(userId, tenantId, cancellationToken);
-        await EnsureMyDocumentsAsync(root, tenantId, userId, cancellationToken);
+        // My Documents goes through the same helper as the other two now: it used to have a near-copy of its
+        // own, differing only in that it stamped the plain Folder mask. It wears its OWN mask since #634, and
+        // restampFromMaskId is what moves an already-provisioned one off Folder — a space created before that
+        // mask existed has a correctly-typed folder by the old rule and a wrongly-typed one by the new.
+        await EnsureTypedFolderAsync(root, tenantId, userId, MyDocumentsFolderName, WellKnownMaskIds.MyDocuments, cancellationToken, restampFromMaskId: WellKnownMaskIds.Folder);
         await EnsureTypedFolderAsync(root, tenantId, userId, MyCalendarFolderName, WellKnownMaskIds.Calendar, cancellationToken);
         await EnsureTypedFolderAsync(root, tenantId, userId, MyAddressbookFolderName, WellKnownMaskIds.Addressbook, cancellationToken, LegacyMyContactsFolderName);
         return root;
@@ -137,47 +141,6 @@ public sealed class PersonalRepositoryProvisioner
     }
 
     /// <summary>
-    /// Idempotently ensures the personal repository has a "My Documents" child folder. A no-op once it exists;
-    /// the folder inherits the root's full-rights ACL (the root doesn't break inheritance). Best-effort on a
-    /// concurrent create — a second caller's duplicate is swallowed (the sibling-name guard / a later Ensure
-    /// call keeps it single).
-    /// </summary>
-    private async Task EnsureMyDocumentsAsync(Document root, Guid tenantId, Guid userId, CancellationToken cancellationToken)
-    {
-        var exists = await _dbContext.Documents
-            .AnyAsync(d => d.ParentId == root.Id && d.Name == MyDocumentsFolderName, cancellationToken);
-        if (exists)
-        {
-            return;
-        }
-
-        _dbContext.Documents.Add(new Document
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            ParentId = root.Id,
-            Name = MyDocumentsFolderName,
-            // Tenant-EXPLICIT for the same reason as the root above (ADR 0590) — the ambient-tenant overload
-            // yields a maskless folder whenever the caller has no current tenant set.
-            MaskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, cancellationToken),
-            CreatedByUserId = userId,
-            CreatedAt = DateTimeOffset.UtcNow,
-        });
-
-        try
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (Exception ex) when (ex is DbUpdateException or InvalidOperationException)
-        {
-            // A concurrent Ensure already created "My Documents" (the SaveChanges sibling-name guard, ADR 0177,
-            // throws InvalidOperationException; a future unique-index would throw DbUpdateException). Either way
-            // the folder now exists — drop this call's pending insert and move on.
-            _dbContext.ChangeTracker.Clear();
-        }
-    }
-
-    /// <summary>
     /// Idempotently ensures the personal repository has a TYPED child folder wearing <paramref name="folderMaskId"/>
     /// — "Notes" for the IMAP notes mailbox (#562 slice 5), "My Calendar"/"My Addressbook" for CalDAV/CardDAV
     /// (#564). One implementation for all three: they differ only in name and mask. Same concurrency posture
@@ -185,7 +148,7 @@ public sealed class PersonalRepositoryProvisioner
     /// </summary>
     private async Task EnsureTypedFolderAsync(
         Document root, Guid tenantId, Guid userId, string name, Guid folderMaskId, CancellationToken cancellationToken,
-        string? legacyName = null)
+        string? legacyName = null, Guid? restampFromMaskId = null)
     {
         var maskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, folderMaskId, cancellationToken);
 
@@ -215,6 +178,20 @@ public sealed class PersonalRepositoryProvisioner
             {
                 existing.MaskVersionId = maskVersionId;
                 await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+            else if (restampFromMaskId is { } fromMaskId && maskVersionId is not null && existing.MaskVersionId is { } currentVersionId)
+            {
+                // A folder wearing the mask this one USED to wear. Distinct from the maskless heal above: the
+                // folder is correctly typed by the old rule and wrongly typed by the new one, which no
+                // "is it null?" check can see. Restamped only from the ONE mask named — a blanket restamp would
+                // claim any folder that happened to be sitting here.
+                var wearsOldMask = await _dbContext.MaskVersions.IgnoreQueryFilters(["TenantFilter"])
+                    .AnyAsync(v => v.Id == currentVersionId && v.MaskId == fromMaskId, cancellationToken);
+                if (wearsOldMask)
+                {
+                    existing.MaskVersionId = maskVersionId;
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                }
             }
             return;
         }

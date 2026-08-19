@@ -46,7 +46,15 @@ public class WorkbenchShellSizeTests
     // the other row actions already live — so what the shell is charged for is six lines of menu markup, which
     // is what a menu entry genuinely costs. A component wrapping two MudMenuItems would have bought the number
     // back at the price of a file that exists only to hold them.
-    private const int Ceiling = 3_196;
+    // 3,196 → 3,204 for #634: the `folders` rel gate around "New subfolder", so the entry is absent
+    // where the server would refuse it rather than present and failing. Shell-level because the tree
+    // pane's node menu is supplied by the shell, not owned by the pane.
+    // 3,204 → 3,212 finishing that gate, and it is the same interaction again: the raise is eight lines, of
+    // which three are code. NewFolderAsync now takes the node it acts on (the menu passed the row while the
+    // handler read the selection — ADR 0559), and NavigateToFolderAsync keeps the LINKS of the resource it was
+    // already fetching instead of only its name, which is what made every rel-gated affordance read as
+    // unavailable after a Go to. Both are one-line changes wearing the comment that explains a non-obvious gate.
+    private const int Ceiling = 3_212;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

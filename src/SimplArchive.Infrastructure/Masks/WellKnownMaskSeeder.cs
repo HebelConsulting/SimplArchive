@@ -32,6 +32,10 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // copy of in everything but identity — and exists so a repository can SAY it is one (ADR 0627).
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Repository, "Repository", [], cancellationToken);
 
+        // The personal space's general-purpose folder (#634). Fieldless and Folder-shaped; it exists so the
+        // space's first level can admit by MASK rather than by name, which is the rule ADR 0633 settled.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.MyDocuments, "My Documents", [], cancellationToken);
+
         // "Short Description" and "Doc Date" were removed — the former duplicates Document.Name (a document
         // is named after its file, ADR "Drag-and-drop document upload"), the latter duplicates the real
         // DocumentVersion.DocumentDate issuing date (ADR "System-field search"). See ADR "Drop redundant

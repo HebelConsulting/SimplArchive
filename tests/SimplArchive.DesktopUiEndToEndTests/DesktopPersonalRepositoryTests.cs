@@ -39,9 +39,13 @@ public class DesktopPersonalRepositoryTests
         Assert.NotNull(bobRepo);
         Assert.NotEqual(aliceRepo.Id, bobRepo!.Id);
 
-        // Alice files a private folder into her personal repository.
-        await alice.Documents.CreateFolderAsync(aliceRepo.Href("children"), "alice-private-" + suffix);
-        Assert.Contains(await alice.Documents.GetChildrenAsync(aliceRepo.Href("children")), c => c.Name == "alice-private-" + suffix);
+        // Alice files a private folder into her personal repository — inside My Documents, because the space's
+        // first level holds only the folders it was provisioned with (#634). What this test is about is that
+        // BOB cannot see it, and that is unchanged by which level it sits on.
+        var aliceDocs = (await alice.Documents.GetChildrenAsync(aliceRepo.Href("children")))
+            .Single(c => c.Name == "My Documents");
+        await alice.Documents.CreateFolderAsync(aliceDocs.Href("children"), "alice-private-" + suffix);
+        Assert.Contains(await alice.Documents.GetChildrenAsync(aliceDocs.Href("children")), c => c.Name == "alice-private-" + suffix);
 
         // Bob can't list Alice's personal repository (no ACL grant → the API denies it).
         await Assert.ThrowsAsync<HttpRequestException>(() => bob.Documents.GetChildrenAsync(aliceRepo.Href("children")));

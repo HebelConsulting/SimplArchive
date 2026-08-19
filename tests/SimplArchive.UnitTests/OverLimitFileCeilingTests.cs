@@ -45,7 +45,13 @@ public class OverLimitFileCeilingTests
         // need two gating flags and two creates. The three creates were unified into ONE body first —
         // CreateSubfolder now shares it and shrank to a single line — so what is charged here is the feature,
         // not a third copy of a method that already existed twice.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_021,
+        // 7,021 → 7,049 for #634: one ScratchParentAsync helper replacing the assumption that scratch space
+        // lives on Tree[0], which six self-tests each made separately, plus the TreeContextCanAddFolder
+        // property that gates "New subfolder" on the rel. Raised deliberately rather than by accident.
+        // 7,049 → 7,055: the ribbon's New folder now answers from the OPENED folder's `folders` rel rather than
+        // being true for any folder at all — cleared on entry and decided once its links arrive, because the
+        // button is clickable throughout the load (ADR 0559). Six lines, all of it that decision and its why.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_055,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
@@ -65,7 +71,10 @@ public class OverLimitFileCeilingTests
         // would net about -16, but it rewrites five handlers this feature does not touch. #519 moves all of
         // them into per-tab UserControls, and that is where the guard should be collapsed once rather than
         // twice.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_191,
+        // 1,191 → 1,192: one line reading the new `folders` rel off the right-clicked node (#634).
+        // 1,192 → 1,194: the tree's create now FOLLOWS that rel instead of `children`, plus the two-line note
+        // saying why the gate and the address must be the same rel.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_194,
 
         // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).

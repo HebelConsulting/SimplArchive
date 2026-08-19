@@ -406,7 +406,9 @@
                     <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedFolder is null)" OnClick="UploadAsync" title="@Strings.Get("Upload")" aria-label="@Strings.Get("Upload")">
                         <MudIcon Icon="@Icons.Material.Filled.Upload" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("Upload")</span>
                     </MudButton>
-                    <MudButton Class="wb-rib-btn" data-tour="action-new-folder" Size="Size.Small" Disabled="@(_selectedFolder is null)" OnClick="NewFolderAsync" title="@Strings.Get("NewFolder")" aria-label="@Strings.Get("NewFolder")">
+                    @* Same rel as the tree's menu entry, but DISABLED rather than hidden — a ribbon whose buttons
+                       come and go with the selection reflows under the cursor (ADR 0550). *@
+                    <MudButton Class="wb-rib-btn" data-tour="action-new-folder" Size="Size.Small" Disabled="@(_selectedFolder is null || BrowseService.HrefOf(_selectedFolder, "folders") is null)" OnClick="() => NewFolderAsync(_selectedFolder)" title="@Strings.Get("NewFolder")" aria-label="@Strings.Get("NewFolder")">
                         <MudIcon Icon="@Icons.Material.Filled.CreateNewFolder" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("NewFolder")</span>
                     </MudButton>
                     <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_downloadUrl is null)" OnClick="DownloadAsync" title="@Strings.Get("Download")" aria-label="@Strings.Get("Download")">
@@ -481,7 +483,15 @@
                        SHELL's operations, so they are supplied here rather than owned by the pane. *@
                     <TreePane @ref="_treePane" SelectedFolder="_selectedFolder" FolderSelected="SelectFolderAsync">
                         <NodeMenu Context="tn">
-                            <MudMenuItem Icon="@Icons.Material.Filled.CreateNewFolder" OnClick="NewFolderAsync">@Strings.Get("MwNewSubfolder")</MudMenuItem>
+                            @* Gated on the rel like every other create here, which it was NOT until #634: it
+                               showed everywhere, so it appeared on a notebook (which holds sections, not
+                               folders), on the personal space's first level, and to a caller with no right to
+                               create — each an action the server refuses. Its absence says "not available to
+                               you, here, now" (ADR 0543). *@
+                            @if (BrowseService.HrefOf(tn, "folders") is not null)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.CreateNewFolder" OnClick="() => NewFolderAsync(tn)">@Strings.Get("MwNewSubfolder")</MudMenuItem>
+                            }
                             @* Only where the ROW advertised them — a notebook or a section (#564, ADR 0625). *@
                             @if (BrowseService.HrefOf(tn, "sections") is not null)
                             {
@@ -2449,9 +2459,12 @@
         }
     }
 
-    private async Task NewFolderAsync()
+    // Takes the node it acts on — the tree menu passes the ROW right-clicked, the ribbon the selection (ADR
+    // 0559); reading _selectedFolder from the menu filed into whatever was last selected. And it addresses the
+    // create by the rel both call sites are gated on, so an absent rel cannot be worked around here.
+    private async Task NewFolderAsync(BrowseNode? node)
     {
-        if (_selectedFolder is not { } folder)
+        if (node is not { } folder || BrowseService.HrefOf(folder, "folders") is not { } createHref)
         {
             return;
         }
@@ -2462,10 +2475,7 @@
             return;
         }
 
-        // The children collection the folder row already advertised — creating in it is a POST to the same
-        // address browsing reads (ADR 0543); the fetch fallback covers a synthetic node with no listing links.
-        var childrenHref = BrowseService.ChildrenHrefOf(folder) ?? await Browse.FetchChildrenHrefAsync(folder.Id);
-        var response = await Http.PostAsJsonAsync(childrenHref, new { name });
+        var response = await Http.PostAsJsonAsync(createHref, new { name });
         if (response.StatusCode == HttpStatusCode.Conflict)
         {
             Snackbar.Add(string.Format(Strings.Get("StNameTaken"), name), Severity.Warning);
@@ -2668,8 +2678,12 @@
             await SetTab(Tab.Repositories);
         }
 
-        var name = await GetDocumentNameAsync(folderId) ?? "(folder)";
-        await SelectFolderAsync(new BrowseNode(folderId, name, true, false, false));
+        // ONE read, whose rels the node then carries (ADR 0557). This used to keep only the NAME, so the node
+        // arrived address-less: LoadContentsAsync re-fetched the same resource for `children`, and every
+        // rel-gated affordance read as unavailable on a folder reached by Go to or a search hit.
+        var doc = await FetchFolderAsync(folderId);
+        await SelectFolderAsync(new BrowseNode(folderId, doc?.Name ?? "(folder)", true, false, false,
+            Links: Links.RelMap(doc?.Links)));
 
         // Prefer the item's real row; fall back to its reference (shortcut) row when the folder holds only a
         // shortcut (a referencing folder) — selecting a reference loads the target document for viewing.
@@ -2683,13 +2697,15 @@
         StateHasChanged();
     }
 
-    private async Task<string?> GetDocumentNameAsync(Guid id)
+    // The resource behind a folder id, links and all: its name, its children address and which creates it admits
+    // all ride in the one response (ADR 0557).
+    private async Task<DocumentLinksResponse?> FetchFolderAsync(Guid id)
     {
         try
         {
             // Through the single sanctioned id-to-resource fetch (BrowseService), not a private copy of the
             // same GET — two copies of the one address the client may build is how the exception multiplies.
-            return (await Browse.FetchAsync(id))?.Name;
+            return await Browse.FetchAsync(id);
         }
         catch (HttpRequestException)
         {

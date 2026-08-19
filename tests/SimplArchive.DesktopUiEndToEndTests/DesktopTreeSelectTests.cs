@@ -21,13 +21,16 @@ public class DesktopTreeSelectTests
         DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
         var vm = new MainWindowViewModel();
 
-        var (afterDrill, afterRetap, items) = await vm.TreeReselectSelfTestAsync(await Ui.GetUserTokenAsync(_app.BaseUrl));
+        var (parent, afterDrill, afterRetap, items) = await vm.TreeReselectSelfTestAsync(await Ui.GetUserTokenAsync(_app.BaseUrl));
 
         // Drilling into the subfolder via the contents list changed the shown folder…
         Assert.NotEqual(afterDrill, afterRetap);
-        // …and re-tapping the still-selected repository node in the tree reloaded the list back to the repo,
-        // re-listing its children (the bug: this stayed on the subfolder because the re-selection was a no-op).
-        Assert.Equal(vm.Tree[0].Id, afterRetap);
+        // …and re-tapping the still-selected node in the tree reloaded the list back to it, re-listing its
+        // children (the bug: this stayed on the subfolder because the re-selection was a no-op).
+        //
+        // Compared against the parent the self-test actually used rather than Tree[0]: scratch folders live in
+        // My Documents since #634, so the root is a folder this exercise never touches.
+        Assert.Equal(parent, afterRetap);
         Assert.NotEmpty(items);
     }
 }

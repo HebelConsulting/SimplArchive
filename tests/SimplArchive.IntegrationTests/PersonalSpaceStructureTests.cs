@@ -70,7 +70,7 @@ public class PersonalSpaceStructureTests
         var folder = await db.Documents.SingleAsync(d => d.Name == name);
         folder.DeletedAt = DateTimeOffset.UtcNow;
 
-        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
+        var failure = await Assert.ThrowsAsync<PersonalSpaceStructureException>(() => db.SaveChangesAsync());
         Assert.Contains("cannot be deleted", failure.Message, StringComparison.Ordinal);
     }
 
@@ -82,12 +82,14 @@ public class PersonalSpaceStructureTests
 
         using var db = Ctx(connection, accessor);
 
-        // Somewhere else to move it TO — an ordinary folder inside the space.
+        // Somewhere else to move it TO — an ordinary folder, which since #634 lives INSIDE My Documents rather
+        // than beside it.
+        var myDocuments = await db.Documents.SingleAsync(d => d.ParentId == personalId && d.Name == PersonalFolders.MyDocuments);
         var elsewhere = new Document
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
-            ParentId = personalId,
+            ParentId = myDocuments.Id,
             Name = "Elsewhere",
             MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, CancellationToken.None),
             CreatedByUserId = userId,
@@ -99,14 +101,19 @@ public class PersonalSpaceStructureTests
         var calendar = await db.Documents.SingleAsync(d => d.Name == PersonalFolders.MyCalendar);
         calendar.ParentId = elsewhere.Id;
 
-        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
+        var failure = await Assert.ThrowsAsync<PersonalSpaceStructureException>(() => db.SaveChangesAsync());
         Assert.Contains("cannot be moved", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task A_plain_folder_may_be_added_beside_them()
+    public async Task Not_even_a_plain_folder_may_be_added_beside_them()
     {
-        // The one change a user MAY make.
+        // REVERSED by #634. A user could add plain folders at this level until then; now the level holds only
+        // what it was provisioned with, and a user's own folders go inside My Documents.
+        //
+        // The reversal is why the admitted set is decided by MASK: My Documents is Folder-SHAPED, so a rule
+        // saying "no Folder here" would have refused the folder we provision. It wears a mask of its own
+        // instead, and this test is the pair that proves the two are told apart.
         var (connection, accessor, userId, personalId) = await SpaceAsync();
         using var _c = connection;
 
@@ -116,6 +123,32 @@ public class PersonalSpaceStructureTests
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             ParentId = personalId,
+            Name = "Tax 2026",
+            MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, CancellationToken.None),
+            CreatedByUserId = userId,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+        var failure = await Assert.ThrowsAsync<PersonalSpaceStructureException>(() => db.SaveChangesAsync());
+        Assert.Contains("cannot", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_plain_folder_is_welcome_inside_My_Documents()
+    {
+        // The other half, and the one that keeps the reversal honest: closing the level must not leave the user
+        // with nowhere to put a folder at all.
+        var (connection, accessor, userId, personalId) = await SpaceAsync();
+        using var _c = connection;
+
+        using var db = Ctx(connection, accessor);
+        var myDocuments = await db.Documents.SingleAsync(d => d.ParentId == personalId && d.Name == PersonalFolders.MyDocuments);
+
+        db.Documents.Add(new Document
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ParentId = myDocuments.Id,
             Name = "Tax 2026",
             MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, CancellationToken.None),
             CreatedByUserId = userId,
@@ -149,8 +182,8 @@ public class PersonalSpaceStructureTests
             CreatedAt = DateTimeOffset.UtcNow,
         });
 
-        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
-        Assert.Contains("Only folders", failure.Message, StringComparison.Ordinal);
+        var failure = await Assert.ThrowsAsync<PersonalSpaceStructureException>(() => db.SaveChangesAsync());
+        Assert.Contains("holds only the folders it was provisioned with", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]

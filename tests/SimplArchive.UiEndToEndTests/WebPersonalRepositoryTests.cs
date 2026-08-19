@@ -15,20 +15,30 @@ public class WebPersonalRepositoryTests
     public WebPersonalRepositoryTests(SelfHostedAppFixture app) => _app = app;
 
     [Fact]
-    public async Task Personal_node_is_pinned_in_the_tree_and_is_browsable()
+    public async Task Personal_node_is_pinned_in_the_tree_and_its_My_Documents_is_writable()
     {
         var page = await Ui.LoginAsync(_app);
         var tree = page.Locator("[data-pane='tree']");
         var folder = "e2e-personal-" + Guid.NewGuid().ToString("N")[..8];
+        var newFolder = page.Locator(".wb-ribbon [aria-label=\"New folder\"]").First;
 
         // The "Personal" node is present in the tree and selectable.
         var personal = tree.GetByText("Personal", new() { Exact = true }).First;
         await Expect(personal).ToBeVisibleAsync();
         await personal.ClickAsync();
 
-        // It's a real writable repository — New folder files into it and the folder shows in the contents pane.
+        // …but its FIRST LEVEL holds only the folders it was provisioned with (#634, ADR 0636), so the ribbon's
+        // New folder is disabled there. Asserted, not merely skipped: the whole point of the rel is that the
+        // client withholds the affordance rather than offering it and handling the refusal (ADR 0543).
+        await Expect(newFolder).ToBeDisabledAsync();
+
+        // My Documents is where the user's own content goes, and it IS writable — New folder files into it and
+        // the folder shows in the contents pane.
+        await page.Locator("[data-pane='list']").GetByText("My Documents").First.DblClickAsync();
+        await Expect(newFolder).ToBeEnabledAsync();
+
         page.Dialog += (_, dialog) => { _ = dialog.AcceptAsync(folder); };
-        await page.Locator(".wb-ribbon [aria-label=\"New folder\"]").First.ClickAsync();
+        await newFolder.ClickAsync();
         await Expect(page.Locator("[data-pane='list']").GetByText(folder)).ToBeVisibleAsync();
     }
 

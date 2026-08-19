@@ -313,6 +313,21 @@ public class DocumentChildrenController : ControllerBase
             links.Add(new Link("notes", $"/api/documents/{d.Id}/notes", "POST"));
         }
 
+        // "New subfolder", gated the same way (#634) — and it must be on the ROW, because that is where both
+        // clients' tree nodes get their links (ADR 0555/0557). A rel added only to the single-document GET
+        // would leave the menu entry hidden everywhere, since nothing re-fetches a node to populate a menu.
+        //
+        // parentIsPersonalRoot is false by construction here: a personal space is a ROOT document, so it is
+        // never itself a listed child. Its own resource advertises this rel — or withholds it — separately.
+        //
+        // Unlike the single-document GET this does not check CanCreateSubItems, because a per-row rights
+        // resolution is a query per row on the hottest path there is. The mask half of the rule is what this
+        // change is for; a caller without the right still meets a 403, exactly as before.
+        if (FolderCreationPolicy.AdmitsPlainFolder(d.MaskId, parentIsPersonalRoot: false))
+        {
+            links.Add(new Link("folders", $"/api/documents/{d.Id}/children", "POST"));
+        }
+
         return links;
     }
 

@@ -53,8 +53,11 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
     private readonly IObjectStorageClient _objectStorage;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
-    public TenantProvisioningService(SimplArchiveDbContext dbContext, IWellKnownMaskSeeder wellKnownMaskSeeder, ISensitivityLabelSeeder sensitivityLabelSeeder, IObjectStorageClient objectStorage)
+    private readonly Documents.PersonalRepositoryProvisioner _personalSpaces;
+
+    public TenantProvisioningService(SimplArchiveDbContext dbContext, IWellKnownMaskSeeder wellKnownMaskSeeder, ISensitivityLabelSeeder sensitivityLabelSeeder, IObjectStorageClient objectStorage, Documents.PersonalRepositoryProvisioner personalSpaces)
     {
+        _personalSpaces = personalSpaces;
         _dbContext = dbContext;
         _wellKnownMaskSeeder = wellKnownMaskSeeder;
         _sensitivityLabelSeeder = sensitivityLabelSeeder;
@@ -149,6 +152,11 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             // ServiceAccount.Name/User.Email hit elsewhere.
             throw new AdministratorEmailConflictException();
         }
+
+        // The tenant administrator is a user like any other, so their personal space is provisioned at creation
+        // rather than on first sign-in (#634) — the first level is closed now, and My Documents is the only home
+        // for their own content.
+        await _personalSpaces.EnsureAsync(administrator.Id, tenant.Id, cancellationToken);
 
         var repository = new Document
         {

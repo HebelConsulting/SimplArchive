@@ -89,7 +89,7 @@ public class RepositoriesController : ControllerBase
         public bool HasSubfolders { get; set; }
     }
 
-    private record RepositoryRow(Guid Id, string Name, DateTimeOffset CreatedAt, bool HasChildren, bool HasVersions, bool HasSubfolders);
+    private record RepositoryRow(Guid Id, string Name, DateTimeOffset CreatedAt, bool HasChildren, bool HasVersions, bool HasSubfolders, Guid? MaskId);
 
     public class RepositoryListResource : HypermediaResource
     {
@@ -134,7 +134,10 @@ public class RepositoriesController : ControllerBase
                 _dbContext.Documents.Any(c => c.ParentId == d.Id)
                     || _dbContext.DocumentReferences.Any(x => x.ParentFolderId == d.Id),
                 _dbContext.DocumentVersions.Any(v => v.DocumentId == d.Id),
-                _dbContext.Documents.Any(c => c.ParentId == d.Id && !_dbContext.DocumentVersions.Any(v => v.DocumentId == c.Id))))
+                _dbContext.Documents.Any(c => c.ParentId == d.Id && !_dbContext.DocumentVersions.Any(v => v.DocumentId == c.Id)),
+                // The mask, for the `folders` rel below — asked per row rather than assumed, so this listing
+                // answers the question with the same predicate every other surface does.
+                _dbContext.MaskVersions.Where(mv => mv.Id == d.MaskVersionId).Select(mv => (Guid?)mv.MaskId).FirstOrDefault()))
             .ToListAsync(cancellationToken);
 
         var visible = new List<RepositoryResource>();
@@ -160,21 +163,26 @@ public class RepositoriesController : ControllerBase
 
             if (await CanSeeAsync(candidate.Id, cancellationToken))
             {
-                visible.Add(new RepositoryResource
+                // "New subfolder" on a repository root (#634). It belongs on the ROW because that is where both
+                // clients' top-level tree nodes get their links (ADR 0555/0557) — a rel that lived only on the
+                // single-repository GET would leave the menu entry hidden on every repository, since nothing
+                // re-fetches a tree node to populate its menu. That is exactly what adding the rel to the
+                // children listing and to GET /documents/{id} — but not here — did.
+                //
+                // parentIsPersonalRoot is false by construction: this listing excludes personal repositories
+                // (see the query above), and PersonalRepositoryController deliberately withholds the rel.
+                // Mask-only, as on the children listing: this endpoint already resolves CanSee per row, and
+                // per-row rights beyond that is a query per row; a caller without CanCreateSubItems still meets
+                // a 403.
+                //
+                // A repository root is where the tree starts, so its row also carries the address of what a
+                // client does next — list its children. Without it the client has an id and no address and
+                // composes the path (ADR 0543, issue #416); fetching `self` first would cost a round trip
+                // per row. Otherwise unconditional rels only, as on the children listing: checkout/external-
+                // links/acl-inheritance depend on per-row rights a listing does not compute, and a listing is
+                // the wrong place to answer "may I?" — so their absence here does NOT mean "not available".
+                var rowLinks = new List<Link>
                 {
-                    Id = candidate.Id,
-                    Name = candidate.Name,
-                    HasChildren = candidate.HasChildren,
-                    HasVersions = candidate.HasVersions,
-                    HasSubfolders = candidate.HasSubfolders,
-                    // A repository root is where the tree starts, so its row carries the address of what a
-                    // client does next — list its children. Without it the client has an id and no address and
-                    // composes the path (ADR 0543, issue #416); fetching `self` first would cost a round trip
-                    // per row. Unconditional rels only, as on the children listing: checkout/external-links/
-                    // acl-inheritance depend on per-row rights a listing does not compute, and a listing is the
-                    // wrong place to answer "may I?" — so their absence here does NOT mean "not available".
-                    Links =
-                    [
                         new Link("self", Url.Action(nameof(Get), new { repositoryId = candidate.Id })!, "GET"),
                         // The SAME object seen as a document (ADR 0200 — a repository IS a document with no
                         // parent). `self` here is the repository view, which answers different questions and
@@ -192,7 +200,21 @@ public class RepositoriesController : ControllerBase
                         new Link("recycle-bin", $"/api/repositories/{candidate.Id}/recycle-bin", "GET"),
                         new Link("index-data", $"/api/documents/{candidate.Id}/index-data", "GET"),
                         new Link("mask", $"/api/documents/{candidate.Id}/mask", "GET"),
-                    ],
+                };
+
+                if (FolderCreationPolicy.AdmitsPlainFolder(candidate.MaskId, parentIsPersonalRoot: false))
+                {
+                    rowLinks.Add(new Link("folders", $"/api/documents/{candidate.Id}/children", "POST"));
+                }
+
+                visible.Add(new RepositoryResource
+                {
+                    Id = candidate.Id,
+                    Name = candidate.Name,
+                    HasChildren = candidate.HasChildren,
+                    HasVersions = candidate.HasVersions,
+                    HasSubfolders = candidate.HasSubfolders,
+                    Links = rowLinks,
                 });
             }
 

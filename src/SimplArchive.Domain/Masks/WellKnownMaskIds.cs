@@ -95,6 +95,22 @@ public static class WellKnownMaskIds
     /// </remarks>
     public static readonly Guid ImapSpecial = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E3F");
 
+    /// <summary>The mask <c>My Documents</c> wears — a personal space's one general-purpose folder (#634).</summary>
+    /// <remarks>
+    /// <para>
+    /// Fieldless, and identical in shape to <see cref="Folder"/>. It exists so that admission at the personal
+    /// space's first level can be decided by MASK: that level holds only what it was provisioned with, and
+    /// <c>My Documents</c> wearing a plain <see cref="Folder"/> would have made "no Folder here" refuse the very
+    /// folder we provision.
+    /// </para>
+    /// <para>
+    /// The same rule the codebase learned the hard way and states in ADR 0633 — <b>admission by mask,
+    /// protection by name</b>. Deciding this one by name instead would put a name back into admission, which is
+    /// exactly what refused a folder caught mid-rename.
+    /// </para>
+    /// </remarks>
+    public static readonly Guid MyDocuments = Guid.Parse("E10E1000-E100-E100-E100-E10E10E10E40");
+
     /// <summary>A section INSIDE a notebook: a folder that holds notes and further sections (#564).</summary>
     /// <remarks>
     /// Fieldless, like the Notebook it lives in — it types the folder, and the fields live on the notes.
@@ -167,7 +183,7 @@ public static class WellKnownMaskIds
     /// </para>
     /// </remarks>
     public static readonly IReadOnlySet<Guid> FolderMasks =
-        new HashSet<Guid> { Folder, Repository, UserFolder, Mailbox, ImapSpecial, Notebook, NotebookSection, Addressbook, Calendar };
+        new HashSet<Guid> { Folder, Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, Notebook, NotebookSection, Addressbook, Calendar };
 
     /// <summary>The well-known masks an ITEM wears — the complement of <see cref="FolderMasks"/>.</summary>
     /// <remarks>Stated rather than derived, so the partition guard has two sides to compare instead of one.</remarks>

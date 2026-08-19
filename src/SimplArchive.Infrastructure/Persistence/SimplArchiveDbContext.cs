@@ -469,16 +469,14 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
         {
             if (entry.Property(d => d.ParentId).IsModified && document.ParentId != from)
             {
-                throw new InvalidOperationException(
-                    $"'{document.Name}' is part of the personal space and cannot be moved out of it.");
+                throw PersonalSpaceStructureException.CannotMove(document.Name);
             }
 
             // Soft delete is the deletion that matters here: a folder in the recycle bin is just as absent
             // from the tree, and just as gone from a subscribed client's point of view.
             if (entry.Property(d => d.DeletedAt).IsModified && document.DeletedAt is not null)
             {
-                throw new InvalidOperationException(
-                    $"'{document.Name}' is part of the personal space and cannot be deleted.");
+                throw PersonalSpaceStructureException.CannotDelete(document.Name);
             }
         }
 
@@ -511,27 +509,14 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
         var admitted = document.MaskVersionId is not { } maskVersionId
             || await MaskVersions.IgnoreQueryFilters(["TenantFilter"])
                 .AnyAsync(
-                    v => v.Id == maskVersionId && PersonalFirstLevelMasks.Contains(v.MaskId),
+                    v => v.Id == maskVersionId && PersonalFolders.FirstLevelMasks.Contains(v.MaskId),
                     cancellationToken);
 
         if (!admitted)
         {
-            throw new InvalidOperationException(
-                $"Only folders may be placed directly in the personal space; '{document.Name}' cannot. "
-                + "Put it inside a folder instead.");
+            throw PersonalSpaceStructureException.NotAdmitted(document.Name);
         }
     }
-
-    // What may sit at the first level of a personal space: a plain Folder, which is all a USER may add, plus
-    // the masks the three provisioned typed folders wear. Their own uniqueness is the sibling-name rule and,
-    // for the mailbox, the cardinality cap — this set only says which KINDS belong there at all.
-    private static readonly Guid[] PersonalFirstLevelMasks =
-    [
-        WellKnownMaskIds.Folder,
-        WellKnownMaskIds.Calendar,
-        WellKnownMaskIds.Addressbook,
-        WellKnownMaskIds.Mailbox,
-    ];
 
     private async Task<bool> IsPersonalRootAsync(Guid documentId, CancellationToken cancellationToken) =>
         await Documents.IgnoreQueryFilters(["TenantFilter", "SoftDeleteFilter"])

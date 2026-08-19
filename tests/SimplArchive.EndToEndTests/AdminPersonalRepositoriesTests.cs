@@ -34,7 +34,7 @@ public class AdminPersonalRepositoriesTests
 
         var aliceRepo = (await TestJson.Post(alice, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
         var bobRepo = (await TestJson.Post(bob, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
-        var aliceDoc = await UploadAsync(alice, aliceRepo, "alice-secret");
+        var aliceDoc = await UploadAsync(alice, await MyDocumentsAsync(alice, aliceRepo), "alice-secret");
 
         // The admin lists every personal repository — both users' spaces are present.
         var list = await TestJson.Get(admin, "/api/admin/personal-repositories");
@@ -42,8 +42,10 @@ public class AdminPersonalRepositoriesTests
         Assert.Contains(repos, r => r.GetProperty("repositoryId").GetGuid() == aliceRepo && r.GetProperty("displayName").GetString() == "Alice");
         Assert.Contains(repos, r => r.GetProperty("repositoryId").GetGuid() == bobRepo);
 
-        // The admin can browse into Alice's personal space (IsTenantAdmin ACL bypass) and see her private document.
-        var children = await TestJson.Get(admin, $"/api/documents/{aliceRepo}/children");
+        // The admin can browse into Alice's personal space (IsTenantAdmin ACL bypass) and see her private
+        // document — which sits in My Documents, since the first level holds only provisioned folders (#634).
+        // The bypass is what this asserts, so it browses with the ADMIN's client all the way down.
+        var children = await TestJson.Get(admin, $"/api/documents/{await MyDocumentsAsync(admin, aliceRepo)}/children");
         Assert.Contains(children.GetProperty("children").EnumerateArray(), c => c.GetProperty("id").GetGuid() == aliceDoc);
 
         // The access was recorded to the audit log.
@@ -66,4 +68,13 @@ public class AdminPersonalRepositoriesTests
         await TestJson.Put(client, $"/api/documents/{docId}/versions/{versionId}", new { });
         return docId;
     }
+
+    // The personal space's first level holds only the folders it was provisioned with (#634), so a test that
+    // wants somewhere to put things asks for My Documents — which is where a user's own content goes.
+    private static async Task<Guid> MyDocumentsAsync(HttpClient api, Guid personalId) =>
+        (await TestJson.Get(api, $"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Documents")
+            .GetProperty("id").GetGuid();
+
 }

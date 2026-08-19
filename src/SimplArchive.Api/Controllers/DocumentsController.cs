@@ -320,6 +320,23 @@ public class DocumentsController : ControllerBase
             links.Add(new Link("notes", $"/api/documents/{documentId}/notes", "POST"));
         }
 
+        // "New subfolder", by the same rule as the two above — and it was the one affordance NOT gated this way
+        // (#634). Both clients showed it unconditionally, so it appeared on a notebook, which admits sections
+        // and notes but not folders; on a personal space's first level, which holds only what it was
+        // provisioned with; on an ephemeral staging folder, which holds messages; and to a caller with no right
+        // to create anything. In each case the user got a refusal instead of an absence, which is exactly what
+        // ADR 0543 says a rel is for: its absence means "not available to you, here, now".
+        //
+        // The href is the children collection, which is also its GET rel — the METHOD is what differs, and a
+        // separate rel name is what keeps a client's lookup-by-rel unambiguous.
+        var isPersonalRoot = await _dbContext.Documents
+            .AnyAsync(d => d.Id == documentId && d.PersonalOfUserId != null, cancellationToken);
+
+        if (rights.CanCreateSubItems && FolderCreationPolicy.AdmitsPlainFolder(folderMaskId, isPersonalRoot))
+        {
+            links.Add(new Link("folders", $"/api/documents/{documentId}/children", "POST"));
+        }
+
         // The structured editors (#564, ADR 0631). Conditional on the MASK for the same reason as the notebook
         // rels above: a contact card exists on a contact and nowhere else, so the rel's absence is the clients'
         // whole test for whether to offer Edit — rather than each of them sniffing a file extension and

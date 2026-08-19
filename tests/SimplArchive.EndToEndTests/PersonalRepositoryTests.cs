@@ -85,12 +85,13 @@ public class PersonalRepositoryTests
         var bobRepo = (await TestJson.Post(bob, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
         Assert.NotEqual(aliceRepo, bobRepo);
 
-        var aliceDoc = await UploadDocumentAsync(alice, aliceRepo, "alice-secret");
-        var bobDoc = await UploadDocumentAsync(bob, bobRepo, "bob-secret");
+        var aliceDoc = await UploadDocumentAsync(alice, await MyDocumentsAsync(alice, aliceRepo), "alice-secret");
+        var bobDoc = await UploadDocumentAsync(bob, await MyDocumentsAsync(bob, bobRepo), "bob-secret");
 
-        // Each sees only their own document under their own repository.
-        Assert.Contains(await ChildIdsAsync(alice, aliceRepo), id => id == aliceDoc);
-        Assert.Contains(await ChildIdsAsync(bob, bobRepo), id => id == bobDoc);
+        // Each sees only their own document, which lives in their My Documents — the first level holds only
+        // the provisioned folders now (#634), so this walks one level deeper than it used to.
+        Assert.Contains(await ChildIdsAsync(alice, await MyDocumentsAsync(alice, aliceRepo)), id => id == aliceDoc);
+        Assert.Contains(await ChildIdsAsync(bob, await MyDocumentsAsync(bob, bobRepo)), id => id == bobDoc);
 
         // Neither can reach the other's personal repository or its document.
         AssertDenied((await bob.GetAsync($"/api/documents/{aliceRepo}")).StatusCode);
@@ -131,4 +132,13 @@ public class PersonalRepositoryTests
 
     private static void AssertDenied(HttpStatusCode status) =>
         Assert.True(status is HttpStatusCode.Forbidden or HttpStatusCode.NotFound, $"expected the request to be denied, got {status}");
+
+    // The personal space's first level holds only the folders it was provisioned with (#634), so a test that
+    // wants somewhere to put things asks for My Documents — which is where a user's own content goes.
+    private static async Task<Guid> MyDocumentsAsync(HttpClient api, Guid personalId) =>
+        (await TestJson.Get(api, $"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Documents")
+            .GetProperty("id").GetGuid();
+
 }

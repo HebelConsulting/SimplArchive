@@ -43,6 +43,8 @@ public class UsersController : ControllerBase
     private readonly Authentication.MfaService _mfa;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
+    private readonly Documents.PersonalRepositoryProvisioner _personalSpaces;
+
     public UsersController(
         SimplArchiveDbContext dbContext,
         ICurrentTenantAccessor currentTenantAccessor,
@@ -53,8 +55,10 @@ public class UsersController : ControllerBase
         IAuditRecorder audit,
         INotificationService notifications,
         Authentication.MfaService mfa,
-        ITransitEncryptor transit)
+        ITransitEncryptor transit,
+        Documents.PersonalRepositoryProvisioner personalSpaces)
     {
+        _personalSpaces = personalSpaces;
         _dbContext = dbContext;
         _currentTenantAccessor = currentTenantAccessor;
         _currentServiceAccountAccessor = currentServiceAccountAccessor;
@@ -174,6 +178,15 @@ public class UsersController : ControllerBase
             // ServiceAccount.Name hit in ADR "ServiceAccount management endpoints".
             throw new UserEmailConflictException();
         }
+
+        // The personal space is provisioned HERE, at creation, rather than on the user's first visit (#634).
+        // Lazily was enough while it held only folders the user could recreate; it is not now that the first
+        // level is closed and My Documents is the only place their own content may go — a user whose space does
+        // not exist yet has nowhere to put anything, and every protocol surface resolves against those folders.
+        //
+        // The lazy EnsureAsync calls elsewhere stay: they are what reaches users created BEFORE this line
+        // existed, which is the population a fresh-volume test never has (#574).
+        await _personalSpaces.EnsureAsync(user.Id, user.TenantId, cancellationToken);
 
         await _audit.RecordAsync(AuditActions.UserCreated, "User", user.Id, user.DisplayName, cancellationToken: cancellationToken);
 

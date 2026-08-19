@@ -1,3 +1,5 @@
+using SimplArchive.Domain.Masks;
+
 namespace SimplArchive.Domain.Documents;
 
 /// <summary>
@@ -31,4 +33,35 @@ public static class PersonalFolders
 
     public static bool IsProtected(string? name) =>
         name is not null && Protected.Contains(name, StringComparer.Ordinal);
+
+    /// <summary>The masks that may sit at the FIRST LEVEL of a personal space (#596).</summary>
+    /// <remarks>
+    /// <para>
+    /// Exactly the masks the PROVISIONED folders wear, and nothing else — the first level is closed, and a
+    /// user adds folders inside <see cref="MyDocuments"/> rather than beside it (#634). The plain
+    /// <see cref="WellKnownMaskIds.Folder"/> was admitted here until then, which is what let a user create
+    /// folders at this level and, less obviously, what let an UPLOAD land here: a create stamps the Folder mask
+    /// and the finalizer reclassifies it afterwards, so the file walked in as a folder.
+    /// Their own uniqueness is the sibling-name rule and, for the mailbox, the cardinality cap — this set only
+    /// says which KINDS belong there at all.
+    /// </para>
+    /// <para>
+    /// Here rather than private to the DbContext because two things need the same answer and must not each
+    /// keep their own copy: <c>SaveChanges</c> REFUSES what is not admitted, and the repository importer
+    /// RE-PARENTS it instead of emitting it where it would be refused (#630). A second hand-maintained list
+    /// would make the importer's fallback silently disagree with the rule it exists to satisfy.
+    /// </para>
+    /// </remarks>
+    /// <remarks>
+    /// A <c>Guid[]</c> rather than a set, and that is load-bearing: this is used inside an EF query, and
+    /// <c>IReadOnlySet&lt;T&gt;.Contains</c> does not translate — the provider throws at query time rather than
+    /// at build time, so the cost of the tidier type is a runtime failure in whichever endpoint touches it.
+    /// </remarks>
+    public static readonly Guid[] FirstLevelMasks =
+    [
+        WellKnownMaskIds.MyDocuments,
+        WellKnownMaskIds.Calendar,
+        WellKnownMaskIds.Addressbook,
+        WellKnownMaskIds.Mailbox,
+    ];
 }

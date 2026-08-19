@@ -143,12 +143,14 @@
                             <!-- Folder actions on the right-clicked tree node (ADR "Desktop tree-pane folder context menu"). -->
                             <TreeView.ContextMenu>
                                 <ContextMenu>
-                                    <MenuItem Header="{loc:Tr MwNewSubfolder}" Click="OnTreeNewFolder">
+                                    <!-- Every create here is gated on a rel the node advertised, and this one was
+                                         the exception until #634: it showed everywhere, including on a notebook
+                                         (which holds sections, not folders), on the personal space's first level,
+                                         and to a caller with no right to create. The server refused each, so the
+                                         user met an error where they should have met an absence (ADR 0543). -->
+                                    <MenuItem Header="{loc:Tr MwNewSubfolder}" Click="OnTreeNewFolder" IsVisible="{Binding TreeContextCanAddFolder}">
                                         <MenuItem.Icon><i:Icon Value="mdi-folder-plus-outline" /></MenuItem.Icon>
                                     </MenuItem>
-                                    <!-- Only on a notebook or a section, and only because the node advertised the
-                                         rel (#564). "New subfolder" above stays visible there and is refused by
-                                         the server, which is correct: a notebook holds sections, not folders. -->
                                     <MenuItem Header="{loc:Tr MwNewSection}" Click="OnTreeNewSection" IsVisible="{Binding TreeContextCanAddSection}">
                                         <MenuItem.Icon><i:Icon Value="mdi-notebook-plus-outline" /></MenuItem.Icon>
                                     </MenuItem>
