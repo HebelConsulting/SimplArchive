@@ -420,6 +420,105 @@ the *Note* document type, and editing a note on your phone adds a *new version* 
 new copy — the full history stays browsable in the workbench. The Notes folder is typed: it accepts only
 notes, and notes live only there (references to them may go anywhere).
 
+= Contacts, calendars & your tasks
+
+Two of the workbench tabs are not about documents at all — or rather, they are about documents that happen to be
+a *contact card* or a *calendar entry*. *Contacts*#idx("Contacts") lists the people in your addressbooks;
+*Calendar*#idx("Calendar") lists your appointments. Both read the same archive, with the same permissions, and
+both can be *subscribed to from your phone*.
+
+#shot("screenshots/desktop-contacts.png",
+  [The Contacts tab: addressbooks on the left, the people in the ticked ones merged into one list.])
+
+*Collections overlay rather than replace.* The left-hand list is a set of tick-boxes, not a single choice — tick
+two addressbooks and you see both sets of people in one list, each row carrying a small colour swatch saying
+which collection it came from. Your own *My Addressbook* and *My Calendar* start ticked, so the tab opens with
+something in it. The colour is yours to set and yours alone: changing it does not change what anybody else sees.
+
+Every user's personal space contains *My Addressbook* and *My Calendar* from the start. They cannot be deleted or
+moved — they are the fixed points your phone subscribes to, and provisioning them would be pointless if the next
+click could remove them. Addressbooks and calendars can also live *anywhere else* in the archive: a shared
+repository can hold a team addressbook, and whoever has permission sees it in the same list.
+
+== Adding and editing a contact or an appointment
+
+*New contact* and *New appointment* open a form. Fill it in and save, and the item is created — nothing exists
+until you save, so closing the form leaves nothing behind. If more than one collection is ticked, the form asks
+which one it should go into; with only one candidate it does not ask, and the confirmation names where it went.
+
+*Edit* opens the *same* form on an existing item. That is deliberate rather than incidental: a create form with
+fewer fields than the editor would quietly discard whatever you typed into the ones it lacked.
+
+A contact holds rather more than a name — several *e-mail addresses* and *phone numbers*, each with its own type,
+several *postal addresses*, an organisation, a job title, a birthday, a website and a note. Add and remove rows
+as you need them.
+
+#note[
+  *Everything the form does not show is kept.* A contact created on a phone carries things this form does not
+  model — a photo, custom labels, fields belonging to some other program. Saving here *preserves* all of it
+  rather than dropping what it does not understand, which is what makes it safe to edit in the archive a card
+  that lives on your phone.
+]
+
+== Advanced: the stored item
+
+Under every contact and appointment form there is a collapsed *Advanced: the stored item* section. Open it and
+you see the item exactly as stored — a *vCard* for a contact, an *iCalendar* entry for an appointment — including
+the properties the form above does not show.
+
+#shot("screenshots/desktop-contact-editor.png",
+  [The contact editor with *Advanced: the stored item* open — the stored vCard, including the properties no form
+   field shows.],
+  width: 42%)
+
+It is editable, and this is the one place in the product where saving *replaces* rather than merges. Delete a line
+here and the property is gone; that is what "raw" has to mean, and a merge would put it back while telling you the
+save had succeeded. Two things are refused rather than accepted: text that is not a valid card or entry, and a
+change to the *UID* — the identifier every phone and mail program uses to recognise this item. Changing the UID
+would not rename the item, it would make it a *different* one, so your phone would keep the old copy and add the
+new. In both cases nothing is written and the stored item is untouched. Removing the UID line is not a change; the
+stored one is kept.
+
+#note[
+  *While you are editing the raw text, the fields above go read-only.* Both describe the same item and only one of
+  them can be saved. A line under the box says which way the save will go.
+]
+
+Every save — from the form or from the raw box — writes a *new version*, exactly as any other change to a
+document does. A raw edit you regret is recoverable from the version history like anything else.
+
+== Subscribing from your phone (CalDAV & CardDAV)
+
+Addressbooks and calendars speak *CardDAV*#idx("CardDAV") and *CalDAV*#idx("CalDAV") — the standards phones,
+tablets and mail programs already use. Point a device at your SimplArchive server and it finds every addressbook
+and calendar you are allowed to see, wherever it sits in the archive; you then pick which to sync. Edits travel
+both ways: a contact changed on your phone becomes a new version in the archive, and one changed in the workbench
+appears on the phone.
+
+The credential is the *same DAV password* the file-manager mount uses — one secret, one place to revoke it. Issue
+it from *WebDAV…* in the account menu if you have not already.
+
+#shot("screenshots/desktop-calendar.png",
+  [The Calendar tab, ordered by time — undated entries sort last rather than into the top rows.])
+
+== Your tasks, on your phone
+
+Beside your calendars, two more collections appear that hold no documents at all:
+
+- *My tasks* — the reviews assigned to you, as to-do items. This is what a reminders or task app subscribes to.
+- *My task deadlines* — the same reviews as dated entries, for calendar programs that do not show to-dos.
+
+Both are *read-only*. They are a view of the *My tasks* tab, published so you can see what is waiting for you
+without opening the archive; approving or rejecting a review still happens in the workbench, where it is recorded
+with who did it and why.
+
+#note[
+  *A review only gets a deadline if its document type defines one.* The review SLA is set per document type, and
+  where none is set the review simply has no due date — it still appears in *My tasks*, but it cannot appear in
+  *My task deadlines*, which is a list of dates. An empty deadlines list usually means no document type in your
+  tenant has an SLA configured.
+]
+
 = Metadata & classification
 
 Each document has a *mask* (document type) that defines its *index fields* — typed metadata such as an invoice
@@ -613,6 +712,10 @@ follows from the account you sign in with.
   *Repository* — a root folder (a document with no parent). *Mask* — a document type / set of index fields.
   *ACL* — per-document access-control list. *Version* — an immutable snapshot of a document's file. *Legal hold*
   — a freeze that blocks change/deletion. *Retention* — a policy that disposes of documents after a period.
+  *vCard* / *iCalendar* — the standard file formats a contact and a calendar entry are stored in (`.vcf` /
+  `.ics`). *CardDAV* / *CalDAV* — the standards a phone or mail program uses to sync addressbooks and calendars.
+  *UID* — the identifier those programs use to recognise an item across devices; changing it makes a duplicate
+  rather than an edit. *SLA* — the review deadline a document type sets, which is what gives a task a due date.
 ]
 
 Further reading:

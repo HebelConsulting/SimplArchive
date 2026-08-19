@@ -93,12 +93,17 @@
 }
 
 // A single captioned screenshot, framed with a thin border.
-#let shot(path, caption) = figure(
+//
+// `width` exists for TALL figures. A landscape screenshot at 100% of the text width is comfortably shorter than
+// a page; a portrait one — a dialog, say — is not: 520x1100 scaled to the text width becomes about twice the
+// height of the page, so Typst clips it and drops the caption onto the footer. Narrowing it is what makes a
+// portrait figure fit, and the value is chosen per figure because only the figure knows its own shape.
+#let shot(path, caption, width: 100%) = figure(
   block(
     stroke: 0.5pt + luma(200),
     radius: 3pt,
     clip: true,
-    image(path, width: 100%),
+    image(path, width: width),
   ),
   caption: caption,
 )
