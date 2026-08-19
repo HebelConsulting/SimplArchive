@@ -65,7 +65,10 @@ internal static class DavResources
 
         if (protocol == DavProtocol.CalDav)
         {
-            resource.Set(DavNames.SupportedCalendarComponentSet, new XElement(DavNames.Comp, new XAttribute("name", "VEVENT")));
+            // The collection's OWN component set, not a constant: a client decides from this whether to show
+            // the collection at all, so the task feed announcing VTODO is what makes a reminder app offer it
+            // and a calendar app leave it alone (#650).
+            resource.Set(DavNames.SupportedCalendarComponentSet, new XElement(DavNames.Comp, new XAttribute("name", collection.ComponentSet)));
             resource.Set(DavNames.SupportedCalendarData,
                 new XElement(DavNames.CalendarData, new XAttribute("content-type", "text/calendar"), new XAttribute("version", "2.0")));
         }

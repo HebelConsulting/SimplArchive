@@ -37,8 +37,8 @@ internal static class DavEndpoints
         {
             foreach (var collection in await DavTree.CollectionsAsync(context.Db, context.Rights, context.UserId, context.Protocol, context.Cancellation))
             {
-                var rights = await context.Rights.GetEffectiveRightsAsync(context.UserId, collection.FolderId);
-                var sequence = await DavChangeLog.CurrentAsync(context.Db, collection.FolderId, context.Cancellation);
+                var rights = await RightsForAsync(context, collection.FolderId);
+                var sequence = await SequenceForAsync(context, collection.FolderId);
                 resources.Add(DavResources.Collection(context.Protocol, context.UserId, collection, rights, sequence, context.VapidPublicKey));
             }
         }
@@ -56,13 +56,13 @@ internal static class DavEndpoints
         }
 
         var request = PropRequest.Parse(await context.ReadBodyAsync());
-        var rights = await context.Rights.GetEffectiveRightsAsync(context.UserId, folderId);
-        var sequence = await DavChangeLog.CurrentAsync(context.Db, folderId, context.Cancellation);
+        var rights = await RightsForAsync(context, folderId);
+        var sequence = await SequenceForAsync(context, folderId);
         var resources = new List<DavResource> { DavResources.Collection(context.Protocol, context.UserId, collection, rights, sequence, context.VapidPublicKey) };
 
         if (context.Depth >= 1)
         {
-            foreach (var item in await DavTree.ItemsAsync(context.Db, context.Protocol, folderId, context.Cancellation))
+            foreach (var item in await DavTree.ItemsAsync(context.Db, context.Protocol, context.UserId, folderId, context.Cancellation))
             {
                 resources.Add(DavResources.Item(context.Protocol, item, data: null));
             }
@@ -70,6 +70,26 @@ internal static class DavEndpoints
 
         return context.MultiStatus(request, resources);
     }
+
+
+    /// <summary>
+    /// The caller's rights on a collection — synthesised for a task feed, resolved from the ACL otherwise.
+    /// </summary>
+    /// <remarks>
+    /// A feed's id belongs to no document, and the rights calculator walks a document's ancestor chain to find
+    /// the governing ACL scope. Handed an id with no row it does not return "no rights", it THROWS — so this
+    /// branch is not tidiness, it is the difference between a listed collection and a 500 (#650).
+    /// </remarks>
+    private static async Task<EffectiveRights> RightsForAsync(DavControllerContext context, Guid folderId) =>
+        context.Protocol == DavProtocol.CalDav && TaskFeeds.KindOf(context.UserId, folderId) is not null
+            ? TaskFeeds.Rights
+            : await context.Rights.GetEffectiveRightsAsync(context.UserId, folderId);
+
+    /// <summary>The CTag / sync-token — computed from the caller's tasks for a feed, from the change log otherwise.</summary>
+    private static async Task<long> SequenceForAsync(DavControllerContext context, Guid folderId) =>
+        context.Protocol == DavProtocol.CalDav && TaskFeeds.KindOf(context.UserId, folderId) is not null
+            ? await TaskFeeds.ChangeSequenceAsync(context.Db, context.UserId, context.Cancellation)
+            : await DavChangeLog.CurrentAsync(context.Db, folderId, context.Cancellation);
 
     /// <summary>PROPFIND on one item.</summary>
     internal static async Task<IActionResult> ItemAsync(DavControllerContext context, Guid folderId, string resourceName)
@@ -79,7 +99,7 @@ internal static class DavEndpoints
             return new NotFoundResult();
         }
 
-        var item = await DavTree.ItemAsync(context.Db, context.Protocol, folderId, resourceName, context.Cancellation);
+        var item = await DavTree.ItemAsync(context.Db, context.Protocol, context.UserId, folderId, resourceName, context.Cancellation);
         if (item is null)
         {
             return new NotFoundResult();
@@ -135,7 +155,7 @@ internal static class DavEndpoints
                 continue;
             }
 
-            var item = await DavTree.ItemAsync(context.Db, context.Protocol, folderId, change.ResourceName, context.Cancellation);
+            var item = await DavTree.ItemAsync(context.Db, context.Protocol, context.UserId, folderId, change.ResourceName, context.Cancellation);
             if (item is null)
             {
                 // Logged as changed but no longer there — tell the client it is gone rather than omitting it,
@@ -222,7 +242,7 @@ internal static class DavEndpoints
         var request = PropRequest.FromProp(body?.Element(DavNames.Prop));
         var wanted = body?.Elements(DavNames.Href).Select(h => h.Value.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
 
-        var items = await DavTree.ItemsAsync(context.Db, context.Protocol, folderId, context.Cancellation);
+        var items = await DavTree.ItemsAsync(context.Db, context.Protocol, context.UserId, folderId, context.Cancellation);
         if (wanted.Count > 0)
         {
             items = items.Where(i =>
@@ -251,7 +271,7 @@ internal static class DavEndpoints
             return new NotFoundResult();
         }
 
-        var item = await DavTree.ItemAsync(context.Db, context.Protocol, folderId, resourceName, context.Cancellation);
+        var item = await DavTree.ItemAsync(context.Db, context.Protocol, context.UserId, folderId, resourceName, context.Cancellation);
         if (item is null)
         {
             return new NotFoundResult();

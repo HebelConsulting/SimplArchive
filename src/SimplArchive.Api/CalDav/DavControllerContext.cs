@@ -15,8 +15,10 @@ internal sealed class DavControllerContext
 
     internal DavControllerContext(
         DavProtocol protocol, HttpRequest request, SimplArchiveDbContext db, IEffectiveRightsCalculator rights,
-        IObjectStorageClient storage, Guid userId, Guid tenantId, string displayName, int depth, string? vapidPublicKey, CancellationToken cancellation)
+        IObjectStorageClient storage, Guid userId, Guid tenantId, string displayName, int depth, string? vapidPublicKey,
+        CancellationToken cancellation, ILogger? log = null)
     {
+        Log = log;
         Protocol = protocol;
         Db = db;
         Rights = rights;
@@ -49,6 +51,12 @@ internal sealed class DavControllerContext
 
     internal CancellationToken Cancellation { get; }
 
+    /// <summary>
+    /// For refusals a counterparty cannot otherwise explain (ADR 0626). Optional so the two controllers stay
+    /// the only place that has to supply one.
+    /// </summary>
+    internal ILogger? Log { get; }
+
     internal Task<System.Xml.Linq.XElement?> ReadBodyAsync() => DavXml.ReadBodyAsync(_request, Cancellation);
 
     internal IActionResult MultiStatus(PropRequest request, IEnumerable<DavResource> resources) =>
@@ -70,6 +78,13 @@ internal sealed class DavControllerContext
     /// <summary>The stored blob, or null when it cannot be read — a gap in one item, not a failed sync.</summary>
     internal async Task<string?> ReadItemAsync(DavItem item)
     {
+        // A generated item IS its text — the task feeds compose theirs from workflow state and store nothing,
+        // so there is no object to fetch (#650).
+        if (item.GeneratedText is { } generated)
+        {
+            return generated;
+        }
+
         try
         {
             await using var stream = await _storage.GetObjectAsync(item.ObjectKey, Cancellation);

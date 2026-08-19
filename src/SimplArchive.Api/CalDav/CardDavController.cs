@@ -34,7 +34,8 @@ public sealed class CardDavController : DavControllerBase
         ApplyPrincipal(_services);
         return new DavControllerContext(
             Protocol, Request, _dbContext, _rights, _storage, CurrentUserId, CurrentTenantId,
-            User.Identity?.Name ?? "SimplArchive", Depth(), _push.VapidPublicKey, HttpContext.RequestAborted);
+            User.Identity?.Name ?? "SimplArchive", Depth(), _push.VapidPublicKey, HttpContext.RequestAborted,
+            _services.GetService<ILoggerFactory>()?.CreateLogger("SimplArchive.Api.CalDav"));
     }
 
     // Discovery is answered WITHOUT credentials — a client probes it before it has any (RFC 6764).

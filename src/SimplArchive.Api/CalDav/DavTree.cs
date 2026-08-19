@@ -5,11 +5,23 @@ using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.CalDav;
 
-/// <summary>A typed folder the caller may subscribe to, with the display name the client shows.</summary>
-internal sealed record DavCollection(Guid FolderId, string DisplayName, bool Writable, string? Color);
+/// <summary>A collection the caller may subscribe to, with the display name the client shows.</summary>
+/// <param name="ComponentSet">
+/// What a CalDAV collection holds — <c>VEVENT</c> for a calendar, <c>VTODO</c> for the task feed (#650). The
+/// component set is how a client decides whether to show a collection at all: a reminder app ignores a
+/// VEVENT-only collection, and a calendar app ignores a VTODO-only one.
+/// </param>
+internal sealed record DavCollection(
+    Guid FolderId, string DisplayName, bool Writable, string? Color, string ComponentSet = "VEVENT");
 
-/// <summary>An item inside such a folder: the document, its current version, and its DAV resource name.</summary>
-internal sealed record DavItem(Guid DocumentId, Guid FolderId, string ResourceName, string ObjectKey, string ETag, DateTimeOffset LastModified, long? SizeBytes);
+/// <summary>An item inside such a collection: the document, its current version, and its DAV resource name.</summary>
+/// <param name="GeneratedText">
+/// Set for an item that has no stored blob — the task feeds compose theirs from workflow state at read time
+/// (#650). When present it IS the item's bytes, and object storage is never consulted.
+/// </param>
+internal sealed record DavItem(
+    Guid DocumentId, Guid FolderId, string ResourceName, string ObjectKey, string ETag,
+    DateTimeOffset LastModified, long? SizeBytes, string? GeneratedText = null);
 
 /// <summary>
 /// Resolves what a CalDAV/CardDAV caller can see (#564, ADR 0619): the typed folders they hold CanSee on,
@@ -61,11 +73,21 @@ internal static class DavTree
 
         var colors = await ColorsAsync(db, userId, protocol, collections.Select(c => c.Collection.FolderId).ToList(), cancellationToken);
 
-        return collections
+        var ordered = collections
             .OrderByDescending(c => c.IsPersonalDefault)
             .ThenBy(c => c.Collection.DisplayName, StringComparer.OrdinalIgnoreCase)
             .Select(c => c.Collection with { Color = colors.GetValueOrDefault(c.Collection.FolderId) })
             .ToList();
+
+        // The task feeds, last (#650). CalDAV only — a review deadline is not a contact. They are appended
+        // rather than sorted in because they are not folders and have no tree position to sort by; a client
+        // shows them as two more subscribable collections and neither knows nor cares that nothing stores them.
+        if (protocol == DavProtocol.CalDav)
+        {
+            ordered.AddRange(TaskFeeds.CollectionsFor(userId));
+        }
+
+        return ordered;
     }
 
     /// <summary>
@@ -75,6 +97,13 @@ internal static class DavTree
     internal static async Task<DavCollection?> CollectionAsync(
         SimplArchiveDbContext db, IEffectiveRightsCalculator rights, Guid userId, DavProtocol protocol, Guid folderId, CancellationToken cancellationToken)
     {
+        // A task feed first: its id belongs to no document, so every query below would miss it — and the ACL
+        // walk would not merely miss it but throw, since it resolves a document's ancestors.
+        if (protocol == DavProtocol.CalDav && TaskFeeds.KindOf(userId, folderId) is not null)
+        {
+            return TaskFeeds.CollectionsFor(userId).First(c => c.FolderId == folderId);
+        }
+
         var folder = await FolderQuery(db, protocol)
             .Where(d => d.Id == folderId)
             .Select(d => new FolderRow(d.Id, d.Name, d.ParentId))
@@ -106,8 +135,13 @@ internal static class DavTree
     /// when it creates one itself, so server-side and client-side items are indistinguishable.
     /// </summary>
     internal static async Task<List<DavItem>> ItemsAsync(
-        SimplArchiveDbContext db, DavProtocol protocol, Guid folderId, CancellationToken cancellationToken)
+        SimplArchiveDbContext db, DavProtocol protocol, Guid userId, Guid folderId, CancellationToken cancellationToken)
     {
+        if (protocol == DavProtocol.CalDav && TaskFeeds.KindOf(userId, folderId) is { } feed)
+        {
+            return await TaskFeeds.ItemsAsync(db, userId, folderId, feed, cancellationToken);
+        }
+
         var documents = await ItemQuery(db, protocol, folderId)
             .Select(d => new ItemRow(d.Id, d.CurrentVersionId, d.ConcurrencyToken))
             .ToListAsync(cancellationToken);
@@ -138,8 +172,13 @@ internal static class DavTree
     /// with no UID is named after).
     /// </summary>
     internal static async Task<DavItem?> ItemAsync(
-        SimplArchiveDbContext db, DavProtocol protocol, Guid folderId, string resourceName, CancellationToken cancellationToken)
+        SimplArchiveDbContext db, DavProtocol protocol, Guid userId, Guid folderId, string resourceName, CancellationToken cancellationToken)
     {
+        if (protocol == DavProtocol.CalDav && TaskFeeds.KindOf(userId, folderId) is { } feed)
+        {
+            return await TaskFeeds.ItemAsync(db, userId, folderId, feed, resourceName, cancellationToken);
+        }
+
         if (!resourceName.EndsWith(protocol.Extension, StringComparison.OrdinalIgnoreCase))
         {
             return null;

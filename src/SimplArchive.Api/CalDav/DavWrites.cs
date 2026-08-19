@@ -25,13 +25,29 @@ internal static class DavWrites
         DavControllerContext context, IServiceProvider services, Guid folderId, string resourceName)
     {
         var (db, rights, protocol) = (context.Db, context.Rights, context.Protocol);
+        // The task feeds are a read-only projection of workflow state (#650): there is nothing to write to, and
+        // completing a review happens in the workbench, where it has an actor, a comment and an audit trail. A
+        // VTODO ticked off on a phone has none of those.
+        //
+        // Refused explicitly rather than left to fall through: DELETE would otherwise reach the ACL calculator
+        // with a WORKFLOW STATE id in place of a document id, and that walk throws on a row that does not exist
+        // — a 500 where the honest answer is "you may not".
+        if (protocol == DavProtocol.CalDav && TaskFeeds.KindOf(context.UserId, folderId) is { } feed)
+        {
+            context.Log?.LogWarning(
+                "Refused a {Method} on the read-only {Feed} feed for {UserId}. This feed is generated from "
+                + "workflow state and stores nothing; enable Trace on this source to see the exchange",
+                context.Request.Method, feed, context.UserId);
+            return new ForbidResult(Authentication.DavAuthenticationDefaults.Scheme);
+        }
+
         var folder = await db.Documents.FirstOrDefaultAsync(d => d.Id == folderId, context.Cancellation);
         if (folder is null)
         {
             return new NotFoundResult();
         }
 
-        var existing = await DavTree.ItemAsync(db, protocol, folderId, resourceName, context.Cancellation);
+        var existing = await DavTree.ItemAsync(db, protocol, context.UserId, folderId, resourceName, context.Cancellation);
         var folderRights = await rights.GetEffectiveRightsAsync(context.UserId, folderId);
 
         // Creating needs CanCreateSubItems on the collection; replacing needs CanEditContent on the item.
@@ -130,14 +146,14 @@ internal static class DavWrites
 
         // The change log is written AFTER the finalizer, because the resource name comes from the UID that
         // classification fills in — logging earlier would record a name no client will ever ask for (ADR 0622).
-        var stored0 = await DavTree.ItemAsync(db, protocol, folderId, resourceName, context.Cancellation);
+        var stored0 = await DavTree.ItemAsync(db, protocol, context.UserId, folderId, resourceName, context.Cancellation);
         var sequence = await DavChangeLog.RecordAsync(db, context.TenantId, folderId, document.Id,
             stored0?.ResourceName ?? resourceName,
             existing is null ? DavChangeType.Created : DavChangeType.Modified, context.Cancellation);
         await NotifyAsync(services, folderId, sequence, context.Cancellation);
 
         // Re-read the document for the ETag: the finalizer's save regenerated the concurrency token.
-        var stored = await DavTree.ItemAsync(db, protocol, folderId, resourceName, context.Cancellation);
+        var stored = await DavTree.ItemAsync(db, protocol, context.UserId, folderId, resourceName, context.Cancellation);
         if (stored is not null)
         {
             context.Response.Headers.ETag = $"\"{stored.ETag}\"";
@@ -150,7 +166,23 @@ internal static class DavWrites
         DavControllerContext context, IServiceProvider services, Guid folderId, string resourceName)
     {
         var (db, rights, protocol) = (context.Db, context.Rights, context.Protocol);
-        var item = await DavTree.ItemAsync(db, protocol, folderId, resourceName, context.Cancellation);
+        // The task feeds are a read-only projection of workflow state (#650): there is nothing to write to, and
+        // completing a review happens in the workbench, where it has an actor, a comment and an audit trail. A
+        // VTODO ticked off on a phone has none of those.
+        //
+        // Refused explicitly rather than left to fall through: DELETE would otherwise reach the ACL calculator
+        // with a WORKFLOW STATE id in place of a document id, and that walk throws on a row that does not exist
+        // — a 500 where the honest answer is "you may not".
+        if (protocol == DavProtocol.CalDav && TaskFeeds.KindOf(context.UserId, folderId) is { } feed)
+        {
+            context.Log?.LogWarning(
+                "Refused a {Method} on the read-only {Feed} feed for {UserId}. This feed is generated from "
+                + "workflow state and stores nothing; enable Trace on this source to see the exchange",
+                context.Request.Method, feed, context.UserId);
+            return new ForbidResult(Authentication.DavAuthenticationDefaults.Scheme);
+        }
+
+        var item = await DavTree.ItemAsync(db, protocol, context.UserId, folderId, resourceName, context.Cancellation);
         if (item is null)
         {
             return new NotFoundResult();
