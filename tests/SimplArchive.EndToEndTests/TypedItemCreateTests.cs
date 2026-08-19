@@ -55,11 +55,20 @@ public class TypedItemCreateTests
         Assert.True(HasRel(folder, "contacts"), "An Addressbook withheld the `contacts` rel, so both clients leave New Contact disabled.");
         Assert.False(HasRel(folder, "appointments"), "An Addressbook advertised `appointments`; it holds contacts.");
 
+        // The create takes the EDITOR's shape, so everything the New dialog can hold reaches the server in one
+        // request. Two phone numbers and a birthday are here on purpose: they are exactly what a create-shaped
+        // subset would have swallowed without a word.
         var created = await TestJson.Post(api, Href(folder, "contacts"), new
         {
             formattedName = "Ada Lovelace",
             organization = "Analytical Engines",
-            email = "ada@example.test",
+            emails = new[] { new { value = "ada@example.test", type = "work" } },
+            phones = new[]
+            {
+                new { value = "+41 44 555 01 22", type = "work" },
+                new { value = "+41 79 555 88 40", type = "cell" },
+            },
+            birthday = "1815-12-10",
         });
 
         var contactId = created.GetProperty("id").GetGuid();
@@ -71,6 +80,11 @@ public class TypedItemCreateTests
         var card = await TestJson.Get(api, $"/api/documents/{contactId}/contact-card");
         Assert.Equal("Ada Lovelace", card.GetProperty("formattedName").GetString());
         Assert.Equal("ada@example.test", card.GetProperty("emails").EnumerateArray().Single().GetProperty("value").GetString());
+
+        // Both phones and the birthday survived the create — the half that proves the wire is not a funnel.
+        Assert.Equal(2, card.GetProperty("phones").GetArrayLength());
+        Assert.Equal("+41 79 555 88 40", card.GetProperty("phones").EnumerateArray().Last().GetProperty("value").GetString());
+        Assert.Equal("1815-12-10", card.GetProperty("birthday").GetString());
 
         // The UID is MINTED, never a client's guess: it is the correlation key a later DAV sync matches on, and
         // a guessed one forks the contact into a duplicate on first sync (#628's lesson from the other side).
@@ -128,6 +142,78 @@ public class TypedItemCreateTests
         var myDocuments = rows.Single(r => r.GetProperty("name").GetString() == "My Documents");
         Assert.False(HasRel(myDocuments, "contacts"));
         Assert.False(HasRel(myDocuments, "appointments"));
+    }
+
+    [Fact]
+    public async Task The_rels_are_on_the_DAV_COLLECTIONS_listing_too_where_the_two_tabs_read_them()
+    {
+        // The third surface, and the one that matters most for this feature: the Contacts and Calendar tabs do
+        // not browse a tree, they read `GET /api/dav-collections`. It carried neither rel when the endpoints
+        // shipped, so both clients had no address to create from on the ONE screen New Contact lives on — while
+        // the document resource and the children listing advertised it perfectly.
+        //
+        // That is the same shape as `folders` on GET /repositories (#638), now three times over, which is why
+        // all three surfaces ask one predicate rather than each answering for itself.
+        var (api, addressbookId, calendarId, _) = await UserAsync();
+        using var _a = api;
+
+        var collections = (await TestJson.Get(api, "/api/dav-collections")).GetProperty("collections").EnumerateArray().ToList();
+
+        var addressbook = collections.Single(c => c.GetProperty("id").GetGuid() == addressbookId);
+        Assert.True(HasRel(addressbook, "contacts"),
+            "GET /api/dav-collections omitted `contacts` on an addressbook, so New Contact stays disabled on the tab it belongs to.");
+        Assert.False(HasRel(addressbook, "appointments"));
+
+        var calendar = collections.Single(c => c.GetProperty("id").GetGuid() == calendarId);
+        Assert.True(HasRel(calendar, "appointments"),
+            "GET /api/dav-collections omitted `appointments` on a calendar.");
+        Assert.False(HasRel(calendar, "contacts"));
+
+        // Following it from THIS listing creates the contact — which is what the tab actually does, and the half
+        // a link-presence assertion cannot prove.
+        var created = await TestJson.Post(api, Href(addressbook, "contacts"), new { formattedName = "Grace Hopper" });
+        Assert.Equal("Grace Hopper",
+            (await TestJson.Get(api, $"/api/documents/{created.GetProperty("id").GetGuid()}")).GetProperty("name").GetString());
+    }
+
+    [Fact]
+    public async Task A_reader_is_not_offered_the_create_at_all()
+    {
+        // The rel is rights-gated, and the negative case is the point of gating it: a caller who cannot create
+        // must see the affordance absent rather than get a refusal from a button that looked available
+        // (ADR 0543). Asserted on the dav-collections listing because that is where the tabs read it.
+        var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
+
+        var ownerEmail = $"owner-{Guid.NewGuid():N}@e2e.local";
+        var readerEmail = $"reader-{Guid.NewGuid():N}@e2e.local";
+        const string password = "typed-1234";
+        await _factory.SeedUserAsync(tenantId, ownerEmail, password, "Owner");
+        var readerId = await _factory.SeedUserAsync(tenantId, readerEmail, password, "Reader");
+
+        using var owner = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(ownerEmail, password));
+        var personalId = (await TestJson.Post(owner, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
+        var addressbookId = (await TestJson.Get(owner, $"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Addressbook").GetProperty("id").GetGuid();
+
+        // See-only: enough to list the collection, not enough to add to it.
+        //
+        // Granted on the personal ROOT, not on the addressbook. Rights resolve at the nearest ancestor that
+        // breaks inheritance — the personal space does — so an entry on the child is simply never read, and a
+        // test that placed it there would "prove" the rel is withheld while actually proving the reader cannot
+        // see the collection at all.
+        (await owner.PutAsJsonAsync($"/api/documents/{personalId}/acl-entries/users/{readerId}",
+            new { canSee = true, canReadContent = true })).EnsureSuccessStatusCode();
+
+        using var reader = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(readerEmail, password));
+        var visible = (await TestJson.Get(reader, "/api/dav-collections")).GetProperty("collections").EnumerateArray()
+            .Where(c => c.GetProperty("id").GetGuid() == addressbookId).ToList();
+
+        // It IS listed — otherwise the assertion below passes for the wrong reason, which is how a rel guard
+        // ends up reporting green while checking nothing.
+        var listed = Assert.Single(visible);
+        Assert.False(HasRel(listed, "contacts"),
+            "A caller who cannot create sub-items was offered `contacts`, so New Contact would fail on a button that looked available.");
     }
 
     [Fact]

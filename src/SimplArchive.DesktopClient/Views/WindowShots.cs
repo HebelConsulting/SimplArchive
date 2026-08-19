@@ -238,9 +238,38 @@ public static class WindowShots
                 .WithInterFont()
                 .SetupWithoutStarting();
 
+            // `--create` renders the SAME dialog in New mode (#631): empty, and — with two candidate
+            // collections — showing the "file it into…" picker, which no edit render ever displays. It is the
+            // only way to look at the row that decides where a new item lands.
+            var createShot = args.Contains("--create");
+
             Avalonia.Controls.Window dialog;
             string outPath;
-            if (contactShotIndex >= 0)
+            if (contactShotIndex >= 0 && createShot)
+            {
+                var blank = new ViewModels.ContactEditViewModel();
+                // "headless" rather than a plausible address: this shot never follows one, and a composed
+                // api/ URL here would be indistinguishable from a real violation to the guard that forbids them.
+                blank.OpenForCreate(
+                [
+                    new ViewModels.CreateTarget("Personal / My Addressbook", "headless"),
+                    new ViewModels.CreateTarget("Sales / Customers", "headless"),
+                ]);
+                dialog = new Views.ContactDialog(blank);
+                outPath = args[contactShotIndex + 1];
+            }
+            else if (apptShotIndex >= 0 && createShot)
+            {
+                var blank = new ViewModels.AppointmentEditViewModel();
+                blank.OpenForCreate(
+                [
+                    new ViewModels.CreateTarget("Personal / My Calendar", "headless"),
+                    new ViewModels.CreateTarget("Team / Releases", "headless"),
+                ]);
+                dialog = new Views.AppointmentDialog(blank);
+                outPath = args[apptShotIndex + 1];
+            }
+            else if (contactShotIndex >= 0)
             {
                 var card = new ViewModels.ContactEditViewModel
                 {

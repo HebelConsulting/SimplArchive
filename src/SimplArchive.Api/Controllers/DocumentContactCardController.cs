@@ -251,7 +251,8 @@ public class DocumentContactCardController : ControllerBase
         Note = card.Note,
     };
 
-    private static ContactCard FromResource(ContactCardResource r) => new(
+    /// <summary>Internal so the CREATE shares it — one shape and one conversion for both (#631).</summary>
+    internal static ContactCard FromResource(ContactCardResource r) => new(
         r.FormattedName,
         r.GivenName,
         r.FamilyName,

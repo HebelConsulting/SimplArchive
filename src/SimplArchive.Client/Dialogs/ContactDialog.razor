@@ -1,0 +1,146 @@
+@using SimplArchive.Client.Services
+
+@* The web structured contact editor (#631) — the twin the web client never had, and the SAME dialog for New
+   and Edit. A create form modelling fewer fields than the editor is a funnel that drops whatever the user
+   typed into the missing ones, and a second dialog is a second place for every later field to be forgotten.
+
+   Everything the form does not show — the photo, custom labels, extensions, anniversary — is preserved by the
+   server's merge and never travels through this window.
+
+   Nothing exists until Save: the document is created FROM the filled-in form, so cancelling leaves nothing
+   behind. (The reference implementation this was ported from creates a stub and then edits it, which would
+   leave an empty contact behind on Cancel — and a DAV client syncing meanwhile would take a copy of it.) *@
+
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 460px; max-width: 560px; max-height: 62vh; overflow-y: auto;">
+
+            @* Where a NEW contact lands. Shown only when the choice is real: a picker with one entry asks a
+               question that has no second answer, and the snackbar names the addressbook either way. *@
+            @if (Targets.Count > 1)
+            {
+                <MudSelect T="CreateTarget" Value="_target" ValueChanged="@(t => _target = t)"
+                           Label="@Strings.Get("ContactsCollections")" Variant="Variant.Outlined"
+                           Margin="Margin.Dense" Class="mb-3" ToStringFunc="@(t => t?.DisplayName ?? string.Empty)">
+                    @foreach (var target in Targets)
+                    {
+                        <MudSelectItem T="CreateTarget" Value="target">@target.DisplayName</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+
+            <div class="d-flex" style="gap:8px;">
+                <MudTextField @bind-Value="Form.GivenName" Label="@Strings.Get("ContactGivenName")"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                <MudTextField @bind-Value="Form.FamilyName" Label="@Strings.Get("ContactFamilyName")"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+            </div>
+            <div class="d-flex mt-2" style="gap:8px;">
+                <MudTextField @bind-Value="Form.Organization" Label="@Strings.Get("ContactsOrg")"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                <MudTextField @bind-Value="Form.Title" Label="@Strings.Get("ContactJobTitle")"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+            </div>
+
+            @* Each repeatable group carries its Add button in its own heading row, so the affordance sits with
+               the thing it adds to rather than at the far end of the form (ADR 0550). *@
+            <RepeatableFieldGroup Title="@Strings.Get("ContactsEmail")" Rows="Form.Emails" CanEdit="Form.CanEdit"
+                                  DefaultType="work" Placeholder="name@example.com" />
+            <RepeatableFieldGroup Title="@Strings.Get("ContactsPhone")" Rows="Form.Phones" CanEdit="Form.CanEdit"
+                                  DefaultType="mobile" />
+
+            <div class="d-flex align-center justify-space-between mt-4 mb-1">
+                <MudText Typo="Typo.subtitle2">@Strings.Get("ContactAddress")</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" Disabled="@(!Form.CanEdit)"
+                               OnClick="@(() => Form.Addresses.Add(new ContactAddressRow()))"
+                               title="@Strings.Get("ContactAddAddress")" aria-label="@Strings.Get("ContactAddAddress")" />
+            </div>
+            @foreach (var address in Form.Addresses.ToList())
+            {
+                <MudPaper Outlined="true" Class="pa-2 mb-2">
+                    <div class="d-flex align-center" style="gap:8px;">
+                        <MudSelect T="string" @bind-Value="address.Type" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   Style="max-width:110px;" Disabled="@(!Form.CanEdit)">
+                            @foreach (var type in ContactAddressRow.Types)
+                            {
+                                <MudSelectItem T="string" Value="type">@type</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudTextField @bind-Value="address.Street" Placeholder="@Strings.Get("ContactStreet")"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Disabled="@(!Form.CanEdit)"
+                                       OnClick="@(() => Form.Addresses.Remove(address))"
+                                       title="@Strings.Get("Remove")" aria-label="@Strings.Get("Remove")" />
+                    </div>
+                    <div class="d-flex mt-2" style="gap:8px;">
+                        <MudTextField @bind-Value="address.City" Placeholder="@Strings.Get("ContactCity")"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                        <MudTextField @bind-Value="address.PostalCode" Placeholder="@Strings.Get("ContactPostalCode")"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:130px;"
+                                      Disabled="@(!Form.CanEdit)" />
+                    </div>
+                    <div class="d-flex mt-2" style="gap:8px;">
+                        <MudTextField @bind-Value="address.Region" Placeholder="@Strings.Get("ContactRegion")"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                        <MudTextField @bind-Value="address.Country" Placeholder="@Strings.Get("ContactCountry")"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                    </div>
+                </MudPaper>
+            }
+
+            <div class="d-flex mt-3" style="gap:8px;">
+                <MudTextField @bind-Value="Form.Birthday" Label="@Strings.Get("ContactBirthday")" Placeholder="1990-02-15"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                <MudTextField @bind-Value="Form.Url" Label="@Strings.Get("ContactUrl")"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+            </div>
+            <MudTextField @bind-Value="Form.Note" Label="@Strings.Get("ContactNote")" Lines="3" Class="mt-2"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+
+            @* Says plainly that the rest of the card is safe. Without it, a user who knows their contact has a
+               photo has no reason to believe this form kept it. *@
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-3">
+                @Strings.Get("ContactPreservedNote")
+            </MudText>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => Dialog.Cancel())">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!Form.CanEdit)" OnClick="Ok">
+            @Strings.Get("Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    /// <summary>The form to edit — a parsed card for Edit, an empty one for New.</summary>
+    [Parameter] public ContactCardForm Form { get; set; } = new();
+
+    /// <summary>Empty when editing; the collections the server said the caller may create in when not.</summary>
+    [Parameter] public List<CreateTarget> Targets { get; set; } = [];
+
+    private CreateTarget? _target;
+
+    protected override void OnInitialized()
+    {
+        // The tab's own ordering lists the caller's personal collection first, so the default is the one a
+        // person filing something of their own almost always means.
+        _target = Targets.FirstOrDefault();
+
+        // A New form opens with one blank e-mail and phone row rather than nothing at all: a create form whose
+        // only visible fields are names reads as not supporting them.
+        if (Targets.Count > 0 && Form.Emails.Count == 0)
+        {
+            Form.Emails.Add(new ContactFieldRow { Type = "work" });
+            Form.Phones.Add(new ContactFieldRow { Type = "mobile" });
+        }
+    }
+
+    private void Ok() => Dialog.Close(DialogResult.Ok(new Saved(Form, _target)));
+
+    /// <summary>What Save returns: the filled form, and — for a create — where it goes.</summary>
+    public sealed record Saved(ContactCardForm Form, CreateTarget? Target);
+}

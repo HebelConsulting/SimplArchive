@@ -121,6 +121,56 @@ public class DesktopContactsTabTests
         Assert.DoesNotContain("already exists", body, StringComparison.OrdinalIgnoreCase);
     }
 
+    // New contact (#631), end to end at view-model level: the tab takes the create address from the rel the
+    // COLLECTION advertised, posts the form the dialog filled in, and shows the result selected.
+    //
+    // The form is the EDITOR's, not a create-shaped subset — so the second phone number and the birthday below
+    // are the point of the test, not decoration: they are exactly what a narrower create swallows in silence.
+    [Fact]
+    public async Task New_contact_creates_from_the_advertised_rel_and_keeps_every_field_the_form_holds()
+    {
+        DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
+        var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
+        Assert.NotNull(await api.Profile.GetPersonalRepositoryAsync());
+
+        var vm = new ContactsTabViewModel();
+        vm.Setup(api);
+        await vm.LoadAsync();
+
+        // The affordance is gated on the rel, which is the server's answer rather than the client's guess.
+        var target = Assert.Single(vm.CreateTargets());
+        Assert.True(vm.CanCreate);
+        Assert.EndsWith("My Addressbook", target.DisplayName, StringComparison.Ordinal);
+
+        var surname = $"Byron{Guid.NewGuid().ToString("N")[..6]}";
+        var form = new ContactEditViewModel { GivenName = "Ada", FamilyName = surname, Organization = "Analytical Engines" };
+        form.OpenForCreate([target]);
+        form.Emails.Add(new ContactFieldRowViewModel { Value = "ada@example.test", Type = "work" });
+        form.Phones.Add(new ContactFieldRowViewModel { Value = "+41 44 555 01 22", Type = "work" });
+        form.Phones.Add(new ContactFieldRowViewModel { Value = "+41 79 555 88 40", Type = "mobile" });
+        form.Birthday = "1815-12-10";
+
+        // One candidate, so the picker stays hidden — a chooser with one entry asks a question with no second
+        // answer — while the target is still selected, which is what the create is addressed from.
+        Assert.False(form.ShowTargetPicker);
+        Assert.Equal(target, form.SelectedTarget);
+
+        await vm.CreateContactAsync(target, form);
+
+        var created = Assert.Single(vm.Contacts, c => c.FullName == $"Ada {surname}");
+        Assert.Equal(created, vm.Selected);
+
+        // Read back through the editor: the classifier ran (the card is reachable at all), and everything the
+        // form held survived the one request that made it.
+        var loaded = await vm.LoadCardAsync(created);
+        Assert.NotNull(loaded);
+        Assert.Equal("Analytical Engines", loaded!.Value.Organization);
+        Assert.Equal("1815-12-10", loaded.Value.Birthday);
+        Assert.Equal(2, loaded.Value.Phones.Count);
+        Assert.Contains(loaded.Value.Phones, p => p.Value == "+41 79 555 88 40");
+        Assert.Equal("ada@example.test", Assert.Single(loaded.Value.Emails).Value);
+    }
+
     [Fact]
     public async Task The_calendar_side_of_the_same_listing_answers_calendars()
     {

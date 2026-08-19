@@ -4296,9 +4296,6 @@
   <data name="ContactsPhone" xml:space="preserve">
     <value>Phone</value>
   </data>
-  <data name="ContactsNewNotYet" xml:space="preserve">
-    <value>Creating a contact in the app is not available yet — add it from a CardDAV client for now.</value>
-  </data>
   <data name="TabCalendar" xml:space="preserve">
     <value>Calendar</value>
   </data>
@@ -4310,9 +4307,6 @@
   </data>
   <data name="CalendarNew" xml:space="preserve">
     <value>New appointment</value>
-  </data>
-  <data name="CalendarNewNotYet" xml:space="preserve">
-    <value>Creating appointments is not available yet.</value>
   </data>
   <data name="CalendarWhen" xml:space="preserve">
     <value>When</value>
@@ -4487,6 +4481,18 @@
   </data>
   <data name="StErrSaveAppt" xml:space="preserve">
     <value>Could not save the appointment: {0}</value>
+  </data>
+  <data name="StContactCreated" xml:space="preserve">
+    <value>Created '{0}' in {1}.</value>
+  </data>
+  <data name="StErrCreateContact" xml:space="preserve">
+    <value>The contact could not be created: {0}</value>
+  </data>
+  <data name="StApptCreated" xml:space="preserve">
+    <value>Created '{0}' in {1}.</value>
+  </data>
+  <data name="StErrCreateAppt" xml:space="preserve">
+    <value>The appointment could not be created: {0}</value>
   </data>
   <data name="StContactSaved" xml:space="preserve">
     <value>Saved '{0}'.</value>

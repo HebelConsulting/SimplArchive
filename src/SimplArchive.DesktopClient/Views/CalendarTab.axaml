@@ -19,8 +19,9 @@
                 AutomationProperties.Name="{loc:Tr RibbonRefresh}">
           <i:Icon Value="mdi-refresh" FontSize="18" />
         </Button>
-        <!-- Disabled until a writable calendar is ticked, so the affordance never lies about what it can do. -->
-        <Button Command="{Binding NewAppointmentCommand}" IsEnabled="{Binding CanCreate}"
+        <!-- Disabled until a ticked calendar ADVERTISES the create (#631), so the affordance never lies
+             about what it can do. -->
+        <Button Click="OnNew" IsEnabled="{Binding CanCreate}"
                 ToolTip.Tip="{loc:Tr CalendarNew}" AutomationProperties.Name="{loc:Tr CalendarNew}">
           <i:Icon Value="mdi-calendar-plus" FontSize="18" />
         </Button>

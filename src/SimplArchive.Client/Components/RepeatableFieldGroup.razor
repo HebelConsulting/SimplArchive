@@ -1,0 +1,49 @@
+@using SimplArchive.Client.Services
+
+@* One repeatable typed group — e-mail addresses or phone numbers (#631). Written once with the list passed in
+   rather than twice: the two differ in nothing but their heading and the type a new row starts with, and the
+   second copy is the one that misses the next fix.
+
+   The Add button sits in the heading row, so the affordance is next to the thing it adds to rather than at the
+   far end of the form (ADR 0550). *@
+
+<div class="d-flex align-center justify-space-between mt-4 mb-1">
+    <MudText Typo="Typo.subtitle2">@Title</MudText>
+    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" Disabled="@(!CanEdit)"
+                   OnClick="@(() => Rows.Add(new ContactFieldRow { Type = DefaultType }))"
+                   title="@AddLabel" aria-label="@AddLabel" />
+</div>
+
+@foreach (var row in Rows.ToList())
+{
+    <div class="d-flex align-center mb-1" style="gap:8px;">
+        <MudSelect T="string" @bind-Value="row.Type" Variant="Variant.Outlined" Margin="Margin.Dense"
+                   Style="max-width:110px;" Disabled="@(!CanEdit)">
+            @foreach (var type in ContactFieldRow.Types)
+            {
+                <MudSelectItem T="string" Value="type">@type</MudSelectItem>
+            }
+        </MudSelect>
+        <MudTextField @bind-Value="row.Value" Placeholder="@Placeholder" Variant="Variant.Outlined"
+                      Margin="Margin.Dense" Disabled="@(!CanEdit)" />
+        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Disabled="@(!CanEdit)"
+                       OnClick="@(() => Rows.Remove(row))"
+                       title="@Strings.Get("Remove")" aria-label="@Strings.Get("Remove")" />
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public List<ContactFieldRow> Rows { get; set; } = [];
+
+    [Parameter] public bool CanEdit { get; set; } = true;
+
+    /// <summary>The type a newly added row starts with — "work" for e-mail, "mobile" for a phone.</summary>
+    [Parameter] public string DefaultType { get; set; } = "work";
+
+    [Parameter] public string? Placeholder { get; set; }
+
+    /// <summary>The Add button's tooltip and accessible name — the heading says what is being added.</summary>
+    private string AddLabel => $"{Strings.Get("Add")} — {Title}";
+}

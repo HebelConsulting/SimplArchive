@@ -23,6 +23,13 @@
     <ScrollViewer>
       <StackPanel Spacing="10" Margin="0,0,12,0">
 
+        <!-- Where a NEW appointment lands; hidden when there is only one candidate. -->
+        <Grid ColumnDefinitions="110,*" IsVisible="{Binding ShowTargetPicker}">
+          <TextBlock Grid.Column="0" Text="{loc:Tr CalendarCollections}" VerticalAlignment="Center" />
+          <ComboBox Grid.Column="1" ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}"
+                    HorizontalAlignment="Stretch" AutomationProperties.Name="{loc:Tr CalendarCollections}" />
+        </Grid>
+
         <Grid ColumnDefinitions="110,*">
           <TextBlock Grid.Column="0" Text="{loc:Tr ApptSummary}" VerticalAlignment="Center" />
           <TextBox Grid.Column="1" Text="{Binding Summary}" />

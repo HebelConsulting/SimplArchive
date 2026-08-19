@@ -15,7 +15,7 @@ public sealed record AttendeeRowViewModel(string Name, string Address, string St
 /// The appointment edit form's state (#564, ADR 0631). Holds the fields the form models; everything else on the
 /// stored entry — VALARM above all — is preserved by the server's merge and never travels through here.
 /// </summary>
-public sealed partial class AppointmentEditViewModel : ObservableObject
+public sealed partial class AppointmentEditViewModel : StructuredEditFormViewModel
 {
     [ObservableProperty] private string _summary = "";
     [ObservableProperty] private string _location = "";
@@ -31,9 +31,6 @@ public sealed partial class AppointmentEditViewModel : ObservableObject
     [ObservableProperty] private TimeSpan? _startTime;
     [ObservableProperty] private DateTimeOffset? _endDate;
     [ObservableProperty] private TimeSpan? _endTime;
-
-    /// <summary>False when the caller may read but not save.</summary>
-    [ObservableProperty] private bool _canEdit = true;
 
     /// <summary>
     /// The appointment's own zone, carried through a save untouched. Shown beside the times as a label, because
@@ -101,6 +98,32 @@ public sealed partial class AppointmentEditViewModel : ObservableObject
         }
 
         return model;
+    }
+
+    /// <summary>
+    /// A new entry opens on the next full hour, running an hour (#631). Not left blank: an appointment with no
+    /// date is the one field a person must fill before the form means anything, and defaulting it to a
+    /// plausible slot is what turns "New appointment → type a title → Save" into the whole interaction.
+    /// </summary>
+    /// <remarks>
+    /// Local wall-clock, and deliberately no <see cref="TimeZoneId"/>: the times a person types here are the
+    /// ones they mean, and stamping a zone we merely inferred from the machine is how a floating time stops
+    /// floating (ADR 0631 decision 5). The editor never converts one either.
+    /// </remarks>
+    protected override void OnOpenedForCreate()
+    {
+        var now = DateTime.Now;
+        var start = DateTime.SpecifyKind(now.Date.AddHours(now.Hour + 1), DateTimeKind.Unspecified);
+        var end = start.AddHours(1);
+
+        // Kind.Unspecified is REQUIRED, not tidiness: DateTimeOffset(dateTime, TimeSpan.Zero) throws when the
+        // value's Kind is Local, and DateTime.Now.Date is Local — so the obvious spelling crashes the dialog on
+        // every machine east or west of UTC. Which is also what a zero offset means here: the form holds a wall
+        // clock and the zone travels separately, the same shape `From` produces when it parses a stored time.
+        StartDate = new DateTimeOffset(start.Date, TimeSpan.Zero);
+        StartTime = start.TimeOfDay;
+        EndDate = new DateTimeOffset(end.Date, TimeSpan.Zero);
+        EndTime = end.TimeOfDay;
     }
 
     public object ToPayload() => new

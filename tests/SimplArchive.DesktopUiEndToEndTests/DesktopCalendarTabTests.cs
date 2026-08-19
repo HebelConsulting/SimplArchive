@@ -73,6 +73,47 @@ public class DesktopCalendarTabTests
         Assert.Contains(vm.Appointments, a => a.Title == "Sprint planning");
     }
 
+    // New appointment (#631): created from the rel the CALENDAR advertised, with the times the form holds —
+    // and a blank form opens on the next full hour rather than with no date at all, which is the one field a
+    // person must fill before the entry means anything.
+    [Fact]
+    public async Task New_appointment_creates_from_the_advertised_rel_with_the_default_slot_filled_in()
+    {
+        DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
+        var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
+        Assert.NotNull(await api.Profile.GetPersonalRepositoryAsync());
+
+        var vm = new CalendarTabViewModel();
+        vm.Setup(api);
+        await vm.LoadAsync();
+
+        var target = Assert.Single(vm.CreateTargets());
+        Assert.True(vm.CanCreate);
+
+        var form = new AppointmentEditViewModel();
+        form.OpenForCreate([target]);
+
+        // Seeded by OpenForCreate, and an hour long — asserted because a blank date silently produces an entry
+        // the calendar cannot place, which then sorts to the bottom as "undated" and looks like a lost save.
+        Assert.NotNull(form.StartDate);
+        Assert.NotNull(form.EndDate);
+        Assert.Equal(TimeSpan.FromHours(1), (form.EndDate!.Value.Date + form.EndTime!.Value) - (form.StartDate!.Value.Date + form.StartTime!.Value));
+
+        var title = $"Quarterly review {Guid.NewGuid().ToString("N")[..6]}";
+        form.Summary = title;
+        form.Location = "Room 3";
+
+        await vm.CreateAppointmentAsync(target, form);
+
+        var created = Assert.Single(vm.Appointments, a => a.Title == title);
+        Assert.Equal(created, vm.Selected);
+
+        var loaded = await vm.LoadEntryAsync(created);
+        Assert.NotNull(loaded);
+        Assert.Equal("Room 3", loaded!.Value.Location);
+        Assert.Equal(form.StartTime, loaded.Value.StartTime);
+    }
+
     // A row's two time displays must agree. They are computed by different code — one formats the range, the
     // other the full start — and binding the raw DateTimeOffset formatted the STORED OFFSET while the range
     // converted to local, so one appointment read "When 11:00–12:00" and "Starts 09:00" two lines apart.

@@ -81,8 +81,58 @@ public sealed partial class ContactsTabViewModel : ObservableObject
         ? Strings.Get("ContactsEmpty")
         : Strings.Get("ContactsNoneSelected");
 
-    /// <summary>True when at least one CHECKED collection accepts writes — gates New/Edit.</summary>
-    public bool CanCreate => Collections.Any(c => c.IsChecked && c.Writable);
+    /// <summary>
+    /// True when at least one CHECKED collection advertises the create — which gates New.
+    /// </summary>
+    /// <remarks>
+    /// Asked of the <c>contacts</c> rel rather than of <c>Writable</c>. They are not the same question: the
+    /// flag reports whether the caller may edit CONTENT, while the create needs the right to add sub-items, and
+    /// gating on the wrong one either hides a create that would succeed or offers one the server refuses. A
+    /// missing rel already means "not available to you, here, now" (ADR 0543), so this is the server's answer
+    /// rather than the client's guess at it.
+    /// </remarks>
+    public bool CanCreate => CreateTargets().Count > 0;
+
+    /// <summary>The checked addressbooks the caller may create in, in the order the tab lists them.</summary>
+    public IReadOnlyList<CreateTarget> CreateTargets() =>
+    [
+        .. Collections
+            .Where(c => c.IsChecked)
+            .Select(c => (c.DisplayName, Href: c.Collection.HrefOrNull("contacts")))
+            .Where(c => c.Href is not null)
+            .Select(c => new CreateTarget(c.DisplayName, c.Href!)),
+    ];
+
+    /// <summary>Creates a contact from a filled-in form, then shows it selected in the list.</summary>
+    /// <remarks>
+    /// One request: the create takes the editor's whole resource, so nothing the user typed is left for a
+    /// follow-up save that could fail and leave a half-filled contact behind.
+    /// </remarks>
+    public async Task CreateContactAsync(CreateTarget target, ContactEditViewModel form)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var createdId = await _api.StructuredEditors.CreateAsync(target.CreateHref, form.ToPayload());
+            await ReloadContactsAsync();
+
+            // Select what was just made — by the id the server returned, never by the name the form composed:
+            // the server decides the filed name (it disambiguates a sibling clash), so matching on our own guess
+            // at it silently selects nothing on exactly the second "Ada Lovelace". A create that leaves the list
+            // looking unchanged reads as one that did not happen, and the row is what every later action is
+            // addressed from (ADR 0559).
+            Selected = Contacts.FirstOrDefault(c => c.Id == createdId) ?? Selected;
+            Report(string.Format(Strings.Get("StContactCreated"), Selected?.FullName ?? string.Empty, target.DisplayName));
+        }
+        catch (Exception e)
+        {
+            Report(string.Format(Strings.Get("StErrCreateContact"), e.Message));
+        }
+    }
 
     /// <summary>What the list actually shows: the filter applied over the merged contacts.</summary>
     public IEnumerable<ContactRowViewModel> VisibleContacts =>
@@ -94,18 +144,6 @@ public sealed partial class ContactsTabViewModel : ObservableObject
             : Contacts;
 
     partial void OnFilterChanged(string value) => OnPropertyChanged(nameof(VisibleContacts));
-
-    /// <summary>
-    /// Creates a contact in the first ticked writable addressbook. NOT YET IMPLEMENTED: a contact IS a .vcf,
-    /// so this needs the editor that composes one (the open question on the epic) — until then the button
-    /// says so rather than silently doing nothing.
-    /// </summary>
-    [RelayCommand]
-    public Task NewContactAsync()
-    {
-        Report(Strings.Get("ContactsNewNotYet"));
-        return Task.CompletedTask;
-    }
 
     /// <summary>
     /// Loads the selected contact's card for the edit form, or null when it cannot be edited here.

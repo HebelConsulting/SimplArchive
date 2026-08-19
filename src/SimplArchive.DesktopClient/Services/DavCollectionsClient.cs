@@ -18,6 +18,12 @@ public sealed record DavCollection(
     public string Href(string rel) => Links.TryGetValue(rel, out var href)
         ? href
         : throw new ApiActionException($"This collection does not offer '{rel}'.");
+
+    /// <summary>
+    /// The address for <paramref name="rel"/>, or null when the collection does not advertise it — which means
+    /// "not available to you, here, now" (ADR 0543) and is what an affordance is gated on, not an error.
+    /// </summary>
+    public string? HrefOrNull(string rel) => Links.GetValueOrDefault(rel);
 }
 
 /// <summary>

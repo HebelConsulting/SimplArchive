@@ -4296,9 +4296,6 @@
   <data name="ContactsPhone" xml:space="preserve">
     <value>Telefono</value>
   </data>
-  <data name="ContactsNewNotYet" xml:space="preserve">
-    <value>La creazione di contatti nell'app non è ancora disponibile — per ora usa un client CardDAV.</value>
-  </data>
   <data name="TabCalendar" xml:space="preserve">
     <value>Calendario</value>
   </data>
@@ -4310,9 +4307,6 @@
   </data>
   <data name="CalendarNew" xml:space="preserve">
     <value>Nuovo appuntamento</value>
-  </data>
-  <data name="CalendarNewNotYet" xml:space="preserve">
-    <value>La creazione di appuntamenti non è ancora disponibile.</value>
   </data>
   <data name="CalendarWhen" xml:space="preserve">
     <value>Quando</value>
@@ -4487,6 +4481,18 @@
   </data>
   <data name="StErrSaveAppt" xml:space="preserve">
     <value>Impossibile salvare l'appuntamento: {0}</value>
+  </data>
+  <data name="StContactCreated" xml:space="preserve">
+    <value>'{0}' creato in {1}.</value>
+  </data>
+  <data name="StErrCreateContact" xml:space="preserve">
+    <value>Impossibile creare il contatto: {0}</value>
+  </data>
+  <data name="StApptCreated" xml:space="preserve">
+    <value>'{0}' creato in {1}.</value>
+  </data>
+  <data name="StErrCreateAppt" xml:space="preserve">
+    <value>Impossibile creare l'appuntamento: {0}</value>
   </data>
   <data name="StContactSaved" xml:space="preserve">
     <value>'{0}' salvato.</value>

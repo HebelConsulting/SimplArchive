@@ -326,15 +326,14 @@ public class DocumentsController : ControllerBase
         // The contact and appointment creates (#631), by the same rule. Rights-gated here as the other creates
         // on this resource are — the row-level copies stay mask-only, because a per-row rights resolution is a
         // query per row on the hottest path there is.
-        if (rights.CanCreateSubItems
-            && WellKnownMaskIds.TypedFolderRules.FirstOrDefault(r => r.FolderMaskId == folderMaskId) is { } itemRule)
+        if (rights.CanCreateSubItems)
         {
-            if (itemRule.Admits.Any(a => a.MaskId == WellKnownMaskIds.Contact))
+            if (ChildCreationPolicy.AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Contact))
             {
                 links.Add(new Link("contacts", $"/api/documents/{documentId}/contacts", "POST"));
             }
 
-            if (itemRule.Admits.Any(a => a.MaskId == WellKnownMaskIds.Appointment))
+            if (ChildCreationPolicy.AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Appointment))
             {
                 links.Add(new Link("appointments", $"/api/documents/{documentId}/appointments", "POST"));
             }

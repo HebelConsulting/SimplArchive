@@ -97,8 +97,49 @@ public sealed partial class CalendarTabViewModel : ObservableObject
         ? Strings.Get("CalendarEmpty")
         : Strings.Get("CalendarNoneSelected");
 
-    /// <summary>True when at least one CHECKED calendar accepts writes — gates New.</summary>
-    public bool CanCreate => Collections.Any(c => c.IsChecked && c.Writable);
+    /// <summary>
+    /// True when at least one CHECKED calendar advertises the create — which gates New.
+    /// </summary>
+    /// <remarks>
+    /// Asked of the <c>appointments</c> rel, not of <c>Writable</c>: the flag reports the right to edit
+    /// content, while the create needs the right to add sub-items, and gating on the wrong one either hides a
+    /// create that works or offers one the server refuses (ADR 0543).
+    /// </remarks>
+    public bool CanCreate => CreateTargets().Count > 0;
+
+    /// <summary>The checked calendars the caller may create in, in the order the tab lists them.</summary>
+    public IReadOnlyList<CreateTarget> CreateTargets() =>
+    [
+        .. Collections
+            .Where(c => c.IsChecked)
+            .Select(c => (c.DisplayName, Href: c.Collection.HrefOrNull("appointments")))
+            .Where(c => c.Href is not null)
+            .Select(c => new CreateTarget(c.DisplayName, c.Href!)),
+    ];
+
+    /// <summary>Creates an appointment from a filled-in form, then shows it selected in the list.</summary>
+    public async Task CreateAppointmentAsync(CreateTarget target, AppointmentEditViewModel form)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var createdId = await _api.StructuredEditors.CreateAsync(target.CreateHref, form.ToPayload());
+            await ReloadAppointmentsAsync();
+
+            // By the id the server returned, not by the summary the form holds — the server decides the filed
+            // name, and a second "Quarterly review" would otherwise select the first one or nothing at all.
+            Selected = Appointments.FirstOrDefault(a => a.Id == createdId) ?? Selected;
+            Report(string.Format(Strings.Get("StApptCreated"), form.Summary, target.DisplayName));
+        }
+        catch (Exception e)
+        {
+            Report(string.Format(Strings.Get("StErrCreateAppt"), e.Message));
+        }
+    }
 
     /// <summary>What the list actually shows: the filter applied over the merged appointments.</summary>
     public IEnumerable<AppointmentRowViewModel> VisibleAppointments =>
@@ -109,18 +150,6 @@ public sealed partial class CalendarTabViewModel : ObservableObject
             : Appointments;
 
     partial void OnFilterChanged(string value) => OnPropertyChanged(nameof(VisibleAppointments));
-
-    /// <summary>
-    /// Creates an appointment in the first ticked writable calendar. NOT YET IMPLEMENTED: an appointment IS an
-    /// .ics, so this needs the editor that composes one — until then the button says so rather than silently
-    /// doing nothing.
-    /// </summary>
-    [RelayCommand]
-    public Task NewAppointmentAsync()
-    {
-        Report(Strings.Get("CalendarNewNotYet"));
-        return Task.CompletedTask;
-    }
 
     /// <summary>
     /// Loads the selected appointment's entry for the edit form, or null when it cannot be edited here.

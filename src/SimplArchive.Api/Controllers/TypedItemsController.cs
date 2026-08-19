@@ -23,6 +23,13 @@ namespace SimplArchive.Api.Controllers;
 /// One create, one rel (ADR 0637), so neither client special-cases contacts or calendars.
 /// </para>
 /// <para>
+/// <b>It takes the EDITOR's own resource, not a create-shaped subset.</b> The subset it shipped with was
+/// defensible only while New opened a small form; both clients now open the full structured editor empty, so a
+/// narrower create is a funnel that silently drops a second phone number, a birthday or a postal address at the
+/// exact moment the user first types one. One shape and one conversion for create and edit means there is no
+/// second place for the mapping to be wrong, and no field that exists in the form but not on the wire.
+/// </para>
+/// <para>
 /// <b>The UID is minted here, never taken from the request.</b> It is the correlation key a later DAV sync
 /// matches on, so a client's guess would fork the item into a duplicate on first sync — the same reasoning
 /// that made the editors read the UID from the STORED item, after reading it from the wrong place rewrote a
@@ -42,6 +49,7 @@ public class TypedItemsController : ControllerBase
     private readonly IContactCardComposer _contacts;
     private readonly IAppointmentComposer _appointments;
     private readonly IAuditRecorder _audit;
+    private readonly ILogger<TypedItemsController> _logger;
 
     public TypedItemsController(
         SimplArchiveDbContext dbContext,
@@ -50,8 +58,10 @@ public class TypedItemsController : ControllerBase
         DocumentFinalizer finalizer,
         IContactCardComposer contacts,
         IAppointmentComposer appointments,
-        IAuditRecorder audit)
+        IAuditRecorder audit,
+        ILogger<TypedItemsController> logger)
     {
+        _logger = logger;
         _dbContext = dbContext;
         _access = access;
         _storage = storage;
@@ -61,30 +71,11 @@ public class TypedItemsController : ControllerBase
         _audit = audit;
     }
 
-    public class CreateContactRequest
-    {
-        public string? FormattedName { get; set; }
-        public string? GivenName { get; set; }
-        public string? FamilyName { get; set; }
-        public string? Organization { get; set; }
-        public string? Email { get; set; }
-        public string? Phone { get; set; }
-    }
-
-    public class CreateAppointmentRequest
-    {
-        public string? Summary { get; set; }
-        public DateTime? Start { get; set; }
-        public DateTime? End { get; set; }
-        public bool IsAllDay { get; set; }
-        public string? TimeZoneId { get; set; }
-        public string? Location { get; set; }
-        public string? Description { get; set; }
-    }
-
     [HttpPost("contacts")]
     public async Task<IActionResult> CreateContact(
-        Guid documentId, [FromBody] CreateContactRequest request, CancellationToken cancellationToken)
+        Guid documentId,
+        [FromBody] DocumentContactCardController.ContactCardResource request,
+        CancellationToken cancellationToken)
     {
         if (await RequireFolderAsync(documentId, WellKnownMaskIds.Addressbook, cancellationToken) is not { } folder)
         {
@@ -97,15 +88,10 @@ public class TypedItemsController : ControllerBase
         }
 
         var uid = Guid.NewGuid().ToString();
-        var card = new ContactCard(
-            request.FormattedName, request.GivenName, request.FamilyName, request.Organization, Title: null,
-            Emails: string.IsNullOrWhiteSpace(request.Email) ? [] : [new ContactField(request.Email.Trim(), null)],
-            Phones: string.IsNullOrWhiteSpace(request.Phone) ? [] : [new ContactField(request.Phone.Trim(), null)],
-            Addresses: [], Birthday: null, Url: null, Note: null);
 
         // A fresh card: Merge composes one from nothing when the existing blob is null, which is the same path
         // an edit takes minus the preservation — so the two cannot drift in how a vCard is written.
-        var blob = _contacts.Merge(null, card, uid);
+        var blob = _contacts.Merge(null, DocumentContactCardController.FromResource(request), uid);
         var name = FirstNonEmpty(request.FormattedName, Join(request.GivenName, request.FamilyName), request.Organization)
                    ?? "New contact";
 
@@ -114,7 +100,9 @@ public class TypedItemsController : ControllerBase
 
     [HttpPost("appointments")]
     public async Task<IActionResult> CreateAppointment(
-        Guid documentId, [FromBody] CreateAppointmentRequest request, CancellationToken cancellationToken)
+        Guid documentId,
+        [FromBody] DocumentAppointmentController.AppointmentResource request,
+        CancellationToken cancellationToken)
     {
         if (await RequireFolderAsync(documentId, WellKnownMaskIds.Calendar, cancellationToken) is not { } folder)
         {
@@ -127,11 +115,7 @@ public class TypedItemsController : ControllerBase
         }
 
         var uid = Guid.NewGuid().ToString();
-        var appointment = new Appointment(
-            request.Summary, request.Start, request.End, request.IsAllDay, request.TimeZoneId,
-            request.Location, request.Description, RecurrenceRule: null);
-
-        var blob = _appointments.Merge(null, appointment, uid);
+        var blob = _appointments.Merge(null, DocumentAppointmentController.FromResource(request), uid);
         var name = FirstNonEmpty(request.Summary) ?? "New appointment";
 
         return await CreateAsync(folder, name, blob, ".ics", "text/calendar", cancellationToken);
@@ -156,7 +140,18 @@ public class TypedItemsController : ControllerBase
             .Select(v => (Guid?)v.MaskId)
             .SingleOrDefaultAsync(cancellationToken);
 
-        return actual == maskId ? folder : null;
+        if (actual == maskId)
+        {
+            return folder;
+        }
+
+        // Debug, not Warning: the caller gets a 404 it can act on, and a conforming client never asks — the
+        // absent rel already said so (ADR 0626's boundary). It is logged at all because the interesting case is
+        // a client that DID ask, which means its rel gating disagrees with this rule.
+        _logger.LogDebug(
+            "Refused a typed-item create on {DocumentId}: it wears {ActualMaskId}, the create needs {RequiredMaskId}",
+            documentId, actual, maskId);
+        return null;
     }
 
     /// <summary>
@@ -210,6 +205,13 @@ public class TypedItemsController : ControllerBase
         await _finalizer.FinalizeAsync(version, cancellationToken);
 
         await _audit.RecordAsync(AuditActions.DocumentCreated, "Document", document.Id, document.Name, cancellationToken: cancellationToken);
+
+        // A completed unit of work with its outcome. The UID is deliberately NOT logged: it is the correlation
+        // key a DAV sync matches on, not a secret, but it is also the one field that identifies the item to an
+        // external system — the document id is what an administrator here can act on.
+        _logger.LogInformation(
+            "Created {ContentType} {DocumentId} named {DocumentName} in collection {CollectionId}",
+            contentType, document.Id, document.Name, folder.Id);
 
         return Created($"/api/documents/{document.Id}", new CreatedResource
         {

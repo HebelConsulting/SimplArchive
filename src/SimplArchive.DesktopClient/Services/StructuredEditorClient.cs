@@ -74,6 +74,30 @@ public sealed class StructuredEditorClient(ApiCore core, DocumentsClient documen
     }
 
     /// <summary>
+    /// Creates an item by POSTing <paramref name="payload"/> to a collection's advertised create rel, and
+    /// returns the created document's own address (#631).
+    /// </summary>
+    /// <remarks>
+    /// No <c>If-Match</c>: there is nothing yet to collide with. The href is the one the COLLECTION advertised,
+    /// so the caller composes nothing — and because the create takes the editor's whole resource, this is one
+    /// request rather than a create followed by a save, which would leave a half-filled contact behind if the
+    /// second one failed.
+    /// </remarks>
+    public async Task<Guid?> CreateAsync(
+        string createHref, object payload, CancellationToken cancellationToken = default)
+    {
+        using var response = await core.Http.PostAsync(createHref, JsonContent.Create(payload), cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            await ApiCore.ThrowIfProblemAsync(response, "The entry could not be created.", cancellationToken);
+            return null;
+        }
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return body.TryGetProperty("id", out var id) && id.TryGetGuid(out var guid) ? guid : null;
+    }
+
+    /// <summary>
     /// Saves <paramref name="payload"/> back to the address the read came from, under its ETag.
     /// </summary>
     public async Task SaveAsync(string href, object payload, string etag, CancellationToken cancellationToken = default)

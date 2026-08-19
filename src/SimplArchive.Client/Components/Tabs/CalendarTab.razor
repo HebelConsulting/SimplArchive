@@ -1,6 +1,8 @@
 @using SimplArchive.Client.Services
 @inject DavCollections DavCollections
 @inject BrowseService Browse
+@inject StructuredEditors StructuredEditors
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 @* The Calendar tab of the workbench (#564) — the web twin of the desktop tab, which is the reference
@@ -13,9 +15,16 @@
                    title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
             <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
         </MudButton>
+        @* Disabled until a ticked calendar ADVERTISES the create (#631), so the affordance never lies. *@
         <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(!CanCreate)" OnClick="NewAppointmentAsync"
                    title="@Strings.Get("CalendarNew")" aria-label="@Strings.Get("CalendarNew")">
             <MudIcon Icon="@Icons.Material.Filled.EventAvailable" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CalendarNew")</span>
+        </MudButton>
+        @* Edit opens the same structured editor; whether the entry is really editable is the server's answer,
+           told by the document's appointment rel (ADR 0543). *@
+        <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selected is null)" OnClick="EditAppointmentAsync"
+                   title="@Strings.Get("CalendarEdit")" aria-label="@Strings.Get("CalendarEdit")">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CalendarEdit")</span>
         </MudButton>
     </div>
 
@@ -86,9 +95,13 @@
     private AppointmentRow? _selected;
     private string _filter = string.Empty;
 
+    /// <summary>
+    /// One listed appointment. <c>SelfHref</c> is the row's own advertised address — Edit acts from THIS,
+    /// never from whatever the detail pane last finished loading (ADR 0559).
+    /// </summary>
     public sealed record AppointmentRow(
         Guid Id, string CollectionColor, string CollectionName, string Title,
-        DateTimeOffset? Start, DateTimeOffset? End, string Location)
+        DateTimeOffset? Start, DateTimeOffset? End, string Location, string? SelfHref)
     {
         /// <summary>"09:00–10:00", or empty when the appointment carries no time at all.</summary>
         public string TimeRange => (Start, End) switch
@@ -106,7 +119,19 @@
         public string StartsOn => Start is { } s ? s.LocalDateTime.ToString("g") : string.Empty;
     }
 
-    private bool CanCreate => _collections.Any(c => _checked.Contains(c.Id) && c.Writable);
+    /// <summary>
+    /// The checked calendars the caller may create in — asked of the <c>appointments</c> rel, not of
+    /// <c>Writable</c>: the flag reports the right to edit content, while the create needs the right to add
+    /// sub-items, and gating on the wrong one either hides a create that works or offers one that is refused.
+    /// </summary>
+    private List<CreateTarget> CreateTargets() =>
+    [
+        .. _collections
+            .Where(c => _checked.Contains(c.Id) && c.Href("appointments") is not null)
+            .Select(c => new CreateTarget(c.Id, c.DisplayName, c.Href("appointments")!)),
+    ];
+
+    private bool CanCreate => CreateTargets().Count > 0;
 
     private IEnumerable<AppointmentRow> Visible =>
         _filter is { Length: > 0 }
@@ -159,7 +184,7 @@
                     // not carry — the same gap the desktop tab has, and it closes the same way for both.
                     rows.Add(new AppointmentRow(
                         node.Id, collection.Color ?? "#8a8a8a", collection.DisplayName, node.Name,
-                        null, null, string.Empty));
+                        null, null, string.Empty, BrowseService.HrefOf(node, "self")));
                 }
             }
             catch (Exception e)
@@ -177,10 +202,77 @@
         StateHasChanged();
     }
 
-    private Task NewAppointmentAsync()
+    /// <summary>
+    /// New appointment (#631): the SAME dialog as Edit, opened on the next full hour, with the entry created
+    /// FROM the filled-in form — nothing exists until Save, so cancelling leaves nothing behind.
+    /// </summary>
+    private async Task NewAppointmentAsync()
     {
-        // NOT YET IMPLEMENTED: an appointment IS an .ics, so this needs the editor that composes one.
-        Snackbar.Add(Strings.Get("CalendarNewNotYet"), Severity.Info);
-        return Task.CompletedTask;
+        if (CreateTargets() is not { Count: > 0 } targets)
+        {
+            return;
+        }
+
+        var parameters = new DialogParameters
+        {
+            { nameof(Dialogs.AppointmentDialog.Form), AppointmentForm.ForCreate() },
+            { nameof(Dialogs.AppointmentDialog.Targets), targets },
+        };
+
+        var dialog = await DialogService.ShowAsync<Dialogs.AppointmentDialog>(Strings.Get("CalendarNew"), parameters);
+        if ((await dialog.Result) is not { Canceled: false, Data: Dialogs.AppointmentDialog.Saved saved }
+            || saved.Target is not { } target)
+        {
+            return;
+        }
+
+        var createdId = await StructuredEditors.CreateAsync(target.CreateHref, saved.Form.ToPayload());
+        if (createdId is null)
+        {
+            Snackbar.Add(string.Format(Strings.Get("StErrCreateAppt"), string.Empty), Severity.Error);
+            return;
+        }
+
+        await ReloadAppointmentsAsync();
+
+        // By the id the server returned, not by the summary the form holds: the server decides the filed name,
+        // and a second "Quarterly review" would otherwise select the first one or nothing at all.
+        _selected = _appointments.FirstOrDefault(a => a.Id == createdId) ?? _selected;
+        Snackbar.Add(string.Format(Strings.Get("StApptCreated"), saved.Form.Summary, target.DisplayName), Severity.Success);
+    }
+
+    /// <summary>Opens the structured editor for the selected appointment, addressed from the ROW (ADR 0559).</summary>
+    private async Task EditAppointmentAsync()
+    {
+        if (_selected is not { SelfHref: { } self } row)
+        {
+            return;
+        }
+
+        var loaded = await StructuredEditors.ReadAsync(self, "appointment", AppointmentForm.From);
+        if (loaded is null)
+        {
+            Snackbar.Add(Strings.Get("ApptNotEditable"), Severity.Info);
+            return;
+        }
+
+        loaded.Value.CanEdit = loaded.CanEdit;
+        var parameters = new DialogParameters { { nameof(Dialogs.AppointmentDialog.Form), loaded.Value } };
+
+        var dialog = await DialogService.ShowAsync<Dialogs.AppointmentDialog>(row.Title, parameters);
+        if ((await dialog.Result) is not { Canceled: false, Data: Dialogs.AppointmentDialog.Saved saved })
+        {
+            return;
+        }
+
+        if (await StructuredEditors.SaveAsync(loaded.Href, saved.Form.ToPayload(), loaded.ETag))
+        {
+            Snackbar.Add(string.Format(Strings.Get("StApptSaved"), row.Title), Severity.Success);
+            await ReloadAppointmentsAsync();
+        }
+        else
+        {
+            Snackbar.Add(string.Format(Strings.Get("StErrSaveAppt"), string.Empty), Severity.Error);
+        }
     }
 }

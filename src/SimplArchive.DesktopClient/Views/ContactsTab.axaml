@@ -19,9 +19,10 @@
                 AutomationProperties.Name="{loc:Tr RibbonRefresh}">
           <i:Icon Value="mdi-refresh" FontSize="18" />
         </Button>
-        <!-- New contact belongs on THIS tab, per the epic's decision; disabled until a writable
-             addressbook is ticked, so the affordance never lies about what it can do. -->
-        <Button Command="{Binding NewContactCommand}" IsEnabled="{Binding CanCreate}"
+        <!-- New contact belongs on THIS tab, per the epic's decision. Disabled until a ticked addressbook
+             ADVERTISES the create (#631) — the server's answer rather than the client's guess at it, so the
+             affordance never lies about what it can do. -->
+        <Button Click="OnNew" IsEnabled="{Binding CanCreate}"
                 ToolTip.Tip="{loc:Tr ContactsNew}" AutomationProperties.Name="{loc:Tr ContactsNew}">
           <i:Icon Value="mdi-account-plus-outline" FontSize="18" />
         </Button>

@@ -242,7 +242,8 @@ public class DocumentAppointmentController : ControllerBase
         ReminderCount = AppointmentDisplay.ReminderCount(blob),
     };
 
-    private static Appointment FromResource(AppointmentResource r) => new(
+    /// <summary>Internal so the CREATE shares it — one shape and one conversion for both (#631).</summary>
+    internal static Appointment FromResource(AppointmentResource r) => new(
         r.Summary,
         r.Start,
         r.End,

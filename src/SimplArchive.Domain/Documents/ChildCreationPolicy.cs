@@ -77,4 +77,24 @@ public static class ChildCreationPolicy
 
         return true;
     }
+
+    /// <summary>
+    /// Whether a folder admits a TYPED item — a Contact, an Appointment, a Note — and therefore advertises that
+    /// family's own create rel (#631).
+    /// </summary>
+    /// <remarks>
+    /// The counterpart to <see cref="AdmitsPlainChild"/>, and here for the same reason: it is asked on every
+    /// surface a client reads a folder from, and each surface answering it for itself is how a rel ends up on
+    /// two of three. That is not hypothetical — <c>contacts</c>/<c>appointments</c> shipped on the document
+    /// resource and the children listing while <c>GET /api/dav-collections</c>, the listing the Contacts and
+    /// Calendar tabs actually read their collections from, advertised neither. Both clients therefore had no
+    /// address to create from on the one screen the feature is for, exactly as <c>folders</c> had none on every
+    /// repository root (#638).
+    /// </remarks>
+    /// <param name="folderMaskId">The mask the folder wears; null for an unclassified one, which admits none.</param>
+    /// <param name="itemMaskId">The item mask in question, e.g. <see cref="WellKnownMaskIds.Contact"/>.</param>
+    public static bool AdmitsTypedItem(Guid? folderMaskId, Guid itemMaskId) =>
+        folderMaskId is { } maskId
+        && WellKnownMaskIds.TypedFolderRules.FirstOrDefault(r => r.FolderMaskId == maskId) is { } rule
+        && rule.Admits.Any(a => a.MaskId == itemMaskId);
 }

@@ -30,6 +30,14 @@
     <ScrollViewer>
       <StackPanel Spacing="10" Margin="0,0,12,0">
 
+        <!-- Where a NEW contact lands. Shown only when the choice is real: a picker with one entry asks a
+             question that has no second answer, and the status line names the addressbook either way. -->
+        <Grid ColumnDefinitions="110,*" IsVisible="{Binding ShowTargetPicker}" Margin="0,0,0,6">
+          <TextBlock Grid.Column="0" Text="{loc:Tr ContactsCollections}" VerticalAlignment="Center" />
+          <ComboBox Grid.Column="1" ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}"
+                    HorizontalAlignment="Stretch" AutomationProperties.Name="{loc:Tr ContactsCollections}" />
+        </Grid>
+
         <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto,Auto">
           <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr ContactGivenName}" VerticalAlignment="Center" />
           <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding GivenName}" Margin="0,0,0,6" />

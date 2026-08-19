@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Application.Abstractions;
+using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Masks;
 using SimplArchive.Infrastructure.Persistence;
 
@@ -125,6 +126,32 @@ public class DavCollectionsController : ControllerBase
 
             var parent = candidate.ParentId is { } pid ? parents.GetValueOrDefault(pid) : null;
             var personal = parent?.PersonalOfUserId == userId;
+            var folderMaskId = maskVersions.FirstOrDefault(v => v.Id == candidate.MaskVersionId)?.MaskId;
+
+            // The collection's OWN create (#631) — the address New Contact / New Appointment acts from.
+            //
+            // This listing is where both tabs get their collections, so a rel absent here is absent from the one
+            // screen the feature exists for, no matter how many other surfaces carry it. It shipped on the
+            // document resource and on the children listing and not here, which is the third time that shape has
+            // bitten (`folders`, #638) — hence the shared predicate rather than a fourth copy of the rule.
+            //
+            // Gated on CanCreateSubItems, which is what the endpoint itself requires — deliberately NOT on
+            // `Writable` below, which reports CanEditContent. The two answer different questions, and gating an
+            // affordance on the wrong one either hides a create that would succeed or offers one that is refused.
+            var itemCreates = new List<Link>();
+            if (effective.CanCreateSubItems)
+            {
+                if (ChildCreationPolicy.AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Contact))
+                {
+                    itemCreates.Add(new Link("contacts", $"/api/documents/{candidate.Id}/contacts", "POST"));
+                }
+
+                if (ChildCreationPolicy.AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Appointment))
+                {
+                    itemCreates.Add(new Link("appointments", $"/api/documents/{candidate.Id}/appointments", "POST"));
+                }
+            }
+
             resources.Add((new DavCollectionResource
             {
                 Id = candidate.Id,
@@ -141,6 +168,7 @@ public class DavCollectionsController : ControllerBase
                     // Everything a tab needs to act on the collection, so it never composes a URL (ADR 0543).
                     new Link("collection-color", $"/api/documents/{candidate.Id}/collection-color", "PUT"),
                     new Link("acl-entries", $"/api/documents/{candidate.Id}/acl-entries", "GET"),
+                    .. itemCreates,
                 ],
             }, personal));
         }

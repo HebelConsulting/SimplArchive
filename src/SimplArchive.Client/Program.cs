@@ -70,6 +70,7 @@ builder.Services.AddScoped<SimplArchive.Client.Services.BrowseService>();
 // the two tabs ask the same endpoint with a different kind, so a client per tab would be one copy to keep in
 // step with the other.
 builder.Services.AddScoped<SimplArchive.Client.Services.DavCollections>();
+builder.Services.AddScoped<SimplArchive.Client.Services.StructuredEditors>();
 
 // The repository tree's nodes. Outside the pane component for the same reason as SearchState: the workbench
 // renders one tab at a time, so roots kept in the component would be re-fetched — and every expanded folder

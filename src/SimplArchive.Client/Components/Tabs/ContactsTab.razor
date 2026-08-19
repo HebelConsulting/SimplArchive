@@ -1,6 +1,8 @@
 @using SimplArchive.Client.Services
 @inject DavCollections DavCollections
 @inject BrowseService Browse
+@inject StructuredEditors StructuredEditors
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 @* The Contacts tab of the workbench (#564) — the web twin of the desktop tab, which is the reference
@@ -13,10 +15,17 @@
                    title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
             <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
         </MudButton>
-        @* Disabled until a writable addressbook is ticked, so the affordance never lies about what it can do. *@
+        @* Disabled until a ticked addressbook ADVERTISES the create (#631) — the server's answer rather than
+           the client's guess at it, so the affordance never lies about what it can do. *@
         <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(!CanCreate)" OnClick="NewContactAsync"
                    title="@Strings.Get("ContactsNew")" aria-label="@Strings.Get("ContactsNew")">
             <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("ContactsNew")</span>
+        </MudButton>
+        @* Edit opens the same structured editor. Enabled only with a row selected; whether the card is really
+           editable is the server's answer, told by the document's contact-card rel (ADR 0543). *@
+        <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selected is null)" OnClick="EditContactAsync"
+                   title="@Strings.Get("ContactsEdit")" aria-label="@Strings.Get("ContactsEdit")">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("ContactsEdit")</span>
         </MudButton>
     </div>
 
@@ -90,11 +99,28 @@
     private ContactRow? _selected;
     private string _filter = string.Empty;
 
+    /// <summary>
+    /// One listed contact. <paramref name="SelfHref"/> is the row's own advertised address — Edit acts from
+    /// THIS, never from whatever the detail pane last finished loading (ADR 0559).
+    /// </summary>
     public sealed record ContactRow(
         Guid Id, string CollectionColor, string CollectionName, string FullName,
-        string Organization, string Email, string Phone);
+        string Organization, string Email, string Phone, string? SelfHref);
 
-    private bool CanCreate => _collections.Any(c => _checked.Contains(c.Id) && c.Writable);
+    /// <summary>
+    /// The checked addressbooks the caller may create in — asked of the <c>contacts</c> rel, not of
+    /// <c>Writable</c>. They are different questions: the flag reports the right to edit CONTENT, while the
+    /// create needs the right to add sub-items, and gating on the wrong one either hides a create that would
+    /// succeed or offers one the server refuses (ADR 0543).
+    /// </summary>
+    private List<CreateTarget> CreateTargets() =>
+    [
+        .. _collections
+            .Where(c => _checked.Contains(c.Id) && c.Href("contacts") is not null)
+            .Select(c => new CreateTarget(c.Id, c.DisplayName, c.Href("contacts")!)),
+    ];
+
+    private bool CanCreate => CreateTargets().Count > 0;
 
     private IEnumerable<ContactRow> Visible =>
         _filter is { Length: > 0 }
@@ -148,7 +174,7 @@
                     // not carry — the same gap the desktop tab has, and it closes the same way for both.
                     rows.Add(new ContactRow(
                         node.Id, collection.Color ?? "#8a8a8a", collection.DisplayName, node.Name,
-                        string.Empty, string.Empty, string.Empty));
+                        string.Empty, string.Empty, string.Empty, BrowseService.HrefOf(node, "self")));
                 }
             }
             catch (Exception e)
@@ -162,11 +188,86 @@
         StateHasChanged();
     }
 
-    private Task NewContactAsync()
+    /// <summary>
+    /// New contact (#631): the SAME dialog as Edit, opened empty, with the document created FROM the filled-in
+    /// form. Nothing exists until Save, so a cancelled dialog leaves nothing behind — and no DAV client syncing
+    /// meanwhile takes a copy of a stub.
+    /// </summary>
+    private async Task NewContactAsync()
     {
-        // NOT YET IMPLEMENTED: a contact IS a .vcf, so this needs the editor that composes one. Saying so
-        // beats a button that silently does nothing.
-        Snackbar.Add(Strings.Get("ContactsNewNotYet"), Severity.Info);
-        return Task.CompletedTask;
+        // Re-read rather than trusting the disabled button: the ticks can change while the tab is open.
+        if (CreateTargets() is not { Count: > 0 } targets)
+        {
+            return;
+        }
+
+        var parameters = new DialogParameters
+        {
+            { nameof(Dialogs.ContactDialog.Form), new ContactCardForm() },
+            { nameof(Dialogs.ContactDialog.Targets), targets },
+        };
+
+        var dialog = await DialogService.ShowAsync<Dialogs.ContactDialog>(Strings.Get("ContactsNew"), parameters);
+        if ((await dialog.Result) is not { Canceled: false, Data: Dialogs.ContactDialog.Saved saved }
+            || saved.Target is not { } target)
+        {
+            return;
+        }
+
+        var createdId = await StructuredEditors.CreateAsync(target.CreateHref, saved.Form.ToPayload());
+        if (createdId is null)
+        {
+            Snackbar.Add(string.Format(Strings.Get("StErrCreateContact"), string.Empty), Severity.Error);
+            return;
+        }
+
+        await ReloadContactsAsync();
+
+        // Selected by the id the server returned, never by the name the form composed: the server decides the
+        // filed name (it disambiguates a sibling clash), so matching on our guess selects nothing on exactly
+        // the second "Ada Lovelace".
+        _selected = _contacts.FirstOrDefault(c => c.Id == createdId) ?? _selected;
+        Snackbar.Add(string.Format(Strings.Get("StContactCreated"), _selected?.FullName ?? string.Empty, target.DisplayName), Severity.Success);
+    }
+
+    /// <summary>Opens the structured editor for the selected contact.</summary>
+    /// <remarks>
+    /// Addressed from the ROW the user clicked (ADR 0559), never from the pane's loaded state. The row's link
+    /// set comes from a children listing, which advertises what BROWSING needs (ADR 0557), so the card is
+    /// reached by resolving that address once and following what the document itself offers — and a document
+    /// advertising no contact-card rel is the server saying this is not an editable contact (ADR 0543).
+    /// </remarks>
+    private async Task EditContactAsync()
+    {
+        if (_selected is not { SelfHref: { } self } row)
+        {
+            return;
+        }
+
+        var loaded = await StructuredEditors.ReadAsync(self, "contact-card", ContactCardForm.From);
+        if (loaded is null)
+        {
+            Snackbar.Add(Strings.Get("ContactNotEditable"), Severity.Info);
+            return;
+        }
+
+        loaded.Value.CanEdit = loaded.CanEdit;
+        var parameters = new DialogParameters { { nameof(Dialogs.ContactDialog.Form), loaded.Value } };
+
+        var dialog = await DialogService.ShowAsync<Dialogs.ContactDialog>(row.FullName, parameters);
+        if ((await dialog.Result) is not { Canceled: false, Data: Dialogs.ContactDialog.Saved saved })
+        {
+            return;
+        }
+
+        if (await StructuredEditors.SaveAsync(loaded.Href, saved.Form.ToPayload(), loaded.ETag))
+        {
+            Snackbar.Add(string.Format(Strings.Get("StContactSaved"), row.FullName), Severity.Success);
+            await ReloadContactsAsync();
+        }
+        else
+        {
+            Snackbar.Add(string.Format(Strings.Get("StErrSaveContact"), string.Empty), Severity.Error);
+        }
     }
 }

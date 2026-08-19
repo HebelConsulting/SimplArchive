@@ -1,0 +1,126 @@
+@using SimplArchive.Client.Services
+
+@* The web structured appointment editor (#631) — the twin of the desktop dialog, and the same window for New
+   and Edit. Everything the form does not show, VALARM above all, is preserved by the server's merge.
+
+   Recurrence and attendees are SHOWN, never edited (ADR 0631 decisions 2 and 3): changing a series properly
+   means choosing between this occurrence / this and following / all, and this product never sends a scheduling
+   message — so an editable field would let this copy diverge from everybody else's. *@
+
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 480px; max-width: 620px; max-height: 62vh; overflow-y: auto;">
+
+            @if (Targets.Count > 1)
+            {
+                <MudSelect T="CreateTarget" Value="_target" ValueChanged="@(t => _target = t)"
+                           Label="@Strings.Get("CalendarCollections")" Variant="Variant.Outlined"
+                           Margin="Margin.Dense" Class="mb-3" ToStringFunc="@(t => t?.DisplayName ?? string.Empty)">
+                    @foreach (var target in Targets)
+                    {
+                        <MudSelectItem T="CreateTarget" Value="target">@target.DisplayName</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+
+            <MudTextField @bind-Value="Form.Summary" Label="@Strings.Get("ApptSummary")"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+
+            <MudCheckBox T="bool" @bind-Value="Form.IsAllDay" Label="@Strings.Get("ApptAllDay")"
+                         Dense="true" Class="mt-1" Disabled="@(!Form.CanEdit)" />
+
+            @* Start and end in the APPOINTMENT'S own zone, labelled with it below. Nothing here converts
+               between zones (ADR 0631 decision 5) — the label is what makes an unconverted time honest rather
+               than ambiguous to a reader somewhere else. *@
+            <div class="d-flex align-center" style="gap:8px;">
+                <MudDatePicker @bind-Date="Form.StartDate" Label="@Strings.Get("ApptStart")" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                @if (!Form.IsAllDay)
+                {
+                    <MudTimePicker @bind-Time="Form.StartTime" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   Style="max-width:140px;" Disabled="@(!Form.CanEdit)" />
+                }
+            </div>
+            <div class="d-flex align-center mt-2" style="gap:8px;">
+                <MudDatePicker @bind-Date="Form.EndDate" Label="@Strings.Get("ApptEnd")" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                @if (!Form.IsAllDay)
+                {
+                    <MudTimePicker @bind-Time="Form.EndTime" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   Style="max-width:140px;" Disabled="@(!Form.CanEdit)" />
+                }
+            </div>
+
+            @* A floating time says so instead of naming a zone it does not have — that is a different promise. *@
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">
+                @(Form.TimeZoneId is { Length: > 0 } zone
+                    ? string.Format(Strings.Get("ApptTimesAreIn"), zone)
+                    : Strings.Get("ApptTimesAreFloating"))
+            </MudText>
+
+            <MudTextField @bind-Value="Form.Location" Label="@Strings.Get("ApptLocation")" Class="mt-3"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+            <MudTextField @bind-Value="Form.Description" Label="@Strings.Get("ApptDescription")" Lines="3" Class="mt-2"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+
+            @if (Form.Repeats)
+            {
+                <div class="mt-3">
+                    <MudText Typo="Typo.subtitle2">@Strings.Get("ApptRepeats")</MudText>
+                    <MudText Typo="Typo.body2">@Form.RecurrenceRule</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("ApptRecurrenceReadOnly")</MudText>
+                </div>
+            }
+
+            @if (Form.Attendees.Count > 0)
+            {
+                <div class="mt-3">
+                    <MudText Typo="Typo.subtitle2">@Strings.Get("ApptAttendees")</MudText>
+                    @foreach (var attendee in Form.Attendees)
+                    {
+                        <div class="d-flex justify-space-between">
+                            <MudText Typo="Typo.body2" title="@attendee.Address">@attendee.Name</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@attendee.Status</MudText>
+                        </div>
+                    }
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("ApptAttendeesReadOnly")</MudText>
+                </div>
+            }
+
+            @* Says a reminder is set without implying it can be changed here. *@
+            @if (Form.ReminderCount > 0)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-3">
+                    @(Form.ReminderCount == 1
+                        ? Strings.Get("ApptReminderOne")
+                        : string.Format(Strings.Get("ApptReminderMany"), Form.ReminderCount))
+                </MudText>
+            }
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => Dialog.Cancel())">@Strings.Get("Cancel")</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!Form.CanEdit)" OnClick="Ok">
+            @Strings.Get("Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public AppointmentForm Form { get; set; } = new();
+
+    /// <summary>Empty when editing; the calendars the server said the caller may create in when not.</summary>
+    [Parameter] public List<CreateTarget> Targets { get; set; } = [];
+
+    private CreateTarget? _target;
+
+    protected override void OnInitialized() => _target = Targets.FirstOrDefault();
+
+    private void Ok() => Dialog.Close(DialogResult.Ok(new Saved(Form, _target)));
+
+    /// <summary>What Save returns: the filled form, and — for a create — where it goes.</summary>
+    public sealed record Saved(AppointmentForm Form, CreateTarget? Target);
+}

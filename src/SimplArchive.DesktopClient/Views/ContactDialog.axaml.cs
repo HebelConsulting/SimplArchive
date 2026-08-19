@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using SimplArchive.DesktopClient.ViewModels;
+using SimplArchive.Localization;
 
 namespace SimplArchive.DesktopClient.Views;
 
@@ -18,6 +19,13 @@ public partial class ContactDialog : Window
     {
         DataContext = model;
         InitializeComponent();
+
+        // Says which of the two things this window is. The same dialog serves New and Edit (#631), and a
+        // create form titled "Edit contact" reads as having opened the wrong record.
+        if (model.IsCreate)
+        {
+            Title = Strings.Get("ContactsNew");
+        }
 
         // An empty card opens with one blank e-mail and phone row rather than nothing at all: a New Contact
         // form whose only visible fields are names reads as not supporting them.

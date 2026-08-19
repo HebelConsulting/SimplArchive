@@ -20,6 +20,12 @@ public partial class AppointmentDialog : Window
         DataContext = model;
         InitializeComponent();
 
+        // Which of the two things this window is — the same dialog serves New and Edit (#631).
+        if (model.IsCreate)
+        {
+            Title = Strings.Get("CalendarNew");
+        }
+
         // The zone the times are IN, spelled out. Without it an unconverted wall clock is ambiguous to anyone
         // reading it from elsewhere — which is the honest cost of not converting (ADR 0631 decision 5).
         // A floating time says so instead: it means "this time, wherever you are", and naming a zone it does

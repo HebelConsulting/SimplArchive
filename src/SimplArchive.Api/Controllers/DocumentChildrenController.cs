@@ -312,11 +312,6 @@ public class DocumentChildrenController : ControllerBase
         });
     }
 
-    /// <summary>Whether a folder wearing <paramref name="folderMaskId"/> admits items wearing <paramref name="itemMaskId"/>.</summary>
-    private static bool AdmitsItem(Guid? folderMaskId, Guid itemMaskId) =>
-        WellKnownMaskIds.TypedFolderRules.FirstOrDefault(r => r.FolderMaskId == folderMaskId) is { } rule
-        && rule.Admits.Any(a => a.MaskId == itemMaskId);
-
     /// <summary>The addresses a listed row carries — see the call site for which rels belong here and why.</summary>
     private static List<Link> RowLinks(DocumentSummaryRow d)
     {
@@ -344,12 +339,12 @@ public class DocumentChildrenController : ControllerBase
         // …and the same for the other two typed families (#631). Keyed on the ADMITTED item mask rather than on
         // the folder's, so the rule reads the same way for all three and a new family is a row in the table
         // rather than another branch here.
-        if (AdmitsItem(d.MaskId, WellKnownMaskIds.Contact))
+        if (ChildCreationPolicy.AdmitsTypedItem(d.MaskId, WellKnownMaskIds.Contact))
         {
             links.Add(new Link("contacts", $"/api/documents/{d.Id}/contacts", "POST"));
         }
 
-        if (AdmitsItem(d.MaskId, WellKnownMaskIds.Appointment))
+        if (ChildCreationPolicy.AdmitsTypedItem(d.MaskId, WellKnownMaskIds.Appointment))
         {
             links.Add(new Link("appointments", $"/api/documents/{d.Id}/appointments", "POST"));
         }

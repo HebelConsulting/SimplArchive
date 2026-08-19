@@ -34,7 +34,7 @@ public sealed partial class ContactAddressRowViewModel : ObservableObject
 /// The contact edit form's state (#564, ADR 0631). Holds only the fields the form models — everything else on
 /// the stored card is preserved by the server's merge and never travels through here.
 /// </summary>
-public sealed partial class ContactEditViewModel : ObservableObject
+public sealed partial class ContactEditViewModel : StructuredEditFormViewModel
 {
     [ObservableProperty] private string _givenName = "";
     [ObservableProperty] private string _familyName = "";
@@ -43,9 +43,6 @@ public sealed partial class ContactEditViewModel : ObservableObject
     [ObservableProperty] private string _birthday = "";
     [ObservableProperty] private string _url = "";
     [ObservableProperty] private string _note = "";
-
-    /// <summary>False when the caller may read the card but not save it — the form opens with Save disabled.</summary>
-    [ObservableProperty] private bool _canEdit = true;
 
     public ObservableCollection<ContactFieldRowViewModel> Emails { get; } = [];
 
