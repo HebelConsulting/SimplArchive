@@ -189,7 +189,17 @@ internal static class WebDavPathResolver
         return subtree;
     }
 
-    internal static string HrefFor(List<string> segments) =>
-        WebDavMiddleware.BasePath + string.Concat(segments.Select(s => "/" + Uri.EscapeDataString(s)));
+    /// <summary>
+    /// The href for <paramref name="segments"/>, rooted at the prefix the REQUEST arrived on.
+    /// </summary>
+    /// <remarks>
+    /// Not the canonical <c>/SimplArchive</c> constant, which is what ADR 0509 originally specified and what
+    /// ADR 0645 supersedes: a Depth-1 PROPFIND on the legacy <c>/webdav</c> answered with members at
+    /// <c>/SimplArchive/…</c> — hrefs outside the collection the client had asked about (RFC 4918 §9.1). A
+    /// client cannot place those beside the mount, so it drew them UNDER it, and the repositories appeared
+    /// cascaded inside the personal space on an already-saved mount.
+    /// </remarks>
+    internal static string HrefFor(string basePath, List<string> segments) =>
+        basePath + string.Concat(segments.Select(s => "/" + Uri.EscapeDataString(s)));
 
 }

@@ -113,7 +113,7 @@ public sealed class WebDavMiddleware
         switch (method)
         {
             case "OPTIONS": HandleOptions(context); break;
-            case "PROPFIND": await HandlePropFindAsync(context, services, db, user, segments); break;
+            case "PROPFIND": await HandlePropFindAsync(context, services, db, user, segments, matchedBase); break;
             case "GET": await HandleGetAsync(context, services, db, user, segments, body: true); break;
             case "HEAD": await HandleGetAsync(context, services, db, user, segments, body: false); break;
             case "PUT": await HandlePutAsync(context, services, db, user, segments); break;
@@ -123,7 +123,7 @@ public sealed class WebDavMiddleware
             case "COPY": await HandleCopyAsync(context, services, db, user, segments); break;
             case "LOCK": WebDavLockHandling.HandleLock(_lockStore, context, user, segments); break;
             case "UNLOCK": WebDavLockHandling.HandleUnlock(_lockStore, context, user, segments); break;
-            case "PROPPATCH": await HandlePropPatchAsync(context, db, user, segments); break;
+            case "PROPPATCH": await HandlePropPatchAsync(context, db, user, segments, matchedBase); break;
             default: context.Response.StatusCode = StatusCodes.Status405MethodNotAllowed; break;
         }
     }
@@ -180,13 +180,13 @@ public sealed class WebDavMiddleware
 
 
 
-    private static Task HandlePropPatchAsync(HttpContext context, SimplArchiveDbContext db, User user, List<string> segments) =>
+    private static Task HandlePropPatchAsync(HttpContext context, SimplArchiveDbContext db, User user, List<string> segments, string basePath) =>
         // We store no dead properties; accept the request as a no-op success so clients (esp. Finder setting
         // timestamps) don't fail the copy.
-        WebDavXml.WriteMultiStatusAsync(context, [new PropStatXml(WebDavPathResolver.HrefFor(segments), "HTTP/1.1 200 OK", "")]);
+        WebDavXml.WriteMultiStatusAsync(context, [new PropStatXml(WebDavPathResolver.HrefFor(basePath, segments), "HTTP/1.1 200 OK", "")]);
 
     // ---- PROPFIND ------------------------------------------------------------------------------------------
-    private async Task HandlePropFindAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments)
+    private async Task HandlePropFindAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments, string basePath)
     {
         var depth = context.Request.Headers["Depth"].ToString();
         depth = string.IsNullOrEmpty(depth) ? "1" : depth; // some clients omit Depth; default 1
@@ -195,7 +195,7 @@ public sealed class WebDavMiddleware
         // entity, not the Document tree (ADR "WebDAV Inbox + Check-out folders").
         if (IsSpecialPath(segments))
         {
-            await WebDavSpecialHandlers.HandleSpecialPropFindAsync(context, services, db, user, segments, depth);
+            await WebDavSpecialHandlers.HandleSpecialPropFindAsync(context, services, db, user, segments, depth, basePath);
             return;
         }
 
@@ -214,12 +214,12 @@ public sealed class WebDavMiddleware
             return;
         }
 
-        var responses = new List<PropStatXml> { PropFor(node, segments) };
+        var responses = new List<PropStatXml> { PropFor(node, segments, basePath) };
         if (depth != "0" && node.IsCollection)
         {
             foreach (var child in await WebDavPathResolver.ChildrenAsync(db, user, node, calc))
             {
-                responses.Add(PropFor(child, [.. segments, child.WebDavName]));
+                responses.Add(PropFor(child, [.. segments, child.WebDavName], basePath));
             }
         }
 
@@ -228,9 +228,9 @@ public sealed class WebDavMiddleware
 
 
 
-    private static PropStatXml PropFor(WebDavNode node, List<string> segments)
+    private static PropStatXml PropFor(WebDavNode node, List<string> segments, string basePath)
     {
-        var href = WebDavPathResolver.HrefFor(segments) + (node.IsCollection ? "/" : "");
+        var href = WebDavPathResolver.HrefFor(basePath, segments) + (node.IsCollection ? "/" : "");
         var props = new StringBuilder();
         props.Append($"<D:displayname>{WebDavXml.Xml(node.WebDavName)}</D:displayname>");
         props.Append(node.IsCollection
@@ -987,13 +987,13 @@ public sealed class WebDavMiddleware
         "<D:lockentry><D:lockscope><D:shared/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockentry>" +
         "</D:supportedlock>";
 
-    internal static PropStatXml CollectionProp(List<string> segments, string displayName)
+    internal static PropStatXml CollectionProp(string basePath, List<string> segments, string displayName)
     {
         var props = $"<D:displayname>{WebDavXml.Xml(displayName)}</D:displayname><D:resourcetype><D:collection/></D:resourcetype><D:getlastmodified>{DateTimeOffset.UnixEpoch.ToString("R", CultureInfo.InvariantCulture)}</D:getlastmodified>{SupportedLockXml}";
-        return new PropStatXml(WebDavPathResolver.HrefFor(segments) + "/", "HTTP/1.1 200 OK", props);
+        return new PropStatXml(WebDavPathResolver.HrefFor(basePath, segments) + "/", "HTTP/1.1 200 OK", props);
     }
 
-    internal static PropStatXml FileProp(List<string> segments, long size, DateTimeOffset modified, string contentType)
+    internal static PropStatXml FileProp(string basePath, List<string> segments, long size, DateTimeOffset modified, string contentType)
     {
         var props = new StringBuilder();
         props.Append($"<D:displayname>{WebDavXml.Xml(segments[^1])}</D:displayname><D:resourcetype/>");
@@ -1001,7 +1001,7 @@ public sealed class WebDavMiddleware
         props.Append($"<D:getcontenttype>{WebDavXml.Xml(contentType)}</D:getcontenttype>");
         props.Append($"<D:getlastmodified>{modified.ToString("R", CultureInfo.InvariantCulture)}</D:getlastmodified>");
         props.Append(SupportedLockXml);
-        return new PropStatXml(WebDavPathResolver.HrefFor(segments), "HTTP/1.1 200 OK", props.ToString());
+        return new PropStatXml(WebDavPathResolver.HrefFor(basePath, segments), "HTTP/1.1 200 OK", props.ToString());
     }
 
 

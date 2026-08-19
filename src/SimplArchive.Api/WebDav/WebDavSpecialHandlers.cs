@@ -14,7 +14,7 @@ namespace SimplArchive.Api.WebDav;
 // family move without a constructor.
 internal static class WebDavSpecialHandlers
 {
-    internal static async Task HandleSpecialPropFindAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments, string depth)
+    internal static async Task HandleSpecialPropFindAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments, string depth, string basePath)
     {
         var folder = segments[1];
         var storage = services.GetRequiredService<IObjectStorageClient>();
@@ -23,10 +23,10 @@ internal static class WebDavSpecialHandlers
         {
             // The Intray / Check-out collection itself, plus (Depth 1) its files (lock/owner sidecars stay hidden).
             var files = await WebDavUserAreas.SpecialFolderFilesAsync(storage, db, user, folder);
-            var responses = new List<PropStatXml> { WebDavMiddleware.CollectionProp([segments[0], folder], folder) };
+            var responses = new List<PropStatXml> { WebDavMiddleware.CollectionProp(basePath, [segments[0], folder], folder) };
             if (depth != "0")
             {
-                responses.AddRange(files.Select(f => WebDavMiddleware.FileProp([segments[0], folder, f.Name], f.Size, f.Modified, ContentTypes.ForExtension(Path.GetExtension(f.Name)))));
+                responses.AddRange(files.Select(f => WebDavMiddleware.FileProp(basePath, [segments[0], folder, f.Name], f.Size, f.Modified, ContentTypes.ForExtension(Path.GetExtension(f.Name)))));
             }
 
             await WebDavXml.WriteMultiStatusAsync(context, responses);
@@ -36,7 +36,7 @@ internal static class WebDavSpecialHandlers
         // A single file inside the folder (flat — no deeper nesting), including a hidden lock/owner sidecar.
         if (segments.Count == 3 && await WebDavUserAreas.ResolveSpecialFileAsync(storage, db, user, folder, segments[2]) is { } file)
         {
-            await WebDavXml.WriteMultiStatusAsync(context, [WebDavMiddleware.FileProp(segments, file.Size, file.Modified, ContentTypes.ForExtension(Path.GetExtension(file.Name)))]);
+            await WebDavXml.WriteMultiStatusAsync(context, [WebDavMiddleware.FileProp(basePath, segments, file.Size, file.Modified, ContentTypes.ForExtension(Path.GetExtension(file.Name)))]);
             return;
         }
 
