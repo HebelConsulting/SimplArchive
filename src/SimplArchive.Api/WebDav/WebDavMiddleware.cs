@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Documents;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
+using SimplArchive.Domain.Masks;
 using SimplArchive.Domain.Users;
 using SimplArchive.Infrastructure.Persistence;
 
@@ -493,9 +494,43 @@ public sealed class WebDavMiddleware
         else
         {
             if (!rights.CanCreateSubItems) { context.Response.StatusCode = StatusCodes.Status403Forbidden; return; }
-            document = new Document { Id = Guid.NewGuid(), TenantId = user.TenantId, ParentId = parentDoc.Id, Name = stem, CreatedByUserId = user.Id, CreatedAt = now, StorageFolderId = keyStorageFolderId };
+
+            // Whether the destination admits only its own listed masks (a Calendar, an Addressbook, a Notebook).
+            var parentMaskId = await db.MaskVersions.Where(mv => mv.Id == parentDoc.MaskVersionId)
+                .Select(mv => (Guid?)mv.MaskId).FirstOrDefaultAsync(context.RequestAborted);
+            var parentIsTypedFolder = parentMaskId is { } pm
+                && WellKnownMaskIds.TypedFolderRules.Any(r => r.FolderMaskId == pm);
+
+            // Stamped with the Folder mask at creation, exactly as the API's create does — the finalizer
+            // reclassifies it to Basic Entry / eMail once the bytes arrive (ADR "Folder mask on folders").
+            //
+            // Creating it MASKLESS is what let a file dropped on the mounted `Personal` drive land at the
+            // personal space's first level (#644): maskless is admitted there (it is the pre-upgrade state),
+            // and the rule is gated on arrival, so the finalizer's later stamp was never re-checked. Stamping
+            // here refuses it at creation, BEFORE any bytes transfer, which is what the API and both clients
+            // already do (ADR 0637).
+            document = new Document
+            {
+                Id = Guid.NewGuid(),
+                TenantId = user.TenantId,
+                ParentId = parentDoc.Id,
+                Name = stem,
+                // …but NULL inside a TYPED folder, which is the other half of the API's rule and the half that
+                // matters here: a My Calendar / My Addressbook admits only Appointments / Contacts, so a
+                // Folder-masked child is refused outright. Those uploads must arrive unclassified and let the
+                // finalizer decide what they are — which is exactly how a .ics or .vcf becomes one.
+                MaskVersionId = parentIsTypedFolder
+                    ? null
+                    : await FolderMask.CurrentVersionIdAsync(db, user.TenantId, WellKnownMaskIds.Folder, context.RequestAborted)
+                        ?? await FolderMask.CurrentVersionIdAsync(db, context.RequestAborted),
+                CreatedByUserId = user.Id,
+                CreatedAt = now,
+                StorageFolderId = keyStorageFolderId,
+            };
             db.Documents.Add(document);
             try { await db.SaveChangesAsync(context.RequestAborted); }
+            catch (SimplArchive.Domain.Documents.PersonalSpaceStructureException) { context.Response.StatusCode = StatusCodes.Status409Conflict; return; }
+            catch (Domain.Masks.TypedFolderContainmentException) { context.Response.StatusCode = StatusCodes.Status409Conflict; return; }
             catch (InvalidOperationException) { context.Response.StatusCode = StatusCodes.Status409Conflict; return; } // sibling-name clash
         }
 

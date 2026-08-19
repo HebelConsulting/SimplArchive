@@ -489,8 +489,25 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
                        || (entry.Property(d => d.ParentId).IsModified
                            && entry.Property(d => d.ParentId).OriginalValue != document.ParentId);
 
-        if (!arriving
-            || document.ParentId is not { } parentId
+        // …and when the MASK is assigned to something already sitting here (#644). Arrival-gating alone left a
+        // bypass: maskless is admitted (it is the pre-upgrade state), so anything created maskless and masked
+        // AFTERWARDS walked straight past this rule. That is not theoretical — a file dropped on the mounted
+        // `Personal` drive over WebDAV took exactly that route until its create learned to stamp a mask.
+        //
+        // It does NOT re-break the heal, which is what arrival-gating was protecting: a heal assigns an
+        // ADMITTED mask (My Documents, Calendar, Addressbook, Mailbox), so it passes the check below rather
+        // than being exempted from it. Only an assignment the level would have refused on arrival is refused
+        // here — which is the same question, asked at the moment the answer becomes knowable.
+        var masked = entry.State == EntityState.Modified
+                     && entry.Property(d => d.MaskVersionId).IsModified
+                     && document.MaskVersionId is not null;
+
+        if (!arriving && !masked)
+        {
+            return;
+        }
+
+        if (document.ParentId is not { } parentId
             || !await IsPersonalRootAsync(parentId, cancellationToken))
         {
             return;

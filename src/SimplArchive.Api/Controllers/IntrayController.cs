@@ -754,7 +754,18 @@ public class IntrayController : ControllerBase
 
         // Confirm + classify (the object is already in storage). A staged draft applies the user's intray
         // classification; otherwise the normal auto-classification runs — same path as a normal upload.
-        await _finalizer.FinalizeAsync(version, cancellationToken, staged);
+        // The finalizer assigns the mask, which is where the destination's admission rules become answerable —
+        // so a folder that will not hold this document is refused HERE rather than at creation (#644). Without
+        // the translation it surfaces as a bare 500: the Domain exception is an InvalidOperationException, and
+        // nothing on this path knew to map it.
+        try
+        {
+            await _finalizer.FinalizeAsync(version, cancellationToken, staged);
+        }
+        catch (Domain.Documents.PersonalSpaceStructureException e)
+        {
+            throw new Errors.Exceptions.Documents.PersonalSpaceStructureException(e.Message);
+        }
 
         // The item left the intray — sweep its staged-mask sidecar + cached preview artifacts so they don't orphan.
         await PurgeItemArtifactsAsync(prefix, name, cancellationToken);

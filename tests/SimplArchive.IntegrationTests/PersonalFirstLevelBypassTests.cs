@@ -13,18 +13,18 @@ namespace SimplArchive.IntegrationTests;
 
 // What happens when a document arrives at a personal space's first level MASKLESS and is masked afterwards —
 // the shape `RepositoryImporter` creates (it adds every document with MaskVersionId = null and assigns masks
-// in a later phase).
+// in a later phase), and the shape a WebDAV PUT created until #644.
 //
-// This matters because the two rules that guard that level answer differently, and the difference is not
-// visible from either rule's own code:
+// That two-step used to walk straight past the first-level rule, because the rule was ARRIVAL-gated: it ran
+// for Added documents and for a changed ParentId, and a later mask assignment is neither. Arrival-gating was
+// not an oversight — it protected the HEAL, since a pre-upgrade space holds maskless folders and a rule that
+// re-validated them on modification would have refused the very writes that fix them (ADR 0633's third wrong
+// shape).
 //
-//   the first-level rule   is ARRIVAL-gated (Added, or ParentId changed), so a later mask assignment is
-//                          never re-checked — an import walks straight past it.
-//   typed-folder containment is NOT gated: it runs for every Added OR Modified document, so the same later
-//                          assignment IS checked, and refuses a mask whose AdmittingFolders say otherwise.
-//
-// So an import bypasses one rule and is stopped by the other, which is why "does import fail?" has no single
-// answer. These tests pin both halves, because #630's fallback is built on top of exactly this asymmetry.
+// #644 closes the bypass without re-breaking that, and the distinction is the point of this file: a heal
+// assigns an ADMITTED mask, so it PASSES the check rather than being exempted from it. Only an assignment the
+// level would have refused on arrival is refused now — the same question, asked at the moment the answer
+// becomes knowable.
 public class PersonalFirstLevelBypassTests
 {
     private readonly Guid _tenantId = Guid.NewGuid();
@@ -78,11 +78,10 @@ public class PersonalFirstLevelBypassTests
     }
 
     [Fact]
-    public async Task A_later_mask_assignment_walks_past_the_first_level_rule()
+    public async Task A_later_mask_assignment_is_refused_like_an_arrival_would_have_been()
     {
-        // The bypass, stated as a test rather than as a claim. An eMail cannot be CREATED at the first level —
-        // PersonalSpaceStructureTests pins that — but arriving maskless and being masked afterwards is a
-        // different path, and the arrival gate does not see it.
+        // The bypass, closed (#644). This test asserted the OPPOSITE until then — it documented the hole as a
+        // fact rather than a bug, which is why flipping it is the deliverable.
         var (connection, accessor, userId, personalId) = await SpaceAsync();
         using var _c = connection;
 
@@ -90,11 +89,50 @@ public class PersonalFirstLevelBypassTests
         var document = await ArriveMasklessAsync(db, personalId, userId, "Slipped in");
 
         document.MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.BasicEntry, CancellationToken.None);
+
+        await Assert.ThrowsAsync<PersonalSpaceStructureException>(() => db.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task But_the_heal_still_works_because_it_assigns_an_ADMITTED_mask()
+    {
+        // The half that would break if the new trigger were an exemption-shaped fix instead of a check. A
+        // pre-upgrade space holds maskless folders, and healing one is a mask assignment on a document already
+        // sitting at the first level — indistinguishable, mechanically, from the bypass above. What separates
+        // them is WHICH mask: My Documents is admitted there, Basic Entry is not.
+        var (connection, accessor, userId, personalId) = await SpaceAsync();
+        using var _c = connection;
+
+        using var db = Ctx(connection, accessor);
+        var folder = await ArriveMasklessAsync(db, personalId, userId, "A pre-upgrade folder");
+
+        folder.MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.MyDocuments, CancellationToken.None);
         await db.SaveChangesAsync();
 
-        var stored = await db.Documents.SingleAsync(d => d.Id == document.Id);
+        var stored = await db.Documents.SingleAsync(d => d.Id == folder.Id);
         Assert.Equal(personalId, stored.ParentId);
         Assert.NotNull(stored.MaskVersionId);
+    }
+
+    [Fact]
+    public async Task And_a_mask_assignment_somewhere_ELSE_is_untouched()
+    {
+        // The rule is about the personal space's first level and nothing else. A document inside My Documents
+        // is masked by the finalizer on every upload, and a guard that reached it would refuse every file the
+        // user ever adds.
+        var (connection, accessor, userId, personalId) = await SpaceAsync();
+        using var _c = connection;
+
+        using var db = Ctx(connection, accessor);
+        var myDocumentsId = await db.Documents
+            .Where(d => d.ParentId == personalId && d.Name == PersonalFolders.MyDocuments)
+            .Select(d => d.Id).SingleAsync();
+
+        var document = await ArriveMasklessAsync(db, myDocumentsId, userId, "An ordinary upload");
+        document.MaskVersionId = await FolderMask.CurrentVersionIdAsync(db, _tenantId, WellKnownMaskIds.BasicEntry, CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        Assert.NotNull((await db.Documents.SingleAsync(d => d.Id == document.Id)).MaskVersionId);
     }
 
     [Fact]

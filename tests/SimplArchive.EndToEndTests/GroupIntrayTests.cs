@@ -56,8 +56,15 @@ public class GroupIntrayTests
         Assert.Equal(HttpStatusCode.Forbidden, (await carol.PostAsJsonAsync($"/api/intray?group={groupId}", new { fileName = "x.txt" })).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await carol.PostAsJsonAsync($"/api/intray/{name}/file?group={groupId}", new { folderId = Guid.NewGuid() })).StatusCode);
 
-        // Bob files it into his personal repository → a Document is created and the item LEAVES the group intray.
-        var bobRepo = (await TestJson.Post(bob, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
+        // Bob files it into his personal space's My Documents → a Document is created and the item LEAVES the
+        // group intray. Into My Documents rather than the personal ROOT: that level holds only the folders it
+        // was provisioned with (#634), so filing there is refused — which this test used to do, back when the
+        // level was open.
+        var personalId = (await TestJson.Post(bob, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
+        var bobRepo = (await TestJson.Get(bob, $"/api/documents/{personalId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Documents")
+            .GetProperty("id").GetGuid();
         var filed = await TestJson.Post(bob, $"/api/intray/{name}/file?group={groupId}", new { folderId = bobRepo });
         Assert.False(string.IsNullOrEmpty(filed.GetProperty("name").GetString()));
         Assert.DoesNotContain(

@@ -58,8 +58,13 @@ public class AuditSettingsFilingPersonalTests
         var personal = await TestJson.Post(user, "/api/me/personal-repository", new { });
         var repoId = personal.GetProperty("id").GetGuid();
 
-        // Upload an intray item and file it into the personal repository (a new document).
-        var docId = await UploadAndFileAsync(user, "note.txt", new { folderId = repoId });
+        // Upload an intray item and file it into My Documents (a new document). Not the personal ROOT: that
+        // level holds only the folders it was provisioned with (#634), so filing there is refused.
+        var myDocumentsId = (await TestJson.Get(user, $"/api/documents/{repoId}/children"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Documents")
+            .GetProperty("id").GetGuid();
+        var docId = await UploadAndFileAsync(user, "note.txt", new { folderId = myDocumentsId });
 
         // Upload another and file it as a new version of that document.
         await UploadAndFileAsync(user, "note2.txt", new { documentId = docId });
