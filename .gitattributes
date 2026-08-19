@@ -6,6 +6,11 @@
 * text=auto eol=lf
 
 # Binary assets — never normalize.
+# vCard and iCalendar fixtures are WIRE FORMAT, not source: both RFCs specify CRLF, and the repo-wide LF
+# normalisation above would otherwise rewrite the seeded demo cards into something a strict parser rejects —
+# silently, since our own lenient reader accepts either and every test would still pass (#648).
+*.vcf   binary
+*.ics   binary
 *.png   binary
 *.icns  binary
 *.ico   binary

@@ -1,0 +1,11 @@
+BEGIN:VCARD
+VERSION:3.0
+UID:volmet-geneva-6f1c2e40
+PRODID:-//Apple Inc.//macOS 15.7.7//EN
+N:;;;;
+FN:VOLMET Geneva
+ORG:VOLMET Geneva;
+TEL;type=WORK;type=VOICE;type=pref:+41 22 417 40 81
+NOTE:VOLMET Geneva\nFrequenz: 126.80 MHz\n\nEnthält aktuelle METARs der Flughäfen\nGeneva\, Zurich\, Bale\, Nizza\, Lyon\, Paris-Charles de Gaulle\, Paris-Orly\, Milano-Linate\, Milano-Malpensa\n\n+41 22 417 40 81
+X-ABShowAs:COMPANY
+END:VCARD

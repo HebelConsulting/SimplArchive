@@ -29,6 +29,11 @@
 
     <ScrollViewer>
       <StackPanel Spacing="10" Margin="0,0,12,0">
+        <!-- The structured half, disabled as a block while the raw text below is dirty: the two describe the
+             same card and only one of them is about to be saved, so leaving both live would let a user type
+             into fields that are then discarded without a word (ADR 0550). One binding on the container rather
+             than one per field, so a field added later cannot forget the rule. -->
+        <StackPanel Spacing="10" IsEnabled="{Binding StructuredEnabled}">
 
         <!-- Where a NEW contact lands. Shown only when the choice is real: a picker with one entry asks a
              question that has no second answer, and the status line names the addressbook either way. -->
@@ -153,6 +158,29 @@
              photo has no reason to believe this form kept it. -->
         <TextBlock Text="{loc:Tr ContactPreservedNote}" Foreground="{DynamicResource WbMuted}"
                    TextWrapping="Wrap" FontSize="11" Margin="0,8,0,0" />
+        </StackPanel>
+
+        <!-- Advanced: the RAW stored item (#648, ADR 0643). Collapsed, because the structured fields above are
+             the answer for almost every edit and a vCard opened by default invites hand-editing a format most
+             people cannot write correctly.
+
+             It exists because the server's merge keeps everything this form does not model — a photo, custom
+             labels, X- extensions — and until now there was no way to SEE that, let alone change it. A save
+             from here REPLACES the item rather than merging, which is what makes deleting a line actually
+             delete the property. -->
+        <Expander Header="{loc:Tr RawAdvanced}" IsVisible="{Binding ShowRaw}" Margin="0,10,0,0"
+                  IsExpanded="{Binding RawExpanded, Mode=TwoWay}" Expanding="OnRawExpanding"
+                  HorizontalAlignment="Stretch">
+          <StackPanel Spacing="6">
+            <TextBox Text="{Binding RawText}" AcceptsReturn="True" TextWrapping="NoWrap" MinHeight="180"
+                     FontFamily="monospace" IsEnabled="{Binding CanEdit}"
+                     AutomationProperties.Name="{loc:Tr RawAdvanced}" />
+            <!-- Says which way the save will go. Without it, a user who typed in both places has no way to know
+                 the form above was set aside. -->
+            <TextBlock Text="{loc:Tr RawReplacesNote}" Foreground="{DynamicResource WbMuted}"
+                       FontSize="11" TextWrapping="Wrap" IsVisible="{Binding RawIsDirty}" />
+          </StackPanel>
+        </Expander>
       </StackPanel>
     </ScrollViewer>
   </DockPanel>

@@ -214,6 +214,8 @@ public static class DemoDataSeeder
         });
         await dbContext.SaveChangesAsync();
 
+        await SeedPersonalContactsAsync(services, dbContext, objectStorage, assembly, tenantId, adminId, now, finalizer);
+
         await SeedExternalLinkAsync(dbContext, tenantId, telekomAgreement.Id, adminId, now);
     }
 
@@ -408,7 +410,7 @@ public static class DemoDataSeeder
 
     private static async Task<Document> AddDocumentAsync(
         SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
-        Guid tenantId, Guid parentId, string name, Guid adminId, DateTimeOffset at, Guid maskVersionId,
+        Guid tenantId, Guid parentId, string name, Guid adminId, DateTimeOffset at, Guid? maskVersionId,
         string resourceName, string ext, string contentType, DateOnly documentDate,
         Documents.DocumentFinalizer finalizer, string? comment = null)
     {
@@ -544,6 +546,62 @@ public static class DemoDataSeeder
             CreatedAt = at,
         });
         await dbContext.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Puts two real contacts in the demo user's own addressbook (#648).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The Contacts tab shipped with nothing to look at: a personal addressbook is provisioned empty, so the
+    /// tab that took a slice of work to build opened blank on the kiosk and read as unfinished.
+    /// </para>
+    /// <para>
+    /// These two are chosen rather than invented. They are real aviation weather-broadcast numbers, and both
+    /// carry an <c>X-ABShowAs:COMPANY</c> the structured form does not model — so they are also the demo of the
+    /// raw disclosure, which has nothing to show on a card this product composed itself.
+    /// </para>
+    /// <para>
+    /// Added MASKLESS on purpose: an addressbook admits only Contacts, and the finalizer is what classifies a
+    /// <c>.vcf</c> and extracts its index fields. Stamping a mask here would be guessing at what classification
+    /// is about to decide, and the guess an addressbook refuses.
+    /// </para>
+    /// </remarks>
+    private static async Task SeedPersonalContactsAsync(
+        IServiceProvider services, SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
+        Guid tenantId, Guid adminId, DateTimeOffset now, Documents.DocumentFinalizer finalizer)
+    {
+        // The personal space is provisioned on demand — for the demo user it does not exist until something
+        // asks for it, and this is that something. Idempotent, so a restart against an existing volume is safe.
+        var personal = await services.GetRequiredService<Documents.PersonalRepositoryProvisioner>()
+            .EnsureAsync(adminId, tenantId, CancellationToken.None);
+
+        var addressbookId = await dbContext.Documents
+            .Where(d => d.ParentId == personal.Id && d.Name == PersonalFolders.MyAddressbook)
+            .Select(d => (Guid?)d.Id)
+            .SingleOrDefaultAsync();
+        if (addressbookId is not { } bookId)
+        {
+            return;
+        }
+
+        foreach (var (name, resource) in new[]
+                 {
+                     ("VOLMET Geneva", "DemoVolmetGeneva.vcf"),
+                     ("VOLMET Zurich", "DemoVolmetZurich.vcf"),
+                 })
+        {
+            // Grow-later seeds strand data that is already there, so this checks rather than assuming an empty
+            // book: the kiosk resets daily but a developer's volume does not.
+            if (await dbContext.Documents.AnyAsync(d => d.ParentId == bookId && d.Name == name))
+            {
+                continue;
+            }
+
+            await AddDocumentAsync(
+                dbContext, storage, assembly, tenantId, bookId, name, adminId, now, maskVersionId: null,
+                resource, ".vcf", "text/vcard", DateOnly.FromDateTime(now.UtcDateTime), finalizer);
+        }
     }
 
     private static async Task<byte[]> ReadResourceAsync(Assembly assembly, string logicalName)

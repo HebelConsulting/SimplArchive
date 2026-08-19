@@ -3525,6 +3525,12 @@
   <data name="CoErrCancel" xml:space="preserve">
     <value>Could not cancel the check-out.</value>
   </data>
+  <data name="ApiErrUnparsableItemSource" xml:space="preserve">
+    <value>That is not a valid vCard or calendar entry. Nothing was saved — the stored item is unchanged.</value>
+  </data>
+  <data name="ApiErrItemSourceUidChanged" xml:space="preserve">
+    <value>The UID identifies this item to every calendar and address-book client that syncs it. Changing it would leave them holding a duplicate rather than the edit. Restore the original UID, or remove the line to keep it. Nothing was saved.</value>
+  </data>
   <data name="ApiErrGeneric" xml:space="preserve">
     <value>The action was rejected by the server.</value>
   </data>
@@ -4493,6 +4499,15 @@
   </data>
   <data name="StErrCreateAppt" xml:space="preserve">
     <value>The appointment could not be created: {0}</value>
+  </data>
+  <data name="RawAdvanced" xml:space="preserve">
+    <value>Advanced: the stored item</value>
+  </data>
+  <data name="RawReplacesNote" xml:space="preserve">
+    <value>The fields above are set aside: saving now replaces the stored item with exactly this text.</value>
+  </data>
+  <data name="StRawSaved" xml:space="preserve">
+    <value>Replaced the stored item.</value>
   </data>
   <data name="StContactSaved" xml:space="preserve">
     <value>Saved '{0}'.</value>

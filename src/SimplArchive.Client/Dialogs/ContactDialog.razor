@@ -31,27 +31,27 @@
 
             <div class="d-flex" style="gap:8px;">
                 <MudTextField @bind-Value="Form.GivenName" Label="@Strings.Get("ContactGivenName")"
-                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
                 <MudTextField @bind-Value="Form.FamilyName" Label="@Strings.Get("ContactFamilyName")"
-                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
             </div>
             <div class="d-flex mt-2" style="gap:8px;">
                 <MudTextField @bind-Value="Form.Organization" Label="@Strings.Get("ContactsOrg")"
-                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
                 <MudTextField @bind-Value="Form.Title" Label="@Strings.Get("ContactJobTitle")"
-                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
             </div>
 
             @* Each repeatable group carries its Add button in its own heading row, so the affordance sits with
                the thing it adds to rather than at the far end of the form (ADR 0550). *@
-            <RepeatableFieldGroup Title="@Strings.Get("ContactsEmail")" Rows="Form.Emails" CanEdit="Form.CanEdit"
+            <RepeatableFieldGroup Title="@Strings.Get("ContactsEmail")" Rows="Form.Emails" CanEdit="Form.StructuredEnabled"
                                   DefaultType="work" Placeholder="name@example.com" />
-            <RepeatableFieldGroup Title="@Strings.Get("ContactsPhone")" Rows="Form.Phones" CanEdit="Form.CanEdit"
+            <RepeatableFieldGroup Title="@Strings.Get("ContactsPhone")" Rows="Form.Phones" CanEdit="Form.StructuredEnabled"
                                   DefaultType="mobile" />
 
             <div class="d-flex align-center justify-space-between mt-4 mb-1">
                 <MudText Typo="Typo.subtitle2">@Strings.Get("ContactAddress")</MudText>
-                <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" Disabled="@(!Form.CanEdit)"
+                <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" Disabled="@(!Form.StructuredEnabled)"
                                OnClick="@(() => Form.Addresses.Add(new ContactAddressRow()))"
                                title="@Strings.Get("ContactAddAddress")" aria-label="@Strings.Get("ContactAddAddress")" />
             </div>
@@ -60,48 +60,74 @@
                 <MudPaper Outlined="true" Class="pa-2 mb-2">
                     <div class="d-flex align-center" style="gap:8px;">
                         <MudSelect T="string" @bind-Value="address.Type" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                   Style="max-width:110px;" Disabled="@(!Form.CanEdit)">
+                                   Style="max-width:110px;" Disabled="@(!Form.StructuredEnabled)">
                             @foreach (var type in ContactAddressRow.Types)
                             {
                                 <MudSelectItem T="string" Value="type">@type</MudSelectItem>
                             }
                         </MudSelect>
                         <MudTextField @bind-Value="address.Street" Placeholder="@Strings.Get("ContactStreet")"
-                                      Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Disabled="@(!Form.CanEdit)"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Disabled="@(!Form.StructuredEnabled)"
                                        OnClick="@(() => Form.Addresses.Remove(address))"
                                        title="@Strings.Get("Remove")" aria-label="@Strings.Get("Remove")" />
                     </div>
                     <div class="d-flex mt-2" style="gap:8px;">
                         <MudTextField @bind-Value="address.City" Placeholder="@Strings.Get("ContactCity")"
-                                      Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
                         <MudTextField @bind-Value="address.PostalCode" Placeholder="@Strings.Get("ContactPostalCode")"
                                       Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:130px;"
-                                      Disabled="@(!Form.CanEdit)" />
+                                      Disabled="@(!Form.StructuredEnabled)" />
                     </div>
                     <div class="d-flex mt-2" style="gap:8px;">
                         <MudTextField @bind-Value="address.Region" Placeholder="@Strings.Get("ContactRegion")"
-                                      Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
                         <MudTextField @bind-Value="address.Country" Placeholder="@Strings.Get("ContactCountry")"
-                                      Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
                     </div>
                 </MudPaper>
             }
 
             <div class="d-flex mt-3" style="gap:8px;">
                 <MudTextField @bind-Value="Form.Birthday" Label="@Strings.Get("ContactBirthday")" Placeholder="1990-02-15"
-                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
                 <MudTextField @bind-Value="Form.Url" Label="@Strings.Get("ContactUrl")"
-                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
             </div>
             <MudTextField @bind-Value="Form.Note" Label="@Strings.Get("ContactNote")" Lines="3" Class="mt-2"
-                          Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
 
             @* Says plainly that the rest of the card is safe. Without it, a user who knows their contact has a
                photo has no reason to believe this form kept it. *@
             <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-3">
                 @Strings.Get("ContactPreservedNote")
             </MudText>
+
+            @* Advanced: the RAW stored item (#648, ADR 0643). Collapsed, because the structured fields above
+               answer almost every edit. It exists because the server's merge keeps everything this form does
+               not model — a photo, custom labels, X- extensions, VALARM — and until now there was no way to
+               SEE that, let alone change it. A save from here REPLACES the item rather than merging, which is
+               what makes deleting a line actually delete the property. *@
+            @if (ShowRaw)
+            {
+                <MudExpansionPanels Class="mt-3" Elevation="0">
+                    <MudExpansionPanel Text="@Strings.Get("RawAdvanced")" Expanded="_rawExpanded"
+                                       ExpandedChanged="OnRawExpandedAsync">
+                        <MudTextField @bind-Value="Form.Raw.Text" Lines="12" Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" Immediate="true"
+                                      Style="font-family: monospace; font-size: 12px;"
+                                      aria-label="@Strings.Get("RawAdvanced")" />
+                        @* Says which way the save will go. Without it, a user who typed in both places has no
+                           way to know the form above was set aside. *@
+                        @if (Form.Raw.IsDirty)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">
+                                @Strings.Get("RawReplacesNote")
+                            </MudText>
+                        }
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
         </div>
     </DialogContent>
     <DialogActions>
@@ -121,6 +147,28 @@
 
     /// <summary>Empty when editing; the collections the server said the caller may create in when not.</summary>
     [Parameter] public List<CreateTarget> Targets { get; set; } = [];
+
+/// <summary>Hidden while composing a NEW item: there is no stored source to show yet.</summary>
+    private bool ShowRaw => Targets.Count == 0;
+
+    private bool _rawExpanded;
+
+    /// <summary>
+    /// Fetches the raw source the first time the disclosure is opened (#648) — lazily, because a card carrying
+    /// a photo is hundreds of kilobytes and most edits never expand the box.
+    /// </summary>
+    private async Task OnRawExpandedAsync(bool expanded)
+    {
+        _rawExpanded = expanded;
+        if (expanded && LoadRaw is { } load)
+        {
+            await load();
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>Supplied by the caller — this dialog owns no api client, matching the desktop's split.</summary>
+    [Parameter] public Func<Task>? LoadRaw { get; set; }
 
     private CreateTarget? _target;
 

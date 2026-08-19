@@ -317,9 +317,39 @@ public static class WindowShots
                 outPath = args[apptShotIndex + 1];
             }
 
+            // Taller than the product's own dialog, so the WHOLE form including the disclosure fits in one
+            // frame. Scrolling to it was tried first and does not work headlessly — the shot came back
+            // identical to the unscrolled one, which is a check that silently verifies nothing.
+            if (args.Contains("--raw") && dialog.DataContext is ViewModels.StructuredEditFormViewModel preForm)
+            {
+                dialog.Height = 1100;
+
+                // Set BEFORE Show, through the bound property: assigning Expander.IsExpanded after the window
+                // is up does not take headlessly — the shot came back with the disclosure still shut, which is
+                // a check that photographs the wrong thing and calls it verified.
+                preForm.RawExpanded = true;
+            }
+
             dialog.Show();
             Dispatcher.UIThread.RunJobs();
             Dispatcher.UIThread.RunJobs();
+
+            // `--raw` opens the Advanced disclosure over a loaded source (#648).
+            if (args.Contains("--raw") && dialog.DataContext is ViewModels.StructuredEditFormViewModel form)
+            {
+                form.SetRaw(
+                    contactShotIndex >= 0
+                        ? "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:6f1c2e40-1\r\nFN:Anna Meyer\r\nORG:Contoso\r\n"
+                          + "TEL;type=WORK:+41 79 000 00 00\r\nX-ABShowAs:COMPANY\r\nPHOTO;ENCODING=b:/9j/4AAQSkZJRg…\r\nEND:VCARD\r\n"
+                        : "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:9a2f-77\r\nSUMMARY:Weekly sync\r\n"
+                          + "DTSTART;TZID=Europe/Zurich:20260901T140000\r\nBEGIN:VALARM\r\nTRIGGER:-PT15M\r\nEND:VALARM\r\n"
+                          + "END:VEVENT\r\nEND:VCALENDAR\r\n",
+                    contactShotIndex >= 0 ? "vCard" : "iCalendar",
+                    "\"headless\"");
+
+                Dispatcher.UIThread.RunJobs();
+            }
+
             dialog.CaptureRenderedFrame()?.Save(outPath);
             return true;
         }

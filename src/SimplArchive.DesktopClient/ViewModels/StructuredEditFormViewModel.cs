@@ -34,6 +34,64 @@ public abstract partial class StructuredEditFormViewModel : ObservableObject
     /// <summary>The collections the server said the caller may create in — never a client-side guess.</summary>
     public ObservableCollection<CreateTarget> Targets { get; } = [];
 
+    /// <summary>The stored item verbatim, once the disclosure has been opened; empty until then (#648).</summary>
+    [ObservableProperty] private string _rawText = string.Empty;
+
+    /// <summary>What was loaded, so a dirty check compares against the SERVER's text rather than a guess.</summary>
+    private string _rawOriginal = string.Empty;
+
+    /// <summary><c>vCard</c> or <c>iCalendar</c> — what the disclosure says it is showing.</summary>
+    [ObservableProperty] private string _rawFormat = string.Empty;
+
+    /// <summary>The token the raw save goes back under; its own read's, not the structured read's.</summary>
+    public string RawETag { get; private set; } = string.Empty;
+
+    /// <summary>False before the disclosure has been opened — the text is fetched on demand, not up front.</summary>
+    [ObservableProperty] private bool _rawLoaded;
+
+    /// <summary>
+    /// Whether the disclosure is open. Bound two-way rather than left to the control, so the state is reachable
+    /// without a visual tree — which is what lets the headless render open it and photograph the box.
+    /// </summary>
+    [ObservableProperty] private bool _rawExpanded;
+
+    /// <summary>
+    /// True once the user has actually changed the raw text. This decides WHICH save happens: a raw save
+    /// replaces the whole item, so it must not run merely because somebody opened the box to look.
+    /// </summary>
+    public bool RawIsDirty => RawLoaded && !string.Equals(RawText, _rawOriginal, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether the structured fields accept input. They go read-only while the raw text is dirty, because the
+    /// two describe the same item and only one of them is about to be saved — leaving both live would let a
+    /// user type into fields that are then discarded without a word (ADR 0550: a control that cannot do
+    /// anything is noise that hides the one that can).
+    /// </summary>
+    public bool StructuredEnabled => CanEdit && !RawIsDirty;
+
+    /// <summary>Hidden while composing a NEW item: there is no stored source to show yet.</summary>
+    public bool ShowRaw => !IsCreate;
+
+    partial void OnRawTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(RawIsDirty));
+        OnPropertyChanged(nameof(StructuredEnabled));
+    }
+
+    partial void OnCanEditChanged(bool value) => OnPropertyChanged(nameof(StructuredEnabled));
+
+    /// <summary>Takes the loaded source as the baseline — so opening the box is not itself an edit.</summary>
+    public void SetRaw(string text, string format, string etag)
+    {
+        _rawOriginal = text;
+        RawFormat = format;
+        RawETag = etag;
+        RawText = text;
+        RawLoaded = true;
+        OnPropertyChanged(nameof(RawIsDirty));
+        OnPropertyChanged(nameof(StructuredEnabled));
+    }
+
     /// <summary>
     /// Whether to show the "file it into…" picker at all. Hidden for a single candidate: a chooser with one
     /// entry asks a question that has no second answer, and the status line names the collection afterwards
@@ -41,7 +99,11 @@ public abstract partial class StructuredEditFormViewModel : ObservableObject
     /// </summary>
     public bool ShowTargetPicker => IsCreate && Targets.Count > 1;
 
-    partial void OnIsCreateChanged(bool value) => OnPropertyChanged(nameof(ShowTargetPicker));
+    partial void OnIsCreateChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowTargetPicker));
+        OnPropertyChanged(nameof(ShowRaw));
+    }
 
     /// <summary>Puts the form into create mode over <paramref name="targets"/>, selecting the first.</summary>
     /// <remarks>

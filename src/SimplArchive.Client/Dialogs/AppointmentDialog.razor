@@ -24,30 +24,30 @@
             }
 
             <MudTextField @bind-Value="Form.Summary" Label="@Strings.Get("ApptSummary")"
-                          Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
 
             <MudCheckBox T="bool" @bind-Value="Form.IsAllDay" Label="@Strings.Get("ApptAllDay")"
-                         Dense="true" Class="mt-1" Disabled="@(!Form.CanEdit)" />
+                         Dense="true" Class="mt-1" Disabled="@(!Form.StructuredEnabled)" />
 
             @* Start and end in the APPOINTMENT'S own zone, labelled with it below. Nothing here converts
                between zones (ADR 0631 decision 5) — the label is what makes an unconverted time honest rather
                than ambiguous to a reader somewhere else. *@
             <div class="d-flex align-center" style="gap:8px;">
                 <MudDatePicker @bind-Date="Form.StartDate" Label="@Strings.Get("ApptStart")" Variant="Variant.Outlined"
-                               Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                               Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
                 @if (!Form.IsAllDay)
                 {
                     <MudTimePicker @bind-Time="Form.StartTime" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                   Style="max-width:140px;" Disabled="@(!Form.CanEdit)" />
+                                   Style="max-width:140px;" Disabled="@(!Form.StructuredEnabled)" />
                 }
             </div>
             <div class="d-flex align-center mt-2" style="gap:8px;">
                 <MudDatePicker @bind-Date="Form.EndDate" Label="@Strings.Get("ApptEnd")" Variant="Variant.Outlined"
-                               Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                               Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
                 @if (!Form.IsAllDay)
                 {
                     <MudTimePicker @bind-Time="Form.EndTime" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                   Style="max-width:140px;" Disabled="@(!Form.CanEdit)" />
+                                   Style="max-width:140px;" Disabled="@(!Form.StructuredEnabled)" />
                 }
             </div>
 
@@ -59,9 +59,9 @@
             </MudText>
 
             <MudTextField @bind-Value="Form.Location" Label="@Strings.Get("ApptLocation")" Class="mt-3"
-                          Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
             <MudTextField @bind-Value="Form.Description" Label="@Strings.Get("ApptDescription")" Lines="3" Class="mt-2"
-                          Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" />
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
 
             @if (Form.Repeats)
             {
@@ -96,6 +96,32 @@
                         : string.Format(Strings.Get("ApptReminderMany"), Form.ReminderCount))
                 </MudText>
             }
+
+            @* Advanced: the RAW stored item (#648, ADR 0643). Collapsed, because the structured fields above
+               answer almost every edit. It exists because the server's merge keeps everything this form does
+               not model — a photo, custom labels, X- extensions, VALARM — and until now there was no way to
+               SEE that, let alone change it. A save from here REPLACES the item rather than merging, which is
+               what makes deleting a line actually delete the property. *@
+            @if (ShowRaw)
+            {
+                <MudExpansionPanels Class="mt-3" Elevation="0">
+                    <MudExpansionPanel Text="@Strings.Get("RawAdvanced")" Expanded="_rawExpanded"
+                                       ExpandedChanged="OnRawExpandedAsync">
+                        <MudTextField @bind-Value="Form.Raw.Text" Lines="12" Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" Disabled="@(!Form.CanEdit)" Immediate="true"
+                                      Style="font-family: monospace; font-size: 12px;"
+                                      aria-label="@Strings.Get("RawAdvanced")" />
+                        @* Says which way the save will go. Without it, a user who typed in both places has no
+                           way to know the form above was set aside. *@
+                        @if (Form.Raw.IsDirty)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">
+                                @Strings.Get("RawReplacesNote")
+                            </MudText>
+                        }
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
         </div>
     </DialogContent>
     <DialogActions>
@@ -114,6 +140,28 @@
 
     /// <summary>Empty when editing; the calendars the server said the caller may create in when not.</summary>
     [Parameter] public List<CreateTarget> Targets { get; set; } = [];
+
+/// <summary>Hidden while composing a NEW item: there is no stored source to show yet.</summary>
+    private bool ShowRaw => Targets.Count == 0;
+
+    private bool _rawExpanded;
+
+    /// <summary>
+    /// Fetches the raw source the first time the disclosure is opened (#648) — lazily, because a card carrying
+    /// a photo is hundreds of kilobytes and most edits never expand the box.
+    /// </summary>
+    private async Task OnRawExpandedAsync(bool expanded)
+    {
+        _rawExpanded = expanded;
+        if (expanded && LoadRaw is { } load)
+        {
+            await load();
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>Supplied by the caller — this dialog owns no api client, matching the desktop's split.</summary>
+    [Parameter] public Func<Task>? LoadRaw { get; set; }
 
     private CreateTarget? _target;
 

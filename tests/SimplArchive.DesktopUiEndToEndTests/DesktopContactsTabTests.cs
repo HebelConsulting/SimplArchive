@@ -171,6 +171,50 @@ public class DesktopContactsTabTests
         Assert.Equal("ada@example.test", Assert.Single(loaded.Value.Emails).Value);
     }
 
+    // The demo seed puts two real contacts in the demo user's own addressbook (#648), so the Contacts tab has
+    // something to look at instead of opening blank on the kiosk and reading as unfinished.
+    //
+    // Asserted through the RAW source rather than only by name, because that is what proves the seed survived
+    // the trip: the cards carry an X-ABShowAs the structured form does not model, so finding it means the bytes
+    // were stored and re-read intact rather than recomposed from the fields we happen to understand.
+    [Fact]
+    public async Task The_demo_addressbook_is_seeded_and_its_unmodelled_properties_survive()
+    {
+        DesktopClientOptions.ApiBaseUrl = _app.BaseUrl;
+        var api = new SimplArchiveApiClient(await Ui.GetUserTokenAsync(_app.BaseUrl));
+        Assert.NotNull(await api.Profile.GetPersonalRepositoryAsync());
+
+        var vm = new ContactsTabViewModel();
+        vm.Setup(api);
+        await vm.LoadAsync();
+
+        var geneva = Assert.Single(vm.Contacts, c => c.FullName == "VOLMET Geneva");
+        Assert.Contains(vm.Contacts, c => c.FullName == "VOLMET Zurich");
+
+        var loaded = await vm.LoadCardAsync(geneva);
+        Assert.NotNull(loaded);
+
+        // The disclosure loads on demand, so nothing is there until it is asked for — the same laziness the
+        // dialog relies on.
+        Assert.False(loaded!.Value.RawLoaded);
+        await vm.LoadRawAsync(loaded, loaded.Value);
+
+        Assert.True(loaded.Value.RawLoaded);
+        Assert.Equal("vCard", loaded.Value.RawFormat);
+        Assert.Contains("X-ABShowAs:COMPANY", loaded.Value.RawText, StringComparison.Ordinal);
+        Assert.Contains("UID:", loaded.Value.RawText, StringComparison.Ordinal);
+
+        // Opening the box is not an edit — otherwise merely looking would trigger a REPLACE on save.
+        Assert.False(loaded.Value.RawIsDirty);
+        Assert.True(loaded.Value.StructuredEnabled);
+
+        // …and typing in it takes the form out of play, which is what stops a user editing both halves and
+        // silently losing one of them.
+        loaded.Value.RawText = loaded.Value.RawText.Replace("COMPANY", "INDIVIDUAL", StringComparison.Ordinal);
+        Assert.True(loaded.Value.RawIsDirty);
+        Assert.False(loaded.Value.StructuredEnabled);
+    }
+
     [Fact]
     public async Task The_calendar_side_of_the_same_listing_answers_calendars()
     {

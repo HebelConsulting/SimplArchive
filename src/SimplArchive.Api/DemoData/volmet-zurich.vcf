@@ -1,0 +1,11 @@
+BEGIN:VCARD
+VERSION:3.0
+UID:volmet-zurich-6f1c2e40
+PRODID:-//Apple Inc.//macOS 15.7.7//EN
+N:;;;;
+FN:VOLMET Zurich
+ORG:VOLMET Zurich;
+TEL;type=WORK;type=VOICE;type=pref:+41 43 931 60 71
+NOTE:VOLMET Zurich\nFrequenz: 127.20 MHz\n\nEnthält aktuelle METARs der Flughäfen\nZurich\, Geneva\, Bale\, Frankfurt\, Munich Stuttgart\, Milano-Malpensa\, Milano-Linate\, Lugano\n\n+41 43 931 60 71
+X-ABShowAs:COMPANY
+END:VCARD

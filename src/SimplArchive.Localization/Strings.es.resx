@@ -3525,6 +3525,12 @@
   <data name="CoErrCancel" xml:space="preserve">
     <value>No se pudo cancelar el check-out.</value>
   </data>
+  <data name="ApiErrUnparsableItemSource" xml:space="preserve">
+    <value>Esto no es una vCard ni una entrada de calendario válida. No se guardó nada: el elemento almacenado no ha cambiado.</value>
+  </data>
+  <data name="ApiErrItemSourceUidChanged" xml:space="preserve">
+    <value>El UID identifica este elemento ante todos los clientes de calendario y libreta de direcciones que lo sincronizan. Cambiarlo les dejaría un duplicado en lugar de la edición. Restaure el UID original o elimine la línea para conservarlo. No se guardó nada.</value>
+  </data>
   <data name="ApiErrGeneric" xml:space="preserve">
     <value>El servidor rechazó la acción.</value>
   </data>
@@ -4493,6 +4499,15 @@
   </data>
   <data name="StErrCreateAppt" xml:space="preserve">
     <value>No se pudo crear la cita: {0}</value>
+  </data>
+  <data name="RawAdvanced" xml:space="preserve">
+    <value>Avanzado: el elemento almacenado</value>
+  </data>
+  <data name="RawReplacesNote" xml:space="preserve">
+    <value>Los campos de arriba se ignoran: al guardar, el elemento almacenado se sustituye exactamente por este texto.</value>
+  </data>
+  <data name="StRawSaved" xml:space="preserve">
+    <value>Elemento almacenado sustituido.</value>
   </data>
   <data name="StContactSaved" xml:space="preserve">
     <value>'{0}' guardado.</value>

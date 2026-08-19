@@ -177,11 +177,50 @@ public sealed partial class CalendarTabViewModel : ObservableObject
         }
     }
 
+    /// <summary>Fills the form's raw box from the stored entry, when the user opens the disclosure (#648).</summary>
+    /// <remarks>On demand rather than with the entry — see the contacts twin for why.</remarks>
+    public async Task LoadRawAsync(StructuredEditorClient.Loaded<AppointmentEditViewModel> loaded, AppointmentEditViewModel form)
+    {
+        if (_api is null || form.RawLoaded)
+        {
+            return;
+        }
+
+        try
+        {
+            if (await _api.StructuredEditors.ReadRawAsync(loaded.Links) is { } raw)
+            {
+                form.SetRaw(raw.Text, raw.Format, raw.ETag);
+            }
+        }
+        catch (Exception e)
+        {
+            Report(string.Format(Strings.Get("StErrLoadCalendars"), e.Message));
+        }
+    }
+
     /// <summary>Saves an edited entry and refreshes the list so the row shows what was stored.</summary>
+    /// <remarks>A dirty raw box wins and REPLACES the entry — see the contacts twin.</remarks>
     public async Task SaveEntryAsync(StructuredEditorClient.Loaded<AppointmentEditViewModel> loaded, AppointmentEditViewModel edited)
     {
         if (_api is null)
         {
+            return;
+        }
+
+        if (edited.RawIsDirty)
+        {
+            try
+            {
+                await _api.StructuredEditors.SaveRawAsync(loaded.Links, edited.RawText, edited.RawETag);
+                Report(Strings.Get("StRawSaved"));
+                await ReloadAppointmentsAsync();
+            }
+            catch (Exception e)
+            {
+                Report(string.Format(Strings.Get("StErrSaveAppt"), e.Message));
+            }
+
             return;
         }
 

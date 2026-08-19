@@ -57,7 +57,10 @@ public partial class CalendarTab : UserControl
         }
 
         loaded.Value.CanEdit = loaded.CanEdit;
-        if (await new AppointmentDialog(loaded.Value).ShowDialog<AppointmentEditViewModel?>(owner) is { } edited)
+
+        // See ContactsTab.OnEdit: the raw source loads on demand, through a lambda.
+        var dialog = new AppointmentDialog(loaded.Value) { RawLoader = () => tab.LoadRawAsync(loaded, loaded.Value) };
+        if (await dialog.ShowDialog<AppointmentEditViewModel?>(owner) is { } edited)
         {
             await tab.SaveEntryAsync(loaded, edited);
         }

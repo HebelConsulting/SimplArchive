@@ -252,11 +252,41 @@
         }
 
         loaded.Value.CanEdit = loaded.CanEdit;
-        var parameters = new DialogParameters { { nameof(Dialogs.ContactDialog.Form), loaded.Value } };
+
+        // The raw source loads only if the user opens the disclosure (#648) — the lambda is how the dialog
+        // reaches the api client without owning one, the same split the desktop uses.
+        var parameters = new DialogParameters
+        {
+            { nameof(Dialogs.ContactDialog.Form), loaded.Value },
+            { nameof(Dialogs.ContactDialog.LoadRaw), (Func<Task>)(async () =>
+                {
+                    if (await StructuredEditors.ReadRawAsync(loaded.Links) is { } raw)
+                    {
+                        loaded.Value.Raw.Set(raw.Text, raw.Format, raw.ETag);
+                    }
+                })
+            },
+        };
 
         var dialog = await DialogService.ShowAsync<Dialogs.ContactDialog>(row.FullName, parameters);
         if ((await dialog.Result) is not { Canceled: false, Data: Dialogs.ContactDialog.Saved saved })
         {
+            return;
+        }
+
+        // A dirty raw box wins and REPLACES the card. The two describe the same contact and only one can be
+        // saved, which is why the form went read-only the moment the raw text changed.
+        if (saved.Form.Raw.IsDirty)
+        {
+            if (await StructuredEditors.SaveRawAsync(loaded.Links, saved.Form.Raw.Text, saved.Form.Raw.ETag) is { } problem)
+            {
+                // Verbatim: the refusals name the line to fix, which "saving failed" would throw away.
+                Snackbar.Add(problem, Severity.Error);
+                return;
+            }
+
+            Snackbar.Add(Strings.Get("StRawSaved"), Severity.Success);
+            await ReloadContactsAsync();
             return;
         }
 

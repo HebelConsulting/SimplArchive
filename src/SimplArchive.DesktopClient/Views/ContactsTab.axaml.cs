@@ -67,7 +67,11 @@ public partial class ContactsTab : UserControl
         }
 
         loaded.Value.CanEdit = loaded.CanEdit;
-        if (await new ContactDialog(loaded.Value).ShowDialog<ContactEditViewModel?>(owner) is { } edited)
+
+        // The raw source is fetched only if the user opens the disclosure (#648) — the lambda is how this
+        // window reaches the api client without owning one.
+        var dialog = new ContactDialog(loaded.Value) { RawLoader = () => tab.LoadRawAsync(loaded, loaded.Value) };
+        if (await dialog.ShowDialog<ContactEditViewModel?>(owner) is { } edited)
         {
             await tab.SaveCardAsync(loaded, edited);
         }

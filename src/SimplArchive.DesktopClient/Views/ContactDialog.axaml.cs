@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using SimplArchive.DesktopClient.Services;
 using SimplArchive.DesktopClient.ViewModels;
 using SimplArchive.Localization;
 
@@ -39,6 +40,26 @@ public partial class ContactDialog : Window
             model.AddPhone();
         }
     }
+
+
+    /// <summary>
+    /// Fetches the raw source the first time the disclosure is opened (#648).
+    /// </summary>
+    /// <remarks>
+    /// Supplied as a lambda by the caller rather than done here: this window owns no api client, which is what
+    /// keeps the load and the save testable without a display. Lazy because a card carrying a photo is hundreds
+    /// of kilobytes and most edits never open the box.
+    /// </remarks>
+    public Func<Task>? RawLoader { get; set; }
+
+    private void OnRawExpanding(object? sender, Avalonia.Interactivity.CancelRoutedEventArgs e) =>
+        Safe.Fire(async () =>
+        {
+            if (RawLoader is { } load)
+            {
+                await load();
+            }
+        });
 
     private void OnSave(object? sender, RoutedEventArgs e) => Close(DataContext as ContactEditViewModel);
 

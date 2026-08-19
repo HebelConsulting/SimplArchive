@@ -257,11 +257,38 @@
         }
 
         loaded.Value.CanEdit = loaded.CanEdit;
-        var parameters = new DialogParameters { { nameof(Dialogs.AppointmentDialog.Form), loaded.Value } };
+
+        // See the contacts twin: the raw source loads on demand, through a lambda.
+        var parameters = new DialogParameters
+        {
+            { nameof(Dialogs.AppointmentDialog.Form), loaded.Value },
+            { nameof(Dialogs.AppointmentDialog.LoadRaw), (Func<Task>)(async () =>
+                {
+                    if (await StructuredEditors.ReadRawAsync(loaded.Links) is { } raw)
+                    {
+                        loaded.Value.Raw.Set(raw.Text, raw.Format, raw.ETag);
+                    }
+                })
+            },
+        };
 
         var dialog = await DialogService.ShowAsync<Dialogs.AppointmentDialog>(row.Title, parameters);
         if ((await dialog.Result) is not { Canceled: false, Data: Dialogs.AppointmentDialog.Saved saved })
         {
+            return;
+        }
+
+        // A dirty raw box wins and REPLACES the entry — see the contacts twin.
+        if (saved.Form.Raw.IsDirty)
+        {
+            if (await StructuredEditors.SaveRawAsync(loaded.Links, saved.Form.Raw.Text, saved.Form.Raw.ETag) is { } problem)
+            {
+                Snackbar.Add(problem, Severity.Error);
+                return;
+            }
+
+            Snackbar.Add(Strings.Get("StRawSaved"), Severity.Success);
+            await ReloadAppointmentsAsync();
             return;
         }
 

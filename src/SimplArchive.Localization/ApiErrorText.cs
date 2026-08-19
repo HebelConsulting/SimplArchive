@@ -55,6 +55,10 @@ public static class ApiErrorText
         "CHECKOUT_PAGES_NOT_SUPPORTED" => Strings.Get("ApiErrIntrayPagesNotSupported"),
         "CHECKOUT_WORKING_COPY_SIGNED" => Strings.Get("ApiErrWorkingCopySigned"),
         "INTRAY_NO_PATCH_CODES_FOUND" => Strings.Get("ApiErrIntrayNoPatchCodes"),
+        // The raw-item disclosure's two refusals (#648, ADR 0643). Both name the line to fix, which is the
+        // whole value of surfacing them in an editor whose premise is that the user can see what they edit.
+        "UNPARSABLE_ITEM_SOURCE" => Strings.Get("ApiErrUnparsableItemSource"),
+        "ITEM_SOURCE_UID_CHANGED" => Strings.Get("ApiErrItemSourceUidChanged"),
         _ => Strings.Get("ApiErrGeneric"),
     };
 }

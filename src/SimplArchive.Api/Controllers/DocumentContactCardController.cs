@@ -136,6 +136,12 @@ public class DocumentContactCardController : ControllerBase
         resource.Links.Add(new Link("self", $"/api/documents/{documentId}/contact-card", "GET"));
         resource.Links.Add(new Link("document", $"/api/documents/{documentId}", "GET"));
 
+        // The RAW source behind this resource (#648, ADR 0643) — how a user sees, and changes, the properties
+        // this form does not model. Advertised HERE rather than on the document, so a client that has just read
+        // the structured item already holds the address and does not spend a request to learn it (ADR 0557).
+        // Withheld from a caller who cannot read content, which the Forbid above already settled.
+        resource.Links.Add(new Link("source", DocumentItemSourceController.SourceHref(documentId, isContact: true), "GET"));
+
         // The DOCUMENT's token: a version is append-only and carries none, and a concurrent save moves the
         // document's, which is exactly the collision this needs to detect.
         Response.Headers.ETag = $"\"{document.ConcurrencyToken}\"";
@@ -205,6 +211,9 @@ public class DocumentContactCardController : ControllerBase
         // Pending + the shared finalizer, never a hand-written Confirmed version: the status is guarded by a
         // CHECK constraint, and the finalizer is what re-extracts the index fields from the merged card.
         await _finalizer.FinalizeAsync(newVersion, cancellationToken);
+
+        // The content changed, so the token both editors share must move — see StructuredItemVersioning.
+        await StructuredItemVersioning.MarkContentChangedAsync(_dbContext, document, cancellationToken);
 
         // Re-read: SaveChanges regenerated the document's token, and the client needs the new one to save again.
         Response.Headers.ETag = $"\"{document.ConcurrencyToken}\"";

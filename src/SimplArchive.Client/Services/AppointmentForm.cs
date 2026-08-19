@@ -58,6 +58,17 @@ public sealed class AppointmentForm
 
     public bool CanEdit { get; set; } = true;
 
+    /// <summary>The "Advanced: the stored item" disclosure's state (#648).</summary>
+    public RawSourceState Raw { get; } = new();
+
+    /// <summary>
+    /// Whether the structured fields accept input. They go read-only while the raw text is dirty: the two
+    /// describe the same item and only one is about to be saved, so leaving both live would let a user type
+    /// into fields that are then discarded without a word (ADR 0550).
+    /// </summary>
+    public bool StructuredEnabled => CanEdit && !Raw.IsDirty;
+
+
     /// <summary>Reads the API's appointment resource into the form.</summary>
     public static AppointmentForm From(JsonElement body)
     {

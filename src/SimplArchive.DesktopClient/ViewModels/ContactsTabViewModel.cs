@@ -176,7 +176,38 @@ public sealed partial class ContactsTabViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Fills the form's raw box from the stored card, when the user opens the disclosure (#648).
+    /// </summary>
+    /// <remarks>
+    /// On demand rather than with the card: a vCard carrying a photo is hundreds of kilobytes, and most edits
+    /// never open the box. A card that advertises no <c>source</c> rel simply leaves it empty and read-only.
+    /// </remarks>
+    public async Task LoadRawAsync(StructuredEditorClient.Loaded<ContactEditViewModel> loaded, ContactEditViewModel form)
+    {
+        if (_api is null || form.RawLoaded)
+        {
+            return;
+        }
+
+        try
+        {
+            if (await _api.StructuredEditors.ReadRawAsync(loaded.Links) is { } raw)
+            {
+                form.SetRaw(raw.Text, raw.Format, raw.ETag);
+            }
+        }
+        catch (Exception e)
+        {
+            Report(string.Format(Strings.Get("StErrLoadContacts"), e.Message));
+        }
+    }
+
     /// <summary>Saves an edited card and refreshes the list so the row shows what was stored.</summary>
+    /// <remarks>
+    /// A dirty raw box wins, and REPLACES the item. The two describe the same card and only one can be saved,
+    /// so the form went read-only the moment the raw text changed — this is the other half of that rule.
+    /// </remarks>
     public async Task SaveCardAsync(StructuredEditorClient.Loaded<ContactEditViewModel> loaded, ContactEditViewModel edited)
     {
         if (_api is null)
@@ -184,10 +215,36 @@ public sealed partial class ContactsTabViewModel : ObservableObject
             return;
         }
 
+        if (edited.RawIsDirty)
+        {
+            await SaveRawAsync(loaded, edited);
+            return;
+        }
+
         try
         {
             await _api.StructuredEditors.SaveAsync(loaded.Href, edited.ToPayload(), loaded.ETag);
             Report(string.Format(Strings.Get("StContactSaved"), edited.StoredFormattedName ?? edited.FamilyName));
+            await ReloadContactsAsync();
+        }
+        catch (Exception e)
+        {
+            Report(string.Format(Strings.Get("StErrSaveContact"), e.Message));
+        }
+    }
+
+    /// <summary>Replaces the stored card with the raw text, and says so plainly when the server refuses.</summary>
+    /// <remarks>
+    /// The refusals — text that is not a vCard, or one whose UID was changed — carry a message written for a
+    /// person, so it is surfaced verbatim. "Saving failed" would leave the user with no idea which line to fix,
+    /// which is a poor answer in an editor whose whole premise is that they can see what they are editing.
+    /// </remarks>
+    private async Task SaveRawAsync(StructuredEditorClient.Loaded<ContactEditViewModel> loaded, ContactEditViewModel edited)
+    {
+        try
+        {
+            await _api!.StructuredEditors.SaveRawAsync(loaded.Links, edited.RawText, edited.RawETag);
+            Report(Strings.Get("StRawSaved"));
             await ReloadContactsAsync();
         }
         catch (Exception e)

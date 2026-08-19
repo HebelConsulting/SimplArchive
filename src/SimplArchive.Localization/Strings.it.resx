@@ -3525,6 +3525,12 @@
   <data name="CoErrCancel" xml:space="preserve">
     <value>Impossibile annullare il check-out.</value>
   </data>
+  <data name="ApiErrUnparsableItemSource" xml:space="preserve">
+    <value>Non è una vCard né una voce di calendario valida. Non è stato salvato nulla: l'elemento memorizzato è invariato.</value>
+  </data>
+  <data name="ApiErrItemSourceUidChanged" xml:space="preserve">
+    <value>L'UID identifica questo elemento per tutti i client di calendario e rubrica che lo sincronizzano. Modificarlo creerebbe un duplicato invece della modifica. Ripristina l'UID originale oppure rimuovi la riga per mantenerlo. Non è stato salvato nulla.</value>
+  </data>
   <data name="ApiErrGeneric" xml:space="preserve">
     <value>L'azione è stata rifiutata dal server.</value>
   </data>
@@ -4493,6 +4499,15 @@
   </data>
   <data name="StErrCreateAppt" xml:space="preserve">
     <value>Impossibile creare l'appuntamento: {0}</value>
+  </data>
+  <data name="RawAdvanced" xml:space="preserve">
+    <value>Avanzate: l'elemento memorizzato</value>
+  </data>
+  <data name="RawReplacesNote" xml:space="preserve">
+    <value>I campi sopra vengono ignorati: al salvataggio l'elemento memorizzato viene sostituito esattamente da questo testo.</value>
+  </data>
+  <data name="StRawSaved" xml:space="preserve">
+    <value>Elemento memorizzato sostituito.</value>
   </data>
   <data name="StContactSaved" xml:space="preserve">
     <value>'{0}' salvato.</value>

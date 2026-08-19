@@ -29,7 +29,16 @@ public sealed class StructuredEditorClient(ApiCore core, DocumentsClient documen
     /// <param name="Href">The resource's own address — saved back to this, not to a re-derived one.</param>
     /// <param name="ETag">The document's concurrency token, required on the way back as <c>If-Match</c>.</param>
     /// <param name="CanEdit">False when the caller may read but not save, so the form opens read-only.</param>
-    public sealed record Loaded<T>(T Value, string Href, string ETag, bool CanEdit);
+    /// <param name="Links">
+    /// The structured resource's OWN advertised addresses, kept so the raw source behind it is reached by
+    /// following its <c>source</c> rel rather than by composing one (#648, ADR 0643). Carried on the read that
+    /// already happened, so opening the raw box costs one request instead of two (ADR 0557).
+    /// </param>
+    public sealed record Loaded<T>(
+        T Value, string Href, string ETag, bool CanEdit, IReadOnlyDictionary<string, string> Links);
+
+    /// <summary>The raw text behind a structured item, and what is needed to save it back.</summary>
+    public sealed record RawSource(string Text, string Format, string ETag, bool CanEdit);
 
     /// <summary>
     /// Follows <paramref name="rel"/> off the document at <paramref name="documentSelfHref"/> and reads it.
@@ -70,7 +79,67 @@ public sealed class StructuredEditorClient(ApiCore core, DocumentsClient documen
         var etag = response.Headers.ETag?.Tag ?? string.Empty;
         var canEdit = body.TryGetProperty("canEdit", out var flag) && flag.GetBoolean();
 
-        return new Loaded<T>(parse(body), href, etag, canEdit);
+        return new Loaded<T>(
+            parse(body), href, etag, canEdit,
+            ApiCore.ParseLinks(body) ?? new Dictionary<string, string>());
+    }
+
+    /// <summary>
+    /// Reads the RAW text behind a structured item, following the <c>source</c> rel the structured resource
+    /// advertised (#648). Null when it advertises none — which is the server saying there is nothing to show.
+    /// </summary>
+    /// <remarks>
+    /// Called when the user OPENS the disclosure, not when the dialog opens. A card carrying a photo is
+    /// hundreds of kilobytes, and paying for that on every Edit to populate a box most people never expand is
+    /// the wrong trade — this is one deliberate request, at the moment it is asked for.
+    /// </remarks>
+    public async Task<RawSource?> ReadRawAsync(
+        IReadOnlyDictionary<string, string> structuredLinks, CancellationToken cancellationToken = default)
+    {
+        if (!structuredLinks.TryGetValue("source", out var href))
+        {
+            return null;
+        }
+
+        using var response = await core.Http.GetAsync(href, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return new RawSource(
+            body.TryGetProperty("text", out var text) ? text.GetString() ?? string.Empty : string.Empty,
+            body.TryGetProperty("format", out var format) ? format.GetString() ?? string.Empty : string.Empty,
+            response.Headers.ETag?.Tag ?? string.Empty,
+            body.TryGetProperty("canEdit", out var flag) && flag.GetBoolean());
+    }
+
+    /// <summary>
+    /// Replaces the stored item with <paramref name="text"/> — this does NOT merge (#648).
+    /// </summary>
+    public async Task SaveRawAsync(
+        IReadOnlyDictionary<string, string> structuredLinks,
+        string text,
+        string etag,
+        CancellationToken cancellationToken = default)
+    {
+        if (!structuredLinks.TryGetValue("source", out var href))
+        {
+            throw new ApiActionException("This item does not offer a raw source.");
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, href) { Content = JsonContent.Create(new { text }) };
+        request.Headers.TryAddWithoutValidation("If-Match", etag);
+
+        using var response = await core.Http.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            // The two refusals a raw save has that a structured one does not — unparsable, and a changed UID —
+            // both arrive as RFC 7807 with a message written for a person, so surfacing the detail is what
+            // tells the user which line to fix rather than that "saving failed".
+            await ApiCore.ThrowIfProblemAsync(response, "The raw item could not be saved.", cancellationToken);
+        }
     }
 
     /// <summary>

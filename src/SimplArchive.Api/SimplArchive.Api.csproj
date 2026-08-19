@@ -29,6 +29,11 @@
          precisely what the Api image does not have. Verified against the real detector: patchPages [2, 6].
          Regenerate with scripts/generate-scan-sample.sh. -->
     <EmbeddedResource Include="DemoData/patch-code-sample-batch.tif" LogicalName="DemoPatchCodeSampleBatch.tif" />
+    <!-- Two real contacts for the demo user's own addressbook (#648). Both carry an X-ABShowAs the structured
+         form does not model, so they double as the demo of the raw disclosure — which has nothing to show on a
+         card this product composed itself. Source: samples/. -->
+    <EmbeddedResource Include="DemoData/volmet-geneva.vcf" LogicalName="DemoVolmetGeneva.vcf" />
+    <EmbeddedResource Include="DemoData/volmet-zurich.vcf" LogicalName="DemoVolmetZurich.vcf" />
     <EmbeddedResource Include="DemoData/sample-offer-v1.pdf" LogicalName="DemoOfferV1.pdf" />
     <EmbeddedResource Include="DemoData/sample-offer-v2.pdf" LogicalName="DemoOfferV2.pdf" />
     <!-- Richer demo tree (ADR 0214, issue #354): Business Years / Contracts / General folders with varied file

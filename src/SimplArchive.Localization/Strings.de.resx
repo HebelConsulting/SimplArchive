@@ -3525,6 +3525,12 @@
   <data name="CoErrCancel" xml:space="preserve">
     <value>Das Check-out konnte nicht abgebrochen werden.</value>
   </data>
+  <data name="ApiErrUnparsableItemSource" xml:space="preserve">
+    <value>Das ist keine gültige vCard bzw. kein gültiger Kalendereintrag. Es wurde nichts gespeichert — der gespeicherte Eintrag ist unverändert.</value>
+  </data>
+  <data name="ApiErrItemSourceUidChanged" xml:space="preserve">
+    <value>Die UID identifiziert diesen Eintrag gegenüber allen Kalender- und Adressbuch-Clients, die ihn synchronisieren. Eine Änderung würde dort ein Duplikat statt der Bearbeitung erzeugen. Stellen Sie die ursprüngliche UID wieder her oder entfernen Sie die Zeile, um sie beizubehalten. Es wurde nichts gespeichert.</value>
+  </data>
   <data name="ApiErrGeneric" xml:space="preserve">
     <value>Die Aktion wurde vom Server abgelehnt.</value>
   </data>
@@ -4493,6 +4499,15 @@
   </data>
   <data name="StErrCreateAppt" xml:space="preserve">
     <value>Der Termin konnte nicht erstellt werden: {0}</value>
+  </data>
+  <data name="RawAdvanced" xml:space="preserve">
+    <value>Erweitert: der gespeicherte Eintrag</value>
+  </data>
+  <data name="RawReplacesNote" xml:space="preserve">
+    <value>Die Felder oben werden ignoriert: Beim Speichern wird der gespeicherte Eintrag durch genau diesen Text ersetzt.</value>
+  </data>
+  <data name="StRawSaved" xml:space="preserve">
+    <value>Gespeicherter Eintrag ersetzt.</value>
   </data>
   <data name="StContactSaved" xml:space="preserve">
     <value>'{0}' gespeichert.</value>

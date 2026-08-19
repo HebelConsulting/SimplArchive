@@ -22,6 +22,8 @@
 
     <ScrollViewer>
       <StackPanel Spacing="10" Margin="0,0,12,0">
+        <!-- The structured half, disabled as a block while the raw text below is dirty — see ContactDialog. -->
+        <StackPanel Spacing="10" IsEnabled="{Binding StructuredEnabled}">
 
         <!-- Where a NEW appointment lands; hidden when there is only one candidate. -->
         <Grid ColumnDefinitions="110,*" IsVisible="{Binding ShowTargetPicker}">
@@ -112,6 +114,23 @@
 
         <TextBlock Text="{loc:Tr ApptPreservedNote}" Foreground="{DynamicResource WbMuted}"
                    TextWrapping="Wrap" FontSize="11" Margin="0,8,0,0" />
+        </StackPanel>
+
+        <!-- Advanced: the RAW stored item (#648, ADR 0643). Collapsed by default — the structured fields above
+             answer almost every edit, and an .ics opened by default invites hand-editing a format with folding
+             rules most people do not know. It exists because the merge keeps everything this form does not
+             model, VALARM above all, and there was no way to see it. A save from here REPLACES the entry. -->
+        <Expander Header="{loc:Tr RawAdvanced}" IsVisible="{Binding ShowRaw}" Margin="0,10,0,0"
+                  IsExpanded="{Binding RawExpanded, Mode=TwoWay}" Expanding="OnRawExpanding"
+                  HorizontalAlignment="Stretch">
+          <StackPanel Spacing="6">
+            <TextBox Text="{Binding RawText}" AcceptsReturn="True" TextWrapping="NoWrap" MinHeight="180"
+                     FontFamily="monospace" IsEnabled="{Binding CanEdit}"
+                     AutomationProperties.Name="{loc:Tr RawAdvanced}" />
+            <TextBlock Text="{loc:Tr RawReplacesNote}" Foreground="{DynamicResource WbMuted}"
+                       FontSize="11" TextWrapping="Wrap" IsVisible="{Binding RawIsDirty}" />
+          </StackPanel>
+        </Expander>
       </StackPanel>
     </ScrollViewer>
   </DockPanel>
