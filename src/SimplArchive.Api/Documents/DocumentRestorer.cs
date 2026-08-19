@@ -17,11 +17,13 @@ public sealed class DocumentRestorer
 
     private readonly SimplArchiveDbContext _dbContext;
     private readonly IDocumentIndexQueue _indexQueue;
+    private readonly DocumentMover _mover;
 
-    public DocumentRestorer(SimplArchiveDbContext dbContext, IDocumentIndexQueue indexQueue)
+    public DocumentRestorer(SimplArchiveDbContext dbContext, IDocumentIndexQueue indexQueue, DocumentMover mover)
     {
         _dbContext = dbContext;
         _indexQueue = indexQueue;
+        _mover = mover;
     }
 
     // Restores the given (already-loaded, tracked) soft-deleted document + its deleted subtree. Returns true when
@@ -40,7 +42,13 @@ public sealed class DocumentRestorer
         if (document.ParentId is { } parentId && !await _dbContext.Documents.AnyAsync(d => d.Id == parentId, cancellationToken))
         {
             var rootId = await FindRootIdAsync(parentId, cancellationToken);
-            document.ParentId = await GetOrCreateRecoveredItemsFolderIdAsync(rootId, document.TenantId, callerUserId, callerServiceAccountId, cancellationToken);
+            var recoveredId = await GetOrCreateRecoveredItemsFolderIdAsync(rootId, document.TenantId, callerUserId, callerServiceAccountId, cancellationToken);
+
+            // A message whose INBOX is gone lands in Recovered Items, which is archive storage — so its bytes
+            // move with it (#633). Rare, and exactly the kind of path a fix confined to the IMAP handler would
+            // have missed: nothing here mentions mail.
+            await _mover.RelocateContentForMoveAsync(document.Id, recoveredId, cancellationToken);
+            document.ParentId = recoveredId;
         }
 
         var toRestore = await CollectDeletedSubtreeAsync(document, cancellationToken);

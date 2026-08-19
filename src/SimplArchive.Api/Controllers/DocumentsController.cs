@@ -47,9 +47,11 @@ public class DocumentsController : ControllerBase
         IAuditRecorder audit,
         ILegalHoldService legalHold,
         IUserSystemRightsResolver userSystemRights,
-        ICurrentTenantAccessor currentTenantAccessor)
+        ICurrentTenantAccessor currentTenantAccessor,
+        Documents.DocumentMover mover)
     {
         _currentTenantAccessor = currentTenantAccessor;
+        _mover = mover;
         _dbContext = dbContext;
         _access = access;
         _currentUserAccessor = currentUserAccessor;
@@ -159,6 +161,7 @@ public class DocumentsController : ControllerBase
     }
 
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
+    private readonly Documents.DocumentMover _mover;
 
     private record DocumentRow(string Name, Guid ConcurrencyToken, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, bool SensitivityWatermark, bool BreaksInheritance, FolderContentsSortOrder ContentsSortOrder, Guid? ParentId);
 
@@ -686,6 +689,10 @@ public class DocumentsController : ControllerBase
             throw new InvalidMoveTargetException();
         }
 
+        // Filing out of a mail inbox moves the BYTES too (#633) — before the save, so the key rewrites ride on
+        // it and a refused move leaves the document addressing its original content.
+        await _mover.RelocateContentForMoveAsync(documentId, request.ParentId, cancellationToken);
+
         document.ParentId = request.ParentId;
         _dbContext.Entry(document).Property(d => d.ConcurrencyToken).OriginalValue = ifMatchToken;
 
@@ -803,6 +810,11 @@ public class DocumentsController : ControllerBase
         {
             _dbContext.DocumentReferences.Remove(redundantReference);
         }
+
+        // Promoting a reference RELOCATES the document, so it crosses the ephemeral boundary exactly as a move
+        // does (#633). Easy to miss — nothing about "primary location" says "move" — which is why the seam is a
+        // service every relocation routes through rather than a fix in the move handler.
+        await _mover.RelocateContentForMoveAsync(documentId, request.FolderId, cancellationToken);
 
         document.ParentId = request.FolderId;
         _dbContext.Entry(document).Property(d => d.ConcurrencyToken).OriginalValue = ifMatchToken;

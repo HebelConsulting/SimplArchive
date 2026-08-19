@@ -273,6 +273,20 @@ internal static class ImapWrites
                 }
 
                 var document = await db.Documents.FirstAsync(d => d.Id == message.DocumentId);
+                try
+                {
+                    // Filing a message out of INBOX moves its BYTES onto archive storage (#633) — the case this
+                    // whole seam exists for, since the inbox is where messages arrive. Before the save, so a
+                    // refused move leaves the message addressing its original content.
+                    await scope.ServiceProvider.GetRequiredService<Documents.DocumentMover>()
+                        .RelocateContentForMoveAsync(document.Id, targetFolderId, CancellationToken.None);
+                }
+                catch (Errors.Exceptions.Documents.CannotFileIntoEphemeralMailException)
+                {
+                    remaining.Add(message); // an archived document cannot be moved back into the inbox
+                    continue;
+                }
+
                 document.ParentId = targetFolderId;
                 try
                 {

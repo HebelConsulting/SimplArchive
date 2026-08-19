@@ -209,6 +209,7 @@ builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentPurger>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentAccessService>();
 // Restore of recycle-bin documents — shared by DocumentsController (per-item) and RecycleBinController (bulk).
 // See ADR "Bulk restore from the recycle bin".
+builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentMover>();
 builder.Services.AddScoped<SimplArchive.Api.Documents.DocumentRestorer>();
 // The intray's page operations and the scope/authorization rule they share with IntrayController (ADR 0575).
 builder.Services.AddScoped<SimplArchive.Api.Intray.IntrayScopeResolver>();

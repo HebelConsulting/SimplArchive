@@ -736,6 +736,19 @@ public sealed class WebDavMiddleware
             return;
         }
 
+        // Dragging a message out of the mounted inbox files it, so the bytes move too (#633). A refused
+        // crossing is a 409, the same answer the client gets for any placement this server will not make.
+        try
+        {
+            await services.GetRequiredService<Documents.DocumentMover>()
+                .RelocateContentForMoveAsync(document.Id, destParentDoc.Id, context.RequestAborted);
+        }
+        catch (Errors.Exceptions.Documents.CannotFileIntoEphemeralMailException)
+        {
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            return;
+        }
+
         document.Name = newName;
         document.ParentId = destParentDoc.Id;
         try { await db.SaveChangesAsync(context.RequestAborted); }

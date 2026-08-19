@@ -23,6 +23,36 @@ public static class ObjectKeyBuilder
         return $"tenants/{tenantId}/{filingDate.Year}/{storageFolderId}/{versionId}{suffix}";
     }
 
+    // The EPHEMERAL key of a delivered message, under the per-user mail prefix rather than the archive's
+    // year buckets: tenants/{tenantId}/users/{userId}/mail/{storageFolderId}/{versionId}{ext} (ADR 0628, #633).
+    //
+    // The point is not the path but what the path MEANS. An inbox is not an archive: deleting there is just
+    // deleting, with no retention schedule and no disposition review — an archive that makes you dispose of
+    // spam is worse than no inbox at all. Keeping those bytes somewhere the archive's rules do not reach is
+    // what makes that true of the storage and not merely of the folder's mask.
+    //
+    // The {storageFolderId}/{versionId} tail is deliberately the same shape as the archive key's, so
+    // <see cref="DerivedKey"/> groups a message's preview rendition beside it exactly as it does for a filed
+    // document, and nothing downstream needs to know which kind of key it holds.
+    public static string EphemeralMailKey(Guid tenantId, Guid userId, Guid storageFolderId, Guid versionId, string? extension = null)
+    {
+        var suffix = string.IsNullOrWhiteSpace(extension)
+            ? string.Empty
+            : extension.StartsWith('.') ? extension : $".{extension}";
+
+        return $"tenants/{tenantId}/users/{userId}/mail/{storageFolderId}/{versionId}{suffix}";
+    }
+
+    // Whether a key names ephemeral mail storage — the question "has this document's content crossed into the
+    // archive yet?", asked of the key rather than of the folder, because the folder is what a move is changing.
+    //
+    // Matched on the two fixed segments rather than on a prefix built from ids the caller may not have: a
+    // caller holding only a version's key (the move seam does) can still answer it. `users/` alone would be
+    // too loose the day anything else lives under a user.
+    public static bool IsEphemeralMailKey(string objectKey) =>
+        objectKey.Contains("/users/", StringComparison.Ordinal)
+        && objectKey.Contains("/mail/", StringComparison.Ordinal);
+
     // A sibling content key in the SAME document folder as an existing version's key, for a *new version* of that
     // document (e.g. the OCR searchable-PDF successor) — keeps the same tenants/{t}/{year}/{storageFolderId}/
     // directory, with a fresh {versionId}{ext} leaf (ADR 0530). Used when the caller has an existing version's key

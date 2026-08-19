@@ -35,6 +35,7 @@ public class DocumentBulkController : ControllerBase
     private readonly IDocumentIndexQueue _queue;
     private readonly IAuditRecorder _audit;
     private readonly IUserSystemRightsResolver _userSystemRights;
+    private readonly Documents.DocumentMover _mover;
 
     public DocumentBulkController(
         SimplArchiveDbContext dbContext,
@@ -44,8 +45,10 @@ public class DocumentBulkController : ControllerBase
         ILegalHoldService legalHold,
         IDocumentIndexQueue queue,
         IAuditRecorder audit,
-        IUserSystemRightsResolver userSystemRights)
+        IUserSystemRightsResolver userSystemRights,
+        Documents.DocumentMover mover)
     {
+        _mover = mover;
         _dbContext = dbContext;
         _effectiveRightsCalculator = effectiveRightsCalculator;
         _currentServiceAccountAccessor = currentServiceAccountAccessor;
@@ -154,6 +157,19 @@ public class DocumentBulkController : ControllerBase
                 || await _legalHold.IsFrozenAsync(id, cancellationToken)
                 || await IsCheckedOutByOtherAsync(id, cancellationToken)
                 || await IsAncestorOrSelfAsync(id, request.ParentId, cancellationToken))
+            {
+                skipped++;
+                continue;
+            }
+
+            // Filing out of a mail inbox moves the bytes too (#633). Inside the per-item try, because a bulk
+            // move SKIPS what it cannot do rather than failing the batch — a refused crossing is one skipped
+            // item, exactly like a name clash below it.
+            try
+            {
+                await _mover.RelocateContentForMoveAsync(id, request.ParentId, cancellationToken);
+            }
+            catch (Errors.Exceptions.Documents.CannotFileIntoEphemeralMailException)
             {
                 skipped++;
                 continue;

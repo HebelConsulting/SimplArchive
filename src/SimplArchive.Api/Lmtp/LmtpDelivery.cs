@@ -100,7 +100,10 @@ public class LmtpDelivery
             var now = DateTimeOffset.UtcNow;
             var versionId = Guid.NewGuid();
             var storageFolderId = Guid.NewGuid();
-            var objectKey = ObjectKeyBuilder.Build(tenantId, now, storageFolderId, versionId, ".eml");
+            // The EPHEMERAL prefix, not an archive key (#633): a delivered message has not been filed, and its
+            // bytes should not sit where the archive's retention and disposition rules apply until it is. It
+            // moves onto an archive key when the user files it out — see DocumentMover.
+            var objectKey = ObjectKeyBuilder.EphemeralMailKey(tenantId, userId, storageFolderId, versionId, ".eml");
 
             // Object FIRST. A row pointing at bytes that are not there is a document that opens to an error;
             // bytes with no row are an orphan a sweep can find. Only one of those is recoverable.
