@@ -1,0 +1,111 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        x:Class="SimplArchive.DesktopClient.Views.AppointmentDialog"
+        x:DataType="vm:AppointmentEditViewModel"
+        Title="{loc:Tr ApptEditTitle}" Width="680" Height="580" MinWidth="640" MinHeight="400"
+        WindowStartupLocation="CenterOwner">
+
+  <!-- The structured appointment editor (#564, ADR 0631). Everything the form does not show — VALARM above
+       all — is preserved by the server's merge and never travels through this window. -->
+  <DockPanel LastChildFill="True" Margin="16">
+
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
+                HorizontalAlignment="Right" Margin="0,14,0,0">
+      <TextBlock x:Name="ErrorText" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center"
+                 TextWrapping="Wrap" MaxWidth="300" IsVisible="False" />
+      <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+      <Button x:Name="SaveButton" Content="{loc:Tr Save}" Click="OnSave" IsDefault="True"
+              IsEnabled="{Binding CanEdit}" />
+    </StackPanel>
+
+    <ScrollViewer>
+      <StackPanel Spacing="10" Margin="0,0,12,0">
+
+        <Grid ColumnDefinitions="110,*">
+          <TextBlock Grid.Column="0" Text="{loc:Tr ApptSummary}" VerticalAlignment="Center" />
+          <TextBox Grid.Column="1" Text="{Binding Summary}" />
+        </Grid>
+
+        <CheckBox Content="{loc:Tr ApptAllDay}" IsChecked="{Binding IsAllDay}" Margin="110,0,0,0" />
+
+        <!-- Start and end in the APPOINTMENT'S own zone, labelled with it. Nothing here converts between
+             zones (ADR 0631 decision 5) — the label is what makes an unconverted time honest rather than
+             ambiguous to a reader somewhere else. -->
+        <!-- Explicit widths, not Auto: a DatePicker's natural width varies with the locale's date format and
+             a TimePicker's with whether the culture uses a 12-hour clock (which adds an AM/PM column), so Auto
+             let the time run off the right edge. Both were clipped mid-value before this was LOOKED at. -->
+        <Grid ColumnDefinitions="110,270,8,210,*" RowDefinitions="Auto,Auto">
+          <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr ApptStart}" VerticalAlignment="Center" />
+          <DatePicker Grid.Row="0" Grid.Column="1" SelectedDate="{Binding StartDate}" Margin="0,0,0,6" />
+          <TimePicker Grid.Row="0" Grid.Column="3" SelectedTime="{Binding StartTime}" Margin="0,0,0,6"
+                      IsVisible="{Binding !IsAllDay}" />
+
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr ApptEnd}" VerticalAlignment="Center" />
+          <DatePicker Grid.Row="1" Grid.Column="1" SelectedDate="{Binding EndDate}" />
+          <TimePicker Grid.Row="1" Grid.Column="3" SelectedTime="{Binding EndTime}"
+                      IsVisible="{Binding !IsAllDay}" />
+        </Grid>
+
+        <TextBlock x:Name="ZoneText" Foreground="{DynamicResource WbMuted}" FontSize="11" Margin="110,0,0,0"
+                   TextWrapping="Wrap" />
+
+        <Grid ColumnDefinitions="110,*">
+          <TextBlock Grid.Column="0" Text="{loc:Tr ApptLocation}" VerticalAlignment="Center" />
+          <TextBox Grid.Column="1" Text="{Binding Location}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="110,*">
+          <TextBlock Grid.Column="0" Text="{loc:Tr ApptDescription}" VerticalAlignment="Top" Margin="0,6,0,0" />
+          <TextBox Grid.Column="1" Text="{Binding Description}" AcceptsReturn="True"
+                   TextWrapping="Wrap" MinHeight="70" />
+        </Grid>
+
+        <!-- Recurrence is SHOWN, not edited, this round: changing a series properly means choosing between
+             this occurrence / this and following / all events, and offering a rule box without that choice
+             would apply every edit to the whole series including occurrences already past. -->
+        <Grid ColumnDefinitions="110,*" IsVisible="{Binding Repeats}">
+          <TextBlock Grid.Column="0" Text="{loc:Tr ApptRepeats}" VerticalAlignment="Top" />
+          <StackPanel Grid.Column="1" Spacing="2">
+            <TextBlock Text="{Binding RecurrenceText}" TextWrapping="Wrap" />
+            <TextBlock Text="{loc:Tr ApptRecurrenceReadOnly}" Foreground="{DynamicResource WbMuted}"
+                       FontSize="11" TextWrapping="Wrap" />
+          </StackPanel>
+        </Grid>
+
+        <!-- Attendees: shown, never edited. This product never sends a scheduling message (ADR 0631
+             decision 3), so an editable field would let this copy diverge from everybody else's. -->
+        <Grid ColumnDefinitions="110,*" IsVisible="{Binding HasAttendees}">
+          <TextBlock Grid.Column="0" Text="{loc:Tr ApptAttendees}" VerticalAlignment="Top" />
+          <StackPanel Grid.Column="1" Spacing="2">
+            <ItemsControl ItemsSource="{Binding Attendees}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:AttendeeRowViewModel">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding Address}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Status}" Foreground="{DynamicResource WbMuted}"
+                               FontSize="11" Margin="8,0,0,0" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{loc:Tr ApptAttendeesReadOnly}" Foreground="{DynamicResource WbMuted}"
+                       FontSize="11" TextWrapping="Wrap" />
+          </StackPanel>
+        </Grid>
+
+        <!-- Says a reminder is set without implying it can be changed here. -->
+        <Grid ColumnDefinitions="110,*" IsVisible="{Binding HasReminders}">
+          <TextBlock Grid.Column="0" Text="{loc:Tr ApptReminder}" VerticalAlignment="Center" />
+          <TextBlock x:Name="ReminderText" Grid.Column="1" Foreground="{DynamicResource WbMuted}"
+                     TextWrapping="Wrap" />
+        </Grid>
+
+        <TextBlock Text="{loc:Tr ApptPreservedNote}" Foreground="{DynamicResource WbMuted}"
+                   TextWrapping="Wrap" FontSize="11" Margin="0,8,0,0" />
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

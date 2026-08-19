@@ -63,6 +63,7 @@ public sealed class SimplArchiveApiClient
     private ProfileClient? _profile;
     private DavCollectionsClient? _davCollections;
     private LegalHoldsClient? _legalHolds;
+    private StructuredEditorClient? _structuredEditors;
 
     public SimplArchiveApiClient(string accessToken)
     {
@@ -117,6 +118,10 @@ public sealed class SimplArchiveApiClient
 
     /// <summary>The legal-holds + retention area (#443, ops tranche).</summary>
     public LegalHoldsClient LegalHolds => _legalHolds ??= new LegalHoldsClient(Core);
+
+    /// <summary>The structured contact/appointment editors' read + save plumbing (#564, ADR 0631).</summary>
+    public StructuredEditorClient StructuredEditors =>
+        _structuredEditors ??= new StructuredEditorClient(Core, Documents);
 
     // This client's bearer token — used as the RFC 8693 subject_token to start impersonation (ADR "User
     // impersonation").

@@ -4356,4 +4356,145 @@
   <data name="StErrCreateNote" xml:space="preserve">
     <value>No se ha podido crear la nota: {0}</value>
   </data>
+  <data name="Remove" xml:space="preserve">
+    <value>Quitar</value>
+  </data>
+  <data name="ContactEditTitle" xml:space="preserve">
+    <value>Contacto</value>
+  </data>
+  <data name="ContactGivenName" xml:space="preserve">
+    <value>Nombre</value>
+  </data>
+  <data name="ContactFamilyName" xml:space="preserve">
+    <value>Apellidos</value>
+  </data>
+  <data name="ContactJobTitle" xml:space="preserve">
+    <value>Cargo</value>
+  </data>
+  <data name="ContactAddEmail" xml:space="preserve">
+    <value>Añadir una dirección de correo</value>
+  </data>
+  <data name="ContactAddPhone" xml:space="preserve">
+    <value>Añadir un número de teléfono</value>
+  </data>
+  <data name="ContactAddress" xml:space="preserve">
+    <value>Dirección</value>
+  </data>
+  <data name="ContactAddAddress" xml:space="preserve">
+    <value>Añadir una dirección</value>
+  </data>
+  <data name="ContactStreet" xml:space="preserve">
+    <value>Calle</value>
+  </data>
+  <data name="ContactCity" xml:space="preserve">
+    <value>Ciudad</value>
+  </data>
+  <data name="ContactPostalCode" xml:space="preserve">
+    <value>Código postal</value>
+  </data>
+  <data name="ContactRegion" xml:space="preserve">
+    <value>Región</value>
+  </data>
+  <data name="ContactCountry" xml:space="preserve">
+    <value>País</value>
+  </data>
+  <data name="ContactBirthday" xml:space="preserve">
+    <value>Cumpleaños</value>
+  </data>
+  <data name="ContactUrl" xml:space="preserve">
+    <value>Sitio web</value>
+  </data>
+  <data name="ContactNote" xml:space="preserve">
+    <value>Nota</value>
+  </data>
+  <data name="ContactPreservedNote" xml:space="preserve">
+    <value>Todo lo que este contacto contenga y no se muestre aquí — una foto, etiquetas personalizadas, campos adicionales — se conserva al guardar.</value>
+  </data>
+  <data name="ContactsEdit" xml:space="preserve">
+    <value>Editar contacto</value>
+  </data>
+  <data name="ApptEditTitle" xml:space="preserve">
+    <value>Cita</value>
+  </data>
+  <data name="ApptSummary" xml:space="preserve">
+    <value>Título</value>
+  </data>
+  <data name="ApptAllDay" xml:space="preserve">
+    <value>Todo el día</value>
+  </data>
+  <data name="ApptStart" xml:space="preserve">
+    <value>Inicio</value>
+  </data>
+  <data name="ApptEnd" xml:space="preserve">
+    <value>Fin</value>
+  </data>
+  <data name="ApptLocation" xml:space="preserve">
+    <value>Lugar</value>
+  </data>
+  <data name="ApptDescription" xml:space="preserve">
+    <value>Notas</value>
+  </data>
+  <data name="ApptRepeats" xml:space="preserve">
+    <value>Repetición</value>
+  </data>
+  <data name="ApptRepeatsDaily" xml:space="preserve">
+    <value>Cada día</value>
+  </data>
+  <data name="ApptRepeatsWeekly" xml:space="preserve">
+    <value>Cada semana</value>
+  </data>
+  <data name="ApptRepeatsMonthly" xml:space="preserve">
+    <value>Cada mes</value>
+  </data>
+  <data name="ApptRepeatsYearly" xml:space="preserve">
+    <value>Cada año</value>
+  </data>
+  <data name="ApptRecurrenceReadOnly" xml:space="preserve">
+    <value>Cambie la repetición en la aplicación que creó esta cita.</value>
+  </data>
+  <data name="ApptAttendees" xml:space="preserve">
+    <value>Invitados</value>
+  </data>
+  <data name="ApptAttendeesReadOnly" xml:space="preserve">
+    <value>Las invitaciones las envía la aplicación que organiza la cita, no desde aquí.</value>
+  </data>
+  <data name="ApptReminder" xml:space="preserve">
+    <value>Recordatorio</value>
+  </data>
+  <data name="ApptReminderOne" xml:space="preserve">
+    <value>Hay un recordatorio configurado.</value>
+  </data>
+  <data name="ApptReminderMany" xml:space="preserve">
+    <value>Hay {0} recordatorios configurados.</value>
+  </data>
+  <data name="ApptTimesAreIn" xml:space="preserve">
+    <value>Horas en {0}.</value>
+  </data>
+  <data name="ApptTimesAreFloating" xml:space="preserve">
+    <value>Horas sin zona horaria — significan la misma hora esté donde esté.</value>
+  </data>
+  <data name="ApptPreservedNote" xml:space="preserve">
+    <value>Todo lo que esta cita contenga y no se muestre aquí — recordatorios, categorías, campos adicionales — se conserva al guardar.</value>
+  </data>
+  <data name="CalendarEdit" xml:space="preserve">
+    <value>Editar cita</value>
+  </data>
+  <data name="StErrSaveContact" xml:space="preserve">
+    <value>No se pudo guardar el contacto: {0}</value>
+  </data>
+  <data name="StErrSaveAppt" xml:space="preserve">
+    <value>No se pudo guardar la cita: {0}</value>
+  </data>
+  <data name="StContactSaved" xml:space="preserve">
+    <value>'{0}' guardado.</value>
+  </data>
+  <data name="StApptSaved" xml:space="preserve">
+    <value>'{0}' guardado.</value>
+  </data>
+  <data name="ContactNotEditable" xml:space="preserve">
+    <value>Este contacto no se puede editar aquí.</value>
+  </data>
+  <data name="ApptNotEditable" xml:space="preserve">
+    <value>Esta cita no se puede editar aquí.</value>
+  </data>
 </root>

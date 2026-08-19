@@ -122,6 +122,52 @@ public sealed partial class CalendarTabViewModel : ObservableObject
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Loads the selected appointment's entry for the edit form, or null when it cannot be edited here.
+    /// </summary>
+    /// <remarks>
+    /// Addressed from the ROW the user clicked (ADR 0559) and reached by following the document's own
+    /// `appointment` rel (ADR 0543/0557) — a document that does not advertise it is the server saying this is
+    /// not an appointment, which disables the affordance rather than producing a failed request.
+    /// </remarks>
+    public async Task<StructuredEditorClient.Loaded<AppointmentEditViewModel>?> LoadEntryAsync(AppointmentRowViewModel row)
+    {
+        if (_api is null || !row.Links.TryGetValue("self", out var self))
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _api.StructuredEditors.ReadAsync(self, "appointment", AppointmentEditViewModel.From);
+        }
+        catch (Exception e)
+        {
+            Report(string.Format(Strings.Get("StErrLoadCalendars"), e.Message));
+            return null;
+        }
+    }
+
+    /// <summary>Saves an edited entry and refreshes the list so the row shows what was stored.</summary>
+    public async Task SaveEntryAsync(StructuredEditorClient.Loaded<AppointmentEditViewModel> loaded, AppointmentEditViewModel edited)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.StructuredEditors.SaveAsync(loaded.Href, edited.ToPayload(), loaded.ETag);
+            Report(string.Format(Strings.Get("StApptSaved"), edited.Summary));
+            await ReloadAppointmentsAsync();
+        }
+        catch (Exception e)
+        {
+            Report(string.Format(Strings.Get("StErrSaveAppt"), e.Message));
+        }
+    }
+
     public void Setup(SimplArchiveApiClient api) => _api = api;
 
     /// <summary>Loads the calendars; the caller's own is checked so the tab opens with content.</summary>

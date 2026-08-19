@@ -214,6 +214,87 @@ public static class WindowShots
             return true;
         }
 
+        // Headless render of the two structured editors (#564, ADR 0631) — catches XAML/binding load crashes,
+        // and is the only way to LOOK at a dialog on a machine with no display:
+        // `--contact-screenshot <out.png>` / `--appointment-screenshot <out.png>`.
+        //
+        // Populated with a card and an entry shaped like a real one — several e-mails, an address, attendees,
+        // reminders, a recurrence — because an empty form renders fine while the one a user actually opens can
+        // clip, overlap or scroll. Optional `--lang <code>` renders it localized.
+        var contactShotIndex = Array.IndexOf(args, "--contact-screenshot");
+        var apptShotIndex = Array.IndexOf(args, "--appointment-screenshot");
+        if ((contactShotIndex >= 0 && contactShotIndex + 1 < args.Length)
+            || (apptShotIndex >= 0 && apptShotIndex + 1 < args.Length))
+        {
+            var langAt = Array.IndexOf(args, "--lang");
+            if (langAt >= 0 && langAt + 1 < args.Length)
+            {
+                SimplArchive.Localization.Culture.Apply(args[langAt + 1]);
+            }
+
+            AppBuilder.Configure<App>()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia()
+                .WithInterFont()
+                .SetupWithoutStarting();
+
+            Avalonia.Controls.Window dialog;
+            string outPath;
+            if (contactShotIndex >= 0)
+            {
+                var card = new ViewModels.ContactEditViewModel
+                {
+                    GivenName = "Anna",
+                    FamilyName = "Meyer",
+                    Organization = "Contoso",
+                    Title = "Head of Procurement",
+                    Birthday = "1990-02-15",
+                    Url = "https://contoso.example",
+                    Note = "Met at the trade fair.",
+                    StoredFormattedName = "Anna Meyer",
+                };
+                card.Emails.Add(new ViewModels.ContactFieldRowViewModel { Value = "anna@example.test", Type = "work" });
+                card.Emails.Add(new ViewModels.ContactFieldRowViewModel { Value = "anna.private@example.test", Type = "home" });
+                card.Phones.Add(new ViewModels.ContactFieldRowViewModel { Value = "+41 79 000 00 00", Type = "mobile" });
+                card.Addresses.Add(new ViewModels.ContactAddressRowViewModel
+                {
+                    Type = "work",
+                    Street = "Bahnhofstrasse 1",
+                    City = "Zurich",
+                    PostalCode = "8001",
+                    Country = "Switzerland",
+                });
+                dialog = new Views.ContactDialog(card);
+                outPath = args[contactShotIndex + 1];
+            }
+            else
+            {
+                var appointment = new ViewModels.AppointmentEditViewModel
+                {
+                    Summary = "Weekly sync",
+                    Location = "Room 3",
+                    Description = "Agenda in the shared folder.",
+                    StartDate = new DateTimeOffset(new DateTime(2026, 9, 1), TimeSpan.Zero),
+                    StartTime = new TimeSpan(14, 0, 0),
+                    EndDate = new DateTimeOffset(new DateTime(2026, 9, 1), TimeSpan.Zero),
+                    EndTime = new TimeSpan(15, 0, 0),
+                    TimeZoneId = "Europe/Zurich",
+                    RecurrenceRule = "FREQ=WEEKLY",
+                    ReminderCount = 2,
+                };
+                appointment.Attendees.Add(new ViewModels.AttendeeRowViewModel("Tom Fischer", "tom@example.test", "ACCEPTED"));
+                appointment.Attendees.Add(new ViewModels.AttendeeRowViewModel("Eva Rossi", "eva@example.test", "NEEDS-ACTION"));
+                dialog = new Views.AppointmentDialog(appointment);
+                outPath = args[apptShotIndex + 1];
+            }
+
+            dialog.Show();
+            Dispatcher.UIThread.RunJobs();
+            Dispatcher.UIThread.RunJobs();
+            dialog.CaptureRenderedFrame()?.Save(outPath);
+            return true;
+        }
+
         // Headless render of the connection-lost dialog (admin variant, details expanded) — catches XAML load
         // crashes: `--connlost-screenshot <out.png>`.
         var connLostShotIndex = Array.IndexOf(args, "--connlost-screenshot");

@@ -107,6 +107,57 @@ public sealed partial class ContactsTabViewModel : ObservableObject
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Loads the selected contact's card for the edit form, or null when it cannot be edited here.
+    /// </summary>
+    /// <remarks>
+    /// Addressed from the ROW the user clicked (ADR 0559), never from whatever the detail pane last finished
+    /// loading — the pane's state describes the PREVIOUS selection for the whole window between a click and
+    /// its response, and acting on it grants the edit against the wrong contact.
+    ///
+    /// The row's own link set comes from a children listing, which advertises what BROWSING needs (ADR 0557),
+    /// so the card is reached by resolving the row's self address once and following what the document offers.
+    /// A document that advertises no contact-card rel is the server saying this is not a contact (ADR 0543) —
+    /// answered by disabling the affordance rather than by a failed request.
+    /// </remarks>
+    public async Task<StructuredEditorClient.Loaded<ContactEditViewModel>?> LoadCardAsync(ContactRowViewModel row)
+    {
+        if (_api is null || !row.Links.TryGetValue("self", out var self))
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _api.StructuredEditors.ReadAsync(self, "contact-card", ContactEditViewModel.From);
+        }
+        catch (Exception e)
+        {
+            Report(string.Format(Strings.Get("StErrLoadContacts"), e.Message));
+            return null;
+        }
+    }
+
+    /// <summary>Saves an edited card and refreshes the list so the row shows what was stored.</summary>
+    public async Task SaveCardAsync(StructuredEditorClient.Loaded<ContactEditViewModel> loaded, ContactEditViewModel edited)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.StructuredEditors.SaveAsync(loaded.Href, edited.ToPayload(), loaded.ETag);
+            Report(string.Format(Strings.Get("StContactSaved"), edited.StoredFormattedName ?? edited.FamilyName));
+            await ReloadContactsAsync();
+        }
+        catch (Exception e)
+        {
+            Report(string.Format(Strings.Get("StErrSaveContact"), e.Message));
+        }
+    }
+
     public void Setup(SimplArchiveApiClient api) => _api = api;
 
     /// <summary>Loads the addressbooks; the caller's own is checked so the tab opens with content.</summary>

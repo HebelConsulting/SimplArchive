@@ -24,6 +24,12 @@
                 ToolTip.Tip="{loc:Tr CalendarNew}" AutomationProperties.Name="{loc:Tr CalendarNew}">
           <i:Icon Value="mdi-calendar-plus" FontSize="18" />
         </Button>
+        <!-- Edit opens the structured editor. Enabled only with a row selected; whether the entry is really
+             editable is the server's answer, told by the document's appointment rel (ADR 0543). -->
+        <Button Click="OnEdit" IsEnabled="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}"
+                ToolTip.Tip="{loc:Tr CalendarEdit}" AutomationProperties.Name="{loc:Tr CalendarEdit}">
+          <i:Icon Value="mdi-pencil-outline" FontSize="18" />
+        </Button>
       </StackPanel>
     </Border>
 

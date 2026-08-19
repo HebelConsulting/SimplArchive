@@ -320,6 +320,24 @@ public class DocumentsController : ControllerBase
             links.Add(new Link("notes", $"/api/documents/{documentId}/notes", "POST"));
         }
 
+        // The structured editors (#564, ADR 0631). Conditional on the MASK for the same reason as the notebook
+        // rels above: a contact card exists on a contact and nowhere else, so the rel's absence is the clients'
+        // whole test for whether to offer Edit — rather than each of them sniffing a file extension and
+        // deciding for itself. Read-gated to match what the linked GET requires; a caller who may read but not
+        // write still gets the rel, and the resource's own CanEdit tells the form which it is.
+        //
+        // Without these the endpoints are unreachable by a conforming client: the desktop composes no API URLs
+        // at all, so an endpoint no rel reaches does not exist as far as it is concerned.
+        if (rights.CanReadContent && folderMaskId == WellKnownMaskIds.Contact)
+        {
+            links.Add(new Link("contact-card", $"/api/documents/{documentId}/contact-card", "GET"));
+        }
+
+        if (rights.CanReadContent && folderMaskId == WellKnownMaskIds.Appointment)
+        {
+            links.Add(new Link("appointment", $"/api/documents/{documentId}/appointment", "GET"));
+        }
+
         if (rights.CanEditIndexData)
         {
             if (isFolder)

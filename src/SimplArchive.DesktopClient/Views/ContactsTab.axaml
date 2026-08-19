@@ -25,6 +25,13 @@
                 ToolTip.Tip="{loc:Tr ContactsNew}" AutomationProperties.Name="{loc:Tr ContactsNew}">
           <i:Icon Value="mdi-account-plus-outline" FontSize="18" />
         </Button>
+        <!-- Edit opens the structured editor. Enabled only with a row selected: the affordance never lies
+             about what it can do, and whether the card is actually editable is the server's answer, told by
+             the presence of the document's contact-card rel (ADR 0543). -->
+        <Button Click="OnEdit" IsEnabled="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}"
+                ToolTip.Tip="{loc:Tr ContactsEdit}" AutomationProperties.Name="{loc:Tr ContactsEdit}">
+          <i:Icon Value="mdi-pencil-outline" FontSize="18" />
+        </Button>
       </StackPanel>
     </Border>
 

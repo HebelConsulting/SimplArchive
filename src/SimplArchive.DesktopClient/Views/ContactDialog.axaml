@@ -1,0 +1,151 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+        x:Class="SimplArchive.DesktopClient.Views.ContactDialog"
+        x:DataType="vm:ContactEditViewModel"
+        Title="{loc:Tr ContactEditTitle}" Width="520" Height="620" MinWidth="440" MinHeight="420"
+        WindowStartupLocation="CenterOwner">
+
+  <!-- The structured contact editor (#564, ADR 0631). A modal rather than the 320 px detail pane: a card
+       carries several e-mails, several phone numbers and a postal address, and none of those fit a column
+       narrow enough to leave the list readable beside it.
+
+       Everything the form does NOT show — the photo, custom labels, extensions, anniversary — is preserved by
+       the server's merge and never travels through this window. -->
+  <DockPanel LastChildFill="True" Margin="16">
+
+    <!-- The commit row is pinned rather than scrolled with the form: a long card must not put Save below the
+         fold, where a user concludes it is missing (ADR 0550). -->
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
+                HorizontalAlignment="Right" Margin="0,14,0,0">
+      <TextBlock x:Name="ErrorText" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center"
+                 TextWrapping="Wrap" MaxWidth="300" IsVisible="False" />
+      <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
+      <Button x:Name="SaveButton" Content="{loc:Tr Save}" Click="OnSave" IsDefault="True"
+              IsEnabled="{Binding CanEdit}" />
+    </StackPanel>
+
+    <ScrollViewer>
+      <StackPanel Spacing="10" Margin="0,0,12,0">
+
+        <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto,Auto">
+          <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr ContactGivenName}" VerticalAlignment="Center" />
+          <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding GivenName}" Margin="0,0,0,6" />
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr ContactFamilyName}" VerticalAlignment="Center" />
+          <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding FamilyName}" Margin="0,0,0,6" />
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr ContactsOrg}" VerticalAlignment="Center" />
+          <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Organization}" Margin="0,0,0,6" />
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr ContactJobTitle}" VerticalAlignment="Center" />
+          <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding Title}" />
+        </Grid>
+
+        <!-- E-mail addresses. The label row carries the Add button, so the affordance sits with the thing it
+             adds to rather than at the far end of the form. -->
+        <Grid ColumnDefinitions="*,Auto" Margin="0,6,0,0">
+          <TextBlock Grid.Column="0" Text="{loc:Tr ContactsEmail}" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Command="{Binding AddEmailCommand}" ToolTip.Tip="{loc:Tr ContactAddEmail}"
+                  AutomationProperties.Name="{loc:Tr ContactAddEmail}" IsEnabled="{Binding CanEdit}">
+            <i:Icon Value="mdi-plus" FontSize="16" />
+          </Button>
+        </Grid>
+        <ItemsControl ItemsSource="{Binding Emails}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ContactFieldRowViewModel">
+              <Grid ColumnDefinitions="100,*,Auto" Margin="0,0,0,4">
+                <ComboBox Grid.Column="0" ItemsSource="{x:Static vm:ContactFieldRowViewModel.Types}"
+                          SelectedItem="{Binding Type}" HorizontalAlignment="Stretch" Margin="0,0,6,0" />
+                <TextBox Grid.Column="1" Text="{Binding Value}" Watermark="name@example.com" />
+                <Button Grid.Column="2" Margin="6,0,0,0"
+                        Command="{Binding $parent[Window].((vm:ContactEditViewModel)DataContext).RemoveEmailCommand}"
+                        CommandParameter="{Binding}" ToolTip.Tip="{loc:Tr Remove}"
+                        AutomationProperties.Name="{loc:Tr Remove}">
+                  <i:Icon Value="mdi-close" FontSize="14" />
+                </Button>
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Grid ColumnDefinitions="*,Auto" Margin="0,6,0,0">
+          <TextBlock Grid.Column="0" Text="{loc:Tr ContactsPhone}" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Command="{Binding AddPhoneCommand}" ToolTip.Tip="{loc:Tr ContactAddPhone}"
+                  AutomationProperties.Name="{loc:Tr ContactAddPhone}" IsEnabled="{Binding CanEdit}">
+            <i:Icon Value="mdi-plus" FontSize="16" />
+          </Button>
+        </Grid>
+        <ItemsControl ItemsSource="{Binding Phones}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ContactFieldRowViewModel">
+              <Grid ColumnDefinitions="100,*,Auto" Margin="0,0,0,4">
+                <ComboBox Grid.Column="0" ItemsSource="{x:Static vm:ContactFieldRowViewModel.Types}"
+                          SelectedItem="{Binding Type}" HorizontalAlignment="Stretch" Margin="0,0,6,0" />
+                <TextBox Grid.Column="1" Text="{Binding Value}" />
+                <Button Grid.Column="2" Margin="6,0,0,0"
+                        Command="{Binding $parent[Window].((vm:ContactEditViewModel)DataContext).RemovePhoneCommand}"
+                        CommandParameter="{Binding}" ToolTip.Tip="{loc:Tr Remove}"
+                        AutomationProperties.Name="{loc:Tr Remove}">
+                  <i:Icon Value="mdi-close" FontSize="14" />
+                </Button>
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Grid ColumnDefinitions="*,Auto" Margin="0,6,0,0">
+          <TextBlock Grid.Column="0" Text="{loc:Tr ContactAddress}" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Command="{Binding AddAddressCommand}" ToolTip.Tip="{loc:Tr ContactAddAddress}"
+                  AutomationProperties.Name="{loc:Tr ContactAddAddress}" IsEnabled="{Binding CanEdit}">
+            <i:Icon Value="mdi-plus" FontSize="16" />
+          </Button>
+        </Grid>
+        <ItemsControl ItemsSource="{Binding Addresses}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ContactAddressRowViewModel">
+              <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="1" CornerRadius="4"
+                      Padding="8" Margin="0,0,0,6">
+                <StackPanel Spacing="4">
+                  <Grid ColumnDefinitions="100,*,Auto">
+                    <ComboBox Grid.Column="0" ItemsSource="{x:Static vm:ContactAddressRowViewModel.Types}"
+                              SelectedItem="{Binding Type}" HorizontalAlignment="Stretch" Margin="0,0,6,0" />
+                    <TextBox Grid.Column="1" Text="{Binding Street}" Watermark="{loc:Tr ContactStreet}" />
+                    <Button Grid.Column="2" Margin="6,0,0,0"
+                            Command="{Binding $parent[Window].((vm:ContactEditViewModel)DataContext).RemoveAddressCommand}"
+                            CommandParameter="{Binding}" ToolTip.Tip="{loc:Tr Remove}"
+                            AutomationProperties.Name="{loc:Tr Remove}">
+                      <i:Icon Value="mdi-close" FontSize="14" />
+                    </Button>
+                  </Grid>
+                  <Grid ColumnDefinitions="*,6,110">
+                    <TextBox Grid.Column="0" Text="{Binding City}" Watermark="{loc:Tr ContactCity}" />
+                    <TextBox Grid.Column="2" Text="{Binding PostalCode}" Watermark="{loc:Tr ContactPostalCode}" />
+                  </Grid>
+                  <Grid ColumnDefinitions="*,6,*">
+                    <TextBox Grid.Column="0" Text="{Binding Region}" Watermark="{loc:Tr ContactRegion}" />
+                    <TextBox Grid.Column="2" Text="{Binding Country}" Watermark="{loc:Tr ContactCountry}" />
+                  </Grid>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto" Margin="0,6,0,0">
+          <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr ContactBirthday}" VerticalAlignment="Center" />
+          <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Birthday}" Watermark="1990-02-15" Margin="0,0,0,6" />
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr ContactUrl}" VerticalAlignment="Center" />
+          <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Url}" Margin="0,0,0,6" />
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr ContactNote}" VerticalAlignment="Top" Margin="0,6,0,0" />
+          <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Note}" AcceptsReturn="True"
+                   TextWrapping="Wrap" MinHeight="60" />
+        </Grid>
+
+        <!-- Says plainly that the rest of the card is safe. Without it, a user who knows their contact has a
+             photo has no reason to believe this form kept it. -->
+        <TextBlock Text="{loc:Tr ContactPreservedNote}" Foreground="{DynamicResource WbMuted}"
+                   TextWrapping="Wrap" FontSize="11" Margin="0,8,0,0" />
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</Window>
