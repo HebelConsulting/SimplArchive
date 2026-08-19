@@ -610,53 +610,6 @@ public partial class MainWindow : Window
         }
     });
 
-    // Export the audit log (Audit tab) as NDJSON to a chosen file (ADR "Audit trail export").
-    internal void OnAuditExport(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm)
-        {
-            return;
-        }
-
-        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-        {
-            Title = "Export audit log",
-            SuggestedFileName = $"audit-export-{DateTime.UtcNow:yyyyMMdd-HHmmss}.ndjson",
-        });
-        if (file is null || vm.ExportAuditBytesAsync() is not { } bytesTask)
-        {
-            return;
-        }
-
-        try
-        {
-            var bytes = await bytesTask;
-            await using var stream = await file.OpenWriteAsync();
-            await stream.WriteAsync(bytes);
-            vm.Status = $"Exported the audit log to {file.Path.LocalPath}.";
-        }
-        catch (Exception ex)
-        {
-            vm.Status = $"Could not export the audit log: {ex.Message}";
-        }
-    });
-
-    // Purge aged audit events (tenant-admin, Audit tab): confirm, then run the purge (ADR "Desktop audit
-    // viewer" over "Audit trail retention and purge").
-    internal void OnAuditPurge(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm)
-        {
-            return;
-        }
-
-        var message = $"Permanently delete audit events older than {(vm.AuditRetentionDays == 0 ? "— (retention disabled)" : $"{vm.AuditRetentionDays} days")}? The tamper-evidence chain stays verifiable over the retained events.";
-        if (await new ConfirmDialog(message, "Purge").ShowDialog<bool>(this))
-        {
-            await vm.PurgeAuditAsync();
-        }
-    });
-
     // Opens the approval workflow for the selected document in a separate window (ADR "Workflow start on
     // demand") — from the ribbon button or the row context menu. Refreshes the Tasks badge afterwards.
     private void OnStartWorkflow(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>

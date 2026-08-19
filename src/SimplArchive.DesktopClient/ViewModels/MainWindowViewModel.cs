@@ -65,6 +65,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SearchPreview.StatusReporter = m => Status = m;
         RecycleBin.StatusReporter = m => Status = m;
         Checkout.StatusReporter = m => Status = m;
+        Audit.StatusReporter = m => Status = m;
         Checkout.OnChanged = RefreshAfterCheckoutChangeAsync;
         ContactsTab.StatusReporter = m => Status = m;
         CalendarTab.StatusReporter = m => Status = m;
@@ -932,6 +933,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         ImpersonatedName = null;
         _adminApi = null;
         CanViewAuditLog = false;
+        Audit.Reset();
         CanLegalHold = false;
         CanManageClassification = false;
         CanOverrideCheckout = false;
@@ -2151,6 +2153,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             CanManageUsers = me.CanManageUsers;
             CanManageServiceAccounts = me.CanManageServiceAccounts;
             CanViewAuditLog = me.CanViewAuditLog;
+            Audit.IsTenantAdmin = me.IsTenantAdmin;
             MfaEnabled = me.MfaEnabled;
             CanResetMfa = me.CanResetMfa;
             CanLegalHold = me.CanLegalHold;
@@ -2170,6 +2173,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 _localFolders = new LocalFolders(tenantName, userName);
                 NativeFileOpener.TempDirectoryOverride = _localFolders.TempDirectory;
                 Checkout.Setup(_api);
+                Audit.Setup(_api);
             }
 
             await LoadTasksAsync(); // for the Tasks tab count badge
@@ -2951,7 +2955,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             4 => LoadRecycleBinAsync(),
             5 => LoadTasksAsync(),
             6 => LoadPrincipalsAsync(),
-            7 => ActivateAuditAsync(),
+            7 => Audit.ActivateAsync(),
             8 => LoadLegalHoldsAsync(),
             9 => LoadRetentionScheduleAsync(),
             10 => LoadTenantSettingsAsync(),
@@ -2980,15 +2984,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         await LoadSavedSearchesAsync();
-    }
-
-    private async Task ActivateAuditAsync()
-    {
-        await LoadRetentionAsync();
-        if (AuditEvents.Count == 0)
-        {
-            await LoadAuditPageAsync(reset: true);
-        }
     }
 
     // Returning to the Repositories tab reloads the open folder's contents — so a document filed or re-versioned
@@ -4938,18 +4933,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         UserDisplayName = "Demo Admin";
         IsTenantAdmin = true;
         CanViewAuditLog = true;
-        AuditRetentionDays = 365;
-        AuditVerifyStatus = "Chain intact (128 events)";
-        AuditVerifyValid = true;
-        AuditVerifyShown = true;
-        WormVerifyStatus = "WORM sealed intact (96 events, 3 segments)";
-        WormVerifyValid = true;
-        WormVerifyShown = true;
-        var now = ScreenshotClock;
-        AuditEvents.Add(new AuditEventRowViewModel { Timestamp = now.AddMinutes(-2), ActorName = "Demo Admin", ActorType = "User", Action = "Auth.LoggedIn" });
-        AuditEvents.Add(new AuditEventRowViewModel { Timestamp = now.AddMinutes(-9), ActorName = "Demo Admin", ActorType = "User", Action = "Document.Deleted", TargetType = "Document", TargetName = "Invoice 2025-001" });
-        AuditEvents.Add(new AuditEventRowViewModel { Timestamp = now.AddMinutes(-15), ActorName = "Demo Admin", ActorType = "User", Action = "Acl.Granted", TargetType = "Document", TargetName = "Contracts", Details = "users …: CanSee, CanReadContent" });
-        AuditEvents.Add(new AuditEventRowViewModel { Timestamp = now.AddHours(-1), ActorName = "Demo Admin", ActorType = "User", Action = "User.RightsChanged", TargetType = "User", TargetName = "Jane Doe", Details = "Manage repositories" });
+        Audit.PopulateDemoForScreenshot();
     }
 
     // Mocks the Tenant tab for the headless screenshot (ADR "Tenant-admin settings tab").
@@ -6849,215 +6833,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Preview.SetHitOverlayPageForScreenshot(page, query);
     }
 
-    // ---- Audit log viewer (ADR "Desktop audit viewer") -----------------------------------------------
+    // ---- Audit tab (ADR "Desktop audit viewer") — extracted to AuditTabViewModel (#517, tranche 1) --------
 
-    // Gates the Audit tab (set from whoami on login); true for any User holding CanViewAuditLog.
+    // Gates the Audit TabItem's visibility (set from whoami on login); the tab's own state lives on Audit.
     [ObservableProperty] private bool _canViewAuditLog;
 
-    public ObservableCollection<AuditEventRowViewModel> AuditEvents { get; } = [];
+    public AuditTabViewModel Audit { get; } = new();
 
-    [ObservableProperty] private string _auditActionFilter = "";
-    [ObservableProperty] private DateTimeOffset? _auditFrom;
-    [ObservableProperty] private DateTimeOffset? _auditTo;
-    [ObservableProperty] private bool _auditHasMore;
-    [ObservableProperty] private bool _auditBusy;
-    [ObservableProperty] private string _auditVerifyStatus = "";
-    [ObservableProperty] private bool _auditVerifyValid;
-    [ObservableProperty] private bool _auditVerifyShown;
-    // WORM-segment verification (ADR "Audit WORM segment verify").
-    [ObservableProperty] private string _wormVerifyStatus = "";
-    [ObservableProperty] private bool _wormVerifyValid;
-    [ObservableProperty] private bool _wormVerifyShown;
-    [ObservableProperty] private int _auditRetentionDays = 365;
-    [ObservableProperty] private string _auditRetentionNote = "";
-    private string? _auditNextCursor;
-
-    [RelayCommand]
-    private Task RunAuditSearch() => LoadAuditPageAsync(reset: true);
-
-    [RelayCommand]
-    private async Task ClearAuditFilters()
-    {
-        AuditActionFilter = "";
-        AuditFrom = null;
-        AuditTo = null;
-        await LoadAuditPageAsync(reset: true);
-    }
-
-    [RelayCommand]
-    private Task LoadMoreAudit() => LoadAuditPageAsync(reset: false);
-
-    private async Task LoadAuditPageAsync(bool reset)
-    {
-        if (_api is null)
-        {
-            return;
-        }
-
-        AuditBusy = true;
-        try
-        {
-            if (reset)
-            {
-                AuditEvents.Clear();
-                _auditNextCursor = null;
-                AuditVerifyShown = false;
-            }
-
-            // "To" is inclusive of the whole selected day.
-            var to = AuditTo is { } t ? new DateTimeOffset(t.Date.AddDays(1), TimeSpan.Zero) : (DateTimeOffset?)null;
-            var page = await _api.Audit.GetAuditEventsAsync(
-                string.IsNullOrWhiteSpace(AuditActionFilter) ? null : AuditActionFilter,
-                AuditFrom,
-                to,
-                _auditNextCursor);
-
-            foreach (var e in page.Events)
-            {
-                AuditEvents.Add(new AuditEventRowViewModel
-                {
-                    Timestamp = e.Timestamp,
-                    ActorName = e.ActorName,
-                    ActorType = e.ActorType,
-                    Action = e.Action,
-                    TargetType = e.TargetType,
-                    TargetName = e.TargetName,
-                    Details = e.Details,
-                });
-            }
-
-            _auditNextCursor = page.NextCursor;
-            AuditHasMore = _auditNextCursor is not null;
-        }
-        catch (Exception e)
-        {
-            Status = string.Format(Strings.Get("StErrLoadAudit"), e.Message);
-        }
-        finally
-        {
-            AuditBusy = false;
-        }
-    }
-
-    // Fetches the NDJSON export bytes for the current filters (the code-behind saves them to a chosen file).
-    public Task<byte[]>? ExportAuditBytesAsync()
-    {
-        if (_api is null)
-        {
-            return null;
-        }
-
-        var to = AuditTo is { } t ? new DateTimeOffset(t.Date.AddDays(1), TimeSpan.Zero) : (DateTimeOffset?)null;
-        return _api.Audit.ExportAuditEventsAsync(string.IsNullOrWhiteSpace(AuditActionFilter) ? null : AuditActionFilter, AuditFrom, to);
-    }
-
-    [RelayCommand]
-    private async Task VerifyAudit()
-    {
-        if (_api is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var result = await _api.Audit.VerifyAuditChainAsync();
-            AuditVerifyValid = result.Valid;
-            AuditVerifyStatus = result.Valid
-                ? $"Chain intact ({result.CheckedCount} events)"
-                : $"Tampering detected at #{result.BrokenAtSequence}";
-            AuditVerifyShown = true;
-        }
-        catch (Exception e)
-        {
-            Status = string.Format(Strings.Get("StErrVerifyAudit"), e.Message);
-        }
-    }
-
-    [RelayCommand]
-    private async Task VerifyWorm()
-    {
-        if (_api is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var result = await _api.Audit.VerifyAuditWormAsync();
-            WormVerifyValid = result.Valid;
-            WormVerifyStatus = result.Valid
-                ? $"WORM sealed intact ({result.CheckedCount} events, {result.SegmentCount} segments)"
-                : $"WORM {result.Reason} at #{result.BrokenAtSequence}";
-            WormVerifyShown = true;
-        }
-        catch (Exception e)
-        {
-            Status = string.Format(Strings.Get("StErrVerifyWorm"), e.Message);
-        }
-    }
-
-    private async Task LoadRetentionAsync()
-    {
-        if (_api is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var retention = await _api.Audit.GetAuditRetentionAsync();
-            AuditRetentionDays = retention.RetentionDays;
-            AuditRetentionNote = retention.ChainStartSequence > 0
-                ? $"Retained from #{retention.ChainStartSequence}" + (retention.LastPurgedAt is { } lp ? $" · last purged {lp.LocalDateTime:yyyy-MM-dd}" : "")
-                : "";
-        }
-        catch (Exception)
-        {
-            // leave defaults
-        }
-    }
-
-    [RelayCommand]
-    private async Task SaveRetention()
-    {
-        if (_api is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var retention = await _api.Audit.SetAuditRetentionAsync(AuditRetentionDays);
-            AuditRetentionDays = retention.RetentionDays;
-            Status = Strings.Get("StAuditRetUpdated");
-        }
-        catch (ApiActionException e)
-        {
-            Status = e.Message;
-        }
-    }
-
-    // Purges aged audit events for the tenant (the code-behind confirms first). Returns the count purged.
-    public async Task<int> PurgeAuditAsync()
-    {
-        if (_api is null)
-        {
-            return 0;
-        }
-
-        try
-        {
-            var result = await _api.Audit.PurgeAuditAsync();
-            await LoadRetentionAsync();
-            await LoadAuditPageAsync(reset: true);
-            Status = string.Format(Strings.Get("StPurgedAudit"), result.PurgedCount);
-            return result.PurgedCount;
-        }
-        catch (ApiActionException e)
-        {
-            Status = e.Message;
-            return 0;
-        }
-    }
 }

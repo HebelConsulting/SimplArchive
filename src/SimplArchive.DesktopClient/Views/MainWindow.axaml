@@ -1750,81 +1750,9 @@
             <!-- Audit log (ADR "Desktop audit viewer") — visible only for a CanViewAuditLog holder. -->
             <TabItem AutomationProperties.AutomationId="tour:tab-audit" ToolTip.Tip="{loc:Tr TabAudit}" IsVisible="{Binding CanViewAuditLog}">
                 <TabItem.Header><i:Icon Value="mdi-history" FontSize="20" /></TabItem.Header>
-                <DockPanel LastChildFill="True" Margin="8">
-                    <!-- The ribbon is its own control (#530 tranche 9, by decision): export, the verify pair,
-                         purge — superseding the old text-only bar. Apply/Clear stay with the filter form. -->
-                    <v:AuditRibbon DockPanel.Dock="Top" />
-
-                    <!-- Retention first, by decision: read-only with a pencil; Save/Cancel appear in the same
-                         row the pencil started the edit in (ADR 0550). Purge moved to the ribbon. -->
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,8,0,6" VerticalAlignment="Center">
-                        <i:Icon Value="mdi-delete-clock-outline" VerticalAlignment="Center" />
-                        <TextBlock Text="{loc:Tr AuditRetentionLabel}" VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding AuditRetentionDays}" VerticalAlignment="Center" IsVisible="{Binding !AuditRetentionEditing}" />
-                        <Border Classes="ribbon" IsVisible="{Binding IsTenantAdmin}">
-                            <Button AutomationProperties.AutomationId="audit-ret-edit" Command="{Binding BeginAuditRetentionEditCommand}"
-                                    IsVisible="{Binding !AuditRetentionEditing}" ToolTip.Tip="{loc:Tr Edit}"><i:Icon Value="mdi-pencil" FontSize="16" /></Button>
-                        </Border>
-                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding AuditRetentionEditing}">
-                            <TextBox Text="{Binding AuditRetentionDays}" Width="80" />
-                            <TextBlock Text="{loc:Tr AuditRetentionDaysHint}" Foreground="{DynamicResource WbMuted}" FontSize="12" VerticalAlignment="Center" />
-                            <Button Content="{loc:Tr Save}" Command="{Binding SaveAuditRetentionEditCommand}" />
-                            <Button Content="{loc:Tr Cancel}" Command="{Binding CancelAuditRetentionEditCommand}" />
-                        </StackPanel>
-                        <TextBlock Text="{Binding AuditRetentionNote}" Foreground="{DynamicResource WbMuted}" FontSize="12" VerticalAlignment="Center" />
-                    </StackPanel>
-
-                    <!-- filter bar — the form keeps its shape; Apply/Clear wear the ribbon-button style, by
-                         decision (the ghost scope is the Border.ribbon wrapper). -->
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,6">
-                        <TextBox Watermark="{loc:Tr MwAuditActionPh}" Text="{Binding AuditActionFilter}" Width="230"
-                                 v:SearchField.Clearable="True" />
-                        <DatePicker SelectedDate="{Binding AuditFrom}" />
-                        <DatePicker SelectedDate="{Binding AuditTo}" />
-                        <Border Classes="ribbon">
-                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                <Button AutomationProperties.AutomationId="audit-apply" Command="{Binding RunAuditSearchCommand}"
-                                        ToolTip.Tip="{loc:Tr Apply}"><i:Icon Value="mdi-filter-check-outline" FontSize="18" /></Button>
-                                <Button AutomationProperties.AutomationId="audit-clear" Command="{Binding ClearAuditFiltersCommand}"
-                                        ToolTip.Tip="{loc:Tr AuditClear}"><i:Icon Value="mdi-filter-remove-outline" FontSize="18" /></Button>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-
-                    <!-- load more -->
-                    <Button DockPanel.Dock="Bottom" Content="{loc:Tr LoadMore}" HorizontalAlignment="Center" Margin="0,6,0,0"
-                            IsVisible="{Binding AuditHasMore}" Command="{Binding LoadMoreAuditCommand}" />
-
-                    <!-- newest-first table -->
-                    <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="1">
-                        <DockPanel LastChildFill="True">
-                            <Grid DockPanel.Dock="Top" ColumnDefinitions="170,190,170,2*,3*" Background="{DynamicResource WbChrome}">
-                                <TextBlock Grid.Column="0" Text="{loc:Tr AuditColWhen}" FontWeight="SemiBold" Margin="6,4" />
-                                <TextBlock Grid.Column="1" Text="{loc:Tr AuditColActor}" FontWeight="SemiBold" Margin="6,4" />
-                                <TextBlock Grid.Column="2" Text="{loc:Tr AuditActionLabel}" FontWeight="SemiBold" Margin="6,4" />
-                                <TextBlock Grid.Column="3" Text="{loc:Tr AuditColTarget}" FontWeight="SemiBold" Margin="6,4" />
-                                <TextBlock Grid.Column="4" Text="{loc:Tr AuditColDetails}" FontWeight="SemiBold" Margin="6,4" />
-                            </Grid>
-                            <ScrollViewer>
-                                <ItemsControl ItemsSource="{Binding AuditEvents}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:AuditEventRowViewModel">
-                                            <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1">
-                                                <Grid ColumnDefinitions="170,190,170,2*,3*">
-                                                    <TextBlock Grid.Column="0" Text="{Binding When}" Margin="6,3" FontSize="12" />
-                                                    <TextBlock Grid.Column="1" Text="{Binding Actor}" Margin="6,3" FontSize="12" TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Grid.Column="2" Text="{Binding Action}" Margin="6,3" FontSize="12" />
-                                                    <TextBlock Grid.Column="3" Text="{Binding Target}" Margin="6,3" FontSize="12" TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Grid.Column="4" Text="{Binding Details}" Margin="6,3" FontSize="12" Foreground="{DynamicResource WbMuted}" TextTrimming="CharacterEllipsis" />
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                        </DockPanel>
-                    </Border>
-                </DockPanel>
+                <!-- The whole body is its own control (#519, tranche 1), on the extracted AuditTabViewModel
+                     (#517) — the header and the visibility gate stay here, on the shell's DataContext. -->
+                <v:AuditTab DataContext="{Binding Audit}" />
             </TabItem>
 
             <!-- Legal holds (ADR "Legal hold & retention enforcement") — visible only for a CanLegalHold holder. -->

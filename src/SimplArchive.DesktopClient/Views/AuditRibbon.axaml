@@ -4,7 +4,7 @@
              xmlns:i="using:Projektanker.Icons.Avalonia"
              xmlns:loc="using:SimplArchive.DesktopClient.Localization"
              x:Class="SimplArchive.DesktopClient.Views.AuditRibbon"
-             x:DataType="vm:MainWindowViewModel">
+             x:DataType="vm:AuditTabViewModel">
     <!-- Audit ribbon (#530, tranche 9, by decision — superseding the old text-only audit bar): export first,
          then the verify pair, then purge SEPARATED — it deletes aged events, and destructive keeps its
          distance — and HIDDEN for a non-admin (ADR 0543). Apply/Clear stay with the filter form below; the

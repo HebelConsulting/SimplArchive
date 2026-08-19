@@ -54,7 +54,9 @@ public class OverLimitFileCeilingTests
         // 7,055 → 7,063 for #634's last part (ADR 0637): UploadDroppedFilesAsync now refuses without the
         // `create-child` rel. Not belt-and-braces over the two gates in the view — it is the ONLY thing covering
         // a drop on the empty list area, which falls back to the currently-open folder.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_063,
+        // 7,063 → 6,843: #517 tranche 1 — the Audit tab's state moved to AuditTabViewModel (the
+        // CheckoutTabViewModel shape). Only the CanViewAuditLog visibility gate stays.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_843,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
@@ -77,16 +79,20 @@ public class OverLimitFileCeilingTests
         // 1,191 → 1,192: one line reading the new `folders` rel off the right-clicked node (#634).
         // 1,192 → 1,194: the tree's create now FOLLOWS that rel instead of `children`, plus the two-line note
         // saying why the gate and the address must be the same rel.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_194,
+        // 1,194 → 1,147: #519 tranche 1 — the audit export/purge handlers moved into AuditTab.axaml.cs with
+        // the markup they serve, exactly the per-tab collapse the notes above kept deferring to.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_147,
 
         // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).
-        // MainWindow.axaml is pure markup; whether the 1000-line rule covers markup-only .axaml is undecided,
-        // but a ceiling costs nothing while that question waits.
+        // MainWindow.axaml is pure markup, and the owner DECIDED (2026-08-14, #519) that the 1000-line rule
+        // COVERS markup: the target is <1,000 via a UserControl per TabItem.
         // 2,464 -> 2,427 (ADR 0577: the Intray ribbon became its own control) -> 2,330 (ADR 0578: so did the
         // top bar). Both had gained a responsibility per feature while living here; chrome and a ribbon are
         // things, not regions.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 2_032,
+        // 2,032 → 1,956: #519 tranche 1 — the Audit TabItem's body became AuditTab (the TenantSettingsPane /
+        // ContactsTab shape); the header and its visibility gate stay with the shell.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_956,
     };
 
     public static TheoryData<string> Files => [.. Ceilings.Keys];

@@ -117,34 +117,6 @@ public sealed partial class MainWindowViewModel
     /// <summary>Greys the Search toolbar's Go to (#530, tranche 8); raised by OnSelectedSearchResultChanged.</summary>
     public bool HasSelectedSearchResult => SelectedSearchResult is not null;
 
-    /// <summary>The audit-retention edit state (#530, tranche 9): read-only with a pencil, Save/Cancel in
-    /// the same row (ADR 0550). Cancel restores the value from before the pencil.</summary>
-    [CommunityToolkit.Mvvm.ComponentModel.ObservableProperty]
-    private bool _auditRetentionEditing;
-
-    private int _auditRetentionSnapshot;
-
-    [CommunityToolkit.Mvvm.Input.RelayCommand]
-    private void BeginAuditRetentionEdit()
-    {
-        _auditRetentionSnapshot = AuditRetentionDays;
-        AuditRetentionEditing = true;
-    }
-
-    [CommunityToolkit.Mvvm.Input.RelayCommand]
-    private void CancelAuditRetentionEdit()
-    {
-        AuditRetentionDays = _auditRetentionSnapshot;
-        AuditRetentionEditing = false;
-    }
-
-    [CommunityToolkit.Mvvm.Input.RelayCommand]
-    private async Task SaveAuditRetentionEdit()
-    {
-        await SaveRetention();
-        AuditRetentionEditing = false;
-    }
-
     // ---- Tenant settings, per group (#530 tranche 10, ADR "Per-group tenant settings") --------------------
     // ONE group edits at a time; each group's Save PUTs exactly its own fields via the api-client's generic
     // SaveTenantSettingsGroupAsync, following the settings-<group> rel of the last-READ settings.
