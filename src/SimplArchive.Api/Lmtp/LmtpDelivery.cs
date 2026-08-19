@@ -118,6 +118,9 @@ public class LmtpDelivery
                 CreatedByUserId = userId,
                 CreatedAt = now,
                 StorageFolderId = storageFolderId,
+                // The retention clock starts here (#640). Delivered, not filed — until the user files it out,
+                // this is staging, and Junk/Trash sweep on this date.
+                StagedAt = now,
             };
             _dbContext.Documents.Add(document);
             await _dbContext.SaveChangesAsync(cancellationToken);

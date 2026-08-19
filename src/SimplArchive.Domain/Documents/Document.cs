@@ -56,6 +56,17 @@ public class Document : ITenantScoped, IConcurrencyTracked, ISoftDeletable
     // Manual purge (hard delete) is still deferred.
     public DateTimeOffset? DeletedAt { get; set; }
 
+    // When this document arrived in an ephemeral staging folder (#640) — set on delivery and on any move
+    // BETWEEN staging folders, cleared when it is filed out into the archive. Null = not staged, which is
+    // every archive document and every row that predates this column.
+    //
+    // A column rather than a derived date because the model has no other answer: CreatedAt dates the MESSAGE
+    // (so a two-year-old mail dragged to Trash would be swept the same day, giving the user none of their 30
+    // days), and DeletedAt is null for the commonest path, since a mail client empties by MOVE-to-Trash rather
+    // than by delete. Resetting on a move between staging folders is what makes the clock mean "how long has
+    // this been in TRASH", which is the question the retention window actually asks.
+    public DateTimeOffset? StagedAt { get; set; }
+
     // A per-document retention extension (ADR "Retention review-before-disposition"): when a records manager
     // Extends a document during disposition review, this holds the new "retain until" date. If set and still in
     // the future, the document is not eligible for disposition (neither the auto-sweep nor a manual dispose),

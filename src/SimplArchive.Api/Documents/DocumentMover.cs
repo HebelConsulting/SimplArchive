@@ -57,7 +57,7 @@ public sealed class DocumentMover(
             .ToListAsync(cancellationToken);
 
         var ephemeral = versions.Where(v => ObjectKeyBuilder.IsEphemeralMailKey(v.ObjectKey)).ToList();
-        var targetIsEphemeral = await IsEphemeralFolderAsync(targetParentId, cancellationToken);
+        var targetIsEphemeral = await EphemeralMailFolder.IsEphemeralAsync(dbContext, targetParentId, cancellationToken);
 
         if (targetIsEphemeral)
         {
@@ -79,6 +79,14 @@ public sealed class DocumentMover(
                 throw new CannotFileIntoEphemeralMailException();
             }
 
+            // The retention clock restarts, because it measures time in THIS staging folder: 30 days in Trash
+            // means 30 days since it was put there, not since the message arrived (#640).
+            var staying = await dbContext.Documents.FirstOrDefaultAsync(d => d.Id == documentId, cancellationToken);
+            if (staying is not null)
+            {
+                staying.StagedAt = DateTimeOffset.UtcNow;
+            }
+
             logger.LogTrace(
                 "Document {DocumentId} moves within ephemeral mail storage to folder {TargetFolderId}; no re-key needed",
                 documentId, targetParentId);
@@ -90,10 +98,10 @@ public sealed class DocumentMover(
             return false;
         }
 
-        var document = await dbContext.Documents
-            .Where(d => d.Id == documentId)
-            .Select(d => new { d.TenantId, d.StorageFolderId })
-            .FirstAsync(cancellationToken);
+        var document = await dbContext.Documents.FirstAsync(d => d.Id == documentId, cancellationToken);
+
+        // Filed out: it is in the repository now, so the sweep must never see it again.
+        document.StagedAt = null;
 
         foreach (var version in ephemeral)
         {
@@ -127,22 +135,6 @@ public sealed class DocumentMover(
             documentId, targetParentId, ephemeral.Count);
 
         return true;
-    }
-
-    /// <summary>Whether a folder is ephemeral mail storage — it wears the <c>IMAP Special</c> mask.</summary>
-    private async Task<bool> IsEphemeralFolderAsync(Guid? folderId, CancellationToken cancellationToken)
-    {
-        if (folderId is not { } id)
-        {
-            return false; // a repository root is never ephemeral
-        }
-
-        var maskId = await dbContext.Documents
-            .Where(d => d.Id == id)
-            .Select(d => dbContext.MaskVersions.Where(mv => mv.Id == d.MaskVersionId).Select(mv => (Guid?)mv.MaskId).FirstOrDefault())
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return maskId == WellKnownMaskIds.ImapSpecial;
     }
 
     /// <summary>The extension of a key's leaf, so the archive key keeps the type the download relies on.</summary>

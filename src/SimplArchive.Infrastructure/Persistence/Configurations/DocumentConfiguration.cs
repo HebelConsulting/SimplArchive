@@ -108,6 +108,12 @@ public class DocumentConfiguration : IEntityTypeConfiguration<Document>
             .HasForeignKey(d => d.PersonalOfUserId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // The ephemeral sweep's only query (#640): staged messages past their retention window. FILTERED to
+        // non-null, because almost nothing is staged at any moment — an unfiltered index over Documents would
+        // be the size of the table to serve a scan of a few hundred rows.
+        builder.HasIndex(d => d.StagedAt)
+            .HasFilter("\"StagedAt\" IS NOT NULL");
+
         // At most one personal repository per user (NULL != NULL exempts ordinary repositories).
         builder.HasIndex(d => new { d.TenantId, d.PersonalOfUserId })
             .IsUnique()

@@ -304,7 +304,53 @@ internal static class ImapWrites
             }
             else
             {
-                // COPY files a REFERENCE (#562): the document stays home, the target folder gains a shortcut.
+                // COPY files a REFERENCE (#562): the document stays home, the target folder gains a shortcut —
+                // which is right for an item ALREADY IN THE REPOSITORY, and wrong for one that is not.
+                //
+                // Ephemeral means "not yet in the repository" (#640). A staged message has no home in the
+                // archive to stay in, so leaving it where it is and pointing a shortcut at it makes an ARCHIVE
+                // folder's content depend on storage whose whole purpose is to be emptied — the shortcut breaks
+                // the day the sweep runs. Same shape ADR 0634 forbids for a folder under an ephemeral parent,
+                // by reference rather than by parent, so no invariant would have caught it.
+                //
+                // So COPY OUT OF A STAGING FOLDER files for real: the document moves into the target (bytes
+                // re-keyed onto archive storage by DocumentMover) and the STASH keeps the shortcut. Copying
+                // between archive folders is untouched.
+                var mover = scope.ServiceProvider.GetRequiredService<Documents.DocumentMover>();
+                if (await EphemeralMailFolder.IsEphemeralAsync(db, selected.FolderId))
+                {
+                    var document = await db.Documents.FirstAsync(d => d.Id == message.DocumentId);
+                    await mover.RelocateContentForMoveAsync(document.Id, targetFolderId, CancellationToken.None);
+                    document.ParentId = targetFolderId;
+
+                    // …and the stash keeps a shortcut, so the message still shows in the mail client where the
+                    // user left it, now pointing at the filed document rather than being it.
+                    db.DocumentReferences.Add(new DocumentReference
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ParentFolderId = selected.FolderId,
+                        TargetDocumentId = message.DocumentId,
+                        CreatedByUserId = userId,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                    });
+
+                    try
+                    {
+                        await db.SaveChangesAsync();
+                        await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()
+                            .RecordAsync(AuditActions.DocumentFiled, "Document", document.Id, document.Name, "Filed out of mail storage over IMAP (COPY)");
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        db.Entry(document).State = EntityState.Unchanged;
+                        document.ParentId = selected.FolderId;
+                    }
+
+                    remaining.Add(message);
+                    continue;
+                }
+
                 var exists = await db.DocumentReferences.AnyAsync(r => r.ParentFolderId == targetFolderId && r.TargetDocumentId == message.DocumentId);
                 if (!exists)
                 {

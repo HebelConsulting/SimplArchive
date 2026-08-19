@@ -73,6 +73,11 @@ public static class DependencyInjection
         services.AddScoped<IStaleCheckoutService, Checkout.StaleCheckoutService>();
         services.AddHostedService<Checkout.StaleCheckoutWorker>();
 
+        // Empties the ephemeral mail prefix (#640): Junk/Trash past their window, plus the objects filing left
+        // behind. Registered as itself too, so a test can drive one pass without waiting for the timer.
+        services.AddSingleton<Mail.EphemeralMailSweepWorker>();
+        services.AddHostedService(sp => sp.GetRequiredService<Mail.EphemeralMailSweepWorker>());
+
         // The intray ingest pipeline (ADR 0576). REGISTRATION ORDER IS THE PIPELINE ORDER: straightening must
         // run before patch-code detection (#492), because a patch code is horizontal bars read by a projection
         // profile and two degrees of rotation flattens it. Adding a processor here is choosing where in the
