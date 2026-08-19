@@ -323,6 +323,23 @@ public class DocumentsController : ControllerBase
             links.Add(new Link("notes", $"/api/documents/{documentId}/notes", "POST"));
         }
 
+        // The contact and appointment creates (#631), by the same rule. Rights-gated here as the other creates
+        // on this resource are — the row-level copies stay mask-only, because a per-row rights resolution is a
+        // query per row on the hottest path there is.
+        if (rights.CanCreateSubItems
+            && WellKnownMaskIds.TypedFolderRules.FirstOrDefault(r => r.FolderMaskId == folderMaskId) is { } itemRule)
+        {
+            if (itemRule.Admits.Any(a => a.MaskId == WellKnownMaskIds.Contact))
+            {
+                links.Add(new Link("contacts", $"/api/documents/{documentId}/contacts", "POST"));
+            }
+
+            if (itemRule.Admits.Any(a => a.MaskId == WellKnownMaskIds.Appointment))
+            {
+                links.Add(new Link("appointments", $"/api/documents/{documentId}/appointments", "POST"));
+            }
+        }
+
         // "New subfolder", by the same rule as the two above — and it was the one affordance NOT gated this way
         // (#634). Both clients showed it unconditionally, so it appeared on a notebook, which admits sections
         // and notes but not folders; on a personal space's first level, which holds only what it was

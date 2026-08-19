@@ -178,9 +178,21 @@ public sealed class CalendarContactClassifier
             .ToDictionaryAsync(f => f.Name, f => f.Id, cancellationToken);
 
         document.MaskVersionId = maskVersionId;
+
+        // Renamed to the item's own title (FN / SUMMARY) — but only when no sibling already holds that name.
+        // Without the check the save throws the sibling-name invariant, which surfaces as a bare 500: two
+        // contacts called "Ada Lovelace", or two appointments called "Standup", are entirely ordinary, and a
+        // person may well know both. The email path next door has had this guard all along; this one did not,
+        // so the collision was reachable through a CalDAV/CardDAV PUT as well as through the create endpoint
+        // that found it (#631).
         if (Nonempty(title) is { } name)
         {
-            document.Name = name;
+            var collides = await _dbContext.Documents.AnyAsync(
+                d => d.Id != document.Id && d.ParentId == document.ParentId && d.Name == name, cancellationToken);
+            if (!collides)
+            {
+                document.Name = name;
+            }
         }
 
         foreach (var (field, value) in values)
