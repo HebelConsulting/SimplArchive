@@ -190,6 +190,28 @@ public static class WellKnownMaskIds
     public static readonly IReadOnlySet<Guid> ItemMasks =
         new HashSet<Guid> { BasicEntry, EMail, Note, Contact, Appointment };
 
+    /// <summary>
+    /// Typed folders that ALSO admit a plain <see cref="Folder"/>, so a user can make folders of their own
+    /// inside one (#596).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Its own one-directional table, and the reason is the same trap <see cref="NoSubfolderMasks"/> documents.
+    /// <see cref="TypedFolderRules"/> is <b>two-directional</b>: a mask listed there may live ONLY in a folder
+    /// admitting it. Adding <c>Folder</c> to the mailbox's row therefore did not mean "a mailbox may also hold
+    /// folders" — it meant <b>every plain folder in the archive may live only inside a mailbox</b>, which took
+    /// out ten integration tests at once and would have been a catastrophe in the wild.
+    /// </para>
+    /// <para>
+    /// So this constrains the PARENT only: a mailbox may hold ordinary folders, and an ordinary folder is still
+    /// welcome anywhere. Deliberately not a mask of its own either — a folder inside a mailbox is an archive
+    /// folder that happens to live there (same retention, same recycle bin), and a mask adding no field and no
+    /// rule costs an id and earns nothing.
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlyList<(Guid FolderMaskId, string FolderName)> AlsoAdmitPlainFolders =
+        [(Mailbox, "Mailbox")];
+
     /// <summary>Folder masks that admit no subfolders at all — only items (#596).</summary>
     /// <remarks>
     /// <para>

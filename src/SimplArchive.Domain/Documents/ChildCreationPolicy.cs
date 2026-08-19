@@ -60,6 +60,13 @@ public static class ChildCreationPolicy
             return false;
         }
 
+        // …unless it is one of the typed folders that also takes ordinary folders (#596) — a mailbox does, so
+        // "New subfolder" and IMAP CREATE both work on it without either side special-casing mail.
+        if (WellKnownMaskIds.AlsoAdmitPlainFolders.Any(m => m.FolderMaskId == maskId))
+        {
+            return true;
+        }
+
         // A typed folder admits only its listed masks — a Notebook holds Sections and Notes, so "New subfolder"
         // there was an action the server always refused while both clients went on offering it. Its own creates
         // are reached by their own rels (`sections`, `notes`), which is why this asks only about the plain one.

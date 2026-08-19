@@ -203,16 +203,55 @@ public class MailboxContainmentTests
     }
 
     [Fact]
-    public async Task A_mailbox_admits_nothing_else()
+    public async Task A_mailbox_also_takes_ordinary_folders_so_a_user_can_file_mail_into_their_own()
     {
+        // Decided 2026-08-19 (#596): a user files mail into folders of their own beside the standing five, and
+        // those are ORDINARY archive folders — same retention, same recycle bin — not a mask of their own.
         var (connection, accessor, userId, mailboxId, _) = await MailboxAsync();
         using var _c = connection;
 
         using var db = Ctx(connection, accessor);
-        await AddAsync(db, mailboxId, userId, "A loose folder", WellKnownMaskIds.Folder);
+        await AddAsync(db, mailboxId, userId, "Sales", WellKnownMaskIds.Folder);
+        await db.SaveChangesAsync();
+
+        Assert.Equal(1, await db.Documents.CountAsync(d => d.ParentId == mailboxId && d.Name == "Sales"));
+    }
+
+    [Fact]
+    public async Task But_it_still_admits_nothing_TYPED_that_is_not_its_own()
+    {
+        // The widening is one-directional and narrow: a plain Folder, and nothing else new. An Addressbook
+        // under a mailbox is still refused, so "also takes folders" did not quietly become "takes anything".
+        var (connection, accessor, userId, mailboxId, _) = await MailboxAsync();
+        using var _c = connection;
+
+        using var db = Ctx(connection, accessor);
+        await AddAsync(db, mailboxId, userId, "Contacts", WellKnownMaskIds.Addressbook);
 
         var failure = await Assert.ThrowsAsync<TypedFolderContainmentException>(() => db.SaveChangesAsync());
         Assert.Contains("only IMAP Special or Notebook can", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task And_a_plain_folder_still_lives_anywhere_else_too()
+    {
+        // The trap this rule exists to avoid, asserted directly. TypedFolderRules is TWO-directional, so
+        // adding Folder to the mailbox's row there would have meant "a plain folder may live ONLY inside a
+        // mailbox" — it took out ten integration tests at once when tried, and would have been a catastrophe
+        // in the wild. The one-directional table constrains the PARENT only.
+        var (connection, accessor, userId, mailboxId, _) = await MailboxAsync();
+        using var _c = connection;
+
+        using var db = Ctx(connection, accessor);
+        var personalId = (await db.Documents.SingleAsync(d => d.Id == mailboxId)).ParentId!.Value;
+        var myDocumentsId = await db.Documents
+            .Where(d => d.ParentId == personalId && d.Name == PersonalFolders.MyDocuments)
+            .Select(d => d.Id).SingleAsync();
+
+        await AddAsync(db, myDocumentsId, userId, "Ordinary", WellKnownMaskIds.Folder);
+        await db.SaveChangesAsync();
+
+        Assert.Equal(1, await db.Documents.CountAsync(d => d.ParentId == myDocumentsId && d.Name == "Ordinary"));
     }
 
     [Fact]

@@ -609,7 +609,15 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
         var typeUndetermined = ownMaskId is null;
 
         // Does the parent admit this child?
+        // …plus the one-directional widening: a mailbox also takes ordinary folders, so a user can file mail
+        // into folders of their own (#596). NOT a TypedFolderRules row — that table is two-directional, and a
+        // `Folder` entry there would confine every folder in the archive to living inside a mailbox.
+        var alsoTakesPlainFolders =
+            Domain.Masks.WellKnownMaskIds.AlsoAdmitPlainFolders.Any(m => m.FolderMaskId == parentMaskId)
+            && ownMaskId == Domain.Masks.WellKnownMaskIds.Folder;
+
         if (!typeUndetermined
+            && !alsoTakesPlainFolders
             && Domain.Masks.WellKnownMaskIds.TypedFolderRules.FirstOrDefault(r => r.FolderMaskId == parentMaskId) is { } parentRule
             && !parentRule.Admits.Any(a => a.MaskId == ownMaskId))
         {

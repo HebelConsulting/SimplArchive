@@ -165,7 +165,7 @@ public sealed class ImapSession
         switch (command)
         {
             case "CAPABILITY":
-                await WriteLineAsync("* CAPABILITY IMAP4rev1 AUTH=PLAIN MOVE UIDPLUS");
+                await WriteLineAsync("* CAPABILITY IMAP4rev1 AUTH=PLAIN MOVE UIDPLUS SPECIAL-USE");
                 await OkAsync(tag, "CAPABILITY");
                 return true;
             case "NOOP":

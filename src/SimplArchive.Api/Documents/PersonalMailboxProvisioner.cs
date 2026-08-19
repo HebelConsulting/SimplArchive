@@ -24,8 +24,41 @@ namespace SimplArchive.Api.Documents;
 /// </remarks>
 public sealed class PersonalMailboxProvisioner
 {
-    /// <summary>The one standing folder every mailbox gets, and the name every mail client knows.</summary>
-    public const string InboxFolderName = "INBOX";
+    /// <summary>The folder delivered mail lands in, and the one IMAP projects as <c>INBOX</c>.</summary>
+    /// <remarks>
+    /// <b>PascalCase, and the wire name differs.</b> These are folders in the archive tree first and mailboxes
+    /// second, so they are named the way every other folder is; IMAP's <c>INBOX</c> is a protocol constant
+    /// (RFC 3501 mandates the literal, case-insensitively) and is applied at the projection. The notebook set
+    /// the precedent — <c>Notebook</c> in the tree, <c>NOTES</c> on the wire.
+    /// </remarks>
+    public const string InboxFolderName = "Inbox";
+
+    /// <summary>The name an <c>INBOX</c> provisioned before the PascalCase rename still carries.</summary>
+    public const string LegacyInboxFolderName = "INBOX";
+
+    /// <summary>Messages the user is composing — RFC 6154 <c>\Drafts</c>.</summary>
+    public const string DraftsFolderName = "Drafts";
+
+    /// <summary>Messages the user has sent — RFC 6154 <c>\Sent</c>.</summary>
+    public const string SentFolderName = "Sent";
+
+    /// <summary>Suspected spam — RFC 6154 <c>\Junk</c>. Swept (#640).</summary>
+    public const string JunkFolderName = "Junk";
+
+    /// <summary>Discarded mail — RFC 6154 <c>\Trash</c>. Swept (#640).</summary>
+    public const string TrashFolderName = "Trash";
+
+    /// <summary>
+    /// The standing mailboxes every mailbox gets, in the order a client conventionally shows them.
+    /// </summary>
+    /// <remarks>
+    /// All five wear <see cref="WellKnownMaskIds.ImapSpecial"/>, which is what makes their contents
+    /// <b>ephemeral</b> — staged under the <c>mail/</c> key prefix rather than filed in the repository
+    /// (ADR 0638). Only <c>Junk</c> and <c>Trash</c> are ever swept (#640); the rest keep their mail until the
+    /// user files or deletes it.
+    /// </remarks>
+    public static readonly IReadOnlyList<string> StandingFolderNames =
+        [InboxFolderName, DraftsFolderName, SentFolderName, JunkFolderName, TrashFolderName];
 
     private readonly SimplArchiveDbContext _dbContext;
     private readonly PersonalRepositoryProvisioner _personalSpace;
@@ -61,6 +94,10 @@ public sealed class PersonalMailboxProvisioner
                 await _dbContext.SaveChangesAsync(cancellationToken);
             }
 
+            // …and a mailbox provisioned when INBOX was the only standing folder is missing the other four.
+            // Reached here rather than only on creation because a grow-later seed strands exactly the
+            // population it is not tested against — fresh volumes have all five, upgraded ones have one (#574).
+            await EnsureStandingFoldersAsync(found, tenantId, userId, cancellationToken);
             return found;
         }
 
@@ -77,13 +114,29 @@ public sealed class PersonalMailboxProvisioner
 
         _dbContext.Documents.Add(mailbox);
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await EnsureStandingFoldersAsync(mailbox, tenantId, userId, cancellationToken);
         return mailbox;
+    }
+
+    /// <summary>The five standing mailboxes, created or healed. Idempotent, and safe to call on every path.</summary>
+    private async Task EnsureStandingFoldersAsync(Document mailbox, Guid tenantId, Guid userId, CancellationToken cancellationToken)
+    {
+        foreach (var name in StandingFolderNames)
+        {
+            await EnsureStandingFolderAsync(
+                mailbox, tenantId, userId, name, WellKnownMaskIds.ImapSpecial, cancellationToken,
+                // Only the inbox has a former name to answer to; the other four are new.
+                legacyName: name == InboxFolderName ? LegacyInboxFolderName : null);
+        }
     }
 
     /// <summary>The user's <c>INBOX</c>, creating the mailbox around it if need be.</summary>
     public async Task<Guid> EnsureInboxAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
         await EnsureStandingFolderAsync(
-            tenantId, userId, InboxFolderName, WellKnownMaskIds.ImapSpecial, cancellationToken);
+            await EnsureMailboxAsync(tenantId, userId, cancellationToken),
+            tenantId, userId, InboxFolderName, WellKnownMaskIds.ImapSpecial, cancellationToken,
+            legacyName: LegacyInboxFolderName);
 
     /// <summary>
     /// The user's notebook — the folder Apple Notes creates as <c>NOTES</c> and fills with notes (#596).
@@ -95,23 +148,34 @@ public sealed class PersonalMailboxProvisioner
     /// </remarks>
     public async Task<Guid> EnsureNotebookAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
         await EnsureStandingFolderAsync(
+            await EnsureMailboxAsync(tenantId, userId, cancellationToken),
             tenantId, userId, PersonalRepositoryProvisioner.NotebookFolderName, WellKnownMaskIds.Notebook, cancellationToken);
 
     // One find-or-create for both standing folders. They differ only in name and mask, so a second copy would
     // be a place for the heal below to exist in one and not the other.
+    // Takes the mailbox rather than resolving it, so EnsureMailboxAsync can provision the standing set without
+    // re-entering itself once per folder.
     private async Task<Guid> EnsureStandingFolderAsync(
-        Guid tenantId, Guid userId, string name, Guid maskId, CancellationToken cancellationToken)
+        Document mailbox, Guid tenantId, Guid userId, string name, Guid maskId, CancellationToken cancellationToken,
+        string? legacyName = null)
     {
-        var mailbox = await EnsureMailboxAsync(tenantId, userId, cancellationToken);
-
         var maskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, maskId, cancellationToken);
 
         var existing = await _dbContext.Documents
-            .Where(d => d.ParentId == mailbox.Id && d.Name == name)
+            .Where(d => d.ParentId == mailbox.Id && (d.Name == name || (legacyName != null && d.Name == legacyName)))
             .FirstOrDefaultAsync(cancellationToken);
 
         if (existing is { } found)
         {
+            // The PascalCase rename, applied to the node already in hand. Renaming rather than creating a
+            // second folder: the old INBOX holds the user's delivered mail, and a fresh empty one beside it
+            // would be an inbox that silently lost everything.
+            if (legacyName is not null && found.Name == legacyName)
+            {
+                found.Name = name;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+
             // Heal a folder created before its mask existed. The mask is what marks an INBOX EPHEMERAL, so a
             // maskless one is not merely untyped — it is indistinguishable from archive content to anything
             // keying off the mask, the sweep included. A grow-only seed never revisits it, so the heal happens

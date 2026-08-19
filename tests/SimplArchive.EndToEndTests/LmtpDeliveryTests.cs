@@ -119,7 +119,7 @@ public class LmtpDeliveryTests
 
         // Filed into INBOX under the lazily-created Mailbox node, not loose in the personal space.
         var inbox = db.Documents.IgnoreQueryFilters().Single(d => d.Id == filed!.ParentId);
-        Assert.Equal("INBOX", inbox.Name);
+        Assert.Equal("Inbox", inbox.Name); // PascalCase in the tree; IMAP projects it as INBOX (#596)
         var mailbox = db.Documents.IgnoreQueryFilters().Single(d => d.Id == inbox.ParentId);
         Assert.Equal("My Mailbox", mailbox.Name);
     }
@@ -271,7 +271,7 @@ public class LmtpDeliveryTests
 
         var filed = db.Documents.IgnoreQueryFilters().Single(d => d.Name == first);
         var inbox = db.Documents.IgnoreQueryFilters().Single(d => d.Id == filed.ParentId);
-        Assert.Equal("INBOX", inbox.Name);
+        Assert.Equal("Inbox", inbox.Name); // PascalCase in the tree; IMAP projects it as INBOX (#596)
         Assert.NotNull(inbox.MaskVersionId);
         Assert.True(await IsImapSpecialAsync(db, inbox.MaskVersionId));
 

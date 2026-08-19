@@ -64,9 +64,10 @@ public class ImapReferenceMailboxTests
 
         var mailboxes = await MailboxesAsync(Port, email, imapPassword);
 
-        // INBOX is the personal repository root, so the reference hangs beneath it — and its child came along.
-        Assert.Contains("INBOX/2026", mailboxes);
-        Assert.Contains("INBOX/2026/Invoices", mailboxes);
+        // The personal space projects under its own name (#596 — INBOX now means the mail folder), so the
+        // reference hangs beneath it, and its child came along.
+        Assert.Contains("Personal/2026", mailboxes);
+        Assert.Contains("Personal/2026/Invoices", mailboxes);
     }
 
     [Fact]
@@ -112,11 +113,11 @@ public class ImapReferenceMailboxTests
         // One level deeper than it used to be: Holder and Target live in My Documents, because the personal
         // space's first level holds only its provisioned folders (#634). The mailbox NAMES follow the tree,
         // which is the property this test is really about.
-        Assert.Contains("INBOX/My Documents/Target", mailboxes);
-        Assert.Contains("INBOX/My Documents/Target/Holder", mailboxes);
+        Assert.Contains("Personal/My Documents/Target", mailboxes);
+        Assert.Contains("Personal/My Documents/Target/Holder", mailboxes);
 
         // The looping appearance is omitted rather than followed.
-        Assert.DoesNotContain(mailboxes, m => m.StartsWith("INBOX/My Documents/Target/Holder/", StringComparison.Ordinal));
+        Assert.DoesNotContain(mailboxes, m => m.StartsWith("Personal/My Documents/Target/Holder/", StringComparison.Ordinal));
     }
 
     [Fact]

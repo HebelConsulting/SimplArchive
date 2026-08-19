@@ -50,11 +50,31 @@ internal static class ImapMailboxes
             }
 
             var children = entry.HasChildren ? "\\HasChildren" : "\\HasNoChildren";
-            await session.WriteLineAsync($"* {command} ({children}) \"/\" {ImapProtocol.QuoteMailbox(entry.Name)}");
+
+            // RFC 6154 SPECIAL-USE. Clients find Drafts/Sent/Junk/Trash by ATTRIBUTE, not by name — a client
+            // told nothing will helpfully create its own "Sent Messages" beside ours, and then the user has
+            // two. INBOX needs none: RFC 3501 makes that name itself the special case.
+            var special = SpecialUseAttribute(entry.Name);
+            await session.WriteLineAsync($"* {command} ({children}{special}) \"/\" {ImapProtocol.QuoteMailbox(entry.Name)}");
         }
 
         await session.OkAsync(tag, command);
     }
+
+    /// <summary>The RFC 6154 use attribute for a standing mailbox, or empty for an ordinary folder.</summary>
+    /// <remarks>
+    /// Keyed on the WIRE name, which is what the client sees and what <see cref="StandingMailboxesAsync"/>
+    /// already resolved from the mask — so a user folder that happens to be called "Sent" somewhere else in
+    /// the archive cannot claim the attribute, because it never reaches the root as that name.
+    /// </remarks>
+    private static string SpecialUseAttribute(string wireName) => wireName switch
+    {
+        Documents.PersonalMailboxProvisioner.DraftsFolderName => " \\Drafts",
+        Documents.PersonalMailboxProvisioner.SentFolderName => " \\Sent",
+        Documents.PersonalMailboxProvisioner.JunkFolderName => " \\Junk",
+        Documents.PersonalMailboxProvisioner.TrashFolderName => " \\Trash",
+        _ => string.Empty,
+    };
 
     // RFC 3501 LIST wildcards: '*' matches anything, '%' anything except the hierarchy delimiter.
     private static System.Text.RegularExpressions.Regex PatternRegex(string pattern) =>
@@ -190,7 +210,14 @@ internal static class ImapMailboxes
             // personal space, so finding it means walking Personal → My Mailbox → Notebook. Both hops go by
             // MASK rather than by name — the folders were renamed on 2026-08-19 and a name-based walk would
             // have gone quietly blind on every space provisioned before that.
-            var rootName = root.PersonalOfUserId == userId ? "INBOX" : root.Name;
+            // The personal space projects under its OWN name now (#596). `INBOX` used to mean this root — it was
+            // written before mail was delivered anywhere, when "the name every mail client knows" was the whole
+            // of the reasoning. Once LMTP started filing into Personal/My Mailbox/Inbox, that made the client's
+            // INBOX a folder that structurally CANNOT hold a message (the first level admits only the
+            // provisioned folders, #634), while the mail sat two levels down under another name. A mail client
+            // showing an empty inbox for an account that is receiving mail is the worst kind of wrong: nothing
+            // errors, and the logs of a working and a broken account are identical.
+            var rootName = root.Name;
             entries.Add(new ImapMailboxEntry(rootName, root.Id, HasChildren: true));
 
             Guid? notesFolderId = null;
@@ -219,14 +246,62 @@ internal static class ImapMailboxes
                 }
             }
 
-            await AddSubfoldersAsync(db, calculator, logger, userId, root.Id, rootName, entries, notesFolderId);
+            // The five standing mailboxes project at the ROOT, where a mail client looks for them — `Inbox` as
+            // the protocol's `INBOX`, the rest under their own names, which are already the RFC 6154
+            // conventions. One folder, two projections, exactly as the notebook has: the workbench shows them
+            // inside Personal/My Mailbox, IMAP shows them at the top.
+            var standingIds = new HashSet<Guid>();
+            if (notesFolderId is { } notes)
+            {
+                standingIds.Add(notes);
+            }
+
+            if (root.PersonalOfUserId == userId)
+            {
+                foreach (var (folderId, wireName) in await StandingMailboxesAsync(db, root.Id))
+                {
+                    standingIds.Add(folderId);
+                    entries.Add(new ImapMailboxEntry(wireName, folderId, await HasSubfoldersAsync(db, folderId)));
+                    await AddSubfoldersAsync(db, calculator, logger, userId, folderId, wireName, entries);
+                }
+            }
+
+            await AddSubfoldersAsync(db, calculator, logger, userId, root.Id, rootName, entries, standingIds);
         }
 
         return entries;
     }
 
+    /// <summary>
+    /// The mailbox's standing folders as (id, wire name) — `Inbox` becomes `INBOX`, the rest keep their names.
+    /// </summary>
+    /// <remarks>
+    /// Found by MASK and then by name: the mask says which folders are the ephemeral staging mailboxes, and the
+    /// name says which of the five a given one is. Walking by name alone would go blind on a space provisioned
+    /// before the PascalCase rename; walking by mask alone cannot tell `Junk` from `Trash`.
+    /// </remarks>
+    private static async Task<List<(Guid Id, string WireName)>> StandingMailboxesAsync(SimplArchiveDbContext db, Guid personalRootId)
+    {
+        var folders = await db.Documents
+            .Where(d => db.Documents.Any(m =>
+                    m.Id == d.ParentId
+                    && m.ParentId == personalRootId
+                    && db.MaskVersions.Any(v => v.Id == m.MaskVersionId && v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.Mailbox))
+                && db.MaskVersions.Any(v => v.Id == d.MaskVersionId && v.MaskId == SimplArchive.Domain.Masks.WellKnownMaskIds.ImapSpecial))
+            .Select(d => new { d.Id, d.Name })
+            .ToListAsync();
+
+        // Ordered by the standing list rather than alphabetically, so INBOX leads — and an unrecognised
+        // IMAP Special folder is left to the ordinary walk rather than silently promoted to the root.
+        return Documents.PersonalMailboxProvisioner.StandingFolderNames
+            .Select(name => (Name: name, Match: folders.FirstOrDefault(f => f.Name == name)))
+            .Where(x => x.Match is not null)
+            .Select(x => (x.Match!.Id, WireName: x.Name == Documents.PersonalMailboxProvisioner.InboxFolderName ? "INBOX" : x.Name))
+            .ToList();
+    }
+
     private static async Task AddSubfoldersAsync(
-        SimplArchiveDbContext db, IEffectiveRightsCalculator calculator, ILogger logger, Guid userId, Guid parentId, string parentName, List<ImapMailboxEntry> entries, Guid? skipFolderId = null, IReadOnlySet<Guid>? ancestors = null)
+        SimplArchiveDbContext db, IEffectiveRightsCalculator calculator, ILogger logger, Guid userId, Guid parentId, string parentName, List<ImapMailboxEntry> entries, IReadOnlySet<Guid>? skipFolderIds = null, IReadOnlySet<Guid>? ancestors = null)
     {
         // The folders on the path to here, so a reference pointing back up one stops instead of recursing for
         // ever. It must be the ANCESTOR CHAIN rather than a global visited-set: the same folder legitimately
@@ -256,7 +331,7 @@ internal static class ImapMailboxes
             .OrderBy(d => d.Name)
             .ToListAsync();
 
-        foreach (var folder in folders.Concat(referenced).Where(f => !f.Name.Contains('/') && f.Id != skipFolderId))
+        foreach (var folder in folders.Concat(referenced).Where(f => !f.Name.Contains('/') && skipFolderIds?.Contains(f.Id) != true))
         {
             // A reference back to somewhere on our own path, or to this folder's own parent chain. Following it
             // would produce Personal/My Mailbox/Personal/My Mailbox/… until the client or the stack gave up.
@@ -299,7 +374,7 @@ internal static class ImapMailboxes
             // The skip PROPAGATES rather than stopping at the first level: the notebook it names is a
             // grandchild of the personal root (#596), so dropping it here would list it twice — once as the
             // root-level `Notes` Apple Notes expects, and again as `INBOX/My Mailbox/Notebook`.
-            await AddSubfoldersAsync(db, calculator, logger, userId, folder.Id, name, entries, skipFolderId, path);
+            await AddSubfoldersAsync(db, calculator, logger, userId, folder.Id, name, entries, skipFolderIds, path);
         }
     }
 
