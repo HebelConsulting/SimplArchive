@@ -403,12 +403,12 @@
                    (ADR 0511). The icon + label are our own child content so hiding the label leaves a clean icon. *@
                 @if (_activeTab == Tab.Repositories)
                 {
-                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedFolder is null)" OnClick="UploadAsync" title="@Strings.Get("Upload")" aria-label="@Strings.Get("Upload")">
+                    @* Upload and New folder are the SAME create, so one rel gates both (ADR 0637). Disabled
+                       rather than hidden: a ribbon whose buttons come and go reflows under the cursor (0550). *@
+                    <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_selectedFolder is null || BrowseService.HrefOf(_selectedFolder, "create-child") is null)" OnClick="() => UploadAsync(_selectedFolder)" title="@Strings.Get("Upload")" aria-label="@Strings.Get("Upload")">
                         <MudIcon Icon="@Icons.Material.Filled.Upload" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("Upload")</span>
                     </MudButton>
-                    @* Same rel as the tree's menu entry, but DISABLED rather than hidden — a ribbon whose buttons
-                       come and go with the selection reflows under the cursor (ADR 0550). *@
-                    <MudButton Class="wb-rib-btn" data-tour="action-new-folder" Size="Size.Small" Disabled="@(_selectedFolder is null || BrowseService.HrefOf(_selectedFolder, "folders") is null)" OnClick="() => NewFolderAsync(_selectedFolder)" title="@Strings.Get("NewFolder")" aria-label="@Strings.Get("NewFolder")">
+                    <MudButton Class="wb-rib-btn" data-tour="action-new-folder" Size="Size.Small" Disabled="@(_selectedFolder is null || BrowseService.HrefOf(_selectedFolder, "create-child") is null)" OnClick="() => NewFolderAsync(_selectedFolder)" title="@Strings.Get("NewFolder")" aria-label="@Strings.Get("NewFolder")">
                         <MudIcon Icon="@Icons.Material.Filled.CreateNewFolder" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("NewFolder")</span>
                     </MudButton>
                     <MudButton Class="wb-rib-btn" Size="Size.Small" Disabled="@(_downloadUrl is null)" OnClick="DownloadAsync" title="@Strings.Get("Download")" aria-label="@Strings.Get("Download")">
@@ -488,7 +488,7 @@
                                folders), on the personal space's first level, and to a caller with no right to
                                create — each an action the server refuses. Its absence says "not available to
                                you, here, now" (ADR 0543). *@
-                            @if (BrowseService.HrefOf(tn, "folders") is not null)
+                            @if (BrowseService.HrefOf(tn, "create-child") is not null)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.CreateNewFolder" OnClick="() => NewFolderAsync(tn)">@Strings.Get("MwNewSubfolder")</MudMenuItem>
                             }
@@ -498,7 +498,11 @@
                                 <MudMenuItem Icon="@Icons.Material.Filled.LibraryAdd" OnClick="() => RunAndRefreshAsync(Actions.CreateSectionAsync(tn))">@Strings.Get("MwNewSection")</MudMenuItem>
                                 <MudMenuItem Icon="@Icons.Material.Filled.NoteAdd" OnClick="() => RunAndRefreshAsync(Actions.CreateNoteAsync(tn))">@Strings.Get("MwNewNote")</MudMenuItem>
                             }
-                            <MudMenuItem Icon="@Icons.Material.Filled.Upload" OnClick="UploadAsync">@Strings.Get("Upload")</MudMenuItem>
+                            @* The same rel as New subfolder above: an upload is that same create (ADR 0637). *@
+                            @if (BrowseService.HrefOf(tn, "create-child") is not null)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Upload" OnClick="() => UploadAsync(tn)">@Strings.Get("Upload")</MudMenuItem>
+                            }
                             <MudDivider />
                             <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => RunAndRefreshAsync(Actions.RenameAsync(tn))">@Strings.Get("CtxRename")</MudMenuItem>
                             <MudMenuItem Icon="@Icons.Material.Filled.DriveFileMove" OnClick="() => RunAndRefreshAsync(Actions.MoveAsync(tn))">@Strings.Get("CtxMoveTo")</MudMenuItem>
@@ -2451,9 +2455,10 @@
 
     // ---- Ribbon actions ------------------------------------------------------------------------------
 
-    private async Task UploadAsync()
+    // Takes the node it acts on (ADR 0559) and refuses without `create-child` — an upload IS that create.
+    private async Task UploadAsync(BrowseNode? node)
     {
-        if (_selectedFolder is { } folder && _module is not null)
+        if (node is { } folder && BrowseService.HrefOf(folder, "create-child") is not null && _module is not null)
         {
             await _module.InvokeVoidAsync("openFilePicker", _selfRef, folder.Id.ToString());
         }
@@ -2464,7 +2469,7 @@
     // create by the rel both call sites are gated on, so an absent rel cannot be worked around here.
     private async Task NewFolderAsync(BrowseNode? node)
     {
-        if (node is not { } folder || BrowseService.HrefOf(folder, "folders") is not { } createHref)
+        if (node is not { } folder || BrowseService.HrefOf(folder, "create-child") is not { } createHref)
         {
             return;
         }

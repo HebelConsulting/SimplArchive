@@ -792,7 +792,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // folders it was provisioned with), on an ephemeral staging folder, and to a caller with no right to create
     // anything — each time offering an action the server refuses. The rel's absence says "not available to you,
     // here, now" (ADR 0543), which is the whole point of asking the server rather than guessing.
-    [ObservableProperty] private bool _treeContextCanAddFolder;
+    [ObservableProperty] private bool _treeContextCanCreateChild;
 
     // Set while a search-hit reveal selects the parent folder's tree node after it has *already* loaded the folder
     // contents + selected the document itself (issue #340) — so the reactive load below doesn't re-fetch the folder
@@ -1157,7 +1157,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                         ? stored
                         : throw new InvalidOperationException($"No advertised address for folder '{folderId}' (ADR 0543).");
             _currentFolderLinks = links;
-            CanCreateFolder = links.ContainsKey("folders");
+            CanCreateFolder = links.ContainsKey("create-child");
             // The folder's persisted default contents order (ADR "Per-folder contents sort order") arrives with
             // the contents; opening a fresh folder resets any ephemeral column-header sort back to that default.
             var (children, sortOrder) = await _api.Documents.GetFolderContentsAsync(links["children"]);
@@ -1614,7 +1614,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             // The `folders` rel the button is gated on, not `children` (#634): same address, different method,
             // and following the one that enabled the affordance keeps gate and action from drifting.
-            await _api.Documents.CreateFolderAsync(folderLinks["folders"], name);
+            await _api.Documents.CreateFolderAsync(folderLinks["create-child"], name);
             Status = string.Format(Strings.Get("StCreatedFolder"), name);
             await ShowNewChildInTreeAsync(folderId); // refresh the parent's children in the tree, keep it expanded
             await LoadFolderContentsAsync(folderId);
@@ -3621,7 +3621,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        var childrenHref = folderLinks["children"];
+        // The `create-child` rel, not `children`: an upload IS that create (ADR 0637), so this asks the same
+        // question the drop target and the menu entry were gated on. It is also the backstop for the path
+        // neither of those covers — a drop on the EMPTY list area falls back to the open folder, which with
+        // `Personal` open is the first level that refuses it (#634).
+        if (!folderLinks.TryGetValue("create-child", out var childrenHref))
+        {
+            Status = Strings.Get("StErrUploadNotHere");
+            return;
+        }
 
         var uploaded = 0;
         var failed = 0;

@@ -2913,6 +2913,9 @@
   <data name="StSearching" xml:space="preserve">
     <value>Searching…</value>
   </data>
+  <data name="StErrUploadNotHere" xml:space="preserve">
+    <value>Files cannot be filed here.</value>
+  </data>
   <data name="StSelectFolderDrop" xml:space="preserve">
     <value>Select a folder before dropping files.</value>
   </data>

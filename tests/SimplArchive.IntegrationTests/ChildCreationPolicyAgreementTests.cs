@@ -11,7 +11,7 @@ using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.IntegrationTests;
 
-// `FolderCreationPolicy` decides whether the Api advertises the `folders` rel, and three separate SaveChanges
+// `ChildCreationPolicy` decides whether the Api advertises the `create-child` rel, and three separate SaveChanges
 // invariants decide whether the create actually succeeds. Two places answering one question is drift waiting to
 // happen, and the drift is invisible from either side: a predicate that is too strict HIDES an action that
 // works, one that is too loose OFFERS an action that cannot.
@@ -19,7 +19,7 @@ namespace SimplArchive.IntegrationTests;
 // So this asks both, for every well-known folder mask, and asserts they agree — the predicate against a real
 // save. Adding a folder mask, a typed-folder rule or a no-subfolder rule extends this automatically, because
 // the cases come from WellKnownMaskIds rather than from a list written out here.
-public class FolderCreationPolicyAgreementTests
+public class ChildCreationPolicyAgreementTests
 {
     private readonly Guid _tenantId = Guid.NewGuid();
 
@@ -108,7 +108,7 @@ public class FolderCreationPolicyAgreementTests
             parentId = parent.Id;
         }
 
-        var predicted = FolderCreationPolicy.AdmitsPlainFolder(parentMaskId, parentIsPersonalRoot: false);
+        var predicted = ChildCreationPolicy.AdmitsPlainChild(parentMaskId, parentIsPersonalRoot: false);
 
         bool actual;
         using (var db = Ctx(connection, accessor))
@@ -171,7 +171,7 @@ public class FolderCreationPolicyAgreementTests
                 .EnsureAsync(userId, _tenantId, CancellationToken.None)).Id;
         }
 
-        var predicted = FolderCreationPolicy.AdmitsPlainFolder(WellKnownMaskIds.UserFolder, parentIsPersonalRoot: true);
+        var predicted = ChildCreationPolicy.AdmitsPlainChild(WellKnownMaskIds.UserFolder, parentIsPersonalRoot: true);
 
         bool actual;
         using (var db = Ctx(connection, accessor))

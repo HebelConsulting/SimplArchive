@@ -2913,6 +2913,9 @@
   <data name="StSearching" xml:space="preserve">
     <value>Buscando…</value>
   </data>
+  <data name="StErrUploadNotHere" xml:space="preserve">
+    <value>Aquí no se pueden archivar archivos.</value>
+  </data>
   <data name="StSelectFolderDrop" xml:space="preserve">
     <value>Selecciona una carpeta antes de soltar archivos.</value>
   </data>

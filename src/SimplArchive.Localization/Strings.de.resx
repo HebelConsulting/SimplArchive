@@ -2913,6 +2913,9 @@
   <data name="StSearching" xml:space="preserve">
     <value>Suche läuft…</value>
   </data>
+  <data name="StErrUploadNotHere" xml:space="preserve">
+    <value>Hier können keine Dateien abgelegt werden.</value>
+  </data>
   <data name="StSelectFolderDrop" xml:space="preserve">
     <value>Wählen Sie einen Ordner, bevor Sie Dateien ablegen.</value>
   </data>

@@ -125,6 +125,9 @@ public class DocumentChildrenController : ControllerBase
         public DateTimeOffset? VersionCreatedAt { get; set; }
     }
 
+    /// <summary>The listed folder itself — its sort order, and what the `create-child` rel needs to decide.</summary>
+    private record FolderRow(FolderContentsSortOrder ContentsSortOrder, Guid? MaskId, bool IsPersonalRoot);
+
     private record DocumentSummaryRow(Guid Id, string Name, DateTimeOffset CreatedAt, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, bool OnLegalHold, Guid? CheckedOutByUserId, string? CheckedOutByName, string? LatestObjectKey, string? DocumentType, DateOnly? DocumentDate, long? SizeBytes, Guid? SensitivityLabelId, string? SensitivityLabelName, string? SensitivityLabelColor, int VersionCount, DateTimeOffset? VersionCreatedAt, Guid? MaskId);
 
     public class DocumentChildrenResource : HypermediaResource
@@ -148,14 +151,22 @@ public class DocumentChildrenController : ControllerBase
     {
         // Fetch the listed folder's persisted contents sort order (ADR "Per-folder contents sort order") — also
         // serves as the existence check (null = no such document).
-        var folderSortOrder = await _dbContext.Documents
+        // Also reads what the `create-child` rel below needs — the folder's own mask, and whether it is a
+        // personal root. In this query rather than a second one: it already reads this row, and the rel is
+        // about THIS folder, not about the children.
+        var folder = await _dbContext.Documents
             .Where(d => d.Id == documentId)
-            .Select(d => (FolderContentsSortOrder?)d.ContentsSortOrder)
+            .Select(d => new FolderRow(
+                d.ContentsSortOrder,
+                _dbContext.MaskVersions.Where(mv => mv.Id == d.MaskVersionId).Select(mv => (Guid?)mv.MaskId).FirstOrDefault(),
+                d.PersonalOfUserId != null))
             .FirstOrDefaultAsync(cancellationToken);
-        if (folderSortOrder is null)
+        if (folder is null)
         {
             return NotFound();
         }
+
+        var folderSortOrder = folder.ContentsSortOrder;
 
         if (!await _access.CanSeeAsync(documentId, cancellationToken))
         {
@@ -230,8 +241,20 @@ public class DocumentChildrenController : ControllerBase
         var links = new List<Link>
         {
             new("self", Url.Action(nameof(ListChildren), new { documentId, cursor, limit = pageSize })!, "GET"),
-            new("create-child", Url.Action(nameof(CreateChild), new { documentId })!, "POST"),
         };
+
+        // `create-child` was advertised here UNCONDITIONALLY, which is the same bug the row-level rel was added
+        // to fix, one level up: it offered a create on a Notebook, on an ephemeral staging folder and on a
+        // personal space's first level, all of which the server refuses (#634).
+        //
+        // It matters more than a stray link, because this rel and the row's are now ONE name. A caller that
+        // reached the same folder through its collection rather than through its parent's listing would
+        // otherwise get the opposite answer to the same question — which is precisely the drift that having one
+        // rel for one create is meant to remove (ADR 0637).
+        if (ChildCreationPolicy.AdmitsPlainChild(folder.MaskId, folder.IsPersonalRoot))
+        {
+            links.Add(new Link("create-child", Url.Action(nameof(CreateChild), new { documentId })!, "POST"));
+        }
 
         if (hasMore)
         {
@@ -284,7 +307,7 @@ public class DocumentChildrenController : ControllerBase
                 // which is exactly the per-rel round trip ADR 0557 exists to prevent.
                 Links = RowLinks(d),
             }).ToList(),
-            ContentsSortOrder = folderSortOrder.Value,
+            ContentsSortOrder = folderSortOrder,
             Links = links,
         });
     }
@@ -323,9 +346,9 @@ public class DocumentChildrenController : ControllerBase
         // Unlike the single-document GET this does not check CanCreateSubItems, because a per-row rights
         // resolution is a query per row on the hottest path there is. The mask half of the rule is what this
         // change is for; a caller without the right still meets a 403, exactly as before.
-        if (FolderCreationPolicy.AdmitsPlainFolder(d.MaskId, parentIsPersonalRoot: false))
+        if (ChildCreationPolicy.AdmitsPlainChild(d.MaskId, parentIsPersonalRoot: false))
         {
-            links.Add(new Link("folders", $"/api/documents/{d.Id}/children", "POST"));
+            links.Add(new Link("create-child", $"/api/documents/{d.Id}/children", "POST"));
         }
 
         return links;

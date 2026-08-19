@@ -332,9 +332,9 @@ public class DocumentsController : ControllerBase
         var isPersonalRoot = await _dbContext.Documents
             .AnyAsync(d => d.Id == documentId && d.PersonalOfUserId != null, cancellationToken);
 
-        if (rights.CanCreateSubItems && FolderCreationPolicy.AdmitsPlainFolder(folderMaskId, isPersonalRoot))
+        if (rights.CanCreateSubItems && ChildCreationPolicy.AdmitsPlainChild(folderMaskId, isPersonalRoot))
         {
-            links.Add(new Link("folders", $"/api/documents/{documentId}/children", "POST"));
+            links.Add(new Link("create-child", $"/api/documents/{documentId}/children", "POST"));
         }
 
         // The structured editors (#564, ADR 0631). Conditional on the MASK for the same reason as the notebook

@@ -113,8 +113,15 @@
     // Makes the whole contents pane a drop target for the currently-selected folder, so files can be dropped
     // anywhere in it (empty area or a document row), not only onto a sub-folder row — see ADR "Content-pane drop
     // target". A sub-folder row's own data-drop-folder still wins (closest() finds the nearest one).
+    // …and only where a child may actually be created, on the `create-child` rel that gates New folder and
+    // Upload — a dropped file IS that create (#634, ADR 0637). With `Personal` open the pane must not be a
+    // drop target at all: the server refuses the upload before any bytes move, so offering the whole pane as a
+    // target is offering a refusal. Returning the shared EmptyAttributes is safe here, unlike in
+    // DropAttributes, because nothing writes into what this returns.
     private Dictionary<string, object> PaneDropAttributes()
-        => SelectedFolder is { } folder ? new() { ["data-drop-folder"] = folder.Id.ToString() } : BrowseService.EmptyAttributes;
+        => SelectedFolder is { } folder && BrowseService.HrefOf(folder, "create-child") is not null
+            ? new() { ["data-drop-folder"] = folder.Id.ToString() }
+            : BrowseService.EmptyAttributes;
 
     // ---- Ephemeral column-header ordering (ADR "List-row columns and sorting") -----------------------
     // Folders are ALWAYS listed on top; within each group the default is the open folder's persisted order

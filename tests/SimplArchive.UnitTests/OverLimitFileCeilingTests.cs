@@ -51,7 +51,10 @@ public class OverLimitFileCeilingTests
         // 7,049 → 7,055: the ribbon's New folder now answers from the OPENED folder's `folders` rel rather than
         // being true for any folder at all — cleared on entry and decided once its links arrive, because the
         // button is clickable throughout the load (ADR 0559). Six lines, all of it that decision and its why.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_055,
+        // 7,055 → 7,063 for #634's last part (ADR 0637): UploadDroppedFilesAsync now refuses without the
+        // `create-child` rel. Not belt-and-braces over the two gates in the view — it is the ONLY thing covering
+        // a drop on the empty list area, which falls back to the currently-open folder.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_063,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —

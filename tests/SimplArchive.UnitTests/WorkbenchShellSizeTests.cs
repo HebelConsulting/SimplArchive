@@ -54,7 +54,11 @@ public class WorkbenchShellSizeTests
     // handler read the selection — ADR 0559), and NavigateToFolderAsync keeps the LINKS of the resource it was
     // already fetching instead of only its name, which is what made every rel-gated affordance read as
     // unavailable after a Go to. Both are one-line changes wearing the comment that explains a non-obvious gate.
-    private const int Ceiling = 3_212;
+    // 3,212 → 3,217 for #634's last part (ADR 0637): Upload joins New folder on the `create-child` rel — the
+    // ribbon button, and the tree menu entry which now needs an `@if` around it. Five lines, three of them the
+    // markup a gated menu entry costs; the drop-zone half of the same change cost the shell nothing, because it
+    // lives in BrowseService and ContentsListPane where the attributes are decided.
+    private const int Ceiling = 3_217;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

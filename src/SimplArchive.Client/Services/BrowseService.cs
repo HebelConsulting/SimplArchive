@@ -216,6 +216,20 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
             // LIST here is a no-op — it is not an internal drag target (see below).
             "checkout" => new Dictionary<string, object> { ["data-drop-checkout"] = "true" },
             _ when node.HasVersions => new Dictionary<string, object> { ["data-drop-doc"] = node.Id.ToString() },
+            // A folder is a drop target only where a child may actually be created — the same `create-child`
+            // rel that gates New folder and Upload, because a dropped file IS that create (#634, ADR 0637). The
+            // personal space's first level is the case this closes: it holds only what it was provisioned with,
+            // so a file dropped on `Personal` was refused before any bytes moved, and the user met a refusal
+            // where the rel says they should have met no target at all.
+            //
+            // Same reasoning as the launchers above, and the same precedent (#467): an inert drop zone is worse
+            // than none, because the user concludes the feature is broken rather than absent.
+            //
+            // A FRESH dictionary, deliberately not the shared EmptyAttributes: the drag-source block below
+            // writes into whatever this returns, so handing it the static would add `draggable` to it once and
+            // then hand that poisoned instance to every node in the app. The null-node path above may return
+            // the shared one because it returns immediately; this branch falls through.
+            _ when HrefOf(node, "create-child") is null => new Dictionary<string, object>(),
             _ => new Dictionary<string, object> { ["data-drop-folder"] = node.Id.ToString() },
         };
 

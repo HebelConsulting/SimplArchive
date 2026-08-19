@@ -202,9 +202,9 @@ public class RepositoriesController : ControllerBase
                         new Link("mask", $"/api/documents/{candidate.Id}/mask", "GET"),
                 };
 
-                if (FolderCreationPolicy.AdmitsPlainFolder(candidate.MaskId, parentIsPersonalRoot: false))
+                if (ChildCreationPolicy.AdmitsPlainChild(candidate.MaskId, parentIsPersonalRoot: false))
                 {
-                    rowLinks.Add(new Link("folders", $"/api/documents/{candidate.Id}/children", "POST"));
+                    rowLinks.Add(new Link("create-child", $"/api/documents/{candidate.Id}/children", "POST"));
                 }
 
                 visible.Add(new RepositoryResource

@@ -43,6 +43,32 @@ public class WebPersonalRepositoryTests
     }
 
     [Fact]
+    public async Task Personal_offers_no_drop_target_and_no_upload_while_My_Documents_offers_both()
+    {
+        var page = await Ui.LoginAsync(_app);
+        var tree = page.Locator("[data-pane='tree']");
+        var list = page.Locator("[data-pane='list']");
+        var upload = page.Locator(".wb-ribbon [aria-label=\"Upload\"]").First;
+
+        await tree.GetByText("Personal", new() { Exact = true }).First.ClickAsync();
+
+        // Asserted on the DOM attribute rather than by simulating a drag, because `data-drop-folder` is exactly
+        // what dropUpload.js keys on (`closest('[data-drop-folder]')`) — its absence IS the drop target being
+        // gone, and a synthetic drag would test Playwright's event synthesis instead (#634, ADR 0637).
+        //
+        // The whole contents pane is the target for the open folder, so this is the attribute that matters:
+        // a file dropped on the empty area below the rows lands on the open folder, which here is `Personal`.
+        await Expect(list).Not.ToHaveAttributeAsync("data-drop-folder", new System.Text.RegularExpressions.Regex(".*"));
+        await Expect(upload).ToBeDisabledAsync();
+
+        // Inside My Documents both come back — the negative above would pass just as well if the pane never
+        // carried the attribute at all, which is the failure mode an absence assertion has to rule out.
+        await list.GetByText("My Documents").First.DblClickAsync();
+        await Expect(list).ToHaveAttributeAsync("data-drop-folder", new System.Text.RegularExpressions.Regex("[0-9a-f-]{36}"));
+        await Expect(upload).ToBeEnabledAsync();
+    }
+
+    [Fact]
     public async Task Personal_node_nests_intray_and_checkout_launchers_that_switch_tabs()
     {
         var page = await Ui.LoginAsync(_app);

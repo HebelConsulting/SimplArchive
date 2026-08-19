@@ -924,7 +924,7 @@ public partial class MainWindow : Window
             // last finished loading, which during a load is a different folder than the one under the cursor.
             vm.TreeContextCanAddSection = node.HasRel("sections");
             vm.TreeContextCanAddNote = node.HasRel("notes");
-            vm.TreeContextCanAddFolder = node.HasRel("folders");
+            vm.TreeContextCanCreateChild = node.HasRel("create-child");
         }
     }
 
@@ -971,7 +971,7 @@ public partial class MainWindow : Window
         {
             // The rel the menu entry was gated on (#634), not `children`: same address, and following the one
             // that granted the affordance is what stops gate and action drifting apart.
-            await vm.CreateSubfolderAsync(node.Id, node.Href("folders"), name);
+            await vm.CreateSubfolderAsync(node.Id, node.Href("create-child"), name);
         }
     });
 
