@@ -14,7 +14,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     private readonly Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? _loadChildren;
     private bool _loaded;
 
-    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false, bool hasChildren = true, IReadOnlyDictionary<string, string>? links = null)
+    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false, bool hasChildren = true, IReadOnlyDictionary<string, string>? links = null, IReadOnlyList<Services.CreatableChild>? admits = null)
     {
         Id = id;
         Name = name;
@@ -26,6 +26,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         HasReferences = hasReferences;
         HasChildren = hasChildren;
         Links = links;
+        Admits = admits ?? [];
 
         // A placeholder child makes the expander appear before the real children are loaded.
         if (hasSubfolders)
@@ -43,6 +44,17 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     // SYNTHETIC rows — Administration, the personal-space groupings, the placeholder — which stand for no server
     // resource at all, so there is nothing to follow and Href() correctly refuses.
     public IReadOnlyDictionary<string, string>? Links { get; }
+
+    /// <summary>
+    /// The kinds of child this node will accept, with the address that creates each (#673).
+    /// </summary>
+    /// <remarks>
+    /// Read from the RIGHT-CLICKED node rather than from pane state, for the reason ADR 0559 gives: the pane
+    /// describes whatever last finished loading, which during a load is a different folder than the one under
+    /// the cursor. Empty for a synthetic row, and for a folder that accepts nothing — the same reading as a
+    /// missing rel, so the menu shows no creates rather than offering ones the server refuses.
+    /// </remarks>
+    public IReadOnlyList<Services.CreatableChild> Admits { get; }
 
     /// <summary>
     /// Whether the server advertised <paramref name="rel"/> for this node — i.e. whether the affordance it

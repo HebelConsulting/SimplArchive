@@ -38,6 +38,7 @@ public class RepositoriesController : ControllerBase
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
     private readonly IUserSystemRightsResolver _userSystemRights;
+    private readonly SimplArchive.Infrastructure.Masks.IMaskContainmentProvider _containment;
 
     public RepositoriesController(
         SimplArchiveDbContext dbContext,
@@ -50,7 +51,8 @@ public class RepositoriesController : ControllerBase
         IAuditRecorder audit,
         Documents.DocumentPurger purger,
         Documents.RepositoryImporter importer,
-        Documents.IClearanceScopeResolver clearanceScope)
+        Documents.IClearanceScopeResolver clearanceScope,
+        SimplArchive.Infrastructure.Masks.IMaskContainmentProvider containment)
     {
         _dbContext = dbContext;
         _clearanceScope = clearanceScope;
@@ -63,6 +65,7 @@ public class RepositoriesController : ControllerBase
         _audit = audit;
         _purger = purger;
         _importer = importer;
+        _containment = containment;
     }
 
     private readonly IDocumentIndexQueue _queue;
@@ -87,6 +90,15 @@ public class RepositoriesController : ControllerBase
         public bool HasVersions { get; set; }
 
         public bool HasSubfolders { get; set; }
+
+        /// <summary>What a client may create in this repository, with the address for each (#673).</summary>
+        /// <remarks>
+        /// On the ROW for the same reason `create-child` is, and stated one paragraph below: a tree's top-level
+        /// nodes get their whole menu from this listing and nothing re-fetches a node to fill one in. Carried
+        /// here and on the children listing — the two places a folder is ever LISTED — so every folder in the
+        /// tree answers the question, not just the ones somebody drilled into.
+        /// </remarks>
+        public List<Documents.CreatableChild> Admits { get; set; } = [];
     }
 
     private record RepositoryRow(Guid Id, string Name, DateTimeOffset CreatedAt, bool HasChildren, bool HasVersions, bool HasSubfolders, Guid? MaskId);
@@ -111,6 +123,10 @@ public class RepositoriesController : ControllerBase
     public async Task<IActionResult> List([FromQuery] string? cursor, [FromQuery] int? limit, CancellationToken cancellationToken)
     {
         var pageSize = PageSize.Resolve(limit);
+
+        // Once for the page, never once per row (#673): the rules are a tenant-wide fact and every row asks the
+        // same question of them.
+        var rules = await _containment.ForAsync(_dbContext, _currentTenantAccessor.TenantId!.Value, cancellationToken);
 
         // Personal repositories (ADR "Per-user personal repository") are surfaced separately (the clients' "Personal"
         // node) — keep them out of the shared repository list.
@@ -215,6 +231,7 @@ public class RepositoriesController : ControllerBase
                     HasVersions = candidate.HasVersions,
                     HasSubfolders = candidate.HasSubfolders,
                     Links = rowLinks,
+                    Admits = Documents.CreatableChildren.For(rules, candidate.Id, candidate.MaskId, isPersonalRoot: false),
                 });
             }
 

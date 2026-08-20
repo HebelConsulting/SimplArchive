@@ -140,6 +140,40 @@ internal static partial class Ui
         return json.GetProperty("access_token").GetString()!;
     }
 
+    /// <summary>
+    /// Opens the tree context menu's "New" submenu and waits for <paramref name="expected"/> to appear in it.
+    /// </summary>
+    /// <remarks>
+    /// The creates a folder offers are nested under one "New" entry (#673), matching the desktop (ADR 0511),
+    /// so every test that used to click "New subfolder" now opens this first.
+    /// <para>
+    /// Hover THEN click, rather than one or the other: MudBlazor's submenus open on pointer-enter, but the
+    /// activation is configurable and a headless hover does not always settle into the popover on a loaded
+    /// runner. Trying both costs one click on the item that is already open — which MudBlazor treats as a
+    /// no-op — and saves a whole suite run spent discovering which of the two it was.
+    /// </para>
+    /// </remarks>
+    public static async Task<ILocator> OpenNewSubmenuAsync(IPage page, string expected)
+    {
+        var items = page.Locator(".mud-menu-item");
+        var newItem = items.Filter(new() { HasText = "New" }).First;
+        await Assertions.Expect(newItem).ToBeVisibleAsync();
+        await newItem.HoverAsync();
+
+        var entry = items.Filter(new() { HasText = expected }).First;
+        try
+        {
+            await Assertions.Expect(entry).ToBeVisibleAsync(new() { Timeout = 2000 });
+        }
+        catch (PlaywrightException)
+        {
+            await newItem.ClickAsync();
+            await Assertions.Expect(entry).ToBeVisibleAsync();
+        }
+
+        return entry;
+    }
+
     private static string Base64Url(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 }

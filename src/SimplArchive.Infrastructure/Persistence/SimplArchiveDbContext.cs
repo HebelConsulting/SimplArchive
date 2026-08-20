@@ -45,11 +45,16 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
     // push (ADR "Real-time notifications (SignalR)") fires from the single SaveChangesAsync choke point below.
     private readonly IRealtimeNotifier? _realtimeNotifier;
 
-    public SimplArchiveDbContext(DbContextOptions<SimplArchiveDbContext> options, ICurrentTenantAccessor currentTenantAccessor, IRealtimeNotifier? realtimeNotifier = null)
+    public SimplArchiveDbContext(
+        DbContextOptions<SimplArchiveDbContext> options,
+        ICurrentTenantAccessor currentTenantAccessor,
+        IRealtimeNotifier? realtimeNotifier = null,
+        IMaskContainmentProvider? containmentProvider = null)
         : base(options)
     {
         _currentTenantAccessor = currentTenantAccessor;
         _realtimeNotifier = realtimeNotifier;
+        _containmentProvider = containmentProvider ?? new MaskContainmentProvider();
     }
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
@@ -623,7 +628,7 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
             parentMaskId = await MaskIdOfAsync(parentMaskVersionId);
         }
 
-        (await ContainmentRulesAsync(document.TenantId, cancellationToken))
+        (await _containmentProvider.ForAsync(this, document.TenantId, cancellationToken))
             .Verify(document.Name, ownMaskId, parentMaskId);
 
         // …and does the folder have ROOM for it? A separate question from admission, and the one that stays
@@ -638,23 +643,16 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
         }
     }
 
-    // Cached for this DbContext's lifetime, which is one request or one unit of work. A bulk move of 500
-    // documents then pays for the rules once instead of 500 times, and a mask edit is picked up by the next
-    // request — so there is no invalidation to get wrong, and no window in which the invariant enforces rules
-    // the tenant no longer has. A process-wide cache would be cheaper and would make a stale entry enforce the
-    // WRONG containment, which fails permissive: the direction nothing downstream reports.
-    private readonly Dictionary<Guid, MaskContainmentRules> _containmentRules = [];
-
-    private async Task<MaskContainmentRules> ContainmentRulesAsync(Guid tenantId, CancellationToken cancellationToken)
-    {
-        if (!_containmentRules.TryGetValue(tenantId, out var rules))
-        {
-            rules = await MaskContainmentRules.LoadAsync(this, tenantId, cancellationToken);
-            _containmentRules[tenantId] = rules;
-        }
-
-        return rules;
-    }
+    // Loaded once per request through the SHARED provider, so the rules this invariant enforces are the same
+    // object the Api offers actions from — an offer the invariant refuses is an action that fails on click, and
+    // a withheld offer hides one that would have worked. One load also means a bulk move of 500 documents pays
+    // for the rules once rather than 500 times.
+    //
+    // The fallback is for the many tests (and the design-time factory) that construct this context with no DI:
+    // they get a private provider, which is the same per-instance cache this had before the Api needed to share
+    // it. A null provider must never mean "no rules" — that would read as unrestricted, the permissive
+    // direction, and silently disable containment in exactly the setups that exercise it hardest.
+    private readonly IMaskContainmentProvider _containmentProvider;
 
     // Counted at the same point as every other document invariant, which is what makes a RESTORE safe: clearing
     // DeletedAt is a save like any other, so a mailbox coming back out of the recycle bin beside a replacement

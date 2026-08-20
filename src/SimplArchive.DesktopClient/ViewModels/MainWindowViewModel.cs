@@ -782,12 +782,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // menu opens.
     [ObservableProperty] private bool _treeContextHasReferences;
 
-    // "New section …" / "New note …" appear only where the right-clicked node ADVERTISED them — a notebook or
-    // a section (#564). The client does not re-derive that from a mask name: the rule about what may hold what
-    // lives on the server, and re-deriving it here would be the same rule implemented twice, differently.
-    [ObservableProperty] private bool _treeContextCanAddSection;
+    // The creates the right-clicked node OFFERED, as entries rather than as one flag per kind (#673). The three
+    // booleans this replaces could only ever describe masks the client knew by name; the server now sends the
+    // label and the address, so a family nobody hardcoded gets a menu entry for free.
+    //
+    // They live under a "New" submenu because Avalonia's menu takes literal items or a bound collection and
+    // never both — the flat alternative meant rebuilding all fifteen entries, separators included, as
+    // view-model objects, which is a rewrite nothing could verify short of opening the menu by hand.
+    [ObservableProperty] private ObservableCollection<TreeMenuEntry> _treeContextAdmits = [];
 
-    [ObservableProperty] private bool _treeContextCanAddNote;
+    // Whether to show the submenu at all. An empty admits list reads exactly as a missing rel does: not
+    // available to you, here, now (ADR 0543) — so the entry disappears rather than opening onto nothing.
+    [ObservableProperty] private bool _treeContextCanCreateAny;
 
     // …and "New subfolder" the same way, which it was NOT until #634. It showed unconditionally, so it appeared
     // on a notebook (which holds sections and notes), on the personal space's first level (which holds only the
@@ -1016,7 +1022,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // Shared repositories sorted alphabetically (issue #339); Personal stays pinned above them.
         foreach (var repository in repositories.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase))
         {
-            Tree.Add(new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync, links: repository.Links, hasReferences: repository.HasReferences, hasChildren: repository.HasChildren));
+            Tree.Add(new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync, links: repository.Links, hasReferences: repository.HasReferences, hasChildren: repository.HasChildren, admits: repository.Admits));
         }
 
         // Tenant admins get a synthetic "Administration → Users" branch (ADR "Tenant-admin Administration → Users
@@ -1100,7 +1106,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var folderNodes = children
             .Where(c => !c.HasVersions)
             .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync, links: c.Links, hasReferences: c.HasReferences, hasChildren: c.HasChildren));
+            .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync, links: c.Links, hasReferences: c.HasReferences, hasChildren: c.HasChildren, admits: c.Admits));
 
         var references = await _api.Documents.GetReferencesAsync(node.Href("references"));
         var referenceNodes = references

@@ -112,7 +112,8 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
                     CheckedOut: c.CheckedOut, CheckedOutByMe: c.CheckedOutByMe, CheckedOutByName: c.CheckedOutByName,
                     DocumentType: c.DocumentType, DocumentDate: c.DocumentDate, SizeBytes: c.SizeBytes, Tags: c.Tags, SensitivityLabelName: c.SensitivityLabelName, SensitivityLabelColor: c.SensitivityLabelColor, VersionCount: c.VersionCount, VersionCreatedAt: c.VersionCreatedAt,
                     ChatHref: Links.Href(c.Links, "chat"),
-                    Links: Links.RelMap(c.Links)));
+                    Links: Links.RelMap(c.Links),
+                    Admits: c.Admits));
             }
             url = Links.Href(page?.Links, "next");
         }

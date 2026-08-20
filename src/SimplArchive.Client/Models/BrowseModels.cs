@@ -42,6 +42,9 @@ public record DocumentSummary
     public string? SensitivityLabelColor { get; set; }
     public int VersionCount { get; set; }
     public DateTimeOffset? VersionCreatedAt { get; set; }
+    /// <summary>What this folder will accept, with the address for each (#673). Empty for a non-folder.</summary>
+    public List<CreatableChild> Admits { get; set; } = [];
+
     public List<LinkResponse> Links { get; set; } = [];
 }
 

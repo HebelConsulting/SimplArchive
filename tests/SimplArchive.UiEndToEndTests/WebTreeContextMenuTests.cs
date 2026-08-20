@@ -35,12 +35,16 @@ public class WebTreeContextMenuTests
         var menu = page.Locator(".mud-menu-item");
         foreach (var label in new[]
                  {
-                     "New subfolder", "Upload", "Rename", "Move to", "Contents sort order", "Delete",
+                     "New", "Upload", "Rename", "Move to", "Contents sort order", "Delete",
                      "Manage access", "Place legal hold", "Place reference", "Follow", "Export", "Refresh",
                  })
         {
             await Expect(menu.Filter(new() { HasText = label }).First).ToBeVisibleAsync();
         }
+
+        // "New" is a submenu now (#673), so its presence at the top level says nothing about whether it leads
+        // anywhere — the creates the folder actually offers are inside it, labelled with the mask's own name.
+        await Ui.OpenNewSubmenuAsync(page, "Folder");
 
         await Expect(menu.Filter(new() { HasText = "References" })).ToHaveCountAsync(0);
 

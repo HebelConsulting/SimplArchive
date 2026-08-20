@@ -97,13 +97,16 @@ public class WebNotebookAffordanceTests
         var notebook = await ExpandToNotebookAsync(page, tree);
         await notebook.ClickAsync(new() { Button = MouseButton.Right });
 
+        // Both creates live under "New" now (#673) and wear the MASK's name rather than a client string, so
+        // what used to read "New section" reads "New ▸ Section" — and would read whatever this tenant renamed
+        // the mask to.
         var menu = page.Locator(".mud-menu-item");
-        await Expect(menu.Filter(new() { HasText = "New section" }).First).ToBeVisibleAsync();
-        await Expect(menu.Filter(new() { HasText = "New note" }).First).ToBeVisibleAsync();
+        var section = await Ui.OpenNewSubmenuAsync(page, "Section");
+        await Expect(menu.Filter(new() { HasText = "Note" }).First).ToBeVisibleAsync();
 
         // The name prompt is the rename dialog reused, so its confirm button has to be RELABELLED — a create
         // whose button says "Rename" is a small lie the user reads before they read anything else.
-        await menu.Filter(new() { HasText = "New section" }).First.ClickAsync();
+        await section.ClickAsync();
         var prompt = page.Locator(".mud-dialog").First;
         await Expect(prompt.GetByRole(AriaRole.Button, new() { Name = "Create" })).ToBeVisibleAsync();
         await Expect(prompt.GetByRole(AriaRole.Button, new() { Name = "Rename" })).ToHaveCountAsync(0);
@@ -114,15 +117,18 @@ public class WebNotebookAffordanceTests
         await Expect(prompt).ToBeHiddenAsync();
 
         // My Documents is a plain folder: neither entry may appear. If this ever passes trivially because the
-        // menu did not open, the "New subfolder" assertion below catches it — a menu that is not there fails
+        // menu did not open, the "New ▸ Folder" assertion below catches it — a menu that is not there fails
         // that one too.
         var documents = Node(tree, "My Documents");
         await Expect(documents).ToBeVisibleAsync();
         await documents.ClickAsync(new() { Button = MouseButton.Right });
 
-        await Expect(menu.Filter(new() { HasText = "New subfolder" }).First).ToBeVisibleAsync();
-        await Expect(menu.Filter(new() { HasText = "New section" })).ToHaveCountAsync(0);
-        await Expect(menu.Filter(new() { HasText = "New note" })).ToHaveCountAsync(0);
+        // Its submenu holds the plain folder and nothing else — which is the containment rule reaching the
+        // menu, not a client gate: a Notebook DECLARES it admits sections and notes, and an ordinary folder
+        // declares nothing.
+        await Ui.OpenNewSubmenuAsync(page, "Folder");
+        await Expect(menu.Filter(new() { HasText = "Section" })).ToHaveCountAsync(0);
+        await Expect(menu.Filter(new() { HasText = "Note" })).ToHaveCountAsync(0);
     }
 
     [Fact]
@@ -135,7 +141,7 @@ public class WebNotebookAffordanceTests
         var notebook = await ExpandToNotebookAsync(page, tree);
         await notebook.ClickAsync(); // select it, so the contents list is showing when the note lands
         await notebook.ClickAsync(new() { Button = MouseButton.Right });
-        await page.Locator(".mud-menu-item").Filter(new() { HasText = "New note" }).First.ClickAsync();
+        await (await Ui.OpenNewSubmenuAsync(page, "Note")).ClickAsync();
 
         var dialog = page.Locator(".mud-dialog").First;
         await Expect(dialog).ToBeVisibleAsync();

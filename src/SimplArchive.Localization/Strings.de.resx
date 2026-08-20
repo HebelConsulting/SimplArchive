@@ -2565,6 +2565,9 @@
   <data name="MwMoveSelected" xml:space="preserve">
     <value>Auswahl verschieben</value>
   </data>
+  <data name="MwNew" xml:space="preserve">
+    <value>Neu</value>
+  </data>
   <data name="MwNewSubfolder" xml:space="preserve">
     <value>Neuer Unterordner…</value>
   </data>

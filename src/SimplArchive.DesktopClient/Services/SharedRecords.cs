@@ -22,6 +22,17 @@ public sealed record AclRights(
     bool CanCreateSubItems, bool CanDelete, bool CanMove, bool CanAnnotate, bool CanManagePermissions);
 
 
+/// <summary>One kind of child a folder will accept, exactly as the server described it (#673).</summary>
+/// <param name="MaskId">The mask a child created this way will wear.</param>
+/// <param name="Name">The mask's name on its current version — the menu label, so a rename follows.</param>
+/// <param name="Folder">Whether creating this makes a folder, which picks the icon.</param>
+/// <param name="Href">Where to POST. Advertised, never composed — nothing is appended to it (ADR 0543).</param>
+/// <param name="FolderMask">
+/// The <c>folderMask</c> body value to send back, or null when the address alone says what to make. Handed
+/// over by the server and returned unread: the vocabulary stays the server's, so no client keeps a copy.
+/// </param>
+public sealed record CreatableChild(Guid MaskId, string Name, bool Folder, string Href, string? FolderMask, string Prompt);
+
 public sealed record Node(Guid Id, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, bool OnLegalHold = false, bool CheckedOut = false, bool CheckedOutByMe = false, string CheckedOutByName = "",
     string DocumentType = "", DateOnly? DocumentDate = null, long? SizeBytes = null, IReadOnlyList<string>? Tags = null, string SensitivityLabelName = "", string? SensitivityLabelColor = null, int VersionCount = 0,
     // The latest confirmed version's CreatedAt (filing timestamp) — the "Created" folder contents-sort key
@@ -31,7 +42,11 @@ public sealed record Node(Guid Id, string Name, bool HasChildren, bool HasVersio
     // holding a row follows these instead of composing a path from the document id from a template. Empty only if
     // the row came from somewhere that does not advertise them, in which case a caller must fetch the
     // resource — never rebuild the path.
-    IReadOnlyDictionary<string, string>? Links = null)
+    IReadOnlyDictionary<string, string>? Links = null,
+    // The kinds of child this folder will accept, each with the address that creates one (#673). Supplied by
+    // the listing, so a context menu is built from it without a round trip — and a mask nobody hardcoded still
+    // gets an entry, because the client never maps a mask to an endpoint.
+    IReadOnlyList<CreatableChild>? Admits = null)
 {
     /// <summary>The advertised href for <paramref name="rel"/>.</summary>
     /// <remarks>

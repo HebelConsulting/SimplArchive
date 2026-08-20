@@ -116,26 +116,87 @@ public sealed class MaskContainmentRules
     /// </remarks>
     public void Verify(string documentName, Guid? ownMaskId, Guid? parentMaskId)
     {
-        // A document whose type is not DETERMINED yet is exempt from the folder's admission rule: an upload
-        // creates the row (and its Pending version) BEFORE the finalizer can read the bytes and classify it, so
-        // enforcing here would refuse every .vcf/.ics before it could become a Contact/Appointment. Nothing
-        // escapes through the gap — classification ends by assigning either the item mask (admitted) or Basic
-        // Entry (a real mask, so the very next save is refused, which is exactly the rejection we want).
+        switch (Check(ownMaskId, parentMaskId))
+        {
+            case Refusal.None:
+                return;
+
+            case Refusal.FolderAdmitsOnly:
+                throw TypedFolderContainmentException.FolderAdmitsOnly(
+                    documentName, NameOf(parentMaskId!.Value), [.. AdmittedBy(parentMaskId.Value).Select(NameOf)]);
+
+            case Refusal.ItemBelongsElsewhere:
+                throw TypedFolderContainmentException.ItemBelongsIn(
+                    documentName, NameOf(ownMaskId!.Value), [.. _allowedParents[ownMaskId.Value].Select(NameOf)]);
+
+            default:
+                throw TypedFolderContainmentException.FolderHoldsNoSubfolders(documentName, NameOf(parentMaskId!.Value));
+        }
+    }
+
+    /// <summary>
+    /// The same question without the refusal — for deciding whether to OFFER an action (#673).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asked once per row when a listing is built, so it must not allocate an exception to throw away. That is
+    /// why the decision below returns a reason rather than an exception, and why <see cref="Verify"/> builds
+    /// the message only once it knows there is one to build.
+    /// </para>
+    /// <para>
+    /// Sharing the decision with <see cref="Verify"/> is the point: what the client is offered and what the
+    /// invariant permits are then the SAME answer rather than two that agree today. That drift is the one
+    /// <c>ChildCreationPolicyAgreementTests</c> exists to catch, and this removes its possibility instead.
+    /// </para>
+    /// </remarks>
+    public bool Allows(Guid? ownMaskId, Guid? parentMaskId) => Check(ownMaskId, parentMaskId) == Refusal.None;
+
+    /// <summary>The masks this folder DECLARES it admits, in name order. Empty for an ordinary folder.</summary>
+    /// <remarks>
+    /// What a "New …" menu is built from, and deliberately narrower than "everything <see cref="Allows"/>
+    /// permits": an ordinary folder permits almost every mask, and a menu listing them all would offer
+    /// "New Basic Entry" beside "New folder". A declaration is an intent to hold something; mere permission is
+    /// not, and only the first belongs on a menu.
+    /// </remarks>
+    public IReadOnlyList<Guid> AdmittedBy(Guid folderMaskId) =>
+        _admittedChildren.TryGetValue(folderMaskId, out var admitted) ? admitted : [];
+
+    /// <summary>Whether this mask types a folder, as the tenant's own model says (ADR 0653).</summary>
+    public bool IsFolderMask(Guid maskId) => _folderMasks.Contains(maskId);
+
+    /// <summary>The mask's name on its current version — what a menu entry and a refusal both read.</summary>
+    public string NameOf(Guid maskId) => _names.TryGetValue(maskId, out var name) ? name : maskId.ToString();
+
+    private enum Refusal
+    {
+        None,
+        FolderAdmitsOnly,
+        ItemBelongsElsewhere,
+        FolderHoldsNoSubfolders,
+    }
+
+    // Three independent questions, never an if/else chain: a Section satisfies two of them at once — it is an
+    // admitted child of a Notebook AND a typed folder in its own right — so treating them as alternatives would
+    // let a Section live at the archive root.
+    private Refusal Check(Guid? ownMaskId, Guid? parentMaskId)
+    {
+        // A document whose type is not DETERMINED yet is exempt: an upload creates the row (and its Pending
+        // version) BEFORE the finalizer can read the bytes and classify it, so refusing here would reject every
+        // .vcf/.ics before it could become a Contact/Appointment. Nothing escapes through the gap —
+        // classification ends by assigning either the item mask (admitted) or Basic Entry (a real mask, so the
+        // very next save is refused, which is exactly the rejection we want).
         if (ownMaskId is not { } childMaskId)
         {
-            return;
+            return Refusal.None;
         }
 
         // Does the parent admit this child? Only an EXCLUSIVE folder narrows; an ordinary one holds anything,
         // which is the permissive default every mask had before containment was modelled.
-        if (parentMaskId is { } folderMaskId && _exclusiveFolders.Contains(folderMaskId))
+        if (parentMaskId is { } folderMaskId
+            && _exclusiveFolders.Contains(folderMaskId)
+            && !AdmittedBy(folderMaskId).Contains(childMaskId))
         {
-            var admitted = _admittedChildren.TryGetValue(folderMaskId, out var list) ? list : [];
-            if (!admitted.Contains(childMaskId))
-            {
-                throw TypedFolderContainmentException.FolderAdmitsOnly(
-                    documentName, NameOf(folderMaskId), [.. admitted.Select(NameOf)]);
-            }
+            return Refusal.FolderAdmitsOnly;
         }
 
         // …and is this child somewhere that admits it? No rows means anywhere — the table is a restriction, so
@@ -144,20 +205,14 @@ public sealed class MaskContainmentRules
         if (_allowedParents.TryGetValue(childMaskId, out var allowed)
             && !(parentMaskId is { } actual && allowed.Contains(actual)))
         {
-            throw TypedFolderContainmentException.ItemBelongsIn(
-                documentName, NameOf(childMaskId), [.. allowed.Select(NameOf)]);
+            return Refusal.ItemBelongsElsewhere;
         }
 
         // …and if the parent holds no subfolders, is this child one? Folder-ness comes from the MASK because
         // the usual tell — does it have versions — cannot be read here: a folder and a just-delivered message
         // are both version-less at the instant this runs.
-        if (_folderMasks.Contains(childMaskId)
-            && parentMaskId is { } leafId
-            && _leafFolders.Contains(leafId))
-        {
-            throw TypedFolderContainmentException.FolderHoldsNoSubfolders(documentName, NameOf(leafId));
-        }
+        return _folderMasks.Contains(childMaskId) && parentMaskId is { } leafId && _leafFolders.Contains(leafId)
+            ? Refusal.FolderHoldsNoSubfolders
+            : Refusal.None;
     }
-
-    private string NameOf(Guid maskId) => _names.TryGetValue(maskId, out var name) ? name : maskId.ToString();
 }

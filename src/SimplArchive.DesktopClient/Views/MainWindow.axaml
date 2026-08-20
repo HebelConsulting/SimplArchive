@@ -148,14 +148,20 @@
                                          (which holds sections, not folders), on the personal space's first level,
                                          and to a caller with no right to create. The server refused each, so the
                                          user met an error where they should have met an absence (ADR 0543). -->
-                                    <MenuItem Header="{loc:Tr MwNewSubfolder}" Click="OnTreeNewFolder" IsVisible="{Binding TreeContextCanCreateChild}">
-                                        <MenuItem.Icon><i:Icon Value="mdi-folder-plus-outline" /></MenuItem.Icon>
-                                    </MenuItem>
-                                    <MenuItem Header="{loc:Tr MwNewSection}" Click="OnTreeNewSection" IsVisible="{Binding TreeContextCanAddSection}">
-                                        <MenuItem.Icon><i:Icon Value="mdi-notebook-plus-outline" /></MenuItem.Icon>
-                                    </MenuItem>
-                                    <MenuItem Header="{loc:Tr MwNewNote}" Click="OnTreeNewNote" IsVisible="{Binding TreeContextCanAddNote}">
-                                        <MenuItem.Icon><i:Icon Value="mdi-note-plus-outline" /></MenuItem.Icon>
+                                    <!-- The creates the SERVER offered for this node (#673). A submenu because
+                                         Avalonia's menu takes literal items or a bound collection and never
+                                         both, and the static entries below are worth more than a flat list. -->
+                                    <MenuItem Header="{loc:Tr MwNew}" ItemsSource="{Binding TreeContextAdmits}" IsVisible="{Binding TreeContextCanCreateAny}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-plus" /></MenuItem.Icon>
+                                        <MenuItem.ItemContainerTheme>
+                                            <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                                <!-- ReflectionBinding: a ControlTheme carries no x:DataType, so a
+                                                     compiled binding here resolves against the WINDOW's
+                                                     view-model and fails to find Header/Command. -->
+                                                <Setter Property="Header" Value="{ReflectionBinding Header}" />
+                                                <Setter Property="Command" Value="{ReflectionBinding Command}" />
+                                            </ControlTheme>
+                                        </MenuItem.ItemContainerTheme>
                                     </MenuItem>
                                     <!-- Same gate as New subfolder above: an upload is that same create (ADR 0637). -->
                                     <MenuItem Header="{loc:Tr Upload}" Click="OnTreeUpload" IsVisible="{Binding TreeContextCanCreateChild}">

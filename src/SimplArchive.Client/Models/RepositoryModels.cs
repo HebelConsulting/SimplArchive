@@ -27,5 +27,12 @@ public record RepositorySummary
 
     public bool HasSubfolders { get; set; }
 
+    /// <summary>What may be created in this repository, with the address for each (#673).</summary>
+    /// <remarks>
+    /// On the row, because a tree's top-level nodes get their whole menu from this listing and nothing
+    /// re-fetches a node to fill one in — the same reason `create-child` is on it (issue #416).
+    /// </remarks>
+    public List<CreatableChild> Admits { get; set; } = [];
+
     public List<LinkResponse>? Links { get; set; }
 }

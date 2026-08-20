@@ -2565,6 +2565,9 @@
   <data name="MwMoveSelected" xml:space="preserve">
     <value>Mover selección</value>
   </data>
+  <data name="MwNew" xml:space="preserve">
+    <value>Nuevo</value>
+  </data>
   <data name="MwNewSubfolder" xml:space="preserve">
     <value>Nueva subcarpeta…</value>
   </data>

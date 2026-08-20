@@ -56,7 +56,11 @@ public class OverLimitFileCeilingTests
         // a drop on the empty list area, which falls back to the currently-open folder.
         // 7,063 → 6,843: #517 tranche 1 — the Audit tab's state moved to AuditTabViewModel (the
         // CheckoutTabViewModel shape). Only the CanViewAuditLog visibility gate stays.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_843,
+        // 6,843 → 6,849 for #673: the three per-kind create flags became one collection of server-supplied
+        // entries plus a visibility bool. Six lines, and all of it the note explaining why the entries are a
+        // submenu — the flat alternative was a fifteen-entry rewrite nothing could verify without opening the
+        // menu by hand. The property count went DOWN; the comment is what costs.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_849,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
@@ -81,7 +85,11 @@ public class OverLimitFileCeilingTests
         // saying why the gate and the address must be the same rel.
         // 1,194 → 1,147: #519 tranche 1 — the audit export/purge handlers moved into AuditTab.axaml.cs with
         // the markup they serve, exactly the per-tab collapse the notes above kept deferring to.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_147,
+        // 1,147 → 1,132: #673 replaced OnTreeNewFolder/OnTreeNewSection/OnTreeNewNote with ONE
+        // CreateAdmittedAsync. The address, the label and which question to ask now come from the entry the
+        // server sent, so three handlers collapsed into one with no case per family. Lowered, not left with
+        // headroom.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_132,
 
         // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).
@@ -92,7 +100,11 @@ public class OverLimitFileCeilingTests
         // things, not regions.
         // 2,032 → 1,956: #519 tranche 1 — the Audit TabItem's body became AuditTab (the TenantSettingsPane /
         // ContactsTab shape); the header and its visibility gate stay with the shell.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_956,
+        // 1,956 → 1,962 for #673: three static MenuItems became one bound submenu. Longer than what it
+        // replaced because of the ItemContainerTheme and the note on why its bindings are reflection ones —
+        // a ControlTheme carries no x:DataType, so a compiled binding there resolves against the WINDOW's
+        // view-model and fails. That cost six lines and would otherwise be rediscovered by whoever touches it.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_962,
 
         // Entered 2026-08-20 (#673, ADR 0655) — over the line since well before it was noticed, and never on
         // the list, so nothing was watching it. It enters ON THE WAY DOWN: the containment port took it 1,041 →
@@ -103,7 +115,11 @@ public class OverLimitFileCeilingTests
         // The direction of travel is right — every invariant here that grows a real collaborator can leave the
         // same way containment did, since what the DbContext owes is the ENFORCEMENT POINT, not the rules. No
         // burn-down is scheduled and none is promised; lower this when one happens.
-        ["src/SimplArchive.Infrastructure/Persistence/SimplArchiveDbContext.cs"] = 1_017,
+        // 1,017 → 1,015: the shared containment provider (#673) replaced the private cache and its one-use
+        // wrapper. Lowered rather than left with headroom — an unlowered ceiling is permission to grow back
+        // into it, silently. It also caught this change growing the file by ONE line, which is the entire
+        // argument for the entry existing.
+        ["src/SimplArchive.Infrastructure/Persistence/SimplArchiveDbContext.cs"] = 1_015,
     };
 
     public static TheoryData<string> Files => [.. Ceilings.Keys];

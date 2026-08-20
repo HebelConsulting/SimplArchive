@@ -58,7 +58,18 @@ public class WorkbenchShellSizeTests
     // ribbon button, and the tree menu entry which now needs an `@if` around it. Five lines, three of them the
     // markup a gated menu entry costs; the drop-zone half of the same change cost the shell nothing, because it
     // lives in BrowseService and ContentsListPane where the attributes are decided.
-    private const int Ceiling = 3_217;
+    // 3,216 → 3,225 for #673: the creates are now built from what the folder ADMITS — one loop over a
+    // server-supplied list, replacing the per-rel `@if`s the two raises above paid for — nested under a "New"
+    // submenu that matches the desktop (ADR 0511). Nine lines, and only four of them markup: the loop is
+    // SHORTER than what it replaced, and would stay that length if a tenant-authored folder mask arrived
+    // tomorrow. What is charged here is the comment saying why "New" is a submenu rather than a flat list,
+    // which is the decision a reader would otherwise re-litigate — the label is the mask's own name, so a flat
+    // entry reads as a noun among verbs, and no client can prefix a verb onto it across four languages.
+    // Five of those lines are a note that cost three suite runs to write: a submenu is a nested MudMenu (a
+    // MudMenuItem wrapping items renders NOTHING) and takes StartIcon, not Icon (which renders a bare
+    // icon-button activator with no label). Both compile clean, so the build says nothing and the menu is
+    // silently wrong — the kind of thing the next person pays for again unless it is written down here.
+    private const int Ceiling = 3_230;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

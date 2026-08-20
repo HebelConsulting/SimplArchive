@@ -9,6 +9,18 @@ namespace SimplArchive.Client.Models;
 /// and by most of the workbench, so decomposing the page into components (ADR 0558) would otherwise need a
 /// private copy of it per component.
 /// </remarks>
+/// <summary>One kind of child a folder will accept, exactly as the server described it (#673).</summary>
+/// <param name="MaskId">The mask a child created this way will wear.</param>
+/// <param name="Name">The mask's name on its current version — the menu label, so a rename follows.</param>
+/// <param name="Folder">Whether creating this makes a folder, which picks the icon.</param>
+/// <param name="Href">Where to POST. Advertised, never composed — nothing is appended to it (ADR 0543).</param>
+/// <param name="FolderMask">The <c>folderMask</c> body value to send back, or null when the address says it.</param>
+/// <param name="Prompt">
+/// What to ask for: <c>name</c>, or <c>note</c> for a title and a body. The SERVER names the input, because a
+/// client that inferred it from the mask would need to know every mask — which is what this removes.
+/// </param>
+public record CreatableChild(Guid MaskId, string Name, bool Folder, string Href, string? FolderMask, string Prompt);
+
 public record BrowseNode(Guid Id, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders,
     bool HasReferences = false, bool IsReference = false, Guid ReferenceId = default, Guid? RealParentId = null,
     Guid RepositoryId = default, string FileExtension = "", bool OnLegalHold = false,
@@ -39,7 +51,11 @@ public record BrowseNode(Guid Id, string Name, bool HasChildren, bool HasVersion
     // Administration branch, the Personal-space groupings), which stands for no server resource, and for a
     // row from a listing that does not advertise them; a caller with neither must FETCH the resource and
     // follow its rel, never compose.
-    IReadOnlyDictionary<string, string>? Links = null)
+    IReadOnlyDictionary<string, string>? Links = null,
+    // The kinds of child this folder will accept, each with the address that creates one (#673). Carried by the
+    // listing, so a context menu is built from it with no round trip — and a mask nobody hardcoded still gets
+    // an entry, because the client never maps a mask to an endpoint.
+    IReadOnlyList<CreatableChild>? Admits = null)
 {
     public bool IsFolder => !HasVersions;
 

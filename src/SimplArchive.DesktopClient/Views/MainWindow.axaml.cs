@@ -875,58 +875,43 @@ public partial class MainWindow : Window
             vm.TreeContextHasReferences = node.HasReferences;
             // Read from the RIGHT-CLICKED node, not from pane state (ADR 0559): the pane describes whatever
             // last finished loading, which during a load is a different folder than the one under the cursor.
-            vm.TreeContextCanAddSection = node.HasRel("sections");
-            vm.TreeContextCanAddNote = node.HasRel("notes");
             vm.TreeContextCanCreateChild = node.HasRel("create-child");
+
+            // Built from what the node ADMITS rather than from rels the client knows by name (#673): the server
+            // sends the label and the address, so this loop needs no case per family and a mask nobody
+            // hardcoded still gets an entry.
+            vm.TreeContextAdmits = [.. node.Admits.Select(a =>
+                TreeMenuEntry.Create(a.Name, a.Folder ? "mdi-folder-plus-outline" : "mdi-note-plus-outline",
+                    () => Safe.Fire(() => CreateAdmittedAsync(vm, node, a))))];
+            vm.TreeContextCanCreateAny = vm.TreeContextAdmits.Count > 0;
         }
     }
 
-    private void OnTreeNewSection(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    // One create for every kind the folder offered. The address, the label and — since the client cannot know
+    // the mask — WHICH QUESTION TO ASK all come from the entry the server sent, so this needs no case per
+    // family and a mask nobody hardcoded still works.
+    private async Task CreateAdmittedAsync(MainWindowViewModel vm, TreeNodeViewModel node, Services.CreatableChild admitted)
     {
-        if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node)
+        if (admitted.Prompt == "note")
         {
+            if (await new NewNoteDialog().ShowDialog<NewNoteDialog.Result?>(this) is { } note)
+            {
+                await vm.CreateNoteAsync(node.Id, admitted.Href, note.Title, note.Body);
+            }
+
             return;
         }
 
-        // The same dialog "New subfolder" uses — a section IS a folder, so asking for it differently would be
-        // a second way to ask the same question. It takes its own title/label so the user is told which of the
-        // two they are creating.
-        var name = await new NewFolderDialog(Strings.Get("MwNewSection"), Strings.Get("NewSectionName"))
-            .ShowDialog<string?>(this);
+        // Titled with the mask's own name, so the user is told which of the kinds on the menu they picked —
+        // and so a tenant-authored folder mask reads correctly without a string of its own.
+        var name = await new NewFolderDialog(admitted.Name, admitted.Name).ShowDialog<string?>(this);
         if (!string.IsNullOrWhiteSpace(name))
         {
-            await vm.CreateSectionAsync(node.Id, node.Href("sections"), name);
+            // The href the ENTRY carried, never one composed from the node: following the address that granted
+            // the affordance is what stops the gate and the action drifting apart (ADR 0543/0559).
+            await vm.CreateSubfolderAsync(node.Id, admitted.Href, name);
         }
-    });
-
-    private void OnTreeNewNote(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node)
-        {
-            return;
-        }
-
-        if (await new NewNoteDialog().ShowDialog<NewNoteDialog.Result?>(this) is { } note)
-        {
-            await vm.CreateNoteAsync(node.Id, node.Href("notes"), note.Title, note.Body);
-        }
-    });
-
-    private void OnTreeNewFolder(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node)
-        {
-            return;
-        }
-
-        var name = await new NewFolderDialog().ShowDialog<string?>(this);
-        if (!string.IsNullOrWhiteSpace(name))
-        {
-            // The rel the menu entry was gated on (#634), not `children`: same address, and following the one
-            // that granted the affordance is what stops gate and action drifting apart.
-            await vm.CreateSubfolderAsync(node.Id, node.Href("create-child"), name);
-        }
-    });
+    }
 
     private void OnTreeRename(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {

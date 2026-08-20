@@ -488,17 +488,30 @@
                                folders), on the personal space's first level, and to a caller with no right to
                                create — each an action the server refuses. Its absence says "not available to
                                you, here, now" (ADR 0543). *@
-                            @if (BrowseService.HrefOf(tn, "create-child") is not null)
+                            @* Every create the SERVER offered (#673), nested under "New" exactly as the desktop
+                               nests them (ADR 0511). A submenu was FORCED there — Avalonia's menu takes literal
+                               items or a bound collection, never both — and is CHOSEN here: the label is the
+                               MASK's name, so a flat entry reads "Folder" among Upload, Rename and Delete, a
+                               noun in a list of verbs. The verb cannot be prefixed onto a server-supplied name
+                               without composing "New {0}" in four languages that disagree about word order, so
+                               it goes on the parent and is said once for every entry. *@
+                            @if (tn.Admits is { Count: > 0 })
                             {
-                                <MudMenuItem Icon="@Icons.Material.Filled.CreateNewFolder" OnClick="() => NewFolderAsync(tn)">@Strings.Get("MwNewSubfolder")</MudMenuItem>
+                                @* A nested MudMenu, and StartIcon rather than Icon. Both were found by dumping
+                                   the rendered menu, and both compile clean: a MudMenuItem wrapping items
+                                   renders NOTHING, and `Icon` makes a nested menu render an icon-button
+                                   activator with no text — a bare "+" among labelled rows. StartIcon is the
+                                   one documented as "also used for nested MudMenu". *@
+                                <MudMenu Label="@Strings.Get("MwNew")" StartIcon="@Icons.Material.Filled.Add" Dense="true">
+                                    @foreach (var admitted in tn.Admits)
+                                    {
+                                        <MudMenuItem Icon="@(admitted.Folder ? Icons.Material.Filled.CreateNewFolder : Icons.Material.Filled.NoteAdd)"
+                                                     OnClick="() => RunAndRefreshAsync(Actions.CreateAdmittedAsync(tn, admitted))">@admitted.Name</MudMenuItem>
+                                    }
+                                </MudMenu>
                             }
-                            @* Only where the ROW advertised them — a notebook or a section (#564, ADR 0625). *@
-                            @if (BrowseService.HrefOf(tn, "sections") is not null)
-                            {
-                                <MudMenuItem Icon="@Icons.Material.Filled.LibraryAdd" OnClick="() => RunAndRefreshAsync(Actions.CreateSectionAsync(tn))">@Strings.Get("MwNewSection")</MudMenuItem>
-                                <MudMenuItem Icon="@Icons.Material.Filled.NoteAdd" OnClick="() => RunAndRefreshAsync(Actions.CreateNoteAsync(tn))">@Strings.Get("MwNewNote")</MudMenuItem>
-                            }
-                            @* The same rel as New subfolder above: an upload is that same create (ADR 0637). *@
+                            @* The same rel the creates above follow (ADR 0637), but top-level rather than in
+                               "New ▸": that submenu makes something EMPTY, and an upload brings its own. *@
                             @if (BrowseService.HrefOf(tn, "create-child") is not null)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.Upload" OnClick="() => UploadAsync(tn)">@Strings.Get("Upload")</MudMenuItem>

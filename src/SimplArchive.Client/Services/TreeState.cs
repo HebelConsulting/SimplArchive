@@ -51,7 +51,7 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
                 foreach (var r in page?.Repositories ?? [])
                 {
                     // A repository is its own repository scope.
-                    shared.Add(BrowseService.ToTreeItem(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, RepositoryId: r.Id, Links: Links.RelMap(r.Links))));
+                    shared.Add(BrowseService.ToTreeItem(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, RepositoryId: r.Id, Links: Links.RelMap(r.Links), Admits: r.Admits)));
                 }
                 url = Links.Href(page?.Links, "next");
             }

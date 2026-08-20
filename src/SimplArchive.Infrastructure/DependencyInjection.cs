@@ -62,6 +62,10 @@ public static class DependencyInjection
         services.AddScoped<CurrentImpersonationAccessor>();
         services.AddScoped<ICurrentImpersonationAccessor>(sp => sp.GetRequiredService<CurrentImpersonationAccessor>());
 
+        // Scoped, and SHARED between the SaveChanges invariant and the Api: what a folder admits must be one
+        // answer, not two that agree today (#673, ADR 0655).
+        services.AddScoped<IMaskContainmentProvider, MaskContainmentProvider>();
+
         services.AddScoped<IEffectiveRightsCalculator, EffectiveRightsCalculator>();
         services.AddScoped<IUserSystemRightsResolver, UserSystemRightsResolver>();
         services.AddScoped<IClearanceResolver, ClearanceResolver>();

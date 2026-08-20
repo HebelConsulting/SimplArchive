@@ -67,6 +67,40 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
             && await PostCreateAsync(href, new { title = note.Title, body = note.Body }, "StErrCreateNote", "StCreatedNote", note.Title);
     }
 
+    /// <summary>
+    /// Creates whichever kind of child the folder OFFERED, at the address the offer carried (#673).
+    /// </summary>
+    /// <remarks>
+    /// The label, the address and — since a client cannot know the mask — WHICH QUESTION TO ASK all come from
+    /// the entry the server sent, so there is no case per family here and a mask nobody hardcoded still works.
+    /// The dialog is the only per-kind thing left: a note needs a title and a body, a folder needs a name, and
+    /// no table can supply that. An unknown prompt asks for a name rather than doing nothing — a typed folder
+    /// somebody authored is exactly what this is heading towards.
+    /// </remarks>
+    public async Task<bool> CreateAdmittedAsync(BrowseNode node, CreatableChild admitted)
+    {
+        if (admitted.Prompt == "note")
+        {
+            var noteDialog = await dialogs.ShowAsync<NewNoteDialog>(admitted.Name);
+            return await noteDialog.Result is { Canceled: false, Data: NewNoteDialog.NewNote note }
+                && await PostCreateAsync(admitted.Href, new { title = note.Title, body = note.Body }, "StErrCreateNote", "StCreatedNote", note.Title);
+        }
+
+        // Titled with the mask's own name, so the user is told which of the kinds on the menu they picked —
+        // and so a tenant-authored folder mask reads correctly without a string of its own.
+        var parameters = new DialogParameters<RenameDialog> { { x => x.ConfirmLabelKey, "Create" } };
+        var dialog = await dialogs.ShowAsync<RenameDialog>(admitted.Name, parameters);
+        if (await dialog.Result is not { Canceled: false, Data: string name } || string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        // The folderMask value came FROM the server and goes back unread: the vocabulary stays the server's,
+        // so this client keeps no copy of it (ADR 0543).
+        object payload = admitted.FolderMask is { } folderMask ? new { name, folderMask } : new { name };
+        return await PostCreateAsync(admitted.Href, payload, "StErrCreateFolder", "StCreatedFolder", name);
+    }
+
     // One body for both: they differ only in the address, the payload and the message.
     private async Task<bool> PostCreateAsync(string href, object payload, string errKey, string okKey, string name)
     {

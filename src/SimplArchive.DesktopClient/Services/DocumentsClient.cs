@@ -788,7 +788,21 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         item.TryGetProperty("versionCreatedAt", out var vca) && vca.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(vca.GetString(), out var vcaDt) ? vcaDt : null,
         // The row's advertised addresses. WITHOUT this every Node.Links is null and Href() throws — which
         // is exactly what shipped in 2aeaae0, because the edit that added it silently did not apply.
-        ApiCore.ParseLinks(item));
+        ApiCore.ParseLinks(item),
+        ParseAdmits(item));
+
+    // What this folder will accept, with the address for each (#673). An absent or empty array means the
+    // client offers no creates here — the same reading as a missing rel: not available to you, here, now.
+    private static IReadOnlyList<CreatableChild> ParseAdmits(JsonElement item) =>
+        item.TryGetProperty("admits", out var a) && a.ValueKind == JsonValueKind.Array
+            ? [.. a.EnumerateArray().Select(e => new CreatableChild(
+                e.GetProperty("maskId").GetGuid(),
+                e.GetProperty("name").GetString() ?? "",
+                e.TryGetProperty("folder", out var f) && f.ValueKind == JsonValueKind.True,
+                e.GetProperty("href").GetString() ?? "",
+                e.TryGetProperty("folderMask", out var fm) && fm.ValueKind == JsonValueKind.String ? fm.GetString() : null,
+                e.TryGetProperty("prompt", out var pr) ? pr.GetString() ?? "name" : "name"))]
+            : [];
 
     // Reads the document FIRST and works outwards from what it advertises (ADR 0543, issue #416). The order
     // matters: `acl-entries` is gated on CanManagePermissions, so its ABSENCE is the answer the dialog needs —

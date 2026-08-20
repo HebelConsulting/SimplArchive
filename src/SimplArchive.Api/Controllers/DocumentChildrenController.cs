@@ -14,6 +14,7 @@ using SimplArchive.Api.Pagination;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Masks;
+using SimplArchive.Infrastructure.Masks;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Controllers;
@@ -37,6 +38,10 @@ public class DocumentChildrenController : ControllerBase
     private readonly Documents.IClearanceScopeResolver _clearanceScope;
     private readonly ICurrentTenantAccessor _currentTenantAccessor;
 
+    // Shared with the SaveChanges invariant, so what this offers and what that permits are the same answer
+    // rather than two that agree today (#673, ADR 0655).
+    private readonly IMaskContainmentProvider _containment;
+
     public DocumentChildrenController(
         ICurrentUserAccessor currentUserAccessor,
         SimplArchiveDbContext dbContext,
@@ -44,7 +49,8 @@ public class DocumentChildrenController : ControllerBase
         IAuditRecorder audit,
         IDocumentIndexQueue queue,
         Documents.IClearanceScopeResolver clearanceScope,
-        ICurrentTenantAccessor currentTenantAccessor)
+        ICurrentTenantAccessor currentTenantAccessor,
+        IMaskContainmentProvider containment)
     {
         _currentUserAccessor = currentUserAccessor;
         _dbContext = dbContext;
@@ -53,6 +59,7 @@ public class DocumentChildrenController : ControllerBase
         _queue = queue;
         _clearanceScope = clearanceScope;
         _currentTenantAccessor = currentTenantAccessor;
+        _containment = containment;
     }
 
     public class DocumentSummaryResource : HypermediaResource
@@ -107,6 +114,23 @@ public class DocumentChildrenController : ControllerBase
         public long? SizeBytes { get; set; }
 
         public List<string> Tags { get; set; } = [];
+
+        /// <summary>
+        /// The kinds of child this folder will accept, each with the address that creates one (#673).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Inline rather than behind a rel, because a context menu opens on a right-click and a round trip
+        /// there is a visible pause on the one interaction that must feel instant. It is a value that already
+        /// travels with the listing, which is exactly where ADR 0557 says to take it from.
+        /// </para>
+        /// <para>
+        /// Empty for anything that is not a folder, and for a folder that accepts nothing — and that emptiness
+        /// is meaningful in the same way a missing rel is (ADR 0543): the client shows no "New …" entries
+        /// rather than offering ones the server would refuse.
+        /// </para>
+        /// </remarks>
+        public List<CreatableChild> Admits { get; set; } = [];
 
         // The data-classification sensitivity label (ADR "Configurable sensitivity labels + upload defaults") —
         // the list-row badge: the label id (null = None, no badge), its name + colour. Derived, never stored here.
@@ -262,6 +286,11 @@ public class DocumentChildrenController : ControllerBase
             links.Add(new Link("next", Url.Action(nameof(ListChildren), new { documentId, cursor = nextCursor, limit = pageSize })!, "GET"));
         }
 
+        // Loaded ONCE for the whole page, not per row: the provider caches per request, so this is one query
+        // however many rows the page holds — and the same object the invariant will consult if any of these
+        // creates is actually attempted.
+        var rules = await _containment.ForAsync(_dbContext, _currentTenantAccessor.TenantId!.Value, cancellationToken);
+
         return Ok(new DocumentChildrenResource
         {
             Children = page.Select(d => new DocumentSummaryResource
@@ -281,6 +310,9 @@ public class DocumentChildrenController : ControllerBase
                 DocumentDate = d.DocumentDate,
                 SizeBytes = d.SizeBytes,
                 Tags = tagsByDoc.TryGetValue(d.Id, out var tags) ? tags : [],
+                // isPersonalRoot is false by construction: a personal space is a ROOT document, so it is never
+                // itself a listed child. Its own resource answers this separately.
+                Admits = CreatableChildren.For(rules, d.Id, d.MaskId, isPersonalRoot: false),
                 SensitivityLabelId = d.SensitivityLabelId,
                 SensitivityLabelName = d.SensitivityLabelName ?? "",
                 SensitivityLabelColor = d.SensitivityLabelColor,

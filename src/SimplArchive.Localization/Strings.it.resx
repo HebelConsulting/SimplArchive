@@ -2565,6 +2565,9 @@
   <data name="MwMoveSelected" xml:space="preserve">
     <value>Sposta selezione</value>
   </data>
+  <data name="MwNew" xml:space="preserve">
+    <value>Nuovo</value>
+  </data>
   <data name="MwNewSubfolder" xml:space="preserve">
     <value>Nuova sottocartella…</value>
   </data>
