@@ -99,6 +99,9 @@ public class RepositoriesController : ControllerBase
         /// tree answers the question, not just the ones somebody drilled into.
         /// </remarks>
         public List<Documents.CreatableChild> Admits { get; set; } = [];
+
+        /// <summary>What to draw for this repository — a token from its mask (see the children listing).</summary>
+        public string? Icon { get; set; }
     }
 
     private record RepositoryRow(Guid Id, string Name, DateTimeOffset CreatedAt, bool HasChildren, bool HasVersions, bool HasSubfolders, Guid? MaskId);
@@ -232,6 +235,7 @@ public class RepositoriesController : ControllerBase
                     HasSubfolders = candidate.HasSubfolders,
                     Links = rowLinks,
                     Admits = Documents.CreatableChildren.For(rules, candidate.Id, candidate.MaskId, isPersonalRoot: false),
+                    Icon = rules.IconOf(candidate.MaskId),
                 });
             }
 

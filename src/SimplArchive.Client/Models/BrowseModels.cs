@@ -45,6 +45,9 @@ public record DocumentSummary
     /// <summary>What this folder will accept, with the address for each (#673). Empty for a non-folder.</summary>
     public List<CreatableChild> Admits { get; set; } = [];
 
+    /// <summary>The mask's icon token, or null for the generic glyph.</summary>
+    public string? Icon { get; set; }
+
     public List<LinkResponse> Links { get; set; } = [];
 }
 

@@ -235,7 +235,7 @@ public sealed class SearchClient(ApiCore core)
     // VersionsHref is the address the HIT advertised (#462) — the row carries its own addresses, so previewing a
     // result follows what the listing handed over instead of resolving the document again (ADR 0555/0557). Null
     // for a folder, which advertises no `versions` because it has nothing to preview.
-    public sealed record SearchResult(Guid Id, string Name, bool IsFolder, Guid? ParentId, string Path, string Highlight, string? VersionsHref = null, IReadOnlyDictionary<string, string>? Links = null);
+    public sealed record SearchResult(Guid Id, string Name, bool IsFolder, Guid? ParentId, string Path, string Highlight, string? VersionsHref = null, IReadOnlyDictionary<string, string>? Links = null, string? Icon = null);
 
 
     private static SearchResult ParseSearchResult(JsonElement item) => new(
@@ -246,7 +246,8 @@ public sealed class SearchClient(ApiCore core)
         item.TryGetProperty("path", out var path) ? path.GetString() ?? "" : "",
         item.TryGetProperty("highlight", out var hl) ? hl.GetString() ?? "" : "",
         ApiCore.FindLink(item, "versions"),
-        ApiCore.ParseLinks(item));
+        ApiCore.ParseLinks(item),
+        item.TryGetProperty("icon", out var ic) && ic.ValueKind == JsonValueKind.String ? ic.GetString() : null);
 
     private static string RequireHref(SavedSearchInfo search, string rel) =>
         search.Href(rel)

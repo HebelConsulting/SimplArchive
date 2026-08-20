@@ -19,7 +19,7 @@ namespace SimplArchive.Client.Models;
 /// What to ask for: <c>name</c>, or <c>note</c> for a title and a body. The SERVER names the input, because a
 /// client that inferred it from the mask would need to know every mask — which is what this removes.
 /// </param>
-public record CreatableChild(Guid MaskId, string Name, bool Folder, string Href, string? FolderMask, string Prompt);
+public record CreatableChild(Guid MaskId, string Name, bool Folder, string Href, string? FolderMask, string Prompt, string? Icon = null);
 
 public record BrowseNode(Guid Id, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders,
     bool HasReferences = false, bool IsReference = false, Guid ReferenceId = default, Guid? RealParentId = null,
@@ -55,7 +55,11 @@ public record BrowseNode(Guid Id, string Name, bool HasChildren, bool HasVersion
     // The kinds of child this folder will accept, each with the address that creates one (#673). Carried by the
     // listing, so a context menu is built from it with no round trip — and a mask nobody hardcoded still gets
     // an entry, because the client never maps a mask to an endpoint.
-    IReadOnlyList<CreatableChild>? Admits = null)
+    IReadOnlyList<CreatableChild>? Admits = null,
+    // What this row is DRAWN as — the mask's icon token, or null to keep the generic folder/document glyph.
+    // A token rather than a glyph name, because the desktop draws from a different icon set; an unrecognised
+    // one falls back to the same default, so an older client meeting a newer token is never worse off.
+    string? Icon = null)
 {
     public bool IsFolder => !HasVersions;
 

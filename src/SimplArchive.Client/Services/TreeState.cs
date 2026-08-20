@@ -51,7 +51,7 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
                 foreach (var r in page?.Repositories ?? [])
                 {
                     // A repository is its own repository scope.
-                    shared.Add(BrowseService.ToTreeItem(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, RepositoryId: r.Id, Links: Links.RelMap(r.Links), Admits: r.Admits)));
+                    shared.Add(BrowseService.ToTreeItem(new BrowseNode(r.Id, r.Name, r.HasChildren, r.HasVersions, r.HasSubfolders, RepositoryId: r.Id, Links: Links.RelMap(r.Links), Admits: r.Admits, Icon: r.Icon)));
                 }
                 url = Links.Href(page?.Links, "next");
             }
@@ -141,7 +141,7 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
             Value = new BrowseNode(r.RepositoryId, r.DisplayName, r.HasChildren, false, r.HasSubfolders, RepositoryId: r.RepositoryId),
             Expandable = r.HasSubfolders,
             Text = r.UserIsActive ? r.DisplayName : $"{r.DisplayName} (inactive)",
-            Icon = Icons.Material.Filled.Person,
+            Icon = MaskIcon.Filled("person")!,
         }).ToList();
     }
 
@@ -154,7 +154,7 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
         // space grouping"), even before any real subfolder exists.
         Expandable = true,
         Text = personal.Name,
-        Icon = Icons.Material.Filled.Person,
+        Icon = MaskIcon.Filled("person")!,
     };
 
     private static TreeItemData<BrowseNode> PersonalLauncherItem(string kind, string text, string icon) => new()

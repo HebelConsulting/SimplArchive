@@ -132,6 +132,14 @@ public class DocumentChildrenController : ControllerBase
         /// </remarks>
         public List<CreatableChild> Admits { get; set; } = [];
 
+        /// <summary>What to DRAW for this row — a token from the mask, or null for the shape default.</summary>
+        /// <remarks>
+        /// A token rather than an icon name, because the two clients draw from different icon sets. Null and
+        /// unrecognised both mean "use the folder/document glyph you always used", so a row is never worse off
+        /// than before this existed.
+        /// </remarks>
+        public string? Icon { get; set; }
+
         // The data-classification sensitivity label (ADR "Configurable sensitivity labels + upload defaults") —
         // the list-row badge: the label id (null = None, no badge), its name + colour. Derived, never stored here.
         public Guid? SensitivityLabelId { get; set; }
@@ -313,6 +321,9 @@ public class DocumentChildrenController : ControllerBase
                 // isPersonalRoot is false by construction: a personal space is a ROOT document, so it is never
                 // itself a listed child. Its own resource answers this separately.
                 Admits = CreatableChildren.For(rules, d.Id, d.MaskId, isPersonalRoot: false),
+                // From the rules object already loaded for this page — the mask facts are all in one place, so
+                // the icon costs no query.
+                Icon = rules.IconOf(d.MaskId),
                 SensitivityLabelId = d.SensitivityLabelId,
                 SensitivityLabelName = d.SensitivityLabelName ?? "",
                 SensitivityLabelColor = d.SensitivityLabelColor,

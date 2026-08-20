@@ -881,7 +881,11 @@ public partial class MainWindow : Window
             // sends the label and the address, so this loop needs no case per family and a mask nobody
             // hardcoded still gets an entry.
             vm.TreeContextAdmits = [.. node.Admits.Select(a =>
-                TreeMenuEntry.Create(a.Name, a.Folder ? "mdi-folder-plus-outline" : "mdi-note-plus-outline",
+                TreeMenuEntry.Create(a.Name,
+                    // The glyph the thing will WEAR once it exists, falling back to the generic add-glyphs.
+                    // A menu that says "Calendar" beside a plain folder, and then draws a calendar in the
+                    // tree, reads as two different actions.
+                    Services.MaskIcon.For(a.Icon) ?? (a.Folder ? "mdi-folder-plus-outline" : "mdi-note-plus-outline"),
                     () => Safe.Fire(() => CreateAdmittedAsync(vm, node, a))))];
             vm.TreeContextCanCreateAny = vm.TreeContextAdmits.Count > 0;
         }

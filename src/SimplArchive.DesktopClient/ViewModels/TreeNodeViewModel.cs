@@ -14,7 +14,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     private readonly Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? _loadChildren;
     private bool _loaded;
 
-    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false, bool hasChildren = true, IReadOnlyDictionary<string, string>? links = null, IReadOnlyList<Services.CreatableChild>? admits = null)
+    public TreeNodeViewModel(Guid id, string name, bool hasSubfolders, Func<TreeNodeViewModel, Task<IEnumerable<TreeNodeViewModel>>>? loadChildren, bool isReference = false, bool isPersonal = false, string? syntheticIcon = null, string? personalKind = null, bool hasReferences = false, bool hasChildren = true, IReadOnlyDictionary<string, string>? links = null, IReadOnlyList<Services.CreatableChild>? admits = null, string? icon = null)
     {
         Id = id;
         Name = name;
@@ -27,6 +27,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         HasChildren = hasChildren;
         Links = links;
         Admits = admits ?? [];
+        MaskIconToken = icon;
 
         // A placeholder child makes the expander appear before the real children are loaded.
         if (hasSubfolders)
@@ -55,6 +56,9 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     /// missing rel, so the menu shows no creates rather than offering ones the server refuses.
     /// </remarks>
     public IReadOnlyList<Services.CreatableChild> Admits { get; }
+
+    /// <summary>The mask's icon token as the server sent it, or null to keep the generic glyph.</summary>
+    public string? MaskIconToken { get; }
 
     /// <summary>
     /// Whether the server advertised <paramref name="rel"/> for this node — i.e. whether the affordance it
@@ -131,7 +135,11 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     {
         "intray" => "mdi-inbox-arrow-down",
         "checkout" => "mdi-lock-open-variant-outline",
-        _ => SyntheticIcon ?? (IsPersonal ? "mdi-account" : IsReference ? "mdi-folder-arrow-right" : "mdi-folder"),
+        // A REFERENCE wins over the mask: that this row is a shortcut is the more important thing to say, and
+        // the target's own row shows the mask glyph anyway. A synthetic node has no mask at all.
+        _ => SyntheticIcon
+            ?? (IsReference ? "mdi-folder-arrow-right"
+                : Services.MaskIcon.For(MaskIconToken) ?? (IsPersonal ? "mdi-account" : "mdi-folder")),
     };
 
     // Which of App.axaml's theme brushes paints this glyph (ADR "Folder icon scheme"). Gold marks a place

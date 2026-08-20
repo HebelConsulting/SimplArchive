@@ -75,6 +75,34 @@ public class Mask : ITenantScoped
     /// </remarks>
     public bool AdmitsNoSubfolders { get; set; }
 
+    /// <summary>What a client should DRAW for a document wearing this mask — a token, not a glyph name.</summary>
+    /// <remarks>
+    /// <para>
+    /// A semantic token (<c>calendar</c>, <c>mailbox</c>) rather than an icon name, because the two clients draw
+    /// from different icon sets: the web from Material, the desktop from Material Design Icons. A concrete name
+    /// could serve only one of them, and the first mask whose glyph exists in one set and not the other would
+    /// make the column a lie in whichever client lost.
+    /// </para>
+    /// <para>
+    /// <b>Null means "use the shape default"</b> — the folder/document/shortcut glyphs a row has always had.
+    /// So a mask with no token renders exactly as it did before this column existed, which is what makes the
+    /// change additive for every tenant-authored mask and for the four shipped ones that keep the plain
+    /// glyphs.
+    /// </para>
+    /// <para>
+    /// Deliberately NOT constrained to a vocabulary in the database. An <b>unrecognised</b> token falls back to
+    /// the same shape default, so a token can be added without a migration and an older client meeting a newer
+    /// token degrades to the generic icon rather than failing. A CHECK constraint would buy validation at the
+    /// price of a migration per token, and would turn a cosmetic unknown into a write error.
+    /// </para>
+    /// <para>
+    /// On the identity rather than <see cref="MaskVersion"/>, for the reason <see cref="IsFolderMask"/> gives:
+    /// it does not change when a version is cut, and a v2 whose icon contradicts v1 would leave "what is this
+    /// drawn as" unanswerable while documents wear both.
+    /// </para>
+    /// </remarks>
+    public string? Icon { get; set; }
+
     /// <summary>Folder masks this mask may live directly inside. Empty means anywhere.</summary>
     public ICollection<MaskAllowedParent> AllowedParents { get; set; } = [];
 

@@ -40,6 +40,10 @@
       <Private>false</Private>
     </ProjectReference>
     <ProjectReference Include="..\..\src\SimplArchive.DesktopClient\SimplArchive.DesktopClient.csproj" />
+    <!-- The TEST project reads WellKnownMaskIds to check the icon vocabulary against the client's glyph map.
+         The desktop CLIENT still does not reference Domain and must not (ADR 0236: it is an Api client, not a
+         second copy of the model) — a test asserting the two agree is exactly the thing that needs both. -->
+    <ProjectReference Include="..\..\src\SimplArchive.Domain\SimplArchive.Domain.csproj" />
     <!-- The shared self-host boot engine (ADR 0502) — one source of truth for standing up the real app. -->
     <ProjectReference Include="..\SimplArchive.SelfHosting\SimplArchive.SelfHosting.csproj" />
   </ItemGroup>

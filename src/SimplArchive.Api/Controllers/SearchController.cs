@@ -41,7 +41,9 @@ public partial class SearchController : ControllerBase
         IEffectiveRightsCalculator effectiveRightsCalculator,
         ICurrentServiceAccountAccessor currentServiceAccountAccessor,
         ICurrentUserAccessor currentUserAccessor,
-        Documents.IClearanceScopeResolver clearanceScope)
+        Documents.IClearanceScopeResolver clearanceScope,
+        ICurrentTenantAccessor currentTenantAccessor,
+        SimplArchive.Infrastructure.Masks.IMaskContainmentProvider containment)
     {
         _dbContext = dbContext;
         _searchService = searchService;
@@ -49,9 +51,13 @@ public partial class SearchController : ControllerBase
         _currentServiceAccountAccessor = currentServiceAccountAccessor;
         _currentUserAccessor = currentUserAccessor;
         _clearanceScope = clearanceScope;
+        _currentTenantAccessor = currentTenantAccessor;
+        _containment = containment;
     }
 
     private readonly Documents.IClearanceScopeResolver _clearanceScope;
+    private readonly ICurrentTenantAccessor _currentTenantAccessor;
+    private readonly SimplArchive.Infrastructure.Masks.IMaskContainmentProvider _containment;
 
     // Plain mutable classes, not records — XmlSerializer (ADR "JSON/XML content negotiation") needs a
     // parameterless constructor and settable properties.
@@ -74,6 +80,13 @@ public partial class SearchController : ControllerBase
         // excerpt, else a matched index-field value, else the name; empty when nothing textual matched or the
         // metadata fallback is in use. Surrounding text is HTML-escaped, so the only markup is the <em> tags.
         public string Highlight { get; set; } = "";
+
+        /// <summary>What to draw for this hit — the mask's token, or null for the shape default.</summary>
+        /// <remarks>
+        /// Carried here so a Calendar found by search wears the same glyph it wears in the tree. A row that
+        /// changes icon depending on which pane found it reads as two different objects.
+        /// </remarks>
+        public string? Icon { get; set; }
     }
 
     // The rels a hit hands out, so a client that wants to DO something with a result never composes a URL
@@ -180,6 +193,9 @@ public partial class SearchController : ControllerBase
         var facetFields = await GetFacetableFieldNamesAsync(cancellationToken);
         var page = await _searchService.SearchAsync(q ?? "", repositoryId, access, filters with { FacetFields = facetFields }, skip, pageSize, cancellationToken);
 
+        // Once for the page of hits, like every other listing that answers this.
+        var rules = await _containment.ForAsync(_dbContext, _currentTenantAccessor.TenantId!.Value, cancellationToken);
+
         var visible = new List<SearchResultResource>();
         foreach (var hit in page.Hits)
         {
@@ -191,8 +207,8 @@ public partial class SearchController : ControllerBase
             // A stale index hit can point at a document that's since been soft-deleted — the async reindex
             // removes it shortly after (ADR 0255), but the index can lag. Skip such a hit rather than 500ing the
             // whole search (BuildPathAsync returns null when the document/an ancestor is no longer readable).
-            var path = await BuildPathAsync(hit.Id, cancellationToken);
-            if (path is null)
+            var context = await BuildPathAsync(hit.Id, cancellationToken);
+            if (context is null)
             {
                 continue;
             }
@@ -203,7 +219,8 @@ public partial class SearchController : ControllerBase
                 Name = hit.Name,
                 IsFolder = hit.IsFolder,
                 ParentId = hit.ParentId,
-                Path = path,
+                Path = context.Path,
+                Icon = rules.IconOf(context.MaskId),
                 Highlight = hit.Highlight ?? "",
                 Links = BuildHitLinks(hit.Id, hit.IsFolder, hit.ParentId),
             });
@@ -491,31 +508,47 @@ public partial class SearchController : ControllerBase
     [HttpHead("fields")]
     public IActionResult HeadFields() => NoContent();
 
-    // Builds an item's full display path (Repositories / … / item) by walking up ParentId.
+    /// <summary>The hit's display path and its own mask — everything the walk below already had in hand.</summary>
+    private sealed record HitContext(string Path, Guid? MaskId);
+
+    // Builds an item's full display path (Repositories / … / item) by walking up ParentId, and returns the
+    // hit's OWN mask on the way past — the first iteration reads the hit's row, so the mask that decides its
+    // icon costs nothing extra. A search index that carried the mask would be a second place to keep it
+    // current; this reads the same row the path already needs.
     // Returns null when the document or any ancestor is no longer in the readable set (e.g. soft-deleted) — a
     // stale index hit the caller (SearchController.Search) skips rather than surfacing.
-    private async Task<string?> BuildPathAsync(Guid documentId, CancellationToken cancellationToken)
+    private async Task<HitContext?> BuildPathAsync(Guid documentId, CancellationToken cancellationToken)
     {
         var names = new List<string>();
         Guid? currentId = documentId;
+        Guid? maskId = null;
 
         while (currentId is { } id)
         {
             var node = await _dbContext.Documents
                 .Where(d => d.Id == id)
-                .Select(d => new { d.Name, d.ParentId })
+                // The mask by way of the version the document wears — the same correlated subquery the
+                // children listing uses, because a Document holds MaskVersionId and the ID is the stable
+                // thing (a rename does not move a document).
+                .Select(d => new
+                {
+                    d.Name,
+                    d.ParentId,
+                    MaskId = _dbContext.MaskVersions.Where(mv => mv.Id == d.MaskVersionId).Select(mv => (Guid?)mv.MaskId).FirstOrDefault(),
+                })
                 .SingleOrDefaultAsync(cancellationToken);
             if (node is null)
             {
                 return null;
             }
 
+            maskId ??= node.MaskId;
             names.Add(node.Name);
             currentId = node.ParentId;
         }
 
         names.Reverse();
-        return string.Join(" / ", names.Prepend("Repositories"));
+        return new HitContext(string.Join(" / ", names.Prepend("Repositories")), maskId);
     }
 
     // The caller's indexed-ACL context (ADR "Indexed ACL in search") — ServiceAccount first, then a

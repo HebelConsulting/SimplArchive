@@ -36,6 +36,14 @@ public class CreatableChild
     /// </remarks>
     public string? FolderMask { get; set; }
 
+    /// <summary>What to draw for this entry — the mask's icon token, or null for the shape default.</summary>
+    /// <remarks>
+    /// So a menu entry wears the same glyph the thing will wear once it exists. Without it the menu says
+    /// "Calendar" beside a generic folder and the tree then draws a calendar, which reads as two different
+    /// actions.
+    /// </remarks>
+    public string? Icon { get; set; }
+
     /// <summary>What to ask the user for: <c>name</c>, or <c>note</c> for a title and a body.</summary>
     /// <remarks>
     /// The server names the INPUT because the client cannot name the mask. The desktop client deliberately does
@@ -152,6 +160,7 @@ public static class CreatableChildren
             Method = "POST",
             FolderMask = folderMask,
             Prompt = prompt,
+            Icon = rules.IconOf(maskId),
         };
     }
 }

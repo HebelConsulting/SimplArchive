@@ -26,5 +26,11 @@ public sealed class SearchResultViewModel
     // (#462, ADRs 0543/0555/0557).
     public string? VersionsHref { get; init; }
 
-    public string IconValue => IsFolder ? "mdi-folder" : "mdi-file-document-outline";
+    /// <summary>The mask's icon token as the hit carried it, or null for the generic glyph.</summary>
+    public string? MaskIconToken { get; init; }
+
+    // The same glyph the row wears in the tree and the list pane — a hit that looks different from the object
+    // it points at reads as a different object.
+    public string IconValue =>
+        Services.MaskIcon.For(MaskIconToken) ?? (IsFolder ? "mdi-folder" : "mdi-file-document-outline");
 }

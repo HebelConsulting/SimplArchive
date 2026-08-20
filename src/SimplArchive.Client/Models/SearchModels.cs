@@ -9,6 +9,13 @@ namespace SimplArchive.Client.Models;
 /// </remarks>
 public record SearchHit
 {
+    /// <summary>The mask's icon token, or null for the generic folder/document glyph.</summary>
+    /// <remarks>
+    /// Carried so a hit wears the same icon here as in the tree — an object that changes shape depending on
+    /// which pane found it reads as two different objects.
+    /// </remarks>
+    public string? Icon { get; set; }
+
     public Guid Id { get; set; }
 
     public string Name { get; set; } = "";

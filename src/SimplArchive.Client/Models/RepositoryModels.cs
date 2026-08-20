@@ -34,5 +34,8 @@ public record RepositorySummary
     /// </remarks>
     public List<CreatableChild> Admits { get; set; } = [];
 
+    /// <summary>The mask's icon token, or null for the generic glyph.</summary>
+    public string? Icon { get; set; }
+
     public List<LinkResponse>? Links { get; set; }
 }

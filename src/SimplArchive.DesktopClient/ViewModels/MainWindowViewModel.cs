@@ -1022,7 +1022,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // Shared repositories sorted alphabetically (issue #339); Personal stays pinned above them.
         foreach (var repository in repositories.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase))
         {
-            Tree.Add(new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync, links: repository.Links, hasReferences: repository.HasReferences, hasChildren: repository.HasChildren, admits: repository.Admits));
+            Tree.Add(new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync, links: repository.Links, hasReferences: repository.HasReferences, hasChildren: repository.HasChildren, admits: repository.Admits, icon: repository.Icon));
         }
 
         // Tenant admins get a synthetic "Administration → Users" branch (ADR "Tenant-admin Administration → Users
@@ -1106,7 +1106,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var folderNodes = children
             .Where(c => !c.HasVersions)
             .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync, links: c.Links, hasReferences: c.HasReferences, hasChildren: c.HasChildren, admits: c.Admits));
+            .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync, links: c.Links, hasReferences: c.HasReferences, hasChildren: c.HasChildren, admits: c.Admits, icon: c.Icon));
 
         var references = await _api.Documents.GetReferencesAsync(node.Href("references"));
         var referenceNodes = references
@@ -1199,6 +1199,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     SensitivityLabelColor = child.SensitivityLabelColor,
                     VersionCount = child.VersionCount,
                     VersionCreatedAt = child.VersionCreatedAt,
+                    MaskIconToken = child.Icon,
                 });
             }
 
@@ -3205,6 +3206,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     Highlight = result.Highlight,
                     VersionsHref = result.VersionsHref,
                     Links = result.Links,
+                    MaskIconToken = result.Icon,
                 });
             }
 

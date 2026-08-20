@@ -209,6 +209,48 @@ public static class WellKnownMaskIds
             [Appointment] = [".ics"],
         };
 
+    /// <summary>
+    /// What each well-known mask is DRAWN as — a semantic token both clients map to their own icon set.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The vocabulary is the wire contract, exactly like the <c>folderMask</c> slugs: the server names the
+    /// thing, and each client decides which glyph its set has for it. Web draws from Material, desktop from
+    /// Material Design Icons, and no single icon NAME exists in both — so a name here could only ever be right
+    /// for one of them.
+    /// </para>
+    /// <para>
+    /// <b>Absent is meaningful.</b> <see cref="Folder"/>, <see cref="MyDocuments"/> and
+    /// <see cref="BasicEntry"/> are deliberately not here: they ARE the generic folder and the generic
+    /// document, so the shape default is already the right answer and a token would only give them a second
+    /// way to say it. <see cref="Repository"/> is here despite also being a folder, because a repository root
+    /// is a different KIND of thing from a folder inside one — it is where a tree starts.
+    /// </para>
+    /// <para>
+    /// Seeded onto <see cref="Mask.Icon"/> per tenant and healed there, so a tenant-authored mask can carry a
+    /// token from the same vocabulary. This table describes only the masks the application ships.
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlyDictionary<Guid, string> IconTokens =
+        new Dictionary<Guid, string>
+        {
+            [Repository] = "repository",
+            [UserFolder] = "person",
+            [Mailbox] = "mailbox",
+            // The INBOX and its future siblings. "mail-folder" rather than "inbox" because SENT/DRAFTS/JUNK
+            // wear the same mask and are not inboxes — naming the token for today's only instance would be
+            // wrong the moment the second one arrives.
+            [ImapSpecial] = "mail-folder",
+            [Notebook] = "notebook",
+            [NotebookSection] = "section",
+            [Addressbook] = "addressbook",
+            [Calendar] = "calendar",
+            [EMail] = "email",
+            [Note] = "note",
+            [Contact] = "contact",
+            [Appointment] = "appointment",
+        };
+
     /// <summary>The well-known masks an ITEM wears — the complement of <see cref="FolderMasks"/>.</summary>
     /// <remarks>Stated rather than derived, so the partition guard has two sides to compare instead of one.</remarks>
     public static readonly IReadOnlySet<Guid> ItemMasks =

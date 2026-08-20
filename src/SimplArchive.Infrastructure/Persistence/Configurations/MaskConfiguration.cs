@@ -18,5 +18,11 @@ public class MaskConfiguration : IEntityTypeConfiguration<Mask>
             .WithMany()
             .HasForeignKey(m => m.TenantId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Bounded because it is a token from a small vocabulary, not free text. Length only — no CHECK against
+        // the known tokens, deliberately: an unrecognised token falls back to the shape default in both
+        // clients, so the vocabulary can grow without a migration, and a cosmetic unknown never becomes a
+        // write error. See Mask.Icon.
+        builder.Property(m => m.Icon).HasMaxLength(40);
     }
 }

@@ -188,6 +188,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             TenantId = tenantId,
             CreatedAt = DateTimeOffset.UtcNow,
             IsFolderMask = WellKnownMaskIds.FolderMasks.Contains(maskId),
+            Icon = WellKnownMaskIds.IconTokens.GetValueOrDefault(maskId),
         });
 
         var maskVersion = new MaskVersion { Id = Guid.NewGuid(), TenantId = tenantId, MaskId = maskId, Name = name, CreatedAt = DateTimeOffset.UtcNow };
@@ -240,6 +241,19 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         if (mask.IsFolderMask != isFolderMask)
         {
             mask.IsFolderMask = isFolderMask;
+        }
+
+        // Healed rather than only seeded, because a tenant that exists already has NULL here and a
+        // grow-only seed would leave it drawing generic folders forever — the #574 trap, which a
+        // fresh-volume test cannot see because every tenant it creates is new.
+        //
+        // Assigned unconditionally to the shipped token, INCLUDING back to null for a mask that has none:
+        // this is app-owned classification, so the well-known set is the authority. A tenant that wants a
+        // different glyph changes the mask, not one of these.
+        var icon = WellKnownMaskIds.IconTokens.GetValueOrDefault(maskId);
+        if (mask.Icon != icon)
+        {
+            mask.Icon = icon;
         }
 
         var wanted = WellKnownMaskIds.FileExtensions.TryGetValue(maskId, out var extensions)

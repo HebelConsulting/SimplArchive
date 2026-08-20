@@ -789,7 +789,8 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         // The row's advertised addresses. WITHOUT this every Node.Links is null and Href() throws — which
         // is exactly what shipped in 2aeaae0, because the edit that added it silently did not apply.
         ApiCore.ParseLinks(item),
-        ParseAdmits(item));
+        ParseAdmits(item),
+        item.TryGetProperty("icon", out var ic) && ic.ValueKind == JsonValueKind.String ? ic.GetString() : null);
 
     // What this folder will accept, with the address for each (#673). An absent or empty array means the
     // client offers no creates here — the same reading as a missing rel: not available to you, here, now.
@@ -801,7 +802,8 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
                 e.TryGetProperty("folder", out var f) && f.ValueKind == JsonValueKind.True,
                 e.GetProperty("href").GetString() ?? "",
                 e.TryGetProperty("folderMask", out var fm) && fm.ValueKind == JsonValueKind.String ? fm.GetString() : null,
-                e.TryGetProperty("prompt", out var pr) ? pr.GetString() ?? "name" : "name"))]
+                e.TryGetProperty("prompt", out var pr) ? pr.GetString() ?? "name" : "name",
+                e.TryGetProperty("icon", out var ei) && ei.ValueKind == JsonValueKind.String ? ei.GetString() : null))]
             : [];
 
     // Reads the document FIRST and works outwards from what it advertises (ADR 0543, issue #416). The order

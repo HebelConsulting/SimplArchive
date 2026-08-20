@@ -32,6 +32,7 @@ public sealed class MaskContainmentRules
     private readonly IReadOnlySet<Guid> _leafFolders;
     private readonly IReadOnlySet<Guid> _folderMasks;
     private readonly IReadOnlyDictionary<Guid, string> _names;
+    private readonly IReadOnlyDictionary<Guid, string> _icons;
 
     private MaskContainmentRules(
         IReadOnlySet<Guid> exclusiveFolders,
@@ -39,7 +40,8 @@ public sealed class MaskContainmentRules
         IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> allowedParents,
         IReadOnlySet<Guid> leafFolders,
         IReadOnlySet<Guid> folderMasks,
-        IReadOnlyDictionary<Guid, string> names)
+        IReadOnlyDictionary<Guid, string> names,
+        IReadOnlyDictionary<Guid, string> icons)
     {
         _exclusiveFolders = exclusiveFolders;
         _admittedChildren = admittedChildren;
@@ -47,6 +49,7 @@ public sealed class MaskContainmentRules
         _leafFolders = leafFolders;
         _folderMasks = folderMasks;
         _names = names;
+        _icons = icons;
     }
 
     /// <summary>Reads a tenant's containment: four queries, and the caller is expected to cache the result.</summary>
@@ -61,7 +64,7 @@ public sealed class MaskContainmentRules
     {
         var masks = await db.Masks.IgnoreQueryFilters(["TenantFilter"])
             .Where(m => m.TenantId == tenantId)
-            .Select(m => new { m.Id, m.IsFolderMask, m.AdmitsOnlyDeclaredChildren, m.AdmitsNoSubfolders })
+            .Select(m => new { m.Id, m.IsFolderMask, m.AdmitsOnlyDeclaredChildren, m.AdmitsNoSubfolders, m.Icon })
             .ToListAsync(cancellationToken);
 
         // The CURRENT version's name, so a refusal names the mask as it is called today. The static tables
@@ -100,7 +103,8 @@ public sealed class MaskContainmentRules
             Group(parents, p => p.MaskId, p => p.ParentMaskId),
             masks.Where(m => m.AdmitsNoSubfolders).Select(m => m.Id).ToHashSet(),
             masks.Where(m => m.IsFolderMask).Select(m => m.Id).ToHashSet(),
-            names);
+            names,
+            masks.Where(m => m.Icon != null).ToDictionary(m => m.Id, m => m.Icon!));
     }
 
     /// <summary>
@@ -166,6 +170,17 @@ public sealed class MaskContainmentRules
 
     /// <summary>The mask's name on its current version — what a menu entry and a refusal both read.</summary>
     public string NameOf(Guid maskId) => _names.TryGetValue(maskId, out var name) ? name : maskId.ToString();
+
+    /// <summary>What a mask is drawn as, or <c>null</c> to leave the row on its shape default.</summary>
+    /// <remarks>
+    /// Answered from here because this object already holds every mask the tenant has — it is loaded once per
+    /// request and shared with the invariant, so the icon costs no query at all. The class is named for
+    /// containment and now carries three things that are not containment (names, folder-ness, icons); what it
+    /// really holds is the tenant's mask facts, and the name is narrower than the type. Worth renaming when
+    /// something else forces a pass over it, not on its own.
+    /// </remarks>
+    public string? IconOf(Guid? maskId) =>
+        maskId is { } id && _icons.TryGetValue(id, out var icon) ? icon : null;
 
     private enum Refusal
     {

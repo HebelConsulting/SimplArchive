@@ -31,7 +31,7 @@ public sealed record AclRights(
 /// The <c>folderMask</c> body value to send back, or null when the address alone says what to make. Handed
 /// over by the server and returned unread: the vocabulary stays the server's, so no client keeps a copy.
 /// </param>
-public sealed record CreatableChild(Guid MaskId, string Name, bool Folder, string Href, string? FolderMask, string Prompt);
+public sealed record CreatableChild(Guid MaskId, string Name, bool Folder, string Href, string? FolderMask, string Prompt, string? Icon = null);
 
 public sealed record Node(Guid Id, string Name, bool HasChildren, bool HasVersions, bool HasSubfolders, bool HasReferences, bool OnLegalHold = false, bool CheckedOut = false, bool CheckedOutByMe = false, string CheckedOutByName = "",
     string DocumentType = "", DateOnly? DocumentDate = null, long? SizeBytes = null, IReadOnlyList<string>? Tags = null, string SensitivityLabelName = "", string? SensitivityLabelColor = null, int VersionCount = 0,
@@ -46,7 +46,10 @@ public sealed record Node(Guid Id, string Name, bool HasChildren, bool HasVersio
     // The kinds of child this folder will accept, each with the address that creates one (#673). Supplied by
     // the listing, so a context menu is built from it without a round trip — and a mask nobody hardcoded still
     // gets an entry, because the client never maps a mask to an endpoint.
-    IReadOnlyList<CreatableChild>? Admits = null)
+    IReadOnlyList<CreatableChild>? Admits = null,
+    // What this row is DRAWN as — the mask's icon token, or null to keep the generic glyph. A token rather
+    // than an MDI name, because the web client draws from a different set entirely.
+    string? Icon = null)
 {
     /// <summary>The advertised href for <paramref name="rel"/>.</summary>
     /// <remarks>

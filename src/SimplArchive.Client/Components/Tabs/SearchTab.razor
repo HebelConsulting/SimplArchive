@@ -222,7 +222,7 @@
                 <div class="wb-list-row @(S.SelectedHit?.Id == hit.Id ? "wb-row-selected" : "")"
                      @onclick="() => SelectHitAsync(hit)"
                      @ondblclick="() => OpenHitAsync(hit)">
-                    <MudIcon Icon="@(hit.IsFolder ? Icons.Material.Filled.Folder : Icons.Material.Filled.Description)" Size="Size.Small" />
+                    <MudIcon Icon="@(MaskIcon.Filled(hit.Icon) ?? (hit.IsFolder ? Icons.Material.Filled.Folder : Icons.Material.Filled.Description))" Size="Size.Small" />
                     <div style="min-width:0; flex:1 1 auto;">
                         <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@hit.Name</div>
                         @if (!string.IsNullOrEmpty(hit.Highlight))

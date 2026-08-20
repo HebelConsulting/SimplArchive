@@ -39,6 +39,9 @@ public sealed class NodeViewModel
     // RealParentId is the target's real home folder (null = a repository root).
     public bool IsReference { get; init; }
 
+    /// <summary>The mask's icon token as the listing sent it, or null to keep the generic glyph.</summary>
+    public string? MaskIconToken { get; init; }
+
     public Guid ReferenceId { get; init; }
 
     public Guid? RealParentId { get; init; }
@@ -140,12 +143,17 @@ public sealed class NodeViewModel
     {
         (true, _) => "mdi-arrow-up-left",
         (_, true) => "mdi-file-outline",
+        // A reference keeps its shortcut glyph rather than the mask's: that this row is not where the object
+        // lives is the more important thing to say, and the target's own row shows the mask icon anyway.
         _ => (IsReference, IsFolder) switch
         {
             (true, true) => "mdi-folder-arrow-right",
             (true, false) => "mdi-file-link",
-            (false, true) => "mdi-folder",
-            (false, false) => "mdi-file-document-outline",
+            (false, true) => Services.MaskIcon.For(MaskIconToken) ?? "mdi-folder",
+            // The generic document glyph is ALREADY an outline one, so a mask token here must be the plain
+            // form — appending "-outline" to "mdi-file-document-outline" would name nothing. Items never
+            // qualify as empty folders, so the suffix is never appended to them anyway.
+            (false, false) => Services.MaskIcon.For(MaskIconToken) ?? "mdi-file-document-outline",
         },
     };
 

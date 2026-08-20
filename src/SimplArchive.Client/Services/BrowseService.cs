@@ -113,7 +113,8 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
                     DocumentType: c.DocumentType, DocumentDate: c.DocumentDate, SizeBytes: c.SizeBytes, Tags: c.Tags, SensitivityLabelName: c.SensitivityLabelName, SensitivityLabelColor: c.SensitivityLabelColor, VersionCount: c.VersionCount, VersionCreatedAt: c.VersionCreatedAt,
                     ChatHref: Links.Href(c.Links, "chat"),
                     Links: Links.RelMap(c.Links),
-                    Admits: c.Admits));
+                    Admits: c.Admits,
+                    Icon: c.Icon));
             }
             url = Links.Href(page?.Links, "next");
         }
@@ -151,12 +152,18 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
     }
 
     /// <summary>Material icon per node — a shortcut variant for references, matching the desktop client's icons.</summary>
+    /// <remarks>
+    /// <b>A reference wins over the mask.</b> Being a shortcut is the more important thing to say: the user
+    /// needs to know this row is not where the object lives before they need to know what kind it is, and the
+    /// target's own row will show them the mask icon anyway. So the two shortcut glyphs are checked first and
+    /// the mask token only decides what a REAL row is drawn as.
+    /// </remarks>
     public static string NodeIcon(BrowseNode n) => (n.IsReference, n.IsFolder) switch
     {
         (true, true) => Icons.Material.Filled.FolderSpecial,
         (true, false) => Icons.Material.Filled.Link,
-        (false, true) => Icons.Material.Filled.Folder,
-        (false, false) => Icons.Material.Filled.Description,
+        (false, true) => MaskIcon.Filled(n.Icon) ?? Icons.Material.Filled.Folder,
+        (false, false) => MaskIcon.Filled(n.Icon) ?? Icons.Material.Filled.Description,
     };
 
     /// <summary>
@@ -173,7 +180,9 @@ public sealed class BrowseService(HttpClient http, ApiRoot apiRoot)
     {
         (false, _) => NodeIcon(n),
         (true, true) => Icons.Material.Outlined.FolderSpecial,
-        (true, false) => Icons.Material.Outlined.Folder,
+        // An empty typed folder outlines its OWN glyph rather than flattening to a plain folder — the same
+        // reason a referenced folder keeps its shortcut shape: being empty must not cost the node what it is.
+        (true, false) => MaskIcon.Outlined(n.Icon) ?? Icons.Material.Outlined.Folder,
     };
 
     public static TreeItemData<BrowseNode> ToTreeItem(BrowseNode node) => new()

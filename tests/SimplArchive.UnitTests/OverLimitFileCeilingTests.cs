@@ -60,7 +60,9 @@ public class OverLimitFileCeilingTests
         // entries plus a visibility bool. Six lines, and all of it the note explaining why the entries are a
         // submenu — the flat alternative was a fifteen-entry rewrite nothing could verify without opening the
         // menu by hand. The property count went DOWN; the comment is what costs.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_849,
+        // 6,849 → 6,851 for per-mask icons: two assignments, one on the list row and one on a search hit, so
+        // an object wears the same glyph in every pane that draws it. Two lines, both of them the feature.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_851,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
@@ -89,7 +91,10 @@ public class OverLimitFileCeilingTests
         // CreateAdmittedAsync. The address, the label and which question to ask now come from the entry the
         // server sent, so three handlers collapsed into one with no case per family. Lowered, not left with
         // headroom.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_132,
+        // 1,132 → 1,136 for per-mask icons on the New menu: the entry now wears the glyph the created thing
+        // will wear. One line of code and three of comment, because "menu says Calendar, tree draws a
+        // calendar" is the reason the fallback is not simply the generic add-glyph.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_136,
 
         // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).
