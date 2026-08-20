@@ -266,6 +266,55 @@ public static class WellKnownMaskIds
             .GroupBy(x => x.MaskId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<TypedFolderRule>)[.. g.Select(x => x.Rule)]);
 
+    /// <summary>
+    /// The containment rules above, projected into the four facts the MODEL stores (#673).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The static tables do not disappear when containment becomes data — they become the <b>seed</b> for the
+    /// well-known masks, exactly as <see cref="FileExtensions"/> did in #674. Projected here rather than
+    /// restated in the seeder, for the reason <see cref="AdmittingFolders"/> gives about itself: a second
+    /// hand-maintained copy is how the two representations of one rule drift apart, and the drift is invisible
+    /// until something is filed where it should not be.
+    /// </para>
+    /// <para>
+    /// Note what does NOT appear here. <see cref="ChildCardinalityRules"/> stays static and stays a different
+    /// question — admission asks "may this child be here at all?", capacity asks "is there already one?".
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlySet<Guid> ExclusiveFolderMasks =
+        TypedFolderRules.Select(r => r.FolderMaskId).ToHashSet();
+
+    /// <summary>Folder mask → the masks it admits as direct children. Only meaningful when exclusive.</summary>
+    /// <remarks>
+    /// <see cref="AlsoAdmitPlainFolders"/> folds in here and needs no mode of its own: a plain
+    /// <see cref="Folder"/> has no allowed parents, so listing it widens the mailbox without confining folders
+    /// to mailboxes. The "also" was never a property of the row — it was a consequence of the two directions
+    /// living in one table.
+    /// </remarks>
+    public static readonly IReadOnlyDictionary<Guid, IReadOnlySet<Guid>> AdmittedChildMasks =
+        TypedFolderRules
+            .Select(rule => (
+                rule.FolderMaskId,
+                Admits: rule.Admits.Select(a => a.MaskId)
+                    .Concat(AlsoAdmitPlainFolders.Any(m => m.FolderMaskId == rule.FolderMaskId) ? [Folder] : [])))
+            .ToDictionary(x => x.FolderMaskId, x => (IReadOnlySet<Guid>)x.Admits.ToHashSet());
+
+    /// <summary>Mask → the folder masks it may live directly inside. Absent means anywhere.</summary>
+    public static readonly IReadOnlyDictionary<Guid, IReadOnlySet<Guid>> AllowedParentMasks =
+        AdmittingFolders.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlySet<Guid>)pair.Value.Select(r => r.FolderMaskId).ToHashSet());
+
+    /// <summary>Folder masks that hold documents only — the fourth fact, one-directional.</summary>
+    /// <remarks>
+    /// A restatement of <see cref="NoSubfolderMasks"/> without the display name, which the model does not need:
+    /// the invariant reads the folder's CURRENT mask version for its message, so a renamed mask produces the
+    /// right message instead of the one hardcoded here.
+    /// </remarks>
+    public static readonly IReadOnlySet<Guid> LeafFolderMasks =
+        NoSubfolderMasks.Select(m => m.FolderMaskId).ToHashSet();
+
     /// <summary>Every well-known mask id, derived from the declarations above rather than restated.</summary>
     /// <remarks>
     /// <para>

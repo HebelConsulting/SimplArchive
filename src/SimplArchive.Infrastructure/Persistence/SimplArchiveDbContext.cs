@@ -99,8 +99,11 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<Mask> Masks => Set<Mask>();
 
-
     public DbSet<MaskFileExtension> MaskFileExtensions => Set<MaskFileExtension>();
+
+    public DbSet<MaskAllowedParent> MaskAllowedParents => Set<MaskAllowedParent>();
+
+    public DbSet<MaskAdmittedChild> MaskAdmittedChildren => Set<MaskAdmittedChild>();
 
     public DbSet<MaskVersion> MaskVersions => Set<MaskVersion>();
 

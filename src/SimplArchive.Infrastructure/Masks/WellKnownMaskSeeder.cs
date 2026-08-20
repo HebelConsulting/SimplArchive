@@ -155,6 +155,11 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // item out of the way first is what stops the heal colliding with itself on every existing tenant.
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Calendar, "Calendar", [ColourField], cancellationToken);
 
+        // After every mask exists, because containment is a relation BETWEEN masks: a Notebook's allowed parent
+        // is the Mailbox, which is seeded eight lines below it, so doing this per-mask inside the loop above
+        // would write a foreign key to a row that does not exist yet.
+        await EnsureContainmentAsync(tenantId, cancellationToken);
+
         // Last, because it needs every mask above to exist: move repositories that predate the Repository mask
         // off Folder and onto it. Idempotent, and it is what makes the lockstep invariant true of the data that
         // is already there rather than only of what is created from now on.
@@ -259,6 +264,110 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // Extensions this mask no longer claims are removed, so a mapping that MOVES between masks does not
         // leave the old row behind to violate the unique index the moment the new one is added.
         _dbContext.MaskFileExtensions.RemoveRange(existing.Where(e => !wanted.Contains(e.Extension)));
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Writes typed-folder containment into the MODEL: where each well-known mask may live, what each folder
+    /// admits, and the two one-directional flags (#673).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Derived from <see cref="WellKnownMaskIds"/>' projections rather than restated, so the static tables and
+    /// the rows remain one fact while both exist. The static tables are still what the invariant reads; this
+    /// makes the database say the same thing, which is the step that has to be in place and CORRECT before
+    /// enforcement can be moved onto it.
+    /// </para>
+    /// <para>
+    /// Reconciles rather than appends: rows that are no longer wanted are removed, so a rule that MOVES between
+    /// masks does not leave the old row behind to keep admitting something it should not. That is the direction
+    /// that matters here — a stale containment row is permissive, and a permissive leftover is the one kind of
+    /// drift nothing downstream reports.
+    /// </para>
+    /// <para>
+    /// Ownership is bounded to rows whose BOTH ends are well-known. A tenant may one day declare that its own
+    /// mask belongs in an Addressbook; that row is not this seed's to delete, and the reconcile must not treat
+    /// "not in my table" as "wrong".
+    /// </para>
+    /// </remarks>
+    private async Task EnsureContainmentAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        // A LIST, not the IReadOnlySet: EF translates Contains over IEnumerable/IList but not over
+        // IReadOnlySet<T>, and the failure is a runtime translation exception rather than a compile error.
+        var wellKnown = WellKnownMaskIds.All.ToList();
+
+        var masks = await _dbContext.Masks.IgnoreQueryFilters(["TenantFilter"])
+            .Where(m => m.TenantId == tenantId && wellKnown.Contains(m.Id))
+            .ToListAsync(cancellationToken);
+
+        foreach (var mask in masks)
+        {
+            // Every existing tenant's masks were created before these columns did, so all of them read
+            // "unrestricted" until this corrects them — the permissive direction, and therefore the dangerous
+            // one. #664's trap: a fresh-volume test cannot see this failing, because every tenant it makes is new.
+            mask.AdmitsOnlyDeclaredChildren = WellKnownMaskIds.ExclusiveFolderMasks.Contains(mask.Id);
+            mask.AdmitsNoSubfolders = WellKnownMaskIds.LeafFolderMasks.Contains(mask.Id);
+        }
+
+        var present = masks.Select(m => m.Id).ToHashSet();
+
+        // A row may only be written once BOTH masks exist. They all do by now, but a tenant part-way through a
+        // failed seed is a real state, and a foreign-key violation at startup would take the whole app down for
+        // every tenant rather than leaving one incompletely healed.
+        bool Both(Guid a, Guid b) => present.Contains(a) && present.Contains(b);
+
+        var wantedParents = WellKnownMaskIds.AllowedParentMasks
+            .SelectMany(pair => pair.Value.Select(parent => (MaskId: pair.Key, ParentMaskId: parent)))
+            .Where(x => Both(x.MaskId, x.ParentMaskId))
+            .ToHashSet();
+
+        var existingParents = await _dbContext.MaskAllowedParents.IgnoreQueryFilters(["TenantFilter"])
+            .Where(p => p.TenantId == tenantId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var (maskId, parentMaskId) in wantedParents.Where(w =>
+                     !existingParents.Any(e => e.MaskId == w.MaskId && e.ParentMaskId == w.ParentMaskId)))
+        {
+            _dbContext.MaskAllowedParents.Add(new MaskAllowedParent
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                MaskId = maskId,
+                ParentMaskId = parentMaskId,
+            });
+        }
+
+        _dbContext.MaskAllowedParents.RemoveRange(existingParents.Where(e =>
+            WellKnownMaskIds.All.Contains(e.MaskId)
+            && WellKnownMaskIds.All.Contains(e.ParentMaskId)
+            && !wantedParents.Contains((e.MaskId, e.ParentMaskId))));
+
+        var wantedChildren = WellKnownMaskIds.AdmittedChildMasks
+            .SelectMany(pair => pair.Value.Select(child => (FolderMaskId: pair.Key, ChildMaskId: child)))
+            .Where(x => Both(x.FolderMaskId, x.ChildMaskId))
+            .ToHashSet();
+
+        var existingChildren = await _dbContext.MaskAdmittedChildren.IgnoreQueryFilters(["TenantFilter"])
+            .Where(c => c.TenantId == tenantId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var (folderMaskId, childMaskId) in wantedChildren.Where(w =>
+                     !existingChildren.Any(e => e.FolderMaskId == w.FolderMaskId && e.ChildMaskId == w.ChildMaskId)))
+        {
+            _dbContext.MaskAdmittedChildren.Add(new MaskAdmittedChild
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                FolderMaskId = folderMaskId,
+                ChildMaskId = childMaskId,
+            });
+        }
+
+        _dbContext.MaskAdmittedChildren.RemoveRange(existingChildren.Where(e =>
+            WellKnownMaskIds.All.Contains(e.FolderMaskId)
+            && WellKnownMaskIds.All.Contains(e.ChildMaskId)
+            && !wantedChildren.Contains((e.FolderMaskId, e.ChildMaskId))));
 
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
