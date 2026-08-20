@@ -41,12 +41,22 @@ public sealed class CalendarDayViewModel
 /// cannot live on the row — the same row object is in every cell it covers, and a flag on it would be rewritten
 /// by whichever cell rendered last.
 /// </remarks>
-public sealed class CalendarCellEntryViewModel
+public sealed partial class CalendarCellEntryViewModel : ObservableObject
 {
     public required AppointmentRowViewModel Row { get; init; }
 
     /// <summary>True on a covered day that is not the entry's first.</summary>
     public required bool Continues { get; init; }
+
+    /// <summary>
+    /// Whether this chip is the selected appointment — what the cell draws a highlight for.
+    /// </summary>
+    /// <remarks>
+    /// A property on the CELL, updated in place, rather than a comparison against the tab's Selected. Rebuilding
+    /// MonthDays on every click would work and is wrong twice: it destroys the very button being clicked, and a
+    /// multi-day entry occupies several cells, so all of its chips must light up together.
+    /// </remarks>
+    [ObservableProperty] private bool _isSelected;
 
     public string Title => Row.Title;
 
@@ -190,6 +200,39 @@ public sealed partial class CalendarTabViewModel : ObservableObject
     public ObservableCollection<AppointmentRowViewModel> Appointments { get; } = [];
 
     [ObservableProperty] private AppointmentRowViewModel? _selected;
+
+    /// <summary>The chips the month grid last built, so a selection can light them without a rebuild.</summary>
+    private List<CalendarCellEntryViewModel> _monthCells = [];
+
+    /// <summary>
+    /// Selects the appointment a month chip stands for, so the detail pane fills the way a list row fills it.
+    /// </summary>
+    /// <remarks>
+    /// The month grid had no interaction at all — the chips rendered and nothing could be clicked, so the whole
+    /// pane beside it stayed empty in month view and the grid was read-only by accident rather than by decision.
+    /// Takes the CELL and selects its Row: the same appointment appears in every cell it covers, and clicking
+    /// any of them means the same thing.
+    /// </remarks>
+    [RelayCommand]
+    private void SelectEntry(CalendarCellEntryViewModel? cell)
+    {
+        if (cell is null)
+        {
+            return;
+        }
+
+        Selected = cell.Row;
+    }
+
+    // Every chip of the selected appointment lights up, not just the one clicked — a multi-day entry occupies
+    // several cells, and highlighting one of them would say the others are a different entry.
+    partial void OnSelectedChanged(AppointmentRowViewModel? value)
+    {
+        foreach (var cell in _monthCells)
+        {
+            cell.IsSelected = ReferenceEquals(cell.Row, value);
+        }
+    }
     [ObservableProperty] private bool _busy;
     [ObservableProperty] private string _filter = string.Empty;
 
@@ -331,6 +374,9 @@ public sealed partial class CalendarTabViewModel : ObservableObject
             var first = Month.AddDays(-lead);
             var visible = VisibleAppointments.ToList();
 
+            var built = new List<CalendarCellEntryViewModel>();
+            _monthCells = built;
+
             return
             [
                 .. Enumerable.Range(0, 42).Select(i =>
@@ -347,19 +393,22 @@ public sealed partial class CalendarTabViewModel : ObservableObject
                         .ThenBy(e => e.Title, StringComparer.CurrentCultureIgnoreCase)
                         .ToList();
 
+                    var cells = entries.Take(EntriesPerCell).Select(e => new CalendarCellEntryViewModel
+                    {
+                        Row = e,
+                        Continues = e.ContinuesOn(day),
+                        IsSelected = ReferenceEquals(e, Selected),
+                    }).ToList();
+
+                    // Kept so a later selection can light the right chips without rebuilding the grid.
+                    built.AddRange(cells);
+
                     return new CalendarDayViewModel
                     {
                         Day = day,
                         InMonth = day.Month == Month.Month,
                         IsToday = day == Today,
-                        Entries =
-                        [
-                            .. entries.Take(EntriesPerCell).Select(e => new CalendarCellEntryViewModel
-                            {
-                                Row = e,
-                                Continues = e.ContinuesOn(day),
-                            }),
-                        ],
+                        Entries = cells,
                         Hidden = Math.Max(0, entries.Count - EntriesPerCell),
                     };
                 }),

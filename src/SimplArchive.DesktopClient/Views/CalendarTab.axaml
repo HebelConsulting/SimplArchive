@@ -100,8 +100,11 @@
 
         <!-- The month grid. Six week rows always, so paging months does not change the grid's height under
              the cursor and move the cell the user was aiming at. -->
-        <Grid>
-        <DockPanel IsVisible="{Binding IsMonthView}" LastChildFill="True">
+        <!-- Two ROWS, not one cell shared by everything: the empty message used to be a bare child of this
+             Grid carrying a stray DockPanel.Dock="Top" — an attached property for a parent it no longer had —
+             so it rendered in the same cell as the month selector and the two drew on top of each other. -->
+        <Grid RowDefinitions="Auto,*">
+        <DockPanel Grid.Row="1" IsVisible="{Binding IsMonthView}" LastChildFill="True">
           <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
             <Button Content="◀" Command="{Binding PreviousMonthCommand}" ToolTip.Tip="{loc:Tr CalendarPrevMonth}" />
             <TextBlock Text="{Binding MonthName}" FontWeight="SemiBold" VerticalAlignment="Center"
@@ -142,6 +145,23 @@
                     <ItemsControl ItemsSource="{Binding Entries}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:CalendarCellEntryViewModel">
+                          <!-- A BUTTON, not a bare Grid: the chips previously had no interaction of any kind, so
+                               the detail pane beside the grid stayed empty in month view. A button also makes the
+                               chip keyboard-reachable, which a PointerPressed handler would not.
+                               Bound from the UserControl rather than $parent[ItemsControl]: the chips sit two
+                               ItemsControls deep (days, then entries), so the nearest one is the wrong scope. -->
+                          <Button Padding="0" Background="Transparent" BorderThickness="0"
+                                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                  Command="{Binding $parent[UserControl].((vm:CalendarTabViewModel)DataContext).SelectEntryCommand}"
+                                  CommandParameter="{Binding}"
+                                  Classes.selected="{Binding IsSelected}">
+                            <Button.Styles>
+                              <!-- The selected chip takes the same tint + leading edge a selected LIST row takes,
+                                   so selection means one thing across the tab (ADR 0578's selection treatment). -->
+                              <Style Selector="Button.selected">
+                                <Setter Property="Background" Value="{DynamicResource WbSelection}" />
+                              </Style>
+                            </Button.Styles>
                           <Grid ColumnDefinitions="10,Auto,*,Auto" ToolTip.Tip="{Binding Title}">
                             <Border Grid.Column="0" Width="7" Height="7" CornerRadius="4"
                                     VerticalAlignment="Center" Background="{Binding CollectionColor}" />
@@ -159,6 +179,7 @@
                                        VerticalAlignment="Center"
                                        Foreground="{DynamicResource WbMuted}" />
                           </Grid>
+                          </Button>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -173,10 +194,10 @@
           </ItemsControl>
         </DockPanel>
 
-        <TextBlock DockPanel.Dock="Top" Text="{Binding EmptyMessage}"
-                   Foreground="{DynamicResource WbMuted}" Margin="2,4,0,0" TextWrapping="Wrap"
+        <TextBlock Grid.Row="0" Text="{Binding EmptyMessage}"
+                   Foreground="{DynamicResource WbMuted}" Margin="2,4,0,4" TextWrapping="Wrap"
                    IsVisible="{Binding !Appointments.Count}" />
-        <ListBox ItemsSource="{Binding VisibleAppointments}" SelectedItem="{Binding Selected}"
+        <ListBox Grid.Row="1" ItemsSource="{Binding VisibleAppointments}" SelectedItem="{Binding Selected}"
                  IsVisible="{Binding !IsMonthView}"
                  Background="Transparent" BorderThickness="0">
           <ListBox.ItemTemplate>

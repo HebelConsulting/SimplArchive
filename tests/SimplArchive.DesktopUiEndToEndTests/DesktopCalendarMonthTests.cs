@@ -311,6 +311,47 @@ public class DesktopCalendarMonthTests
         Assert.Equal([false, true], cell.Entries.Select(e => e.Recurring));
     }
 
+    // The month grid had NO interaction at all: chips rendered, nothing could be clicked, and the detail pane
+    // beside it stayed empty for as long as you were in month view. Reported from the running app, because
+    // nothing here could see it — every test asserted what the grid CONTAINS, and none that it can be used.
+    [Fact]
+    public void Clicking_a_chip_selects_its_appointment_so_the_detail_pane_fills()
+    {
+        var day = new DateOnly(2026, 9, 15);
+        var soundcheck = Row("Soundcheck", day, new TimeOnly(9, 0));
+        var vm = OnMonth(new DateOnly(2026, 9, 1), soundcheck, Row("Matinee", day.AddDays(1), new TimeOnly(14, 0)));
+
+        Assert.Null(vm.Selected);
+
+        var chip = vm.MonthDays.Single(d => d.Day == day).Entries[0];
+        vm.SelectEntryCommand.Execute(chip);
+
+        // The pane binds Selected, so this IS the pane filling.
+        Assert.Same(soundcheck, vm.Selected);
+        Assert.True(chip.IsSelected);
+    }
+
+    // A multi-day entry occupies several cells. Highlighting only the clicked one would say the other chips are
+    // a different appointment, which is exactly what the span was built to deny.
+    [Fact]
+    public void Selecting_a_multi_day_entry_lights_every_chip_it_occupies()
+    {
+        var first = new DateOnly(2026, 9, 15);
+        var conference = Timed("Conference", first, new TimeOnly(9, 0), first.AddDays(2), new TimeOnly(17, 0));
+        var other = Row("Unrelated", first, new TimeOnly(8, 0));
+        var vm = OnMonth(new DateOnly(2026, 9, 1), conference, other);
+
+        var chips = vm.MonthDays.SelectMany(d => d.Entries).ToList();
+        vm.SelectEntryCommand.Execute(chips.First(c => c.Row == conference));
+
+        Assert.Equal(3, chips.Count(c => c.Row == conference && c.IsSelected));
+        Assert.DoesNotContain(chips, c => c.Row == other && c.IsSelected);
+
+        // And selecting elsewhere clears them all — a stale highlight is a claim about the wrong entry.
+        vm.SelectEntryCommand.Execute(chips.First(c => c.Row == other));
+        Assert.DoesNotContain(chips, c => c.Row == conference && c.IsSelected);
+    }
+
     /// <summary>A timed entry spanning two given moments — the shape a conference or an overnight set has.</summary>
     private static AppointmentRowViewModel Timed(
         string title, DateOnly from, TimeOnly at, DateOnly until, TimeOnly then)
