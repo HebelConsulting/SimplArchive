@@ -19,5 +19,7 @@ public static class DesktopClientOptions
 
     // Only "openid" is registered as a scope on the server; the email claim still reaches the id_token via
     // the authorization endpoint's SetDestinations (ADR 0211), so it needn't be requested as a scope.
-    public const string Scopes = "openid";
+    // "offline_access" is what ASKS for a refresh token; without it the server issues none however many flows it
+    // allows, and the client is left holding one access token until it expires (the hour-long 401).
+    public const string Scopes = "openid offline_access";
 }

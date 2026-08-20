@@ -135,6 +135,12 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         // Hermetic in-memory OpenIddict keys — the dev-cert store fails in a headless CI runner environment (ADR
         // "Continuous integration"); ephemeral keys need no store.
         Environment.SetEnvironmentVariable("OpenIddict__UseEphemeralKeys", "true");
+
+        // A redeemed rolling refresh token stays usable for a reuse leeway — 30 seconds in production, so a
+        // client retrying after a lost response is not signed out. Shortened here so the security property
+        // (reuse PAST the window is refused) can be asserted in a second instead of costing 30 per assertion,
+        // which is how a property ends up untested.
+        Environment.SetEnvironmentVariable("OpenIddict__RefreshTokenReuseLeewaySeconds", "1");
         Environment.SetEnvironmentVariable("ObjectStorage__ServiceUrl", _storageUrl);
         Environment.SetEnvironmentVariable("ObjectStorage__PublicServiceUrl", _storageUrl);
         Environment.SetEnvironmentVariable("ObjectStorage__Region", "us-east-1");

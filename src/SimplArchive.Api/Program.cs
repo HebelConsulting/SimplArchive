@@ -442,7 +442,28 @@ using (var scope = app.Services.CreateScope())
     // Idempotently seeds the cross-platform desktop fat client's OpenIddict application — a public client
     // using Authorization Code + PKCE with a fixed loopback redirect (RFC 8252 "OAuth for Native Apps"). See
     // ADR "Cross-platform desktop fat client (Avalonia)".
-    if (await applicationManager.FindByClientIdAsync("simplarchive-desktop") is null)
+    // The desktop client's registration is HEALED, not merely created-if-absent. A plain
+    // create-if-null seed gives new permissions only to deployments that never had the client — so an
+    // existing install would keep the old permission set for ever and the refresh grant below would be
+    // refused with `unauthorized_client`, which reads as a client bug rather than as stale registration.
+    // Same shape as the well-known mask heal (#579) and the trap #664 recorded.
+    var desktopApp = await applicationManager.FindByClientIdAsync("simplarchive-desktop");
+    if (desktopApp is not null)
+    {
+        var descriptor = new OpenIddictApplicationDescriptor();
+        await applicationManager.PopulateAsync(descriptor, desktopApp);
+
+        var refreshGrant = OpenIddictConstants.Permissions.GrantTypes.RefreshToken;
+        var offlineScope = OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.OfflineAccess;
+        if (!descriptor.Permissions.Contains(refreshGrant) || !descriptor.Permissions.Contains(offlineScope))
+        {
+            descriptor.Permissions.Add(refreshGrant);
+            descriptor.Permissions.Add(offlineScope);
+            await applicationManager.UpdateAsync(desktopApp, descriptor);
+        }
+    }
+
+    if (desktopApp is null)
     {
         await applicationManager.CreateAsync(new OpenIddictApplicationDescriptor
         {
@@ -458,6 +479,9 @@ using (var scope = app.Services.CreateScope())
                 OpenIddictConstants.Permissions.ResponseTypes.Code,
                 OpenIddictConstants.Permissions.Scopes.Email,
                 OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.OpenId,
+                // Renewal without the user present: the grant, and the scope that asks for a refresh token.
+                OpenIddictConstants.Permissions.GrantTypes.RefreshToken,
+                OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.OfflineAccess,
                 // RFC 8693 token exchange for User impersonation (ADR "User impersonation").
                 OpenIddictConstants.Permissions.Prefixes.GrantType + SimplArchive.Auth.ImpersonationConstants.TokenExchangeGrantType,
             },

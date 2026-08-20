@@ -19,13 +19,15 @@ public static class AppExceptions
     private static Window? _owner;
     private static Func<bool>? _isTenantAdmin;
     private static Func<Task>? _reconnect;
+    private static Func<Task>? _signIn;
     private static bool _showing;
 
-    public static void Initialize(Window owner, Func<bool> isTenantAdmin, Func<Task> reconnect)
+    public static void Initialize(Window owner, Func<bool> isTenantAdmin, Func<Task> reconnect, Func<Task>? signIn = null)
     {
         _owner = owner;
         _isTenantAdmin = isTenantAdmin;
         _reconnect = reconnect;
+        _signIn = signIn;
     }
 
     // Safe to call from any thread — marshals to the UI thread. A connectivity failure (server unreachable)
@@ -45,6 +47,23 @@ public static class AppExceptions
     // Raised by the background heartbeat (ADR "Desktop session reconnect") when an idle probe finds the server
     // unreachable — surfaces the same reconnect modal without an exception.
     public static void ReportConnectionLost() => Run(() => _ = ShowReconnectAsync());
+
+    /// <summary>
+    /// A server's session ended and could not be renewed — the user has to sign in again there.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Distinct from a connectivity loss, and worth its own message: the server is reachable and answering, it
+    /// simply will not accept this session any more (a revoked or expired refresh token, a deactivated account,
+    /// a server restarted with new keys). Telling the user the connection was lost would send them to check
+    /// their network for something their network cannot fix.
+    /// </para>
+    /// <para>
+    /// It NAMES the server, because somebody moving between production, integration and a local stack needs to
+    /// know which one dropped them; a dialog that only says "your session expired" makes them guess.
+    /// </para>
+    /// </remarks>
+    public static void ReportSessionEnded(string apiRootUrl) => Run(() => _ = ShowSessionEndedAsync(apiRootUrl));
 
     private static void Run(Action action)
     {
@@ -103,6 +122,63 @@ public static class AppExceptions
                     return; // reachable + session reloaded — dismiss the modal
                 }
                 // still unreachable → loop and show the modal again
+            }
+        }
+        finally
+        {
+            _showing = false;
+        }
+    }
+
+    /// <summary>
+    /// The session-ended modal: retries a few times, then offers to sign in again rather than only to quit.
+    /// </summary>
+    /// <remarks>
+    /// Retrying first is deliberate. A server that is restarting refuses renewals for a few seconds and then
+    /// accepts them, and throwing the user back to a login screen for that is a worse answer than waiting —
+    /// the escalation exists for the sessions that are genuinely over, not for the ones that are briefly
+    /// inconvenienced.
+    /// </remarks>
+    private const int RenewalAttemptsBeforeSignIn = 3;
+
+    private static async Task ShowSessionEndedAsync(string apiRootUrl)
+    {
+        if (_owner is null || _showing)
+        {
+            return;
+        }
+
+        _showing = true;
+        try
+        {
+            var attempts = 0;
+            while (true)
+            {
+                var offerSignIn = attempts >= RenewalAttemptsBeforeSignIn;
+                var message = offerSignIn
+                    ? $"Your session on {apiRootUrl} has ended and could not be renewed. Sign in again to continue."
+                    : $"Your session on {apiRootUrl} has ended. Trying to renew it…";
+
+                var result = await new ConnectionLostDialog(_isTenantAdmin?.Invoke() ?? false, message)
+                    .ShowDialog<string?>(_owner);
+
+                if (result != "reconnect")
+                {
+                    (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
+                    return;
+                }
+
+                if (offerSignIn && _signIn is not null)
+                {
+                    await _signIn();
+                    return;
+                }
+
+                attempts++;
+                if (await TryReconnectAsync())
+                {
+                    return;
+                }
             }
         }
         finally

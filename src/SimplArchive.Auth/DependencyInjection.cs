@@ -64,6 +64,29 @@ public static class DependencyInjection
                 options.AllowAuthorizationCodeFlow()
                     .RequireProofKeyForCodeExchange();
 
+                // Refresh tokens, so a client can renew WITHOUT the user present. The desktop client held a
+                // single access token from login until it expired and then 401'd on every request — reported as
+                // "I thought the client rotates the tokens even in the background", which it did not, because
+                // nothing here issued a refresh token to rotate with.
+                //
+                // Rolling refresh tokens are OpenIddict's default and are kept: each refresh issues a new token
+                // and marks the presented one REDEEMED, so a leaked token is good for one use rather than for
+                // its whole lifetime.
+                //
+                // A redeemed token nevertheless stays usable for a REUSE LEEWAY — 30 seconds by default — and
+                // that is deliberate on OpenIddict's part, not an oversight: a client whose refresh response is
+                // lost to a network blip retries with the token it still holds, and without the leeway that
+                // ordinary event would sign the user out. Measured, not assumed: a replay inside the window
+                // returns 200, which is what the test asserting instant invalidation discovered.
+                //
+                // Made EXPLICIT rather than inherited, so the window is a decision with a number attached, and
+                // so the test host can shorten it to prove that reuse past the window really is refused —
+                // otherwise the security property costs 30 seconds per assertion and quietly goes untested.
+                options.AllowRefreshTokenFlow();
+
+                var leeway = configuration.GetValue<int?>("OpenIddict:RefreshTokenReuseLeewaySeconds");
+                options.SetRefreshTokenReuseLeeway(TimeSpan.FromSeconds(leeway ?? 30));
+
                 // RFC 8693 token exchange, used only for User impersonation (ADR "User impersonation") — a
                 // CanImpersonate admin exchanges their access token for one representing a target User.
                 options.AllowCustomFlow(ImpersonationConstants.TokenExchangeGrantType);
@@ -72,7 +95,10 @@ public static class DependencyInjection
                 // not a DB-backed scope entity (no IOpenIddictScopeManager round-trip needed). Its
                 // presence on a token request is what makes OpenIddict actually issue an identity token —
                 // see ADR "Blazor Client-side login wiring".
-                options.RegisterScopes(OpenIddictConstants.Scopes.OpenId);
+                //
+                // "offline_access" is the scope that ASKS for a refresh token: without it on the request,
+                // OpenIddict issues none however many flows are allowed above.
+                options.RegisterScopes(OpenIddictConstants.Scopes.OpenId, OpenIddictConstants.Scopes.OfflineAccess);
 
                 // Signing/encryption certificates: sourced from OpenBao when configured (ADR "OpenIddict
                 // certificates from OpenBao" — the OpenBao config provider maps the PKI-issued cert/key PEMs to

@@ -886,6 +886,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
 
             _forceLoginNext = false;
+            TokenSessions.Current.Record(DesktopClientOptions.ApiBaseUrl, result);
             UseApi(new SimplArchiveApiClient(result.AccessToken));
             UserEmail = result.Email ?? "(unknown)";
             IsLoggedIn = true;

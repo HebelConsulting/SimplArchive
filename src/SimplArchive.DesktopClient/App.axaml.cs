@@ -49,8 +49,17 @@ public partial class App : Application
             viewModel.EnvBanner.Set(logonVm.SelectedServer?.Environment);
             var window = new MainWindow { DataContext = viewModel };
 
-            // Wire the crash guard (ADR "Desktop crash guard") to the new main window.
-            Services.AppExceptions.Initialize(window, () => viewModel.IsTenantAdmin, viewModel.ReconnectAsync);
+            // Wire the crash guard (ADR "Desktop crash guard") to the new main window. The sign-in hook is what
+            // lets a session that cannot be renewed escalate to a real login instead of only offering to quit.
+            Services.AppExceptions.Initialize(
+                window,
+                () => viewModel.IsTenantAdmin,
+                viewModel.ReconnectAsync,
+                () => viewModel.LoginCommand.ExecuteAsync(null));
+
+            // A session that ends is NOT a connectivity failure — the server is answering, it just will not
+            // accept this session any more — so it gets its own modal, naming the server it happened on.
+            Services.RenewingAuthHandler.SessionEnded += Services.AppExceptions.ReportSessionEnded;
 
             // Background heartbeat (ADR "Desktop session reconnect"): while logged in, probe the server so an
             // idle disconnect surfaces the reconnect modal before the user's next action fails. Stopped on logout.

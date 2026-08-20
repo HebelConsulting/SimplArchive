@@ -13,7 +13,17 @@ public sealed class OidcLoopbackAuthenticator
 {
     private static readonly HttpClient Http = new();
 
-    public sealed record AuthResult(string AccessToken, string? Email);
+    /// <param name="RefreshToken">Null when the server issued none — an older deployment, or offline_access refused.</param>
+    /// <param name="ExpiresAt">When the access token stops working, as an instant rather than a duration.</param>
+    /// <remarks>
+    /// The renewal fields default to "none, already expired" — the honest reading of a server that issued no
+    /// refresh token, and what keeps a test that only cares about the access token from having to state them.
+    /// </remarks>
+    public sealed record AuthResult(
+        string AccessToken,
+        string? Email,
+        string? RefreshToken = null,
+        DateTimeOffset ExpiresAt = default);
 
     // forceLogin adds prompt=login so the server re-authenticates even if the system browser still holds a
     // session cookie — used after a Log out, so a different tenant/user can sign in (ADR "Desktop logout").
@@ -80,7 +90,17 @@ public sealed class OidcLoopbackAuthenticator
         var tokens = await tokenResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         var accessToken = tokens.GetProperty("access_token").GetString()!;
         var email = tokens.TryGetProperty("id_token", out var idToken) ? ReadEmailFromJwt(idToken.GetString()) : null;
-        return new AuthResult(accessToken, email);
+        var refreshToken = tokens.TryGetProperty("refresh_token", out var refresh) ? refresh.GetString() : null;
+
+        // expires_in is seconds from NOW, so it is converted at the moment it is read. Holding the duration and
+        // converting later is how a laptop that slept for an hour ends up believing its token is still fresh.
+        // A server that sends none is treated as already expired, so the first request renews rather than
+        // gambling on a lifetime nobody stated.
+        var lifetime = tokens.TryGetProperty("expires_in", out var expires) && expires.TryGetInt32(out var seconds)
+            ? TimeSpan.FromSeconds(seconds)
+            : TimeSpan.Zero;
+
+        return new AuthResult(accessToken, email, refreshToken, DateTimeOffset.UtcNow + lifetime);
     }
 
     // Opens the server-rendered passkey-management page (ADR "Desktop passkey management") in the system

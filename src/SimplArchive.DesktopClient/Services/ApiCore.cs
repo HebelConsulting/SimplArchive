@@ -26,15 +26,54 @@ public sealed class ApiCore
     private IReadOnlyDictionary<string, string>? _rootLinks;
     private readonly SemaphoreSlim _rootGate = new(1, 1);
 
+    private readonly string _apiRootUrl;
+    private readonly TokenSession.Holder _session;
+
     public ApiCore(string accessToken)
     {
-        AccessToken = accessToken;
-        Http = new HttpClient { BaseAddress = new Uri(DesktopClientOptions.ApiBaseUrl) };
-        Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        _apiRootUrl = DesktopClientOptions.ApiBaseUrl;
+
+        // Honour the token this was CONSTRUCTED with. The login path records the full session first (with its
+        // refresh token) and this leaves it alone; every other caller — impersonation, and every test that
+        // builds a client from a bare token — gets a session seeded from what it passed.
+        //
+        // Without this the handler finds no session, sends no Authorization header, and every request 401s.
+        // That is not hypothetical: it took 115 desktop tests down in one run, all of them reporting the same
+        // 401 as if the server had rejected a credential rather than never being offered one.
+        //
+        // MaxValue, not "already expired": we do not know this token's lifetime and cannot renew it without a
+        // refresh token, so claiming it needs renewal would make every request attempt a refresh it cannot do.
+        // Adopt the recorded session when this client was built from the SAME token the login recorded — that
+        // is the one case where a refresh token belongs to this client. Otherwise the client owns a private
+        // session seeded from the token it was given, and does not renew.
+        //
+        // Deliberately NOT the shared store as the live source: it is keyed by SERVER, which is right for
+        // persistence and wrong for identity — two clients for different users against one server would share
+        // a slot and the second would silently become the first.
+        var recorded = TokenSessions.Current.For(_apiRootUrl);
+        var session = recorded is { RefreshToken.Length: > 0 }
+            && string.Equals(recorded.AccessToken, accessToken, StringComparison.Ordinal)
+                ? recorded
+                // MaxValue, not "already expired": the lifetime is unknown and there is no refresh token, so
+                // claiming it needs renewal would make every request attempt one it cannot perform.
+                : new TokenSession(accessToken, null, DateTimeOffset.MaxValue);
+
+        _session = new TokenSession.Holder(session);
+
+        Http = new HttpClient(new RenewingAuthHandler(_apiRootUrl, _session, new HttpClientHandler()))
+        {
+            BaseAddress = new Uri(_apiRootUrl),
+        };
     }
 
-    /// <summary>This client's bearer token — also the RFC 8693 subject_token for impersonation.</summary>
-    public string AccessToken { get; }
+    /// <summary>
+    /// This client's bearer token — also the RFC 8693 subject_token for impersonation.
+    /// </summary>
+    /// <remarks>
+    /// Read from the live session rather than captured at construction, so a caller that needs the raw token
+    /// (impersonation) gets the one currently valid rather than the one this object was born with.
+    /// </remarks>
+    public string AccessToken => _session.Value?.AccessToken ?? string.Empty;
 
     /// <summary>The authenticated HttpClient every area client sends through.</summary>
     public HttpClient Http { get; }

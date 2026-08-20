@@ -91,6 +91,11 @@ public class TokenController : ControllerBase
             return SignIn(result.Principal!, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
+        if (request.IsRefreshTokenGrantType())
+        {
+            return await HandleRefreshAsync();
+        }
+
         if (request.GrantType == ImpersonationConstants.TokenExchangeGrantType)
         {
             return await HandleImpersonationAsync(request);
@@ -170,6 +175,70 @@ public class TokenController : ControllerBase
     // actor is an active User holding CanImpersonate and isn't already impersonating, and that the target is an
     // active, same-tenant, non-admin User. Issues a token whose Subject is the target + an `impersonated_by`
     // claim naming the actor, so every subsequent action is attributable.
+    /// <summary>
+    /// Renews an access token from a refresh token, so a client can keep working without the user present.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// OpenIddict has already validated the refresh token and rebuilt the principal by the time this runs, so
+    /// the shape mirrors the authorization-code branch above. What it adds is a RE-CHECK of the user: a refresh
+    /// token outlives the access token by design, and without this a user deactivated ten minutes ago would go
+    /// on minting fresh access tokens until their refresh token expired.
+    /// </para>
+    /// <para>
+    /// The same reasoning the rights calculator applies on every request (ADRs 0174/0153: a deactivated user or
+    /// a non-Active tenant short-circuits to no rights, BEFORE any admin bypass). Renewal is the one moment the
+    /// token pipeline gets to ask the same question, so it asks it.
+    /// </para>
+    /// </remarks>
+    private async Task<IActionResult> HandleRefreshAsync()
+    {
+        var result = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        if (result.Principal is not { } principal)
+        {
+            return Forbid(
+                new AuthenticationProperties(new Dictionary<string, string?>
+                {
+                    [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidGrant,
+                    [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] =
+                        "The refresh token is no longer valid.",
+                }),
+                OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        }
+
+        // The subject is the User id for an interactive login — the only principal kind that gets here, since
+        // client-credentials callers have no refresh token to present.
+        if (Guid.TryParse(principal.GetClaim(OpenIddictConstants.Claims.Subject), out var userId))
+        {
+            var user = await _dbContext.Users
+                .IgnoreQueryFilters()
+                .Where(u => u.Id == userId)
+                .Join(
+                    _dbContext.Tenants.IgnoreQueryFilters(),
+                    u => u.TenantId,
+                    t => t.Id,
+                    (u, t) => new { u.IsActive, TenantStatus = t.Status })
+                .SingleOrDefaultAsync();
+
+            if (user is null || !user.IsActive || user.TenantStatus != SimplArchive.Domain.Tenants.TenantStatus.Active)
+            {
+                _logger.LogInformation(
+                    "Refused to renew a token for {UserId}: the user or tenant is no longer active", userId);
+
+                return Forbid(
+                    new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidGrant,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] =
+                            "The account is no longer active.",
+                    }),
+                    OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            }
+        }
+
+        return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+    }
+
     private async Task<IActionResult> HandleImpersonationAsync(OpenIddictRequest request)
     {
         var requestedSubject = request.GetParameter(ImpersonationConstants.RequestedSubjectParameter)?.ToString();
