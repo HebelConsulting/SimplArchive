@@ -177,7 +177,12 @@ public class NotebookSectionContainmentTests
 
         // The message must list BOTH admitted masks: naming only one would send the reader to the wrong place
         // half the time, which is the failure the set-valued rule exists to avoid.
-        Assert.Contains("Section or Note", refused.Message, StringComparison.Ordinal);
+        //
+        // Alphabetical since ADR 0655, where the admitted set began coming from the model. Row order out of a
+        // database is undefined, and a refusal that lists the same masks differently on different runs is one
+        // nobody can quote in a bug report — so the order is imposed rather than inherited. Only the ORDER
+        // changed here; both masks are named exactly as before.
+        Assert.Contains("Note or Section", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]

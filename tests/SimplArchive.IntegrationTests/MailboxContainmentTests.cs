@@ -229,7 +229,15 @@ public class MailboxContainmentTests
         await AddAsync(db, mailboxId, userId, "Contacts", WellKnownMaskIds.Addressbook);
 
         var failure = await Assert.ThrowsAsync<TypedFolderContainmentException>(() => db.SaveChangesAsync());
-        Assert.Contains("only IMAP Special or Notebook can", failure.Message, StringComparison.Ordinal);
+
+        // "Folder" joined this list at ADR 0655, and its absence before then was a LIE the old message told:
+        // built from the two-directional table alone, it never mentioned the one-directional widening, so a
+        // user informed that "only IMAP Special or Notebook can live in a Mailbox" could go and successfully
+        // create a plain folder there. The refusal now names what the folder really admits.
+        //
+        // The VERDICT is unchanged — an Addressbook is still refused — which is what the equivalence sweep in
+        // MaskContainmentEquivalenceTests asserts across all 242 mask pairs. Only the wording widened.
+        Assert.Contains("only Folder, IMAP Special or Notebook can", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]

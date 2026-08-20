@@ -13,6 +13,7 @@ using SimplArchive.Domain.ServiceAccounts;
 using SimplArchive.Domain.Tenants;
 using SimplArchive.Domain.Users;
 using SimplArchive.Domain.Workflow;
+using SimplArchive.Infrastructure.Masks;
 
 namespace SimplArchive.Infrastructure.Persistence;
 
@@ -598,14 +599,12 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
 
     // Typed-folder containment (#562 slice 5, generalized for #564's Contact/Calendar folders and its notebook
     // sections): a typed folder admits ONLY children wearing one of its admitted masks, and such a child's
-    // PRIMARY location is only a folder that admits it — references may point anywhere. The rules are data
-    // (WellKnownMaskIds.TypedFolderRules), so a new typed family is a row there rather than another copy of
-    // this rule. Enforced here, the single enforcement point, so every path (workbench move, import, WebDAV,
-    // IMAP, CalDAV/CardDAV) obeys.
+    // PRIMARY location is only a folder that admits it — references may point anywhere. Enforced here, the
+    // single enforcement point, so every path (workbench move, import, WebDAV, IMAP, CalDAV/CardDAV) obeys.
     //
-    // Admission is a SET, not one mask: a Notebook holds Sections and Notes, and a Section holds more of both
-    // — including itself, so the relation is neither one-to-one nor acyclic. An Addressbook is the same rule
-    // with a set of one, which is why there is no notebook special case below.
+    // The rules are read from the MODEL since ADR 0655 — MaskContainmentRules.Verify decides, and it is pure,
+    // so the decision itself is testable without a database. What stays here is the part that needs one: which
+    // masks the two documents wear, and whether the folder has room for another.
     private async Task EnforceTypedFolderContainmentAsync(Document document, CancellationToken cancellationToken)
     {
         async Task<Guid?> MaskIdOfAsync(Guid? maskVersionId) => maskVersionId is not { } mv
@@ -624,53 +623,12 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
             parentMaskId = await MaskIdOfAsync(parentMaskVersionId);
         }
 
-        // A document whose type is not DETERMINED yet is exempt from the folder's admission rule: an upload
-        // creates the row (and its Pending version) BEFORE the finalizer can read the bytes and classify it,
-        // so enforcing here would refuse every .vcf/.ics before it could become a Contact/Calendar. Nothing
-        // escapes through the gap — classification ends by assigning either the item mask (admitted) or Basic
-        // Entry (a real mask, so the very next save is refused, which is exactly the rejection we want).
-        var typeUndetermined = ownMaskId is null;
+        (await ContainmentRulesAsync(document.TenantId, cancellationToken))
+            .Verify(document.Name, ownMaskId, parentMaskId);
 
-        // Does the parent admit this child?
-        // …plus the one-directional widening: a mailbox also takes ordinary folders, so a user can file mail
-        // into folders of their own (#596). NOT a TypedFolderRules row — that table is two-directional, and a
-        // `Folder` entry there would confine every folder in the archive to living inside a mailbox.
-        var alsoTakesPlainFolders =
-            Domain.Masks.WellKnownMaskIds.AlsoAdmitPlainFolders.Any(m => m.FolderMaskId == parentMaskId)
-            && ownMaskId == Domain.Masks.WellKnownMaskIds.Folder;
-
-        if (!typeUndetermined
-            && !alsoTakesPlainFolders
-            && Domain.Masks.WellKnownMaskIds.TypedFolderRules.FirstOrDefault(r => r.FolderMaskId == parentMaskId) is { } parentRule
-            && !parentRule.Admits.Any(a => a.MaskId == ownMaskId))
-        {
-            throw Domain.Masks.TypedFolderContainmentException.FolderAdmitsOnly(document.Name, parentRule);
-        }
-
-        // …and is this child somewhere that admits it? A Section satisfies BOTH questions — it is an admitted
-        // child of a Notebook and a typed folder in its own right — so the two checks are independent, not an
-        // if/else. Getting that wrong would let a Section live at the archive root.
-        if (ownMaskId is { } ownId
-            && Domain.Masks.WellKnownMaskIds.AdmittingFolders.TryGetValue(ownId, out var admittingRules)
-            && !admittingRules.Any(r => r.FolderMaskId == parentMaskId))
-        {
-            throw Domain.Masks.TypedFolderContainmentException.ItemBelongsIn(document.Name, ownId, admittingRules);
-        }
-
-        // …and if the parent holds no subfolders, is this child one? A third question, and deliberately not a
-        // TypedFolderRules row: that table is two-directional, so admitting eMail into an IMAP Special folder
-        // would also confine every eMail in the archive to one. Folder-ness comes from the MASK because the
-        // usual tell — does it have versions — cannot be read here: a folder and a just-delivered message are
-        // both version-less at the instant this runs.
-        if (ownMaskId is { } childMaskId
-            && Domain.Masks.WellKnownMaskIds.FolderMasks.Contains(childMaskId)
-            && Domain.Masks.WellKnownMaskIds.NoSubfolderMasks.FirstOrDefault(m => m.FolderMaskId == parentMaskId) is { FolderName: not null } leafRule)
-        {
-            throw Domain.Masks.TypedFolderContainmentException.FolderHoldsNoSubfolders(document.Name, leafRule.FolderName);
-        }
-
-        // …and does the folder have ROOM for it? A separate question from admission: the folder here admits
-        // anything, and the only limit is how many of ONE mask it holds (a personal space, one mailbox).
+        // …and does the folder have ROOM for it? A separate question from admission, and the one that stays
+        // STATIC: the folder here admits anything, and the only limit is how many of ONE mask it holds (a
+        // personal space, one mailbox). Answering it means counting siblings, which is a query and not a rule.
         if (ownMaskId is { } countedId
             && document.ParentId is { } folderId
             && Domain.Masks.WellKnownMaskIds.ChildCardinalityRules
@@ -678,6 +636,24 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
         {
             await EnforceChildCardinalityAsync(document, folderId, countedId, capacityRule, cancellationToken);
         }
+    }
+
+    // Cached for this DbContext's lifetime, which is one request or one unit of work. A bulk move of 500
+    // documents then pays for the rules once instead of 500 times, and a mask edit is picked up by the next
+    // request — so there is no invalidation to get wrong, and no window in which the invariant enforces rules
+    // the tenant no longer has. A process-wide cache would be cheaper and would make a stale entry enforce the
+    // WRONG containment, which fails permissive: the direction nothing downstream reports.
+    private readonly Dictionary<Guid, MaskContainmentRules> _containmentRules = [];
+
+    private async Task<MaskContainmentRules> ContainmentRulesAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        if (!_containmentRules.TryGetValue(tenantId, out var rules))
+        {
+            rules = await MaskContainmentRules.LoadAsync(this, tenantId, cancellationToken);
+            _containmentRules[tenantId] = rules;
+        }
+
+        return rules;
     }
 
     // Counted at the same point as every other document invariant, which is what makes a RESTORE safe: clearing

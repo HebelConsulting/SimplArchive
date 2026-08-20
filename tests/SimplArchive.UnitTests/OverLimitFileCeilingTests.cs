@@ -93,6 +93,17 @@ public class OverLimitFileCeilingTests
         // 2,032 → 1,956: #519 tranche 1 — the Audit TabItem's body became AuditTab (the TenantSettingsPane /
         // ContactsTab shape); the header and its visibility gate stay with the shell.
         ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_956,
+
+        // Entered 2026-08-20 (#673, ADR 0655) — over the line since well before it was noticed, and never on
+        // the list, so nothing was watching it. It enters ON THE WAY DOWN: the containment port took it 1,041 →
+        // 1,017 by moving the decision into MaskContainmentRules, and the entry is what stops that gain being
+        // given back a few lines at a time. Which is the whole lesson of this list: the file was not noticed
+        // because no single commit made it look unreasonable.
+        //
+        // The direction of travel is right — every invariant here that grows a real collaborator can leave the
+        // same way containment did, since what the DbContext owes is the ENFORCEMENT POINT, not the rules. No
+        // burn-down is scheduled and none is promised; lower this when one happens.
+        ["src/SimplArchive.Infrastructure/Persistence/SimplArchiveDbContext.cs"] = 1_017,
     };
 
     public static TheoryData<string> Files => [.. Ceilings.Keys];
