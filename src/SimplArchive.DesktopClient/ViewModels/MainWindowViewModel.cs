@@ -2633,7 +2633,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             IntrayAvailableMasks.Clear();
             IntrayAvailableMasks.Add(new MaskChoiceViewModel(null, "(No mask)"));
-            foreach (var mask in await _api!.Documents.GetMasksAsync())
+            foreach (var mask in await _api!.Masks.GetMasksAsync())
             {
                 IntrayAvailableMasks.Add(new MaskChoiceViewModel(mask.Id, mask.Name, mask));
             }
@@ -2680,7 +2680,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         await LoadIntrayMaskFieldsAsync(value?.Mask, useDraftValues: false);
     }
 
-    private async Task LoadIntrayMaskFieldsAsync(DocumentsClient.MaskOptionInfo? mask, bool useDraftValues)
+    private async Task LoadIntrayMaskFieldsAsync(MasksClient.MaskOptionInfo? mask, bool useDraftValues)
     {
         IntrayMaskEditFields.Clear();
         if (_api is null || mask is not { } chosen)
@@ -2688,7 +2688,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        foreach (var field in await _api.Documents.GetMaskFieldsAsync(chosen))
+        foreach (var field in await _api.Masks.GetMaskFieldsAsync(chosen))
         {
             var values = useDraftValues && _intrayDraftValues.TryGetValue(field.Id, out var v) ? v : [];
             IntrayMaskEditFields.Add(MaskFieldEditViewModel.Create(field, values));
@@ -5601,7 +5601,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
             AvailableMasks.Clear();
             AvailableMasks.Add(new MaskChoiceViewModel(null, "(No mask)"));
-            foreach (var mask in await _api.Documents.GetMasksAsync())
+            foreach (var mask in await _api.Masks.GetMasksAsync())
             {
                 AvailableMasks.Add(new MaskChoiceViewModel(mask.Id, mask.Name, mask));
             }
@@ -5634,7 +5634,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         await LoadMaskEditFieldsAsync(value?.Mask, withCurrentValues: false);
     }
 
-    private async Task LoadMaskEditFieldsAsync(DocumentsClient.MaskOptionInfo? mask, bool withCurrentValues)
+    private async Task LoadMaskEditFieldsAsync(MasksClient.MaskOptionInfo? mask, bool withCurrentValues)
     {
         MaskEditFields.Clear();
         if (_api is null || mask is not { } chosen)
@@ -5642,7 +5642,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        var fields = await _api.Documents.GetMaskFieldsAsync(chosen);
+        var fields = await _api.Masks.GetMaskFieldsAsync(chosen);
         var valuesByName = withCurrentValues
             ? (await _api.Documents.GetIndexDataAsync(DetailHref("index-data"))).ToDictionary(f => f.FieldName, f => f.Values)
             : new Dictionary<string, IReadOnlyList<string>>();
@@ -5745,7 +5745,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             {
                 if (_originalMaskId is not null)
                 {
-                    await _api.Documents.ClearMaskAsync(DetailHref("mask"));
+                    await _api.Masks.ClearMaskAsync(DetailHref("mask"));
                     _originalMaskId = null;
                 }
             }
@@ -5756,7 +5756,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 await _api.Documents.SetIndexDataAsync(DetailHref("index-data"), MaskEditFields.Select(f => (f.FieldDefinitionId, f.ToValues())));
                 if (newMaskId != _originalMaskId)
                 {
-                    await _api.Documents.SetMaskAsync(DetailHref("mask"), newMaskId.Value);
+                    await _api.Masks.SetMaskAsync(DetailHref("mask"), newMaskId.Value);
                     _originalMaskId = newMaskId;
                 }
             }
@@ -6211,10 +6211,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
         AvailableMasks.Add(new MaskChoiceViewModel(Guid.NewGuid(), "Basic Entry"));
         AvailableMasks.Add(new MaskChoiceViewModel(Guid.NewGuid(), "eMail"));
         SelectedMaskChoice = AvailableMasks[1];
-        MaskEditFields.Add(MaskFieldEditViewModel.Create(new DocumentsClient.MaskFieldInfo(Guid.NewGuid(), "Keywords", "MultiSelect", false), ["finance", "quarterly"]));
-        MaskEditFields.Add(MaskFieldEditViewModel.Create(new DocumentsClient.MaskFieldInfo(Guid.NewGuid(), "Amount", "Number", true), ["1240"]));
-        MaskEditFields.Add(MaskFieldEditViewModel.Create(new DocumentsClient.MaskFieldInfo(Guid.NewGuid(), "Due date", "Date", false), ["2026-07-28"]));
-        MaskEditFields.Add(MaskFieldEditViewModel.Create(new DocumentsClient.MaskFieldInfo(Guid.NewGuid(), "Paid", "Boolean", false), ["true"]));
+        MaskEditFields.Add(MaskFieldEditViewModel.Create(new MasksClient.MaskFieldInfo(Guid.NewGuid(), "Keywords", "MultiSelect", false), ["finance", "quarterly"]));
+        MaskEditFields.Add(MaskFieldEditViewModel.Create(new MasksClient.MaskFieldInfo(Guid.NewGuid(), "Amount", "Number", true), ["1240"]));
+        MaskEditFields.Add(MaskFieldEditViewModel.Create(new MasksClient.MaskFieldInfo(Guid.NewGuid(), "Due date", "Date", false), ["2026-07-28"]));
+        MaskEditFields.Add(MaskFieldEditViewModel.Create(new MasksClient.MaskFieldInfo(Guid.NewGuid(), "Paid", "Boolean", false), ["true"]));
         IsEditing = true;
     }
 
@@ -6304,7 +6304,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         IntrayAvailableMasks.Add(new MaskChoiceViewModel(null, "(No mask)"));
         IntrayAvailableMasks.Add(new MaskChoiceViewModel(Guid.NewGuid(), "Basic Entry"));
         IntraySelectedMaskChoice = IntrayAvailableMasks[1];
-        IntrayMaskEditFields.Add(MaskFieldEditViewModel.Create(new DocumentsClient.MaskFieldInfo(Guid.NewGuid(), "Keywords", "MultiSelect", false), ["invoice", "march"]));
+        IntrayMaskEditFields.Add(MaskFieldEditViewModel.Create(new MasksClient.MaskFieldInfo(Guid.NewGuid(), "Keywords", "MultiSelect", false), ["invoice", "march"]));
         Preview.Reset("Preview renders here (PDF/image/text).");
     }
 

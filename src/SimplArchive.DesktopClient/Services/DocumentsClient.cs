@@ -1062,11 +1062,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
 
     public sealed record MaskInfo(Guid? MaskId, string? Name, int? VersionNumber);
 
-    // A tenant mask option for the mask-change dropdown (ADR "Editable mask on the detail pane").
-    // SelfHref is the address the mask catalogue advertised for this mask — reading its fields follows that
-    // rather than rebuilding /api/masks/{id} from the id beside it (ADR 0543/0555).
-    public sealed record MaskOptionInfo(Guid Id, string Name, string? SelfHref = null);
-
     // System-field values shown always (separate from the mask, ADR "System fields + OCR-language mask
     // field"). Created/CreatedBy/DocumentDate are the currently-shown version's; the OCR-language override +
     // TIFF-source come from the latest TIFF version.
@@ -1133,34 +1128,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
             mask.TryGetProperty("versionNumber", out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : null);
     }
 
-    // The tenant's masks (id + name) for the mask-change dropdown (ADR "Editable mask on the detail pane").
-    public async Task<IReadOnlyList<MaskOptionInfo>> GetMasksAsync(CancellationToken cancellationToken = default)
-    {
-        var json = await _core.Http.GetFromJsonAsync<JsonElement>(await _core.RootHrefAsync("masks", cancellationToken), cancellationToken);
-        var list = new List<MaskOptionInfo>();
-        if (json.TryGetProperty("masks", out var masks))
-        {
-            foreach (var m in masks.EnumerateArray())
-            {
-                list.Add(new MaskOptionInfo(m.GetProperty("id").GetGuid(), m.GetProperty("name").GetString() ?? "", ApiCore.RelHref(m, "self")));
-            }
-        }
-
-        return list;
-    }
-
-    // Assigns (or changes) the document's mask. 400 REQUIRED_FIELD_MISSING surfaces as a friendly message.
-    public async Task SetMaskAsync(string maskHref, Guid maskId, CancellationToken cancellationToken = default)
-    {
-        var response = await _core.Http.PutAsJsonAsync(maskHref, new { maskId }, cancellationToken);
-        await ApiCore.ThrowIfProblemAsync(response, "Could not assign the mask", cancellationToken);
-    }
-
-    public async Task ClearMaskAsync(string maskHref, CancellationToken cancellationToken = default)
-    {
-        var response = await _core.Http.DeleteAsync(maskHref, cancellationToken);
-        await ApiCore.ThrowIfProblemAsync(response, "Could not clear the mask", cancellationToken);
-    }
 
     // Replaces the whole index-data set. 400 FIELD_VALUE_INVALID / MULTIPLE_VALUES_NOT_ALLOWED surface as a message.
     public async Task SetIndexDataAsync(string indexDataHref, IEnumerable<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> fields, CancellationToken cancellationToken = default)
@@ -1378,30 +1345,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     }
 
 
-    // A mask's field definition + type, for building the type-aware editor.
-    public sealed record MaskFieldInfo(Guid Id, string Name, string DataType, bool IsRequired);
-
-    // A mask's field definitions (+ types), for building the type-aware editors.
-    public async Task<IReadOnlyList<MaskFieldInfo>> GetMaskFieldsAsync(MaskOptionInfo mask, CancellationToken cancellationToken = default)
-    {
-        var json = await _core.Http.GetFromJsonAsync<JsonElement>(
-            mask.SelfHref ?? throw new InvalidOperationException($"The mask '{mask.Name}' advertised no 'self' rel (ADR 0543/0555)."),
-            cancellationToken);
-        var list = new List<MaskFieldInfo>();
-        if (json.TryGetProperty("fields", out var fields))
-        {
-            foreach (var f in fields.EnumerateArray())
-            {
-                list.Add(new MaskFieldInfo(
-                    f.GetProperty("id").GetGuid(),
-                    f.GetProperty("name").GetString() ?? "",
-                    f.TryGetProperty("dataType", out var dt) ? dt.GetString() ?? "Text" : "Text",
-                    f.TryGetProperty("isRequired", out var r) && r.GetBoolean()));
-            }
-        }
-
-        return list;
-    }
     public sealed record TagCatalog(IReadOnlyList<TagCatalogItem> Items, bool CanManage);
 
 

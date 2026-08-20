@@ -99,6 +99,9 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<Mask> Masks => Set<Mask>();
 
+
+    public DbSet<MaskFileExtension> MaskFileExtensions => Set<MaskFileExtension>();
+
     public DbSet<MaskVersion> MaskVersions => Set<MaskVersion>();
 
     public DbSet<FieldDefinition> FieldDefinitions => Set<FieldDefinition>();

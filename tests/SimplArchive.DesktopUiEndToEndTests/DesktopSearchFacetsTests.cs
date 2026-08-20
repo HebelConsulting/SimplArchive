@@ -22,14 +22,12 @@ public class DesktopSearchFacetsTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var word = $"dtfacet{suffix}";
 
-        var masks = await api.Documents.GetMasksAsync();
-        // Two masks that are genuinely assignable to a plain document, picked BY NAME because an
-        // index-based pick is not stable against the well-known set growing. The pick has to clear two
-        // separate refusals: a TYPED mask (Note/Contact/Calendar) is admitted only inside its own folder
-        // (containment, #564/ADR 0619), and a mask with REQUIRED fields — eMail wants From/To/Subject —
-        // is refused on assignment until they are filled (ADR 0176). Basic Entry and Folder clear both.
-        var maskA = masks.First(m => m.Name == "Basic Entry");
-        var maskB = masks.First(m => m.Name == "Folder");
+        // Two masks genuinely assignable to a plain document. This used to pick "Folder" as the second one,
+        // which was a FOLDER mask stamped on a filed document — the very state #580 exists to prevent, and it
+        // stopped being offered once the server started saying so (ADR 0653). A tenant-authored mask is what a
+        // real user would reach for: no folder flag, no extension, no containment, so freely assignable.
+        var maskA = (await api.Masks.GetMasksAsync()).First(m => m.Name == "Basic Entry");
+        var maskB = await api.Masks.CreateAsync($"Facet Type {suffix}");
 
         await api.Documents.CreateRepositoryAsync($"dt-facets-{suffix}");
         var repo = (await api.Documents.GetRepositoriesAsync()).First(r => r.Name == $"dt-facets-{suffix}");
@@ -83,7 +81,7 @@ public class DesktopSearchFacetsTests
     {
         await api.Documents.UploadFileAsync(repo.Href("children"), $"{name}.txt", Encoding.UTF8.GetBytes(content));
         var doc = (await api.Documents.GetChildrenAsync(repo.Href("children"))).First(c => c.Name == name);
-        await api.Documents.SetMaskAsync(doc.Href("mask"), maskId);
+        await api.Masks.SetMaskAsync(doc.Href("mask"), maskId);
         return doc.Id;
     }
 

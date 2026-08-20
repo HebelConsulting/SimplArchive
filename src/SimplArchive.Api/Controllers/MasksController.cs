@@ -166,6 +166,45 @@ public class MasksController : ControllerBase
         public string Name { get; set; } = "";
 
         public int VersionNumber { get; set; }
+
+        /// <summary>
+        /// True when this mask types a FOLDER — so it must never be offered for a filed document.
+        /// </summary>
+        /// <remarks>
+        /// Named for the MASK, not the document: <c>IsFolder</c> already means "a document with no versions"
+        /// throughout the clients, and conflating the two is how a picker ends up asking the wrong question.
+        /// </remarks>
+        public bool IsFolderMask { get; set; }
+
+        /// <summary>
+        /// The extensions that make this mask automatic. Non-empty means the user gets NO choice: the
+        /// classifier assigns it on upload and containment then requires the matching collection.
+        /// </summary>
+        public List<string> FileExtensions { get; set; } = [];
+
+        /// <summary>
+        /// Whether a user may choose this mask for an ordinary filed document.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Decided by the SERVER and sent, not derived by each client — which is the whole point of #671. Both
+        /// clients were inferring it, differently, and offering masks the containment invariant then refused,
+        /// so the user learned about it from a failed save (#580).
+        /// </para>
+        /// <para>
+        /// <b>Three reasons a mask is not choosable</b>, and it took a test to find the third. A folder mask
+        /// types a folder. An extension-claimed mask is assigned by the classifier on upload. And a mask whose
+        /// primary location is CONSTRAINED — <c>Note</c> lives only in a Notebook or a Section — is not
+        /// choosable either, though it is neither of the first two. Deriving this from the two projected fields
+        /// would have quietly offered Note, which is exactly the bug being fixed.
+        /// </para>
+        /// <para>
+        /// The containment part still comes from static app knowledge (<c>WellKnownMaskIds.AdmittingFolders</c>),
+        /// so it cannot yet describe a tenant-authored mask. #673 moves that into the model; when it lands, this
+        /// property's third input changes source and nothing else here does.
+        /// </para>
+        /// </remarks>
+        public bool IsFreelyAssignable { get; set; }
     }
 
     public class MaskListResource : HypermediaResource
@@ -185,11 +224,34 @@ public class MasksController : ControllerBase
             .Select(v => new MaskSummaryResource { Id = v.MaskId, Name = v.Name, VersionNumber = v.VersionNumber })
             .ToListAsync(cancellationToken);
 
+        // Assignability comes from the MASK, not the version: whether it types a folder and which extensions
+        // claim it are identity-level facts (#671). Read for the whole page in two queries rather than per row.
+        var ids = masks.Select(m => m.Id).ToList();
+        var folderMasks = await _dbContext.Masks
+            .Where(m => ids.Contains(m.Id) && m.IsFolderMask)
+            .Select(m => m.Id)
+            .ToListAsync(cancellationToken);
+        var extensions = await _dbContext.MaskFileExtensions
+            .Where(e => ids.Contains(e.MaskId))
+            .Select(e => new { e.MaskId, e.Extension })
+            .ToListAsync(cancellationToken);
+
         // Each summary addresses the full mask — its field definitions — so a client holding a row follows the
         // rel instead of rebuilding /masks/{id} (issue #416).
         foreach (var mask in masks)
         {
+            mask.IsFolderMask = folderMasks.Contains(mask.Id);
+            mask.FileExtensions = [.. extensions.Where(e => e.MaskId == mask.Id).Select(e => e.Extension).Order()];
+            mask.IsFreelyAssignable = !mask.IsFolderMask
+                && mask.FileExtensions.Count == 0
+                && !WellKnownMaskIds.AdmittingFolders.ContainsKey(mask.Id);
             mask.Links = [new Link("self", $"/api/masks/{mask.Id}", "GET")];
+
+            // NO create rel here, deliberately. Creating a typed folder needs a PARENT, which this resource does
+            // not know — an href carrying a {parentId} placeholder would be a template the client substitutes
+            // into, which is composing a URL wearing a rel's clothes (ADR 0543). The affordance belongs on the
+            // document that would hold the new folder, beside the `create-child` rel that already gates
+            // "New subfolder", because what may be created somewhere is a fact about that somewhere.
         }
 
         return Ok(new MaskListResource { Masks = masks, Links = [new Link("self", "/api/masks", "GET")] });

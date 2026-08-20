@@ -77,7 +77,12 @@ public sealed class DetailCatalogs(
     {
         await EnsureTagsAsync();
         await EnsureSensitivityAsync();
-        Masks = (await http.GetFromJsonAsync<MaskListResponse>(await apiRoot.RequireAsync("masks")))?.Masks ?? [];
+        // Only masks a user may actually CHOOSE (#671). A folder mask types a folder and an extension-claimed
+        // mask is assigned by the classifier on upload, so offering either is offering a refusal that the
+        // containment invariant delivers after the save rather than before it (#580). The server decides, and
+        // both clients read the same flag — they used to derive it, differently.
+        Masks = [.. ((await http.GetFromJsonAsync<MaskListResponse>(await apiRoot.RequireAsync("masks")))?.Masks ?? [])
+            .Where(m => m.IsFreelyAssignable)];
         if (needsOcr && Ocr.Count == 0)
         {
             Ocr = await ocrLanguages.GetAsync();

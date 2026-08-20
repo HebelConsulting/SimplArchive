@@ -62,6 +62,7 @@ public sealed class SimplArchiveApiClient
     private ExternalLinksClient? _externalLinks;
     private ProfileClient? _profile;
     private DavCollectionsClient? _davCollections;
+    private MasksClient? _masks;
     private LegalHoldsClient? _legalHolds;
     private StructuredEditorClient? _structuredEditors;
 
@@ -73,6 +74,9 @@ public sealed class SimplArchiveApiClient
 
     /// <summary>The shared authenticated HTTP core every per-area client rides on (#443).</summary>
     public ApiCore Core { get; }
+
+    /// <summary>The masks area (#443's shape) — the tenant catalogue, a mask's fields, and assigning one.</summary>
+    public MasksClient Masks => _masks ??= new MasksClient(Core);
 
     /// <summary>The check-out area (#443 tranche 1).</summary>
     public CheckoutClient Checkout => _checkout ??= new CheckoutClient(Core);

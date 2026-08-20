@@ -185,6 +185,30 @@ public static class WellKnownMaskIds
     public static readonly IReadOnlySet<Guid> FolderMasks =
         new HashSet<Guid> { Folder, Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, Notebook, NotebookSection, Addressbook, Calendar };
 
+    /// <summary>
+    /// The file extensions that make a well-known mask the automatic choice for an upload (#671).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The mapping already existed, scattered across <c>CalendarContactClassifier.Handles</c> and
+    /// <c>DocumentFinalizer</c>, where the endpoint that lists masks could not see it. Stated here so the
+    /// seeder can put it in the DATABASE, which is what lets a picker and a classifier reach the same answer.
+    /// </para>
+    /// <para>
+    /// <b>Note is deliberately absent.</b> A note is stored as <c>.eml</c> — the same extension as a mail — and
+    /// the two are told apart by WHERE they are filed, not by their bytes. So <c>.eml</c> belongs to
+    /// <see cref="EMail"/> and a note gets its mask from the composer that writes it. Listing both would make
+    /// the unique index on (tenant, extension) unsatisfiable, which is the constraint doing its job.
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlyDictionary<Guid, IReadOnlyList<string>> FileExtensions =
+        new Dictionary<Guid, IReadOnlyList<string>>
+        {
+            [EMail] = [".eml", ".msg"],
+            [Contact] = [".vcf"],
+            [Appointment] = [".ics"],
+        };
+
     /// <summary>The well-known masks an ITEM wears — the complement of <see cref="FolderMasks"/>.</summary>
     /// <remarks>Stated rather than derived, so the partition guard has two sides to compare instead of one.</remarks>
     public static readonly IReadOnlySet<Guid> ItemMasks =

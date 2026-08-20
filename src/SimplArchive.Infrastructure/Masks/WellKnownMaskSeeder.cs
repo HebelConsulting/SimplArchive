@@ -173,10 +173,17 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         {
             await RenameIfNeededAsync(tenantId, maskId, name, cancellationToken);
             await AddMissingFieldsAsync(tenantId, maskId, fields, cancellationToken);
+            await EnsureAssignabilityAsync(tenantId, maskId, cancellationToken);
             return;
         }
 
-        _dbContext.Masks.Add(new Mask { Id = maskId, TenantId = tenantId, CreatedAt = DateTimeOffset.UtcNow });
+        _dbContext.Masks.Add(new Mask
+        {
+            Id = maskId,
+            TenantId = tenantId,
+            CreatedAt = DateTimeOffset.UtcNow,
+            IsFolderMask = WellKnownMaskIds.FolderMasks.Contains(maskId),
+        });
 
         var maskVersion = new MaskVersion { Id = Guid.NewGuid(), TenantId = tenantId, MaskId = maskId, Name = name, CreatedAt = DateTimeOffset.UtcNow };
         _dbContext.MaskVersions.Add(maskVersion);
@@ -194,6 +201,64 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
                 CreatedAt = DateTimeOffset.UtcNow,
             });
         }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await EnsureAssignabilityAsync(tenantId, maskId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Makes the mask say how it can be assigned: whether it types a folder, and which extensions claim it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Runs on BOTH paths — the fresh create and the heal — for the reason #664 recorded: a fact added to the
+    /// well-known masks reaches only tenants provisioned afterwards unless the heal carries it too, and the
+    /// difference is invisible because both tenants look fine. Every existing tenant's masks were created
+    /// before this column existed, so every one of them reads "not a folder mask" until this corrects it.
+    /// </para>
+    /// <para>
+    /// Derived from <see cref="WellKnownMaskIds"/> rather than passed per call site: the folder/item partition
+    /// is already stated there and is already guarded, so taking it from anywhere else would be a second copy
+    /// of an answer that has to agree.
+    /// </para>
+    /// </remarks>
+    private async Task EnsureAssignabilityAsync(Guid tenantId, Guid maskId, CancellationToken cancellationToken)
+    {
+        var mask = await _dbContext.Masks.IgnoreQueryFilters(["TenantFilter"])
+            .SingleOrDefaultAsync(m => m.TenantId == tenantId && m.Id == maskId, cancellationToken);
+        if (mask is null)
+        {
+            return;
+        }
+
+        var isFolderMask = WellKnownMaskIds.FolderMasks.Contains(maskId);
+        if (mask.IsFolderMask != isFolderMask)
+        {
+            mask.IsFolderMask = isFolderMask;
+        }
+
+        var wanted = WellKnownMaskIds.FileExtensions.TryGetValue(maskId, out var extensions)
+            ? extensions
+            : [];
+
+        var existing = await _dbContext.MaskFileExtensions.IgnoreQueryFilters(["TenantFilter"])
+            .Where(e => e.TenantId == tenantId && e.MaskId == maskId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var extension in wanted.Where(w => !existing.Any(e => e.Extension == w)))
+        {
+            _dbContext.MaskFileExtensions.Add(new MaskFileExtension
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                MaskId = maskId,
+                Extension = extension,
+            });
+        }
+
+        // Extensions this mask no longer claims are removed, so a mapping that MOVES between masks does not
+        // leave the old row behind to violate the unique index the moment the new one is added.
+        _dbContext.MaskFileExtensions.RemoveRange(existing.Where(e => !wanted.Contains(e.Extension)));
 
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
