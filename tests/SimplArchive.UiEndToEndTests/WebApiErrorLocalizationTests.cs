@@ -70,7 +70,13 @@ public class WebApiErrorLocalizationTests
         var row = page.Locator("[data-pane='list']").Locator(".wb-list-row").Filter(new() { HasText = name });
         await Expect(row).ToBeVisibleAsync();
         await row.ClickAsync();
-        await page.GetByRole(AriaRole.Button, new() { Name = "Workflow starten" }).ClickAsync();
+        // Exact, because two buttons legitimately carry this name: the ribbon's "Workflow starten"
+        // (RibbonStartWorkflow) and the detail pane's "Workflow starten…" (CtxStartWorkflow, with an ellipsis).
+        // Playwright's `Name` is a SUBSTRING match unless told otherwise, so the shorter one matches both — and
+        // only once the detail pane has finished rendering, which makes it a race the test wins on a fast
+        // machine and loses on a slow runner. It failed on `main` exactly that way, as a strict-mode violation
+        // rather than a timeout, which is the tell: two elements, not zero.
+        await page.GetByRole(AriaRole.Button, new() { Name = "Workflow starten", Exact = true }).ClickAsync();
 
         var dialog = page.Locator(".mud-dialog");
         await Expect(dialog).ToBeVisibleAsync();
