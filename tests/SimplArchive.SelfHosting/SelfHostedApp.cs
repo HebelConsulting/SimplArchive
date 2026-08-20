@@ -7,6 +7,7 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
+using Npgsql;
 using Testcontainers.PostgreSql;
 
 namespace SimplArchive.SelfHosting;
@@ -52,10 +53,23 @@ public sealed class SelfHostedApp : IAsyncDisposable
 
     // OpenSearch + Tika so the real full-text path is active (the Postgres fallback ignores field/date filters).
     private readonly IContainer _openSearch = new ContainerBuilder()
-        .WithImage("opensearchproject/opensearch:2")
+        // Pinned to the version Compose, the kiosk and the Helm chart all run, so the suite tests what ships and
+        // an image change arrives as a deliberate bump rather than overnight (#663).
+        .WithImage("opensearchproject/opensearch:2.19.6")
         .WithEnvironment("discovery.type", "single-node")
         .WithEnvironment("DISABLE_SECURITY_PLUGIN", "true")
         .WithEnvironment("DISABLE_INSTALL_DEMO_CONFIG", "true")
+        // Disk watermarks off — THIS is what made CI refuse every index with a 403. A node above the HIGH
+        // watermark makes OpenSearch set `cluster.blocks.create_index` on the cluster, and a hosted runner sits
+        // at 93% full before the fleet even starts (4.6 GB free of 71.6 GB). The cluster it is protecting holds
+        // 111 KB of indices in a container discarded at the end of the run, so the watermark is guarding nothing
+        // and costing the whole suite.
+        .WithEnvironment("cluster.routing.allocation.disk.threshold_enabled", "false")
+        // Index State Management off. Nothing here uses it, and its start-up template migration sets
+        // `cluster.blocks.create_index` too — at t≈50-60s, LONG after /_cluster/health answers at t≈1s. That
+        // was a real second route to the same 403, just not the one that was firing.
+        // Kept in step with E2EApiFactory by OpenSearchContainerParityTests.
+        .WithEnvironment("plugins.index_state_management.enabled", "false")
         .WithEnvironment("OPENSEARCH_JAVA_OPTS", "-Xms512m -Xmx512m")
         .WithPortBinding(9200, true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(9200).ForPath("/_cluster/health").ForStatusCode(HttpStatusCode.OK)))
@@ -77,6 +91,16 @@ public sealed class SelfHostedApp : IAsyncDisposable
         .WithPortBinding(3000, true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(3000).ForPath("/health").ForStatusCode(HttpStatusCode.OK)))
         .Build();
+
+    // Generous on purpose. Draining the seed's index backlog is serial and Tika-bound, so it scales with the
+    // demo seed, and a hosted runner is far slower at it than a developer machine — measured at ~2 s locally
+    // against over five minutes on CI (#660). It is boot time, paid once per fixture rather than per test, so a
+    // generous budget costs little; too tight a one costs a leg's worth of red search tests that name no cause.
+    //
+    // 300 s was too tight and was measured as such: the first run with this wait timed out on three legs with
+    // "the alias never appeared". Raised rather than guessed at again — and the alias half of that wait is now
+    // immediate anyway, because a first build publishes it up front instead of at the end (ADR 0649).
+    private const int SearchReadyTimeoutSeconds = 900;
 
     private readonly StringBuilder _apiLog = new();
     private Process? _api;
@@ -251,10 +275,11 @@ public sealed class SelfHostedApp : IAsyncDisposable
             {
                 if ((await http.GetAsync("/health/ready")).IsSuccessStatusCode)
                 {
+                    await WaitForSearchAsync();
                     return;
                 }
             }
-            catch
+            catch (Exception e) when (e is not InvalidOperationException)
             {
                 // not up yet
             }
@@ -263,6 +288,115 @@ public sealed class SelfHostedApp : IAsyncDisposable
         }
 
         throw new InvalidOperationException($"API did not become ready within 150s:\n{ApiLog()}");
+    }
+
+    /// <summary>
+    /// Waits until the demo seed is actually searchable — a precondition every search test silently assumed and
+    /// none of them stated. <c>/health/ready</c> cannot cover it: it checks Postgres, the one dependency every
+    /// request needs, and deliberately nothing else (ADR 0205).
+    /// </summary>
+    /// <remarks>
+    /// Indexing is a durable outbox drained by ONE background consumer, oldest row first, one document at a
+    /// time — each costing a handful of DB round trips, an object-storage read and a full Tika extraction. The
+    /// seed enqueues a row per seeded document before the app ever serves a request, so at boot the queue holds
+    /// the whole demo corpus. A test that uploads its own document lands its row BEHIND all of them, and
+    /// head-of-line blocking means it stays invisible to search until the backlog clears. Nothing about the
+    /// test is slow; it is simply queued.
+    ///
+    /// Growing the seed by ~70 documents (#659) pushed that drain past the tests' own 30–90 s waits and failed
+    /// NINE search tests on CI while the same code passed locally — a developer machine drains the backlog in
+    /// about a second, a 2-core hosted runner does not. It read as a search regression and was nothing of the
+    /// kind (#660).
+    ///
+    /// So the wait is on the OUTBOX BEING EMPTY, not merely on the <c>documents</c> alias existing. The alias
+    /// is necessary — every per-document write is gated on it
+    /// (<c>OpenSearchDocumentIndexer.AliasReadyAsync</c>) — but it is not sufficient, and it is the more
+    /// tempting signal precisely because it appears early: the startup backfill can flip it while the queue is
+    /// still hundreds of documents deep. An empty outbox means every enqueued document was accepted by
+    /// OpenSearch, because a row is deleted only on a successful sync.
+    ///
+    /// This fixes the class rather than the instance: seed growth now costs boot time, paid once per fixture,
+    /// instead of turning search tests red at whatever size the runner happens to lose the race.
+    ///
+    /// One thing it also HIDES, deliberately recorded here: no test uploads during a rebuild any more, so the
+    /// suite can no longer catch the rebuild's alias swap deleting a document indexed in that window (#661).
+    /// </remarks>
+    private async Task WaitForSearchAsync()
+    {
+        if (_openSearchUrl.Length == 0)
+        {
+            return; // no OpenSearch: the Postgres metadata fallback needs no index (ADR 0249)
+        }
+
+        using var http = new HttpClient { BaseAddress = new Uri(_openSearchUrl) };
+        await using var db = new NpgsqlConnection(_postgres.GetConnectionString());
+        await db.OpenAsync();
+
+        var started = DateTime.UtcNow;
+        var deadline = started.AddSeconds(SearchReadyTimeoutSeconds);
+        var pending = -1L;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (_api!.HasExited)
+            {
+                throw new InvalidOperationException($"API exited while the search index was building:\n{ApiLog()}");
+            }
+
+            try
+            {
+                if ((await http.GetAsync("_alias/documents")).IsSuccessStatusCode)
+                {
+                    await using var count = new NpgsqlCommand("SELECT count(*) FROM \"SearchIndexOutbox\"", db);
+                    pending = (long)(await count.ExecuteScalarAsync() ?? 0L);
+                    if (pending == 0)
+                    {
+                        Console.WriteLine($"[SelfHostedApp] search index ready after {(DateTime.UtcNow - started).TotalSeconds:F1}s.");
+                        return;
+                    }
+                }
+            }
+            catch
+            {
+                // OpenSearch answers only once the alias exists; the table only once migrations have run
+            }
+
+            await Task.Delay(1000);
+        }
+
+        // Loud on purpose, and self-diagnosing. A stalled indexer is otherwise invisible — the symptom is a
+        // scattering of search tests timing out with no shared cause, which is exactly what cost the diagnosis
+        // in #660. Every layer here log-and-continues, so this message is the only evidence there is: OUR side
+        // from the API log, THEIRS from the cluster. Ask the cluster too, because the likeliest ways this wedges
+        // on a hosted runner are invisible to us — a disk watermark flipping every index to read-only, or a
+        // shard that never allocates — and both look identical to "indexing is just slow" from here.
+        throw new InvalidOperationException(
+            $"The search index did not catch up within {SearchReadyTimeoutSeconds}s — " +
+            $"{(pending < 0 ? "the 'documents' alias never appeared" : $"{pending} outbox row(s) still pending")}.\n\n" +
+            $"--- cluster health ---\n{await AskOpenSearchAsync(http, "_cluster/health")}\n" +
+            $"--- indices ---\n{await AskOpenSearchAsync(http, "_cat/indices?v")}\n" +
+            $"--- index blocks (read_only_allow_delete = the disk watermark) ---\n" +
+            $"{await AskOpenSearchAsync(http, "_all/_settings/index.blocks*")}\n" +
+            // Index-level blocks are not the whole story, and assuming they were cost a CI round trip: with no
+            // indices yet there is nothing to carry one, so the dump reads `{}` while a CLUSTER-level block is
+            // refusing every index creation. Ask both.
+            $"--- cluster settings (cluster.blocks.* refuses index creation outright) ---\n" +
+            $"{await AskOpenSearchAsync(http, "_cluster/settings?flat_settings=true")}\n" +
+            $"--- disk allocation (the usual cause of a cluster block) ---\n" +
+            $"{await AskOpenSearchAsync(http, "_cat/allocation?v")}\n" +
+            $"--- API log ---\n{ApiLog()}");
+    }
+
+
+    private static async Task<string> AskOpenSearchAsync(HttpClient http, string path)
+    {
+        try
+        {
+            return await (await http.GetAsync(path)).Content.ReadAsStringAsync();
+        }
+        catch (Exception e)
+        {
+            return $"(unavailable: {e.Message})";
+        }
     }
 
     /// <summary>

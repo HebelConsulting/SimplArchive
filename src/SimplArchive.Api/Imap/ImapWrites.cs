@@ -191,6 +191,35 @@ internal static class ImapWrites
             }
 
             var document = await db.Documents.FirstAsync(d => d.Id == message.DocumentId);
+
+            // WHERE the delete happens decides what it MEANS (#658). In a mail client, deleting outside Trash
+            // moves the message to Trash and deleting inside Trash is final — that is what every user expects,
+            // and doing the final thing everywhere made a mis-click in Inbox unrecoverable from the client.
+            //
+            // Null means "final here": either this IS Trash, or it is an ordinary archive folder, where a
+            // delete keeps its existing meaning (soft-delete into the recycle bin, as the workbench does).
+            // Moving an ARCHIVED document into the mail Trash would be far worse than the bug — it would pull
+            // it out of the repository and hand it to the sweep that empties that prefix.
+            if (await EphemeralMailFolder.TrashForDeleteAsync(db, selected.FolderId) is { } trashFolderId)
+            {
+                // Two messages sharing a subject is ordinary in mail — a thread is a pile of "Re: the thing" —
+                // and the sibling-name invariant refuses the second. Without a free name, deleting the second
+                // message of a thread fails while the first succeeds.
+                document.Name = await EphemeralMailFolder.FreeNameAsync(db, trashFolderId, document.Name);
+
+                // Ephemeral → ephemeral: no re-key, but the mover RESTARTS the retention clock, which is what
+                // makes "30 days in Trash" mean 30 days since it was put there rather than since it arrived.
+                await scope.ServiceProvider.GetRequiredService<Documents.DocumentMover>()
+                    .RelocateContentForMoveAsync(document.Id, trashFolderId, CancellationToken.None);
+
+                document.ParentId = trashFolderId;
+                await db.SaveChangesAsync();
+                await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()
+                    .RecordAsync(AuditActions.DocumentMoved, "Document", document.Id, document.Name, "Moved to Trash over IMAP (EXPUNGE)");
+                expungedSequences.Add(index + 1);
+                continue;
+            }
+
             document.DeletedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync();
             await scope.ServiceProvider.GetRequiredService<IAuditRecorder>()

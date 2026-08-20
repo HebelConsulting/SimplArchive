@@ -66,10 +66,23 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
     // the search slice exercises the real OpenSearch full-text path incl. document-content extraction, not the
     // Postgres fallback. Started only for the search tests, but shared across the whole E2E collection.
     private readonly IContainer _openSearch = new ContainerBuilder()
-        .WithImage("opensearchproject/opensearch:2")
+        // Pinned to the version Compose, the kiosk and the Helm chart all run, so the suite tests what ships and
+        // an image change arrives as a deliberate bump rather than overnight (#663).
+        .WithImage("opensearchproject/opensearch:2.19.6")
         .WithEnvironment("discovery.type", "single-node")
         .WithEnvironment("DISABLE_SECURITY_PLUGIN", "true")
         .WithEnvironment("DISABLE_INSTALL_DEMO_CONFIG", "true")
+        // Disk watermarks off — THIS is what made CI refuse every index with a 403. A node above the HIGH
+        // watermark makes OpenSearch set `cluster.blocks.create_index` on the cluster, and a hosted runner sits
+        // at 93% full before the fleet even starts (4.6 GB free of 71.6 GB). The cluster it is protecting holds
+        // 111 KB of indices in a container discarded at the end of the run, so the watermark is guarding nothing
+        // and costing the whole suite.
+        .WithEnvironment("cluster.routing.allocation.disk.threshold_enabled", "false")
+        // Index State Management off. Nothing here uses it, and its start-up template migration sets
+        // `cluster.blocks.create_index` too — at t≈50-60s, LONG after /_cluster/health answers at t≈1s. That
+        // was a real second route to the same 403, just not the one that was firing.
+        // Kept in step with SelfHostedApp by OpenSearchContainerParityTests.
+        .WithEnvironment("plugins.index_state_management.enabled", "false")
         .WithEnvironment("OPENSEARCH_JAVA_OPTS", "-Xms512m -Xmx512m")
         .WithPortBinding(9200, true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(9200).ForPath("/_cluster/health").ForStatusCode(HttpStatusCode.OK)))

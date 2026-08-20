@@ -36,4 +36,82 @@ public static class EphemeralMailFolder
 
         return maskId == WellKnownMaskIds.ImapSpecial;
     }
+
+    /// <summary>
+    /// The <c>Trash</c> a delete in <paramref name="folderId"/> should move to — or null when a delete there is
+    /// final (#658).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Null for two different reasons, and both mean "do not move": the folder IS Trash (a delete in Trash is
+    /// the last one), or it is an ordinary archive folder rather than mail staging. The second is deliberate
+    /// and worth stating, because the tempting generalisation is destructive: moving an ARCHIVED document into
+    /// the personal mail Trash would take it out of the repository and hand it to the sweep, which empties that
+    /// prefix after the retention period. A delete in an ordinary folder therefore keeps its existing meaning —
+    /// soft-delete into the recycle bin, exactly as the workbench does.
+    /// </para>
+    /// <para>
+    /// Resolved as a SIBLING under the same mailbox, so a user with several mailboxes gets their own Trash
+    /// rather than somebody else's, and by the <c>IMAP Special</c> mask rather than by name for the reason the
+    /// class comment gives.
+    /// </para>
+    /// </remarks>
+    public static async Task<Guid?> TrashForDeleteAsync(
+        SimplArchiveDbContext dbContext, Guid folderId, CancellationToken cancellationToken = default)
+    {
+        if (!await IsEphemeralAsync(dbContext, folderId, cancellationToken))
+        {
+            return null; // an ordinary archive folder — a delete there is a recycle-bin delete
+        }
+
+        var folder = await dbContext.Documents
+            .Where(d => d.Id == folderId)
+            .Select(d => new { d.Name, d.ParentId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (folder is null
+            || folder.ParentId is not { } mailboxId
+            || folder.Name == PersonalMailboxProvisioner.TrashFolderName)
+        {
+            return null; // already Trash: this delete is the final one
+        }
+
+        return await dbContext.Documents
+            .Where(d => d.ParentId == mailboxId
+                && d.Name == PersonalMailboxProvisioner.TrashFolderName
+                && dbContext.MaskVersions.Any(mv => mv.Id == d.MaskVersionId && mv.MaskId == WellKnownMaskIds.ImapSpecial))
+            .Select(d => (Guid?)d.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// A name no sibling in <paramref name="targetFolderId"/> already holds.
+    /// </summary>
+    /// <remarks>
+    /// Not defensive tidiness: two messages sharing a subject is ORDINARY in mail — a thread is a pile of
+    /// "Re: the thing" — and the sibling-name invariant refuses the second one. Without this, deleting the
+    /// second message of a thread fails while the first succeeds, which reads as a broken mailbox.
+    /// </remarks>
+    public static async Task<string> FreeNameAsync(
+        SimplArchiveDbContext dbContext, Guid targetFolderId, string name, CancellationToken cancellationToken = default)
+    {
+        var taken = await dbContext.Documents
+            .Where(d => d.ParentId == targetFolderId)
+            .Select(d => d.Name)
+            .ToListAsync(cancellationToken);
+
+        if (!taken.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            return name;
+        }
+
+        for (var suffix = 2; ; suffix++)
+        {
+            var candidate = $"{name} ({suffix})";
+            if (!taken.Contains(candidate, StringComparer.OrdinalIgnoreCase))
+            {
+                return candidate;
+            }
+        }
+    }
 }

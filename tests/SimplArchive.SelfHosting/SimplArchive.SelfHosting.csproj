@@ -19,6 +19,10 @@
     <PackageReference Include="NetVips.Native.osx-x64" Version="8.18.4" />
     <PackageReference Include="AWSSDK.S3" Version="4.0.100.3" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.0.0" />
+    <!-- Boot-time readiness only: the engine waits for the seed's search-index backlog to drain before it hands
+         the app over, and the outbox table is the one place that says so (#660). Same version the two UI test
+         projects already use. -->
+    <PackageReference Include="Npgsql" Version="9.0.4" />
     <!-- Security-driven transitive pin (ADR 0379 "Security and dependency scanning"): Testcontainers pulls
          SSH.NET, and every version up to and including 2025.1.0 carries GHSA-q939-rpr3-3284 (High — ScpClient
          recursive download allows arbitrary file write via server-controlled filenames), fixed in 2026.0.0.

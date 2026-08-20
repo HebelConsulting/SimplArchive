@@ -22,8 +22,25 @@ namespace SimplArchive.Api.Provisioning;
 // two extra users and a shared "Scan Team" group intray (the group-intray showcase, ADR 0532).
 //
 // Gated on the demo config being present AND the tenant not already existing, so it's a no-op on restart and in
-// every environment that doesn't configure it (default appsettings ships the keys empty). All content is
-// public-safe (fictional companies; no real customer data).
+// every environment that doesn't configure it (default appsettings ships the keys empty).
+//
+// All content is public-safe, but no longer in one sense (#658, corrected 2026-08-20 — the claim used to read
+// "fictional companies; no real customer data" and had quietly stopped being the whole truth):
+//
+//   - The BUSINESS tree is fictional throughout — invented companies, invoices and correspondence. No real
+//     customer data has ever been here, and none should be added.
+//   - The EVENTS department (DemoArtistsSeeder) carries REAL published data: three touring acts, their own
+//     websites, one publicly-advertised booking address, and the concert dates their sites announce. Deliberate
+//     — the Contacts and Calendar tabs only become legible with content that behaves like the real thing.
+//
+// The rule that keeps the second safe is ONLY WHAT THE SUBJECT PUBLISHES, and nothing inferred or invented:
+// business contact details a working musician publishes in order to be contacted, and dates they advertise in
+// order to be attended. Not a photo (someone else's copyright, usually the photographer's — this repo is
+// Apache-2.0 and publicly mirrored, so committing one redistributes it under terms we cannot grant), not a
+// number that turned out to be a VENUE's line rather than the artist's, and never a plausible-looking phone or
+// address invented to fill an empty field — a fabrication attached to a real named person is worse than a blank.
+//
+// Anyone extending the demo with real-world data should apply the same test, and prefer fiction when unsure.
 public static class DemoDataSeeder
 {
     public static async Task SeedIfConfiguredAsync(IServiceProvider services, IConfiguration configuration)
@@ -213,6 +230,11 @@ public static class DemoDataSeeder
             CreatedAt = now,
         });
         await dbContext.SaveChangesAsync();
+
+        // The Events department: an artist-booking tree with real contact cards and real concert schedules
+        // (#659). Its own class — a tab's worth of seed data belongs beside the tab it fills, and this file is
+        // on the standing size list.
+        await DemoArtistsSeeder.SeedAsync(services, dbContext, objectStorage, tenantId, repositoryId, adminId, now, finalizer);
 
         await SeedPersonalContactsAsync(services, dbContext, objectStorage, assembly, tenantId, adminId, now, finalizer);
 

@@ -209,6 +209,20 @@ jobs:
           - { name: "UiEndToEndTests · 3", project: UiEndToEndTests, filter: '--filter "Area=ui-3"' }
           - { name: "UiEndToEndTests · 4", project: UiEndToEndTests, filter: '--filter "Area!=ui-1&Area!=ui-2&Area!=ui-3"' }
     steps:
+      # The runner arrives ~93% full (measured: 4.6 GB free of 71.6 GB), and this tier then pulls a six-container
+      # fleet. That is not merely tight — OpenSearch sets `cluster.blocks.create_index` on the CLUSTER as soon as
+      # its node is above the high disk watermark, so every index creation answered 403 and search returned zero
+      # hits for a whole leg, presenting as ~278 unrelated test failures against a green, healthy cluster (#663).
+      # The fixtures now disable that watermark, because a throwaway cluster holding 111 KB has nothing to
+      # protect; this removes the underlying pressure too, since a nearly-full disk breaks image pulls and
+      # artifact uploads in less legible ways.
+      #
+      # Only toolchains nothing here uses. NOT /usr/share/dotnet — setup-dotnet installs into it.
+      - name: Free runner disk space
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+          df -h / | tail -1
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:

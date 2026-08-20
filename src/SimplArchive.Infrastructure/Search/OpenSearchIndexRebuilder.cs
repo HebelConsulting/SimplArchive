@@ -17,7 +17,10 @@ namespace SimplArchive.Infrastructure.Search;
 // document so the (tenant-filtered) content queries resolve.
 public sealed class OpenSearchIndexRebuilder
 {
-    private const string Alias = "documents";
+    /// <summary>The alias every read and every per-document write goes through.</summary>
+    public const string AliasName = "documents";
+
+    private const string Alias = AliasName;
 
     private readonly HttpClient _http;
     private readonly SimplArchiveDbContext _dbContext;
@@ -54,6 +57,27 @@ public sealed class OpenSearchIndexRebuilder
         var newIndex = $"documents-{Guid.NewGuid():N}";
         await CreateIndexAsync(newIndex, cancellationToken);
 
+        // Blue-green protects a search that already works. On a FIRST build there is none: the alias does not
+        // exist, so it is guarding an empty room, and holding the flip until the last document is extracted
+        // buys nothing while costing everything — until then `AliasReadyAsync` gates EVERY per-document write
+        // off, so nothing at all is searchable and the outbox just spins. That window scales with the corpus:
+        // ~1 s on a developer machine, over five minutes on a 2-core runner once the demo seed grew (#660).
+        //
+        // So on a first build, publish the alias immediately and let the index fill behind it. Search becomes
+        // progressively available instead of arriving all at once, which is strictly better than answering
+        // nothing — and the outbox worker starts draining into the SAME index this loop is filling, so the two
+        // converge on the same documents by id instead of one being thrown away (#661).
+        //
+        // A REBUILD of a live index keeps the old behaviour exactly: flip at the end, atomically, so a running
+        // search is never served a half-built index.
+        var firstBuild = !await AliasExistsAsync(cancellationToken);
+        if (firstBuild)
+        {
+            await SwapAliasAsync(newIndex, cancellationToken);
+            _logger.LogInformation(
+                "No search alias yet — published {Index} immediately; it will fill as the backfill runs.", newIndex);
+        }
+
         var documents = await _dbContext.Documents
             .IgnoreQueryFilters(["TenantFilter"]) // every tenant; soft-delete filter still excludes deleted docs
             .Select(d => new { d.Id, d.TenantId })
@@ -89,7 +113,11 @@ public sealed class OpenSearchIndexRebuilder
             using var _ = await _http.SendAsync(refresh, cancellationToken);
         }
 
-        await SwapAliasAsync(newIndex, cancellationToken);
+        if (!firstBuild)
+        {
+            await SwapAliasAsync(newIndex, cancellationToken);
+        }
+
         _logger.LogInformation("Search index rebuild complete: {Count} documents into {Index}.", count, newIndex);
         return count;
     }
@@ -154,7 +182,7 @@ public sealed class OpenSearchIndexRebuilder
             Content = new StringContent(mapping, Encoding.UTF8, "application/json"),
         };
         using var response = await _http.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await SearchIndexOperationException.ThrowIfFailedAsync(response, $"create index {index}", cancellationToken);
     }
 
     private async Task SwapAliasAsync(string newIndex, CancellationToken cancellationToken)
@@ -189,7 +217,8 @@ public sealed class OpenSearchIndexRebuilder
         })
         {
             using var response = await _http.SendAsync(post, cancellationToken);
-            response.EnsureSuccessStatusCode();
+            await SearchIndexOperationException.ThrowIfFailedAsync(
+                response, $"point the '{Alias}' alias at {newIndex}", cancellationToken);
         }
 
         foreach (var old in oldIndices.Where(i => i != newIndex))

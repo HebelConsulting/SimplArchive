@@ -160,4 +160,74 @@ public class ImapStandingMailboxTests
 
         await client.DisconnectAsync(true);
     }
+
+    // Where a delete happens decides what it MEANS (#658). Every mail client teaches the same two rules —
+    // delete outside Trash moves it to Trash, delete inside Trash is final — and EXPUNGE did the FINAL thing
+    // everywhere, so a mis-click in the inbox was unrecoverable from the client. The message was in the
+    // archive's recycle bin, which a mail client cannot see and most users do not know exists.
+    [Fact]
+    public async Task Deleting_outside_Trash_moves_to_Trash_and_deleting_in_Trash_is_final()
+    {
+        var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
+
+        var domain = $"trash-{Guid.NewGuid():N}".ToLowerInvariant()[..17] + ".test";
+        var address = $"tess@{domain}";
+        const string password = "trash-1234";
+        await _factory.SeedUserAsync(tenantId, address, password, "Tess Trash");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+            db.TenantMailDomains.Add(new TenantMailDomain
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                Domain = domain,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using var api = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(address, password));
+        var imapPassword = (await TestJson.Post(api, "/api/me/imap-access", new { })).GetProperty("password").GetString()!;
+
+        // Two messages sharing a subject, deliberately: a thread is a pile of "Re: the thing", and the
+        // sibling-name invariant refuses a second document of the same name in one folder. Without a free name
+        // the SECOND delete fails while the first succeeds — a mailbox that works once.
+        var subject = $"Same subject {Guid.NewGuid():N}"[..24];
+        await DeliverAsync(address, subject);
+        await DeliverAsync(address, subject);
+
+        using var client = new ImapClient();
+        await client.ConnectAsync("127.0.0.1", ImapPort, SecureSocketOptions.None);
+        await client.AuthenticateAsync(address, imapPassword);
+
+        var inbox = await client.GetFolderAsync("INBOX");
+        var trash = await client.GetFolderAsync("Trash");
+        await inbox.OpenAsync(FolderAccess.ReadWrite);
+        Assert.Equal(2, inbox.Count);
+
+        // Delete BOTH in the inbox — they move to Trash rather than disappearing.
+        await inbox.AddFlagsAsync(new[] { 0, 1 }, MessageFlags.Deleted, silent: true);
+        await inbox.ExpungeAsync();
+        Assert.Equal(0, inbox.Count);
+
+        await trash.OpenAsync(FolderAccess.ReadWrite);
+        Assert.Equal(2, trash.Count);
+
+        // Still in the archive, not in the recycle bin: a delete in the inbox is a move, and the user can
+        // fetch it back from the client itself.
+        var bin = (await TestJson.Get(api, "/api/recycle-bin")).GetProperty("items").EnumerateArray().ToList();
+        Assert.DoesNotContain(bin, i => i.GetProperty("name").GetString()!.StartsWith(subject, StringComparison.Ordinal));
+
+        // …and now the SAME action in Trash is the final one.
+        await trash.AddFlagsAsync(new[] { 0 }, MessageFlags.Deleted, silent: true);
+        await trash.ExpungeAsync();
+        Assert.Equal(1, trash.Count);
+
+        var binAfter = (await TestJson.Get(api, "/api/recycle-bin")).GetProperty("items").EnumerateArray().ToList();
+        Assert.Contains(binAfter, i => i.GetProperty("name").GetString()!.StartsWith(subject, StringComparison.Ordinal));
+
+        await client.DisconnectAsync(true);
+    }
 }
