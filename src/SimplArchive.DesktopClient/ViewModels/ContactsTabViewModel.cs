@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -20,6 +22,23 @@ public sealed partial class ContactRowViewModel : ObservableObject
     [ObservableProperty] private string _organization = "";
     [ObservableProperty] private string _email = "";
     [ObservableProperty] private string _phone = "";
+
+    /// <summary>The card's own picture once fetched, or null while it loads and when there is none.</summary>
+    [ObservableProperty] private Bitmap? _photo;
+
+    /// <summary>The letters drawn when there is no picture — shared with the web client so both agree.</summary>
+    public string Initials => ContactInitials.From(FullName);
+
+    /// <summary>
+    /// Whether this contact HAS a picture, which is what the row asks before spending a request.
+    /// </summary>
+    /// <remarks>
+    /// Answered by the rel the listing advertised, not by trying: a missing <c>photo</c> rel means the card
+    /// carries no picture (ADR 0543), so the initials are the answer rather than a fallback from a 404.
+    /// </remarks>
+    public bool HasPhoto => Links.ContainsKey("photo");
+
+    partial void OnFullNameChanged(string value) => OnPropertyChanged(nameof(Initials));
 
     /// <summary>The row's own advertised addresses — the pane acts from these, never from a composed URL.</summary>
     public required IReadOnlyDictionary<string, string> Links { get; init; }
@@ -93,11 +112,18 @@ public sealed partial class ContactsTabViewModel : ObservableObject
     /// </remarks>
     public bool CanCreate => CreateTargets().Count > 0;
 
-    /// <summary>The checked addressbooks the caller may create in, in the order the tab lists them.</summary>
+    /// <summary>
+    /// The checked addressbooks the caller may create in, in the order the tab lists them.
+    /// </summary>
+    /// <remarks>
+    /// Gated on <c>CanCreateEntries</c>, NOT on the presence of the <c>contacts</c> rel: that rel now serves
+    /// the LISTING too, so it is advertised to any reader, and gating on it would light New up for someone
+    /// who cannot create and fail with a 403 on click (ADR 0543).
+    /// </remarks>
     public IReadOnlyList<CreateTarget> CreateTargets() =>
     [
         .. Collections
-            .Where(c => c.IsChecked)
+            .Where(c => c.IsChecked && c.Collection.CanCreateEntries)
             .Select(c => (c.DisplayName, Href: c.Collection.HrefOrNull("contacts")))
             .Where(c => c.Href is not null)
             .Select(c => new CreateTarget(c.DisplayName, c.Href!)),
@@ -312,10 +338,18 @@ public sealed partial class ContactsTabViewModel : ObservableObject
         var rows = new List<ContactRowViewModel>();
         foreach (var collection in Collections.Where(c => c.IsChecked))
         {
-            List<Node> children;
+            // The collection's OWN rel, followed with GET — the children listing carries a name and nothing
+            // else, which is why Organization, Email and Phone were empty strings and the detail pane beside
+            // them was blank by construction (#660).
+            if (collection.Collection.HrefOrNull("contacts") is not { } entriesHref)
+            {
+                continue; // a rel the server did not advertise means "not available here" (ADR 0543)
+            }
+
+            IReadOnlyList<DavEntry> entries;
             try
             {
-                children = await _api.Documents.GetChildrenAsync(collection.Collection.Href("children"));
+                entries = await _api.DavCollections.ListEntriesAsync(entriesHref);
             }
             catch (Exception e)
             {
@@ -324,15 +358,18 @@ public sealed partial class ContactsTabViewModel : ObservableObject
                 continue;
             }
 
-            foreach (var child in children.Where(c => c.HasVersions))
+            foreach (var entry in entries)
             {
                 rows.Add(new ContactRowViewModel
                 {
-                    Id = child.Id,
+                    Id = entry.Id,
                     CollectionColor = collection.Color ?? "#8a8a8a",
                     CollectionName = collection.DisplayName,
-                    FullName = child.Name,
-                    Links = child.Links ?? new Dictionary<string, string>(),
+                    FullName = entry.FullName is { Length: > 0 } full ? full : entry.Name,
+                    Organization = entry.Organization ?? string.Empty,
+                    Email = entry.Email ?? string.Empty,
+                    Phone = entry.Phone ?? string.Empty,
+                    Links = entry.Links,
                 });
             }
         }
@@ -348,6 +385,43 @@ public sealed partial class ContactsTabViewModel : ObservableObject
         OnPropertyChanged(nameof(VisibleContacts));
         OnPropertyChanged(nameof(CanCreate));
         OnPropertyChanged(nameof(EmptyMessage));
+
+        // The list is already on screen with its initials by now; faces arrive as they load. Deliberately NOT
+        // awaited before showing the rows — a tab that waits for every picture before drawing anything is a
+        // blank pane for as long as the slowest image takes.
+        _ = LoadPhotosAsync(rows);
+    }
+
+    /// <summary>
+    /// Fetches the pictures for the rows that HAVE one, filling each in as it arrives.
+    /// </summary>
+    /// <remarks>
+    /// Only for rows whose listing advertised a <c>photo</c> rel, so a book of contacts without pictures costs
+    /// no requests at all — the listing already answered the question, and asking again per row is what
+    /// ADR 0557 exists to stop. A failure leaves the initials in place: a face that will not load is a contact
+    /// with initials, not an error worth interrupting anyone for.
+    /// </remarks>
+    private async Task LoadPhotosAsync(IEnumerable<ContactRowViewModel> rows)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        foreach (var row in rows.Where(r => r.HasPhoto))
+        {
+            try
+            {
+                var bytes = await _api.Core.Http.GetByteArrayAsync(row.Links["photo"]);
+                using var stream = new MemoryStream(bytes);
+                row.Photo = new Bitmap(stream);
+            }
+            catch (Exception)
+            {
+                // Left as initials. Not reported: the row is complete and correct without a picture, and one
+                // failed avatar must not put an error banner in front of somebody reading an addressbook.
+            }
+        }
     }
 
     /// <summary>Re-reads the list when a collection is checked or unchecked.</summary>
@@ -372,7 +446,7 @@ public sealed partial class ContactsTabViewModel : ObservableObject
             Collections.Add(new ContactCollectionViewModel
             {
                 Collection = new DavCollection(
-                    Guid.NewGuid(), name, name.Split('/')[^1].Trim(), "addressbook", colour, true, personal,
+                    Guid.NewGuid(), name, name.Split('/')[^1].Trim(), "addressbook", colour, true, personal, false,
                     new Dictionary<string, string>()),
                 Color = colour,
                 IsChecked = true,

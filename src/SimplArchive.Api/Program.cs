@@ -163,6 +163,11 @@ builder.Services.AddScoped<SimplArchive.Api.Lmtp.LmtpDelivery>();
 // The lossless vCard merge behind the contact editor (#564, ported from SimplCalCon's ADR 0082).
 builder.Services.AddSingleton<SimplArchive.Api.Documents.IContactCardComposer, SimplArchive.Api.Documents.ContactCardComposer>();
 builder.Services.AddSingleton<SimplArchive.Api.Documents.IAppointmentComposer, SimplArchive.Api.Documents.AppointmentComposer>();
+
+// Registered HERE rather than in Infrastructure's AddInfrastructure: the renderer reads through the two
+// composers above, which live in this layer, and Infrastructure may not depend on Api (ArchitectureTests). The
+// rendition service asks for the abstraction; this is the only place that can answer it.
+builder.Services.AddSingleton<SimplArchive.Application.Abstractions.IStructuredItemRenderer, SimplArchive.Api.Documents.StructuredItemRenderer>();
 builder.Services.AddSingleton<SimplArchive.Api.Lmtp.LmtpServer>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SimplArchive.Api.Lmtp.LmtpServer>());
 

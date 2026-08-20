@@ -494,9 +494,9 @@
         }
     }
 
-    private static string PrincipalInitials(string name) => string.IsNullOrWhiteSpace(name)
-        ? "?"
-        : string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
+    // One implementation for every avatar in both clients (CLAUDE.md: converge at the second occurrence, not
+    // the fourth). There were five copies of this before ContactInitials existed.
+    private static string PrincipalInitials(string name) => ContactInitials.From(name);
 
     // Admin password reset (ADR "User password management") — generates a random password shown once.
     private async Task ResetPrincipalPasswordAsync()

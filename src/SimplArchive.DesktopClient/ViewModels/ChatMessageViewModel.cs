@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
 using Avalonia.Media.Imaging;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -138,10 +139,9 @@ public sealed class UserCardViewModel
     // Decoded once on demand; Avalonia's Image binds a Bitmap, not raw bytes.
     public Bitmap? PhotoImage => Photo is { } bytes ? Decode(bytes) : null;
 
-    // Initials stand in when a colleague has no photo, the same fallback the web card uses.
-    public string Initials =>
-        string.Concat(DisplayName.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Take(2).Select(part => part[0])).ToUpperInvariant();
+    // Initials stand in when a colleague has no photo, the same fallback the web card uses — now literally
+    // the same, rather than a fifth copy that agreed by coincidence.
+    public string Initials => ContactInitials.From(DisplayName);
 
     private static Bitmap Decode(byte[] bytes)
     {

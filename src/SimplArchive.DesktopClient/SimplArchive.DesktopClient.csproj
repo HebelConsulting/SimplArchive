@@ -59,6 +59,7 @@
     <ProjectReference Include="..\SimplArchive.Localization\SimplArchive.Localization.csproj" />
     <!-- The design tokens (ADR 0578): the shipped palette for the icon art, and the loader that
          applies a custom theme at startup. -->
+    <ProjectReference Include="..\SimplArchive.Presentation\SimplArchive.Presentation.csproj" />
     <ProjectReference Include="..\SimplArchive.Theming\SimplArchive.Theming.csproj" />
   </ItemGroup>
 

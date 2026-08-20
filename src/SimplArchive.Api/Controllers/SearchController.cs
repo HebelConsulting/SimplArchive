@@ -417,7 +417,7 @@ public partial class SearchController : ControllerBase
     private static FieldFilterKind MapKind(FieldDataType dataType) => dataType switch
     {
         FieldDataType.Number => FieldFilterKind.Number,
-        FieldDataType.Date => FieldFilterKind.Date,
+        FieldDataType.Date or FieldDataType.DateTime => FieldFilterKind.Date,
         FieldDataType.Boolean => FieldFilterKind.Boolean,
         FieldDataType.SingleSelect or FieldDataType.MultiSelect => FieldFilterKind.Select,
         _ => FieldFilterKind.Text,

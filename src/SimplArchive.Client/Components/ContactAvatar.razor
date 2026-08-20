@@ -1,0 +1,76 @@
+@inject HttpClient Http
+
+@* A contact's face, or its initials when it has none (#658 follow-on).
+
+   The picture is fetched with the AUTHENTICATED client and rendered as a data URL, never as a bare <img src>:
+   the token lives on the HttpClient's handler, not in the browser's own request, so a raw src would send no
+   Authorization header and get a 401 — a failure that shows up as a broken-image glyph rather than as an error.
+
+   Initials show while the picture loads and stay if it fails, so this never renders as an empty hole. *@
+
+<span class="wb-avatar @(Small ? "wb-avatar-sm" : "")" title="@Name" aria-label="@Name">
+    @if (_data is { Length: > 0 } data)
+    {
+        <img src="@data" alt="@Name" />
+    }
+    else
+    {
+        @ContactInitials.From(Name)
+    }
+</span>
+
+@code {
+    /// <summary>
+    /// The picture's advertised address, or null when the contact has none.
+    /// </summary>
+    /// <remarks>
+    /// A missing rel means "this contact has no picture" (ADR 0543), so a null here is the normal case and not
+    /// an error — it is what makes the initials the answer rather than a fallback from a failed request.
+    /// </remarks>
+    [Parameter] public string? PhotoHref { get; set; }
+
+    [Parameter, EditorRequired] public string? Name { get; set; }
+
+    /// <summary>Row-sized rather than pane-sized.</summary>
+    [Parameter] public bool Small { get; set; }
+
+    private string? _data;
+
+    /// <summary>The href the current bytes belong to, so a re-render does not re-fetch the same picture.</summary>
+    private string? _loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.Equals(_loaded, PhotoHref, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        // Clear FIRST: the component is reused as the selection moves, and keeping the previous contact's face
+        // while the next one loads shows one person's picture under another person's name (ADR 0559's family).
+        _loaded = PhotoHref;
+        _data = null;
+
+        if (PhotoHref is not { Length: > 0 } href)
+        {
+            return;
+        }
+
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync(href);
+
+            // Guard against a slower earlier fetch landing after a later one: the selection may have moved on
+            // while this was in flight, and the answer to a question nobody is asking any more must be dropped.
+            if (string.Equals(_loaded, href, StringComparison.Ordinal))
+            {
+                _data = $"data:image;base64,{Convert.ToBase64String(bytes)}";
+            }
+        }
+        catch (HttpRequestException)
+        {
+            // A picture that will not load is a contact with initials. Not a snackbar: the row is still correct
+            // and complete without it, and one failed avatar must not put an error in front of the user.
+        }
+    }
+}

@@ -128,14 +128,26 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             new FieldSpec("Email", FieldDataType.Text, IsRequired: false),
             new FieldSpec("Phone", FieldDataType.Text, IsRequired: false),
             new FieldSpec("Organization", FieldDataType.Text, IsRequired: false),
+            // The picture's media type when the card carries one inline, absent otherwise. Indexed for the same
+            // reason Repeats is on the Appointment mask: a listing that opened one .vcf per row merely to learn
+            // whether there IS a photo would pay the per-row cost ADR 0557 forbids, and the answer is what
+            // decides between drawing a face and drawing initials.
+            new FieldSpec("Photo", FieldDataType.Text, IsRequired: false),
         ], cancellationToken);
 
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Appointment, "Appointment",
         [
             new FieldSpec("Event UID", FieldDataType.Text, IsRequired: true),
-            new FieldSpec("Start", FieldDataType.Date, IsRequired: false),
-            new FieldSpec("End", FieldDataType.Date, IsRequired: false),
+            // A concert at 19:00 and one at 21:00 are different appointments; a date cannot say so (#660).
+            new FieldSpec("Start", FieldDataType.DateTime, IsRequired: false),
+            new FieldSpec("End", FieldDataType.DateTime, IsRequired: false),
             new FieldSpec("Location", FieldDataType.Text, IsRequired: false),
+            // The RRULE as stored, verbatim and opaque. Indexed rather than parsed at list time for the same
+            // reason Start and Location are: a listing that opened each .ics to answer "does this repeat" would
+            // read one blob per row, which is the per-row cost ADR 0557 exists to forbid. Optional, so the heal
+            // adds it to tenants seeded before it existed; a document filed before it simply has no value, which
+            // reads as "does not repeat" — right for every entry that does not, and corrected on its next write.
+            new FieldSpec("Repeats", FieldDataType.Text, IsRequired: false),
         ], cancellationToken);
 
         // AFTER the item, deliberately: MaskVersions has a unique (TenantId, Name) index, and this folder mask
@@ -215,14 +227,36 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             return; // a mask with no current version is a broken row this probe must not compound
         }
 
-        var existing = await _dbContext.FieldDefinitions.IgnoreQueryFilters(["TenantFilter"])
+        var defined = await _dbContext.FieldDefinitions.IgnoreQueryFilters(["TenantFilter"])
             .Where(f => f.TenantId == tenantId && f.MaskVersionId == currentVersion)
-            .Select(f => f.Name)
             .ToListAsync(cancellationToken);
+        var existing = defined.Select(f => f.Name).ToList();
+
+        // A field can also be present with the WRONG TYPE — `Start`/`End` on the Appointment mask were seeded
+        // as Date and became DateTime (#660). This probe used to ask only "is the field there?", so a tenant
+        // seeded before the change kept a date-only field forever while new tenants got the right one, and the
+        // two behaved differently with nothing reporting it.
+        //
+        // Corrected IN PLACE, on the current version, rather than by minting a new one: OWNER-DECIDED
+        // 2026-08-20, on the grounds that there is no user base yet to protect. That is a deliberate departure
+        // from mask-version immutability (ADR 0166) and it is safe only while that premise holds — widening
+        // Date → DateTime does not invalidate a stored value (every `yyyy-MM-dd` still parses), but a future
+        // NARROWING would, and would need a real version.
+        foreach (var field in defined)
+        {
+            if (fields.FirstOrDefault(f => string.Equals(f.Name, field.Name, StringComparison.OrdinalIgnoreCase)) is { } spec
+                && field.DataType != spec.DataType)
+            {
+                field.DataType = spec.DataType;
+            }
+        }
 
         var missing = fields.Where(f => !existing.Contains(f.Name, StringComparer.OrdinalIgnoreCase)).ToList();
         if (missing.Count == 0)
         {
+            // …but a type correction above may still be pending, and returning without saving is how a heal
+            // silently does nothing on precisely the tenants that need it.
+            await _dbContext.SaveChangesAsync(cancellationToken);
             return;
         }
 

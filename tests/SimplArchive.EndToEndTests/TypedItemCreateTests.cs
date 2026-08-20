@@ -209,11 +209,20 @@ public class TypedItemCreateTests
         var visible = (await TestJson.Get(reader, "/api/dav-collections")).GetProperty("collections").EnumerateArray()
             .Where(c => c.GetProperty("id").GetGuid() == addressbookId).ToList();
 
-        // It IS listed — otherwise the assertion below passes for the wrong reason, which is how a rel guard
+        // It IS listed — otherwise the assertions below pass for the wrong reason, which is how a rel guard
         // ends up reporting green while checking nothing.
         var listed = Assert.Single(visible);
-        Assert.False(HasRel(listed, "contacts"),
-            "A caller who cannot create sub-items was offered `contacts`, so New Contact would fail on a button that looked available.");
+
+        // The rel IS offered, and that is correct: `contacts` now serves the LISTING as well as the create, and
+        // withholding it from a reader would leave them an addressbook with no contacts in it. One address, two
+        // methods, different rights — and a rel cannot say "read yes, write no".
+        Assert.True(HasRel(listed, "contacts"),
+            "A reader was not offered `contacts`, so their addressbook would render empty.");
+
+        // So what gates New is the CAPABILITY, not the rel's presence. This is the assertion that matters: it
+        // is what stops the button lighting up for someone whose POST would be refused.
+        Assert.False(listed.GetProperty("canCreateEntries").GetBoolean(),
+            "A caller who cannot create sub-items reported canCreateEntries, so New Contact would fail on a button that looked available.");
     }
 
     [Fact]

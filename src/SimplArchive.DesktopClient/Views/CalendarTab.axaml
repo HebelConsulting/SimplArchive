@@ -31,6 +31,31 @@
                 ToolTip.Tip="{loc:Tr CalendarEdit}" AutomationProperties.Name="{loc:Tr CalendarEdit}">
           <i:Icon Value="mdi-pencil-outline" FontSize="18" />
         </Button>
+
+        <!-- Month ⇄ List. Two questions, not two skins of one: the list answers "what is coming up" and keeps
+             the filter, the month answers "what does this month look like". The active one wears the accent,
+             which is the group's vocabulary for STATE (ADR 0581). -->
+        <Border Width="1" Background="{DynamicResource WbBorder}" Margin="4,2" />
+        <Button Command="{Binding ShowMonthCommand}" ToolTip.Tip="{loc:Tr CalendarViewMonth}"
+                AutomationProperties.Name="{loc:Tr CalendarViewMonth}"
+                Classes.on="{Binding IsMonthView}">
+          <Button.Styles>
+            <Style Selector="Button.on i|Icon">
+              <Setter Property="Foreground" Value="{DynamicResource SystemAccentColorBrush}" />
+            </Style>
+          </Button.Styles>
+          <i:Icon Value="mdi-calendar-month" FontSize="18" />
+        </Button>
+        <Button Command="{Binding ShowListCommand}" ToolTip.Tip="{loc:Tr CalendarViewList}"
+                AutomationProperties.Name="{loc:Tr CalendarViewList}"
+                Classes.on="{Binding !IsMonthView}">
+          <Button.Styles>
+            <Style Selector="Button.on i|Icon">
+              <Setter Property="Foreground" Value="{DynamicResource SystemAccentColorBrush}" />
+            </Style>
+          </Button.Styles>
+          <i:Icon Value="mdi-format-list-bulleted" FontSize="18" />
+        </Button>
       </StackPanel>
     </Border>
 
@@ -60,10 +85,99 @@
       <DockPanel Grid.Column="2" LastChildFill="True">
         <TextBox DockPanel.Dock="Top" Text="{Binding Filter}" Watermark="{loc:Tr FilterHint}" Margin="0,0,0,6"
                  v:SearchField.Clearable="True" />
+
+        <!-- The day handed over by a cell's overflow. It says which day, and it is clearable: a filter the
+             user cannot see is one they conclude is a bug (ADR 0550). -->
+        <Border DockPanel.Dock="Top" IsVisible="{Binding DayFilter, Converter={x:Static ObjectConverters.IsNotNull}}"
+                Background="{DynamicResource WbChrome}" CornerRadius="3" Padding="6,2" Margin="0,0,0,6"
+                HorizontalAlignment="Left">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{Binding DayFilterLabel}" VerticalAlignment="Center" />
+            <Button Content="✕" Command="{Binding ClearDayFilterCommand}" Padding="4,0"
+                    Background="Transparent" BorderThickness="0" />
+          </StackPanel>
+        </Border>
+
+        <!-- The month grid. Six week rows always, so paging months does not change the grid's height under
+             the cursor and move the cell the user was aiming at. -->
+        <Grid>
+        <DockPanel IsVisible="{Binding IsMonthView}" LastChildFill="True">
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
+            <Button Content="◀" Command="{Binding PreviousMonthCommand}" ToolTip.Tip="{loc:Tr CalendarPrevMonth}" />
+            <TextBlock Text="{Binding MonthName}" FontWeight="SemiBold" VerticalAlignment="Center"
+                       MinWidth="140" TextAlignment="Center" />
+            <Button Content="▶" Command="{Binding NextMonthCommand}" ToolTip.Tip="{loc:Tr CalendarNextMonth}" />
+            <Button Content="{loc:Tr CalendarToday}" Command="{Binding GoTodayCommand}" Margin="8,0,0,0" />
+          </StackPanel>
+
+          <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding WeekdayHeadings}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate><UniformGrid Columns="7" /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Text="{Binding}" FontSize="11" Foreground="{DynamicResource WbMuted}" Margin="4,2" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <ItemsControl ItemsSource="{Binding MonthDays}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate><UniformGrid Columns="7" Rows="6" /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:CalendarDayViewModel">
+                <!-- Days either side of the month are shown so the weeks stay whole, but they are context:
+                     dimmed, never hidden, because a ragged grid reads as broken. A style class rather than a
+                     converter — one fewer resource to exist, and a missing StaticResource fails at RUNTIME on
+                     a screen no test opens. -->
+                <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,1,1" Padding="2"
+                        Classes.outside="{Binding !InMonth}">
+                  <Border.Styles>
+                    <Style Selector="Border.outside"><Setter Property="Opacity" Value="0.45" /></Style>
+                  </Border.Styles>
+                  <StackPanel Spacing="1">
+                    <TextBlock Text="{Binding DayNumber}" FontSize="11"
+                               Foreground="{DynamicResource WbMuted}" />
+                    <ItemsControl ItemsSource="{Binding Entries}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:CalendarCellEntryViewModel">
+                          <Grid ColumnDefinitions="10,Auto,*,Auto" ToolTip.Tip="{Binding Title}">
+                            <Border Grid.Column="0" Width="7" Height="7" CornerRadius="4"
+                                    VerticalAlignment="Center" Background="{Binding CollectionColor}" />
+                            <!-- The START, not the range: see StartTimeShort — the range leaves the title no room.
+                                 On a day the entry only runs THROUGH, LeadText is the continuation mark instead. -->
+                            <TextBlock Grid.Column="1" Text="{Binding LeadText}" FontSize="10"
+                                       Foreground="{DynamicResource WbMuted}" Margin="0,0,3,0" />
+                            <TextBlock Grid.Column="2" Text="{Binding Title}" FontSize="10"
+                                       TextTrimming="CharacterEllipsis" />
+                            <!-- The rule is never expanded, so this entry is drawn at its first occurrence and
+                                 nowhere else. Without the marker the grid silently claims the other weeks are
+                                 free. Muted and last: it qualifies the entry rather than identifying it. -->
+                            <TextBlock Grid.Column="3" Text="{Binding RepeatMark}" FontSize="9"
+                                       IsVisible="{Binding Recurring}" Margin="2,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource WbMuted}" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Content="{Binding MoreLabel}" IsVisible="{Binding HasHidden}"
+                            FontSize="10" Padding="2,0" Background="Transparent" BorderThickness="0"
+                            Command="{Binding $parent[ItemsControl].((vm:CalendarTabViewModel)DataContext).ShowDayCommand}"
+                            CommandParameter="{Binding}" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </DockPanel>
+
         <TextBlock DockPanel.Dock="Top" Text="{Binding EmptyMessage}"
                    Foreground="{DynamicResource WbMuted}" Margin="2,4,0,0" TextWrapping="Wrap"
                    IsVisible="{Binding !Appointments.Count}" />
         <ListBox ItemsSource="{Binding VisibleAppointments}" SelectedItem="{Binding Selected}"
+                 IsVisible="{Binding !IsMonthView}"
                  Background="Transparent" BorderThickness="0">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:AppointmentRowViewModel">
@@ -73,13 +187,20 @@
                 <!-- Time leads: a calendar row is read by WHEN before WHAT. -->
                 <TextBlock Grid.Column="1" Text="{Binding TimeRange}" FontFamily="monospace"
                            Foreground="{DynamicResource WbMuted}" />
-                <TextBlock Grid.Column="2" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                  <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                  <!-- Says the entry repeats. The rule is never expanded, so the row is its first occurrence. -->
+                  <TextBlock Text="{Binding RepeatMark}" IsVisible="{Binding Recurring}" FontSize="11"
+                             VerticalAlignment="Center" ToolTip.Tip="{loc:Tr CalendarRepeatsHint}"
+                             Foreground="{DynamicResource WbMuted}" />
+                </StackPanel>
                 <TextBlock Grid.Column="3" Text="{Binding Location}" TextTrimming="CharacterEllipsis"
                            Foreground="{DynamicResource WbMuted}" />
               </Grid>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
+        </Grid>
       </DockPanel>
 
       <GridSplitter Grid.Column="3" ResizeDirection="Columns" Background="{DynamicResource WbBorder}" />
@@ -89,13 +210,20 @@
         <StackPanel Spacing="8" Margin="8,0,0,0" IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
           <TextBlock Text="{Binding Selected.Title}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
           <TextBlock Text="{Binding Selected.CollectionName}" Foreground="{DynamicResource WbMuted}" />
-          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr CalendarWhen}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,4" />
             <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Selected.TimeRange}" TextWrapping="Wrap" Margin="0,0,0,4" />
             <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr CalendarStarts}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,4" />
             <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.StartsOn}" TextWrapping="Wrap" Margin="0,0,0,4" />
             <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr CalendarWhere}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,4" />
             <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Selected.Location}" TextWrapping="Wrap" Margin="0,0,0,4" />
+            <!-- The rule verbatim, where there is room for it: a mark answers "does this repeat" but not "how",
+                 which is the next thing a reader asks. Not prettified into prose — inventing wording for a rule
+                 we deliberately do not interpret would state more than we know. -->
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr CalendarRepeats}" Foreground="{DynamicResource WbMuted}"
+                       Margin="0,0,8,4" IsVisible="{Binding Selected.Recurring}" />
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Selected.Repeats}" TextWrapping="Wrap"
+                       Margin="0,0,0,4" IsVisible="{Binding Selected.Recurring}" FontFamily="monospace" />
           </Grid>
         </StackPanel>
       </ScrollViewer>

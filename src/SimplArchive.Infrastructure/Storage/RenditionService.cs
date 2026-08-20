@@ -27,6 +27,7 @@ public class RenditionService : IDocumentPreviewService
         HtmlToPdf,
         JsonPretty,
         XmlPretty,
+        StructuredItemToPdf,
     }
 
     // Raster formats browsers can't render natively, converted to PNG. Deliberately a small explicit set
@@ -71,6 +72,12 @@ public class RenditionService : IDocumentPreviewService
     private static readonly HashSet<string> XmlExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".xml" };
 
+    // Contact cards and appointments are rendered as a CARD, not shown as their own text. Both are text
+    // formats, so serving them raw would be the cheap answer and the wrong one: a vCard carrying a picture is
+    // mostly a base64 blob, so the "preview" would be screens of encoded bytes. See IStructuredItemRenderer.
+    private static readonly HashSet<string> StructuredItemExtensions =
+        new(StringComparer.OrdinalIgnoreCase) { ".vcf", ".ics" };
+
     private static readonly JsonSerializerOptions PrettyJsonOptions = new()
     {
         WriteIndented = true,
@@ -83,6 +90,7 @@ public class RenditionService : IDocumentPreviewService
     private readonly IEmailConverter _emailConverter;
     private readonly IMarkdownConverter _markdownConverter;
     private readonly IHtmlConverter _htmlConverter;
+    private readonly IStructuredItemRenderer _structuredItems;
     private readonly ILogger<RenditionService> _logger;
 
     public RenditionService(
@@ -91,6 +99,7 @@ public class RenditionService : IDocumentPreviewService
         IEmailConverter emailConverter,
         IMarkdownConverter markdownConverter,
         IHtmlConverter htmlConverter,
+        IStructuredItemRenderer structuredItems,
         ILogger<RenditionService> logger)
     {
         _objectStorageClient = objectStorageClient;
@@ -98,6 +107,7 @@ public class RenditionService : IDocumentPreviewService
         _emailConverter = emailConverter;
         _markdownConverter = markdownConverter;
         _htmlConverter = htmlConverter;
+        _structuredItems = structuredItems;
         _logger = logger;
     }
 
@@ -347,6 +357,7 @@ public class RenditionService : IDocumentPreviewService
             RenditionKind.HtmlToPdf => (await _htmlConverter.ConvertToPdfAsync(originalBytes, cancellationToken), "application/pdf"),
             RenditionKind.JsonPretty => (PrettyPrintJson(originalBytes), "application/json; charset=utf-8"),
             RenditionKind.XmlPretty => (PrettyPrintXml(originalBytes), "text/plain; charset=utf-8"),
+            RenditionKind.StructuredItemToPdf => (await StructuredItemPdfAsync(originalBytes, extension, cancellationToken), "application/pdf"),
             _ => throw new InvalidOperationException($"Unexpected rendition kind {kind}."),
         };
 
@@ -418,6 +429,11 @@ public class RenditionService : IDocumentPreviewService
             return RenditionKind.JsonPretty;
         }
 
+        if (StructuredItemExtensions.Contains(extension))
+        {
+            return RenditionKind.StructuredItemToPdf;
+        }
+
         return XmlExtensions.Contains(extension) ? RenditionKind.XmlPretty : RenditionKind.None;
     }
 
@@ -453,6 +469,19 @@ public class RenditionService : IDocumentPreviewService
         {
             return originalBytes;
         }
+    }
+
+    /// <summary>Renders a stored card/appointment to HTML, then through the same converter markdown uses.</summary>
+    /// <remarks>
+    /// Reusing IHtmlConverter rather than adding a sidecar: the document this produces is ordinary HTML, and a
+    /// second conversion path would be a second thing to deploy, monitor and keep in step for no gain.
+    /// </remarks>
+    private async Task<byte[]> StructuredItemPdfAsync(byte[] originalBytes, string extension, CancellationToken cancellationToken)
+    {
+        var html = _structuredItems.ToHtml(System.Text.Encoding.UTF8.GetString(originalBytes), extension)
+                   ?? throw new InvalidOperationException($"The {extension} item could not be read as a card.");
+
+        return await _htmlConverter.ConvertToPdfAsync(System.Text.Encoding.UTF8.GetBytes(html), cancellationToken);
     }
 
     // "<dir>/<guid>.preview.<ext>" — same path as the original, its extension replaced by the suffix.

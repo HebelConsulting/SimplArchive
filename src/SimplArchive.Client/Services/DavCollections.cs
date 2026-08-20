@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 
@@ -23,6 +24,16 @@ public sealed class DavCollection
     public string? Color { get; set; }
 
     public bool Writable { get; set; }
+
+    /// <summary>
+    /// Whether this caller may add an entry here — what New is gated on.
+    /// </summary>
+    /// <remarks>
+    /// Not the presence of the typed rel, which now serves the LISTING too and is therefore advertised to any
+    /// reader: gating on it would light New up for someone who cannot create and fail with a 403 on click.
+    /// Not <c>Writable</c> either, which reports the right to edit content and answers a different question.
+    /// </remarks>
+    public bool CanCreateEntries { get; set; }
 
     public bool IsPersonalDefault { get; set; }
 
@@ -76,9 +87,110 @@ public sealed class DavCollections
         return response?.Collections ?? [];
     }
 
+    /// <summary>
+    /// The entries filed in one collection, with their index fields — one request for a whole tab's worth of
+    /// rows.
+    /// </summary>
+    /// <remarks>
+    /// Followed from the collection's own typed rel (<c>contacts</c>/<c>appointments</c>), which serves both
+    /// the listing and the create. Before this the tabs built rows from the children listing, which carries a
+    /// name and nothing else — so When, Where, e-mail and phone were rendered from empty strings and the
+    /// detail pane beside them was blank by construction (#660).
+    /// </remarks>
+    public async Task<List<DavEntry>> ListEntriesAsync(string href, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.GetFromJsonAsync<EntriesResponse>(href, cancellationToken);
+        return response?.Appointments.Count > 0 ? response.Appointments : response?.Contacts ?? [];
+    }
+
     private sealed class ListResponse
     {
         [JsonPropertyName("collections")]
         public List<DavCollection> Collections { get; set; } = [];
     }
+
+    private sealed class EntriesResponse
+    {
+        [JsonPropertyName("appointments")]
+        public List<DavEntry> Appointments { get; set; } = [];
+
+        [JsonPropertyName("contacts")]
+        public List<DavEntry> Contacts { get; set; } = [];
+    }
+}
+
+/// <summary>
+/// One listed contact or appointment. One shape for both, because the two tabs differ in which fields they
+/// show rather than in how a row is fetched, addressed or selected.
+/// </summary>
+public sealed class DavEntry
+{
+    public Guid Id { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    // Appointment
+    /// <summary>ISO-8601 with an offset for a timed entry, <c>yyyy-MM-dd</c> for an all-day one.</summary>
+    public string? Start { get; set; }
+
+    public string? End { get; set; }
+
+    public string? Location { get; set; }
+
+    /// <summary>A day rather than a moment — <see cref="Start"/> carries no time (ADR 0647).</summary>
+    public bool AllDay { get; set; }
+
+    /// <summary>The stored <c>RRULE</c> as text, or null when the entry does not repeat.</summary>
+    public string? Repeats { get; set; }
+
+    /// <summary>Whether this entry repeats — all a client needs, since the rule is never expanded here.</summary>
+    public bool Recurring => !string.IsNullOrEmpty(Repeats);
+
+    // Contact
+    public string? FullName { get; set; }
+
+    public string? Email { get; set; }
+
+    public string? Phone { get; set; }
+
+    public string? Organization { get; set; }
+
+    public List<DavCollection.LinkDto> Links { get; set; } = [];
+
+    public string? Href(string rel) =>
+        Links.FirstOrDefault(l => string.Equals(l.Rel, rel, StringComparison.Ordinal))?.Href;
+
+    /// <summary>
+    /// The start as an instant, or null when it is a day or absent — what a list orders by and a grid places.
+    /// </summary>
+    public DateTimeOffset? StartsAt =>
+        !AllDay && DateTimeOffset.TryParse(Start, CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)
+            ? at
+            : null;
+
+    /// <summary>The end as an instant, or null for an all-day or undated entry.</summary>
+    public DateTimeOffset? EndsAt =>
+        !AllDay && DateTimeOffset.TryParse(End, CultureInfo.InvariantCulture, DateTimeStyles.None, out var at)
+            ? at
+            : null;
+
+    /// <summary>The day this entry falls on, for both shapes — the key a month grid buckets by.</summary>
+    public DateOnly? Day =>
+        DateOnly.TryParse(Start, CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)
+            ? day
+            : StartsAt is { } at ? DateOnly.FromDateTime(at.LocalDateTime) : null;
+
+    /// <summary>
+    /// The day named by END, for both shapes — the raw <c>DTEND</c>, which iCalendar defines as EXCLUSIVE.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately NOT adjusted here. The classifier stamps <c>DTEND</c> verbatim, so this is the day the entry
+    /// stops rather than its last day, and turning one into the other is the grid's job (<c>CoversDay</c>) where
+    /// the all-day and timed shapes are decided together. Adjusting it here would leave a property whose name
+    /// says "end" and whose value is a day earlier than the stored one.
+    /// </remarks>
+    public DateOnly? EndDay =>
+        DateOnly.TryParse(End, CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)
+            ? day
+            : EndsAt is { } at ? DateOnly.FromDateTime(at.LocalDateTime) : null;
 }

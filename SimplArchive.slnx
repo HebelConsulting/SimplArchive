@@ -8,6 +8,7 @@
     <Project Path="src/SimplArchive.Domain/SimplArchive.Domain.csproj" />
     <Project Path="src/SimplArchive.Infrastructure/SimplArchive.Infrastructure.csproj" />
     <Project Path="src/SimplArchive.Localization/SimplArchive.Localization.csproj" />
+    <Project Path="src/SimplArchive.Presentation/SimplArchive.Presentation.csproj" />
     <Project Path="src/SimplArchive.Theming/SimplArchive.Theming.csproj" />
     <Project Path="src/SimplArchive.Worker/SimplArchive.Worker.csproj" />
   </Folder>

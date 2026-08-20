@@ -108,9 +108,54 @@ public class DocumentContactCardController : ControllerBase
         public bool CanEdit { get; set; }
     }
 
+    /// <summary>The address of a contact's picture. One place, so the rel and the route cannot drift.</summary>
+    public static string PhotoHref(Guid documentId) => $"/api/documents/{documentId}/contact-card/photo";
+
     [HttpGet]
     public async Task<IActionResult> Get(Guid documentId, CancellationToken cancellationToken) =>
         await ReadAsync(documentId, body: true, cancellationToken);
+
+    /// <summary>
+    /// The contact's picture, decoded from the card itself.
+    /// </summary>
+    /// <remarks>
+    /// Inline photos only — an external <c>PHOTO</c> URL is never followed (see <see cref="IContactCardComposer"/>),
+    /// and a card carrying one answers 404 exactly as a card with no photo does. The content type is SNIFFED
+    /// from the bytes rather than taken from the card, so a vCard cannot choose what this origin serves.
+    /// </remarks>
+    [HttpGet("photo")]
+    public async Task<IActionResult> Photo(Guid documentId, CancellationToken cancellationToken) =>
+        await ReadPhotoAsync(documentId, body: true, cancellationToken);
+
+    /// <summary>Same headers, no body — ASP.NET Core does not strip a GET body for HEAD.</summary>
+    [HttpHead("photo")]
+    public async Task<IActionResult> HeadPhoto(Guid documentId, CancellationToken cancellationToken) =>
+        await ReadPhotoAsync(documentId, body: false, cancellationToken);
+
+    private async Task<IActionResult> ReadPhotoAsync(Guid documentId, bool body, CancellationToken cancellationToken)
+    {
+        // The same right the card itself needs: a picture is part of the card, not a less sensitive thing that
+        // happens to live beside it.
+        if (!(await _access.GetCallerRightsAsync(documentId, cancellationToken)).CanReadContent)
+        {
+            return Forbid();
+        }
+
+        if (await ResolveCardAsync(documentId, cancellationToken) is not var (_, _, blob)
+            || _composer.ReadPhoto(blob) is not { } photo)
+        {
+            return NotFound();
+        }
+
+        if (!body)
+        {
+            Response.ContentType = photo.ContentType;
+            Response.ContentLength = photo.Bytes.Length;
+            return new EmptyResult();
+        }
+
+        return File(photo.Bytes, photo.ContentType);
+    }
 
     /// <summary>Same headers, no body — ASP.NET Core does not strip a GET body for HEAD.</summary>
     [HttpHead]
@@ -141,6 +186,14 @@ public class DocumentContactCardController : ControllerBase
         // the structured item already holds the address and does not spend a request to learn it (ADR 0557).
         // Withheld from a caller who cannot read content, which the Forbid above already settled.
         resource.Links.Add(new Link("source", DocumentItemSourceController.SourceHref(documentId, isContact: true), "GET"));
+
+        // Advertised ONLY when the card actually carries an inline picture. A missing rel means "not available
+        // to you, here, now" (ADR 0543), which here reads as "this contact has no photo" — so the client draws
+        // its initials placeholder instead of requesting an image and handling a 404 as if it were a failure.
+        if (_composer.ReadPhoto(blob) is not null)
+        {
+            resource.Links.Add(new Link("photo", PhotoHref(documentId), "GET"));
+        }
 
         // The DOCUMENT's token: a version is append-only and carries none, and a concurrent save moves the
         // document's, which is exactly the collision this needs to detect.

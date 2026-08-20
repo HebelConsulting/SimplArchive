@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Documents;
 using SimplArchive.Api.Hypermedia;
+using SimplArchive.Api.Pagination;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Masks;
@@ -119,6 +120,237 @@ public class TypedItemsController : ControllerBase
         var name = FirstNonEmpty(request.Summary) ?? "New appointment";
 
         return await CreateAsync(folder, name, blob, ".ics", "text/calendar", cancellationToken);
+    }
+
+    /// <summary>One listed contact — the card's index fields, so a row renders without a request of its own.</summary>
+    public class ContactEntryResource : HypermediaResource
+    {
+        public Guid Id { get; set; }
+
+        /// <summary>The filed document name, which is what the tree and the tab title show.</summary>
+        public string Name { get; set; } = string.Empty;
+
+        public string? FullName { get; set; }
+
+        public string? Email { get; set; }
+
+        public string? Phone { get; set; }
+
+        public string? Organization { get; set; }
+
+        /// <summary>
+        /// True when the card carries an inline picture — so a row draws a face rather than initials, without
+        /// asking. Its address arrives as the <c>photo</c> rel on this entry, present only when this is true.
+        /// </summary>
+        public bool HasPhoto { get; set; }
+    }
+
+    /// <summary>One listed appointment.</summary>
+    public class AppointmentEntryResource : HypermediaResource
+    {
+        public Guid Id { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>
+        /// The indexed start, verbatim: ISO-8601 with an offset for a timed entry, a plain <c>yyyy-MM-dd</c>
+        /// for an all-day one.
+        /// </summary>
+        /// <remarks>
+        /// A string rather than a <c>DateTimeOffset</c>, because the two shapes are genuinely different things
+        /// and a single typed field would have to invent a time for the all-day case — the exact inference
+        /// ADR 0647 refuses. <see cref="AllDay"/> says which shape this is, so a client formats rather than
+        /// guesses.
+        /// </remarks>
+        public string? Start { get; set; }
+
+        public string? End { get; set; }
+
+        public string? Location { get; set; }
+
+        /// <summary>True when the entry is a day rather than a moment — <see cref="Start"/> carries no time.</summary>
+        public bool AllDay { get; set; }
+
+        /// <summary>
+        /// The stored <c>RRULE</c> as text (<c>FREQ=WEEKLY;BYDAY=TU</c>), or null when the entry does not repeat.
+        /// </summary>
+        /// <remarks>
+        /// <b>Opaque, and never expanded.</b> The server does not compute a recurrence set (the epic's decision),
+        /// so <see cref="Start"/> is the FIRST occurrence's and nothing else. That makes this field the only
+        /// thing standing between a grid and a quiet lie: an entry drawn once, in a month it actually occupies
+        /// four times, looks exactly like an entry that happens once. A client shows a marker; it does not try
+        /// to read the rule.
+        /// </remarks>
+        public string? Repeats { get; set; }
+    }
+
+    public class ContactListResource : HypermediaResource
+    {
+        public List<ContactEntryResource> Contacts { get; set; } = [];
+    }
+
+    public class AppointmentListResource : HypermediaResource
+    {
+        public List<AppointmentEntryResource> Appointments { get; set; } = [];
+    }
+
+    /// <summary>
+    /// The contacts filed in this addressbook, with their index fields.
+    /// </summary>
+    /// <remarks>
+    /// The same rel as the create, on the same address, distinguished by method — so a client that can read the
+    /// collection can list it, while the POST keeps its own right. Whether New is offered rides on the
+    /// collection's <c>CanCreateEntries</c>, since one rel cannot say "read yes, write no".
+    /// </remarks>
+    [HttpGet("contacts")]
+    public Task<IActionResult> ListContacts(
+        Guid documentId, [FromQuery] string? cursor, [FromQuery] int? limit, CancellationToken cancellationToken) =>
+        ListAsync(
+            documentId, WellKnownMaskIds.Addressbook, cursor, limit, cancellationToken,
+            (id, name, field) => new ContactEntryResource
+            {
+                Id = id,
+                Name = name,
+                FullName = field("Full name"),
+                Email = field("Email"),
+                Phone = field("Phone"),
+                Organization = field("Organization"),
+                HasPhoto = field("Photo") is not null,
+            },
+            (entries, links) => new ContactListResource { Contacts = entries, Links = links });
+
+    [HttpHead("contacts")]
+    public async Task<IActionResult> HeadContacts(Guid documentId, CancellationToken cancellationToken) =>
+        await RequireFolderAsync(documentId, WellKnownMaskIds.Addressbook, cancellationToken) is null
+            ? NotFound()
+            : await CanListAsync(documentId, cancellationToken) ? NoContent() : Forbid();
+
+    /// <summary>The appointments filed in this calendar, with their index fields. See <see cref="ListContacts"/>.</summary>
+    [HttpGet("appointments")]
+    public Task<IActionResult> ListAppointments(
+        Guid documentId, [FromQuery] string? cursor, [FromQuery] int? limit, CancellationToken cancellationToken) =>
+        ListAsync(
+            documentId, WellKnownMaskIds.Calendar, cursor, limit, cancellationToken,
+            (id, name, field) => new AppointmentEntryResource
+            {
+                Id = id,
+                Name = name,
+                Start = field("Start"),
+                End = field("End"),
+                Location = field("Location"),
+                // A day, not a moment: the indexed value carries no time at all (ADR 0647).
+                AllDay = field("Start") is { } start && !start.Contains('T', StringComparison.Ordinal),
+                Repeats = field("Repeats"),
+            },
+            (entries, links) => new AppointmentListResource { Appointments = entries, Links = links });
+
+    [HttpHead("appointments")]
+    public async Task<IActionResult> HeadAppointments(Guid documentId, CancellationToken cancellationToken) =>
+        await RequireFolderAsync(documentId, WellKnownMaskIds.Calendar, cancellationToken) is null
+            ? NotFound()
+            : await CanListAsync(documentId, cancellationToken) ? NoContent() : Forbid();
+
+    private async Task<bool> CanListAsync(Guid documentId, CancellationToken cancellationToken) =>
+        (await _access.GetCallerRightsAsync(documentId, cancellationToken)).CanSee;
+
+    /// <summary>
+    /// One listing for both typed collections: page the children, read their index fields, shape a row.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Written once with the two genuine differences — how a row is shaped and what the envelope is called —
+    /// passed in as lambdas at the call site. Two copies of this would drift in exactly the way that matters
+    /// here: the paging, the access check and the field lookup are the parts a reader never re-reads.
+    /// </para>
+    /// <para>
+    /// <b>Field values are read BY NAME.</b> A document has one row per index field, so filtering only by
+    /// document id returns an arbitrary one — which is how a vCard's UID was once overwritten with a phone
+    /// number (#628).
+    /// </para>
+    /// <para>
+    /// Values are fetched for the whole page in ONE query and assembled in memory, rather than as a correlated
+    /// sub-query per field per row: four sub-queries times a page of fifty is the shape that turns a listing
+    /// into a timeout, and it is the same "one read, many follows" economy the clients are held to (ADR 0557).
+    /// </para>
+    /// </remarks>
+    private async Task<IActionResult> ListAsync<TEntry, TList>(
+        Guid documentId,
+        Guid folderMaskId,
+        string? cursor,
+        int? limit,
+        CancellationToken cancellationToken,
+        Func<Guid, string, Func<string, string?>, TEntry> shape,
+        Func<List<TEntry>, List<Link>, TList> envelope)
+        where TEntry : HypermediaResource
+        where TList : HypermediaResource
+    {
+        if (await RequireFolderAsync(documentId, folderMaskId, cancellationToken) is null)
+        {
+            return NotFound();
+        }
+
+        if (!await CanListAsync(documentId, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var pageSize = PageSize.Resolve(limit);
+        var query = _dbContext.Documents.Where(d => d.ParentId == documentId);
+        if (Cursor.TryDecode(cursor, out var cursorCreatedAt, out var cursorId))
+        {
+            query = query.Where(d => d.CreatedAt > cursorCreatedAt || (d.CreatedAt == cursorCreatedAt && d.Id > cursorId));
+        }
+
+        // Filter and order on the ENTITY before projecting: EF cannot translate an order applied to an already
+        // projected positional shape, and the failure is a 500 rather than a compile error.
+        var fetched = await query
+            .OrderBy(d => d.CreatedAt).ThenBy(d => d.Id)
+            .Take(pageSize + 1)
+            .Select(d => new { d.Id, d.Name, d.CreatedAt })
+            .ToListAsync(cancellationToken);
+
+        var page = fetched.Take(pageSize).ToList();
+        var ids = page.Select(p => p.Id).ToList();
+
+        var values = await _dbContext.FieldValues
+            .Where(fv => ids.Contains(fv.DocumentId))
+            .Join(
+                _dbContext.FieldDefinitions,
+                fv => fv.FieldDefinitionId,
+                fd => fd.Id,
+                (fv, fd) => new { fv.DocumentId, fd.Name, fv.Value })
+            .ToListAsync(cancellationToken);
+
+        var byDocument = values
+            .GroupBy(v => v.DocumentId)
+            .ToDictionary(g => g.Key, g => g.ToDictionary(v => v.Name, v => v.Value, StringComparer.OrdinalIgnoreCase));
+
+        var entries = new List<TEntry>();
+        foreach (var row in page)
+        {
+            var fields = byDocument.GetValueOrDefault(row.Id) ?? [];
+            var entry = shape(row.Id, row.Name, name => fields.GetValueOrDefault(name) is { Length: > 0 } v ? v : null);
+
+            // The row's own address, so acting on it never reads the pane's loaded state (ADR 0559).
+            entry.Links = [new Link("self", $"/api/documents/{row.Id}", "GET")];
+
+            // A contact that HAS a picture also carries its address, so the row follows a rel rather than
+            // composing one (ADR 0543) and never spends a request discovering there is nothing to show.
+            if (entry is ContactEntryResource { HasPhoto: true })
+            {
+                entry.Links.Add(new Link("photo", DocumentContactCardController.PhotoHref(row.Id), "GET"));
+            }
+            entries.Add(entry);
+        }
+
+        var links = new List<Link> { new("self", $"/api/documents/{documentId}", "GET") };
+        if (fetched.Count > pageSize && page.Count > 0)
+        {
+            var last = page[^1];
+            links.Add(new Link("next", $"{Request.Path}?cursor={Cursor.Encode(last.CreatedAt, last.Id)}&limit={pageSize}", "GET"));
+        }
+
+        return Ok(envelope(entries, links));
     }
 
     /// <summary>The folder, when it wears the mask this create belongs to; else null.</summary>

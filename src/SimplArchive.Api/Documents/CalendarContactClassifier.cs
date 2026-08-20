@@ -24,13 +24,16 @@ public sealed class CalendarContactClassifier
 {
     private readonly SimplArchiveDbContext _dbContext;
     private readonly IObjectStorageClient _objectStorageClient;
+    private readonly IContactCardComposer _contacts;
     private readonly ILogger<CalendarContactClassifier> _logger;
 
     public CalendarContactClassifier(
-        SimplArchiveDbContext dbContext, IObjectStorageClient objectStorageClient, ILogger<CalendarContactClassifier> logger)
+        SimplArchiveDbContext dbContext, IObjectStorageClient objectStorageClient,
+        IContactCardComposer contacts, ILogger<CalendarContactClassifier> logger)
     {
         _dbContext = dbContext;
         _objectStorageClient = objectStorageClient;
+        _contacts = contacts;
         _logger = logger;
     }
 
@@ -106,6 +109,9 @@ public sealed class CalendarContactClassifier
             ("Email", Nonempty(card.EMails?.FirstOrDefault()?.Value)),
             ("Phone", Nonempty(card.Phones?.FirstOrDefault()?.Value)),
             ("Organization", Nonempty(card.Organizations?.FirstOrDefault()?.Value?.Name)),
+            // Its media type, not the picture: index data is queried, listed and exported, and a base64 image
+            // in it would be all three. The bytes stay in the card and are served from their own address.
+            ("Photo", _contacts.ReadPhoto(content)?.ContentType),
         };
 
         await ApplyAsync(document, WellKnownMaskIds.Contact, values, fullName, cancellationToken);
@@ -140,9 +146,14 @@ public sealed class CalendarContactClassifier
         var values = new List<(string Field, string? Value)>
         {
             ("Event UID", Nonempty(occurrence.Uid) ?? document.Id.ToString()),
-            ("Start", start is { } s ? s.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : null),
-            ("End", end is { } endDate ? endDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : null),
+            ("Start", Stamp(occurrence.DtStart)),
+            ("End", Stamp(occurrence.DtEnd)),
             ("Location", Nonempty(occurrence.Location)),
+            // Indexed so a listing can SAY the entry repeats without opening the blob. The rule itself stays
+            // opaque — this is the stored text, not an interpretation of it, and nothing here expands a
+            // recurrence set. What it buys is honesty in the grid: an entry drawn at its first occurrence and
+            // nowhere else is under-reporting the month, and a marker is what stops that being silent.
+            ("Repeats", Nonempty(RecurrenceRule(occurrence))),
         };
 
         await ApplyAsync(document, WellKnownMaskIds.Appointment, values, Nonempty(occurrence.Summary), cancellationToken);
@@ -156,6 +167,15 @@ public sealed class CalendarContactClassifier
     }
 
     private static string? Nonempty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>The stored <c>RRULE</c> as text, or null when the entry does not repeat.</summary>
+    /// <remarks>
+    /// Round-tripped through the library's own writer rather than scraped out of the blob, so what is indexed
+    /// is what the file actually says — the same source the composer reads it from, which is what keeps the
+    /// index and the item from disagreeing about whether something repeats.
+    /// </remarks>
+    private static string? RecurrenceRule(Ical.Net.CalendarComponents.CalendarEvent occurrence) =>
+        Nonempty(occurrence.RecurrenceRule?.ToString());
 
     // Assigns the mask, writes the field values that parsed, and names the document after its human title
     // (summary / display name) when the upload carried a placeholder-ish name — same spirit as an email being
@@ -213,5 +233,67 @@ public sealed class CalendarContactClassifier
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// An index value for a calendar instant: ISO-8601 <b>carrying an offset</b> (#660, ADR 0647).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The zone is the entry's OWN where it has one (<c>TZID</c>, or <c>Z</c> for a UTC stamp), and the
+    /// SERVER's where the entry floats. So every indexed moment is a real instant that sorts against every
+    /// other — a 19:00 concert in Barcelona and a 19:00 concert in Massachusetts are four hours apart and now
+    /// order that way, where a bare wall clock made them a tie.
+    /// </para>
+    /// <para>
+    /// This is a PROJECTION, not the source of truth. The stored <c>.ics</c> keeps its floating time exactly as
+    /// ADR 0631 requires, so DAV clients and the structured editors round-trip unchanged; only the searchable
+    /// copy gains the offset. The cost is that a floating entry's index value depends on where the server runs
+    /// — reindex on a host in another zone and it shifts — which is the deliberate price of one comparable
+    /// instant.
+    /// </para>
+    /// <para>
+    /// An ALL-DAY entry keeps a plain date. A day is not a moment: it has no time to place in a zone, and
+    /// stamping midnight on it would invent one — the same inference this rule exists to avoid elsewhere.
+    /// </para>
+    /// </remarks>
+    private static string? Stamp(Ical.Net.DataTypes.CalDateTime? when)
+    {
+        if (when?.Value is not { } value)
+        {
+            return null;
+        }
+
+        if (!when.HasTime)
+        {
+            return value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+
+        var local = DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
+        var offset = when.TzId switch
+        {
+            null or "" => TimeZoneInfo.Local.GetUtcOffset(local),
+            var tz => ZoneOffset(tz, local),
+        };
+
+        return new DateTimeOffset(local, offset).ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The zone's offset at that moment, falling back to the server's when the id is unknown here.</summary>
+    /// <remarks>
+    /// A TZID names an IANA zone the host may not carry (a Windows host without ICU, say). Falling back keeps
+    /// the item indexed and findable rather than dropping its time entirely, which is the failure that would
+    /// make a whole calendar unsortable because of one exotic zone.
+    /// </remarks>
+    private static TimeSpan ZoneOffset(string timeZoneId, DateTime local)
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId).GetUtcOffset(local);
+        }
+        catch (Exception)
+        {
+            return TimeZoneInfo.Local.GetUtcOffset(local);
+        }
     }
 }

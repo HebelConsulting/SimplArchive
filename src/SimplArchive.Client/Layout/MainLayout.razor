@@ -398,9 +398,7 @@
         _unreadCount = 0;
     }
 
-    private string Initials => string.IsNullOrWhiteSpace(_displayName)
-        ? "?"
-        : string.Concat(_displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
+    private string Initials => ContactInitials.From(_displayName);
 
     protected override async Task OnParametersSetAsync()
     {

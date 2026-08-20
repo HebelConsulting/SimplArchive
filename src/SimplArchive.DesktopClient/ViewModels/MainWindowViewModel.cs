@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
+using SimplArchive.Presentation;
 using SimplArchive.Theming;
 
 namespace SimplArchive.DesktopClient.ViewModels;
@@ -4674,9 +4675,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private Guid? _currentUserId;
 
-    private static string Initials(string? name) => string.IsNullOrWhiteSpace(name)
-        ? "?"
-        : string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
+    private static string Initials(string? name) => ContactInitials.From(name);
 
     private static Bitmap Decode(byte[] bytes)
     {

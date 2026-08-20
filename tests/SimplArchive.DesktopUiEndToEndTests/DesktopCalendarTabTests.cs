@@ -140,6 +140,7 @@ public class DesktopCalendarTabTests
             Id = Guid.NewGuid(),
             CollectionColor = "#8a8a8a",
             CollectionName = "Personal / My Calendar",
+            AllDay = false,
             Title = "No date at all",
             Links = new Dictionary<string, string>(),
         });

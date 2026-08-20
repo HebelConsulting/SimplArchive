@@ -155,6 +155,8 @@ internal static class DemoArtistsSeeder
         var events = await FolderAsync(dbContext, tenantId, departments.Id, "Events", adminId, now, folderMask);
         await FolderAsync(dbContext, tenantId, departments.Id, "Catering", adminId, now, folderMask);
 
+        await SeasonAsync(dbContext, storage, services, tenantId, events.Id, adminId, now, finalizer, calendarMask);
+
         var artistsFolder = await FolderAsync(dbContext, tenantId, events.Id, "Artists", adminId, now, folderMask);
         var contactsFolder = await FolderAsync(dbContext, tenantId, artistsFolder.Id, "Contacts", adminId, now, addressbookMask);
 
@@ -214,8 +216,13 @@ internal static class DemoArtistsSeeder
                 // too rather than mistaking it for a published set length. Everything else in this seeder is
                 // "only what the subject publishes"; this is the one deliberate exception, and it is labelled
                 // instead of being quietly plausible.
+                // The summary, not just the document name. Classification RENAMES the document to the event's
+                // SUMMARY, so a name qualified only here would be silently overwritten by the bare title — which
+                // is what happened: of the two Rockport shows, the first was renamed to the plain venue and the
+                // second kept the seeder's name because the rename would have collided. One name, decided once.
+                var name = ConcertName(concert, artist.Concerts);
                 var entry = new Appointment(
-                    Summary: concert.Title,
+                    Summary: name,
                     Start: start,
                     End: allDay ? start : start.AddHours(2),
                     IsAllDay: allDay,
@@ -224,7 +231,6 @@ internal static class DemoArtistsSeeder
                     Description: allDay ? null : "End time not published — shown as a nominal two hours.",
                     RecurrenceRule: null);
 
-                var name = $"{start:yyyy-MM-dd} {concert.Title}";
                 await ItemAsync(
                     dbContext, storage, tenantId, concertsFolder.Id, name, adminId, now, finalizer,
                     appointments.Merge(null, entry, $"demo-concert-{Slug(artist.Name)}-{start:yyyyMMddHHmm}"),
@@ -232,6 +238,119 @@ internal static class DemoArtistsSeeder
             }
         }
     }
+
+    /// <summary>
+    /// The department's own calendar: what the Events team is staging, as opposed to what the acts play.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This one is invented, and it is in its own folder for that reason.</b> Everything under
+    /// <c>Artists</c> is what the three acts publish on their own sites, and inventing a date for a real named
+    /// performer would poison the one part of this seed that is true. The department's own run-of-show is the
+    /// demo tenant's fiction, like the sprint planning and release cuts elsewhere, so it can carry what the
+    /// real data does not happen to contain.
+    /// </para>
+    /// <para>
+    /// What it contains that nothing else does is a <b>multi-day</b> entry. A grid that places each chip only on
+    /// its start day loses everything after day one, and a seed in which every entry begins and ends inside one
+    /// afternoon can never show that — so the festival week is the fixture the month grid is actually tested
+    /// against. All-day rather than timed, deliberately: the all-day shape carries iCalendar's EXCLUSIVE
+    /// <c>DTEND</c>, which is the subtler of the two off-by-ones and the one no other seeded entry exercises.
+    /// </para>
+    /// </remarks>
+    private static async Task SeasonAsync(
+        SimplArchiveDbContext dbContext, IObjectStorageClient storage, IServiceProvider services, Guid tenantId,
+        Guid eventsFolderId, Guid adminId, DateTimeOffset now, DocumentFinalizer finalizer, Guid? calendarMask)
+    {
+        var season = await FolderAsync(dbContext, tenantId, eventsFolderId, "Season", adminId, now, calendarMask);
+
+        // A fourth colour, distinct from the three acts': the Calendar tab overlays ticked collections, and the
+        // swatch is the only thing saying which one a row came from (ADR 0620).
+        await SetColourAsync(dbContext, tenantId, season, calendarMask, "#00897b");
+
+        var appointments = services.GetRequiredService<IAppointmentComposer>();
+
+        foreach (var (summary, from, days, place) in SeasonEntries)
+        {
+            var start = DateTime.ParseExact(from, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None);
+
+            var entry = new Appointment(
+                Summary: summary,
+                Start: start,
+                // DTEND is EXCLUSIVE for an all-day entry: a three-day run stops on the fourth day. Writing the
+                // last day here instead would be the off-by-one that shortens every span by one day, and it
+                // would look entirely reasonable in the file.
+                End: start.AddDays(days),
+                IsAllDay: true,
+                TimeZoneId: null,
+                Location: place,
+                Description: "Illustrative: the department's own run-of-show, not a published date.",
+                RecurrenceRule: null);
+
+            await ItemAsync(
+                dbContext, storage, tenantId, season.Id, summary, adminId, now, finalizer,
+                appointments.Merge(null, entry, $"demo-season-{Slug(summary)}"),
+                ".ics", "text/calendar");
+        }
+    }
+
+    /// <summary>The department's run-of-show: a summary, its first day, how many days it runs, and where.</summary>
+    private static readonly (string Summary, string From, int Days, string Place)[] SeasonEntries =
+    [
+        ("Festival week", "2026-08-24", 3, "Kornhausplatz, Bern, Switzerland"),
+        ("Site build-up", "2026-08-21", 1, "Kornhausplatz, Bern, Switzerland"),
+    ];
+
+    /// <summary>
+    /// What the concert is called: the venue, qualified only as far as it has to be to stay unique.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every name used to begin <c>yyyy-MM-dd</c>, which put an ISO date where a reader looks for a venue. It
+    /// showed: a month cell is narrow, so two shows at one venue on one day read as <c>Shalin Liu P…</c> and
+    /// <c>2026-09-01…</c> — the second one identifying nothing at all. A sibling-name collision was being
+    /// resolved in the one place the user reads.
+    /// </para>
+    /// <para>
+    /// The date was never needed for the reader either. A month cell already establishes the day and renders
+    /// the time beside the title, so both were duplicated in every name to disambiguate the few that collide.
+    /// Hence the shortest qualifier that works: the venue, then the venue and its time, then the day as well —
+    /// added only for the entries that actually clash, so the common case reads as just the venue.
+    /// </para>
+    /// </remarks>
+    private static string ConcertName(Concert concert, IReadOnlyList<Concert> all)
+    {
+        // Shortest first. The last is unconditionally unique — an act does not play one venue twice at the same
+        // minute — so the loop always terminates on something, and uniqueness is CHECKED rather than assumed.
+        Func<Concert, string>[] candidates =
+        [
+            c => c.Title,
+            c => ConcertStart(c) is { } at && HasTime(c) ? $"{c.Title} {at:HH:mm}" : c.Title,
+            c => ConcertStart(c) is { } at
+                ? $"{c.Title} {at:d MMM}{(HasTime(c) ? at.ToString(" HH:mm", CultureInfo.InvariantCulture) : string.Empty)}"
+                : c.Title,
+        ];
+
+        foreach (var candidate in candidates)
+        {
+            var name = candidate(concert);
+            if (all.Count(c => candidate(c) == name) == 1)
+            {
+                return name;
+            }
+        }
+
+        return candidates[^1](concert);
+    }
+
+    private static bool HasTime(Concert concert) => concert.When.Contains(' ', StringComparison.Ordinal);
+
+    private static DateTime? ConcertStart(Concert concert) =>
+        DateTime.TryParseExact(
+            concert.When, HasTime(concert) ? "yyyy-MM-dd HH:mm" : "yyyy-MM-dd",
+            CultureInfo.InvariantCulture, DateTimeStyles.None, out var start)
+            ? start
+            : null;
 
     /// <summary>
     /// Paints the calendar with its own colour — the collection's default, which every user sees until they set

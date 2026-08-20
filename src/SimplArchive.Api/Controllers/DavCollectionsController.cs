@@ -56,6 +56,17 @@ public class DavCollectionsController : ControllerBase
         /// <summary>True when the caller may add or change items — the tabs disable their editors otherwise.</summary>
         public bool Writable { get; set; }
 
+        /// <summary>
+        /// Whether this caller may add an entry here — the flag New is gated on.
+        /// </summary>
+        /// <remarks>
+        /// A capability rather than a rel, because the typed rel (<c>contacts</c>/<c>appointments</c>) serves
+        /// both the listing and the create, and one rel cannot say "read yes, write no". It reports
+        /// <c>CanCreateSubItems</c>, the right the POST actually checks — not <c>Writable</c>, which is
+        /// <c>CanEditContent</c> and answers a different question.
+        /// </remarks>
+        public bool CanCreateEntries { get; set; }
+
         /// <summary>The caller's own personal default, which the tabs list first.</summary>
         public bool IsPersonalDefault { get; set; }
     }
@@ -135,21 +146,26 @@ public class DavCollectionsController : ControllerBase
             // document resource and on the children listing and not here, which is the third time that shape has
             // bitten (`folders`, #638) — hence the shared predicate rather than a fourth copy of the rule.
             //
-            // Gated on CanCreateSubItems, which is what the endpoint itself requires — deliberately NOT on
-            // `Writable` below, which reports CanEditContent. The two answer different questions, and gating an
-            // affordance on the wrong one either hides a create that would succeed or offers one that is refused.
-            var itemCreates = new List<Link>();
-            if (effective.CanCreateSubItems)
+            // ONE rel per typed collection, serving both methods: GET lists the entries, POST adds one. It is
+            // therefore advertised to anyone who can SEE the collection — the listing is what fills the tab, and
+            // withholding it from a reader would leave them a calendar with no appointments in it.
+            //
+            // The two methods need different rights, though, and a rel cannot say "read yes, write no". So the
+            // right to create rides as an explicit capability instead: `CanCreateEntries`, from
+            // CanCreateSubItems, which is what the POST itself requires — deliberately NOT `Writable` below,
+            // which reports CanEditContent. Gating New on the wrong one either hides a create that would succeed
+            // or offers one that is refused, and the second is what an unqualified rel would now do.
+            var typedItems = new List<Link>();
+            var contacts = ChildCreationPolicy.AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Contact);
+            var appointments = ChildCreationPolicy.AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Appointment);
+            if (contacts)
             {
-                if (ChildCreationPolicy.AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Contact))
-                {
-                    itemCreates.Add(new Link("contacts", $"/api/documents/{candidate.Id}/contacts", "POST"));
-                }
+                typedItems.Add(new Link("contacts", $"/api/documents/{candidate.Id}/contacts", "GET"));
+            }
 
-                if (ChildCreationPolicy.AdmitsTypedItem(folderMaskId, WellKnownMaskIds.Appointment))
-                {
-                    itemCreates.Add(new Link("appointments", $"/api/documents/{candidate.Id}/appointments", "POST"));
-                }
+            if (appointments)
+            {
+                typedItems.Add(new Link("appointments", $"/api/documents/{candidate.Id}/appointments", "GET"));
             }
 
             resources.Add((new DavCollectionResource
@@ -160,6 +176,7 @@ public class DavCollectionsController : ControllerBase
                 Kind = kindByMaskVersion.GetValueOrDefault(candidate.MaskVersionId!.Value, "calendar"),
                 Color = overrides.GetValueOrDefault(candidate.Id) ?? defaults.GetValueOrDefault(candidate.Id),
                 Writable = effective.CanEditContent,
+                CanCreateEntries = effective.CanCreateSubItems && (contacts || appointments),
                 IsPersonalDefault = personal,
                 Links =
                 [
@@ -168,7 +185,7 @@ public class DavCollectionsController : ControllerBase
                     // Everything a tab needs to act on the collection, so it never composes a URL (ADR 0543).
                     new Link("collection-color", $"/api/documents/{candidate.Id}/collection-color", "PUT"),
                     new Link("acl-entries", $"/api/documents/{candidate.Id}/acl-entries", "GET"),
-                    .. itemCreates,
+                    .. typedItems,
                 ],
             }, personal));
         }

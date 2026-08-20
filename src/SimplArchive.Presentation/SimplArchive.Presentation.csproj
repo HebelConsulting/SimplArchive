@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- TargetFramework is set explicitly (not just inherited from Directory.Build.props) because the Docker
+       restore layer copies only the .csproj files, not Directory.Build.props — every project does the same. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- The display rules both clients share: the pure answers to questions like "which days does this
+       appointment occupy" that the Avalonia desktop and the Blazor web client must answer IDENTICALLY.
+
+       A shared leaf with no dependencies — the same shape as SimplArchive.Localization and
+       SimplArchive.Theming — so either client can reference it and neither drags the other in.
+
+       What belongs here is the arithmetic, not the formatting. A time rendered for a cell is a client's own
+       business (one has a CSS class, the other a TextBlock); which cells an entry appears in is not, and
+       two copies of that answer is how the two grids come to disagree about a Tuesday. -->
+
+</Project>

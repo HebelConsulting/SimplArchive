@@ -71,15 +71,27 @@
                  Background="Transparent" BorderThickness="0">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ContactRowViewModel">
-              <Grid ColumnDefinitions="14,2*,*,*,*" Margin="0,2">
+              <Grid ColumnDefinitions="14,24,2*,*,*,*" Margin="0,2">
                 <Border Grid.Column="0" Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center"
                         Background="{Binding CollectionColor}" ToolTip.Tip="{Binding CollectionName}" />
-                <TextBlock Grid.Column="1" Text="{Binding FullName}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="2" Text="{Binding Organization}" TextTrimming="CharacterEllipsis"
+                <!-- The card's own face, or its initials. ONE neutral background, never a hue derived from the
+                     name: the swatch to its left already spends colour on "which collection" (ADR 0581). -->
+                <Panel Grid.Column="1" Width="20" Height="20" VerticalAlignment="Center" Margin="0,0,4,0">
+                  <Border CornerRadius="10" Background="{DynamicResource WbBorder}" ClipToBounds="True">
+                    <TextBlock Text="{Binding Initials}" FontSize="9" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Foreground="{DynamicResource WbText}" />
+                  </Border>
+                  <Border CornerRadius="10" ClipToBounds="True" IsVisible="{Binding Photo, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <Image Source="{Binding Photo}" Stretch="UniformToFill" />
+                  </Border>
+                </Panel>
+                <TextBlock Grid.Column="2" Text="{Binding FullName}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="3" Text="{Binding Organization}" TextTrimming="CharacterEllipsis"
                            Foreground="{DynamicResource WbMuted}" />
-                <TextBlock Grid.Column="3" Text="{Binding Email}" TextTrimming="CharacterEllipsis"
+                <TextBlock Grid.Column="4" Text="{Binding Email}" TextTrimming="CharacterEllipsis"
                            Foreground="{DynamicResource WbMuted}" />
-                <TextBlock Grid.Column="4" Text="{Binding Phone}" TextTrimming="CharacterEllipsis"
+                <TextBlock Grid.Column="5" Text="{Binding Phone}" TextTrimming="CharacterEllipsis"
                            Foreground="{DynamicResource WbMuted}" />
               </Grid>
             </DataTemplate>
@@ -92,8 +104,22 @@
       <!-- Detail. Sized to its content: this pane must not claim space it is not using (ADR 0550). -->
       <ScrollViewer Grid.Column="4">
         <StackPanel Spacing="8" Margin="8,0,0,0" IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
-          <TextBlock Text="{Binding Selected.FullName}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
-          <TextBlock Text="{Binding Selected.CollectionName}" Foreground="{DynamicResource WbMuted}" />
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <Panel Width="44" Height="44" VerticalAlignment="Top">
+              <Border CornerRadius="22" Background="{DynamicResource WbBorder}" ClipToBounds="True">
+                <TextBlock Text="{Binding Selected.Initials}" FontSize="16" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{DynamicResource WbText}" />
+              </Border>
+              <Border CornerRadius="22" ClipToBounds="True" IsVisible="{Binding Selected.Photo, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <Image Source="{Binding Selected.Photo}" Stretch="UniformToFill" />
+              </Border>
+            </Panel>
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock Text="{Binding Selected.FullName}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding Selected.CollectionName}" Foreground="{DynamicResource WbMuted}" />
+            </StackPanel>
+          </StackPanel>
           <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" >
             <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr ContactsOrg}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,4" />
             <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Selected.Organization}" TextWrapping="Wrap" Margin="0,0,0,4" />

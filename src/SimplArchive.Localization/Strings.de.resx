@@ -4314,6 +4314,33 @@
   <data name="CalendarNew" xml:space="preserve">
     <value>Neuer Termin</value>
   </data>
+  <data name="CalendarPrevMonth" xml:space="preserve">
+    <value>Vorheriger Monat</value>
+  </data>
+  <data name="CalendarNextMonth" xml:space="preserve">
+    <value>Nächster Monat</value>
+  </data>
+  <data name="CalendarToday" xml:space="preserve">
+    <value>Heute</value>
+  </data>
+  <data name="CalendarMoreEntries" xml:space="preserve">
+    <value>+{0} weitere</value>
+  </data>
+  <data name="CalendarViewMonth" xml:space="preserve">
+    <value>Monat</value>
+  </data>
+  <data name="CalendarViewList" xml:space="preserve">
+    <value>Liste</value>
+  </data>
+  <data name="CalendarRepeats" xml:space="preserve">
+    <value>Wiederholung</value>
+  </data>
+  <data name="CalendarRepeatsHint" xml:space="preserve">
+    <value>Wiederholt sich — nur der erste Termin wird angezeigt</value>
+  </data>
+  <data name="CalendarAllDay" xml:space="preserve">
+    <value>Ganztägig</value>
+  </data>
   <data name="CalendarWhen" xml:space="preserve">
     <value>Wann</value>
   </data>

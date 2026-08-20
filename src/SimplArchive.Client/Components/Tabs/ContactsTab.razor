@@ -58,6 +58,7 @@
                               RowClassFunc="@((row, _) => row == _selected ? "wb-list-row-selected" : "")">
                         <HeaderContent>
                             <MudTh Style="width:1px;"></MudTh>
+                            <MudTh Style="width:1px;"></MudTh>
                             <MudTh>@Strings.Get("Name")</MudTh>
                             <MudTh>@Strings.Get("ContactsOrg")</MudTh>
                             <MudTh>@Strings.Get("ContactsEmail")</MudTh>
@@ -65,6 +66,11 @@
                         </HeaderContent>
                         <RowTemplate Context="row">
                             <MudTd><span style="@Swatch(row.CollectionColor)" title="@row.CollectionName"></span></MudTd>
+                            <MudTd Style="width:1px;">
+                                @* Keyed by id: without it Blazor reuses the component across rows as the list
+                                   re-sorts, and one contact's face appears beside another's name. *@
+                                <ContactAvatar @key="row.Id" Name="@row.FullName" PhotoHref="@row.PhotoHref" Small="true" />
+                            </MudTd>
                             <MudTd>@row.FullName</MudTd>
                             <MudTd Class="mud-text-secondary">@row.Organization</MudTd>
                             <MudTd Class="mud-text-secondary">@row.Email</MudTd>
@@ -79,8 +85,13 @@
         <div style="flex:0 0 320px; border-left:1px solid var(--mud-palette-lines-default); overflow:auto;" class="pa-3">
             @if (_selected is { } selected)
             {
-                <MudText Typo="Typo.h6">@selected.FullName</MudText>
-                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">@selected.CollectionName</MudText>
+                <div class="d-flex align-center mb-3" style="gap:.75rem; min-width:0;">
+                    <ContactAvatar @key="selected.Id" Name="@selected.FullName" PhotoHref="@selected.PhotoHref" />
+                    <div style="min-width:0;">
+                        <MudText Typo="Typo.h6" Style="overflow:hidden; text-overflow:ellipsis;">@selected.FullName</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@selected.CollectionName</MudText>
+                    </div>
+                </div>
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("ContactsOrg")</MudText>
                 <MudText Typo="Typo.body2" Class="mb-2">@selected.Organization</MudText>
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("ContactsEmail")</MudText>
@@ -105,18 +116,19 @@
     /// </summary>
     public sealed record ContactRow(
         Guid Id, string CollectionColor, string CollectionName, string FullName,
-        string Organization, string Email, string Phone, string? SelfHref);
+        string Organization, string Email, string Phone, string? SelfHref, string? PhotoHref = null);
 
     /// <summary>
-    /// The checked addressbooks the caller may create in — asked of the <c>contacts</c> rel, not of
-    /// <c>Writable</c>. They are different questions: the flag reports the right to edit CONTENT, while the
-    /// create needs the right to add sub-items, and gating on the wrong one either hides a create that would
-    /// succeed or offers one the server refuses (ADR 0543).
+    /// The checked addressbooks the caller may create in — asked of the collection's <c>CanCreateEntries</c>
+    /// capability. NOT of the <c>contacts</c> rel, which now serves the LISTING too and is therefore
+    /// advertised to any reader: gating on it would light New up for someone who cannot create and fail with
+    /// a 403 on click. Not <c>Writable</c> either, which reports the right to edit CONTENT — a different
+    /// question again, and the one this used to get wrong (ADR 0543).
     /// </summary>
     private List<CreateTarget> CreateTargets() =>
     [
         .. _collections
-            .Where(c => _checked.Contains(c.Id) && c.Href("contacts") is not null)
+            .Where(c => _checked.Contains(c.Id) && c.CanCreateEntries && c.Href("contacts") is not null)
             .Select(c => new CreateTarget(c.Id, c.DisplayName, c.Href("contacts")!)),
     ];
 
@@ -160,21 +172,23 @@
         var rows = new List<ContactRow>();
         foreach (var collection in _collections.Where(c => _checked.Contains(c.Id)))
         {
-            if (collection.Href("children") is not { } childrenHref)
+            // The collection's OWN rel, followed with GET — the children listing carries a name and nothing
+            // else, which is why Organization, Email and Phone were empty strings and the detail pane beside
+            // them was blank by construction (#660).
+            if (collection.Href("contacts") is not { } entriesHref)
             {
                 continue; // a rel the server did not advertise means "not available here" (ADR 0543)
             }
 
             try
             {
-                var contents = await Browse.LoadContentsAsync(collection.Id, collection.Id, childrenHref);
-                foreach (var node in contents.Nodes.Where(n => n.HasVersions))
+                foreach (var entry in await DavCollections.ListEntriesAsync(entriesHref))
                 {
-                    // Organization/Email/Phone come from the Contact mask's index data, which this listing does
-                    // not carry — the same gap the desktop tab has, and it closes the same way for both.
                     rows.Add(new ContactRow(
-                        node.Id, collection.Color ?? "#8a8a8a", collection.DisplayName, node.Name,
-                        string.Empty, string.Empty, string.Empty, BrowseService.HrefOf(node, "self")));
+                        entry.Id, collection.Color ?? "#8a8a8a", collection.DisplayName,
+                        entry.FullName is { Length: > 0 } full ? full : entry.Name,
+                        entry.Organization ?? string.Empty, entry.Email ?? string.Empty,
+                        entry.Phone ?? string.Empty, entry.Href("self"), entry.Href("photo")));
                 }
             }
             catch (Exception e)

@@ -29,6 +29,7 @@ public static class SearchFieldMapper
                     break;
 
                 case FieldDataType.Date:
+                case FieldDataType.DateTime:
                     if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date))
                     {
                         field["date"] = date.ToString("o", CultureInfo.InvariantCulture);

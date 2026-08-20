@@ -53,6 +53,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SimplArchive.Application\SimplArchive.Application.csproj" />
+    <ProjectReference Include="..\SimplArchive.Presentation\SimplArchive.Presentation.csproj" />
     <ProjectReference Include="..\SimplArchive.Infrastructure\SimplArchive.Infrastructure.csproj" />
     <ProjectReference Include="..\SimplArchive.Auth\SimplArchive.Auth.csproj" />
     <ProjectReference Include="..\SimplArchive.Client\SimplArchive.Client.csproj" />

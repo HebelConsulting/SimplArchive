@@ -948,7 +948,10 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
 
                 break;
 
+            // DateTime rides with Date: both parse as a DateTimeOffset, and the min/max comparison below is
+            // the same question asked of a point in time rather than of a day (#660).
             case FieldDataType.Date:
+            case FieldDataType.DateTime:
                 var dateValue = DateTimeOffset.Parse(fieldValue.Value, CultureInfo.InvariantCulture);
 
                 if (fieldDefinition.MinValue is { } minDateText

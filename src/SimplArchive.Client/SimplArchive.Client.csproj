@@ -25,6 +25,7 @@
     <ProjectReference Include="..\SimplArchive.Localization\SimplArchive.Localization.csproj" />
     <!-- The design tokens (ADR 0578): the MudTheme is built from them rather than being
          MudBlazor's stock palette. -->
+    <ProjectReference Include="..\SimplArchive.Presentation\SimplArchive.Presentation.csproj" />
     <ProjectReference Include="..\SimplArchive.Theming\SimplArchive.Theming.csproj" />
   </ItemGroup>
 

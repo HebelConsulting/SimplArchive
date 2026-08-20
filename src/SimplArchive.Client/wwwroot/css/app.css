@@ -148,3 +148,51 @@ h1:focus {
        one thing, taking width from every row to say so. Same query, same reason as the labels above. */
     .wb-touch-only { display: none; }
 }
+
+/* Month grid (#660). A list answers "what is coming up"; the grid answers "what does this month look like".
+   Sized in fr/minmax rather than fixed pixels so it fills the pane the user dragged, and the row height is
+   fixed so paging to another month does not change the grid's height under the cursor. */
+.wb-cal-month { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.wb-cal-monthbar { display: flex; align-items: center; gap: .25rem; padding: .35rem .5rem;
+    border-bottom: 1px solid var(--mud-palette-lines-default); }
+.wb-cal-monthname { font-weight: 600; min-width: 11ch; text-align: center; }
+.wb-cal-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+    /* auto for the weekday header, then six EQUAL week rows. grid-auto-rows would have sized the header as a
+       seventh row and given it a full week's height. */
+    grid-template-rows: auto repeat(6, minmax(0, 1fr)); overflow: auto; }
+.wb-cal-dow { grid-row: 1; padding: .2rem .4rem; font-size: .75rem; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--sa-text-secondary); border-bottom: 1px solid var(--mud-palette-lines-default); }
+.wb-cal-day { border-right: 1px solid var(--mud-palette-lines-default);
+    border-bottom: 1px solid var(--mud-palette-lines-default); padding: .15rem .2rem; overflow: hidden;
+    display: flex; flex-direction: column; gap: 1px; }
+.wb-cal-daynum { font-size: .75rem; color: var(--sa-text-secondary); font-variant-numeric: tabular-nums; }
+/* The days either side of the month are shown so the weeks stay whole, but they are context, not content. */
+.wb-cal-outside { opacity: .45; }
+.wb-cal-today .wb-cal-daynum { font-weight: 700; color: var(--sa-accent-text); }
+.wb-cal-entry { display: flex; align-items: center; gap: .25rem; padding: 0 .15rem; border-radius: 3px;
+    font-size: .78rem; white-space: nowrap; overflow: hidden; cursor: pointer; }
+.wb-cal-entry:hover { background: var(--sa-accent-tint); }
+.wb-cal-entry-sel { background: var(--sa-selection); box-shadow: inset 2px 0 0 0 var(--sa-accent); }
+/* A day the entry runs THROUGH rather than starts on: the flattened left edge reads as "carried in from the
+   cell before", which is the one thing a chip-per-day layout cannot say by position alone. */
+.wb-cal-entry-cont { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.wb-cal-cont-mark { letter-spacing: -.05em; }
+/* The repeat marker. Muted and last in the row: it qualifies the entry rather than identifying it, so it must
+   not compete with the title for the eye — and it must not be the accent, which on this row already means
+   "which calendar" (ADR 0581). */
+.wb-cal-repeat { flex: 0 0 auto; color: var(--sa-text-secondary); font-size: .7rem; }
+
+/* A contact's face, or its initials. ONE neutral background, never a hue derived from the name: every row here
+   already carries a collection swatch, and colour that encodes identity cannot also be decoration (ADR 0581). */
+.wb-avatar { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+    width: 2.25rem; height: 2.25rem; border-radius: 50%; overflow: hidden;
+    background: var(--mud-palette-lines-default, #e6e7ec); color: var(--mud-palette-text-primary, #14161c);
+    font-size: .8rem; font-weight: 600; line-height: 1; user-select: none; }
+.wb-avatar-sm { width: 1.5rem; height: 1.5rem; font-size: .6rem; }
+/* object-fit: cover, so a portrait or a panorama both fill the circle instead of stretching a face. */
+.wb-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.wb-cal-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 4px; }
+.wb-cal-time { flex: 0 0 auto; color: var(--sa-text-secondary); font-variant-numeric: tabular-nums; }
+.wb-cal-title { overflow: hidden; text-overflow: ellipsis; }
+.wb-cal-more { font-size: .72rem; color: var(--sa-accent-text); cursor: pointer; padding: 0 .15rem; }
+.wb-cal-more:hover { text-decoration: underline; }

@@ -15,7 +15,7 @@
                    title="@Strings.Get("RibbonRefresh")" aria-label="@Strings.Get("RibbonRefresh")">
             <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
         </MudButton>
-        @* Disabled until a ticked calendar ADVERTISES the create (#631), so the affordance never lies. *@
+        @* Disabled until a ticked calendar says the caller MAY create there, so the affordance never lies. *@
         <MudButton Class="wb-rib-btn ml-3" Size="Size.Small" Disabled="@(!CanCreate)" OnClick="NewAppointmentAsync"
                    title="@Strings.Get("CalendarNew")" aria-label="@Strings.Get("CalendarNew")">
             <MudIcon Icon="@Icons.Material.Filled.EventAvailable" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CalendarNew")</span>
@@ -26,6 +26,20 @@
                    title="@Strings.Get("CalendarEdit")" aria-label="@Strings.Get("CalendarEdit")">
             <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CalendarEdit")</span>
         </MudButton>
+
+        @* Month ⇄ List. Two questions, not two skins of one: the list answers "what is coming up" and keeps the
+           filter; the month answers "what does this month look like". Neither subsumes the other, which is why
+           the grid is a second view rather than a replacement. *@
+        <div class="ml-auto">
+            <MudButton Class="@ViewButtonClass(true)" Size="Size.Small" OnClick="@(() => SetMonthView(true))"
+                       title="@Strings.Get("CalendarViewMonth")" aria-label="@Strings.Get("CalendarViewMonth")">
+                <MudIcon Icon="@Icons.Material.Filled.CalendarMonth" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CalendarViewMonth")</span>
+            </MudButton>
+            <MudButton Class="@ViewButtonClass(false)" Size="Size.Small" OnClick="@(() => SetMonthView(false))"
+                       title="@Strings.Get("CalendarViewList")" aria-label="@Strings.Get("CalendarViewList")">
+                <MudIcon Icon="@Icons.Material.Filled.ViewList" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("CalendarViewList")</span>
+            </MudButton>
+        </div>
     </div>
 
     <div style="flex:1 1 auto; min-height:0; display:flex;">
@@ -37,9 +51,26 @@
         </div>
 
         <div style="flex:1 1 auto; min-width:0; display:flex; flex-direction:column;">
-            <div class="pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
+            <div class="pa-2 d-flex align-center" style="border-bottom:1px solid var(--mud-palette-lines-default); gap:.5rem;">
                 <SearchField @bind-Value="_filter" Placeholder="@Strings.Get("FilterHint")" />
+                @if (_dayFilter is { } dayFilter)
+                {
+                    @* The day arrived from the grid's "+N more". It says so, and it is clearable — a filter the
+                       user cannot see is one they conclude is a bug (ADR 0550). *@
+                    <MudChip T="string" Size="Size.Small" OnClose="@(() => _dayFilter = null)">
+                        @dayFilter.ToDateTime(TimeOnly.MinValue).ToString("D", System.Globalization.CultureInfo.CurrentCulture)
+                    </MudChip>
+                }
             </div>
+            @if (_monthView)
+            {
+                <CalendarMonth Entries="Visible.ToList()" Selected="_selected"
+                               OnSelected="@(row => _selected = row)"
+                               OnActivated="@(async row => { _selected = row; await EditAppointmentAsync(); })"
+                               OnDayOverflowed="ShowDay" />
+            }
+            else
+            {
             <div style="flex:1 1 auto; overflow:auto;">
                 @if (_appointments.Count == 0)
                 {
@@ -63,12 +94,20 @@
                             <MudTd><span style="@Swatch(row.CollectionColor)" title="@row.CollectionName"></span></MudTd>
                             @* Time leads: a calendar row is read by WHEN before WHAT. *@
                             <MudTd Class="mud-text-secondary" Style="font-variant-numeric:tabular-nums;">@row.TimeRange</MudTd>
-                            <MudTd>@row.Title</MudTd>
+                            <MudTd>
+                                @row.Title
+                                @if (row.Recurring)
+                                {
+                                    <span class="wb-cal-repeat ml-1" title="@Strings.Get("CalendarRepeatsHint")"
+                                          aria-label="@Strings.Get("CalendarRepeatsHint")">@AppointmentCoverage.RepeatMark</span>
+                                }
+                            </MudTd>
                             <MudTd Class="mud-text-secondary">@row.Location</MudTd>
                         </RowTemplate>
                     </MudTable>
                 }
             </div>
+            }
         </div>
 
         @* Detail. Sized to its content: this pane must not claim space it is not using (ADR 0550). *@
@@ -83,6 +122,15 @@
                 <MudText Typo="Typo.body2" Class="mb-2">@selected.StartsOn</MudText>
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("CalendarWhere")</MudText>
                 <MudText Typo="Typo.body2">@selected.Location</MudText>
+                @if (selected.Recurring)
+                {
+                    @* The rule verbatim, where there is room for it. The grid has space only for a mark, and a
+                       mark answers "does this repeat" but not "how" — which is the next thing a reader asks.
+                       Not prettified into prose: inventing wording for a rule we deliberately do not interpret
+                       would state more than we know (the same call the edit form's read-only RRULE line made). *@
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">@Strings.Get("CalendarRepeats")</MudText>
+                    <MudText Typo="Typo.body2" Style="font-family:var(--mud-typography-default-family); word-break:break-all;">@selected.Repeats</MudText>
+                }
             }
         </div>
     </div>
@@ -95,19 +143,72 @@
     private AppointmentRow? _selected;
     private string _filter = string.Empty;
 
+    /// <summary>Month grid or flat list. Opens on the month, which is what the tab is for.</summary>
+    private bool _monthView = true;
+
+    /// <summary>Set by the grid's "+N more"; narrows the LIST to that day rather than growing a cell.</summary>
+    private DateOnly? _dayFilter;
+
+    private void SetMonthView(bool month)
+    {
+        _monthView = month;
+        if (month)
+        {
+            // The day filter belongs to the list it sent the user to; carrying it back into the grid would
+            // silently hide every other day.
+            _dayFilter = null;
+        }
+    }
+
+    private string ViewButtonClass(bool month) =>
+        _monthView == month ? "wb-rib-btn mud-primary-text" : "wb-rib-btn";
+
+    /// <summary>Hands a day to the list — which already has the columns, the filter and the selection.</summary>
+    private void ShowDay(DateOnly day)
+    {
+        _dayFilter = day;
+        _monthView = false;
+    }
+
     /// <summary>
     /// One listed appointment. <c>SelfHref</c> is the row's own advertised address — Edit acts from THIS,
     /// never from whatever the detail pane last finished loading (ADR 0559).
     /// </summary>
     public sealed record AppointmentRow(
         Guid Id, string CollectionColor, string CollectionName, string Title,
-        DateTimeOffset? Start, DateTimeOffset? End, string Location, string? SelfHref)
+        DateTimeOffset? Start, DateTimeOffset? End, string Location, string? SelfHref,
+        DateOnly? Day = null, bool AllDay = false, DateOnly? EndDay = null, string? Repeats = null)
     {
-        /// <summary>"09:00–10:00", or empty when the appointment carries no time at all.</summary>
-        public string TimeRange => (Start, End) switch
+        /// <summary>
+        /// Whether this entry repeats — and therefore whether the grid is showing less than the month holds.
+        /// </summary>
+        /// <remarks>
+        /// The server never expands a recurrence set, so a weekly rehearsal is drawn at its FIRST occurrence and
+        /// nowhere else. That is a deliberate limitation, but a silent one is a grid quietly claiming three
+        /// weeks are free. The marker is what makes it a stated limitation instead.
+        /// </remarks>
+        public bool Recurring => !string.IsNullOrEmpty(Repeats);
+
+        /// <summary>The last day this entry covers — see <c>AppointmentCoverage</c> for the arithmetic.</summary>
+        /// <remarks>
+        /// Shared with the desktop rather than written twice: the end being exclusive at midnight is a single
+        /// off-by-one in each direction, invisible until somebody counts, and two copies of it is how the two
+        /// grids come to disagree about a Tuesday.
+        /// </remarks>
+        public DateOnly? LastDay => AppointmentCoverage.LastDay(Day, AllDay, EndDay, End);
+
+        /// <summary>Whether this entry is on show on <paramref name="day"/> — the grid's bucketing question.</summary>
+        public bool CoversDay(DateOnly day) => AppointmentCoverage.CoversDay(day, Day, AllDay, EndDay, End);
+
+        /// <summary>True on a covered day that is not the first — the cell reads as "still going", not "starts".</summary>
+        public bool ContinuesOn(DateOnly day) => AppointmentCoverage.ContinuesOn(day, Day, AllDay, EndDay, End);
+
+        /// <summary>"09:00–10:00", the all-day marker, or empty when the entry carries no time at all.</summary>
+        public string TimeRange => (AllDay, Start, End) switch
         {
-            ({ } s, { } e) => $"{s.LocalDateTime:HH:mm}–{e.LocalDateTime:HH:mm}",
-            ({ } s, null) => $"{s.LocalDateTime:HH:mm}",
+            (true, _, _) => Strings.Get("CalendarAllDay"),
+            (_, { } s, { } e) => $"{s.LocalDateTime:HH:mm}–{e.LocalDateTime:HH:mm}",
+            (_, { } s, null) => $"{s.LocalDateTime:HH:mm}",
             _ => string.Empty,
         };
 
@@ -120,25 +221,42 @@
     }
 
     /// <summary>
-    /// The checked calendars the caller may create in — asked of the <c>appointments</c> rel, not of
-    /// <c>Writable</c>: the flag reports the right to edit content, while the create needs the right to add
-    /// sub-items, and gating on the wrong one either hides a create that works or offers one that is refused.
+    /// The checked calendars the caller may create in — asked of the collection's <c>CanCreateEntries</c>
+    /// capability. NOT of the <c>appointments</c> rel, which now serves the LISTING too and is therefore
+    /// advertised to any reader; not <c>Writable</c> either, which reports the right to edit content. Three
+    /// questions, and only one of them is the one the POST actually checks.
     /// </summary>
     private List<CreateTarget> CreateTargets() =>
     [
         .. _collections
-            .Where(c => _checked.Contains(c.Id) && c.Href("appointments") is not null)
+            .Where(c => _checked.Contains(c.Id) && c.CanCreateEntries && c.Href("appointments") is not null)
             .Select(c => new CreateTarget(c.Id, c.DisplayName, c.Href("appointments")!)),
     ];
 
     private bool CanCreate => CreateTargets().Count > 0;
 
-    private IEnumerable<AppointmentRow> Visible =>
-        _filter is { Length: > 0 }
-            ? _appointments.Where(a =>
-                a.Title.Contains(_filter, StringComparison.CurrentCultureIgnoreCase)
-                || a.Location.Contains(_filter, StringComparison.CurrentCultureIgnoreCase))
-            : _appointments;
+    private IEnumerable<AppointmentRow> Visible
+    {
+        get
+        {
+            var rows = _appointments.AsEnumerable();
+            if (_filter is { Length: > 0 })
+            {
+                rows = rows.Where(a =>
+                    a.Title.Contains(_filter, StringComparison.CurrentCultureIgnoreCase)
+                    || a.Location.Contains(_filter, StringComparison.CurrentCultureIgnoreCase));
+            }
+
+            // The day filter narrows the LIST only: the grid shows a month, and a month narrowed to one day is
+            // an empty month.
+            if (!_monthView && _dayFilter is { } day)
+            {
+                rows = rows.Where(a => a.Day == day);
+            }
+
+            return rows;
+        }
+    }
 
     private static string Swatch(string color) =>
         $"display:inline-block; width:8px; height:8px; border-radius:4px; background:{color};";
@@ -170,21 +288,22 @@
         var rows = new List<AppointmentRow>();
         foreach (var collection in _collections.Where(c => _checked.Contains(c.Id)))
         {
-            if (collection.Href("children") is not { } childrenHref)
+            // The collection's OWN rel, followed with GET. The children listing was the wrong source: it carries
+            // a name and nothing else, so every row's When and Where came out of an empty string and the detail
+            // pane beside them was blank by construction (#660).
+            if (collection.Href("appointments") is not { } entriesHref)
             {
                 continue; // a rel the server did not advertise means "not available here" (ADR 0543)
             }
 
             try
             {
-                var contents = await Browse.LoadContentsAsync(collection.Id, collection.Id, childrenHref);
-                foreach (var node in contents.Nodes.Where(n => n.HasVersions))
+                foreach (var entry in await DavCollections.ListEntriesAsync(entriesHref))
                 {
-                    // Start/End/Location come from the Appointment mask's index data, which this listing does
-                    // not carry — the same gap the desktop tab has, and it closes the same way for both.
                     rows.Add(new AppointmentRow(
-                        node.Id, collection.Color ?? "#8a8a8a", collection.DisplayName, node.Name,
-                        null, null, string.Empty, BrowseService.HrefOf(node, "self")));
+                        entry.Id, collection.Color ?? "#8a8a8a", collection.DisplayName, entry.Name,
+                        entry.StartsAt, entry.EndsAt, entry.Location ?? string.Empty, entry.Href("self"),
+                        entry.Day, entry.AllDay, entry.EndDay, entry.Repeats));
                 }
             }
             catch (Exception e)

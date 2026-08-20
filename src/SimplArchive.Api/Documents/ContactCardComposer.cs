@@ -32,6 +32,66 @@ public sealed class ContactCardComposer : IContactCardComposer
     private static readonly HashSet<string> ModelledProperties =
         new(StringComparer.OrdinalIgnoreCase) { "FN", "N", "ORG", "TITLE", "EMAIL", "TEL", "ADR", "BDAY", "URL", "NOTE" };
 
+    // What a decoded photo is allowed to BE. A vCard is user-supplied data, so the type it declares is a
+    // suggestion, not a fact — and `image/svg+xml` is a scriptable document, which is why an allowlist of raster
+    // formats is the rule rather than "whatever it says". Anything else is treated as no photo at all: showing
+    // initials is a smaller loss than echoing an attacker's document back from our own origin.
+    private static readonly (string Type, byte[] Magic)[] PhotoTypes =
+    [
+        ("image/jpeg", [0xFF, 0xD8, 0xFF]),
+        ("image/png", [0x89, 0x50, 0x4E, 0x47]),
+        ("image/gif", [0x47, 0x49, 0x46, 0x38]),
+        ("image/webp", [0x52, 0x49, 0x46, 0x46]),
+    ];
+
+    public ContactPhoto? ReadPhoto(string blob)
+    {
+        if (string.IsNullOrWhiteSpace(blob))
+        {
+            return null;
+        }
+
+        var photo = LogicalLines(blob).Select(ParseLine).FirstOrDefault(l => Is(l, "PHOTO"));
+        if (photo is null)
+        {
+            return null;
+        }
+
+        var value = photo.RawValue.Trim();
+
+        // A `data:` URI carries its own media type; strip the header and keep the base64 tail. Anything else
+        // that looks like a URI is an EXTERNAL reference, which is deliberately not followed (see the interface).
+        if (value.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            var comma = value.IndexOf(',');
+            value = comma < 0 ? string.Empty : value[(comma + 1)..];
+        }
+        else if (value.Contains("://", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        // vCard 3.0 spells inline data as ENCODING=b (or BASE64); a value with neither is a plain URI form we
+        // do not follow. Folded lines have already been rejoined by LogicalLines, but the whitespace of the
+        // folding itself is not part of the payload.
+        var bytes = Decode(value.Replace(" ", string.Empty).Replace("\t", string.Empty));
+
+        // The type is SNIFFED, never read from the card's own TYPE parameter — see PhotoTypes.
+        return bytes is { Length: > 0 } && Sniff(bytes) is { } contentType
+            ? new ContactPhoto(bytes, contentType)
+            : null;
+    }
+
+    private static byte[]? Decode(string base64)
+    {
+        Span<byte> buffer = new byte[((base64.Length / 4) + 1) * 3];
+        return Convert.TryFromBase64String(base64, buffer, out var written) ? buffer[..written].ToArray() : null;
+    }
+
+    private static string? Sniff(byte[] bytes) =>
+        PhotoTypes.FirstOrDefault(t => bytes.Length >= t.Magic.Length && bytes.Take(t.Magic.Length).SequenceEqual(t.Magic))
+            .Type;
+
     public ContactCard Read(string blob)
     {
         var lines = LogicalLines(blob).Select(ParseLine).ToList();

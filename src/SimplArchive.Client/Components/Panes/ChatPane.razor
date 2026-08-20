@@ -261,9 +261,9 @@
 
     private void CloseAuthorCard() => _authorCardOpen = false;
 
-    // Initials fallback when a colleague has no photo — the same treatment MainLayout gives the current user.
-    private static string Initials(string displayName) =>
-        string.Concat(displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => part[0])).ToUpperInvariant();
+    // Initials fallback when a colleague has no photo. This copy had no empty-name guard, so a card with a
+    // blank display name rendered an empty circle where the other four rendered "?".
+    private static string Initials(string displayName) => ContactInitials.From(displayName);
 
     private async Task OpenAuthorCardAsync(string cardHref)
     {

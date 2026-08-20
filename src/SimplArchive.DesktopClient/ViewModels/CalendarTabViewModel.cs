@@ -4,8 +4,65 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.Localization;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
+
+/// <summary>One cell of the month grid: a day, what falls on it, and how much did not fit.</summary>
+/// <remarks>
+/// A model rather than a formatting trick in the view, because "which entries are on this day" is the one
+/// question the grid exists to answer, and it is worth being able to test without a window.
+/// </remarks>
+public sealed class CalendarDayViewModel
+{
+    public required DateOnly Day { get; init; }
+
+    /// <summary>False for the leading/trailing days that keep the weeks whole — context, not content.</summary>
+    public required bool InMonth { get; init; }
+
+    public required bool IsToday { get; init; }
+
+    public required IReadOnlyList<CalendarCellEntryViewModel> Entries { get; init; }
+
+    /// <summary>How many more fall on this day than the cell can show.</summary>
+    public required int Hidden { get; init; }
+
+    public bool HasHidden => Hidden > 0;
+
+    public string DayNumber => Day.Day.ToString(CultureInfo.CurrentCulture);
+
+    public string MoreLabel => string.Format(CultureInfo.CurrentCulture, Strings.Get("CalendarMoreEntries"), Hidden);
+}
+
+/// <summary>One appointment as it appears in ONE day cell.</summary>
+/// <remarks>
+/// A multi-day entry occupies several cells, and what a cell shows depends on which cell it is: the day it
+/// starts shows a time, the days it runs through show a continuation mark. That is a fact about the PAIR, so it
+/// cannot live on the row — the same row object is in every cell it covers, and a flag on it would be rewritten
+/// by whichever cell rendered last.
+/// </remarks>
+public sealed class CalendarCellEntryViewModel
+{
+    public required AppointmentRowViewModel Row { get; init; }
+
+    /// <summary>True on a covered day that is not the entry's first.</summary>
+    public required bool Continues { get; init; }
+
+    public string Title => Row.Title;
+
+    public string CollectionColor => Row.CollectionColor;
+
+    /// <summary>The repeat marker, or empty. Bound directly so the cell needs no converter.</summary>
+    public string RepeatMark => Row.RepeatMark;
+
+    public bool Recurring => Row.Recurring;
+
+    /// <summary>
+    /// The start time, or the continuation mark on a day the entry merely runs through — repeating the start
+    /// time on day three would state it began that morning.
+    /// </summary>
+    public string LeadText => Continues ? AppointmentRowViewModel.ContinuationMark : Row.StartTimeShort;
+}
 
 /// <summary>One appointment row in the middle pane.</summary>
 public sealed partial class AppointmentRowViewModel : ObservableObject
@@ -22,8 +79,44 @@ public sealed partial class AppointmentRowViewModel : ObservableObject
     [ObservableProperty] private DateTimeOffset? _end;
     [ObservableProperty] private string _location = string.Empty;
 
+    /// <summary>A day rather than a moment: it has no time to show, and none should be invented (ADR 0647).</summary>
+    public required bool AllDay { get; init; }
+
+    /// <summary>The day as the server indexed it — set for an all-day entry, which has no Start instant.</summary>
+    public DateOnly? IndexedDay { get; init; }
+
     /// <summary>The day this appointment groups under — the list is read by day, not as a flat sequence.</summary>
-    public DateOnly? Day => Start is { } start ? DateOnly.FromDateTime(start.LocalDateTime) : null;
+    public DateOnly? Day => IndexedDay ?? (Start is { } start ? DateOnly.FromDateTime(start.LocalDateTime) : null);
+
+    /// <summary>The end as the server indexed it — <c>DTEND</c> verbatim, which iCalendar defines as EXCLUSIVE.</summary>
+    public DateOnly? IndexedEndDay { get; init; }
+
+    /// <summary>The stored <c>RRULE</c> as text, or null when the entry does not repeat.</summary>
+    public string? Repeats { get; init; }
+
+    /// <summary>
+    /// Whether this entry repeats — and therefore whether the grid is showing less than the month holds.
+    /// </summary>
+    /// <remarks>
+    /// The rule is never expanded, so a weekly rehearsal is drawn at its FIRST occurrence and nowhere else. A
+    /// deliberate limitation; a silent one would be a grid quietly claiming the other three weeks are free.
+    /// </remarks>
+    public bool Recurring => !string.IsNullOrEmpty(Repeats);
+
+    /// <summary>The marker itself, or empty — bound directly, so the view needs no converter.</summary>
+    public string RepeatMark => Recurring ? AppointmentCoverage.RepeatMark : string.Empty;
+
+    /// <summary>What a continuation cell shows where a starting one shows its time.</summary>
+    public const string ContinuationMark = AppointmentCoverage.ContinuationMark;
+
+    /// <summary>The last day this entry covers — see <see cref="AppointmentCoverage"/> for the arithmetic.</summary>
+    public DateOnly? LastDay => AppointmentCoverage.LastDay(Day, AllDay, IndexedEndDay, End);
+
+    /// <summary>Whether this entry is on show on <paramref name="day"/> — the grid's bucketing question.</summary>
+    public bool CoversDay(DateOnly day) => AppointmentCoverage.CoversDay(day, Day, AllDay, IndexedEndDay, End);
+
+    /// <summary>True on a covered day that is not the first — the cell reads as "still going", not "starts".</summary>
+    public bool ContinuesOn(DateOnly day) => AppointmentCoverage.ContinuesOn(day, Day, AllDay, IndexedEndDay, End);
 
     /// <summary>
     /// The full start, in the reader's own time zone, for the detail pane. It exists because binding the raw
@@ -33,11 +126,23 @@ public sealed partial class AppointmentRowViewModel : ObservableObject
     /// </summary>
     public string StartsOn => Start is { } start ? start.LocalDateTime.ToString("g", CultureInfo.CurrentCulture) : string.Empty;
 
-    /// <summary>"09:00–10:00", or empty when the appointment carries no time at all.</summary>
-    public string TimeRange => (Start, End) switch
+    /// <summary>Just the start — what a month cell has room for.</summary>
+    /// <remarks>
+    /// A day cell is about 85 px wide. Binding <see cref="TimeRange"/> there put "11:00–12:00" in an Auto column
+    /// ahead of the title, so the title was trimmed to nothing and every entry read as a time and an ellipsis —
+    /// identifying no more than the ISO-date names it sat beside. The end time is not what a cell answers, and
+    /// the range is still on the row and in the detail pane where there is room for it. The web grid already
+    /// showed the start alone; this is that pattern promoted into the desktop (ADR 0511).
+    /// </remarks>
+    public string StartTimeShort =>
+        !AllDay && Start is { } at ? at.LocalDateTime.ToString("HH:mm", CultureInfo.CurrentCulture) : string.Empty;
+
+    /// <summary>"09:00–10:00", the all-day marker, or empty when the entry carries no time at all.</summary>
+    public string TimeRange => (AllDay, Start, End) switch
     {
-        ({ } s, { } e) => $"{s.LocalDateTime:HH:mm}–{e.LocalDateTime:HH:mm}",
-        ({ } s, null) => $"{s.LocalDateTime:HH:mm}",
+        (true, _, _) => Strings.Get("CalendarAllDay"),
+        (_, { } s, { } e) => $"{s.LocalDateTime:HH:mm}–{e.LocalDateTime:HH:mm}",
+        (_, { } s, null) => $"{s.LocalDateTime:HH:mm}",
         _ => string.Empty,
     };
 
@@ -107,11 +212,18 @@ public sealed partial class CalendarTabViewModel : ObservableObject
     /// </remarks>
     public bool CanCreate => CreateTargets().Count > 0;
 
-    /// <summary>The checked calendars the caller may create in, in the order the tab lists them.</summary>
+    /// <summary>
+    /// The checked calendars the caller may create in, in the order the tab lists them.
+    /// </summary>
+    /// <remarks>
+    /// Gated on <c>CanCreateEntries</c>, NOT on the presence of the <c>appointments</c> rel: that rel now serves
+    /// the LISTING too, so it is advertised to any reader, and gating on it would light New up for someone
+    /// who cannot create and fail with a 403 on click (ADR 0543).
+    /// </remarks>
     public IReadOnlyList<CreateTarget> CreateTargets() =>
     [
         .. Collections
-            .Where(c => c.IsChecked)
+            .Where(c => c.IsChecked && c.Collection.CanCreateEntries)
             .Select(c => (c.DisplayName, Href: c.Collection.HrefOrNull("appointments")))
             .Where(c => c.Href is not null)
             .Select(c => new CreateTarget(c.DisplayName, c.Href!)),
@@ -142,14 +254,170 @@ public sealed partial class CalendarTabViewModel : ObservableObject
     }
 
     /// <summary>What the list actually shows: the filter applied over the merged appointments.</summary>
-    public IEnumerable<AppointmentRowViewModel> VisibleAppointments =>
-        Filter is { Length: > 0 } filter
-            ? Appointments.Where(a =>
-                a.Title.Contains(filter, StringComparison.CurrentCultureIgnoreCase)
-                || a.Location.Contains(filter, StringComparison.CurrentCultureIgnoreCase))
-            : Appointments;
+    public IEnumerable<AppointmentRowViewModel> VisibleAppointments
+    {
+        get
+        {
+            var rows = Appointments.AsEnumerable();
+            if (Filter is { Length: > 0 } filter)
+            {
+                rows = rows.Where(a =>
+                    a.Title.Contains(filter, StringComparison.CurrentCultureIgnoreCase)
+                    || a.Location.Contains(filter, StringComparison.CurrentCultureIgnoreCase));
+            }
 
-    partial void OnFilterChanged(string value) => OnPropertyChanged(nameof(VisibleAppointments));
+            // The day filter narrows the LIST only: the grid shows a month, and a month narrowed to one day is
+            // an empty month.
+            if (!IsMonthView && DayFilter is { } day)
+            {
+                // Covers, not starts on: the filter answers the cell the user clicked, and a multi-day entry is
+                // in that cell. Matching on the start day would hand back an emptier list than the grid showed.
+                rows = rows.Where(a => a.CoversDay(day));
+            }
+
+            return rows;
+        }
+    }
+
+    partial void OnFilterChanged(string value) => Refresh();
+
+    // ── Month grid ───────────────────────────────────────────────────────────────────────────────────────
+    //
+    // 67 concerts across five months is not a list. The list answers "what is coming up"; the grid answers
+    // "what does September look like", and shows that an act plays the same venue twice on one day — which is
+    // what a date-only index could not even express (#660).
+
+    /// <summary>Month grid or flat list. Opens on the month, which is what the tab is for.</summary>
+    [ObservableProperty] private bool _isMonthView = true;
+
+    /// <summary>The month on show — today's, which is what every calendar does and what a reader expects.</summary>
+    [ObservableProperty] private DateOnly _month = Today.AddDays(1 - Today.Day);
+
+    /// <summary>Set by a day cell's overflow; narrows the LIST to that day rather than growing the cell.</summary>
+    [ObservableProperty] private DateOnly? _dayFilter;
+
+    /// <summary>Rows in one day cell before the rest become "+N more" — see the web twin for the reasoning.</summary>
+    private const int EntriesPerCell = 2;
+
+    private static DateOnly Today => DateOnly.FromDateTime(DateTime.Today);
+
+    /// <summary>The culture's own first day of the week — Monday here, Sunday there; never a constant.</summary>
+    private static DayOfWeek FirstDay => CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek;
+
+    public string MonthName => Month.ToDateTime(TimeOnly.MinValue).ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+
+    /// <summary>The seven column headings, rotated to start on the culture's own first day.</summary>
+    public IReadOnlyList<string> WeekdayHeadings
+    {
+        get
+        {
+            var names = CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames;
+            return [.. Enumerable.Range(0, 7).Select(i => names[((int)FirstDay + i) % 7])];
+        }
+    }
+
+    /// <summary>
+    /// Forty-two cells: six weeks, always.
+    /// </summary>
+    /// <remarks>
+    /// A fixed count keeps the grid from changing height as the user pages through months, which is otherwise
+    /// a visible jolt on every click and moves the cell out from under the cursor.
+    /// </remarks>
+    public IReadOnlyList<CalendarDayViewModel> MonthDays
+    {
+        get
+        {
+            var lead = ((int)Month.DayOfWeek - (int)FirstDay + 7) % 7;
+            var first = Month.AddDays(-lead);
+            var visible = VisibleAppointments.ToList();
+
+            return
+            [
+                .. Enumerable.Range(0, 42).Select(i =>
+                {
+                    var day = first.AddDays(i);
+
+                    // Chip-per-day, not a spanning bar: a bar across a week needs lane packing and absolute
+                    // positioning, which is a different grid. So one entry yields one chip in each cell it covers.
+                    var entries = visible
+                        .Where(e => e.CoversDay(day))
+                        // All-day first, then by time: an entry covering the whole day is context for the rest.
+                        .OrderBy(e => !e.AllDay)
+                        .ThenBy(e => e.Start)
+                        .ThenBy(e => e.Title, StringComparer.CurrentCultureIgnoreCase)
+                        .ToList();
+
+                    return new CalendarDayViewModel
+                    {
+                        Day = day,
+                        InMonth = day.Month == Month.Month,
+                        IsToday = day == Today,
+                        Entries =
+                        [
+                            .. entries.Take(EntriesPerCell).Select(e => new CalendarCellEntryViewModel
+                            {
+                                Row = e,
+                                Continues = e.ContinuesOn(day),
+                            }),
+                        ],
+                        Hidden = Math.Max(0, entries.Count - EntriesPerCell),
+                    };
+                }),
+            ];
+        }
+    }
+
+    [RelayCommand]
+    private void PreviousMonth() => Month = Month.AddMonths(-1);
+
+    [RelayCommand]
+    private void NextMonth() => Month = Month.AddMonths(1);
+
+    [RelayCommand]
+    private void GoToday() => Month = Today.AddDays(1 - Today.Day);
+
+    [RelayCommand]
+    private void ShowMonth()
+    {
+        // The day filter belongs to the list it sent the user to; carrying it back into the grid would
+        // silently hide every other day.
+        DayFilter = null;
+        IsMonthView = true;
+    }
+
+    [RelayCommand]
+    private void ShowList() => IsMonthView = false;
+
+    /// <summary>Hands a day to the list — which already has the columns, the filter and the selection.</summary>
+    [RelayCommand]
+    private void ShowDay(CalendarDayViewModel day)
+    {
+        DayFilter = day.Day;
+        IsMonthView = false;
+    }
+
+    [RelayCommand]
+    private void ClearDayFilter() => DayFilter = null;
+
+    partial void OnMonthChanged(DateOnly value) => Refresh();
+
+    partial void OnIsMonthViewChanged(bool value) => Refresh();
+
+    partial void OnDayFilterChanged(DateOnly? value) => Refresh();
+
+    /// <summary>Everything derived from the appointments, in one place so no view is left showing stale rows.</summary>
+    private void Refresh()
+    {
+        OnPropertyChanged(nameof(VisibleAppointments));
+        OnPropertyChanged(nameof(MonthDays));
+        OnPropertyChanged(nameof(MonthName));
+        OnPropertyChanged(nameof(DayFilterLabel));
+    }
+
+    /// <summary>The chip's text — a filter the user cannot see is one they conclude is a bug (ADR 0550).</summary>
+    public string DayFilterLabel => DayFilter is { } day
+        ? day.ToDateTime(TimeOnly.MinValue).ToString("D", CultureInfo.CurrentCulture)
+        : string.Empty;
 
     /// <summary>
     /// Loads the selected appointment's entry for the edit form, or null when it cannot be edited here.
@@ -293,10 +561,18 @@ public sealed partial class CalendarTabViewModel : ObservableObject
         var rows = new List<AppointmentRowViewModel>();
         foreach (var collection in Collections.Where(c => c.IsChecked))
         {
-            List<Node> children;
+            // The collection's OWN rel, followed with GET. The children listing was the wrong source: it
+            // carries a name and nothing else, so every row's When and Where came out of an empty string and
+            // the detail pane beside them was blank by construction (#660).
+            if (collection.Collection.HrefOrNull("appointments") is not { } entriesHref)
+            {
+                continue; // a rel the server did not advertise means "not available here" (ADR 0543)
+            }
+
+            IReadOnlyList<DavEntry> entries;
             try
             {
-                children = await _api.Documents.GetChildrenAsync(collection.Collection.Href("children"));
+                entries = await _api.DavCollections.ListEntriesAsync(entriesHref);
             }
             catch (Exception e)
             {
@@ -305,17 +581,22 @@ public sealed partial class CalendarTabViewModel : ObservableObject
                 continue;
             }
 
-            foreach (var child in children.Where(c => c.HasVersions))
+            foreach (var entry in entries)
             {
                 rows.Add(new AppointmentRowViewModel
                 {
-                    Id = child.Id,
+                    Id = entry.Id,
                     CollectionColor = collection.Color ?? "#8a8a8a",
                     CollectionName = collection.DisplayName,
-                    Title = child.Name,
-                    // Start/End/Location come from the Appointment mask's index data, which this listing does
-                    // not carry — the same gap the Contacts tab has, and it closes the same way.
-                    Links = child.Links ?? new Dictionary<string, string>(),
+                    Title = entry.Name,
+                    Start = entry.StartsAt,
+                    End = entry.EndsAt,
+                    Location = entry.Location ?? string.Empty,
+                    AllDay = entry.AllDay,
+                    IndexedDay = entry.Day,
+                    IndexedEndDay = entry.EndDay,
+                    Repeats = entry.Repeats,
+                    Links = entry.Links,
                 });
             }
         }
@@ -329,7 +610,7 @@ public sealed partial class CalendarTabViewModel : ObservableObject
         }
 
         // VisibleAppointments is a PROJECTION, not a collection — mutating Appointments raises nothing for it.
-        OnPropertyChanged(nameof(VisibleAppointments));
+        Refresh();
         OnPropertyChanged(nameof(CanCreate));
         OnPropertyChanged(nameof(EmptyMessage));
     }
@@ -356,7 +637,7 @@ public sealed partial class CalendarTabViewModel : ObservableObject
             Collections.Add(new CalendarCollectionViewModel
             {
                 Collection = new DavCollection(
-                    Guid.NewGuid(), name, name.Split('/')[^1].Trim(), "calendar", colour, true, personal,
+                    Guid.NewGuid(), name, name.Split('/')[^1].Trim(), "calendar", colour, true, personal, false,
                     new Dictionary<string, string>()),
                 Color = colour,
                 IsChecked = true,
@@ -365,16 +646,21 @@ public sealed partial class CalendarTabViewModel : ObservableObject
 
         // A fixed date, not "today": a screenshot that moves every day cannot be compared against the last one.
         var day = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
+        // The last one spans three days on purpose: a multi-day entry is the case a chip-per-day grid can get
+        // wrong invisibly, and a demo set where everything starts and ends within one afternoon never shows it.
         var items = new[]
         {
-            ("Sprint planning", 9, 10, "Room 2.14", 0),
-            ("Architecture review", 11, 12, "Zoom", 1),
-            ("Lunch with Marta", 12, 13, "Kornhausplatz", 0),
-            ("Release 0.4.0 cut", 16, 17, string.Empty, 1),
+            // Sprint planning REPEATS: the marker is the only thing saying the grid is showing less than the
+            // month holds, and a demo set in which nothing repeats can never show that it works.
+            ("Sprint planning", 0, 9, 0, 10, "Room 2.14", 0, "FREQ=WEEKLY;BYDAY=TU"),
+            ("Architecture review", 0, 11, 0, 12, "Zoom", 1, null),
+            ("Lunch with Marta", 0, 12, 0, 13, "Kornhausplatz", 0, null),
+            ("Release 0.4.0 cut", 0, 16, 0, 17, string.Empty, 1, null),
+            ("Team offsite", 1, 9, 3, 17, "Interlaken", 1, null),
         };
 
         Appointments.Clear();
-        foreach (var (title, from, to, location, calendar) in items)
+        foreach (var (title, fromDay, from, toDay, to, location, calendar, repeats) in items)
         {
             Appointments.Add(new AppointmentRowViewModel
             {
@@ -382,15 +668,17 @@ public sealed partial class CalendarTabViewModel : ObservableObject
                 CollectionColor = calendars[calendar].Item2,
                 CollectionName = calendars[calendar].Item1,
                 Title = title,
-                Start = day.AddHours(from),
-                End = day.AddHours(to),
+                AllDay = false,
+                Start = day.AddDays(fromDay).AddHours(from),
+                End = day.AddDays(toDay).AddHours(to),
                 Location = location,
+                Repeats = repeats,
                 Links = new Dictionary<string, string>(),
             });
         }
 
         Selected = Appointments[0];
-        OnPropertyChanged(nameof(VisibleAppointments));
+        Refresh();
         OnPropertyChanged(nameof(CanCreate));
         OnPropertyChanged(nameof(EmptyMessage));
     }

@@ -1,0 +1,169 @@
+@using System.Globalization
+@using SimplArchive.Client.Components.Tabs
+
+@* The month grid (#660). A list answers "what is coming up"; this answers "what does September look like",
+   which is the question 67 concerts across five months made unanswerable in a flat list.
+
+   Everything about the calendar itself comes from the ACTIVE CULTURE rather than from a constant: which day a
+   week starts on is a genuine regional difference (Monday across most of Europe, Sunday in the US), and the app
+   already ships EN/DE/IT/ES. A hardcoded Monday would be wrong for one of them and silently so. *@
+
+<div class="wb-cal-month">
+    <div class="wb-cal-monthbar">
+        <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small"
+                       title="@Strings.Get("CalendarPrevMonth")" aria-label="@Strings.Get("CalendarPrevMonth")"
+                       OnClick="@(() => Shift(-1))" />
+        <span class="wb-cal-monthname">@MonthName</span>
+        <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small"
+                       title="@Strings.Get("CalendarNextMonth")" aria-label="@Strings.Get("CalendarNextMonth")"
+                       OnClick="@(() => Shift(1))" />
+        <MudButton Size="Size.Small" Class="wb-rib-btn ml-2" OnClick="GoToday"
+                   title="@Strings.Get("CalendarToday")" aria-label="@Strings.Get("CalendarToday")">
+            <span class="wb-rib-label">@Strings.Get("CalendarToday")</span>
+        </MudButton>
+    </div>
+
+    <div class="wb-cal-grid" role="grid">
+        @foreach (var heading in WeekdayHeadings())
+        {
+            <div class="wb-cal-dow" role="columnheader">@heading</div>
+        }
+
+        @foreach (var day in Days())
+        {
+            var entries = EntriesOn(day);
+            var shown = entries.Take(EntriesPerCell).ToList();
+            var hidden = entries.Count - shown.Count;
+
+            <div class="wb-cal-day @(day.Month == Month.Month ? "" : "wb-cal-outside") @(day == Today ? "wb-cal-today" : "")"
+                 role="gridcell">
+                <div class="wb-cal-daynum">@day.Day</div>
+                @foreach (var entry in shown)
+                {
+                    @* Single click selects, double-click edits — the same contract as every other list in the
+                       workbench, so the grid is not a place where the mouse means something different. *@
+                    <div class="wb-cal-entry @(entry == Selected ? "wb-cal-entry-sel" : "") @(entry.ContinuesOn(day) ? "wb-cal-entry-cont" : "")"
+                         title="@Tooltip(entry)"
+                         @onclick="@(() => OnSelected.InvokeAsync(entry))"
+                         @ondblclick="@(() => OnActivated.InvokeAsync(entry))">
+                        <span class="wb-cal-dot" style="background:@entry.CollectionColor"></span>
+                        @if (entry.ContinuesOn(day))
+                        {
+                            @* A continuation carries no time of its own: the entry did not start here, and
+                               repeating the start time on day three would state it began that morning. *@
+                            <span class="wb-cal-time wb-cal-cont-mark">@ContinuationMark</span>
+                        }
+                        else if (!entry.AllDay && entry.Start is { } start)
+                        {
+                            <span class="wb-cal-time">@start.LocalDateTime.ToString("HH:mm")</span>
+                        }
+                        <span class="wb-cal-title">@entry.Title</span>
+                        @if (entry.Recurring)
+                        {
+                            @* The rule is never expanded, so this entry is drawn at its first occurrence and
+                               nowhere else. Without the marker the grid silently claims the other weeks are
+                               free; with it, the limitation is stated where the reader is looking. *@
+                            <span class="wb-cal-repeat" title="@Strings.Get("CalendarRepeatsHint")"
+                                  aria-label="@Strings.Get("CalendarRepeatsHint")">@RepeatMark</span>
+                        }
+                    </div>
+                }
+                @if (hidden > 0)
+                {
+                    @* Not an expander and not a popover: it hands the day to the LIST, which already has the
+                       columns, the filter and the selection behaviour. A third surface to build, localize and
+                       test would earn nothing the list does not already do. *@
+                    <div class="wb-cal-more" @onclick="@(() => OnDayOverflowed.InvokeAsync(day))">
+                        @string.Format(Strings.Get("CalendarMoreEntries"), hidden)
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>Rows to show inside one day cell before the rest become "+N more".</summary>
+    /// <remarks>
+    /// Two, because a cell has to stay the same height as its neighbours for the grid to read as a grid, and
+    /// two lines plus the overflow link is what fits at that height. It is not a guess at how busy a day is:
+    /// the seed's fullest day has two concerts at the same venue, and a day with eight would make any
+    /// "fit them all" rule stretch one row and squash the month.
+    /// </remarks>
+    private const int EntriesPerCell = 2;
+
+    /// <summary>What a continuation cell shows where a starting one shows its time.</summary>
+    private const string ContinuationMark = AppointmentCoverage.ContinuationMark;
+
+    /// <summary>The marker on an entry that repeats. A mark, not a word — its meaning rides in the tooltip.</summary>
+    private const string RepeatMark = AppointmentCoverage.RepeatMark;
+
+    [Parameter, EditorRequired] public IReadOnlyList<CalendarTab.AppointmentRow> Entries { get; set; } = [];
+
+    [Parameter] public CalendarTab.AppointmentRow? Selected { get; set; }
+
+    [Parameter] public EventCallback<CalendarTab.AppointmentRow> OnSelected { get; set; }
+
+    [Parameter] public EventCallback<CalendarTab.AppointmentRow> OnActivated { get; set; }
+
+    /// <summary>Raised when a day's hidden entries are asked for — the tab switches to the filtered list.</summary>
+    [Parameter] public EventCallback<DateOnly> OnDayOverflowed { get; set; }
+
+    /// <summary>The month on show. Opens on today's, which is what every calendar does and what a reader expects.</summary>
+    private DateOnly Month { get; set; } = DateOnly.FromDateTime(DateTime.Today).AddDays(1 - DateTime.Today.Day);
+
+    private static DateOnly Today => DateOnly.FromDateTime(DateTime.Today);
+
+    private string MonthName => Month.ToDateTime(TimeOnly.MinValue)
+        .ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+
+    private void Shift(int months) => Month = Month.AddMonths(months);
+
+    private void GoToday() => Month = Today.AddDays(1 - Today.Day);
+
+    /// <summary>The culture's own first day of the week — Monday here, Sunday there; never a constant.</summary>
+    private static DayOfWeek FirstDay => CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek;
+
+    private static IEnumerable<string> WeekdayHeadings()
+    {
+        var names = CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames;
+        for (var i = 0; i < 7; i++)
+        {
+            yield return names[((int)FirstDay + i) % 7];
+        }
+    }
+
+    /// <summary>
+    /// Six weeks, always. A fixed count keeps the grid from changing height as the user pages through months,
+    /// which is otherwise a visible jolt on every click and moves the cell under the cursor.
+    /// </summary>
+    private IEnumerable<DateOnly> Days()
+    {
+        var lead = ((int)Month.DayOfWeek - (int)FirstDay + 7) % 7;
+        var first = Month.AddDays(-lead);
+        for (var i = 0; i < 42; i++)
+        {
+            yield return first.AddDays(i);
+        }
+    }
+
+    /// <summary>
+    /// Chip-per-day, not a spanning bar: a bar across a week needs lane packing and absolute positioning, which
+    /// is a different grid. The same entry object appears in several cells, so the day is passed to the chip
+    /// rather than stored on the row.
+    /// </summary>
+    private List<CalendarTab.AppointmentRow> EntriesOn(DateOnly day) =>
+    [
+        .. Entries
+            .Where(e => e.CoversDay(day))
+            // All-day first, then by time: an entry that covers the whole day is context for the ones inside it.
+            .OrderBy(e => !e.AllDay)
+            .ThenBy(e => e.Start)
+            .ThenBy(e => e.Title, StringComparer.CurrentCultureIgnoreCase),
+    ];
+
+    /// <summary>The cell is too narrow for the whole story, so the hover carries it — where there is a hover.</summary>
+    private static string Tooltip(CalendarTab.AppointmentRow entry) =>
+        string.Join(" · ", new[] { entry.TimeRange, entry.Title, entry.Location, entry.CollectionName }
+            .Where(part => part is { Length: > 0 }));
+}
