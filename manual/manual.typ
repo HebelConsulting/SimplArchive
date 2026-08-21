@@ -294,7 +294,7 @@ curated tag catalogue with colours. *Sensitivity labels*#idx("Sensitivity label"
 #shot("screenshots/web-tags.png",
   [The tag catalogue: curated, colour-coded tags an administrator maintains for the whole tenant.])
 
-= Working from your file manager (WebDAV)
+= Working from your file manager (WebDAV) <webdav>
 
 The whole archive is reachable over *WebDAV*#idx("WebDAV") as a network drive — not just your personal space but the shared
 repositories you have permission to access, with your rights enforced on every operation. The mounted drive is
@@ -380,7 +380,7 @@ edit, and documents frozen by a legal hold, behave in the mount exactly as they 
   will typically work in another on the same machine.
 ]
 
-== Reading the archive in your mail program (IMAP)
+== Reading the archive in your mail program (IMAP) <imap>
 
 Where WebDAV turns the archive into a network drive, *IMAP*#idx("IMAP") lets a mail program browse it: point
 any IMAP-speaking mail client at your SimplArchive server and browse the same
@@ -487,7 +487,7 @@ stored one is kept.
 Every save — from the form or from the raw box — writes a *new version*, exactly as any other change to a
 document does. A raw edit you regret is recoverable from the version history like anything else.
 
-== Subscribing from your phone (CalDAV & CardDAV)
+== Subscribing from your phone (CalDAV & CardDAV) <davsub>
 
 Addressbooks and calendars speak *CardDAV*#idx("CardDAV") and *CalDAV*#idx("CalDAV") — the standards phones,
 tablets and mail programs already use. Point a device at your SimplArchive server and it finds every addressbook
@@ -518,6 +518,79 @@ with who did it and why.
   *My task deadlines*, which is a list of dates. An empty deadlines list usually means no document type in your
   tenant has an SLA configured.
 ]
+
+= Your own device
+
+Everything in this chapter is already yours. SimplArchive installs *nothing* on your phone, tablet or laptop —
+the archive speaks the protocols those devices came with, so the mail app, address book, calendar and file
+manager you already use are the client. There is no app to find, no version to keep current, and nothing to
+uninstall when you leave.
+
+That also means the archive obeys the same rules on your device as in the workbench. What you may see is what
+you may see; a folder you have no rights to simply is not there, rather than being there and refusing you.
+
+== What speaks what
+
+#table(
+  columns: (auto, auto, 1fr),
+  inset: 6pt,
+  align: (left, left, left),
+  table.header([*On your device*], [*Protocol*], [*What you get*]),
+  [Mail program], [*IMAP*#idx("IMAP")], [The archive as mail folders — see @imap],
+  [Address book], [*CardDAV*#idx("CardDAV")], [Contacts sync both ways — see @davsub],
+  [Calendar], [*CalDAV*#idx("CalDAV")], [Calendars and your task deadlines — see @davsub],
+  [File manager], [*WebDAV*#idx("WebDAV")], [One mountable drive — see @webdav],
+  [Notes app], [IMAP], [Notes with real version history — see @imap],
+  [Browser], [—], [The full workbench, on any screen],
+)
+
+== One password for your devices
+
+Every protocol above uses the *same DAV password*, issued from *WebDAV…* in the account menu. It is separate
+from your sign-in password on purpose: a device holds it indefinitely, so it is the one you revoke when a phone
+is lost — without changing how you sign in.
+
+Revoking it disconnects every device at once. There is no per-device credential today; if you need one device
+cut off, reissue and re-enter the password on the ones you keep.
+
+== Encryption is not optional
+
+Point your devices at an `https://` address, and make sure the mail account uses *TLS* (port 993). This is not
+only good practice — some notes clients *silently refuse* a plaintext connection: they ask the server what it
+supports, dislike the answer and hang up, showing you nothing at all. A server that works perfectly from every
+other app can look broken from that one, and the reason never appears on screen.
+
+#note[
+  *If a device connects but shows nothing*, suspect the transport before the account. A wrong password produces
+  an error you can read; a refused plaintext connection produces silence.
+]
+
+== What each one does not give you
+
+Naming the boundary is what stops a working feature looking broken:
+
+- *A mail program shows the archive, not the application.* No recycle bin, no workflow, no permissions dialog,
+  no search across metadata — those live in the workbench.
+- *A mounted drive shows the tree, not the history.* Versions, comments and index data are not files, so they
+  do not appear; saving over a file makes a new version, which is the one piece of history the drive can express.
+- *Calendars and address books carry their own items only.* A calendar holds appointments; it will not show you
+  the documents filed beside it.
+- *Task collections are read-only.* You can see what is waiting; approving it is recorded in the workbench, with
+  who did it and why.
+
+== On a small screen
+
+The workbench itself adapts rather than sending you to a separate mobile site, and it decides by what you are
+holding rather than by how wide the window is — a tablet is recognised by its *touch* screen, so turning it does
+not turn it into a laptop.
+
+- *Phone, and a tablet held upright* — one pane at a time. The folder tree slides in from the left, the folder
+  contents fill the screen, and opening a document covers it with *Preview*, *Details* and *Comments* tabs. A
+  single tap navigates, rather than the desktop's click-then-double-click.
+- *Tablet held sideways* — two panes. Browsing shows the tree beside the folder contents; opening a document
+  swaps the tree for the document, so what you came from stays next to what you opened. The tree is always one
+  tap away, from the ☰ button.
+- *Laptop or desktop* — the full workbench, with resizable panes that remember their widths.
 
 = Metadata & classification
 

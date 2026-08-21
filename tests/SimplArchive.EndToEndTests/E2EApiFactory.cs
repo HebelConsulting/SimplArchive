@@ -153,6 +153,9 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         Environment.SetEnvironmentVariable("Lmtp__Port", "-1");
         Environment.SetEnvironmentVariable("Imap__Enabled", "true");
         Environment.SetEnvironmentVariable("Imap__Port", "-1");
+        // A PUBLISHED port that cannot coincide with the ephemeral bound one, so the advertised-vs-bound
+        // distinction (#682) is observable rather than a value that happens to match.
+        Environment.SetEnvironmentVariable("Imap__PublicPort", "143");
         // Session-hygiene caps scaled for testability (ADR 0618): the pre-auth timeout short enough that a
         // test can wait it out, the caps low enough to hit with a handful of sockets — but all with headroom
         // over what the MailKit-driven tests actually hold open (≤3 concurrent sessions, logins < 1 s).

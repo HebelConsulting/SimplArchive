@@ -69,7 +69,16 @@ public class WorkbenchShellSizeTests
     // MudMenuItem wrapping items renders NOTHING) and takes StartIcon, not Icon (which renders a bare
     // icon-button activator with no label). Both compile clean, so the build says nothing and the menu is
     // silently wrong — the kind of thing the next person pays for again unless it is written down here.
-    private const int Ceiling = 3_230;
+    // 3,230 → 3,299 for the tablet tier (#684): a media query for a tablet held upright (folded into the
+    // single-pane block as a second condition rather than a copy of it), one for a tablet held sideways, and
+    // the viewport-mode callback that replaced the phone bool.
+    //
+    // The biggest raise this guard has taken, and argued rather than assumed. EXTRACTION WAS CONSIDERED AND
+    // REJECTED: ADR 0491 records that these queries must come LAST in this <style> block to beat the base
+    // .wb-* pane widths at equal specificity, and an external sheet in <head> loads EARLIER, which inverts
+    // that. Moving them would trade 90 lines for a cascade bug the tests would not obviously catch.
+    // The comments were trimmed by 12 lines first; what is left is the third tier of a layout the shell owns.
+    private const int Ceiling = 3_299;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

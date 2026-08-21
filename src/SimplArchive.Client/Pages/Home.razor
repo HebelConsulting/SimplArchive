@@ -344,7 +344,10 @@
     /* Phone single-pane drill-down (ADR "Responsive phone drill-down"), replacing the trimmed-3-pane tier: the
        tree becomes a slide-out drawer, the folder contents list is the default full-width view, and a selected
        document opens a full-screen detail overlay with Preview/Details/Comments sub-tabs. */
-    @@media (max-width: 767px) {
+    /* ...and a TABLET HELD UPRIGHT joins it (#684): a second condition on the same block rather than a copy,
+       because two blocks that must stay identical do not. `(pointer: coarse)` identifies the tablet — width
+       cannot, an iPad Pro being 1024px portrait and 1366px landscape. */
+    @@media (max-width: 767px), (pointer: coarse) and (min-width: 768px) and (orientation: portrait) {
         .wb-ribbon { padding: 4px 8px; }
         .wb-phone-topbar { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; padding: 2px 6px;
             border-bottom: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
@@ -385,6 +388,40 @@
         .wb-detail.wb-ptab-comments .wb-detail-bottom { display: flex; }
         .wb-detail.wb-ptab-comments .wb-preview { display: none; }
         .wb-detail.wb-ptab-comments .wb-chat { display: flex !important; flex: 1 1 auto; }
+    }
+
+    /* TABLET, HELD SIDEWAYS (#684): two of the three panes, the tree always one tap away. Browsing shows
+       tree | list; selecting swaps the tree for the detail, so the parent stays beside the child. Which two
+       show is a function of `wb-has-selection` alone, so this tier needs nothing from Blazor. */
+    @@media (pointer: coarse) and (min-width: 768px) and (orientation: landscape) {
+        .wb-ribbon { padding: 4px 8px; }
+        /* Hidden by default, so every tier that wants it must say so — omitting this made the hamburger
+           present, correct and invisible. It is the "always able to return to the tree" promise. */
+        .wb-phone-topbar { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; padding: 2px 6px;
+            border-bottom: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
+        /* Above 1199px the trim tier does not run, so a large tablet would otherwise keep the chat pane. */
+        .wb-chat, [data-gutter="chat"] { display: none !important; }
+        .wb-cols { position: relative; }
+        .wb-cols [data-gutter] { display: none !important; }
+
+        /* The drawer, as in the single-pane tier: off-screen once the detail has taken its place. */
+        .wb-tree { position: absolute; top: 0; left: 0; bottom: 0; width: 46%; max-width: 380px; z-index: 50;
+            flex: none !important; transform: translateX(-104%); transition: transform .2s ease;
+            background: var(--mud-palette-surface); box-shadow: 2px 0 8px rgba(0,0,0,.3); }
+        .wb-cols.wb-phone-tree-open .wb-tree { transform: translateX(0); }
+        .wb-phone-scrim-on { display: block; position: absolute; inset: 0; z-index: 45; background: rgba(0,0,0,.35); }
+
+        /* Nothing selected: the tree sits INLINE beside the list, so browsing needs no drawer at all. */
+        .wb-cols:not(.wb-has-selection) .wb-tree { position: static; transform: none; width: auto;
+            flex: 0 0 40% !important; max-width: 380px; box-shadow: none; z-index: auto; }
+        .wb-cols:not(.wb-has-selection) .wb-detail { display: none; }
+
+        .wb-list { flex: 1 1 auto !important; min-width: 0; max-width: none; }
+        .wb-cols.wb-has-selection .wb-detail { display: flex; flex: 1 1 52% !important; }
+        .wb-detail [data-gutter] { display: none !important; }
+
+        /* A landscape tablet has room for the index above the preview, where the desktop puts it. */
+        .wb-detail .wb-index { display: flex !important; flex: 0 0 auto !important; }
     }
 </style>
 
@@ -462,19 +499,24 @@
             @* ---- Tab content ---- *@
             @if (_activeTab == Tab.Repositories)
             {
-                @* Phone-only top bar (ADR "Responsive phone drill-down"): the hamburger toggles the tree drawer;
-                   the current folder name. Rendered ONLY in phone mode (not merely CSS-hidden) so its duplicate
-                   folder-name text can't collide with the desktop tests' text locators. *@
-                @if (_isPhone)
+                @* Touch-tier top bar (ADR "Responsive phone drill-down"): the hamburger toggles the tree drawer;
+                   the current folder name. Rendered ONLY when it is needed (not merely CSS-hidden) so its
+                   duplicate folder-name text can't collide with the desktop tests' text locators.
+                   On a LANDSCAPE tablet it appears only once something is selected (#684) — until then the tree
+                   is inline beside the list, so a hamburger would open a drawer over a tree already on screen. *@
+                @if (_isSinglePane || (_isTabletLandscape && _selectedItem is not null))
                 {
                     <div class="wb-phone-topbar">
                         <MudIconButton Icon="@Icons.Material.Filled.Menu" Size="Size.Small" aria-label="Folders" OnClick="ToggleTreeDrawer" />
                         <span class="wb-phone-title">@(_selectedFolder?.Name ?? Strings.Get("TabRepositories"))</span>
                     </div>
                 }
-                <div class="wb-cols @(_treeDrawerOpen ? "wb-phone-tree-open" : "")" @ref="_layoutRoot">
-                    @* Scrim behind the open tree drawer — tap to close (phone only). *@
-                    @if (_isPhone)
+                @* wb-has-selection is what lets the landscape-tablet tier pick its two panes in CSS alone
+                   (#684): tree | list while browsing, list | detail once a document is chosen. Emitted in every
+                   mode — the other tiers simply do not key on it. *@
+                <div class="wb-cols @(_treeDrawerOpen ? "wb-phone-tree-open" : "") @(_selectedItem is not null ? "wb-has-selection" : "")" @ref="_layoutRoot">
+                    @* Scrim behind the open tree drawer — tap to close. *@
+                    @if (_isSinglePane || _isTabletLandscape)
                     {
                         <div class="wb-phone-scrim @(_treeDrawerOpen ? "wb-phone-scrim-on" : "")" @onclick="() => _treeDrawerOpen = false"></div>
                     }
@@ -640,11 +682,11 @@
 
                     <div class="wb-gutter wb-gutter-v" data-gutter="list"><button type="button" class="wb-gutter-toggle"></button></div>
 
-                    <div class="wb-detail @(_isPhone && _selectedItem is not null ? "wb-phone-detail-open" : "") wb-ptab-@_phoneDetailTab">
+                    <div class="wb-detail @(_isSinglePane && _selectedItem is not null ? "wb-phone-detail-open" : "") wb-ptab-@_phoneDetailTab">
                         @* Phone-only detail bar: back to the folder list + Preview/Details/Comments sub-tabs
                            (ADR "Responsive phone drill-down"). Rendered ONLY in phone mode so its button text
                            can't collide with the desktop tests' locators. *@
-                        @if (_isPhone)
+                        @if (_isSinglePane)
                         {
                             <div class="wb-phone-detbar">
                                 <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Size="Size.Small" aria-label="Back" OnClick="PhoneBack" />
@@ -1075,10 +1117,17 @@
     private bool _dropRootWired;
     private bool _panesWired;
 
-    // Phone single-pane drill-down (ADR "Responsive phone drill-down"). _isPhone is reported by wbLayout.js
-    // (viewport <= 767) — the phone tap-to-navigate needs it at click time; the tree slides out as a drawer;
-    // a selected document opens a full-screen detail overlay with Preview/Details/Comments sub-tabs.
-    private bool _isPhone;
+    // Single-pane drill-down (ADR "Responsive phone drill-down"), reported by wbLayout.js: a phone, OR a tablet
+    // held upright (#684) — one pane is one pane, and the two share every rule. Needed at CLICK time for
+    // tap-to-navigate, which a media query cannot answer; the tree slides out as a drawer; a selected document
+    // opens a full-screen detail overlay with Preview/Details/Comments sub-tabs.
+    private bool _isSinglePane;
+
+    // A tablet held sideways: two panes of the three. The CSS decides WHICH two from the selection alone, so
+    // this exists for one thing the CSS cannot do — the top bar is conditionally RENDERED rather than hidden
+    // (its folder-name text would otherwise collide with the desktop tests' text locators), so the shell has to
+    // know when to emit it.
+    private bool _isTabletLandscape;
     private bool _viewportWatched;
     // A touch-only device (no hover, coarse pointer) — hides the annotation authoring tools (#349); captured once
     // from wbLayout.js (a device capability). False on a hybrid with a mouse, so those keep full authoring.
@@ -1086,20 +1135,40 @@
     private bool _treeDrawerOpen;
     private string _phoneDetailTab = "preview";
 
+    /// <summary>The viewport tier, as wbLayout.js reads it: phone / tablet-portrait / tablet-landscape / desktop.</summary>
     [JSInvokable]
-    public Task OnViewportChanged(bool isPhone)
+    public Task OnViewportModeChanged(string mode)
     {
-        if (_isPhone != isPhone)
+        var singlePane = mode is "phone" or "tablet-portrait";
+        var tabletLandscape = mode is "tablet-landscape";
+        if (_isSinglePane == singlePane && _isTabletLandscape == tabletLandscape)
         {
-            _isPhone = isPhone;
-            if (!_isPhone)
-            {
-                _treeDrawerOpen = false; // leaving phone mode — the drawer concept doesn't apply
-            }
-            StateHasChanged();
+            return Task.CompletedTask;
         }
+
+        _isSinglePane = singlePane;
+        _isTabletLandscape = tabletLandscape;
+
+        // The drawer is a touch-tier concept. Leaving BOTH tiers — rotating a tablet is not leaving — has to
+        // close it, or the desktop layout renders with a translated tree nothing can dismiss.
+        if (!singlePane && !tabletLandscape)
+        {
+            _treeDrawerOpen = false;
+        }
+
+        StateHasChanged();
         return Task.CompletedTask;
     }
+
+    /// <summary>What a wbLayout.js from before #684 calls. Kept so a stale cached module still works.</summary>
+    /// <remarks>
+    /// ADR 0500's lesson: the module is cached independently of the app, so a client can be running last
+    /// week's JS against today's Blazor. Renaming the only entry point would have made that combination fail
+    /// to deserialise instead of degrading — this way it keeps the phone behaviour it already had, and gains
+    /// the tablet tiers when its cache turns over.
+    /// </remarks>
+    [JSInvokable]
+    public Task OnViewportChanged(bool isPhone) => OnViewportModeChanged(isPhone ? "phone" : "desktop");
 
     private void ToggleTreeDrawer() => _treeDrawerOpen = !_treeDrawerOpen;
 
@@ -1782,7 +1851,7 @@
 
         // Phone: a single tap navigates (there's no side-by-side detail) — a folder / doc-with-children / zip
         // drills in; a leaf document opens the full-screen detail overlay.
-        if (_isPhone)
+        if (_isSinglePane)
         {
             if (node.IsFolder || node.HasChildren || (node.HasVersions && node.FileExtension.Equals(".zip", StringComparison.OrdinalIgnoreCase)))
             {

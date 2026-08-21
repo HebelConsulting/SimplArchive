@@ -156,8 +156,10 @@ public class ImapAccessController : ControllerBase
             Enabled = user.ImapPasswordHash is not null,
             Username = user.Email,
             Host = host,
-            Port = options.Enabled && options.Port != 0 ? options.Port : null,
-            TlsPort = options.Enabled && options.TlsPort != 0 ? options.TlsPort : null,
+            // The PUBLISHED port, not the bound one — a user can only act on what is reachable from outside,
+            // and the container-internal port must never reach a screen (#682).
+            Port = options.Enabled ? options.AdvertisedPort : null,
+            TlsPort = options.Enabled ? options.AdvertisedTlsPort : null,
             ShowAllDocuments = user.ImapShowAllDocuments,
             Links =
             [

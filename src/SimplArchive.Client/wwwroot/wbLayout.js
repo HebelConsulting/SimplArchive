@@ -36,21 +36,53 @@ const WIDE_MIN = 1200;
 // The phone single-pane drill-down mode kicks in at/below this width (ADR "Responsive phone drill-down").
 const PHONE_MAX = 767;
 
+// A tablet is a COARSE-POINTER device at or above this width. Width alone cannot identify one: an iPad Pro is
+// 1024px in portrait and 1366px in landscape, so it would land in the tablet tier one way up and the DESKTOP
+// tier the other. The pointer is what actually distinguishes a finger from a trackpad.
+//
+// Deliberately NOT applied to PHONE_MAX above. A narrow desktop window has a fine pointer, and requiring coarse
+// there would hand it the overflowing multi-pane layout the phone tier exists to prevent.
+const TABLET_MIN = 768;
+
+// The primary pointer is a finger. `(pointer: coarse)` alone rather than `(hover: none) and (pointer: coarse)`
+// (which isTouchOnly uses for a different question): a hybrid laptop with a touchscreen reports a FINE primary
+// pointer and stays on the desktop layout either way, and the hover half is what a headless browser's touch
+// emulation is least consistent about.
+function coarsePointer() {
+    return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+}
+
+// Which tier the viewport is in. Reported to Blazor because two things cannot be answered by a media query:
+// the tap-to-navigate branch happens at CLICK time, and the touch top bar is conditionally RENDERED rather
+// than hidden (its folder name would collide with the desktop tests' text locators).
+//
+// The conditions here MUST mirror the media queries in Home.razor's <style> — they are two readings of one
+// decision, and a disagreement shows as a layout whose behaviour does not match its shape.
+
 // One shared resize hook re-applies the active workbench's panes when the viewport crosses the breakpoint
 // (debounced) and reports phone-ness to Blazor (the phone tap-to-navigate needs it at click time); the module
 // loads once, so this listener is registered once.
 let activeReapply = null;
 let viewportRef = null;
 let resizeTimer = 0;
+function viewportMode() {
+    const coarse = coarsePointer();
+    if (window.innerWidth <= PHONE_MAX) return 'phone';
+    if (!coarse || window.innerWidth < TABLET_MIN) return 'desktop';
+    return window.matchMedia('(orientation: portrait)').matches ? 'tablet-portrait' : 'tablet-landscape';
+}
+
 function reportViewport() {
-    if (viewportRef) viewportRef.invokeMethodAsync('OnViewportChanged', window.innerWidth <= PHONE_MAX);
+    if (viewportRef) viewportRef.invokeMethodAsync('OnViewportModeChanged', viewportMode());
 }
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => { if (activeReapply) activeReapply(); reportViewport(); }, 150);
 });
 
-// Report whether the viewport is phone-sized to Blazor, now and on every subsequent resize.
+// Report whether the viewport shows ONE pane to Blazor, now and on every subsequent resize. The signature is
+// still a bool on purpose: a stale cached module (ADR 0500) then keeps working against the same C# method
+// rather than failing to deserialise, and reports the phone answer it always did.
 export function watchViewport(dotNetRef) {
     viewportRef = dotNetRef;
     reportViewport();

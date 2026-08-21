@@ -39,6 +39,14 @@ public class ImapEndpointTests
         var status = await TestJson.Get(api, "/api/me/imap-access");
         Assert.True(status.GetProperty("available").GetBoolean());
         Assert.False(status.GetProperty("enabled").GetBoolean());
+
+        // The port a user is told to dial is the PUBLISHED one, never the bound one (#682). Decisive here
+        // because the fixture binds EPHEMERALLY: a regression could not coincidentally report 143, it would
+        // report whatever random port the listener got. The kiosk shipped the other way round — bound 9993,
+        // published 993, advertised 9993 — and sent every user to a port nothing outside can open.
+        var bound = ((SimplArchive.Api.Imap.ImapServer)_factory.Services.GetService(typeof(SimplArchive.Api.Imap.ImapServer))!).BoundPort!.Value;
+        Assert.Equal(143, status.GetProperty("port").GetInt32());
+        Assert.NotEqual(bound, status.GetProperty("port").GetInt32());
         var generated = await TestJson.Post(api, "/api/me/imap-access", new { });
         var imapPassword = generated.GetProperty("password").GetString()!;
         Assert.Equal(email, generated.GetProperty("username").GetString());
