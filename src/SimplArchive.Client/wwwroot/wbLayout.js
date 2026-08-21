@@ -103,6 +103,42 @@ export function desktopOs() {
     return 'other';
 }
 
+// Brings the tree's current node into view after a reveal (#692). Called from Blazor AFTER the render that
+// applies the mark, because the element does not exist until then.
+//
+// The arithmetic is done here rather than by scrollIntoView, which was tried first and moved nothing: the
+// element is small, below the pane, and its nearest scrollable ancestor IS the pane — and the pane's scrollTop
+// stayed at 0. Rather than keep guessing at which box the browser considered "nearest", this measures the two
+// rectangles and scrolls the pane itself, which is the element we know scrolls.
+//
+// It implements all three decisions directly and visibly:
+//   * only when OUT OF VIEW — an in-view node returns without touching scrollTop, so the pane never lurches
+//     without cause, which is what makes a large movement acceptable in response to a small act;
+//   * to the NEAREST EDGE — the delta is exactly the overhang, so a node just past the fold moves just past it;
+//   * SMOOTHLY, so the eye follows the tree moving rather than finding it changed.
+export function scrollTreeCurrentIntoView() {
+    const pane = document.querySelector('[data-pane="tree"]');
+    const node = pane?.querySelector('.wb-tree-current');
+    if (!pane || !node) return false;
+
+    const p = pane.getBoundingClientRect();
+    const n = node.getBoundingClientRect();
+
+    // A small tolerance: a node flush with the edge is in view, and rounding must not start a scroll.
+    const margin = 2;
+    let delta = 0;
+    if (n.bottom > p.bottom - margin) {
+        delta = n.bottom - p.bottom + margin;
+    } else if (n.top < p.top + margin) {
+        delta = n.top - p.top - margin;
+    } else {
+        return false; // already visible — nothing moves
+    }
+
+    pane.scrollTo({ top: pane.scrollTop + delta, behavior: 'smooth' });
+    return true;
+}
+
 export function isTouchOnly() {
     return !!(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
 }

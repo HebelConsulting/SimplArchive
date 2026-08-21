@@ -82,7 +82,10 @@ public class WorkbenchShellSizeTests
     // selection reveals it. Fourteen lines, of which four are code — the reveal itself went to TreeState,
     // which owns the tree's shape, rather than here. What is charged is the selection highlight's CSS and the
     // note on why an outline and not a fill (the tree already spends its accent on the glyphs, ADR 0581).
-    private const int Ceiling = 3_313;
+    // 3,313 → 3,331 for #692: the reveal now brings the marked node into view. Eighteen lines, of which four
+    // are code — the flag, its consumption after the render that applies the mark, and the guarded interop
+    // call. The scroll arithmetic itself is in wbLayout.js, where the DOM measuring belongs.
+    private const int Ceiling = 3_331;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

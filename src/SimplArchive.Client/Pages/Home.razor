@@ -1410,8 +1410,24 @@
         }
     }
 
+    // Set when a reveal has just marked a node; acted on after the NEXT render, because the marked element
+    // does not exist until the class has been rendered (#692).
+    private bool _scrollTreeCurrent;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_scrollTreeCurrent)
+        {
+            _scrollTreeCurrent = false;
+            if (_layoutModule is not null)
+            {
+                // Wrapped like every other call into this module: a stale cached copy missing the export must
+                // degrade to "the tree did not scroll" rather than throwing through the render loop (ADR 0500).
+                try { await _layoutModule.InvokeAsync<bool>("scrollTreeCurrentIntoView"); }
+                catch (JSException) { }
+            }
+        }
+
         if (firstRender)
         {
             // Import the JS modules up front (no DOM dependency). The DOM-dependent wiring below must NOT
@@ -1965,7 +1981,9 @@
         // opened. Revealing is not navigating, so the list keeps showing the folder the user is standing in.
         // Best-effort by design: a folder whose ancestors the tree has never loaded simply is not revealed,
         // and the highlight stays where it was rather than the selection being refused.
-        await Tree.RevealAsync(folder.Id, _selectedFolder?.Id);
+        // Revealed AND brought into view (#692): expanding a deep chain can push the marked node below the
+        // fold, where a correct mark is indistinguishable from no mark at all.
+        _scrollTreeCurrent = await Tree.RevealAsync(folder.Id, _selectedFolder?.Id);
         // The selected folder WINS over the open one: the pane follows the selection exactly as it does for a
         // document row, so a child folder's metadata is editable without navigating into it (issue #408).
         await LoadDetailForAsync(folder);
