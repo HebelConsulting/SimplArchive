@@ -103,6 +103,38 @@ public class Mask : ITenantScoped
     /// </remarks>
     public string? Icon { get; set; }
 
+    /// <summary>Whether a USER may create a document wearing this mask directly (#678).</summary>
+    /// <remarks>
+    /// <para>
+    /// The fifth fact. Containment says WHERE a mask may live; this says whether a person may make one at all.
+    /// Nothing in the other four distinguishes a <c>Notebook</c> — which the IMAP client creates automatically
+    /// and no menu ever offers — from an <c>Addressbook</c>, which a user makes deliberately. Both are folder
+    /// masks admitted somewhere, and before this the difference lived only as absence from a hardcoded table
+    /// in the Api, where every omission needed its own explanatory sentence.
+    /// </para>
+    /// <para>
+    /// <b>Defaults to true</b>, so a tenant who authors a mask can use it without a second step — which is the
+    /// complaint this exists to answer. The masks that must never be offered are the ones provisioning owns,
+    /// and the seeder sets those false explicitly.
+    /// </para>
+    /// <para>
+    /// The default lives HERE, on the CLR property, rather than as an EF <c>HasDefaultValue(true)</c>, and the
+    /// migration backfills existing rows. This is the shape ADR "EF store default" recommends — every insert
+    /// sends an explicit value, so no value of the property becomes unreachable.
+    /// <b>Measured, not assumed:</b> on EF Core 10 a <c>HasDefaultValue(true)</c> would ALSO have been safe
+    /// here — it derives the sentinel from the configured default, so <c>false</c> is still sent. The older
+    /// trap (sentinel = the CLR default, making that value unstorable) did not reproduce for a bool on this
+    /// version. The initializer is preferred because it needs no such reasoning to be correct, not because
+    /// the alternative was proven broken.
+    /// </para>
+    /// <para>
+    /// Not the same question as <i>may THIS caller create one HERE</i>: that is rights
+    /// (<c>CanCreateSubItems</c>) and containment, both asked separately. This is a property of the KIND of
+    /// thing, not of a caller or a place.
+    /// </para>
+    /// </remarks>
+    public bool UserCreatable { get; set; } = true;
+
     /// <summary>Folder masks this mask may live directly inside. Empty means anywhere.</summary>
     public ICollection<MaskAllowedParent> AllowedParents { get; set; } = [];
 

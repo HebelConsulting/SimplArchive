@@ -109,7 +109,7 @@ public class DesktopMaskIconTests
         var vm = await OpenAsync();
         var children = await PersonalChildrenAsync(vm);
 
-        Assert.Equal("mdi-contacts", children["My Addressbook"].MaskIconToken is null ? "(no token)" : MaskIcon.For(children["My Addressbook"].MaskIconToken));
+        Assert.Equal("mdi-book-account", MaskIcon.For(children["My Addressbook"].MaskIconToken));
         Assert.Equal("mdi-calendar", MaskIcon.For(children["My Calendar"].MaskIconToken));
 
         // A plain folder is untouched — it has no token, so it keeps the glyph it always had. Without this the
@@ -127,10 +127,10 @@ public class DesktopMaskIconTests
         var children = await PersonalChildrenAsync(vm);
 
         var addressbook = children["My Addressbook"];
-        var expected = addressbook.IsEmptyFolder ? "mdi-contacts-outline" : "mdi-contacts";
+        var expected = addressbook.IsEmptyFolder ? "mdi-book-account-outline" : "mdi-book-account";
         Assert.Equal(expected, addressbook.IconValue);
 
         // Whichever state it was in, the glyph is the ADDRESSBOOK's — never the plain folder's.
-        Assert.StartsWith("mdi-contacts", addressbook.IconValue);
+        Assert.StartsWith("mdi-book-account", addressbook.IconValue);
     }
 }

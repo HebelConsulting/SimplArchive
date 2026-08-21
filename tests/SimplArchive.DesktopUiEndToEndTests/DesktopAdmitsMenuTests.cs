@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using SimplArchive.DesktopClient;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.DesktopClient.ViewModels;
@@ -44,12 +45,16 @@ public class DesktopAdmitsMenuTests
     }
 
     [Fact]
-    public async Task An_ordinary_folder_carries_one_create_across_the_wire()
+    public async Task An_ordinary_folder_carries_its_creates_across_the_wire()
     {
         var (vm, _) = await OpenAsync();
         var documents = (await PersonalChildrenAsync(vm))["My Documents"];
 
-        var entry = Assert.Single(documents.Admits);
+        // Three since #678: creatability became data, and Addressbook and Calendar are creatable and admitted
+        // anywhere. The plain folder stays FIRST — it is what "New subfolder" has always meant.
+        Assert.Equal(["Folder", "Addressbook", "Calendar"], documents.Admits.Select(a => a.Name).ToList());
+
+        var entry = documents.Admits[0];
         Assert.Equal("Folder", entry.Name);
         Assert.True(entry.Folder);
 
@@ -69,10 +74,10 @@ public class DesktopAdmitsMenuTests
     {
         var (vm, _) = await OpenAsync();
         var documents = (await PersonalChildrenAsync(vm))["My Documents"];
-        var entry = Assert.Single(documents.Admits);
+        var entry = documents.Admits.Single(a => a.Name == "Folder");
 
         var name = $"Admits {Guid.NewGuid():N}"[..14];
-        await vm.CreateSubfolderAsync(documents.Id, entry.Href, name);
+        await vm.CreateSubfolderAsync(documents.Id, entry.Href, name, entry.MaskId);
 
         await documents.ReloadChildrenAsync();
         var created = Assert.Single(documents.Children, c => c.Name == name);
@@ -80,6 +85,46 @@ public class DesktopAdmitsMenuTests
         // And the thing it created offers the same create in turn — a folder inside a folder, which is what
         // makes the menu usable more than one level deep.
         Assert.Contains(created.Admits, a => a.Name == "Folder");
+    }
+
+    // The fifth fact end to end (#678): a mask that is NOT a plain folder, reaching the server by its ID
+    // rather than by a slug the endpoint hardcodes. This is the path a tenant-authored mask will take — the
+    // only difference being that Addressbook happens to also have a legacy slug.
+    [Fact]
+    public async Task A_typed_folder_is_created_from_the_entry_by_its_mask_id()
+    {
+        var (vm, _) = await OpenAsync();
+        var documents = (await PersonalChildrenAsync(vm))["My Documents"];
+        var entry = documents.Admits.Single(a => a.Name == "Addressbook");
+
+        var name = $"Book {Guid.NewGuid():N}"[..12];
+        await vm.CreateSubfolderAsync(documents.Id, entry.Href, name, entry.MaskId);
+
+        await documents.ReloadChildrenAsync();
+        var created = Assert.Single(documents.Children, c => c.Name == name);
+
+        // It really is an ADDRESSBOOK, not a plain folder wearing the name: it draws as one, and being
+        // exclusive it offers no creates of its own in the tree.
+        Assert.Equal("addressbook", created.MaskIconToken);
+        Assert.Empty(created.Admits);
+    }
+
+    // What stops an id on the wire being a licence. Mailbox is a real folder mask this tenant HAS — so the
+    // refusal can only come from UserCreatable, not from the mask being unknown.
+    [Fact]
+    public async Task A_mask_provisioning_owns_is_refused_even_when_asked_for_by_id()
+    {
+        var (vm, _) = await OpenAsync();
+        var documents = (await PersonalChildrenAsync(vm))["My Documents"];
+
+        using var http = new HttpClient { BaseAddress = new Uri(_app.BaseUrl) };
+        http.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await Ui.GetUserTokenAsync(_app.BaseUrl));
+
+        var response = await http.PostAsJsonAsync(documents.Href("children"),
+            new { name = $"Nope {Guid.NewGuid():N}"[..12], maskId = SimplArchive.Domain.Masks.WellKnownMaskIds.Mailbox });
+
+        Assert.False(response.IsSuccessStatusCode);
     }
 
     // The guard for the mistake this change actually made: `admits` was added to the CHILDREN listing only, so

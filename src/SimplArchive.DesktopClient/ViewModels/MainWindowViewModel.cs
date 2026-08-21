@@ -1644,8 +1644,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // Create a subfolder directly under a tree folder (not necessarily the currently-open one) — through the
     // node's own children address (ADR 0555); the id only drives the local tree refresh.
-    public Task CreateSubfolderAsync(Guid parentId, string childrenHref, string name) =>
-        CreateChildAsync(parentId, api => api.Documents.CreateFolderAsync(childrenHref, name), "StCreatedFolder", "StErrCreateFolder", name);
+    public Task CreateSubfolderAsync(Guid parentId, string childrenHref, string name, Guid? maskId = null) =>
+        CreateChildAsync(parentId, api => api.Documents.CreateFolderAsync(childrenHref, name, maskId), "StCreatedFolder", "StErrCreateFolder", name);
 
     // A section, and a note, inside a notebook (#564). Both reach the server through an href the row itself
     // advertised — the caller never names a mask, so the rule about what may live where stays on the server.

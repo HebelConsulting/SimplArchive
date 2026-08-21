@@ -373,8 +373,11 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     }
 
     // Creates a folder = a child Document with no version (ADR 0175). Duplicate name -> 409, no permission -> 403.
-    public Task CreateFolderAsync(string childrenHref, string name, CancellationToken cancellationToken = default) =>
-        PostCreateAsync(childrenHref, new { name }, name, "folder", cancellationToken);
+    // maskId is the entry's own value going back unread (ADR 0543) — it is the only thing a tenant-authored
+    // mask has, since slugs exist for the handful of kinds that shipped with one. Null keeps the old body
+    // exactly, so the self-tests and every other caller that just wants a plain folder are unchanged.
+    public Task CreateFolderAsync(string childrenHref, string name, Guid? maskId = null, CancellationToken cancellationToken = default) =>
+        PostCreateAsync(childrenHref, maskId is { } id ? new { name, maskId = id } : (object)new { name }, name, "folder", cancellationToken);
 
     // A section, and a note, inside a notebook (#564). Each is its own sub-resource rather than a folderMask on
     // POST children, and the caller reaches it by following a rel the server advertised — so which folders can

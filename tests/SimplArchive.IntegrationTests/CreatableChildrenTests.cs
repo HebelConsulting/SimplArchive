@@ -58,22 +58,34 @@ public class CreatableChildrenTests
         return CreatableChildren.For(rules, _documentId, folderMaskId, isPersonalRoot);
     }
 
+    // Three since #678, and the plain folder is FIRST: it is what "New subfolder" has always meant, and a
+    // menu that reorders itself per folder is one the user has to read rather than aim at. The other two are
+    // ordered by name, because row order out of a database is not defined.
     [Fact]
-    public async Task An_ordinary_folder_offers_one_create_and_says_how_to_perform_it()
+    public async Task An_ordinary_folder_offers_the_three_kinds_and_says_how_to_perform_each()
     {
         var admits = await AdmitsAsync(WellKnownMaskIds.Folder);
 
-        var entry = Assert.Single(admits);
+        Assert.Equal(["Folder", "Addressbook", "Calendar"], admits.Select(a => a.Name).ToList());
+
+        var entry = admits[0];
         Assert.Equal(WellKnownMaskIds.Folder, entry.MaskId);
         Assert.Equal("Folder", entry.Name);
         Assert.True(entry.Folder);
         Assert.Equal("POST", entry.Method);
         Assert.Equal($"/api/documents/{_documentId}/children", entry.Href);
 
-        // The two the client sends back rather than derives: `children` creates more than folders, so the body
-        // carries the kind, and the server names the input because a client cannot name the mask.
+        // The values the client sends back rather than derives: `children` creates more than folders, so the
+        // body carries the kind, and the server names the input because a client cannot name the mask.
         Assert.Equal("folder", entry.FolderMask);
         Assert.Equal("name", entry.Prompt);
+
+        // Addressbook and Calendar reach the SAME address — since #678 a folder mask is made through the
+        // children collection carrying its mask id, which is what lets a tenant-authored mask arrive here
+        // without a table entry of its own. The slug rides along only because it exists for these.
+        Assert.All(admits, a => Assert.EndsWith("/children", a.Href));
+        Assert.Equal(["folder", "addressbook", "calendar"], admits.Select(a => a.FolderMask).ToList());
+        Assert.All(admits, a => Assert.NotEqual(Guid.Empty, a.MaskId));
     }
 
     // Containment PERMITS a Basic Entry or an eMail in an ordinary folder — a menu built from permission would
@@ -183,8 +195,9 @@ public class CreatableChildrenTests
     [Fact]
     public async Task A_folder_with_no_mask_still_offers_a_subfolder()
     {
-        var entry = Assert.Single(await AdmitsAsync(null));
-        Assert.Equal(WellKnownMaskIds.Folder, entry.MaskId);
+        var admits = await AdmitsAsync(null);
+        Assert.Equal(WellKnownMaskIds.Folder, admits[0].MaskId);
+        Assert.Contains(admits, a => a.MaskId == WellKnownMaskIds.Addressbook);
     }
 
     // Cross-cutting, over every well-known mask rather than the handful above: an entry a client cannot act on
@@ -218,6 +231,85 @@ public class CreatableChildrenTests
 
     // The rules are fully materialised by LoadAsync, so the connection has done its job by the time this
     // returns — which is what lets the tests that ask several questions share one seeding.
+    // The fifth fact (#678): whether a user may make one at all is DATA on the mask, so flipping the column
+    // removes the entry — no code knows the difference between a Notebook and an Addressbook any more.
+    [Fact]
+    public async Task A_mask_marked_not_user_creatable_disappears_from_the_menu()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        await SeededRulesAsync(connection);
+
+        using (var edit = Ctx(connection))
+        {
+            (await edit.Masks.SingleAsync(m => m.Id == WellKnownMaskIds.Addressbook)).UserCreatable = false;
+            await edit.SaveChangesAsync();
+        }
+
+        using var read = Ctx(connection);
+        var rules = await MaskContainmentRules.LoadAsync(read, _tenantId, CancellationToken.None);
+        var admits = CreatableChildren.For(rules, _documentId, WellKnownMaskIds.Folder, isPersonalRoot: false);
+
+        Assert.DoesNotContain(admits, a => a.MaskId == WellKnownMaskIds.Addressbook);
+        Assert.Contains(admits, a => a.MaskId == WellKnownMaskIds.Calendar);
+    }
+
+    // The inverse, and the one that proves this is data rather than a shorter hardcoded list: a mask the
+    // application ships as NOT creatable appears the moment the column says otherwise. If a table still gated
+    // it, this would stay hidden.
+    [Fact]
+    public async Task A_mask_marked_creatable_appears_even_though_the_application_ships_it_closed()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        await SeededRulesAsync(connection);
+
+        using (var edit = Ctx(connection))
+        {
+            (await edit.Masks.SingleAsync(m => m.Id == WellKnownMaskIds.Notebook)).UserCreatable = true;
+            await edit.SaveChangesAsync();
+        }
+
+        using var read = Ctx(connection);
+        var rules = await MaskContainmentRules.LoadAsync(read, _tenantId, CancellationToken.None);
+
+        // Under a Mailbox, which is the only folder that admits a Notebook — so containment is satisfied and
+        // creatability is the only thing that was ever keeping it off the menu.
+        var admits = CreatableChildren.For(rules, _documentId, WellKnownMaskIds.Mailbox, isPersonalRoot: false);
+        Assert.Contains(admits, a => a.MaskId == WellKnownMaskIds.Notebook);
+    }
+
+    // Containment and creatability are asked SEPARATELY, and both must hold. A creatable mask the folder does
+    // not admit stays off the menu — otherwise the menu would offer a create its own SaveChanges refuses.
+    [Fact]
+    public async Task Creatable_is_not_enough_the_folder_must_admit_it_too()
+    {
+        var rules = await RulesAsync();
+        Assert.True(rules.IsUserCreatable(WellKnownMaskIds.Addressbook));
+
+        // A Notebook is exclusive: it admits sections and notes, and nothing else.
+        var admits = CreatableChildren.For(rules, _documentId, WellKnownMaskIds.Notebook, isPersonalRoot: false);
+        Assert.DoesNotContain(admits, a => a.MaskId == WellKnownMaskIds.Addressbook);
+    }
+
+    // The third question, and the one that keeps an ordinary folder's menu short. Basic Entry and eMail are
+    // user-creatable AND permitted in an ordinary folder — but neither is something you MAKE, you upload a
+    // file and get one. A menu built from creatability alone would offer "New Basic Entry" beside "New folder".
+    [Theory]
+    [InlineData("BasicEntry")]
+    [InlineData("EMail")]
+    public async Task A_mask_with_no_way_to_create_one_stays_off_the_menu(string mask)
+    {
+        var rules = await RulesAsync();
+        var maskId = mask == "BasicEntry" ? WellKnownMaskIds.BasicEntry : WellKnownMaskIds.EMail;
+
+        Assert.True(rules.IsUserCreatable(maskId));
+        Assert.True(rules.Allows(maskId, WellKnownMaskIds.Folder));
+
+        var admits = CreatableChildren.For(rules, _documentId, WellKnownMaskIds.Folder, isPersonalRoot: false);
+        Assert.DoesNotContain(admits, a => a.MaskId == maskId);
+    }
+
     private async Task<MaskContainmentRules> RulesAsync()
     {
         using var connection = new SqliteConnection("Filename=:memory:");

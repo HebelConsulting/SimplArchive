@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Avalonia.LogicalTree;
 using Projektanker.Icons.Avalonia;
 using Projektanker.Icons.Avalonia.MaterialDesign;
 using SimplArchive.DesktopClient.ViewModels;
@@ -713,6 +714,45 @@ internal static class Program
         {
             viewModel.Preview.FitPageCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();
+        }
+
+        // `--menu`: open the tree context menu with its "New" submenu expanded, so the one part of this client
+        // nobody could see gets into a screenshot.
+        //
+        // It turns out Avalonia's headless platform hosts a ContextMenu as an OVERLAY inside the window rather
+        // than as a separate top-level, so CaptureRenderedFrame includes it — I had previously asserted the
+        // opposite and left the desktop menu unlooked-at through three changes on the strength of that guess.
+        // The first thing this flag rendered was a real defect: the submenu's entries were the only items in
+        // that menu with no icon, because the ItemContainerTheme bound Header and Command and nothing else.
+        //
+        // The admits list is SYNTHETIC — demo data carries no masks, so the entries stand in for what a server
+        // sends. That makes this a check on how the menu RENDERS (icons, alignment, nesting), not on which
+        // entries a folder offers; the latter is CreatableChildrenTests and DesktopAdmitsMenuTests.
+        if (Environment.GetCommandLineArgs().Contains("--menu"))
+        {
+            viewModel.TreeContextAdmits =
+            [
+                ViewModels.TreeMenuEntry.Create("Folder", "mdi-folder", () => { }),
+                ViewModels.TreeMenuEntry.Create("Addressbook", "mdi-book-account", () => { }),
+                ViewModels.TreeMenuEntry.Create("Calendar", "mdi-calendar", () => { }),
+            ];
+            viewModel.TreeContextCanCreateAny = true;
+            Dispatcher.UIThread.RunJobs();
+
+            if (window.GetVisualDescendants().OfType<Avalonia.Controls.TreeView>().FirstOrDefault()?.ContextMenu is { } menu)
+            {
+                menu.Open();
+                Dispatcher.UIThread.RunJobs();
+
+                // The submenu has to be opened EXPLICITLY: it expands on hover, and a headless run has no
+                // pointer, so without this the capture shows a collapsed "New ▸" and proves nothing.
+                foreach (var item in menu.GetLogicalDescendants().OfType<Avalonia.Controls.MenuItem>().Where(m => m.ItemCount > 0))
+                {
+                    item.Open();
+                }
+
+                Dispatcher.UIThread.RunJobs();
+            }
         }
 
         // Force a hovered word so the light-grey hover box (ADR "Copy a preview word to the clipboard") shows in

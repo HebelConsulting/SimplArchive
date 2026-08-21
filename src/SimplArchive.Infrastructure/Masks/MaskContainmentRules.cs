@@ -33,6 +33,7 @@ public sealed class MaskContainmentRules
     private readonly IReadOnlySet<Guid> _folderMasks;
     private readonly IReadOnlyDictionary<Guid, string> _names;
     private readonly IReadOnlyDictionary<Guid, string> _icons;
+    private readonly IReadOnlySet<Guid> _userCreatable;
 
     private MaskContainmentRules(
         IReadOnlySet<Guid> exclusiveFolders,
@@ -41,7 +42,8 @@ public sealed class MaskContainmentRules
         IReadOnlySet<Guid> leafFolders,
         IReadOnlySet<Guid> folderMasks,
         IReadOnlyDictionary<Guid, string> names,
-        IReadOnlyDictionary<Guid, string> icons)
+        IReadOnlyDictionary<Guid, string> icons,
+        IReadOnlySet<Guid> userCreatable)
     {
         _exclusiveFolders = exclusiveFolders;
         _admittedChildren = admittedChildren;
@@ -50,6 +52,7 @@ public sealed class MaskContainmentRules
         _folderMasks = folderMasks;
         _names = names;
         _icons = icons;
+        _userCreatable = userCreatable;
     }
 
     /// <summary>Reads a tenant's containment: four queries, and the caller is expected to cache the result.</summary>
@@ -64,7 +67,7 @@ public sealed class MaskContainmentRules
     {
         var masks = await db.Masks.IgnoreQueryFilters(["TenantFilter"])
             .Where(m => m.TenantId == tenantId)
-            .Select(m => new { m.Id, m.IsFolderMask, m.AdmitsOnlyDeclaredChildren, m.AdmitsNoSubfolders, m.Icon })
+            .Select(m => new { m.Id, m.IsFolderMask, m.AdmitsOnlyDeclaredChildren, m.AdmitsNoSubfolders, m.Icon, m.UserCreatable })
             .ToListAsync(cancellationToken);
 
         // The CURRENT version's name, so a refusal names the mask as it is called today. The static tables
@@ -104,7 +107,8 @@ public sealed class MaskContainmentRules
             masks.Where(m => m.AdmitsNoSubfolders).Select(m => m.Id).ToHashSet(),
             masks.Where(m => m.IsFolderMask).Select(m => m.Id).ToHashSet(),
             names,
-            masks.Where(m => m.Icon != null).ToDictionary(m => m.Id, m => m.Icon!));
+            masks.Where(m => m.Icon != null).ToDictionary(m => m.Id, m => m.Icon!),
+            masks.Where(m => m.UserCreatable).Select(m => m.Id).ToHashSet());
     }
 
     /// <summary>
@@ -179,6 +183,23 @@ public sealed class MaskContainmentRules
     /// really holds is the tenant's mask facts, and the name is narrower than the type. Worth renaming when
     /// something else forces a pass over it, not on its own.
     /// </remarks>
+    /// <summary>Whether a user may create a document wearing this mask at all (#678).</summary>
+    /// <remarks>
+    /// A property of the KIND of thing, asked separately from "may this caller, here" — that is rights and
+    /// containment. A mask this tenant does not have reads as NOT creatable: an id nobody recognises is not a
+    /// licence, and the alternative would let an unknown guid through the one gate that stops a menu offering
+    /// what provisioning owns.
+    /// </remarks>
+    public bool IsUserCreatable(Guid maskId) => _userCreatable.Contains(maskId);
+
+    /// <summary>Every mask in this tenant a user may create, including ones the application never shipped.</summary>
+    /// <remarks>
+    /// Enumerable, because a menu has to be BUILT rather than checked: the caller does not know what masks the
+    /// tenant has, which is the entire point of the fact being data. Says nothing about whether any of them may
+    /// live in a particular folder — ask <see cref="Allows"/> for that.
+    /// </remarks>
+    public IReadOnlyCollection<Guid> UserCreatableMasks => _userCreatable;
+
     public string? IconOf(Guid? maskId) =>
         maskId is { } id && _icons.TryGetValue(id, out var icon) ? icon : null;
 

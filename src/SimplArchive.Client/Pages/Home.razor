@@ -505,7 +505,7 @@
                                 <MudMenu Label="@Strings.Get("MwNew")" StartIcon="@Icons.Material.Filled.Add" Dense="true">
                                     @foreach (var admitted in tn.Admits)
                                     {
-                                        <MudMenuItem Icon="@(MaskIcon.Filled(admitted.Icon) ?? (admitted.Folder ? Icons.Material.Filled.CreateNewFolder : Icons.Material.Filled.NoteAdd))"
+                                        <MudMenuItem Icon="@(MaskIcon.Filled(admitted.Icon) ?? (admitted.Folder ? Icons.Material.Filled.Folder : Icons.Material.Filled.Description))"
                                                      OnClick="() => RunAndRefreshAsync(Actions.CreateAdmittedAsync(tn, admitted))">@admitted.Name</MudMenuItem>
                                     }
                                 </MudMenu>

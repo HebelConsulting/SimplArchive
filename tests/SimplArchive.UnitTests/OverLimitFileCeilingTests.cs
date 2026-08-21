@@ -94,7 +94,11 @@ public class OverLimitFileCeilingTests
         // 1,132 → 1,136 for per-mask icons on the New menu: the entry now wears the glyph the created thing
         // will wear. One line of code and three of comment, because "menu says Calendar, tree draws a
         // calendar" is the reason the fallback is not simply the generic add-glyph.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_136,
+        // 1,136 → 1,137: one line of the note explaining why the New submenu's FALLBACK is a plain kind
+        // glyph rather than an add-glyph — the verb is on the parent, so a plus made Folder read as a
+        // different sort of action from its siblings. Found by looking at the built menu, which is the only
+        // way it could be found.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_137,
 
         // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).
@@ -109,7 +113,11 @@ public class OverLimitFileCeilingTests
         // replaced because of the ItemContainerTheme and the note on why its bindings are reflection ones —
         // a ControlTheme carries no x:DataType, so a compiled binding there resolves against the WINDOW's
         // view-model and fails. That cost six lines and would otherwise be rediscovered by whoever touches it.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_962,
+        // 1,962 → 1,971: the New submenu's entries now get an ICON. MenuItem.Icon takes CONTENT rather than a
+        // glyph name, so it is a Setter with a Template — four lines of markup and five of the note saying
+        // why, because the previous state was TreeMenuEntry.Icon set and never read, which failed silently and
+        // was only ever going to be found by looking at a rendered menu.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_971,
 
         // Entered 2026-08-20 (#673, ADR 0655) — over the line since well before it was noticed, and never on
         // the list, so nothing was watching it. It enters ON THE WAY DOWN: the containment port took it 1,041 →

@@ -95,9 +95,13 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
             return false;
         }
 
-        // The folderMask value came FROM the server and goes back unread: the vocabulary stays the server's,
-        // so this client keeps no copy of it (ADR 0543).
-        object payload = admitted.FolderMask is { } folderMask ? new { name, folderMask } : new { name };
+        // Both values came FROM the server on the row and go back unread — the vocabulary stays the server's
+        // and this client keeps no copy of it (ADR 0543). maskId is sent for every entry because it is the
+        // only one a tenant-authored mask has; folderMask rides along where the server supplied a slug, so
+        // nothing depends on which of the two the endpoint prefers.
+        object payload = admitted.FolderMask is { } folderMask
+            ? new { name, folderMask, maskId = admitted.MaskId }
+            : new { name, maskId = admitted.MaskId };
         return await PostCreateAsync(admitted.Href, payload, "StErrCreateFolder", "StCreatedFolder", name);
     }
 

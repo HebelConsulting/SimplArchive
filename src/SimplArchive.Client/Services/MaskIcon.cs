@@ -40,7 +40,10 @@ public static class MaskIcon
         ["mail-folder"] = (Icons.Material.Filled.Inbox, Icons.Material.Outlined.Inbox),
         ["notebook"] = (Icons.Material.Filled.MenuBook, Icons.Material.Outlined.MenuBook),
         ["section"] = (Icons.Material.Filled.Topic, Icons.Material.Outlined.Topic),
-        ["addressbook"] = (Icons.Material.Filled.Contacts, Icons.Material.Outlined.Contacts),
+        // A BOOK with a person, not a contact card. Contacts/ContactPage are person-shaped at 16 px and so is
+        // the personal space's Person glyph, and three person shapes in one tree is three things the eye cannot
+        // separate. Found by looking at the rendered tree, which no name-comparison test can do.
+        ["addressbook"] = (Icons.Material.Filled.ImportContacts, Icons.Material.Outlined.ImportContacts),
         ["calendar"] = (Icons.Material.Filled.CalendarMonth, Icons.Material.Outlined.CalendarMonth),
 
         // Item masks — the outline half is never read (an item is not a folder, so it is never empty).

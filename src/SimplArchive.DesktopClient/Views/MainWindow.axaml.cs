@@ -882,10 +882,11 @@ public partial class MainWindow : Window
             // hardcoded still gets an entry.
             vm.TreeContextAdmits = [.. node.Admits.Select(a =>
                 TreeMenuEntry.Create(a.Name,
-                    // The glyph the thing will WEAR once it exists, falling back to the generic add-glyphs.
-                    // A menu that says "Calendar" beside a plain folder, and then draws a calendar in the
-                    // tree, reads as two different actions.
-                    Services.MaskIcon.For(a.Icon) ?? (a.Folder ? "mdi-folder-plus-outline" : "mdi-note-plus-outline"),
+                    // The glyph the thing will WEAR once it exists — and the FALLBACK is the plain kind
+                    // glyph, not an add-glyph. These entries sit under "New", so the verb is already said:
+                    // a plus on one of them made Folder read as a different sort of action from its
+                    // siblings, which wear their mask's own icon. Seen in the built menu, not in a diff.
+                    Services.MaskIcon.For(a.Icon) ?? (a.Folder ? "mdi-folder" : "mdi-file-document-outline"),
                     () => Safe.Fire(() => CreateAdmittedAsync(vm, node, a))))];
             vm.TreeContextCanCreateAny = vm.TreeContextAdmits.Count > 0;
         }
@@ -913,7 +914,7 @@ public partial class MainWindow : Window
         {
             // The href the ENTRY carried, never one composed from the node: following the address that granted
             // the affordance is what stops the gate and the action drifting apart (ADR 0543/0559).
-            await vm.CreateSubfolderAsync(node.Id, admitted.Href, name);
+            await vm.CreateSubfolderAsync(node.Id, admitted.Href, name, admitted.MaskId);
         }
     }
 

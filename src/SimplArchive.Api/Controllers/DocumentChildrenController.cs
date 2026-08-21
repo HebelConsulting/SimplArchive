@@ -456,10 +456,35 @@ public class DocumentChildrenController : ControllerBase
         /// by a caller asserting it.
         /// </summary>
         public string? FolderMask { get; set; }
+
+        /// <summary>
+        /// The mask to create, as the <c>admits</c> entry gave it (#678) — the general form of
+        /// <see cref="FolderMask"/>, which only names the handful of kinds that ever had a slug.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// An id on the wire where this API has otherwise exposed vocabulary, and taken deliberately: the
+        /// client is <b>echoing back what the server gave it</b> on the row, exactly as it does with
+        /// <c>folderMask</c>, so it composes nothing and keeps no copy of the mask set (ADR 0543). The
+        /// alternative was a stable per-mask slug column, which needs uniqueness rules, a migration and an
+        /// answer for the existing one-to-many alias — "notes" and "notebook" both mean Notebook, which a slug
+        /// column cannot say.
+        /// </para>
+        /// <para>
+        /// Wins over <see cref="FolderMask"/> when both are sent. A client that knows about this field is
+        /// newer than one that only knows slugs, and the two can only disagree if something built the body by
+        /// hand.
+        /// </para>
+        /// </remarks>
+        public Guid? MaskId { get; set; }
     }
 
-    // The folder kinds a caller may name, mapped to their well-known mask. Kept here rather than exposing raw
-    // mask ids: the wire stays readable, and the set is exactly the typed folders a client can create.
+    // The folder kinds a caller may name by SLUG. No longer the gate — whether a mask may be created is
+    // Mask.UserCreatable and whether it may live here is containment, both data (#678) — this is now a
+    // compatibility alias table so a client built before that keeps working, and so the wire stays readable
+    // for the kinds that always had a name.
+    //
+    // It cannot grow to cover a tenant-authored mask, which is exactly why MaskId exists beside it.
     private static readonly Dictionary<string, Guid> CreatableFolderMasks = new(StringComparer.OrdinalIgnoreCase)
     {
         ["folder"] = WellKnownMaskIds.Folder,
@@ -497,11 +522,30 @@ public class DocumentChildrenController : ControllerBase
             return NotFound();
         }
 
-        // Resolve the requested folder kind before doing anything else — an unknown one is the caller's mistake,
+        // Resolve the requested kind before doing anything else — an unknown one is the caller's mistake,
         // not a half-created folder.
+        //
+        // MaskId wins over FolderMask: it is the general form, and a client sending it is newer than one
+        // sending only a slug. Both come from the `admits` entry the server handed out, so they can disagree
+        // only if something assembled the body by hand.
+        var rules = await _containment.ForAsync(_dbContext, parent.TenantId, cancellationToken);
         var folderMaskId = WellKnownMaskIds.Folder;
-        var folderMaskRequested = request.FolderMask is { Length: > 0 };
-        if (request.FolderMask is { Length: > 0 } requestedMask
+        var folderMaskRequested = request.MaskId is not null || request.FolderMask is { Length: > 0 };
+
+        if (request.MaskId is { } requestedMaskId)
+        {
+            // Gated on the DATA, not on a table of names (#678). A mask this tenant does not have, or one
+            // provisioning owns, is refused here — which is what stops a caller asking for a Mailbox or a
+            // Repository by id now that ids are on the wire. Containment is asked separately below, so the
+            // refusal a caller gets names the right reason.
+            if (!rules.IsUserCreatable(requestedMaskId) || !rules.IsFolderMask(requestedMaskId))
+            {
+                throw new InvalidFolderMaskException(requestedMaskId.ToString());
+            }
+
+            folderMaskId = requestedMaskId;
+        }
+        else if (request.FolderMask is { Length: > 0 } requestedMask
             && !CreatableFolderMasks.TryGetValue(requestedMask, out folderMaskId))
         {
             throw new InvalidFolderMaskException(requestedMask);

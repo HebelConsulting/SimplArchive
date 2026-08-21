@@ -251,6 +251,32 @@ public static class WellKnownMaskIds
             [Appointment] = "appointment",
         };
 
+    /// <summary>
+    /// The well-known masks a USER may not create directly — everything provisioning or a protocol owns (#678).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stated as the EXCEPTIONS rather than as the permitted set, because <see cref="Mask.UserCreatable"/>
+    /// defaults to true: a tenant who authors a mask should be able to use it, and a permitted-set table could
+    /// only ever list the masks the application ships. Everything absent here is creatable.
+    /// </para>
+    /// <para>
+    /// Each entry is a different reason, and the fact that each needed its own sentence in the Api is exactly
+    /// why this became data:
+    /// <c>Repository</c>, <c>User Folder</c> and <c>My Documents</c> are made by provisioning;
+    /// <c>Mailbox</c> and <c>IMAP Special</c> by the mail path;
+    /// and <c>Notebook</c> by the IMAP client, automatically — it IS declared by a Mailbox, so without this
+    /// line an honest menu would offer "New Notebook" on every mailbox (owner-stated 2026-08-20).
+    /// </para>
+    /// <para>
+    /// <c>Contact</c> and <c>Appointment</c> are deliberately ABSENT — they are user-creatable, from the
+    /// Contacts and Calendar tabs. Their tree-menu entries need their own dialogs rather than a name prompt,
+    /// which is its own piece of work; being creatable is not the thing standing in the way.
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlySet<Guid> NotUserCreatable =
+        new HashSet<Guid> { Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, Notebook };
+
     /// <summary>The well-known masks an ITEM wears — the complement of <see cref="FolderMasks"/>.</summary>
     /// <remarks>Stated rather than derived, so the partition guard has two sides to compare instead of one.</remarks>
     public static readonly IReadOnlySet<Guid> ItemMasks =

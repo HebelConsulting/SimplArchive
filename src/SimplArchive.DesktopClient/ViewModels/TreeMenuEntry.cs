@@ -5,22 +5,26 @@ using CommunityToolkit.Mvvm.Input;
 namespace SimplArchive.DesktopClient.ViewModels;
 
 /// <summary>
-/// One entry in the tree's context menu — including the separators, because the menu is now built rather than
-/// written (#673).
+/// One create the server offered for the right-clicked folder — an entry in the tree menu's "New" submenu (#673).
 /// </summary>
 /// <remarks>
 /// <para>
-/// The menu had to stop being static markup once the CREATES became server-supplied: a folder says what it
-/// admits, and how many entries that is depends on the folder. Avalonia's menu takes either literal items or a
-/// bound collection, never both, so the entries that never change are built here too rather than the dynamic
-/// ones being exiled to a submenu — which would have put an extra click and a hover between the user and every
-/// create (ADR 0550).
+/// The creates had to stop being static markup once they became server-supplied: a folder says what it admits,
+/// and how many entries that is depends on the folder. Avalonia's menu takes either literal items or a bound
+/// collection and never both, so the dynamic entries went into a <b>submenu</b> of their own rather than the
+/// fifteen static ones being rebuilt here to join them. That costs a hover to reach a create (ADR 0550 would
+/// rather it did not), and it bought not rewriting a menu that nothing could verify without opening it by hand.
 /// </para>
 /// <para>
-/// <b>The command is a delegate the VIEW supplies.</b> The fifteen handlers stay in <c>MainWindow.axaml.cs</c>
-/// where they already are, next to the dialogs they open and the window they need; this type only decides what
-/// appears and in what order. Moving the bodies would have shifted a thousand lines between two files that are
-/// both already over the size limit, which is churn no reviewer can check and neither ceiling would forgive.
+/// <b>The command is a delegate the VIEW supplies.</b> The handlers stay in <c>MainWindow.axaml.cs</c> next to
+/// the dialogs they open and the window they need; this type only carries what to show and what to run.
+/// </para>
+/// <para>
+/// <b>Every property here is bound, and that was not always true.</b> <c>Icon</c> was set and never read for as
+/// long as this type existed — the submenu's <c>ItemContainerTheme</c> bound <c>Header</c> and <c>Command</c>
+/// and nothing else, so these were the only entries in that menu with no glyph. Nothing failed; the icons were
+/// simply absent, and only a rendered screenshot showed it (`--menu`). If you add a property, bind it in that
+/// theme in the same change, or it is decoration.
 /// </para>
 /// </remarks>
 public sealed class TreeMenuEntry
@@ -29,31 +33,20 @@ public sealed class TreeMenuEntry
     {
     }
 
-    /// <summary>The label, already localised — a separator has none.</summary>
+    /// <summary>The label — the mask's name as this tenant calls it today.</summary>
+    /// <remarks>
+    /// Not localised, and deliberately: it comes from the mask's current version, so it is whatever this tenant
+    /// renamed it to. A translation table here could only ever cover the masks the application ships, which is
+    /// the limitation the whole change exists to remove — and it would show the shipped name for a mask
+    /// somebody renamed.
+    /// </remarks>
     public string Header { get; private init; } = string.Empty;
 
-    /// <summary>The Material Design icon name, or empty where the entry has no icon.</summary>
+    /// <summary>The Material Design Icons glyph the created thing will itself wear.</summary>
     public string Icon { get; private init; } = string.Empty;
-
-    /// <summary>Whether this is a rule rather than an item. Bound by the container theme, not by a template.</summary>
-    public bool IsSeparator { get; private init; }
 
     public ICommand? Command { get; private init; }
 
-    public static TreeMenuEntry Item(string header, string icon, Action run) =>
-        new() { Header = header, Icon = icon, Command = new RelayCommand(run) };
-
-    /// <summary>
-    /// A create the SERVER offered — its label is the mask's name as the tenant calls it today.
-    /// </summary>
-    /// <remarks>
-    /// Not localised, and deliberately: the name comes from the mask's current version, so it is whatever this
-    /// tenant renamed it to. A translation table here could only ever cover the masks the application ships,
-    /// which is the limitation the whole change exists to remove — and it would silently show the shipped name
-    /// for a mask somebody renamed.
-    /// </remarks>
     public static TreeMenuEntry Create(string maskName, string icon, Action run) =>
         new() { Header = maskName, Icon = icon, Command = new RelayCommand(run) };
-
-    public static TreeMenuEntry Separator() => new() { IsSeparator = true };
 }

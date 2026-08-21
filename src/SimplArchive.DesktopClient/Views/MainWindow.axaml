@@ -160,6 +160,15 @@
                                                      view-model and fails to find Header/Command. -->
                                                 <Setter Property="Header" Value="{ReflectionBinding Header}" />
                                                 <Setter Property="Command" Value="{ReflectionBinding Command}" />
+                                                <!-- The glyph the created thing will wear. A Template, because
+                                                     MenuItem.Icon takes CONTENT rather than a name — without
+                                                     it these entries were the only ones in this menu with no
+                                                     icon, and TreeMenuEntry.Icon was set and never read. -->
+                                                <Setter Property="Icon">
+                                                    <Template>
+                                                        <i:Icon Value="{ReflectionBinding Icon}" />
+                                                    </Template>
+                                                </Setter>
                                             </ControlTheme>
                                         </MenuItem.ItemContainerTheme>
                                     </MenuItem>

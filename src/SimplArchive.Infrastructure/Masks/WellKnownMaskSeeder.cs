@@ -189,6 +189,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
             CreatedAt = DateTimeOffset.UtcNow,
             IsFolderMask = WellKnownMaskIds.FolderMasks.Contains(maskId),
             Icon = WellKnownMaskIds.IconTokens.GetValueOrDefault(maskId),
+            UserCreatable = !WellKnownMaskIds.NotUserCreatable.Contains(maskId),
         });
 
         var maskVersion = new MaskVersion { Id = Guid.NewGuid(), TenantId = tenantId, MaskId = maskId, Name = name, CreatedAt = DateTimeOffset.UtcNow };
@@ -254,6 +255,15 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         if (mask.Icon != icon)
         {
             mask.Icon = icon;
+        }
+
+        // Healed for the same reason the icon is: a tenant that already exists was backfilled to `true` by the
+        // migration, which would leave Repository, Mailbox and the rest offered on menus until this corrects
+        // them. Assigned unconditionally, so a shipped mask cannot drift from what this release says it is.
+        var userCreatable = !WellKnownMaskIds.NotUserCreatable.Contains(maskId);
+        if (mask.UserCreatable != userCreatable)
+        {
+            mask.UserCreatable = userCreatable;
         }
 
         var wanted = WellKnownMaskIds.FileExtensions.TryGetValue(maskId, out var extensions)

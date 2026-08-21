@@ -66,48 +66,38 @@ public class CreatableChild
 /// everywhere that does not refuse it, rather than declared anywhere.
 /// </para>
 /// <para>
-/// <b>What is still hardcoded, and why it is the remaining gap.</b> The model says WHERE each mask may live;
-/// it does not say whether a user may create one directly, nor at which address. <c>Repository</c>,
-/// <c>User Folder</c>, <c>My Documents</c>, <c>Mailbox</c> and <c>IMAP Special</c> are all folder masks that
-/// only provisioning creates, and nothing in the four facts distinguishes them from a Notebook. So the table
-/// below is a fifth fact living in code — deliberately, for now: #673's scope was the well-known masks, and a
-/// tenant-authored typed folder needs this to become data before it can appear on a menu at all.
+/// <b>Creatability is DATA now (#678).</b> Whether a user may make one of these at all is
+/// <c>Mask.UserCreatable</c>, defaulting to true, with the six masks provisioning owns set false by the
+/// seeder. What remains in code below is much smaller and is genuinely application knowledge: which masks have
+/// a create endpoint of their OWN. Everything else creatable goes through the children collection carrying its
+/// mask id, so a tenant-authored folder mask reaches a menu with no change here.
 /// </para>
 /// </remarks>
 public static class CreatableChildren
 {
-    // Mask → the address that creates one, relative to the folder, and the body value where the address is
-    // shared. A mask absent here is one a USER does not create from a menu, which is why absence is the default.
+    // Masks with a DEDICATED create endpoint, and what that endpoint asks the user for. Not a permission list
+    // — permission is Mask.UserCreatable — just the two families whose create is not "make a folder".
     //
-    // "Absent" is not the same as "the API refuses it": `CreatableFolderMasks` on the children endpoint accepts
-    // more than this, because a protocol client legitimately asks for things a menu never offers. This table is
-    // about the MENU.
-    //
-    // Deliberately absent, and each for a different reason:
-    //   Notebook             — the IMAP client creates it automatically; it is never offered in the UI
-    //                          (owner-stated 2026-08-20). It IS declared by a Mailbox, so without this line an
-    //                          honest admits list would have put "New Notebook" on every mailbox.
-    //   Mailbox, IMAP Special — provisioning and the mail path own them.
-    //   Repository, User Folder, My Documents — provisioning only.
-    //   Addressbook, Calendar — user-creatable, but from the Contacts and Calendar tabs, which is where someone
-    //                          looking for a new one goes. Nothing declares them, so they would not appear here
-    //                          anyway; named so the omission reads as a decision rather than an oversight.
-    //   Contact, Appointment  — the same: made in the tab that shows them, where the dialog for a person or an
-    //                          event belongs. Listing them here would put "New Contact" in the TREE's menu on
-    //                          every addressbook, which is a new affordance rather than the same one sourced
-    //                          differently — out of scope while this change is behaviour-preserving.
-    //
-    // The addresses match the rels the clients already follow (`sections`, `notes`), so a menu entry lands on
-    // the endpoint that already exists rather than on a second way in. `folder` alone goes through `children`
-    // with a body value, because a plain folder has no rel of its own — it IS the children collection's create.
-    //
-    // That every one of these needs a sentence is the argument for making it DATA: the model says where a mask
-    // may live, and nothing in the four facts says who may create one. See the remarks above.
-    private static readonly Dictionary<Guid, (string Path, string? FolderMask, string Prompt)> Creates = new()
+    // Contact and Appointment are deliberately absent even though /contacts and /appointments EXIST. Those
+    // endpoints take a whole person or a whole event, not a name, so a tree-menu entry for them needs the
+    // Contacts/Calendar tab dialog rather than the name prompt every other entry uses. That is its own piece
+    // of work (owner-decided 2026-08-21); being creatable was never what stood in the way.
+    private static readonly Dictionary<Guid, (string Path, string Prompt)> DedicatedEndpoints = new()
     {
-        [WellKnownMaskIds.Folder] = ("children", "folder", "name"),
-        [WellKnownMaskIds.NotebookSection] = ("sections", null, "name"),
-        [WellKnownMaskIds.Note] = ("notes", null, "note"),
+        [WellKnownMaskIds.NotebookSection] = ("sections", "name"),
+        [WellKnownMaskIds.Note] = ("notes", "note"),
+    };
+
+    // The legacy folderMask slugs, emitted ALONGSIDE the mask id purely so a client built before #678 keeps
+    // working. The endpoint accepts either; a tenant-authored mask has no slug and needs none.
+    // Only the kinds whose entry goes through the CHILDREN collection are here. A family with its own endpoint
+    // needs no body value at all — its address already says what it makes — and sending one there would be
+    // noise a reader has to work out is unused.
+    private static readonly Dictionary<Guid, string> LegacySlugs = new()
+    {
+        [WellKnownMaskIds.Folder] = "folder",
+        [WellKnownMaskIds.Addressbook] = "addressbook",
+        [WellKnownMaskIds.Calendar] = "calendar",
     };
 
     /// <param name="rules">The tenant's containment, loaded once per request and shared with the invariant.</param>
@@ -120,37 +110,61 @@ public static class CreatableChildren
     public static List<CreatableChild> For(
         MaskContainmentRules rules, Guid documentId, Guid? folderMaskId, bool isPersonalRoot)
     {
+        // A personal space's first level holds only what provisioning put there (#634). A separate invariant
+        // from containment, so it is answered separately — and answered FIRST, because nothing below it can
+        // make an entry legal here.
+        if (isPersonalRoot)
+        {
+            return [];
+        }
+
         var admits = new List<CreatableChild>();
 
         // The plain folder first: it is what "New subfolder" has always meant, and a menu that reorders itself
         // per folder is one the user has to read rather than aim at.
-        if (!isPersonalRoot && rules.Allows(WellKnownMaskIds.Folder, folderMaskId))
+        if (Offers(rules, WellKnownMaskIds.Folder, folderMaskId))
         {
             admits.Add(Entry(rules, documentId, WellKnownMaskIds.Folder));
         }
 
-        if (folderMaskId is not { } maskId)
-        {
-            return admits;
-        }
-
-        foreach (var declared in rules.AdmittedBy(maskId))
-        {
-            // Already added above, and a folder that declares it must not list it twice.
-            if (declared == WellKnownMaskIds.Folder || !Creates.ContainsKey(declared))
-            {
-                continue;
-            }
-
-            admits.Add(Entry(rules, documentId, declared));
-        }
+        // Everything else this folder will take, by NAME so the order is stable — a menu whose entries move
+        // between renders is one the user has to read rather than aim at, and row order out of a database is
+        // not defined.
+        admits.AddRange(rules.UserCreatableMasks
+            .Where(m => m != WellKnownMaskIds.Folder && Offers(rules, m, folderMaskId))
+            .OrderBy(rules.NameOf, StringComparer.Ordinal)
+            .Select(m => Entry(rules, documentId, m)));
 
         return admits;
     }
 
+    /// <summary>Whether this folder offers to make one of <paramref name="maskId"/>.</summary>
+    /// <remarks>
+    /// Three independent questions, and all three must hold. <b>May anyone make one</b> — data on the mask.
+    /// <b>Would it be allowed here</b> — containment, the same object the invariant uses, so a menu can never
+    /// offer a create its own <c>SaveChanges</c> would refuse. And <b>is there a way to make one</b>: a folder
+    /// mask is made through the children collection, and a couple of families have endpoints of their own.
+    /// <para>
+    /// The third is what keeps an ordinary folder's menu short. Containment PERMITS a Basic Entry or an eMail
+    /// in an ordinary folder and both are user-creatable, but neither is something you make — you upload a
+    /// file and get one. A menu built without this question would offer "New Basic Entry" beside "New folder",
+    /// which is the outcome ADR 0656 rejected.
+    /// </para>
+    /// </remarks>
+    private static bool Offers(MaskContainmentRules rules, Guid maskId, Guid? folderMaskId) =>
+        rules.IsUserCreatable(maskId)
+        && (rules.IsFolderMask(maskId) || DedicatedEndpoints.ContainsKey(maskId))
+        && rules.Allows(maskId, folderMaskId);
+
     private static CreatableChild Entry(MaskContainmentRules rules, Guid documentId, Guid maskId)
     {
-        var (path, folderMask, prompt) = Creates[maskId];
+        // A family with its own endpoint goes there; everything else is the children collection's create,
+        // carrying the mask id. That is the whole reason a tenant-authored mask needs no entry in any table:
+        // its address is the one every folder already advertises.
+        var (path, prompt) = DedicatedEndpoints.TryGetValue(maskId, out var dedicated)
+            ? dedicated
+            : ("children", "name");
+
         return new CreatableChild
         {
             MaskId = maskId,
@@ -158,7 +172,7 @@ public static class CreatableChildren
             Folder = rules.IsFolderMask(maskId),
             Href = $"/api/documents/{documentId}/{path}",
             Method = "POST",
-            FolderMask = folderMask,
+            FolderMask = LegacySlugs.GetValueOrDefault(maskId),
             Prompt = prompt,
             Icon = rules.IconOf(maskId),
         };

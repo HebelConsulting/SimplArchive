@@ -39,7 +39,10 @@ public static class MaskIcon
         ["mail-folder"] = "mdi-inbox",
         ["notebook"] = "mdi-notebook",
         ["section"] = "mdi-folder-text",
-        ["addressbook"] = "mdi-contacts",
+        // A BOOK with a person, not a contact card: mdi-contacts is person-shaped at 16 px, and so are the
+        // personal space (mdi-account) and a Contact (mdi-card-account-details). Three person shapes in one
+        // tree is three things the eye cannot separate.
+        ["addressbook"] = "mdi-book-account",
         ["calendar"] = "mdi-calendar",
         ["email"] = "mdi-email",
         ["note"] = "mdi-note-text",
