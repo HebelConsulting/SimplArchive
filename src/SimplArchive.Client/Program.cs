@@ -28,6 +28,16 @@ builder.Services.AddOidcAuthentication(options =>
     // regardless of requested scope. See ADR "Blazor Client-side login wiring".
     options.ProviderOptions.DefaultScopes.Clear();
     options.ProviderOptions.DefaultScopes.Add("openid");
+
+    // NO "offline_access", and therefore no refresh token — a DECISION, not an omission (ADR 0660, #669).
+    // This client renews by re-authorizing against the OpenIddict cookie (`prompt=none`), where the desktop
+    // rotates a refresh token held in the OS secret store. The desktop's credential is reachable by the user's
+    // account; a browser's would sit in the same storage an XSS already reads, upgrading the blast radius from
+    // one hour of access to long-lived offline access — with reuse detection still deferred.
+    //
+    // The trigger that revisits it: federation (#545). Silent renew works because client and auth server are
+    // same-origin, so third-party-cookie rules do not apply; an external IdP is where that stops holding.
+    // WebSilentRenewTests fails if this line grows offline_access, which is how the decision stays a decision.
 });
 
 // The one HttpClient this app needs so far talks back to this same origin's own Api (e.g.

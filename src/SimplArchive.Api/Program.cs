@@ -400,6 +400,9 @@ using (var scope = app.Services.CreateScope())
                     OpenIddictConstants.Permissions.ResponseTypes.Code,
                     OpenIddictConstants.Permissions.Scopes.Email,
                     OpenIddictConstants.Permissions.Prefixes.Scope + OpenIddictConstants.Scopes.OpenId,
+                    // Deliberately NO RefreshToken grant and no offline_access for the BROWSER client — the
+                    // desktop registration below has both. See ADR 0660: the credential would live where an
+                    // XSS already reads. Revisit when federation (#545) breaks same-origin silent renew.
                     // RFC 8693 token exchange for User impersonation (ADR "User impersonation").
                     OpenIddictConstants.Permissions.Prefixes.GrantType + SimplArchive.Auth.ImpersonationConstants.TokenExchangeGrantType,
                 },
