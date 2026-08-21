@@ -68,7 +68,11 @@ public class OverLimitFileCeilingTests
         // superseded-load guard: two loads race when a user selects twice quickly, and the EARLIER one could
         // finish last and repaint the pane with the previous subject. That race predates this issue and was
         // found by its test.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_899,
+        // 6,899 → 6,913 for remembering the tree's expansion between sessions: a field, the loop that wires
+        // the roots, and the note on why only roots need wiring. The feature itself is ~110 lines and they are
+        // NOT here — TreeExpansionMemory owns them. Written inline first, which is exactly what this guard
+        // caught: +110 on a file already on the debt list, cut to +14 by giving the responsibility a home.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_913,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —

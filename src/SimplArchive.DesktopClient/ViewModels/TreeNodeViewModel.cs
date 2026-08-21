@@ -172,8 +172,23 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty]
     private bool _isExpanded;
 
+    /// <summary>Told whenever this node opens or closes, so the shape can be remembered between sessions.</summary>
+    /// <remarks>
+    /// Handed DOWN to children as they load rather than wired per node by whoever constructs them: children
+    /// appear lazily and in several places, and a callback attached at each construction site is one that a new
+    /// site forgets. Set it on the roots and every descendant inherits it.
+    /// </remarks>
+    public Action<TreeNodeViewModel, bool>? ExpansionChanged { get; set; }
+
     async partial void OnIsExpandedChanged(bool value)
     {
+        // Reported for CLOSING as well as opening — a collapse is a change to the remembered shape, and the
+        // early return below only concerns loading children.
+        if (!IsSynthetic && !IsLauncher)
+        {
+            ExpansionChanged?.Invoke(this, value);
+        }
+
         if (!value || _loaded || _loadChildren is null)
         {
             return;
@@ -184,6 +199,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         foreach (var child in await _loadChildren(this))
         {
             child.Parent = this;
+            child.ExpansionChanged = ExpansionChanged;
             Children.Add(child);
         }
     }
@@ -218,6 +234,7 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         foreach (var child in await _loadChildren(this))
         {
             child.Parent = this;
+            child.ExpansionChanged = ExpansionChanged; // the second place children appear; both must pass it on
             Children.Add(child);
         }
         IsExpanded = true;

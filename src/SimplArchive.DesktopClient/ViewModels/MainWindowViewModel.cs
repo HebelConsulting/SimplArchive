@@ -976,6 +976,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // Bootstraps an already-authenticated session (the logon window did the OAuth, ADR "Desktop logon window") —
     // mirrors LoginAsync's post-authentication steps without opening the browser here.
+    private readonly TreeExpansionMemory _treeMemory = new();
+
     public async Task InitializeSessionAsync(SimplArchiveApiClient api, string email)
     {
         UseApi(api);
@@ -1041,6 +1043,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             Tree.Add(new TreeNodeViewModel(Guid.Empty, "Administration", true, LoadAdminRootAsync, syntheticIcon: "mdi-shield-account"));
         }
+
+        // The roots are the only nodes anyone constructs directly; every descendant inherits the callback as it
+        // loads, so a new place that creates child nodes cannot forget to wire it.
+        // Remembering the tree's shape is its own responsibility and lives in its own class (#687-adjacent
+        // size rule): this view-model only says which context it is in and hands over the roots.
+        _treeMemory.Use(DesktopClientOptions.ApiBaseUrl, UserEmail);
+        foreach (var root in Tree)
+        {
+            root.ExpansionChanged = _treeMemory.Record;
+        }
+
+        await _treeMemory.RestoreAsync(Tree);
     }
 
     // After a subfolder is created under parentId, refresh just that node's children in place + keep it expanded,
