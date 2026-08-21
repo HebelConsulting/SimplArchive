@@ -62,7 +62,13 @@ public class OverLimitFileCeilingTests
         // menu by hand. The property count went DOWN; the comment is what costs.
         // 6,849 → 6,851 for per-mask icons: two assignments, one on the list row and one on a search hit, so
         // an object wears the same glyph in every pane that draws it. Two lines, both of them the feature.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_851,
+        // 6,851 → 6,899 for #686: the detail pane now describes a selected FOLDER, which it did not — it kept
+        // the previous document's values on screen, which is worse than an empty pane because it looks right.
+        // The 48 lines are that branch, the version-less path through LoadSystemFieldsAsync, and the
+        // superseded-load guard: two loads race when a user selects twice quickly, and the EARLIER one could
+        // finish last and repaint the pane with the previous subject. That race predates this issue and was
+        // found by its test.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_899,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —

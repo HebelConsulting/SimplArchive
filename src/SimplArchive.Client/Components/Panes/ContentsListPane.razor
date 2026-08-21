@@ -37,7 +37,7 @@
         @foreach (var node in SortedContents())
         {
             var attrs = BrowseService.DropAttributes(node);
-            <div class="wb-list-row wb-cols @(BulkIds.Contains(node.Id) || ReferenceEquals(node, CommentTarget) ? "wb-list-row-selected" : "")"
+            <div class="wb-list-row wb-cols @(BulkIds.Contains(node.Id) || ReferenceEquals(node, SelectedNode) ? "wb-list-row-selected" : "")"
                  @onclick="(e) => RowClick.InvokeAsync((node, e))" @ondblclick="() => RowDoubleClick.InvokeAsync(node)" @attributes="attrs">
                 <span class="wb-ccell wb-cname" title="@node.DisplayName">
                     <MudIcon Icon="@BrowseService.TreeIcon(node)" Size="Size.Small"
@@ -89,7 +89,7 @@
     [Parameter] public IReadOnlySet<Guid> BulkIds { get; set; } = new HashSet<Guid>();
 
     /// <summary>The row whose chat thread is open — also drawn as selected.</summary>
-    [Parameter] public BrowseNode? CommentTarget { get; set; }
+    [Parameter] public BrowseNode? SelectedNode { get; set; }
 
     /// <summary>A row click, with its modifiers — the shell owns what selection means.</summary>
     [Parameter] public EventCallback<(BrowseNode Node, MouseEventArgs Args)> RowClick { get; set; }

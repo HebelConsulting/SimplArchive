@@ -80,6 +80,85 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
     }
 
     /// <summary>The tree contains folders only (no documents) — see ADR "Workbench pane content fixes".</summary>
+    /// <summary>
+    /// Makes <paramref name="id"/> visible in the tree: expands every ancestor on the path to it, loading
+    /// children where a node has not been opened yet. Returns false when the node is not in the tree at all.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Revealing is NOT navigating (#686): this changes what the tree SHOWS, never what the list is listing.
+    /// The two are separate facts — a folder selected in the contents list is marked in the tree while the list
+    /// keeps showing its parent's contents, which is what lets a user read a folder's metadata without losing
+    /// the listing they are standing in.
+    /// </para>
+    /// <para>
+    /// Lives here rather than in the shell because the tree's SHAPE is this service's — it owns the roots, the
+    /// expansion state and the lazy child loading. A shell that reached in to expand nodes would be a second
+    /// place that knows how the tree is built.
+    /// </para>
+    /// <para>
+    /// Only the loaded tree is searched. A folder reached by "Go to" may have ancestors the tree has never
+    /// opened, and this returns false rather than walking the whole archive to find it — the honest answer for
+    /// a node the tree does not have, and the caller simply leaves the highlight where it was.
+    /// </para>
+    /// </remarks>
+    public async Task<bool> RevealAsync(Guid id, Guid? parentId = null)
+    {
+        // The parent first, and this is not an optimisation — it is what makes the search possible at all. A
+        // node the tree has never expanded has no children loaded, so the target is not IN the loaded tree yet
+        // and searching for it finds nothing. Opening the parent is what puts it there.
+        if (parentId is { } parent && !await ExpandAsync(parent, includeSelf: true))
+        {
+            return false;
+        }
+
+        return await ExpandAsync(id, includeSelf: false);
+    }
+
+    // Expands the chain down to `id`; `includeSelf` also opens the node itself, loading its children.
+    // Revealing a folder must not expand IT — that would be opening it — except when it is the parent whose
+    // children we are about to look inside.
+    private async Task<bool> ExpandAsync(Guid id, bool includeSelf)
+    {
+        var path = new List<ITreeItemData<BrowseNode>>();
+        if (!FindPath(Roots, id, path))
+        {
+            return false;
+        }
+
+        var last = includeSelf ? path.Count : path.Count - 1;
+        for (var i = 0; i < last; i++)
+        {
+            var node = path[i];
+            node.Expanded = true;
+            if (node.Children is null or { Count: 0 } && node.Value is { } value)
+            {
+                node.Children = [.. await LoadChildrenAsync(value)];
+            }
+        }
+
+        return true;
+    }
+
+    // Depth-first, recording the chain so the caller can expand it. Searches only what is LOADED — an
+    // unexpanded node's children are null, and fetching them here would turn "reveal" into a crawl of the
+    // archive on every selection.
+    private static bool FindPath(IEnumerable<ITreeItemData<BrowseNode>> items, Guid id, List<ITreeItemData<BrowseNode>> path)
+    {
+        foreach (var item in items)
+        {
+            path.Add(item);
+            if (item.Value?.Id == id || (item.Children is { } children && FindPath(children, id, path)))
+            {
+                return true;
+            }
+
+            path.RemoveAt(path.Count - 1);
+        }
+
+        return false;
+    }
+
     public async Task<IReadOnlyCollection<TreeItemData<BrowseNode>>> LoadChildrenAsync(BrowseNode node)
     {
         if (node.AdminKind is not "")

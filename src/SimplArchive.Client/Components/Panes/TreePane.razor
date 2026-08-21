@@ -26,10 +26,15 @@
                    "Tree-pane context menu"): a MudTreeViewItem renders its children INSIDE
                    itself, so stopPropagation is what makes a right-click on a subfolder open
                    that subfolder's menu instead of also firing its ancestors' handlers. *@
-                <div class="wb-tree-node @(item.Value?.TreeGlyphClass)"
+                <div class="wb-tree-node @(item.Value?.TreeGlyphClass) @(item.Value is { } n && n.Id != Guid.Empty && n.Id == SelectedId ? "wb-tree-current" : "")"
                      @oncontextmenu="@(e => OnContextMenuAsync(item.Value, e))"
                      @oncontextmenu:preventDefault="true" @oncontextmenu:stopPropagation="true">
+                    @* Expanded is BOUND, not merely initial: the item keeps its own expansion state otherwise,
+                       so RevealAsync setting it on the data changed nothing on screen — the node was marked
+                       current inside a branch that stayed shut (#686). Two-way so a user's own click still
+                       writes back. *@
                     <MudTreeViewItem Value="@item.Value" Text="@item.Text" Icon="@item.Icon"
+                                     @bind-Expanded="item.Expanded"
                                      CanExpand="@item.Expandable" Items="@item.Children"
                                      OnClick="@(() => FolderSelected.InvokeAsync(item.Value))"
                                      @attributes="BrowseService.DropAttributes(item.Value)">
@@ -73,8 +78,26 @@
 </div>
 
 @code {
-    /// <summary>The folder the workbench currently has open, so the tree shows it as selected.</summary>
+    /// <summary>The folder the workbench currently has open — the tree still binds it for MudTreeView's own
+    /// bookkeeping, but the HIGHLIGHT comes from <see cref="SelectedId"/>.</summary>
     [Parameter] public BrowseNode? SelectedFolder { get; set; }
+
+    /// <summary>The id of the node the user has SELECTED, which the tree marks as current (#686).</summary>
+    /// <remarks>
+    /// <para>
+    /// An id rather than the node, because the tree holds its own <c>BrowseNode</c> instances and the list holds
+    /// others for the same folders. <c>BrowseNode</c> is a record, so equality compares members — and two of
+    /// those members are an <c>IReadOnlyDictionary</c> and an <c>IReadOnlyList</c>, which compare by REFERENCE.
+    /// Two separately-loaded nodes for one folder are therefore never equal, so matching on the value would
+    /// silently never highlight anything.
+    /// </para>
+    /// <para>
+    /// Separate from <see cref="SelectedFolder"/> because they are separate facts: single-clicking a folder in
+    /// the contents list selects it WITHOUT opening it, so the tree marks a node whose contents the list is not
+    /// showing. Conflating them is what made the tree sit on the parent while the detail described the child.
+    /// </para>
+    /// </remarks>
+    [Parameter] public Guid? SelectedId { get; set; }
 
     /// <summary>Raised when a node is clicked, or right-clicked (which selects before opening the menu).</summary>
     [Parameter] public EventCallback<BrowseNode?> FolderSelected { get; set; }

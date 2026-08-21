@@ -78,7 +78,11 @@ public class WorkbenchShellSizeTests
     // .wb-* pane widths at equal specificity, and an external sheet in <head> loads EARLIER, which inverts
     // that. Moving them would trade 90 lines for a cascade bug the tests would not obviously catch.
     // The comments were trimmed by 12 lines first; what is left is the third tier of a layout the shell owns.
-    private const int Ceiling = 3_299;
+    // 3,299 → 3,313 for #686: the tree marks the SELECTED node rather than the open folder, and a folder row
+    // selection reveals it. Fourteen lines, of which four are code — the reveal itself went to TreeState,
+    // which owns the tree's shape, rather than here. What is charged is the selection highlight's CSS and the
+    // note on why an outline and not a fill (the tree already spends its accent on the glyphs, ADR 0581).
+    private const int Ceiling = 3_313;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

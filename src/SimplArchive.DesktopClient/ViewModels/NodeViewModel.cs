@@ -19,6 +19,15 @@ public sealed class NodeViewModel
                 $"The '{rel}' rel was not advertised for '{Name}'. Follow a rel the resource offers, or fetch the "
                 + "resource — do not compose the URL (ADR 0543).");
 
+    /// <summary>The advertised href for <paramref name="rel"/>, or null when the row does not offer it.</summary>
+    /// <remarks>
+    /// For the places where a missing rel is an ANSWER rather than a mistake — a folder has no versions, so
+    /// asking for them is not a bug to throw on (ADR 0543: absence means "not available here"). Href stays the
+    /// default, because composing past a rel the server withheld is what that rule exists to stop.
+    /// </remarks>
+    public string? TryHref(string rel) =>
+        Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
+
     /// <summary>
     /// The DOCUMENT resource's own address. A repository row calls its document view <c>document</c> — its
     /// <c>self</c> is the repository view (ADR 0200) — while every other row's <c>self</c> IS the document.

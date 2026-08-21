@@ -866,9 +866,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanCheckOut));
         OnPropertyChanged(nameof(CanOverrideSelected));
         OnPropertyChanged(nameof(DetailIsFolder)); // the pane's subject changed, and with it the folder-only row
-        if (value is { IsFolder: false, IsArchiveEntry: false })
+
+        // FOLDERS TOO (#686). A folder is a Document with a mask, index fields and dates like any other, and
+        // skipping it here did not leave the pane empty — it left the PREVIOUS document's values on screen
+        // while the list showed a folder, which is the stale-subject condition ADR 0559 exists to prevent.
+        // The web has described a selected folder since #408; this is that behaviour promoted across (ADR 0511).
+        if (value is { IsArchiveEntry: false, IsArchiveBack: false })
         {
             await LoadDetailAsync(value);
+        }
+        else
+        {
+            // An archive row is not a document at all. Clear rather than leave the last subject standing.
+            ClearDetail();
         }
     }
 
@@ -3883,19 +3893,50 @@ public sealed partial class MainWindowViewModel : ObservableObject
         CanEditDetail = true;
         Preview.Reset("Loading…");
 
+        // Every write below happens AFTER an await, and a user can select again while one is in flight. Two
+        // loads then race, and the one that started EARLIER can finish last and repaint the pane with the
+        // previous subject — which is the same defect from the other end: the pane describing something other
+        // than what is selected (ADR 0559). Found by #686's test, which saw a folder's title beside a
+        // document's mask line.
+        //
+        // _selectedDocumentId was stamped above, so a stale load can see that it has been superseded and stop.
+        bool Superseded() => _selectedDocumentId != document.Id;
+
         try
         {
             var mask = await _api.Documents.GetMaskAsync(document.Href("mask"));
+            if (Superseded()) { return; }
+
             MaskLine = mask.Name is null ? "No mask" : $"Mask: {mask.Name}" + (mask.VersionNumber is { } v ? $" · version {v}" : "");
 
-            foreach (var field in await _api.Documents.GetIndexDataAsync(document.Href("index-data")))
+            var indexData = await _api.Documents.GetIndexDataAsync(document.Href("index-data"));
+            if (Superseded()) { return; }
+
+            foreach (var field in indexData)
             {
                 IndexFields.Add(new IndexFieldViewModel { FieldName = field.FieldName, Values = string.Join(", ", field.Values) });
             }
 
-            await LoadSystemFieldsAsync(document.DocumentSelfHref, document.Href("versions"), document.Name);
-            await LoadPreviewAsync(document.Href("versions"));
-            await LoadCommentsAsync(document.Href("chat"));
+            // A folder advertises no `versions`, and that absence is the ANSWER rather than a mistake — there
+            // is nothing to preview and no current version to name. Asked with TryHref so a folder takes the
+            // branch instead of throwing halfway through and leaving the pane half-loaded under a Status line.
+            var versions = document.TryHref("versions");
+            await LoadSystemFieldsAsync(document.DocumentSelfHref, versions, document.Name);
+            if (Superseded()) { return; }
+
+            if (versions is not null)
+            {
+                await LoadPreviewAsync(versions);
+            }
+            else
+            {
+                Preview.Reset(Strings.Get("NoPreview"));
+            }
+
+            if (document.TryHref("chat") is { } chat && !Superseded())
+            {
+                await LoadCommentsAsync(chat);
+            }
         }
         catch (Exception e)
         {
@@ -5439,7 +5480,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // Loads the always-shown system fields for the selected document (ADR "System fields + OCR-language mask
     // field"). OCR languages only apply to a TIFF-sourced document.
-    private async Task LoadSystemFieldsAsync(string documentSelfHref, string versionsHref, string name)
+    /// <param name="versionsHref">Null for a FOLDER, which advertises no versions (#686) — the system fields
+    /// below the sensitivity/tags block are a current version's, so there are none to read.</param>
+    private async Task LoadSystemFieldsAsync(string documentSelfHref, string? versionsHref, string name)
     {
         SysName = name;
         SysDocumentDate = null;
@@ -5491,10 +5534,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
         try { foreach (var t in await _api.Documents.GetTagsAsync(DetailHref("tags"))) DetailTags.Add(t); } catch (Exception) { /* leave empty */ }
         HasDetailTags = DetailTags.Count > 0;
 
+        if (versionsHref is null)
+        {
+            return; // a folder: no versions rel at all, so nothing below this line applies
+        }
+
         var fields = await _api.Documents.GetSystemFieldsAsync(versionsHref);
         if (fields is null)
         {
-            return; // no confirmed version yet (e.g. a folder)
+            return; // no confirmed version yet
         }
 
         _sysCurrentVersionId = fields.CurrentVersionId;

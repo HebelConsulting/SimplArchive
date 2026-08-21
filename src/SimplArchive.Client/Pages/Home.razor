@@ -324,6 +324,15 @@
     .wb-audit-table th { text-align: left; position: sticky; top: 0; background: var(--mud-palette-surface); border-bottom: 1px solid var(--mud-palette-lines-default); padding: 6px 12px; font-weight: 600; }
     .wb-audit-table td { padding: 5px 12px; border-bottom: 1px solid var(--mud-palette-lines-default); vertical-align: top; }
 
+    /* The SELECTED node (#686) — the one the detail pane is describing, which is not always the open folder.
+       An outline rather than a fill: the tree's accent already means "this is a container" on the glyphs, and
+       a second accent-coloured surface would be a state competing with a state (ADR 0581). Explicit colours,
+       no bare var() without a fallback — an undefined custom property renders as nothing at all. */
+    .wb-tree-current > .mud-treeview-item .mud-treeview-item-content,
+    .wb-tree-current > .mud-treeview-item > .mud-treeview-item-content {
+        outline: 2px solid var(--mud-palette-primary, #1976d2); outline-offset: -2px; border-radius: 4px;
+    }
+
     /* Phone drill-down chrome (ADR "Responsive phone drill-down") — hidden on desktop/tablet, shown only ≤767. */
     .wb-phone-topbar, .wb-phone-scrim, .wb-phone-detbar { display: none; }
 
@@ -523,7 +532,7 @@
                     @* The tree pane (ADR 0558). Its nodes live in the injected TreeState, not in the
                        component — this whole tab is torn down on a tab switch. The menu items are the
                        SHELL's operations, so they are supplied here rather than owned by the pane. *@
-                    <TreePane @ref="_treePane" SelectedFolder="_selectedFolder" FolderSelected="SelectFolderAsync">
+                    <TreePane @ref="_treePane" SelectedFolder="_selectedFolder" SelectedId="_selectedNode?.Id" FolderSelected="SelectFolderAsync">
                         <NodeMenu Context="tn">
                             @* Gated on the rel like every other create here, which it was NOT until #634: it
                                showed everywhere, so it appeared on a notebook (which holds sections, not
@@ -599,7 +608,7 @@
                        drag handler, the bulk operations and the post-rename refresh all read. What the pane
                        owns is how a row is drawn and the ephemeral header ordering. *@
                     <ContentsListPane @ref="_listPane" Rows="_folderContents" SelectedFolder="_selectedFolder"
-                                      FolderSortOrder="_folderSortOrder" BulkIds="_bulkIds" CommentTarget="_commentTarget"
+                                      FolderSortOrder="_folderSortOrder" BulkIds="_bulkIds" SelectedNode="_selectedNode"
                                       RowClick="@(t => OnRowClickAsync(t.Node, t.Args))" RowDoubleClick="OnRowDoubleClickAsync" ShowArchive="@(_archiveDocument is not null)">
                         <BulkBar>
                             @* Bulk-action bar (ADR "Bulk actions on selected documents") — shows when ≥2 rows are Ctrl/Shift-selected. *@
@@ -785,7 +794,7 @@
 
                             @* The chat pane (ADR 0558). The composer's text stays in the SHELL: a half-typed
                                comment is unsaved input, and this pane is disposed on every tab switch. *@
-                            <ChatPane Target="_commentTarget" Messages="_comments" FolderSubscribed="_folderSubscribed"
+                            <ChatPane Target="_selectedNode" Messages="_comments" FolderSubscribed="_folderSubscribed"
                                       @bind-NewComment="_newComment" @bind-ReplyText="_replyText"
                                       ReplyingTo="_replyingTo" MentionCandidates="_mentionCandidates"
                                       PostComment="@(() => PostCommentAsync())" PostReply="@((Guid id) => PostReplyAsync(id))"
@@ -1098,7 +1107,7 @@
 
     // The node whose comment thread is shown — a selected folder OR document (comments work on any Document,
     // ADR 0222), unlike the index/preview panes which are document-only (_selectedItem).
-    private BrowseNode? _commentTarget;
+    private BrowseNode? _selectedNode;
     private List<ChatMessageResponse> _comments = [];
     private string _newComment = "";
     private Guid? _replyingTo;
@@ -1178,7 +1187,7 @@
     private void PhoneBack()
     {
         _selectedItem = null;
-        _commentTarget = null;
+        _selectedNode = null;
     }
     private bool _uploading;
 
@@ -1801,7 +1810,7 @@
         // document gets, because a folder is a Document with a mask and index data of its own.
         if (folder is not null)
         {
-            _commentTarget = folder;
+            _selectedNode = folder;
             await LoadDetailForAsync(folder);
             await LoadFolderSubscriptionAsync(folder);
             await LoadCommentsAsync(folder);
@@ -1951,7 +1960,12 @@
     private async Task SelectContentFolderAsync(BrowseNode folder)
     {
         ClearDetail();
-        _commentTarget = folder;
+        _selectedNode = folder;
+        // The tree follows the selection (#686): ancestors expanded, the node marked as current — but NOT
+        // opened. Revealing is not navigating, so the list keeps showing the folder the user is standing in.
+        // Best-effort by design: a folder whose ancestors the tree has never loaded simply is not revealed,
+        // and the highlight stays where it was rather than the selection being refused.
+        await Tree.RevealAsync(folder.Id, _selectedFolder?.Id);
         // The selected folder WINS over the open one: the pane follows the selection exactly as it does for a
         // document row, so a child folder's metadata is editable without navigating into it (issue #408).
         await LoadDetailForAsync(folder);
@@ -1963,7 +1977,7 @@
     {
         ClearDetail();
         _selectedItem = item;
-        _commentTarget = item;
+        _selectedNode = item;
         await LoadDetailForAsync(item);
     }
 
@@ -2083,7 +2097,7 @@
         Detail.Tags = null;
         _downloadUrl = null;
         ClearPreviewPane();
-        _commentTarget = null;
+        _selectedNode = null;
         _comments = [];
         _replyingTo = null;
         _newComment = "";
@@ -2184,7 +2198,7 @@
 
     private async Task ToggleFolderSubscriptionAsync()
     {
-        if (_commentTarget is not { IsFolder: true } folder)
+        if (_selectedNode is not { IsFolder: true } folder)
         {
             return;
         }
@@ -2498,7 +2512,7 @@
 
     private async Task PostCommentAsync()
     {
-        if (_commentTarget is not { } item || string.IsNullOrWhiteSpace(_newComment))
+        if (_selectedNode is not { } item || string.IsNullOrWhiteSpace(_newComment))
         {
             return;
         }
@@ -2517,7 +2531,7 @@
 
     private async Task PostReplyAsync(Guid parentMessageId)
     {
-        if (_commentTarget is not { } item || string.IsNullOrWhiteSpace(_replyText))
+        if (_selectedNode is not { } item || string.IsNullOrWhiteSpace(_replyText))
         {
             return;
         }
