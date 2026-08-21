@@ -164,7 +164,15 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             TenantId = tenant.Id,
             ParentId = null,
             Name = repositoryName ?? tenant.Name,
-            MaskVersionId = await Documents.FolderMask.CurrentVersionIdAsync(_dbContext, tenant.Id, cancellationToken),
+            // A repository wears the Repository mask, in lockstep with ParentId == null (ADR 0627) — the same
+            // rule RepositoriesController.Create already followed. This path did NOT, and the drift was
+            // invisible on any long-lived installation: WellKnownMaskSeeder's backfill promotes Folder-masked
+            // roots on startup, but it runs BEFORE this service creates them, so a repository born here wore
+            // the wrong mask until the NEXT restart healed it. The one place that never gets a second start is
+            // a freshly reset demo — which is why the kiosk showed a plain folder icon on its repository every
+            // morning after the nightly `down -v`, and nowhere else did.
+            MaskVersionId = await Documents.FolderMask.CurrentVersionIdAsync(
+                _dbContext, tenant.Id, Domain.Masks.WellKnownMaskIds.Repository, cancellationToken),
             CreatedByUserId = administrator.Id,
             CreatedAt = DateTimeOffset.UtcNow,
         };

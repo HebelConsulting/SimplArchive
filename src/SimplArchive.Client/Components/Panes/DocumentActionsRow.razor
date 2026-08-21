@@ -1,0 +1,85 @@
+@* The index-data pane's row of PER-DOCUMENT actions — things the user does to the document they picked, as
+   opposed to things they do to the form (ADR 0550 keeps Save/Cancel out of here, with the fields they commit).
+
+   Extracted from the workbench shell (ADR 0558's direction, forced by the shell's size ratchet when Compare
+   versions moved up here — ADR 0664). It renders inside IndexDataPane's <ReadActions> fragment, which the shell
+   supplies, so the shell still decides that this row exists; it no longer has to hold its markup.
+
+   IT INJECTS NOTHING, AND THAT IS LOAD-BEARING. The first version of this component read DetailState and
+   DetailEditor directly, like the pane it sits in — and froze. Its only parameters were six EventCallbacks
+   built from METHOD GROUPS, which C# caches, so every parent render handed it byte-identical parameter values;
+   Blazor's diff concluded nothing could have changed and skipped re-rendering it. The row therefore showed
+   whatever was true at first paint and never updated, so the share and compare buttons — the two whose
+   conditions are only satisfied once the shell's async load finishes — were simply absent, on a document that
+   had both. It corrected itself on a tab switch, because that re-creates the tree structurally.
+
+   So the state arrives as PARAMETERS: a value that changes is a parameter that changes, and the component
+   re-renders because Blazor can see that it must. It also makes the row honest — it renders what it is given
+   and knows nothing about where the answers came from.
+
+   ONE VOCABULARY (ADR 0511): every entry is an icon with a tooltip, always visible rather than revealed on
+   hover, because touch has no hover. The tooltip IS the label here, so each button needs its OWN MudTooltip
+   wrapping it — nesting one button inside another's tooltip makes it wear that neighbour's text, which is
+   exactly what the chain icon did until ADR 0664. *@
+
+@* Follow / unfollow this document (ADR "Document subscriptions"). *@
+<MudTooltip Text="@(Subscribed ? Strings.Get("UnfollowDoc") : Strings.Get("FollowDoc"))">
+    <MudIconButton Size="Size.Small" aria-label="Follow"
+                   Icon="@(Subscribed ? Icons.Material.Filled.Notifications : Icons.Material.Outlined.NotificationsNone)"
+                   Color="@(Subscribed ? Color.Primary : Color.Default)"
+                   OnClick="@(() => Follow.InvokeAsync())" />
+</MudTooltip>
+@* Set a reminder (Wiedervorlage) on this document (ADR "Document reminders"). *@
+<MudTooltip Text="@Strings.Get("RemindTooltip")">
+    <MudIconButton Size="Size.Small" aria-label="Remind" Icon="@Icons.Material.Filled.Alarm"
+                   OnClick="@(() => Remind.InvokeAsync())" />
+</MudTooltip>
+@* Share with someone who has no account (ADR 0546); an absent rel means it is not offered (ADR 0543). *@
+@if (CanShare)
+{
+    <MudTooltip Text="@Strings.Get("ExtLinkManage")">
+        <MudIconButton Size="Size.Small" aria-label="@Strings.Get("ExtLinkManage")"
+                       Icon="@Icons.Material.Filled.Link" OnClick="@(() => Share.InvokeAsync())" />
+    </MudTooltip>
+}
+@* Compare two versions (ADR 0664). It lived at the BOTTOM of the pane until it was found scrolled out of
+   sight on an ordinary document, and moved here because it is a per-document action like its neighbours. *@
+@if (VersionCount >= 2)
+{
+    <MudTooltip Text="@Strings.Get("CompareVersionsBtn")">
+        <MudIconButton Size="Size.Small" aria-label="@Strings.Get("CompareVersionsBtn")"
+                       Icon="@Icons.Material.Filled.Difference" OnClick="@(() => Compare.InvokeAsync())" />
+    </MudTooltip>
+}
+@* Manage access (ACL) — only when the caller can manage permissions (ADR "Manage-access UI"). *@
+@if (CanManagePermissions)
+{
+    <MudTooltip Text="@Strings.Get("MaManageAccess")">
+        <MudIconButton data-tour="action-manage-access" Size="Size.Small" aria-label="Manage access"
+                       Icon="@Icons.Material.Filled.Security" OnClick="@(() => ManageAccess.InvokeAsync())" />
+    </MudTooltip>
+}
+@* Edit the index data (issue #407) — beside the thing it edits rather than at the far end of the pane. *@
+@if (CanEdit)
+{
+    <MudTooltip Text="@Strings.Get("Edit")">
+        <MudIconButton data-tour="action-edit-index" Size="Size.Small" aria-label="@Strings.Get("Edit")"
+                       Icon="@Icons.Material.Filled.Edit" OnClick="@(() => Edit.InvokeAsync())" Disabled="Busy" />
+    </MudTooltip>
+}
+
+@code {
+    [Parameter] public bool Subscribed { get; set; }
+    [Parameter] public bool CanShare { get; set; }
+    [Parameter] public int VersionCount { get; set; }
+    [Parameter] public bool CanManagePermissions { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public EventCallback Follow { get; set; }
+    [Parameter] public EventCallback Remind { get; set; }
+    [Parameter] public EventCallback Share { get; set; }
+    [Parameter] public EventCallback Compare { get; set; }
+    [Parameter] public EventCallback ManageAccess { get; set; }
+    [Parameter] public EventCallback Edit { get; set; }
+}

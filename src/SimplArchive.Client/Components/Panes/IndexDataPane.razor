@@ -248,17 +248,19 @@
             }
         }
 
-        @* Save/Cancel are NOT here any more — they live in the header row, where the pencil
-           that started the edit is (ADR 0550). Compare versions stays: it is about the
-           document's history, not about editing it. *@
-        <div class="wb-detail-actions">
-            @if (!IsEditing && Detail.VersionCount >= 2)
-            {
-                @* Edit moved to the header (issue #407); Compare versions stays, being about the
-                   document's history rather than about editing it. *@
-                <MudButton Size="Size.Small" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Difference" OnClick="@(() => OpenCompareVersions.InvokeAsync())">@Strings.Get("CompareVersionsBtn")</MudButton>
-            }
-        </div>
+        @* Nothing lives down here any more. Save/Cancel went to the header row with the pencil that starts
+           the edit (ADR 0550); Compare versions followed them, and for the same reason rather than a
+           different one — it is a per-document action, and this pane's per-document actions are in the
+           header.
+
+           What forced it was that "stays" had a cost nobody had measured. On the demo offer this pane is
+           210px around 318px of content, so the row sat 60px below the fold of a scroller macOS draws no
+           bar for: the button was rendered, correct, and unreachable without discovering the pane scrolls.
+           It was reported from the live demo as version comparison being broken. Pinning the row (ADR 0550's
+           own remedy for a form long enough to scroll) worked, but sliced two field rows in half — on a pane
+           this short the honest answer was to stop spending the space at all.
+
+           The .wb-detail-actions class itself lives on — the Intray has its own row of it. *@
     }
 
 
@@ -301,7 +303,6 @@
 
     [Parameter] public EventCallback Save { get; set; }
     [Parameter] public EventCallback Cancel { get; set; }
-    [Parameter] public EventCallback OpenCompareVersions { get; set; }
     [Parameter] public EventCallback<KeyboardEventArgs> KeyDown { get; set; }
     [Parameter] public EventCallback<Guid?> EditMaskChanged { get; set; }
 

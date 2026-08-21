@@ -189,7 +189,11 @@
     // marks this dialog changed so the parent refreshes.
     private async Task CompareAsync()
     {
-        var parameters = new DialogParameters { ["DocumentId"] = DocumentId, ["DocumentName"] = DocumentName };
+        // VersionsHref travels too. Omitting it did not fail — it made the compare dialog open with NOTHING
+        // loaded and both pickers rendering Guid.Empty as "00000000-0000-…", because its list load begins with
+        // a silent `if (VersionsHref is null) { return; }`. Same dialog, two callers, one of them incomplete:
+        // the detail pane's Compare button worked while this one was broken, which is why it survived.
+        var parameters = new DialogParameters { ["DocumentId"] = DocumentId, ["DocumentName"] = DocumentName, ["VersionsHref"] = VersionsHref };
         var dialog = await DialogService.ShowAsync<CompareVersionsDialog>(Strings.Get("CvTitle"), parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
         if ((await dialog.Result) is { Canceled: false, Data: true })
         {

@@ -11,6 +11,14 @@
     </TitleContent>
     <DialogContent>
         <div style="min-width: 620px;">
+            @if (_unavailable)
+            {
+                @* The versions could not be listed at all. Showing the pickers here is what produced the
+                   "00000000-0000-…" the bug was reported as: controls that look ready, bound to nothing. *@
+                <MudAlert data-testid="compare-unavailable" Severity="Severity.Warning" Dense="true">@Strings.Get("CompareNoVersions")</MudAlert>
+            }
+            else
+            {
             <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
                 <MudSelect T="Guid" Value="_fromId" ValueChanged="OnFromChanged" Label="@Strings.Get("CompareFrom")" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:180px;">
                     @foreach (var v in _versions)
@@ -53,6 +61,7 @@
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("CompareHint")</MudText>
                 </div>
             }
+            }
         </div>
     </DialogContent>
     <DialogActions>
@@ -69,7 +78,13 @@
     // still composes: comparing a PAIR has no rel to follow — a link names one resource, and there is no
     // advertised address for "these two against each other". Converting it needs an API shape that can express
     // the pair (a compare rel on a version, or the pair as query parameters), which is its own change.
-    [Parameter] public string? VersionsHref { get; set; }
+    //
+    // EditorRequired is a secondary net, NOT the guard. It is a Razor MARKUP diagnostic (RZ2012) and this
+    // dialog is never written as a tag — it is launched through DialogService.ShowAsync with a runtime
+    // DialogParameters dictionary the Razor compiler never inspects. What actually catches an omission is
+    // CompareVersionsDialogCallersTests, which reads the call sites. The attribute earns its place only if
+    // someone later uses this component as markup.
+    [Parameter, EditorRequired] public string? VersionsHref { get; set; }
 
     private string? _compareHref;
     [Parameter] public string DocumentName { get; set; } = "";
@@ -78,11 +93,19 @@
     private Guid _fromId;
     private Guid _toId;
     private bool _busy;
+    private bool _unavailable;
     private CompareResult? _result;
 
     protected override async Task OnInitializedAsync()
     {
-        if (VersionsHref is null) { return; }
+        // No address, no version list — and SAY so. Returning quietly left the dialog looking operable: two
+        // pickers bound to Guid, holding the default, which MudSelect renders literally as "00000000-0000-…".
+        // A user reads that as the app having lost the document, not as a caller having forgotten a parameter.
+        if (VersionsHref is null)
+        {
+            _unavailable = true;
+            return;
+        }
 
         var resp = await Http.GetFromJsonAsync<VersionListResponse>(VersionsHref);
         _compareHref = resp?.Links?.FirstOrDefault(l => l.Rel == "compare")?.Href.TrimStart('/');

@@ -516,6 +516,9 @@
   <data name="CompareHint" xml:space="preserve">
     <value>Seleccione dos versiones y haga clic en Comparar para ejecutar la comparación.</value>
   </data>
+  <data name="CompareNoVersions" xml:space="preserve">
+    <value>No se han podido listar las versiones de este documento, por lo que no hay nada que comparar.</value>
+  </data>
   <data name="CompareNotAvailable" xml:space="preserve">
     <value>La comparación no está disponible para este formato (solo se pueden comparar documentos con texto extraíble).</value>
   </data>

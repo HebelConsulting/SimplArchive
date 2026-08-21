@@ -113,6 +113,8 @@
     .wb-ocr-chip { border: 1px solid var(--mud-palette-lines-default); border-radius: 12px; padding: 1px 8px; font-size: 0.75rem; background: transparent; cursor: pointer; color: var(--mud-palette-text-primary); }
     .wb-ocr-chip-on { background: var(--mud-palette-primary); color: var(--mud-palette-primary-text); border-color: var(--mud-palette-primary); }
     .wb-detail-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+    /* An empty row spends 12px of a pane ADR 0550 says must waste none — enough here to clip the last field. */
+    .wb-detail-actions:empty { display: none; }
     .wb-detail-bottom { flex: 1 1 auto; min-height: 0; display: flex; }
     /* min-height:0, or a tall document's content minimum beats the pane's bounds and paints over the tab
        bar wherever the ancestor chain lacks an overflow backstop — Search showed it (review finding); the
@@ -716,47 +718,21 @@
                            and ⌘S stays a desktop affordance where it works properly. *@
                         @* The index-data pane (ADR 0558). The pane owns the read/edit SWAP — ADR 0550 makes
                            that a property of the transition — while the actions themselves stay the shell's. *@
-                        <IndexDataPane Save="SaveDetailAsync" Cancel="@(() => Editor.Cancel())" OpenWorkflow="@(() => OpenWorkflowAsync(_selectedItem!))" OpenCompareVersions="OpenCompareVersionsAsync"
+                        <IndexDataPane Save="SaveDetailAsync" Cancel="@(() => Editor.Cancel())" OpenWorkflow="@(() => OpenWorkflowAsync(_selectedItem!))"
                                        KeyDown="OnDetailKeyDown" EditMaskChanged="@((Guid? m) => Editor.ChangeMaskAsync(m))"
                                        ToggleOcrCode="@((string c) => Editor.ToggleOcr(c))" SearchByTag="SearchByTagAsync">
                             <ReadActions>
-                                @* Follow / unfollow this document (ADR "Document subscriptions"). *@
-                                <MudTooltip Text="@(Detail.Subscribed ? Strings.Get("UnfollowDoc") : Strings.Get("FollowDoc"))">
-                                    <MudIconButton Size="Size.Small" aria-label="Follow"
-                                                   Icon="@(Detail.Subscribed ? Icons.Material.Filled.Notifications : Icons.Material.Outlined.NotificationsNone)"
-                                                   Color="@(Detail.Subscribed ? Color.Primary : Color.Default)"
-                                                   OnClick="ToggleSubscriptionAsync" />
-                                </MudTooltip>
-                                @* Set a reminder (Wiedervorlage) on this document (ADR "Document reminders"). *@
-                                <MudTooltip Text="@Strings.Get("RemindTooltip")">
-                                    <MudIconButton Size="Size.Small" aria-label="Remind" Icon="@Icons.Material.Filled.Alarm" OnClick="OpenReminderDialogAsync" />
-                                    @if (Detail.ExternalLinksHref is not null)
-                                    {
-                                        <MudTooltip Text="@Strings.Get("ExtLinkManage")">
-                                            <MudIconButton Size="Size.Small" aria-label="@Strings.Get("ExtLinkManage")"
-                                                           Icon="@Icons.Material.Filled.Link" OnClick="OpenExternalLinksDialogAsync" />
-                                        </MudTooltip>
-                                    }
-                                </MudTooltip>
-                                @* Manage access (ACL) — only when the caller can manage permissions (ADR "Manage-access UI"). *@
-                                @if (Detail.CanManagePermissions)
-                                {
-                                    <MudTooltip Text="@Strings.Get("MaManageAccess")">
-                                        <MudIconButton data-tour="action-manage-access" Size="Size.Small" aria-label="Manage access" Icon="@Icons.Material.Filled.Security" OnClick="() => OpenManageAccessForSelectedAsync()" />
-                                    </MudTooltip>
-                                }
-                                @* Edit the index data (issue #407). It belongs beside the thing it edits, in the row of
-                                   per-document actions, rather than at the far end of the pane where it began — and
-                                   icon-only like its neighbours, so the row stays one vocabulary. Always visible rather
-                                   than on hover: touch has no hover (ADR 0511). Save and Cancel stay down with the
-                                   FIELDS, because they act on the form rather than on the document. *@
-                                @if (Editor.CanEdit)
-                                {
-                                    <MudTooltip Text="@Strings.Get("Edit")">
-                                        <MudIconButton data-tour="action-edit-index" Size="Size.Small" aria-label="@Strings.Get("Edit")" Icon="@Icons.Material.Filled.Edit"
-                                                       OnClick="BeginEditAsync" Disabled="Detail.Busy" />
-                                    </MudTooltip>
-                                }
+                                @* The per-document action row, extracted to its own component (ADR 0664). The shell
+                                   still decides the row exists and owns what each action DOES; only the markup moved.
+                                   The state is PASSED, not injected — a child whose parameters are only method-group
+                                   EventCallbacks never re-renders, because C# caches those delegates and Blazor then
+                                   sees no parameter change. *@
+                                <DocumentActionsRow Subscribed="Detail.Subscribed" CanShare="@(Detail.ExternalLinksHref is not null)"
+                                                    VersionCount="Detail.VersionCount" CanManagePermissions="Detail.CanManagePermissions"
+                                                    CanEdit="Editor.CanEdit" Busy="Detail.Busy"
+                                                    Follow="ToggleSubscriptionAsync" Remind="OpenReminderDialogAsync"
+                                                    Share="OpenExternalLinksDialogAsync" Compare="OpenCompareVersionsAsync"
+                                                    ManageAccess="@(() => OpenManageAccessForSelectedAsync())" Edit="BeginEditAsync" />
                             </ReadActions>
                             <TagAdd>
                                 <MudAutocomplete T="string" @bind-Value="Detail.EditNewTag" SearchFunc="SearchTagCatalog" CoerceValue="true"
