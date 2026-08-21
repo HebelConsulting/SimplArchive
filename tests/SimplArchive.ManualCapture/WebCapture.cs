@@ -79,6 +79,126 @@ public static partial class WebCapture
         await CaptureVersionCompareAsync(page, outDir);
         await CaptureWebDavAsync(page, outDir);
         await CaptureExternalLinksAsync(context, page, outDir);
+        await CaptureMobileTiersAsync(context, app.BaseUrl, outDir);
+    }
+
+    /// <summary>The phone and tablet tiers (#684) — captured from the real app, in a TOUCH context.</summary>
+    /// <remarks>
+    /// <para>
+    /// Its own browser context, because <c>HasTouch</c> can only be set when a context is created and the
+    /// tablet tier keys on the pointer being <b>coarse</b> (ADR 0659). A capture that set only the viewport
+    /// would quietly photograph the DESKTOP layout and file it under a tablet name — worse than no screenshot,
+    /// because it would look like documentation.
+    /// </para>
+    /// <para>
+    /// Logged in at desktop size and resized afterwards: the login wait looks for the display name in the app
+    /// bar, and the responsive CSS hides it on a narrow screen — logging in at phone size hangs on an element
+    /// that is present and hidden.
+    /// </para>
+    /// </remarks>
+    private static async Task CaptureMobileTiersAsync(IBrowserContext desktop, string baseUrl, string outDir)
+    {
+        await using var touch = await desktop.Browser!.NewContextAsync(new BrowserNewContextOptions
+        {
+            ViewportSize = new ViewportSize { Width = ViewportWidth, Height = ViewportHeight },
+            ColorScheme = ColorScheme.Light,
+            HasTouch = true,
+        });
+        await touch.AddInitScriptAsync("try { localStorage.setItem('sa.desktopClientNoticeDismissed', '1'); } catch (e) { }");
+
+        var page = await touch.NewPageAsync();
+        page.SetDefaultTimeout(60000);
+        await page.GotoAsync(baseUrl, new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+        await page.GetByText(LoginRegex()).First.WaitForAsync();
+        await LoginAsync(page);
+
+        // The premise, asserted rather than assumed: without a coarse pointer every shot below is the desktop
+        // layout under a mobile filename.
+        if (!await page.EvaluateAsync<bool>("() => matchMedia('(pointer: coarse)').matches"))
+        {
+            Console.WriteLine("[web] mobile tiers SKIPPED — touch emulation did not produce a coarse pointer");
+            return;
+        }
+
+        var list = page.Locator("[data-pane='list']");
+
+        // Between tiers, start from a clean page. The phone's detail overlay stays open across a resize and
+        // covers everything — its find-in-document field then intercepts the click meant for the tree, which
+        // reads as a mysterious timeout rather than "something is on top".
+        async Task ResetAsync()
+        {
+            await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+            await page.Locator(".wb-tabs").First.WaitForAsync();
+            await page.WaitForTimeoutAsync(800);
+        }
+
+        // On the single-pane tiers the tree is a DRAWER translated off-screen, so the repository label exists
+        // and cannot be clicked — the click retries until it times out. Open the drawer first where there is
+        // one; choosing a folder closes it again. On a landscape tablet the tree is inline and there is none.
+        async Task OpenDemoRepositoryAsync()
+        {
+            var hamburger = page.GetByLabel("Folders").First;
+            if (await hamburger.IsVisibleAsync())
+            {
+                await hamburger.ClickAsync();
+                await page.WaitForTimeoutAsync(600);
+            }
+
+            await page.GetByText("Demo Repository").First.ClickAsync();
+            await list.Locator(".wb-list-row").First.WaitForAsync();
+            await page.WaitForTimeoutAsync(500);
+        }
+
+        // ---- Phone (<= 767): drawer, list, and the full-screen detail with its sub-tabs.
+        await page.SetViewportSizeAsync(390, 844);
+        await page.WaitForTimeoutAsync(800);
+        await OpenDemoRepositoryAsync();
+        await ShotAsync(page, outDir, "phone-list");
+
+        await page.GetByLabel("Folders").First.ClickAsync();
+        await page.WaitForTimeoutAsync(700);
+        await ShotAsync(page, outDir, "phone-drawer");
+
+        // Closed by toggling the hamburger. The scrim is the interactive way out for a user, but it is a bare
+        // positioned div that Playwright will not call visible, so it cannot be clicked from here — and leaving
+        // the drawer open would put a dimmed overlay across every shot that follows.
+        await page.GetByLabel("Folders").First.ClickAsync();
+        await page.WaitForTimeoutAsync(600);
+
+        // A single tap opens a document full-screen on a phone — the detail sub-tabs are the figure.
+        await DrillToDocumentAsync(page, list);
+        await ShotAsync(page, outDir, "phone-detail");
+
+        // ---- Tablet upright (coarse + >= 768 + portrait): one pane, like a phone.
+        await ResetAsync();
+        await page.SetViewportSizeAsync(1024, 1366);
+        await page.WaitForTimeoutAsync(900);
+        await OpenDemoRepositoryAsync();
+        await ShotAsync(page, outDir, "tablet-portrait");
+
+        // ---- Tablet sideways: tree | list while browsing...
+        await ResetAsync();
+        await page.SetViewportSizeAsync(1366, 1024);
+        await page.WaitForTimeoutAsync(900);
+        await OpenDemoRepositoryAsync();
+        await ShotAsync(page, outDir, "tablet-landscape");
+
+        // ...and list | detail once a document is selected, with the tree a tap away.
+        await DrillToDocumentAsync(page, list);
+        await ShotAsync(page, outDir, "tablet-landscape-detail");
+    }
+
+    // Walks Contracts -> Acme Corp -> the two-revision offer, the same document the desktop figures use.
+    private static async Task DrillToDocumentAsync(IPage page, ILocator list)
+    {
+        foreach (var folder in new[] { "Contracts", "Acme Corp" })
+        {
+            await list.Locator(".wb-list-row").Filter(new LocatorFilterOptions { HasText = folder }).First.DblClickAsync();
+            await page.WaitForTimeoutAsync(900);
+        }
+
+        await list.Locator(".wb-list-row").Filter(new LocatorFilterOptions { HasText = "Offer 2026-014" }).First.ClickAsync();
+        await page.WaitForTimeoutAsync(2000);
     }
 
     // The Personal space expanded, showing the Intray and Check-out launchers — the figure for the manual's

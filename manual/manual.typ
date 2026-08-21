@@ -519,7 +519,82 @@ with who did it and why.
   tenant has an SLA configured.
 ]
 
-= Your own device
+== On a phone or a tablet
+
+The same address, in the same browser, gives you a layout built for the screen you are holding. There is no
+separate mobile site and nothing to install — and nothing is *taken away*: what the narrower layouts cannot show
+side by side, they show one at a time.
+
+*A tablet is recognised by its touch screen, not by its width.*#idx("Tablet") That distinction matters more than
+it sounds: a large tablet is about 1024 points across upright and 1366 across sideways, so measuring width alone
+would call the same device a tablet one way up and a desktop the other. Turning your tablet changes how many
+panes you get, and never which kind of device the archive thinks you have.
+
+=== A phone: one pane, and a way back
+
+The folder tree becomes a drawer, the folder's contents fill the screen, and a document opens over the top with
+its own *Preview*, *Details* and *Comments* tabs — so the panes the wide layout drops are a tap away rather than
+gone.
+
+#shot("screenshots/web-phone-list.png",
+  [A folder's contents on a phone, filling the screen. A single tap opens — there is no double-click here.])
+
+#shot("screenshots/web-phone-drawer.png",
+  [The tree, slid in from the left. Choosing a folder closes it again.])
+
+#shot("screenshots/web-phone-detail.png",
+  [A document, full screen, with its three tabs. Back returns to the list.])
+
+#note[
+  *A single tap navigates on a phone.* On a desktop a click selects and a double click opens, because there is a
+  second pane to show the selection in. On a phone there is not, so a tap goes straight in.
+]
+
+=== A tablet: one pane upright, two sideways
+
+Held upright, a tablet behaves exactly as a phone does — one pane, the tree in a drawer.
+
+#shot("screenshots/web-tablet-portrait.png",
+  [Upright: one pane at a time, the same shape as a phone.])
+
+Turn it sideways and you get two of the three panes. While you are browsing, the tree sits beside the folder's
+contents.
+
+#shot("screenshots/web-tablet-landscape.png",
+  [Sideways, browsing: the tree beside the contents list.])
+
+Open a document and the tree steps aside for it, so what you came *from* stays next to what you opened — and the
+tree is one tap away from the #box[≡] button whenever you want it back.
+
+#shot("screenshots/web-tablet-landscape-detail.png",
+  [Sideways, with a document open: the list beside the document. The tree is a tap away.])
+
+=== What each width shows
+
+#table(
+  columns: (auto, 1fr),
+  inset: 6pt,
+  align: (left, left),
+  table.header([*Screen*], [*What you see*]),
+  [Desktop], [All four panes — tree, contents, document, comments — resizable, and remembered per browser],
+  [Tablet, sideways], [Two panes: tree and contents, or contents and document],
+  [Tablet, upright], [One pane, tree in a drawer],
+  [Phone], [One pane, tree in a drawer, document full screen],
+)
+
+The comments pane is the first to go as the screen narrows, and the index-data pane the next — both come back as
+tabs inside the document view, so nothing becomes unreachable. It moves.
+
+#note[
+  *Buttons are labelled where you cannot hover.* On a desktop a ribbon button is an icon and its name appears on
+  hover. A touch screen has no hover and therefore no tooltip, so the same buttons keep their labels — an
+  unlabelled symbol you cannot interrogate is a guess.
+]
+
+This chapter is about the archive *in a browser*. For your device's own mail, contacts, calendar and files apps
+reaching the archive with no browser at all, see @byod.
+
+= Your own device <byod>
 
 Everything in this chapter is already yours. SimplArchive installs *nothing* on your phone, tablet or laptop —
 the archive speaks the protocols those devices came with, so the mail app, address book, calendar and file
