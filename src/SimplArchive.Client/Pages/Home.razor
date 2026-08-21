@@ -431,8 +431,8 @@
         .wb-cols.wb-has-selection .wb-detail { display: flex; flex: 1 1 52% !important; }
         .wb-detail [data-gutter] { display: none !important; }
 
-        /* A landscape tablet has room for the index above the preview, where the desktop puts it. */
-        .wb-detail .wb-index { display: flex !important; flex: 0 0 auto !important; }
+        /* Index above the preview, as on the desktop. flex-direction is LOAD-BEARING — see #698 / ADR 0666. */
+        .wb-detail .wb-index { display: flex !important; flex-direction: column; flex: 0 0 auto !important; }
     }
 </style>
 

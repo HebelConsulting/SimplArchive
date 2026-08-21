@@ -20,6 +20,21 @@ const DEFAULTS = { tree: 240, list: 300, chat: 340 };
 // so there is nothing that could ever change it. A stale `sizes.index` left in storage by an older build is
 // simply never read.
 const INDEX_CAP = 210;
+
+// ...except on a landscape tablet, where the trade the cap encodes is a different one (#698). There the pane
+// sits ABOVE the preview in a 1024px-tall viewport rather than competing with it in a desktop window, so 210
+// buys the preview little and costs the fields a lot: an ordinary Basic Entry is 282px of content, so the
+// desktop cap hid Retention and Mask outright and sliced Current version in half — on the very screenshot the
+// manual uses to show what a tablet looks like.
+//
+// Raised for that tier ONLY. Raising it everywhere would spend ~90px of desktop preview height, which is the
+// trade ADR 0550 deliberately made the other way; the desktop's own answer to the same squeeze was to move a
+// button out of the pane (#664), not to give the pane more room.
+const INDEX_CAP_TABLET_LANDSCAPE = 320;
+
+function indexCap() {
+    return viewportMode() === 'tablet-landscape' ? INDEX_CAP_TABLET_LANDSCAPE : INDEX_CAP;
+}
 const MIN = 90;
 const GUTTERS = {
     tree: { pane: 'tree', mode: 'left' },
@@ -236,7 +251,7 @@ export function attach(root) {
             // see, which is precisely what ADR 0550 forbids. Growth is bounded by max-height, so refusing to
             // shrink cannot cost the preview more than the cap.
             el.style.flex = '0 0 auto';
-            el.style.maxHeight = `${INDEX_CAP}px`;
+            el.style.maxHeight = `${indexCap()}px`;
             return;
         }
 
