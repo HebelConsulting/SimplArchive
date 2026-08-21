@@ -226,13 +226,18 @@
                             </TreeView.Styles>
                             <TreeView.DataTemplates>
                                 <TreeDataTemplate DataType="vm:TreeNodeViewModel" ItemsSource="{Binding Children}">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <i:Icon Value="{Binding IconValue}"
-                                                Classes.wbFolder="{Binding UsesFolderBrush}"
-                                                Classes.wbFolderEmpty="{Binding UsesEmptyFolderBrush}"
-                                                Classes.wbMutedGlyph="{Binding UsesMutedBrush}" />
-                                        <TextBlock Text="{Binding Name}" />
-                                    </StackPanel>
+                                    <!-- The Border exists to carry the selected-node ring (#696); a StackPanel
+                                         has no border of its own. Padding is set by the style so an unmarked
+                                         row does not shift when its neighbour gains a ring. -->
+                                    <Border Classes.wbCurrentNode="{Binding IsMarked}" Padding="2,0">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <i:Icon Value="{Binding IconValue}"
+                                                    Classes.wbFolder="{Binding UsesFolderBrush}"
+                                                    Classes.wbFolderEmpty="{Binding UsesEmptyFolderBrush}"
+                                                    Classes.wbMutedGlyph="{Binding UsesMutedBrush}" />
+                                            <TextBlock Text="{Binding Name}" />
+                                        </StackPanel>
+                                    </Border>
                                 </TreeDataTemplate>
                             </TreeView.DataTemplates>
                         </TreeView>

@@ -72,7 +72,12 @@ public class OverLimitFileCeilingTests
         // the roots, and the note on why only roots need wiring. The feature itself is ~110 lines and they are
         // NOT here — TreeExpansionMemory owns them. Written inline first, which is exactly what this guard
         // caught: +110 on a file already on the debt list, cut to +14 by giving the responsibility a home.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_913,
+        // 6,913 → 6,973 for #696: marking the selected folder in the tree without opening it. Sixty lines —
+        // MarkInTreeAsync, the event the view scrolls from, and the recursive walk that clears the previous
+        // mark. Left here rather than extracted: unlike the tree's remembered shape (which became
+        // TreeExpansionMemory), this is three short members reading state this class already owns, and a class
+        // holding one bool would be a file that exists to satisfy a number.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_973,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
@@ -108,7 +113,11 @@ public class OverLimitFileCeilingTests
         // glyph rather than an add-glyph — the verb is on the parent, so a plus made Folder read as a
         // different sort of action from its siblings. Found by looking at the built menu, which is the only
         // way it could be found.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_137,
+        // 1,137 → 1,145 for #696: bringing a newly marked tree node into view. Only the VIEW knows which
+        // container renders which node, so the view-model raises and this scrolls — eight lines, four of them
+        // the note on why BringIntoView is the right primitive (minimal movement, and a no-op when already
+        // visible, which is the behaviour decided for the web).
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_145,
 
         // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).
@@ -127,7 +136,9 @@ public class OverLimitFileCeilingTests
         // glyph name, so it is a Setter with a Template — four lines of markup and five of the note saying
         // why, because the previous state was TreeMenuEntry.Icon set and never read, which failed silently and
         // was only ever going to be found by looking at a rendered menu.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_971,
+        // 1,971 → 1,976 for #696: the tree item's template gains a Border to carry the selected-node ring. A
+        // StackPanel has no border of its own, so this is the cheapest shape that can show one.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_976,
 
         // Entered 2026-08-20 (#673, ADR 0655) — over the line since well before it was noticed, and never on
         // the list, so nothing was watching it. It enters ON THE WAY DOWN: the containment port took it 1,041 →

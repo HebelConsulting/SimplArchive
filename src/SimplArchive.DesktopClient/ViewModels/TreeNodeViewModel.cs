@@ -169,6 +169,16 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
     public ObservableCollection<TreeNodeViewModel> Children { get; } = [];
 
+    /// <summary>Whether this node is the SELECTED subject — which is not the same as the OPEN folder (#696).</summary>
+    /// <remarks>
+    /// Separate from the TreeView's own <c>SelectedItem</c> (bound to <c>SelectedTreeNode</c>), because on this
+    /// client the selected tree node IS the navigation: setting it loads that folder's contents. Marking a node
+    /// without navigating to it therefore needs its own state, exactly as the web needed a class it applies
+    /// from the shell's selection rather than from the tree's own selection (ADR 0661).
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isMarked;
+
     [ObservableProperty]
     private bool _isExpanded;
 

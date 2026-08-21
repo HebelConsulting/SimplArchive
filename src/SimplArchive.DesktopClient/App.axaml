@@ -53,6 +53,20 @@
              DynamicResource, not a brush a view model resolved: the colour has to come from the ACTIVE theme
              dictionary, or it keeps the startup theme after the OS switches. Avalonia cannot bind a resource
              KEY, hence one class per brush. -->
+        <!-- The SELECTED tree node (#696) — the one the detail pane is describing, which is not always the
+             open folder. An outline rather than a fill, matching the web (ADR 0661): the tree already spends
+             its accent on the folder glyphs, so a second accent-coloured surface would be a state competing
+             with a state (ADR 0581). The TreeView paints its own selected row for the OPEN folder, so the two
+             stay legible at once and in different channels. -->
+        <!-- WbAccent, the app's OWN token (Themes/Tokens.axaml), because a server profile can carry its own
+             theme (ADR 0578) and this ring should follow it. SystemAccentColorLight1 was tried first and does
+             resolve (measured: #ff149a90) — it is simply the OS accent, which would ignore the tenant's. -->
+        <Style Selector="Border.wbCurrentNode">
+            <Setter Property="BorderBrush" Value="{DynamicResource WbAccent}" />
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+
         <Style Selector="i|Icon.wbFolder">
             <Setter Property="Foreground" Value="{DynamicResource WbFolder}" />
         </Style>

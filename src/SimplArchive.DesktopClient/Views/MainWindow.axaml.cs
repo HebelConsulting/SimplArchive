@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Controls.Primitives;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using SimplArchive.DesktopClient.Services;
 using SimplArchive.DesktopClient.ViewModels;
@@ -47,6 +48,13 @@ public partial class MainWindow : Window
             if (DataContext is MainWindowViewModel vm)
             {
                 vm.Preview.AnnotationDialog = ShowAnnotationDialogAsync;
+                // Bring a newly marked tree node into view (#692's desktop half). Only the VIEW knows which
+                // container renders which node, so the view-model raises and this scrolls. BringIntoView is
+                // minimal-movement and a no-op when the node is already visible, which is the same behaviour
+                // decided for the web: never move the pane without cause.
+                vm.MarkedNodeChanged += node => Dispatcher.UIThread.Post(() =>
+                    FolderTree.GetVisualDescendants().OfType<Border>()
+                        .FirstOrDefault(b => ReferenceEquals(b.DataContext, node))?.BringIntoView());
                 vm.ExtendRetentionDialog = name => new ExtendRetentionDialog(name).ShowDialog<string?>(this);
                 vm.SaveSearchNamePrompt = () => new NewFolderDialog("Save search", "Name this saved search").ShowDialog<string?>(this);
                 vm.DuplicateUploadDialog = req => new DuplicateUploadDialog(req).ShowDialog<MainWindowViewModel.DuplicatePromptResult?>(this);

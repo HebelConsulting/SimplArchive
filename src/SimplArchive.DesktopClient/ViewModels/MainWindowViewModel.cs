@@ -873,12 +873,72 @@ public sealed partial class MainWindowViewModel : ObservableObject
         // The web has described a selected folder since #408; this is that behaviour promoted across (ADR 0511).
         if (value is { IsArchiveEntry: false, IsArchiveBack: false })
         {
+            // The tree marks the SELECTED subject too (#696), so the three panes agree about what they are
+            // describing. Started before the detail load and not awaited with it: marking is local work on
+            // nodes already in the tree, and making it wait behind a document's fields would leave the tree
+            // pointing at the previous subject for as long as that took.
+            await MarkInTreeAsync(value);
             await LoadDetailAsync(value);
         }
         else
         {
             // An archive row is not a document at all. Clear rather than leave the last subject standing.
             ClearDetail();
+        }
+    }
+
+    /// <summary>Marks a selected row's folder in the tree — expanding to it, WITHOUT opening it (#696).</summary>
+    /// <remarks>
+    /// <para>
+    /// Revealing is not navigating. Setting <c>SelectedTreeNode</c> would load that folder's contents and take
+    /// the user out of the listing they are standing in, which is what <c>RevealFolderInTreeAsync</c> is for
+    /// and why it cannot serve here.
+    /// </para>
+    /// <para>
+    /// The selected row is always a child of the OPEN folder, so the search starts there rather than walking
+    /// the archive: the open folder's node is the one place its children can be. A row whose folder the tree
+    /// does not hold — reached by "Go to", or a document rather than a folder — simply clears the mark, which
+    /// is the honest answer: nothing in the tree is the subject.
+    /// </para>
+    /// </remarks>
+    private async Task MarkInTreeAsync(NodeViewModel? row)
+    {
+        foreach (var node in AllTreeNodes(Tree).Where(n => n.IsMarked))
+        {
+            node.IsMarked = false;
+        }
+
+        if (row is not { IsFolder: true } || SelectedTreeNode is not { } parent)
+        {
+            return;
+        }
+
+        // The parent has to be open for its children to exist in the tree at all — an unexpanded node has none
+        // loaded, so the target could not be found however hard we looked.
+        await parent.EnsureExpandedAsync();
+        if (parent.Children.FirstOrDefault(c => c.Id == row.Id) is { } marked)
+        {
+            marked.IsMarked = true;
+            MarkedNodeChanged?.Invoke(marked);
+        }
+    }
+
+    /// <summary>Raised when a node gains the mark, so the view can bring it into view (#692's desktop half).</summary>
+    /// <remarks>
+    /// An event rather than the view-model scrolling: only the view knows which container renders which node,
+    /// and a view-model that reached for one would be doing layout.
+    /// </remarks>
+    public event Action<TreeNodeViewModel>? MarkedNodeChanged;
+
+    private static IEnumerable<TreeNodeViewModel> AllTreeNodes(IEnumerable<TreeNodeViewModel> nodes)
+    {
+        foreach (var node in nodes)
+        {
+            yield return node;
+            foreach (var child in AllTreeNodes(node.Children))
+            {
+                yield return child;
+            }
         }
     }
 

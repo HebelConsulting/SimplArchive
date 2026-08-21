@@ -716,6 +716,21 @@ internal static class Program
             Dispatcher.UIThread.RunJobs();
         }
 
+        // `--marked`: put the selected-node ring on a real tree node so it can be looked at (#696). The ring is
+        // the kind of thing that is perfectly true in the view-model and absent on screen, which no assertion
+        // about IsMarked can catch.
+        //
+        // It marks a NAMED node rather than "the first child": the first attempt marked the demo tree's "…"
+        // placeholder and rendered nothing, which read as a broken style and was not one. Two things had
+        // changed between that render and the working one — the brush AND the target — and only re-running with
+        // the original brush showed which mattered. It was the target.
+        if (Environment.GetCommandLineArgs().Contains("--marked"))
+        {
+            var target = viewModel.Tree.FirstOrDefault(n => n.Name == "Demo Repository") ?? viewModel.Tree.First();
+            target.IsMarked = true;
+            Dispatcher.UIThread.RunJobs();
+        }
+
         // `--menu`: open the tree context menu with its "New" submenu expanded, so the one part of this client
         // nobody could see gets into a screenshot.
         //
