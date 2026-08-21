@@ -915,6 +915,16 @@ public partial class MainWindow : Window
             return;
         }
 
+        // A person and an event get the Contacts/Calendar tabs' OWN dialogs (#689), reused rather than
+        // reimplemented: two forms for one object is how they come to disagree about which fields are
+        // required. The folder is handed in as the single target, which both fixes the destination and hides
+        // the dialog's collection picker (it draws only above one). Nothing is created until Save.
+        if (admitted.Prompt is "contact" or "appointment")
+        {
+            await TreeCreateDialogs.CreateAsync(this, vm, node, admitted);
+            return;
+        }
+
         // Titled with the mask's own name, so the user is told which of the kinds on the menu they picked —
         // and so a tenant-authored folder mask reads correctly without a string of its own.
         var name = await new NewFolderDialog(admitted.Name, admitted.Name).ShowDialog<string?>(this);
@@ -925,6 +935,7 @@ public partial class MainWindow : Window
             await vm.CreateSubfolderAsync(node.Id, admitted.Href, name, admitted.MaskId);
         }
     }
+
 
     private void OnTreeRename(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {

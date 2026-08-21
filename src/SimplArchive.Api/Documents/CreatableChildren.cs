@@ -44,12 +44,24 @@ public class CreatableChild
     /// </remarks>
     public string? Icon { get; set; }
 
-    /// <summary>What to ask the user for: <c>name</c>, or <c>note</c> for a title and a body.</summary>
+    /// <summary>
+    /// What to ask the user for: <c>name</c>, <c>note</c> (a title and a body), <c>contact</c> or
+    /// <c>appointment</c>.
+    /// </summary>
     /// <remarks>
+    /// <para>
     /// The server names the INPUT because the client cannot name the mask. The desktop client deliberately does
     /// not reference the Domain project — it is an Api client, not a second copy of the model — so it has no
     /// <c>WellKnownMaskIds</c> to switch on, and inferring "this one needs a body" from whether it happens to be
     /// a folder would be reading a decision out of an incidental field.
+    /// </para>
+    /// <para>
+    /// A CLOSED VOCABULARY of four values, each naming a dialog both clients already have (#689, owner-decided).
+    /// It is deliberately not a form specification: describing the fields to collect, so any mask gets a create
+    /// form, is a different and much larger piece of work, and one to enter on purpose rather than to arrive at
+    /// by widening this field one mask at a time. An unknown value must fall back to the name prompt, so a
+    /// client older than a new kind stays usable rather than offering an entry that does nothing.
+    /// </para>
     /// </remarks>
     public string Prompt { get; set; } = "name";
 }
@@ -76,16 +88,20 @@ public class CreatableChild
 public static class CreatableChildren
 {
     // Masks with a DEDICATED create endpoint, and what that endpoint asks the user for. Not a permission list
-    // — permission is Mask.UserCreatable — just the two families whose create is not "make a folder".
+    // — permission is Mask.UserCreatable — just the four families whose create is not "make a folder".
     //
-    // Contact and Appointment are deliberately absent even though /contacts and /appointments EXIST. Those
-    // endpoints take a whole person or a whole event, not a name, so a tree-menu entry for them needs the
-    // Contacts/Calendar tab dialog rather than the name prompt every other entry uses. That is its own piece
-    // of work (owner-decided 2026-08-21); being creatable was never what stood in the way.
+    // Contact and Appointment were absent until #689, and NOT because of creatability: they passed both the
+    // other questions all along. What they lacked was a way to ASK. Their endpoints take a whole person or a
+    // whole event, so a name prompt would have produced an empty vCard or a dateless appointment — worse than
+    // no affordance. They arrive now with prompts of their own, naming the dialog each client already has for
+    // the Contacts and Calendar tabs, so there is exactly one form per object rather than two that can come to
+    // disagree about required fields.
     private static readonly Dictionary<Guid, (string Path, string Prompt)> DedicatedEndpoints = new()
     {
         [WellKnownMaskIds.NotebookSection] = ("sections", "name"),
         [WellKnownMaskIds.Note] = ("notes", "note"),
+        [WellKnownMaskIds.Contact] = ("contacts", "contact"),
+        [WellKnownMaskIds.Appointment] = ("appointments", "appointment"),
     };
 
     // The legacy folderMask slugs, emitted ALONGSIDE the mask id purely so a client built before #678 keeps

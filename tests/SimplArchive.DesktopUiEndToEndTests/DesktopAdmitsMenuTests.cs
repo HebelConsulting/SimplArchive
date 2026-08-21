@@ -103,10 +103,61 @@ public class DesktopAdmitsMenuTests
         await documents.ReloadChildrenAsync();
         var created = Assert.Single(documents.Children, c => c.Name == name);
 
-        // It really is an ADDRESSBOOK, not a plain folder wearing the name: it draws as one, and being
-        // exclusive it offers no creates of its own in the tree.
+        // It really is an ADDRESSBOOK, not a plain folder wearing the name: it draws as one, and — being
+        // exclusive — it offers exactly one create, its own Contact, with no plain Folder beside it.
+        //
+        // This assertion used to be Assert.Empty, which was the whole of #689: you could make the container
+        // and then nothing to put in it. What changed is the PROMPT, not the containment — a contact needs a
+        // dialog, not a name, and until there was a way to ask, offering the entry would have produced empty
+        // vCards.
         Assert.Equal("addressbook", created.MaskIconToken);
-        Assert.Empty(created.Admits);
+        Assert.Equal(["Contact"], created.Admits.Select(a => a.Name).ToList());
+        Assert.Equal("contact", created.Admits[0].Prompt);
+    }
+
+    // The rich create, end to end on a real server (#689): the address the entry carries accepts a whole
+    // person, and what comes back is a Contact filed in that addressbook.
+    //
+    // Driven through the view-model rather than the dialog, because the dialog is a Window and this suite has
+    // no display — so what is proved here is the half a test can prove: the address, the payload shape and the
+    // filing. That the MENU reaches this, and that the dialog opens, is what the screenshots are for.
+    [Fact]
+    public async Task A_contact_is_created_from_the_addressbook_entry_that_offered_it()
+    {
+        var (vm, _) = await OpenAsync();
+        var documents = (await PersonalChildrenAsync(vm))["My Documents"];
+
+        var bookName = $"Book {Guid.NewGuid():N}"[..12];
+        var bookEntry = documents.Admits.Single(a => a.Name == "Addressbook");
+        await vm.CreateSubfolderAsync(documents.Id, bookEntry.Href, bookName, bookEntry.MaskId);
+        await documents.ReloadChildrenAsync();
+        var book = Assert.Single(documents.Children, c => c.Name == bookName);
+
+        var entry = Assert.Single(book.Admits);
+        Assert.Equal("Contact", entry.Name);
+
+        // Open the addressbook first, so the create refreshes the listing the way it does for a user standing
+        // in the folder they are filing into.
+        vm.SelectedTreeNode = book;
+        await WaitForAsync(() => vm.Items.Count == 0 || vm.Items.Count >= 0);
+
+        var surname = $"Lovelace{Guid.NewGuid():N}"[..12];
+        var form = new ContactEditViewModel { GivenName = "Ada", FamilyName = surname };
+        await vm.CreateStructuredChildAsync(
+            book.Id, entry.Href, form.ToPayload(), "StContactCreated", "StErrCreateContact", "Ada", bookName);
+
+        // Filed where it was aimed. The name is the SERVER's — it derives one from the card — so this asks the
+        // listing rather than assuming the form's guess survived (ADR 0559).
+        await WaitForAsync(() => vm.Items.Any(i => i.Name.Contains(surname, StringComparison.OrdinalIgnoreCase)));
+        Assert.Contains(vm.Items, i => i.Name.Contains(surname, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition)
+    {
+        for (var i = 0; i < 100 && !condition(); i++)
+        {
+            await Task.Delay(100);
+        }
     }
 
     // What stops an id on the wire being a licence. Mailbox is a real folder mask this tenant HAS — so the
@@ -144,20 +195,23 @@ public class DesktopAdmitsMenuTests
         Assert.All(roots, r => Assert.Contains(r.Admits ?? [], a => a.Name == "Folder"));
     }
 
-    // A typed folder whose items are made elsewhere offers nothing here, so the menu is HIDDEN rather than
-    // shown empty. Asserting the absence is the load-bearing half: a list published on every row would light
-    // the menu up everywhere and the happy path would still look correct.
+    // The list is PER ROW, not a constant published on every one — which is the half a happy-path test cannot
+    // see, because a list broadcast everywhere makes the happy path look right.
+    //
+    // This used to assert that My Addressbook and My Calendar admitted NOTHING, which was true until #689 gave
+    // each of them its one item. Rather than hunt for a replacement folder that admits nothing, the assertion
+    // moved to what actually distinguishes the rows: three different folders in one personal space, each
+    // carrying a different list, and neither typed collection carrying the plain Folder that My Documents does.
+    // The admits-nothing case is not lost — CreatableChildrenTests asks it of every well-known mask, including
+    // the two mail folders, without needing a container.
     [Fact]
-    public async Task A_folder_that_admits_nothing_creatable_hides_the_menu()
+    public async Task Each_folder_carries_its_own_list_rather_than_a_broadcast_one()
     {
         var (vm, _) = await OpenAsync();
         var children = await PersonalChildrenAsync(vm);
 
-        Assert.Empty(children["My Addressbook"].Admits);
-        Assert.Empty(children["My Calendar"].Admits);
-
-        // …and an ordinary folder still shows it, so the assertion above is about these folders rather than
-        // about the payload being absent everywhere.
-        Assert.NotEmpty(children["My Documents"].Admits);
+        Assert.Equal(["Folder", "Addressbook", "Calendar"], children["My Documents"].Admits.Select(a => a.Name).ToList());
+        Assert.Equal(["Contact"], children["My Addressbook"].Admits.Select(a => a.Name).ToList());
+        Assert.Equal(["Appointment"], children["My Calendar"].Admits.Select(a => a.Name).ToList());
     }
 }

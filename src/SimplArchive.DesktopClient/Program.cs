@@ -750,6 +750,11 @@ internal static class Program
                 ViewModels.TreeMenuEntry.Create("Folder", "mdi-folder", () => { }),
                 ViewModels.TreeMenuEntry.Create("Addressbook", "mdi-book-account", () => { }),
                 ViewModels.TreeMenuEntry.Create("Calendar", "mdi-calendar", () => { }),
+                // The two item kinds (#689). No real folder offers all five at once — an Addressbook offers
+                // only Contact — but this list exists to check how an entry RENDERS, and an item's glyph
+                // beside a folder's is the comparison worth being able to see.
+                ViewModels.TreeMenuEntry.Create("Contact", "mdi-card-account-details", () => { }),
+                ViewModels.TreeMenuEntry.Create("Appointment", "mdi-calendar-clock", () => { }),
             ];
             viewModel.TreeContextCanCreateAny = true;
             Dispatcher.UIThread.RunJobs();

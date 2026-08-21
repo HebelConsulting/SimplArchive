@@ -86,6 +86,19 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
                 && await PostCreateAsync(admitted.Href, new { title = note.Title, body = note.Body }, "StErrCreateNote", "StCreatedNote", note.Title);
         }
 
+        // A person and an event get the Contacts/Calendar tabs' OWN dialogs (#689) — reused, not reimplemented:
+        // two forms for one object is how they come to disagree about which fields are required, and the tab
+        // form is the one that has been through review. The folder is handed in as the single CreateTarget, so
+        // the dialog's collection picker hides itself (it only draws above one) and the entry's advertised href
+        // is what the create posts to.
+        //
+        // Nothing is created until Save. The endpoints take the whole resource, so a cancelled dialog leaves
+        // NOTHING behind — no "New contact" stub, and no window in which a CardDAV client syncs a copy of one.
+        if (admitted.Prompt is "contact" or "appointment")
+        {
+            return await CreateStructuredAsync(node, admitted);
+        }
+
         // Titled with the mask's own name, so the user is told which of the kinds on the menu they picked —
         // and so a tenant-authored folder mask reads correctly without a string of its own.
         var parameters = new DialogParameters<RenameDialog> { { x => x.ConfirmLabelKey, "Create" } };
@@ -104,6 +117,86 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
             : new { name, maskId = admitted.MaskId };
         return await PostCreateAsync(admitted.Href, payload, "StErrCreateFolder", "StCreatedFolder", name);
     }
+
+    /// <summary>
+    /// Opens the Contacts / Calendar tab's own dialog for a folder that admits one, and creates from the
+    /// filled-in form (#689).
+    /// </summary>
+    /// <remarks>
+    /// The two kinds differ only in which form and which dialog, so they share this body and each states its
+    /// own difference at the call below rather than becoming a second copy that drifts. The strings are the
+    /// tabs' — a contact created from the tree is the same event as one created from the Contacts tab, and
+    /// telling the user otherwise would be describing the route rather than the outcome.
+    /// </remarks>
+    private async Task<bool> CreateStructuredAsync(BrowseNode node, CreatableChild admitted)
+    {
+        // The folder itself, as the one place this create can land. The dialog draws its collection picker only
+        // above a single target, so handing it one both fixes the destination and removes the choice.
+        var targets = new List<CreateTarget> { new(node.Id, node.Name, admitted.Href) };
+
+        object payload;
+        string typed;
+        string okKey;
+        string errKey;
+
+        if (admitted.Prompt == "contact")
+        {
+            var parameters = new DialogParameters
+            {
+                { nameof(ContactDialog.Form), new ContactCardForm() },
+                { nameof(ContactDialog.Targets), targets },
+            };
+
+            var dialog = await dialogs.ShowAsync<ContactDialog>(admitted.Name, parameters);
+            if (await dialog.Result is not { Canceled: false, Data: ContactDialog.Saved saved })
+            {
+                return false;
+            }
+
+            payload = saved.Form.ToPayload();
+            // What the USER typed, for the message only. The server derives the filed name and may disambiguate
+            // a sibling clash, so this is not something to match a row on later (ADR 0559) — it is the reply to
+            // "did that work", and answering it with the words they just entered is what makes it useful.
+            typed = Composed(saved.Form);
+            (okKey, errKey) = ("StContactCreated", "StErrCreateContact");
+        }
+        else
+        {
+            var parameters = new DialogParameters
+            {
+                { nameof(AppointmentDialog.Form), AppointmentForm.ForCreate() },
+                { nameof(AppointmentDialog.Targets), targets },
+            };
+
+            var dialog = await dialogs.ShowAsync<AppointmentDialog>(admitted.Name, parameters);
+            if (await dialog.Result is not { Canceled: false, Data: AppointmentDialog.Saved saved })
+            {
+                return false;
+            }
+
+            payload = saved.Form.ToPayload();
+            typed = saved.Form.Summary;
+            (okKey, errKey) = ("StApptCreated", "StErrCreateAppt");
+        }
+
+        // The tabs' own two-argument messages — "Created '{0}' in {1}." — so the user is told WHERE it landed.
+        // From a tree menu that matters more than it does on a tab, because the folder they aimed at is the
+        // only thing that distinguished this create from the one on the Contacts tab.
+        var response = await http.PostAsJsonAsync(admitted.Href, payload);
+        if (!response.IsSuccessStatusCode)
+        {
+            snackbar.Add(string.Format(Strings.Get(errKey), string.Empty), Severity.Error);
+            return false;
+        }
+
+        snackbar.Add(string.Format(Strings.Get(okKey), typed, node.Name), Severity.Success);
+        return true;
+    }
+
+    /// <summary>The name a contact form reads as, for a message — given+family, else the organisation.</summary>
+    /// <remarks>The same order the server derives one in, so the message does not contradict the filed name.</remarks>
+    private static string Composed(ContactCardForm form) =>
+        $"{form.GivenName} {form.FamilyName}".Trim() is { Length: > 0 } person ? person : form.Organization;
 
     // One body for both: they differ only in the address, the payload and the message.
     private async Task<bool> PostCreateAsync(string href, object payload, string errKey, string okKey, string name)

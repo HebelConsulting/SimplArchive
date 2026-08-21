@@ -169,16 +169,49 @@ public class CreatableChildrenTests
         Assert.Empty(await AdmitsAsync(WellKnownMaskIds.ImapSpecial));
     }
 
-    // Addressbook and Calendar are user-creatable — from the Contacts and Calendar tabs, where the dialog for a
-    // person or an event belongs. Nothing they admit is on a tree menu, and being exclusive they take no plain
-    // folder either.
+    // An Addressbook offers exactly Contact, a Calendar exactly Appointment (#689) — one entry each, at the
+    // family's own endpoint, asking for the dialog rather than a name.
+    //
+    // This test previously asserted the OPPOSITE, that both offered nothing, and the reasoning is kept because
+    // it explains the shape rather than being wrong: the two masks always passed creatability and containment,
+    // and failed only "is there a way to make one" — a name prompt would have produced an empty vCard. Giving
+    // each a prompt naming a dialog the clients already have is what changed, not the containment.
+    //
+    // Being exclusive, neither takes a plain Folder, so a single entry is also an assertion that Folder did not
+    // sneak in: `Assert.Equal` on the whole list says more here than a Contains would.
     [Theory]
-    [InlineData("Addressbook")]
-    [InlineData("Calendar")]
-    public async Task A_typed_item_folder_offers_nothing_in_the_tree(string mask)
+    [InlineData("Addressbook", "Contact", "contacts", "contact")]
+    [InlineData("Calendar", "Appointment", "appointments", "appointment")]
+    public async Task A_typed_item_folder_offers_its_one_item(string mask, string item, string path, string prompt)
     {
         var maskId = mask == "Addressbook" ? WellKnownMaskIds.Addressbook : WellKnownMaskIds.Calendar;
-        Assert.Empty(await AdmitsAsync(maskId));
+        var admits = await AdmitsAsync(maskId);
+
+        Assert.Equal([item], admits.Select(a => a.Name).ToList());
+        Assert.Equal($"/api/documents/{_documentId}/{path}", admits[0].Href);
+        Assert.Equal(prompt, admits[0].Prompt);
+
+        // Not a folder, and carrying no folderMask slug: its ADDRESS already says what it makes, so a body
+        // value naming a kind would be noise the reader has to work out is unused.
+        Assert.False(admits[0].Folder);
+        Assert.Null(admits[0].FolderMask);
+    }
+
+    // The other half of the same rule, and the one a Contains-based test would miss: these two items are NOT
+    // offered anywhere else. An ordinary folder permits a Contact — containment is not what keeps it off that
+    // menu — so if the reason it stays off were ever confused with a containment rule, this is where it shows.
+    [Fact]
+    public async Task A_contact_and_an_appointment_are_offered_only_by_their_own_collection()
+    {
+        var rules = await RulesAsync();
+
+        foreach (var maskId in WellKnownMaskIds.All.Where(m =>
+                     m != WellKnownMaskIds.Addressbook && m != WellKnownMaskIds.Calendar))
+        {
+            var admits = CreatableChildren.For(rules, _documentId, maskId, isPersonalRoot: false);
+            Assert.DoesNotContain(admits, a => a.MaskId == WellKnownMaskIds.Contact);
+            Assert.DoesNotContain(admits, a => a.MaskId == WellKnownMaskIds.Appointment);
+        }
     }
 
     // A personal space's first level holds only what provisioning put there (#634) — a separate invariant from

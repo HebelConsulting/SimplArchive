@@ -77,7 +77,10 @@ public class OverLimitFileCeilingTests
         // mark. Left here rather than extracted: unlike the tree's remembered shape (which became
         // TreeExpansionMemory), this is three short members reading state this class already owns, and a class
         // holding one bool would be a file that exists to satisfy a number.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_973,
+        // 6_973 -> 6_987: CreateStructuredChildAsync (#689) joins CreateSubfolderAsync / CreateSectionAsync /
+        // CreateNoteAsync, forwarding to the same generic with a lambda. Owner-confirmed: splitting one of four
+        // siblings out would scatter a family this file already documents as belonging together.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_987,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
@@ -117,7 +120,10 @@ public class OverLimitFileCeilingTests
         // container renders which node, so the view-model raises and this scrolls — eight lines, four of them
         // the note on why BringIntoView is the right primitive (minimal movement, and a no-op when already
         // visible, which is the behaviour decided for the web).
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_145,
+        // 1_145 -> 1_156: the tree menu's rich creates (#689) went to Views/TreeCreateDialogs.cs rather than
+        // into this file, which is why eleven lines land here instead of fifty-seven. Adding to an over-limit
+        // file needs the owner's confirmation (CLAUDE.md); the confirmation given was to extract.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_156,
 
         // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).

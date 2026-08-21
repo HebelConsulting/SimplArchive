@@ -1739,12 +1739,22 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public Task CreateNoteAsync(Guid parentId, string notesHref, string title, string body) =>
         CreateChildAsync(parentId, api => api.Documents.CreateNoteAsync(notesHref, title, body), "StCreatedNote", "StErrCreateNote", title);
 
-    // The three creates differ only in the call and the two strings, so they share one body rather than
-    // becoming three copies that drift (the fourth would get the fix and the first three would not). What
-    // genuinely differs rides in as a lambda at each call site, where a reader wants both the difference and
-    // the delegation on one line.
+    // A contact, and an appointment, from the tree (#689). The whole filled-in resource goes in one request —
+    // nothing exists until the user saves the dialog, so a cancelled one leaves no stub for a DAV client to
+    // sync. Their messages name the FOLDER as well as the item, which is why inFolder exists at all: from a
+    // tree menu the folder the user aimed at is the only thing distinguishing this from the tab's own create.
+    public Task CreateStructuredChildAsync(
+        Guid parentId, string createHref, object payload, string okKey, string errKey, string name, string inFolder) =>
+        CreateChildAsync(
+            parentId, api => api.StructuredEditors.CreateAsync(createHref, payload), okKey, errKey, name, inFolder);
+
+    // The creates differ only in the call and the two strings, so they share one body rather than becoming
+    // copies that drift (the fourth would get the fix and the first three would not). What genuinely differs
+    // rides in as a lambda at each call site, where a reader wants both the difference and the delegation on
+    // one line.
     private async Task CreateChildAsync(
-        Guid parentId, Func<SimplArchiveApiClient, Task> create, string okKey, string errKey, string name)
+        Guid parentId, Func<SimplArchiveApiClient, Task> create, string okKey, string errKey, string name,
+        string? inFolder = null)
     {
         if (_api is null)
         {
@@ -1754,7 +1764,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         try
         {
             await create(_api);
-            Status = string.Format(Strings.Get(okKey), name);
+            // Two-argument where the caller named a folder, one where it did not — the message templates differ
+            // in arity, and string.Format throws on a template whose placeholders outnumber its arguments.
+            Status = inFolder is null
+                ? string.Format(Strings.Get(okKey), name)
+                : string.Format(Strings.Get(okKey), name, inFolder);
             await ShowNewChildInTreeAsync(parentId);
             if (_currentFolderId == parentId)
             {
