@@ -26,6 +26,12 @@ public class DocumentFinalizer
     private readonly INotificationService _notifications;
     private readonly ChatSystemEntryRecorder _chatEntries;
     private readonly CalendarContactClassifier _calendarContactClassifier;
+    private readonly SimplArchive.Infrastructure.Masks.IMaskContainmentProvider _containment;
+
+    // EVERY save here goes through SaveTranslatingContainmentAsync (#665). Several of them assign a mask or add
+    // a child document, so any can trip the typed-folder invariant — and this class had none of them, which is
+    // how a refusal reached a user as a bare 500 with no hint that the LOCATION was the problem. Using it
+    // uniformly rather than on the paths that look risky: the one that looked safe is the one that was not.
 
     public DocumentFinalizer(
         SimplArchiveDbContext dbContext,
@@ -37,7 +43,8 @@ public class DocumentFinalizer
         IStorageQuotaService storageQuota,
         INotificationService notifications,
         ChatSystemEntryRecorder chatEntries,
-        CalendarContactClassifier calendarContactClassifier)
+        CalendarContactClassifier calendarContactClassifier,
+        SimplArchive.Infrastructure.Masks.IMaskContainmentProvider containment)
     {
         _dbContext = dbContext;
         _objectStorageClient = objectStorageClient;
@@ -49,6 +56,7 @@ public class DocumentFinalizer
         _notifications = notifications;
         _chatEntries = chatEntries;
         _calendarContactClassifier = calendarContactClassifier;
+        _containment = containment;
     }
 
     // Extensions that trigger a searchable-PDF successor job. A TIFF always converts; a PDF is a *candidate* —
@@ -121,7 +129,7 @@ public class DocumentFinalizer
             document.CurrentVersionId = null;
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
         await _storageQuota.AdjustUsageAsync(version.TenantId, sizeBytes, cancellationToken);
 
         // The document's chat thread records that this was filed (ADR 0545). This method is the single point
@@ -223,7 +231,7 @@ public class DocumentFinalizer
             }
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
 
         if (staged.MaskId is not { } maskId)
         {
@@ -253,7 +261,7 @@ public class DocumentFinalizer
         try
         {
             document.MaskVersionId = await ResolveCurrentMaskVersionIdAsync(maskId, cancellationToken);
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
         }
         catch (Exception)
         {
@@ -288,7 +296,7 @@ public class DocumentFinalizer
         if (defaultLabelId is { } labelId)
         {
             document.SensitivityLabelId = labelId;
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
         }
     }
 
@@ -328,18 +336,47 @@ public class DocumentFinalizer
             }
         }
 
-        // A .vcf/.ics becomes a Contact/Calendar (#564, ADR 0619) — required, not decorative: the typed-folder
-        // containment invariant refuses a Basic-Entry-masked child of a Contact/Calendar, so without
+        // A .vcf/.ics becomes a Contact/Appointment (#564, ADR 0619) — required, not decorative: the
+        // typed-folder invariant refuses a Basic-Entry-masked child of an Addressbook/Calendar, so without
         // this an upload into one of those folders could not be saved at all.
+        //
+        // ...but ONLY WHERE THE PARENT ADMITS IT (#665). Stamping regardless of destination made dragging a
+        // .vcf onto an ordinary folder — filing a card somebody e-mailed you — impossible: the stamp created
+        // the very containment violation that then refused the save, and the user met a bare 500. Elsewhere
+        // the card stays an ordinary document, which is what it is when it is not in an addressbook.
         if (CalendarContactClassifier.Handles(extension)
+            && await AdmitsTypedItemAsync(document, extension, cancellationToken)
             && await _calendarContactClassifier.TryClassifyAsync(document, version, cancellationToken))
         {
             return false; // classified, but it has no attachments to file
         }
 
         document.MaskVersionId = await ResolveCurrentMaskVersionIdAsync(WellKnownMaskIds.BasicEntry, cancellationToken);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
         return false;
+    }
+
+    /// <summary>Whether the document's PARENT admits the typed item this extension would make (#665).</summary>
+    /// <remarks>
+    /// Asked of the same containment rules the invariant enforces, so the classifier cannot stamp a mask that
+    /// <c>SaveChanges</c> is about to refuse. A root document has no parent and admits nothing typed — it is a
+    /// repository, and a contact card is not one.
+    /// </remarks>
+    private async Task<bool> AdmitsTypedItemAsync(Document document, string extension, CancellationToken cancellationToken)
+    {
+        if (document.ParentId is not { } parentId)
+        {
+            return false;
+        }
+
+        var parentMaskId = await _dbContext.Documents
+            .Where(d => d.Id == parentId)
+            .Select(d => _dbContext.MaskVersions.Where(v => v.Id == d.MaskVersionId).Select(v => (Guid?)v.MaskId).FirstOrDefault())
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var rules = await _containment.ForAsync(_dbContext, document.TenantId, cancellationToken);
+        var itemMaskId = extension == ".vcf" ? WellKnownMaskIds.Contact : WellKnownMaskIds.Appointment;
+        return rules.Allows(itemMaskId, parentMaskId);
     }
 
     // One level only (a nested email's own attachments aren't extracted); best-effort per attachment. The
@@ -433,7 +470,7 @@ public class DocumentFinalizer
 
         _dbContext.Documents.Add(child);
         _dbContext.DocumentVersions.Add(version);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
         await _storageQuota.AdjustUsageAsync(email.TenantId, attachment.Content.Length, cancellationToken);
 
         await AutoClassifyAsync(version, cancellationToken); // one level — don't recurse into its attachments
@@ -490,7 +527,7 @@ public class DocumentFinalizer
         }
 
         document.MaskVersionId = maskVersionId;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
     }
 
     private async Task<Guid> ResolveCurrentMaskVersionIdAsync(Guid maskId, CancellationToken cancellationToken)
