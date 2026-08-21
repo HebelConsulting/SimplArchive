@@ -383,7 +383,7 @@ edit, and documents frozen by a legal hold, behave in the mount exactly as they 
 == Reading the archive in your mail program (IMAP)
 
 Where WebDAV turns the archive into a network drive, *IMAP*#idx("IMAP") lets a mail program browse it: point
-Apple Mail, Thunderbird or any IMAP-speaking client at your SimplArchive server and browse the same
+any IMAP-speaking mail client at your SimplArchive server and browse the same
 ACL-filtered tree as mailboxes. *INBOX* is your personal folder; the shared repositories you can see appear
 beside it. Archived e-mails read natively; every *other* document can appear too — as a message carrying the
 file as an attachment — if you switch that on.
@@ -414,7 +414,7 @@ attached to open straight from the mail client.
   to the *recycle bin* — never a hard delete. Read/unread marks are remembered per person.
 ]
 
-*Notes, too.*#idx("Notes") Point your notes app (Apple Notes, for instance) at the same account and it finds the
+*Notes, too.*#idx("Notes") Point a notes app that syncs over IMAP at the same account and it finds the
 *Notes* mailbox — your personal *Notes* folder in disguise. Every note becomes a proper archive document with
 the *Note* document type, and editing a note on your phone adds a *new version* in the archive rather than a
 new copy — the full history stays browsable in the workbench. The Notes folder is typed: it accepts only

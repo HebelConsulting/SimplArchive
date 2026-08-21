@@ -62,9 +62,42 @@ jobs:
         run: |
           set -uo pipefail
           # Gratuitous naming of a third-party product: an office suite standing in for a file format, a mail
-          # client standing in for a message format. Dependencies this project integrates with are nominative
+          # client standing in for a protocol. Dependencies this project integrates with are nominative
           # use and are NOT listed here (ADR 0610).
+          #
+          # The mail/PIM clients are named as EXAMPLES of something the sentence already says — "point <a
+          # client> or any IMAP-speaking client at the server" is true with the examples deleted, which is the
+          # ADR's own test for gratuitous use. Contrast the clients this project is deliberately COMPATIBLE
+          # with, named in ADRs (withheld from the mirror) and in code comments crediting borrowed
+          # implementations: those are nominative and are not listed.
+          #
+          # Phrase-bound on purpose. A bare vendor name would be a menace here: 'apple' alone matches the
+          # apple/banana text fixtures the version-compare tests diff, and 'Apple's clients' in the CalDAV
+          # source is a credit, not a product standing in for a protocol. Match the PRODUCT, not the vendor.
           PATTERN='(microsoft (word|excel|powerpoint|office)|\bms[- ](word|excel|office)\b|\bpowerpoint\b|\bexcel\b)'
+
+          # A SECOND list, and a narrower scope, because these two cases genuinely differ and the office one
+          # does not have this problem: a word processor standing in for a file format is gratuitous WHEREVER
+          # it appears, but a mail client is gratuitous in the manual and NOMINATIVE in the source.
+          #
+          # "point <a client> or any IMAP-speaking client at the server" stays true with the example deleted —
+          # decoration. "Apple Notes EDITS by appending a new message and deleting the old" does NOT; strip the
+          # name and the sentence stops explaining why the code is shaped that way. Eleven such comments exist,
+          # each recording an interop constraint that a specific client's behaviour imposed, and a gate that
+          # forced them out would delete the reasons and keep the code.
+          #
+          # No regex can tell those apart, so the scope does it: the places EXAMPLES get written (the manual,
+          # the chart's admin-facing values, user-visible strings) are gated; source comments are not. The
+          # limitation is real and worth knowing — a brand smuggled into a code comment as decoration passes
+          # here. Reviewing that is a reader's job, which is what the standing principle in CLAUDE.md is for.
+          PROSE_PATTERN='(apple ?(mail|notes)\b|\bthunderbird\b)'
+          PROSE_HITS=$(git ls-files 'manual/*' 'charts/*' 'src/SimplArchive.Localization/*' \
+            | xargs grep -InEi "$PROSE_PATTERN" 2>/dev/null || true)
+          if [ -n "$PROSE_HITS" ]; then
+            echo "::error::A third-party product named as an EXAMPLE in user-facing prose (ADR 0610). Say what the thing does — 'any IMAP-speaking client', not a brand:"
+            echo "$PROSE_HITS"
+            exit 1
+          fi
           HITS=$(git ls-files \
             | grep -vE '^(docs/|tools/|publish/|CLAUDE.md|README.md|\.github/workflows/ci\.yml)' \
             | xargs grep -InEi "$PATTERN" 2>/dev/null \
