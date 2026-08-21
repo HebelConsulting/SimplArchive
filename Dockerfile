@@ -31,19 +31,38 @@ COPY . .
 # document reports the real server version (ADR 0512, for the desktop self-update check); defaults to 0.1.0 locally.
 RUN dotnet publish "src/SimplArchive.Api/SimplArchive.Api.csproj" -c Release -o /app/publish --no-restore -p:Version=$VERSION
 
-# Bake the desktop-client packages into the served /download area so downloads stay in lock-step with this API
-# image (ADR 0490). Only win-x64 + linux-x64 — a Linux build can't produce the macOS .dmg (clients/macos/ links to
-# the GitHub Release instead). Needs bash + zip + tar for scripts/package-windows-linux.sh. The .gitkeep
-# placeholders that kept the (otherwise-empty) folders in git are removed so they don't clutter the listing.
+# (The desktop-client archives are built in their own stage below and copied into the final image — they used to
+#  be produced here, which made the ARM leg build them under emulation. See the `clients` stage for why.)
+
+
+# ── Desktop-client archives, built ONCE on the BUILD platform (#701) ─────────────────────────────────────────
+#
+# `--platform=$BUILDPLATFORM` is the whole point: this stage runs on the machine doing the building, never on
+# the image's target architecture, so it is never emulated. What it produces — win-x64 and linux-x64 archives —
+# is x64 content either way, so there was never a reason to produce it twice, let alone once under QEMU.
+#
+# Measured on v0.5.1, when this ran inside the per-architecture build stage:
+#
+#     linux/amd64    99 s
+#     linux/arm64  1350 s      — 13.6x, emulated
+#
+# Twenty-two minutes of emulated ARM for artefacts identical to the ones the amd64 leg had just built. That one
+# step was most of the margin against the publish job's `timeout-minutes: 60`: the v0.5.1 run was cancelled at
+# exactly sixty minutes, having pushed the image three minutes earlier and been killed during the cache export.
+#
+# Both final images still carry the archives, so /download/clients/{windows,linux}/ keeps working and downloads
+# stay in lock-step with the API image (ADR 0490). macOS is unaffected — a Linux build cannot produce a .dmg, so
+# clients/macos/ links to the GitHub Release.
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS clients
+ARG VERSION=0.0.0-dev
+WORKDIR /src
+COPY . .
 RUN apk add --no-cache bash zip tar \
- && bash scripts/package-windows-linux.sh "$VERSION" \
- && cp dist/SimplArchive-"$VERSION"-win-x64.zip /app/publish/wwwroot/download/clients/windows/ \
- && cp dist/SimplArchive-"$VERSION"-linux-x64.tar.gz /app/publish/wwwroot/download/clients/linux/ \
- && rm -f /app/publish/wwwroot/download/clients/windows/.gitkeep /app/publish/wwwroot/download/clients/linux/.gitkeep \
- && rm -rf dist
+ && bash scripts/package-windows-linux.sh "$VERSION"
 
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS final
+ARG VERSION=0.0.0-dev
 WORKDIR /app
 
 # icu-libs: proper globalization/culture handling for multi-tenant deployments with varying locales
@@ -58,6 +77,12 @@ ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
     ASPNETCORE_HTTP_PORTS=8080
 
 COPY --from=build /app/publish .
+
+# The archives from the build-platform stage. The .gitkeep placeholders that kept the (otherwise-empty) folders
+# in git are removed so they do not clutter the served listing.
+COPY --from=clients /src/dist/SimplArchive-${VERSION}-win-x64.zip wwwroot/download/clients/windows/
+COPY --from=clients /src/dist/SimplArchive-${VERSION}-linux-x64.tar.gz wwwroot/download/clients/linux/
+RUN rm -f wwwroot/download/clients/windows/.gitkeep wwwroot/download/clients/linux/.gitkeep
 
 USER app
 EXPOSE 8080
