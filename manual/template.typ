@@ -7,6 +7,9 @@
 #import "colors.generated.typ": accent
 
 // Document-wide configuration. Wrap the whole manual body in `#show: conf`.
+// Set by every heading, read and cleared by the first paragraph after it (#699) — see the show rules below.
+#let after-heading = state("manual.after-heading", false)
+
 #let conf(version: "", date: "", doc) = {
   set document(title: "SimplArchive — User Manual")
   set page(
@@ -35,11 +38,38 @@
       #it
     ]
   }
+  // `sticky: true` is NOT decoration — it restores what this rule took away (#699). Typst's own heading block
+  // is sticky, meaning it stays with the block that follows; wrapping the heading in a block of our own to
+  // style it REPLACES that block and silently drops the property. So every level-2 heading here could be left
+  // alone at the foot of a page, which is what "12.1 The controls an administrator holds" was doing: the
+  // heading and one line of intro, then a page turn for the list. Level 1 never showed it only because it
+  // starts on a fresh page anyway.
   show heading.where(level: 2): it => {
-    block(above: 1.1em, below: 0.6em)[
+    block(above: 1.1em, below: 0.6em, sticky: true)[
       #set text(size: 13pt, fill: accent.darken(15%), weight: "bold")
       #it
     ]
+  }
+
+  // ...and stickiness has to reach PAST the intro line (#699). A heading sticks to the block that follows, and a
+  // one-line paragraph satisfies that completely — so "heading + one line + page turn" survives a sticky
+  // heading, which is what "7.5.2 A tablet" was still doing after the figures were resized: heading, one line,
+  // five centimetres of blank, figure overleaf.
+  //
+  // So the paragraph directly after a heading is sticky too, and the chain heading → intro → figure holds.
+  // ORDER MATTERS: this was tried BEFORE the oversized figures were fixed and made things worse — the phone
+  // shots were 36cm tall, so the chain could not fit anywhere and left a near-empty page. It is safe now only
+  // because no figure exceeds the page body. If a tall figure is ever added without a `width`, this rule will
+  // amplify it rather than absorb it.
+  //
+  // The state is set by the heading and cleared by the first paragraph that reads it, so only the FIRST
+  // paragraph of a section is affected; every later one breaks normally.
+  show heading: it => { after-heading.update(true); it }
+  show par: it => context {
+    if after-heading.get() {
+      after-heading.update(false)
+      block(it, sticky: true)
+    } else { it }
   }
 
   doc

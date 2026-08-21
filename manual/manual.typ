@@ -537,13 +537,13 @@ its own *Preview*, *Details* and *Comments* tabs — so the panes the wide layou
 gone.
 
 #shot("screenshots/web-phone-list.png",
-  [A folder's contents on a phone, filling the screen. A single tap opens — there is no double-click here.])
+  [A folder's contents on a phone, filling the screen. A single tap opens — there is no double-click here.], width: 45%)
 
 #shot("screenshots/web-phone-drawer.png",
-  [The tree, slid in from the left. Choosing a folder closes it again.])
+  [The tree, slid in from the left. Choosing a folder closes it again.], width: 45%)
 
 #shot("screenshots/web-phone-detail.png",
-  [A document, full screen, with its three tabs. Back returns to the list.])
+  [A document, full screen, with its three tabs. Back returns to the list.], width: 45%)
 
 #note[
   *A single tap navigates on a phone.* On a desktop a click selects and a double click opens, because there is a
@@ -555,7 +555,7 @@ gone.
 Held upright, a tablet behaves exactly as a phone does — one pane, the tree in a drawer.
 
 #shot("screenshots/web-tablet-portrait.png",
-  [Upright: one pane at a time, the same shape as a phone.])
+  [Upright: one pane at a time, the same shape as a phone.], width: 75%)
 
 Turn it sideways and you get two of the three panes. While you are browsing, the tree sits beside the folder's
 contents.
@@ -710,7 +710,7 @@ it tells you both what people said and what changed.
 
 #shot("screenshots/web-chat.png",
   [The chat pane on a document: a threaded conversation interleaved with the document's own activity — here a
-   question and its reply, followed by the two versions as they were saved.])
+   question and its reply, followed by the two versions as they were saved.], width: 60%)
 
 #pair("screenshots/web-my-work.png", "screenshots/desktop-checkout.png",
   [Left: the *My work* dashboard. Right: the *Check-out* tab listing documents locked for exclusive editing —
