@@ -32,6 +32,13 @@ public class WebAdminUsersTests
         await users.Locator(".mud-treeview-item-arrow").ClickAsync();
 
         // The demo admin's own personal space appears under Users (loaded from the admin endpoint).
-        await Expect(tree.GetByText("Demo Admin")).ToBeVisibleAsync(new() { Timeout = 15000 });
+        //
+        // Scoped to the Users SUBTREE, and that is the whole assertion. Unscoped, this matched two nodes once
+        // personal spaces began carrying their owner's name (ADR 0671): the admin's own space at the tree's top
+        // level, and its entry here. Playwright then raised a strict-mode violation — but only once the branch
+        // had rendered, so the test PASSED whenever the assertion ran early enough to match the top-level node
+        // alone. It was green by matching the wrong element, which is worse than red.
+        var usersSubtree = users.Locator("xpath=ancestor::li[contains(@class,'mud-treeview-item')][1]");
+        await Expect(usersSubtree.GetByText("Demo Admin")).ToBeVisibleAsync(new() { Timeout = 15000 });
     }
 }
