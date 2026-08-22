@@ -85,12 +85,18 @@ public class WorkbenchShellSizeTests
     // 3,313 → 3,331 for #692: the reveal now brings the marked node into view. Eighteen lines, of which four
     // are code — the flag, its consumption after the render that applies the mark, and the guarded interop
     // call. The scroll arithmetic itself is in wbLayout.js, where the DOM measuring belongs.
+    // 3_307 -> 3_322 for #691, owner-confirmed: the detail pane's workflow slot now renders the transitions the
+    // SERVER advertises instead of a permanent "Start workflow" button. Fifteen lines, and they are the shell's
+    // genuine share — following the current version's workflow rel during the detail load, clearing it with the
+    // other addresses (ADR 0559), and reselecting after a transition, which needs SelectItemAsync. It was +33
+    // until the act-or-dialog decision moved to DocumentActions, which is where per-document actions live.
+    //
     // 3_331 -> 3_307: the per-document action row moved into DocumentActionsRow (ADR 0664). It went the RIGHT
     // way under pressure — adding Compare versions to that row put the shell 16 lines over, and this guard's
     // own advice ("put the new code in the component that owns the responsibility") was cheaper than the
     // exception it offers as the alternative. (The extracted row takes its state as parameters rather than
     // injecting it, which costs five lines here and is what makes it re-render at all — see the component.)
-    private const int Ceiling = 3_307;
+    private const int Ceiling = 3_322;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

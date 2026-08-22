@@ -718,7 +718,7 @@
                            and ⌘S stays a desktop affordance where it works properly. *@
                         @* The index-data pane (ADR 0558). The pane owns the read/edit SWAP — ADR 0550 makes
                            that a property of the transition — while the actions themselves stay the shell's. *@
-                        <IndexDataPane Save="SaveDetailAsync" Cancel="@(() => Editor.Cancel())" OpenWorkflow="@(() => OpenWorkflowAsync(_selectedItem!))"
+                        <IndexDataPane Save="SaveDetailAsync" Cancel="@(() => Editor.Cancel())" OpenWorkflow="@(() => OpenWorkflowAsync(_selectedItem!))" WorkflowTransition="DoWorkflowTransitionAsync"
                                        KeyDown="OnDetailKeyDown" EditMaskChanged="@((Guid? m) => Editor.ChangeMaskAsync(m))"
                                        ToggleOcrCode="@((string c) => Editor.ToggleOcr(c))" SearchByTag="SearchByTagAsync">
                             <ReadActions>
@@ -2059,6 +2059,10 @@
             }
 
             DeriveSystemFields(item, confirmed, versions?.CurrentVersionId);
+            // The transitions the pane may offer (#691) — followed from the current version's own workflow rel,
+            // and skipped for the states that offer nothing (see WorkflowTransitionsAsync: ADR 0557).
+            Detail.WorkflowLinks = await Actions.WorkflowTransitionsAsync(
+                Detail.SysWorkflowStatus, latest is null ? null : Links.Href(latest.Links, "workflow"));
             // The pane may not EXIST yet: @ref is assigned after a render, and the two ways a document is
             // opened from elsewhere — a search hit, a notification — call SetTab(Repositories) and select in the
             // same synchronous run, with no render in between. Rendering straight into a null ref would lose the
@@ -2124,6 +2128,7 @@
         Detail.CanManagePermissions = false;
         Detail.BreaksInheritance = false;
         Detail.ExternalLinksHref = null;
+        Detail.WorkflowLinks = null;
     }
 
     // Open the reminder (Wiedervorlage) dialog for the selected document (ADR "Document reminders").
@@ -2272,6 +2277,16 @@
         var parameters = new DialogParameters { ["DocumentId"] = item.Id, ["DocumentName"] = item.Name, ["VersionsHref"] = item.Links?.GetValueOrDefault("versions") };
         var dialog = await DialogService.ShowAsync<Dialogs.VersionsDialog>(Strings.Get("RibbonVersions"), parameters, new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
         if ((await dialog.Result) is { Canceled: false, Data: true } && _selectedItem?.Id == item.Id)
+        {
+            await SelectItemAsync(item);
+        }
+    }
+
+    // A workflow transition pressed in the detail pane (#691). Reselect rather than patch the status locally:
+    // the transition can move the document out of this listing entirely (status-gating).
+    private async Task DoWorkflowTransitionAsync(string rel)
+    {
+        if (_selectedItem is { } item && await Actions.WorkflowTransitionAsync(item, rel, Detail.WorkflowLinks))
         {
             await SelectItemAsync(item);
         }

@@ -5577,6 +5577,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SysCreated = "";
         SysCreatedBy = "";
         SysWorkflowStatus = null;
+        WorkflowTransitions.Clear();
         SysFileExtension = "";
         SysHasTiff = false;
         SysOcrLanguages = "";
@@ -5639,6 +5640,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SysCreated = fields.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
         SysCreatedBy = fields.CreatedByName;
         SysWorkflowStatus = fields.WorkflowStatus;
+        // The transitions the detail pane may offer (#691) — skipped for the states that offer nothing.
+        await LoadWorkflowTransitionsAsync(fields.WorkflowStatus, versionsHref);
         SysFileExtension = fields.FileExtension;
         SysDocumentDate = DateTimeOffset.TryParse(fields.DocumentDate, out var d) ? new DateTimeOffset(d.Date, TimeSpan.Zero) : null;
         SysHasTiff = fields.HasTiffVersion;
@@ -6235,6 +6238,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SysCreated = "";
         SysCreatedBy = "";
         SysWorkflowStatus = null;
+        WorkflowTransitions.Clear();
         SysFileExtension = "";
         SysHasTiff = false;
         SysOcrLanguages = "";

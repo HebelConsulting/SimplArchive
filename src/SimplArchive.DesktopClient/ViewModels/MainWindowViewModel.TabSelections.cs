@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using SimplArchive.Localization;
 
 namespace SimplArchive.DesktopClient.ViewModels;
@@ -107,12 +108,122 @@ public sealed partial class MainWindowViewModel
         var other => other,
     };
 
+    /// <summary>Labels the RIBBON's workflow button, which keeps its state-labelled affordance (#691 left the
+    /// ribbon alone deliberately; only the detail pane changed).</summary>
     public string WorkflowButtonLabel => SysWorkflowStatus switch
     {
         null or "" => Strings.Get("CtxStartWorkflow"),
         "Released" => Strings.Get("CtxViewWorkflow"),
         _ => Strings.Get("CtxManageWorkflow"),
     };
+
+    /// <summary>
+    /// The transitions the server says this caller may make on the selected version's workflow (#691) — one
+    /// button each in the detail pane, or none at all.
+    /// </summary>
+    /// <remarks>
+    /// The pane used to carry a permanent button labelled from the status string (Start / Manage / View). Most
+    /// documents never enter a workflow, so a control for a rare action sat in the row people use constantly,
+    /// and "Start" was an invitation rather than an action — what a reviewer actually has to do was two clicks
+    /// away inside a dialog. Now the slot holds what the current state affords and stands empty otherwise
+    /// (ADR 0550), drawn from the rels the server advertises rather than from any state machine repeated here
+    /// (ADR 0543). The web pane does exactly the same thing (ADR 0511).
+    /// </remarks>
+    public ObservableCollection<WorkflowTransitionViewModel> WorkflowTransitions { get; } = [];
+
+    /// <summary>One offered transition: the rel, its label, and the address to follow.</summary>
+    public sealed record WorkflowTransitionViewModel(string Rel, string Label, string Href);
+
+    /// <summary>The order the pane draws transitions in — fixed, never the dictionary's own.</summary>
+    /// <remarks>A row of buttons that reorders itself between documents is one the user must read rather than
+    /// aim at. `submit` leads because in the state that offers it beside nothing else, it IS the next step.</remarks>
+    private static readonly string[] TransitionOrder = ["submit", "approve", "reject", "reassign", "release"];
+
+    private static string TransitionLabel(string rel) => Strings.Get(rel switch
+    {
+        "submit" => "WorkflowSubmit",
+        "approve" => "WorkflowApprove",
+        "reject" => "WorkflowReject",
+        "reassign" => "WorkflowReassign",
+        "release" => "WorkflowRelease",
+        _ => "WorkflowStatus",
+    });
+
+    /// <summary>
+    /// Replaces the offered transitions from a workflow resource — or clears them when there is nothing to
+    /// offer.
+    /// </summary>
+    /// <remarks>
+    /// Called with the STATUS the version payload already carries, and returns without a request for the states
+    /// that offer nothing: no workflow, Draft, Released. That guard is what keeps this off the hot path
+    /// (ADR 0557 — the status rides in the payload precisely so a client need not follow the rel to label an
+    /// affordance). DRAFT is a decision rather than an optimisation: the server does advertise `submit` there,
+    /// but starting a workflow is an invitation and stays on the context menu. REJECTED is included — a
+    /// workflow exists, it came back, and resubmitting is the next thing to do.
+    /// </remarks>
+    private async Task LoadWorkflowTransitionsAsync(string? status, string versionsHref)
+    {
+        WorkflowTransitions.Clear();
+        if (_api is null || status is null or "" or "Draft" or "Released")
+        {
+            return;
+        }
+
+        try
+        {
+            var workflow = await _api.Documents.GetWorkflowAsync(versionsHref);
+            if (workflow is null)
+            {
+                return;
+            }
+
+            foreach (var rel in TransitionOrder)
+            {
+                if (workflow.Links.TryGetValue(rel, out var href))
+                {
+                    WorkflowTransitions.Add(new WorkflowTransitionViewModel(rel, TransitionLabel(rel), href));
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // A pane that cannot learn the transitions offers none — the same reading ADR 0543 gives an absent
+            // rel. Failing loudly would put an error over a document whose other fields all loaded.
+        }
+    }
+
+    /// <summary>
+    /// Follows one of the advertised transition addresses, then reloads what the pane shows (#691).
+    /// </summary>
+    /// <remarks>
+    /// Reselecting rather than patching the status locally: the transition can move the document out of this
+    /// listing entirely (status-gating hides a version in review from a non-reviewer), and guessing the new
+    /// state here would be the client reproducing the state machine the rels exist to keep on the server.
+    /// </remarks>
+    public async Task PerformWorkflowTransitionAsync(string href)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.Workflow.PostWorkflowActionAsync(href, null);
+            await ReloadTasksAsync();
+            if (SelectedItem is { } item)
+            {
+                await LoadDetailAsync(item);
+            }
+
+            // Reported AFTER the reload, naming the state ARRIVED AT rather than the button pressed: the server
+            // decides where a transition lands, and announcing our own guess would be a claim about its outcome
+            // rather than a report of it. WorkflowStateDisplay is the reloaded value by this point.
+            Status = string.Format(Strings.Get("StWorkflowStatus"), WorkflowStateDisplay);
+        }
+        catch (Services.ApiActionException e) { Status = e.Message; }
+        catch (Exception) { Status = Strings.Get("WorkflowActionFailed"); }
+    }
 
     /// <summary>Greys the Search toolbar's Go to (#530, tranche 8); raised by OnSelectedSearchResultChanged.</summary>
     public bool HasSelectedSearchResult => SelectedSearchResult is not null;

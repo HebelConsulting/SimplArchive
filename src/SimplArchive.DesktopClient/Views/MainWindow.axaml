@@ -493,12 +493,23 @@
                                         <TextBlock Grid.Row="6" Grid.Column="0" Text="{loc:Tr SysCurrentVersion}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                                         <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SysCurrentVersion}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" Margin="0,2" />
 
-                                        <!-- The workflow's state, readable at a glance, with the state-labelled
-                                             affordance beside it (review decision: Start / Manage / View). -->
+                                        <!-- The workflow's state, and beside it the transitions the SERVER
+                                             advertises - one button each, or nothing (#691; ADR 0550/0543). -->
                                         <TextBlock Grid.Row="7" Grid.Column="0" Text="{loc:Tr WorkflowStatus}" Foreground="{DynamicResource WbMuted}" VerticalAlignment="Center" />
                                         <StackPanel Grid.Row="7" Grid.Column="1" Orientation="Horizontal" Spacing="8">
                                             <TextBlock Text="{Binding WorkflowStateDisplay}" VerticalAlignment="Center" Margin="0,2" />
-                                            <Button Content="{Binding WorkflowButtonLabel}" Click="OnStartWorkflow" Padding="8,2" />
+                                            <ItemsControl ItemsSource="{Binding WorkflowTransitions}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" Spacing="6" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:MainWindowViewModel+WorkflowTransitionViewModel">
+                                                        <Button Content="{Binding Label}" Tag="{Binding Rel}" Click="OnWorkflowTransition" Padding="8,2" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
                                         </StackPanel>
                                     </Grid>
 

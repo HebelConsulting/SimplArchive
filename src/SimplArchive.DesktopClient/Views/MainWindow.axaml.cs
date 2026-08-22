@@ -632,6 +632,27 @@ public partial class MainWindow : Window
         await vm.ReloadTasksAsync();
     });
 
+    // A transition pressed in the detail pane's workflow slot (#691). Split by what the transition NEEDS:
+    // approve/submit/release act; reject needs a reason and reassign a reviewer, so those open the window that
+    // can ask. The web client splits them identically (ADR 0511).
+    private void OnWorkflowTransition(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm
+            || (sender as Control)?.Tag is not string rel
+            || vm.WorkflowTransitions.FirstOrDefault(t => t.Rel == rel) is not { } transition)
+        {
+            return;
+        }
+
+        if (rel is "reject" or "reassign")
+        {
+            OnStartWorkflow(sender, e);
+            return;
+        }
+
+        await vm.PerformWorkflowTransitionAsync(transition.Href);
+    });
+
     internal void OnManageSensitivityLabels(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
     {
         if (DataContext is not MainWindowViewModel vm || vm.CreateSensitivityLabelsViewModel() is not { } labels)

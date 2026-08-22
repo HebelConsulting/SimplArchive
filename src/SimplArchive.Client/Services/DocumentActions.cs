@@ -193,6 +193,99 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
         return true;
     }
 
+    /// <summary>
+    /// The transitions this caller may make on a version's workflow, by rel — or null when there is nothing to
+    /// ask about (#691).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Called with the STATUS the version resource already carries, and returns immediately for the states that
+    /// offer nothing: no workflow, Draft, Released. That is the whole reason this is affordable on the hottest
+    /// path in the client — ADR 0557 forbids a request per rel, and the version payload deliberately carries
+    /// the status so a client need not follow the workflow rel just to label an affordance. The follow happens
+    /// only when the status says there IS something to offer, which on ordinary demo data is almost never.
+    /// </para>
+    /// <para>
+    /// DRAFT is excluded on purpose, and it is the one state where that is a decision rather than an
+    /// optimisation: the server does advertise `submit` there, but starting a workflow is an invitation rather
+    /// than a next step, and it stays on the context menu (#691). REJECTED is not excluded — a workflow exists,
+    /// it came back, and resubmitting is genuinely the next thing to do.
+    /// </para>
+    /// </remarks>
+    public async Task<Dictionary<string, string>?> WorkflowTransitionsAsync(string? status, string? workflowHref)
+    {
+        if (workflowHref is null || status is null or "" or "Draft" or "Released")
+        {
+            return null;
+        }
+
+        try
+        {
+            var resource = await http.GetFromJsonAsync<WorkflowLinksResponse>(workflowHref);
+            return (resource?.Links ?? [])
+                .Where(l => l.Rel != "self" && l.Href is { Length: > 0 })
+                .ToDictionary(l => l.Rel, l => l.Href!, StringComparer.Ordinal);
+        }
+        catch (Exception)
+        {
+            // A pane that cannot learn the transitions offers none — the same reading ADR 0543 gives an absent
+            // rel. Failing loudly here would put an error over a document whose other fields all loaded.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Carries out a transition the detail pane offered (#691), asking for input first where the transition
+    /// needs it.
+    /// </summary>
+    /// <remarks>
+    /// The split is by what a transition NEEDS, not by what it is called: approve / submit / release are
+    /// complete as pressed, so they act; reject needs a reason and reassign needs a reviewer, so they open the
+    /// dialog that can ask. A button that opened a dialog only to offer the same button again would be an
+    /// invitation wearing an action's label — the thing #691 set out to remove.
+    /// </remarks>
+    /// <returns>True when the document's state may have changed, so the caller can reload what it shows.</returns>
+    public async Task<bool> WorkflowTransitionAsync(BrowseNode node, string rel, IReadOnlyDictionary<string, string>? links)
+    {
+        if (links?.GetValueOrDefault(rel) is not { } href)
+        {
+            return false;
+        }
+
+        if (rel is "reject" or "reassign")
+        {
+            var parameters = new DialogParameters { ["DocumentId"] = node.Id, ["DocumentHref"] = DocumentAddress(node) };
+            await (await dialogs.ShowAsync<WorkflowDialog>(Strings.Get("WfTitle"), parameters, new DialogOptions { CloseButton = true })).Result;
+            return true;
+        }
+
+        return await PostTransitionAsync(href);
+    }
+
+    private async Task<bool> PostTransitionAsync(string href)
+    {
+        var response = await http.PostAsJsonAsync(href, new { });
+        if (!response.IsSuccessStatusCode)
+        {
+            // The dialog's own failure text, so the same refusal reads the same wherever the action was pressed.
+            snackbar.Add(Strings.Get("WorkflowActionFailed"), Severity.Error);
+            return false;
+        }
+
+        // ...and its own success text, which names the state ARRIVED AT rather than the button pressed: the
+        // server decides where a transition lands, and reporting our own guess would be a claim about its
+        // outcome rather than a report of it.
+        var state = await response.Content.ReadFromJsonAsync<WorkflowLinksResponse>();
+        snackbar.Add(string.Format(Strings.Get("StWorkflowStatus"), state?.StatusName), Severity.Success);
+        return true;
+    }
+
+    private sealed class WorkflowLinksResponse
+    {
+        public List<Hypermedia.LinkResponse> Links { get; set; } = [];
+        public string? StatusName { get; set; }
+    }
+
     /// <summary>The name a contact form reads as, for a message — given+family, else the organisation.</summary>
     /// <remarks>The same order the server derives one in, so the message does not contradict the filed name.</remarks>
     private static string Composed(ContactCardForm form) =>

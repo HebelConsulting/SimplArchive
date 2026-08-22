@@ -80,7 +80,9 @@ public class OverLimitFileCeilingTests
         // 6_973 -> 6_987: CreateStructuredChildAsync (#689) joins CreateSubfolderAsync / CreateSectionAsync /
         // CreateNoteAsync, forwarding to the same generic with a lambda. Owner-confirmed: splitting one of four
         // siblings out would scatter a family this file already documents as belonging together.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_987,
+        // 6_987 -> 6_991 for #691 (owner-confirmed): the load call plus two clears. The ~90 lines the feature
+        // actually cost went to MainWindowViewModel.TabSelections.cs, which is not on this list.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_991,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
@@ -123,7 +125,10 @@ public class OverLimitFileCeilingTests
         // 1_145 -> 1_156: the tree menu's rich creates (#689) went to Views/TreeCreateDialogs.cs rather than
         // into this file, which is why eleven lines land here instead of fifty-seven. Adding to an over-limit
         // file needs the owner's confirmation (CLAUDE.md); the confirmation given was to extract.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_156,
+        // 1_156 -> 1_177 for #691 (owner-confirmed): OnWorkflowTransition reads the pressed rel and routes
+        // reject/reassign to the workflow window, which needs this window as the dialog owner and so cannot
+        // leave the code-behind.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_177,
 
         // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).
@@ -144,7 +149,10 @@ public class OverLimitFileCeilingTests
         // was only ever going to be found by looking at a rendered menu.
         // 1,971 → 1,976 for #696: the tree item's template gains a Border to carry the selected-node ring. A
         // StackPanel has no border of its own, so this is the cheapest shape that can show one.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_976,
+        // 1_976 -> 1_987 for #691 (owner-confirmed): the detail pane's workflow slot became an ItemsControl over
+        // the advertised transitions where it was one Button. #519 will take this file down by extracting a
+        // UserControl per tab; eleven lines of markup is not the moment to start that.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml"] = 1_987,
 
         // Entered 2026-08-20 (#673, ADR 0655) — over the line since well before it was noticed, and never on
         // the list, so nothing was watching it. It enters ON THE WAY DOWN: the containment port took it 1,041 →

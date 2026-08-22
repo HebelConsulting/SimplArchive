@@ -61,13 +61,31 @@
                 @if (Detail.SysHasVersion)
                 {
                 <tr><td>@Strings.Get("SysFileExtension")</td><td class="wb-sys-muted">@Detail.SysFileExtension</td></tr>
-                @* The workflow's state, readable at a glance, with the state-labelled affordance beside it
-                   (review decision: Start when none, Manage while active, View once Released). *@
+                @* The workflow's state, readable at a glance — and beside it the transitions the SERVER says are
+                   available, one button each, or nothing at all (#691).
+
+                   What used to be here was a permanent button labelled from the status string: Start / Manage /
+                   View. Two things were wrong with it. Most documents never enter a workflow, so a control for a
+                   rare action sat forever in the row people use constantly — and ADR 0550 asks the opposite, that
+                   a slot holds what the current state affords and stands empty otherwise. And "Start" was an
+                   invitation rather than an action: the thing a reviewer actually has to do, approve or reject,
+                   was two clicks away inside a dialog.
+
+                   Now the slot earns its place. Nothing is drawn for a document with no workflow, or one already
+                   Released; a live one shows exactly the transitions this caller may make. The client reproduces
+                   no part of the state machine — it draws the rels it was given (ADR 0543), so a new state needs
+                   no change here. *@
                 <tr>
                     <td>@Strings.Get("WorkflowStatus")</td>
                     <td>
                         <span class="@(Detail.SysWorkflowStatus is null ? "wb-sys-muted" : "")">@Detail.WorkflowStateName</span>
-                        <MudButton Size="Size.Small" Variant="Variant.Text" Class="ml-2" OnClick="@(() => OpenWorkflow.InvokeAsync())">@Detail.WorkflowButtonLabel</MudButton>
+                        @foreach (var rel in Detail.OfferedTransitions)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Class="ml-2"
+                                       Color="@(rel == "reject" ? Color.Error : Color.Primary)"
+                                       Disabled="Detail.Busy"
+                                       OnClick="@(() => WorkflowTransition.InvokeAsync(rel))">@Strings.Get(TransitionLabel(rel))</MudButton>
+                        }
                     </td>
                 </tr>
                 <tr>
@@ -270,6 +288,30 @@
     /// <summary>Open the workflow dialog for the shown document — the shell owns the dialog.</summary>
     [Parameter]
     public EventCallback OpenWorkflow { get; set; }
+
+    /// <summary>Invoked with the REL of the transition the user pressed (#691) — the shell performs it.</summary>
+    /// <remarks>
+    /// The rel rather than an enum, because this pane is not allowed to know the state machine: it forwards the
+    /// name the server used, and the shell follows the matching href. A transition added server-side therefore
+    /// reaches the user through here without a client change (ADR 0543).
+    /// </remarks>
+    [Parameter]
+    public EventCallback<string> WorkflowTransition { get; set; }
+
+    /// <summary>
+    /// The resource key for a transition's button — the workflow DIALOG's own labels, so the same action reads
+    /// identically wherever it is offered. An unrecognised rel falls back to the status label rather than
+    /// rendering a raw rel name at the user.
+    /// </summary>
+    private static string TransitionLabel(string rel) => rel switch
+    {
+        "submit" => "WorkflowSubmit",
+        "approve" => "WorkflowApprove",
+        "reject" => "WorkflowReject",
+        "reassign" => "WorkflowReassign",
+        "release" => "WorkflowRelease",
+        _ => "WorkflowStatus",
+    };
 
     /// <summary>Whether the pane is in edit mode — which swaps the header's actions (ADR 0550).</summary>
     /// <remarks>

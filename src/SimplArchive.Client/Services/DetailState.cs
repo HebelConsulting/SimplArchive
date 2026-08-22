@@ -46,6 +46,37 @@ public sealed class DetailState
     /// <summary>The current version's workflow state (raw enum name), null when none was started.</summary>
     public string? SysWorkflowStatus { get; set; }
 
+    /// <summary>
+    /// The transitions the server says this caller may make on this version's workflow, by rel (#691).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The pane renders one button per entry and knows nothing about the state machine: which transitions are
+    /// legal here, and which of those this caller may make, are both the server's answers (ADR 0543). Adding a
+    /// state to the workflow therefore needs no client change — the labels are looked up per rel, and an
+    /// unknown rel is simply not drawn rather than drawn wrong.
+    /// </para>
+    /// <para>
+    /// Null means NOT FETCHED, which is also how it starts and what it returns to between documents — never
+    /// "no transitions". The distinction matters because the fetch is deliberately skipped when the status
+    /// already says there is nothing to offer (see the loader), so an empty set and an absent one must not be
+    /// allowed to look alike (ADR 0559: an address must not outlive its subject).
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string>? WorkflowLinks { get; set; }
+
+    /// <summary>The transition rels, in the order the pane draws them — never the dictionary's own order.</summary>
+    /// <remarks>
+    /// Fixed rather than emitted-order: a row of buttons that reorders itself between documents is one the user
+    /// must read instead of aim at, which is the same reason CreatableChildren sorts its menu. `submit` leads
+    /// because in the one state that offers it beside nothing else, it IS the next step.
+    /// </remarks>
+    public static readonly string[] WorkflowTransitions = ["submit", "approve", "reject", "reassign", "release"];
+
+    /// <summary>The advertised transitions, in draw order. Empty when none was fetched or none is offered.</summary>
+    public IEnumerable<string> OfferedTransitions =>
+        WorkflowLinks is null ? [] : WorkflowTransitions.Where(WorkflowLinks.ContainsKey);
+
     /// <summary>The workflow state, localised for the pane's Status row.</summary>
     public string WorkflowStateName => SysWorkflowStatus switch
     {
