@@ -12,6 +12,10 @@ namespace SimplArchive.EndToEndTests;
 [Collection(E2ECollection.Name)]
 public class ImapReferenceMailboxTests
 {
+    // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is
+    // whatever this test seeded as the display name — not the constant "Personal" it used to be.
+    private const string Personal = "Imap Ref User";
+
     private readonly E2EApiFactory _factory;
 
     public ImapReferenceMailboxTests(E2EApiFactory factory) => _factory = factory;
@@ -66,8 +70,8 @@ public class ImapReferenceMailboxTests
 
         // The personal space projects under its own name (#596 — INBOX now means the mail folder), so the
         // reference hangs beneath it, and its child came along.
-        Assert.Contains("Personal/2026", mailboxes);
-        Assert.Contains("Personal/2026/Invoices", mailboxes);
+        Assert.Contains($"{Personal}/2026", mailboxes);
+        Assert.Contains($"{Personal}/2026/Invoices", mailboxes);
     }
 
     [Fact]
@@ -113,11 +117,11 @@ public class ImapReferenceMailboxTests
         // One level deeper than it used to be: Holder and Target live in My Documents, because the personal
         // space's first level holds only its provisioned folders (#634). The mailbox NAMES follow the tree,
         // which is the property this test is really about.
-        Assert.Contains("Personal/My Documents/Target", mailboxes);
-        Assert.Contains("Personal/My Documents/Target/Holder", mailboxes);
+        Assert.Contains($"{Personal}/My Documents/Target", mailboxes);
+        Assert.Contains($"{Personal}/My Documents/Target/Holder", mailboxes);
 
         // The looping appearance is omitted rather than followed.
-        Assert.DoesNotContain(mailboxes, m => m.StartsWith("Personal/My Documents/Target/Holder/", StringComparison.Ordinal));
+        Assert.DoesNotContain(mailboxes, m => m.StartsWith($"{Personal}/My Documents/Target/Holder/", StringComparison.Ordinal));
     }
 
     [Fact]

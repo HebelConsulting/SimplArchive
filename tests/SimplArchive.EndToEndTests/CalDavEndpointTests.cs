@@ -12,6 +12,10 @@ namespace SimplArchive.EndToEndTests;
 [Collection(E2ECollection.Name)]
 public class CalDavEndpointTests
 {
+    // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is
+    // whatever this test seeded as the display name — not the constant "Personal" it used to be.
+    private const string Personal = "Dav User";
+
     private static readonly XNamespace Dav = "DAV:";
 
     private readonly E2EApiFactory _factory;
@@ -129,7 +133,7 @@ public class CalDavEndpointTests
         // ---- File an item through WebDAV — the SAME shared credential, and the path a user would use -------
         var uid = $"e2e-{Guid.NewGuid():N}";
         var title = protocol == CalDav ? "Quarterly review" : "Ada Lovelace";
-        using (var put = new HttpRequestMessage(HttpMethod.Put, $"/SimplArchive/Personal/{protocol.DefaultFolder}/{uid}{protocol.Extension}")
+        using (var put = new HttpRequestMessage(HttpMethod.Put, $"/SimplArchive/{Personal}/{protocol.DefaultFolder}/{uid}{protocol.Extension}")
         {
             Content = new ByteArrayContent(Item(protocol, uid, title)),
             Headers = { Authorization = auth },

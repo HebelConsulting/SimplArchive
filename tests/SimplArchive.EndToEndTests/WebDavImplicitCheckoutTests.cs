@@ -16,6 +16,10 @@ namespace SimplArchive.EndToEndTests;
 [Collection(E2ECollection.Name)]
 public class WebDavImplicitCheckoutTests
 {
+    // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is
+    // whatever this test seeded as the display name — not the constant "Personal" it used to be.
+    private const string Personal = "Impl User";
+
     private const string EditorAgent = "TestOfficeSuite/1.0 (save-by-rename)";
 
     private readonly E2EApiFactory _factory;
@@ -41,7 +45,7 @@ public class WebDavImplicitCheckoutTests
 
         // 2. The edit is the working copy, readable from the Check-out folder — the same stash an explicit
         //    check-out uses, which is what makes check-in, discard and the idle sweep work unchanged.
-        var stash = await DavAsync(ctx, "GET", $"/webdav/Personal/Check-out/{docName}");
+        var stash = await DavAsync(ctx, "GET", $"/webdav/{Personal}/Check-out/{docName}");
         Assert.Equal(HttpStatusCode.OK, stash.StatusCode);
         Assert.Equal(edited, await stash.Content.ReadAsByteArrayAsync());
 
@@ -70,7 +74,7 @@ public class WebDavImplicitCheckoutTests
         // The lock is not re-taken (which would restart the idle clock on every keystroke-triggered autosave) and
         // the stash simply carries the newer bytes.
         Assert.Equal(first, await CheckedOutAtAsync(ctx, docId));
-        var stash = await DavAsync(ctx, "GET", $"/webdav/Personal/Check-out/{docName}");
+        var stash = await DavAsync(ctx, "GET", $"/webdav/{Personal}/Check-out/{docName}");
         Assert.Equal("second", await stash.Content.ReadAsStringAsync());
     }
 

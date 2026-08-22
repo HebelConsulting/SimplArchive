@@ -27,6 +27,10 @@ namespace SimplArchive.EndToEndTests;
 [Collection(E2ECollection.Name)]
 public class ImapStandingMailboxTests
 {
+    // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is
+    // whatever this test seeded as the display name — not the constant "Personal" it used to be.
+    private const string Personal = "Anna Standing";
+
     private readonly E2EApiFactory _factory;
 
     public ImapStandingMailboxTests(E2EApiFactory factory) => _factory = factory;
@@ -130,7 +134,7 @@ public class ImapStandingMailboxTests
         Assert.Equal(subject, (await inbox.GetMessageAsync(0)).Subject);
 
         // 4. The archive is still browsable — it simply stopped pretending to be an inbox.
-        Assert.Contains("Personal", names);
+        Assert.Contains(Personal, names);
         Assert.DoesNotContain("INBOX/My Mailbox/Inbox", names);
 
         await client.DisconnectAsync(true);

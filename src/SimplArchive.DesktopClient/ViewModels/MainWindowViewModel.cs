@@ -5717,8 +5717,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 AvailableMasks.Add(new MaskChoiceViewModel(mask.Id, mask.Name, mask));
             }
 
-            _originalMaskId = (await _api.Documents.GetMaskAsync(DetailHref("mask"))).MaskId;
-            SelectedMaskChoice = AvailableMasks.FirstOrDefault(m => m.MaskId == _originalMaskId) ?? AvailableMasks[0];
+            SelectedMaskChoice = MaskChoices.Select(AvailableMasks, await _api.Documents.GetMaskAsync(DetailHref("mask")));
+            _originalMaskId = SelectedMaskChoice.MaskId; // Select always answers the document's own mask
             await LoadMaskEditFieldsAsync(SelectedMaskChoice.Mask, withCurrentValues: true);
 
             IsEditing = true;
@@ -6233,7 +6233,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Breadcrumbs.Add(new BreadcrumbViewModel { Name = "Demo Repository", FolderId = Guid.NewGuid(), ShowSeparator = true });
         // Mirror the real tree's top-level nodes: a Personal repository (ADR 0370) and, for a tenant admin, the
         // synthetic Administration branch (ADR 0377), around the shared repositories.
-        Tree.Add(new TreeNodeViewModel(Guid.Empty, "Personal", true, null, isPersonal: true));
+        Tree.Add(new TreeNodeViewModel(Guid.Empty, "Demo Admin", true, null, isPersonal: true)); // named after its owner (ADR 0671)
         Tree.Add(new TreeNodeViewModel(Guid.Empty, "Demo Repository", true, null));
         Tree.Add(new TreeNodeViewModel(Guid.Empty, "Invoices", false, null, hasChildren: false)); // an EMPTY folder — shows the pastel glyph (ADR "Empty-folder tree icon")
         Tree.Add(new TreeNodeViewModel(Guid.Empty, "Shared (ref)", false, null, isReference: true));

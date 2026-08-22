@@ -32,7 +32,9 @@ public class DesktopPersonalRepositoryTests
         // Get-or-create is idempotent and gives each user a distinct space.
         var aliceRepo = await alice.Profile.GetPersonalRepositoryAsync();
         Assert.NotNull(aliceRepo);
-        Assert.Equal("Personal", aliceRepo!.Name);
+        // Named after its owner (ADR 0671) — which is also what makes two users' spaces tell each other apart
+        // in a DAV client, where they used to be two collections both called "Personal".
+        Assert.Equal("Alice " + suffix, aliceRepo!.Name);
         Assert.Equal(aliceRepo.Id, (await alice.Profile.GetPersonalRepositoryAsync())!.Id);
 
         var bobRepo = await bob.Profile.GetPersonalRepositoryAsync();

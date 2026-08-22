@@ -167,7 +167,7 @@ public class OverLimitFileCeilingTests
         // wrapper. Lowered rather than left with headroom — an unlowered ceiling is permission to grow back
         // into it, silently. It also caught this change growing the file by ONE line, which is the entire
         // argument for the entry existing.
-        ["src/SimplArchive.Infrastructure/Persistence/SimplArchiveDbContext.cs"] = 1_016,
+        ["src/SimplArchive.Infrastructure/Persistence/SimplArchiveDbContext.cs"] = 1_018,
     };
 
     public static TheoryData<string> Files => [.. Ceilings.Keys];

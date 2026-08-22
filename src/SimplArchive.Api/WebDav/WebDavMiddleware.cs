@@ -46,14 +46,25 @@ public sealed class WebDavMiddleware
     // staging prefix) and Check-out (the caller's checked-out documents + their working-copy stash). Their WebDAV
     // paths are /webdav/Personal/Intray and /webdav/Personal/Check-out — virtual (not Documents), shadowing any
     // real same-named child of Personal.
-    internal const string PersonalName = PersonalRepositoryProvisioner.PersonalRepositoryName;
     internal const string IntrayName = "Intray";
     internal const string CheckoutName = "Check-out";
 
+    // The caller's own personal-space name, stashed per request by the dispatch below (ADR 0671). It USED to be
+    // a constant, because every personal space was called "Personal"; now it is whatever its owner is called, so
+    // the question "is this the special Intray/Check-out path?" is per-user and cannot be answered by a literal.
+    //
+    // Taken from the ROOT DOCUMENT rather than recomputed from the display name, and that distinction is
+    // load-bearing: the rename is not backfilled, so a space provisioned earlier is still called "Personal" and a
+    // check against the sanitised display name would stop finding its Intray.
+    private const string PersonalNameKey = "webdav.personalName";
+
+    internal static string PersonalNameFor(HttpContext context) =>
+        context.Items[PersonalNameKey] as string ?? PersonalRepositoryProvisioner.LegacyPersonalRepositoryName;
+
     // True when the path addresses (or sits inside) one of the Personal-nested special folders:
-    // [Personal, Intray|Check-out, file?]. The special file, when present, is segments[2].
-    internal static bool IsSpecialPath(List<string> segments) =>
-        segments.Count >= 2 && segments[0] == PersonalName && segments[1] is IntrayName or CheckoutName;
+    // [<personal>, Intray|Check-out, file?]. The special file, when present, is segments[2].
+    internal static bool IsSpecialPath(HttpContext context, List<string> segments) =>
+        segments.Count >= 2 && segments[0] == PersonalNameFor(context) && segments[1] is IntrayName or CheckoutName;
 
     private readonly RequestDelegate _next;
     private readonly WebDavLockStore _lockStore;
@@ -105,7 +116,8 @@ public sealed class WebDavMiddleware
 
         // The Personal repository is the home for the Intray / Check-out folders and always appears at the WebDAV
         // root — ensure it exists (get-or-create, idempotent) before serving any request.
-        await services.GetRequiredService<PersonalRepositoryProvisioner>().EnsureAsync(user.Id, user.TenantId, context.RequestAborted);
+        var personalRoot = await services.GetRequiredService<PersonalRepositoryProvisioner>().EnsureAsync(user.Id, user.TenantId, context.RequestAborted);
+        context.Items[PersonalNameKey] = personalRoot.Name;
 
         var segments = path[matchedBase.Length..].Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries)
             .Select(Uri.UnescapeDataString).ToList();
@@ -193,7 +205,7 @@ public sealed class WebDavMiddleware
 
         // The special Personal/Intray and Personal/Check-out folders are backed by object storage / the check-out
         // entity, not the Document tree (ADR "WebDAV Inbox + Check-out folders").
-        if (IsSpecialPath(segments))
+        if (IsSpecialPath(context, segments))
         {
             await WebDavSpecialHandlers.HandleSpecialPropFindAsync(context, services, db, user, segments, depth, basePath);
             return;
@@ -254,7 +266,7 @@ public sealed class WebDavMiddleware
     {
         var storage = services.GetRequiredService<IObjectStorageClient>();
 
-        if (IsSpecialPath(segments))
+        if (IsSpecialPath(context, segments))
         {
             if (segments.Count != 3 || await WebDavUserAreas.ResolveSpecialFileAsync(storage, db, user, segments[1], segments[2]) is not { } file)
             {
@@ -370,7 +382,7 @@ public sealed class WebDavMiddleware
     // ---- PUT (create or new version) ----------------------------------------------------------------------
     private async Task HandlePutAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments)
     {
-        if (IsSpecialPath(segments))
+        if (IsSpecialPath(context, segments))
         {
             await WebDavSpecialHandlers.HandleSpecialPutAsync(context, services, db, user, segments);
             return;
@@ -557,7 +569,7 @@ public sealed class WebDavMiddleware
     // ---- MKCOL (create folder) ----------------------------------------------------------------------------
     private async Task HandleMkColAsync(HttpContext context, SimplArchiveDbContext db, User user, List<string> segments)
     {
-        if (segments.Count < 2 || IsSpecialPath(segments))
+        if (segments.Count < 2 || IsSpecialPath(context, segments))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden; // can't create folders at the root, on the virtual Intray/Check-out folders, or inside them
             return;
@@ -617,7 +629,7 @@ public sealed class WebDavMiddleware
     // ---- DELETE (soft-delete to the recycle bin) ----------------------------------------------------------
     private async Task HandleDeleteAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments)
     {
-        if (IsSpecialPath(segments))
+        if (IsSpecialPath(context, segments))
         {
             if (segments.Count != 3)
             {
@@ -709,7 +721,7 @@ public sealed class WebDavMiddleware
     // ---- MOVE (reparent + rename) -------------------------------------------------------------------------
     private async Task HandleMoveAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments)
     {
-        if (IsSpecialPath(segments))
+        if (IsSpecialPath(context, segments))
         {
             await WebDavSpecialHandlers.HandleSpecialRenameAsync(context, services, db, user, segments, keepSource: false); // atomic-save rename within Intray/Check-out (ADR 0508)
             return;
@@ -751,7 +763,7 @@ public sealed class WebDavMiddleware
         }
 
         var destSegments = ParseDestination(context);
-        if (destSegments is null || destSegments.Count < 2 || IsSpecialPath(destSegments))
+        if (destSegments is null || destSegments.Count < 2 || IsSpecialPath(context, destSegments))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden; // no/blank destination, the root, or a special folder
             return;
@@ -820,7 +832,7 @@ public sealed class WebDavMiddleware
     // ---- COPY (duplicate a file or a folder subtree) ------------------------------------------------------
     private async Task HandleCopyAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments)
     {
-        if (IsSpecialPath(segments))
+        if (IsSpecialPath(context, segments))
         {
             await WebDavSpecialHandlers.HandleSpecialRenameAsync(context, services, db, user, segments, keepSource: true); // atomic-save copy within Intray/Check-out (ADR 0508)
             return;
@@ -840,7 +852,7 @@ public sealed class WebDavMiddleware
         }
 
         var destSegments = ParseDestination(context);
-        if (destSegments is null || destSegments.Count < 2 || IsSpecialPath(destSegments))
+        if (destSegments is null || destSegments.Count < 2 || IsSpecialPath(context, destSegments))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return;

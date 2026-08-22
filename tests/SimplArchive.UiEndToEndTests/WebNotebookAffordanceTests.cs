@@ -23,7 +23,7 @@ public class WebNotebookAffordanceTests
     private static async Task<ILocator> ExpandPersonalAsync(IPage page)
     {
         var tree = page.Locator("[data-pane='tree']");
-        var personal = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Personal" }).First;
+        var personal = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = SelfHostedAppFixture.AdminDisplayName }).First;
         await Expect(personal).ToBeVisibleAsync();
         await personal.Locator(".mud-treeview-item-arrow").ClickAsync();
         return tree;

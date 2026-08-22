@@ -4,19 +4,25 @@ using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Acl;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Masks;
+using SimplArchive.Domain.Users;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Documents;
 
 /// <summary>
 /// Get-or-create the logged-in user's personal repository (ADR "Per-user personal repository") — a root
-/// <see cref="Document"/> flagged with <c>PersonalOfUserId</c>, named "Personal", Folder-masked, with a
+/// <see cref="Document"/> flagged with <c>PersonalOfUserId</c>, named after its owner (ADR 0671), Folder-masked, with a
 /// full-rights ACL grant to the user. Extracted from <c>PersonalRepositoryController</c> so the WebDAV gateway
 /// (which nests the Intray / Check-out folders under Personal) can ensure it exists too. Idempotent.
 /// </summary>
 public sealed class PersonalRepositoryProvisioner
 {
-    public const string PersonalRepositoryName = "Personal";
+    /// <summary>
+    /// What a personal space was called before it was named after its owner (ADR 0671) — kept because spaces
+    /// provisioned earlier still carry it: the rename is not backfilled, so "Personal" and a display name are
+    /// both live names for the same kind of node. Nothing NEW is named this.
+    /// </summary>
+    public const string LegacyPersonalRepositoryName = "Personal";
 
     /// <summary>The default subfolder every personal repository is seeded with (ADR "My Documents in the personal space").</summary>
     public const string MyDocumentsFolderName = PersonalFolders.MyDocuments;
@@ -88,12 +94,21 @@ public sealed class PersonalRepositoryProvisioner
             return existing;
         }
 
+        // Named after its owner (ADR 0671). Read here rather than passed in, because every caller has the id and
+        // none of them has the person — and a space provisioned with the wrong name is not something a later
+        // rename fixes for anyone who has already mounted it.
+        var owner = await _dbContext.Users
+            .IgnoreQueryFilters(["TenantFilter"])
+            .Where(u => u.Id == userId)
+            .Select(u => new { u.DisplayName, u.Email })
+            .SingleAsync(cancellationToken);
+
         var document = new Document
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ParentId = null,
-            Name = PersonalRepositoryName,
+            Name = PersonalSpaceName.For(owner.DisplayName, owner.Email),
             PersonalOfUserId = userId,
             // Tenant-EXPLICIT (ADR 0590): this method already has the tenant, and resolving the mask through the
             // ambient one instead made a personal repository come out with no mask whenever the caller had no

@@ -18,6 +18,10 @@ namespace SimplArchive.EndToEndTests;
 [Collection(E2ECollection.Name)]
 public class WebDavPersonalRootTests
 {
+    // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is
+    // whatever this test seeded as the display name — not the constant "Personal" it used to be.
+    private const string Personal = "Dav Root";
+
     private readonly E2EApiFactory _factory;
 
     public WebDavPersonalRootTests(E2EApiFactory factory) => _factory = factory;
@@ -45,12 +49,12 @@ public class WebDavPersonalRootTests
 
         // The personal space's first level holds only what it was provisioned with. Refused — and refused at
         // CREATION, which is why the status is a conflict rather than a late failure after the transfer.
-        var refused = await PutAsync("/SimplArchive/Personal/dropped-on-personal.txt");
+        var refused = await PutAsync($"/SimplArchive/{Personal}/dropped-on-personal.txt");
         Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
 
         // …while the folder that exists for exactly this takes it. Asserted alongside, because a middleware
         // that refused every PUT would satisfy the assertion above and break the mounted drive entirely.
-        var accepted = await PutAsync("/SimplArchive/Personal/My Documents/dropped-in-my-documents.txt");
+        var accepted = await PutAsync($"/SimplArchive/{Personal}/My Documents/dropped-in-my-documents.txt");
         Assert.Equal(HttpStatusCode.Created, accepted.StatusCode);
     }
 }

@@ -115,7 +115,7 @@ internal static class WebDavSpecialHandlers
     internal static async Task HandleSpecialRenameAsync(HttpContext context, IServiceProvider services, SimplArchiveDbContext db, User user, List<string> segments, bool keepSource)
     {
         var destSegments = WebDavMiddleware.ParseDestination(context);
-        if (segments.Count != 3 || destSegments is not { Count: 3 } || !WebDavMiddleware.IsSpecialPath(destSegments)
+        if (segments.Count != 3 || destSegments is not { Count: 3 } || !WebDavMiddleware.IsSpecialPath(context, destSegments)
             || destSegments[0] != segments[0] || destSegments[1] != segments[1])
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden; // only same-special-folder renames are supported
@@ -242,7 +242,7 @@ internal static class WebDavSpecialHandlers
         }
 
         var destSegments = WebDavMiddleware.ParseDestination(context);
-        if (destSegments is null || destSegments.Count < 2 || WebDavMiddleware.IsSpecialPath(destSegments))
+        if (destSegments is null || destSegments.Count < 2 || WebDavMiddleware.IsSpecialPath(context, destSegments))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return true;
@@ -327,7 +327,7 @@ internal static class WebDavSpecialHandlers
         }
 
         var destSegments = WebDavMiddleware.ParseDestination(context);
-        if (destSegments is null || destSegments.Count < 2 || WebDavMiddleware.IsSpecialPath(destSegments))
+        if (destSegments is null || destSegments.Count < 2 || WebDavMiddleware.IsSpecialPath(context, destSegments))
         {
             return false;
         }

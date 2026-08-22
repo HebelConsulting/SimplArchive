@@ -17,6 +17,10 @@ namespace SimplArchive.EndToEndTests;
 [Collection(E2ECollection.Name)]
 public class WebDavAtomicSaveTests
 {
+    // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is
+    // whatever this test seeded as the display name — not the constant "Personal" it used to be.
+    private const string Personal = "Dav User";
+
     private static readonly string[] OfficeFormats = [".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt", ".rtf", ".odt", ".ods", ".odp"];
 
     private readonly E2EApiFactory _factory;
@@ -95,26 +99,26 @@ public class WebDavAtomicSaveTests
 
         var checkoutEdit = Encoding.UTF8.GetBytes($"checkout {suite} {ext} {id}");
         await SaveAtomicallyAsync(Dav, "Check-out", $"co{id}{ext}", checkoutEdit, suite);
-        var checkoutBack = await Dav("GET", $"/webdav/Personal/Check-out/co{id}{ext}");
+        var checkoutBack = await Dav("GET", $"/webdav/{Personal}/Check-out/co{id}{ext}");
         Assert.Equal(HttpStatusCode.OK, checkoutBack.StatusCode);
         Assert.Equal(checkoutEdit, await checkoutBack.Content.ReadAsByteArrayAsync());
 
         // Intray: a staged file, edited via WebDAV → the staged object must hold the edit.
         var intrayName = $"in{id}{ext}";
-        (await Dav("PUT", $"/webdav/Personal/Intray/{intrayName}", Encoding.UTF8.GetBytes("original"))).EnsureSuccessStatusCode();
+        (await Dav("PUT", $"/webdav/{Personal}/Intray/{intrayName}", Encoding.UTF8.GetBytes("original"))).EnsureSuccessStatusCode();
 
         var intrayEdit = Encoding.UTF8.GetBytes($"intray {suite} {ext} {id}");
         await SaveAtomicallyAsync(Dav, "Intray", intrayName, intrayEdit, suite);
-        var intrayBack = await Dav("GET", $"/webdav/Personal/Intray/{intrayName}");
+        var intrayBack = await Dav("GET", $"/webdav/{Personal}/Intray/{intrayName}");
         Assert.Equal(HttpStatusCode.OK, intrayBack.StatusCode);
         Assert.Equal(intrayEdit, await intrayBack.Content.ReadAsByteArrayAsync());
     }
 
-    // Emits one editor's atomic-save sequence saving `content` onto /webdav/Personal/{folder}/{name}, asserting
+    // Emits one editor's atomic-save sequence saving `content` onto /webdav/{Personal}/{folder}/{name}, asserting
     // every WebDAV op succeeds (2xx). Temp names are unique per call.
     private static async Task SaveAtomicallyAsync(Func<string, string, byte[]?, (string, string)[]?, Task<HttpResponseMessage>> dav, string folder, string name, byte[] content, string suite)
     {
-        var basePath = $"/webdav/Personal/{folder}";
+        var basePath = $"/webdav/{Personal}/{folder}";
         var target = $"{basePath}/{name}";
         var rand = Guid.NewGuid().ToString("N")[..8];
 

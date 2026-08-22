@@ -10,6 +10,10 @@ namespace SimplArchive.EndToEndTests;
 [Collection(E2ECollection.Name)]
 public class PersonalRepositoryTests
 {
+    // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is
+    // whatever this test seeded as the display name — not the constant "Personal" it used to be.
+    private const string Personal = "Personal User";
+
     private readonly E2EApiFactory _factory;
 
     public PersonalRepositoryTests(E2EApiFactory factory) => _factory = factory;
@@ -27,7 +31,7 @@ public class PersonalRepositoryTests
         // Get-or-create: the first POST creates it, a second returns the exact same repository.
         var first = await TestJson.Post(user, "/api/me/personal-repository", new { });
         var personalId = first.GetProperty("id").GetGuid();
-        Assert.Equal("Personal", first.GetProperty("name").GetString());
+        Assert.Equal(Personal, first.GetProperty("name").GetString());
         var second = await TestJson.Post(user, "/api/me/personal-repository", new { });
         Assert.Equal(personalId, second.GetProperty("id").GetGuid());
 

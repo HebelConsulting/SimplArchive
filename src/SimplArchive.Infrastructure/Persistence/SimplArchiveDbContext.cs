@@ -235,6 +235,7 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
     public override int SaveChanges()
     {
         ValidateGroupsAsync(CancellationToken.None).GetAwaiter().GetResult();
+        PersonalRootName.FollowDisplayNameAsync(this, CancellationToken.None).GetAwaiter().GetResult();
         ValidateDocumentsAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateFieldValuesAsync(CancellationToken.None).GetAwaiter().GetResult();
         ValidateRequiredFieldsAsync(CancellationToken.None).GetAwaiter().GetResult();
@@ -246,6 +247,7 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         await ValidateGroupsAsync(cancellationToken);
+        await PersonalRootName.FollowDisplayNameAsync(this, cancellationToken);
         await ValidateDocumentsAsync(cancellationToken);
         await ValidateFieldValuesAsync(cancellationToken);
         await ValidateRequiredFieldsAsync(cancellationToken);

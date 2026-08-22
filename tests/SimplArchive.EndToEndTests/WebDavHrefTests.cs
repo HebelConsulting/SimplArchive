@@ -10,6 +10,16 @@ namespace SimplArchive.EndToEndTests;
 [Collection(E2ECollection.Name)]
 public partial class WebDavHrefTests
 {
+    // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is
+    // whatever this test seeded as the display name — not the constant "Personal" it used to be.
+    private const string Personal = "Href User";
+
+    // An href is a URL, so the segment is percent-encoded — "Href User" arrives as "Href%20User". That never
+    // showed while every personal space was called "Personal": a one-word name has nothing to escape. Naming
+    // them after people (ADR 0671) makes a space the NORMAL case, so the expectation has to be built the same
+    // way the server builds the href rather than from the display name directly.
+    private static readonly string PersonalSegment = Uri.EscapeDataString(Personal);
+
     private readonly E2EApiFactory _factory;
 
     public WebDavHrefTests(E2EApiFactory factory) => _factory = factory;
@@ -41,7 +51,7 @@ public partial class WebDavHrefTests
         Assert.Equal($"{mount}/", hrefs[0]);
 
         // …and the members are the top level of the Repositories tree (ADR 0509), each one directly beneath.
-        Assert.Contains($"{mount}/Personal/", hrefs);
+        Assert.Contains($"{mount}/{PersonalSegment}/", hrefs);
         Assert.Contains($"{mount}/{repository}/", hrefs);
 
         Assert.All(hrefs, href => Assert.StartsWith($"{mount}/", href, StringComparison.Ordinal));
@@ -52,7 +62,7 @@ public partial class WebDavHrefTests
     /// </summary>
     /// <remarks>
     /// The reported symptom was the two appearing "cascaded" on the drive. Asserted on the DEPTH of the href
-    /// rather than on its text: `/SimplArchive/Personal/Demo/` would satisfy a `Contains("Personal")` check and
+    /// rather than on its text: `/SimplArchive/{Personal}/Demo/` would satisfy a `Contains("Personal")` check and
     /// still be exactly the bug.
     /// </remarks>
     [Theory]
@@ -73,7 +83,7 @@ public partial class WebDavHrefTests
                 $"'{href}' is nested under another member; the mount's children must be one segment deep.");
         });
 
-        Assert.Contains(members, h => h.EndsWith("/Personal/", StringComparison.Ordinal));
+        Assert.Contains(members, h => h.EndsWith($"/{PersonalSegment}/", StringComparison.Ordinal));
         Assert.Contains(members, h => h.EndsWith($"/{repository}/", StringComparison.Ordinal));
     }
 

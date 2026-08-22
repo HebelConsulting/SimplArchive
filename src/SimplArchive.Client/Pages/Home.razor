@@ -329,8 +329,8 @@
     /* The SELECTED node (#686) — the one the detail pane is describing, which is not always the open folder.
        An outline rather than a fill: the tree's accent already means "this is a container" on the glyphs, and
        a second accent-coloured surface would be a state competing with a state (ADR 0581). Explicit colours,
-       no bare var() without a fallback — an undefined custom property renders as nothing at all. */
-    .wb-tree-current > .mud-treeview-item .mud-treeview-item-content,
+       no bare var() without a fallback — an undefined custom property renders as nothing at all. DIRECT-CHILD
+       chain, like the glyph rules: an item holds its children, so a descendant combinator ringed the subtree. */
     .wb-tree-current > .mud-treeview-item > .mud-treeview-item-content {
         outline: 2px solid var(--mud-palette-primary, #1976d2); outline-offset: -2px; border-radius: 4px;
     }

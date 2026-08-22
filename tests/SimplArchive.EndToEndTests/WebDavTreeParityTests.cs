@@ -13,6 +13,10 @@ namespace SimplArchive.EndToEndTests;
 [Collection(E2ECollection.Name)]
 public partial class WebDavTreeParityTests
 {
+    // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is
+    // whatever this test seeded as the display name — not the constant "Personal" it used to be.
+    private const string Personal = "Dav User";
+
     private readonly E2EApiFactory _factory;
 
     public WebDavTreeParityTests(E2EApiFactory factory) => _factory = factory;
@@ -42,7 +46,7 @@ public partial class WebDavTreeParityTests
         // The Repositories tree-pane's top level = the "Personal" node + the repositories the user can see.
         var repos = (await TestJson.Get(api, "/api/repositories")).GetProperty("repositories").EnumerateArray()
             .Select(r => r.GetProperty("name").GetString()!).ToHashSet();
-        var expectedTopLevel = new HashSet<string>(repos) { "Personal" };
+        var expectedTopLevel = new HashSet<string>(repos) { Personal };
 
         // PROPFIND the single /SimplArchive resource: root named "SimplArchive", children == the tree top level.
         var names = await PropFindNamesAsync(dav, basic, "/SimplArchive");

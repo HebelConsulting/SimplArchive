@@ -24,7 +24,7 @@ public class WebContactsCalendarTests
 
         // The personal collection is listed, parent-qualified, and TICKED — a tab that needs a click before it
         // shows anything reads as broken.
-        var row = page.Locator($"text=/Personal / {collection}/").First;
+        var row = page.Locator($"text=/{SelfHostedAppFixture.AdminDisplayName} / {collection}/").First;
         await Expect(row).ToBeVisibleAsync();
 
         var check = page.Locator($".mud-checkbox input[aria-label*='{collection}']").First;
@@ -126,12 +126,12 @@ public class WebContactsCalendarTests
         var page = await Ui.LoginAsync(_app);
 
         await page.Locator(".wb-tab[aria-label='Contacts']").First.ClickAsync();
-        await Expect(page.Locator("text=/Personal / My Addressbook/").First).ToBeVisibleAsync();
-        await Expect(page.Locator("text=/Personal / My Calendar/")).ToHaveCountAsync(0);
+        await Expect(page.Locator($"text=/{SelfHostedAppFixture.AdminDisplayName} / My Addressbook/").First).ToBeVisibleAsync();
+        await Expect(page.Locator($"text=/{SelfHostedAppFixture.AdminDisplayName} / My Calendar/")).ToHaveCountAsync(0);
 
         await page.Locator(".wb-tab[aria-label='Calendar']").First.ClickAsync();
-        await Expect(page.Locator("text=/Personal / My Calendar/").First).ToBeVisibleAsync();
-        await Expect(page.Locator("text=/Personal / My Addressbook/")).ToHaveCountAsync(0);
+        await Expect(page.Locator($"text=/{SelfHostedAppFixture.AdminDisplayName} / My Calendar/").First).ToBeVisibleAsync();
+        await Expect(page.Locator($"text=/{SelfHostedAppFixture.AdminDisplayName} / My Addressbook/")).ToHaveCountAsync(0);
     }
 
     // MudTextField (no Immediate) commits its bound value on the change event, i.e. on blur — fill then blur so

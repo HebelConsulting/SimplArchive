@@ -10,6 +10,10 @@ namespace SimplArchive.EndToEndTests;
 [Collection(E2ECollection.Name)]
 public class DavGatewayTests
 {
+    // The personal space is named after its owner (ADR 0671), so its WebDAV/IMAP path segment is
+    // whatever this test seeded as the display name — not the constant "Personal" it used to be.
+    private const string Personal = "Dav User";
+
     private readonly E2EApiFactory _factory;
 
     public DavGatewayTests(E2EApiFactory factory) => _factory = factory;
@@ -196,10 +200,10 @@ public class DavGatewayTests
         Assert.Single(repoChildren);
 
         // Into the Intray: OS junk is still discarded, but a transient/partial file legitimately stages.
-        Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", "/webdav/Personal/Intray/.DS_Store", bytes)).StatusCode);
-        Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", "/webdav/Personal/Intray/partial.crdownload", bytes)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", $"/webdav/{Personal}/Intray/.DS_Store", bytes)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", $"/webdav/{Personal}/Intray/partial.crdownload", bytes)).StatusCode);
 
-        var intrayList = await (await DavAsync("PROPFIND", "/webdav/Personal/Intray", headers: [("Depth", "1")])).Content.ReadAsStringAsync();
+        var intrayList = await (await DavAsync("PROPFIND", $"/webdav/{Personal}/Intray", headers: [("Depth", "1")])).Content.ReadAsStringAsync();
         Assert.Contains("partial.crdownload", intrayList); // transient is allowed in the staging area
         Assert.DoesNotContain(".DS_Store", intrayList);    // OS junk is discarded even in the intray
     }
@@ -233,19 +237,19 @@ public class DavGatewayTests
 
         // The root lists the Personal folder (which nests Intray + Check-out) — not top-level Intray/Check-out.
         var rootXml = await (await DavAsync("PROPFIND", "/webdav", headers: [("Depth", "1")])).Content.ReadAsStringAsync();
-        Assert.Contains("Personal", rootXml);
+        Assert.Contains(Personal, rootXml);
 
         // Personal lists the two virtual special folders alongside its real children.
-        var personalXml = await (await DavAsync("PROPFIND", "/webdav/Personal", headers: [("Depth", "1")])).Content.ReadAsStringAsync();
+        var personalXml = await (await DavAsync("PROPFIND", $"/webdav/{Personal}", headers: [("Depth", "1")])).Content.ReadAsStringAsync();
         Assert.Contains("Intray", personalXml);
         Assert.Contains("Check-out", personalXml);
 
         // Intray: PUT stages a raw object (no document), PROPFIND lists it, GET returns it, DELETE removes it.
-        Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", "/webdav/Personal/Intray/staged.txt", Encoding.UTF8.GetBytes("stage me"))).StatusCode);
-        Assert.Contains("staged.txt", await (await DavAsync("PROPFIND", "/webdav/Personal/Intray", headers: [("Depth", "1")])).Content.ReadAsStringAsync());
-        Assert.Equal("stage me", await (await DavAsync("GET", "/webdav/Personal/Intray/staged.txt")).Content.ReadAsStringAsync());
-        Assert.Equal(HttpStatusCode.NoContent, (await DavAsync("DELETE", "/webdav/Personal/Intray/staged.txt")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await DavAsync("GET", "/webdav/Personal/Intray/staged.txt")).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", $"/webdav/{Personal}/Intray/staged.txt", Encoding.UTF8.GetBytes("stage me"))).StatusCode);
+        Assert.Contains("staged.txt", await (await DavAsync("PROPFIND", $"/webdav/{Personal}/Intray", headers: [("Depth", "1")])).Content.ReadAsStringAsync());
+        Assert.Equal("stage me", await (await DavAsync("GET", $"/webdav/{Personal}/Intray/staged.txt")).Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.NoContent, (await DavAsync("DELETE", $"/webdav/{Personal}/Intray/staged.txt")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await DavAsync("GET", $"/webdav/{Personal}/Intray/staged.txt")).StatusCode);
 
         // Check-out: create a document, check it out via the API, then browse/edit it in the WebDAV Check-out folder.
         var docId = (await TestJson.Post(owner, $"/api/documents/{repoId}/children", new { name = "codoc" })).GetProperty("id").GetGuid();
@@ -257,21 +261,21 @@ public class DavGatewayTests
         await TestJson.Put(owner, $"/api/documents/{docId}/versions/{created.GetProperty("id").GetGuid()}", new { });
         (await api.PutAsync($"/api/documents/{docId}/checkout", null)).EnsureSuccessStatusCode();
 
-        Assert.Contains("codoc.txt", await (await DavAsync("PROPFIND", "/webdav/Personal/Check-out", headers: [("Depth", "1")])).Content.ReadAsStringAsync());
-        Assert.Equal("v1", await (await DavAsync("GET", "/webdav/Personal/Check-out/codoc.txt")).Content.ReadAsStringAsync());
+        Assert.Contains("codoc.txt", await (await DavAsync("PROPFIND", $"/webdav/{Personal}/Check-out", headers: [("Depth", "1")])).Content.ReadAsStringAsync());
+        Assert.Equal("v1", await (await DavAsync("GET", $"/webdav/{Personal}/Check-out/codoc.txt")).Content.ReadAsStringAsync());
 
         // PUT saves an edited working copy to the stash; GET then returns the stash.
-        Assert.Equal(HttpStatusCode.NoContent, (await DavAsync("PUT", "/webdav/Personal/Check-out/codoc.txt", Encoding.UTF8.GetBytes("edited"))).StatusCode);
-        Assert.Equal("edited", await (await DavAsync("GET", "/webdav/Personal/Check-out/codoc.txt")).Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.NoContent, (await DavAsync("PUT", $"/webdav/{Personal}/Check-out/codoc.txt", Encoding.UTF8.GetBytes("edited"))).StatusCode);
+        Assert.Equal("edited", await (await DavAsync("GET", $"/webdav/{Personal}/Check-out/codoc.txt")).Content.ReadAsStringAsync());
 
         // LibreOffice's lock sidecar (.~lock.<file>#) must ROUND-TRIP — PUT then read it back — or the editor
         // reverts the document to read-only (ADR 0513). It stays HIDDEN from the folder listing, though.
-        const string lockFile = "/webdav/Personal/Check-out/.~lock.codoc.txt%23"; // %23 = '#'
+        const string lockFile = $"/webdav/{Personal}/Check-out/.~lock.codoc.txt%23"; // %23 = '#'
         Assert.Equal(HttpStatusCode.Created, (await DavAsync("PUT", lockFile, Encoding.UTF8.GetBytes(",user,host,"))).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await DavAsync("GET", lockFile)).StatusCode);
         Assert.Equal(HttpStatusCode.MultiStatus, (await DavAsync("PROPFIND", lockFile, headers: [("Depth", "0")])).StatusCode);
         // ...but it does NOT appear in the folder listing.
-        Assert.DoesNotContain(".~lock", await (await DavAsync("PROPFIND", "/webdav/Personal/Check-out", headers: [("Depth", "1")])).Content.ReadAsStringAsync());
+        Assert.DoesNotContain(".~lock", await (await DavAsync("PROPFIND", $"/webdav/{Personal}/Check-out", headers: [("Depth", "1")])).Content.ReadAsStringAsync());
         // And it deletes cleanly.
         Assert.Equal(HttpStatusCode.NoContent, (await DavAsync("DELETE", lockFile)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await DavAsync("GET", lockFile)).StatusCode);
@@ -362,7 +366,7 @@ public class DavGatewayTests
         req.Headers.TryAddWithoutValidation("Depth", "1");
         var xml = await (await dav.SendAsync(req)).Content.ReadAsStringAsync();
 
-        Assert.Contains("Personal", xml);           // the user's own personal space is listed
+        Assert.Contains("Plain User", xml);         // the user's own personal space, named after them (ADR 0671)
         Assert.DoesNotContain(secretRepo, xml);      // a shared repo they can't see is hidden
     }
 }

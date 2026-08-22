@@ -174,13 +174,29 @@
             <div class="wb-mask-edit">
                 <div class="wb-mask-row">
                     <span class="wb-mask-label">@Strings.Get("MaskLabel")</span>
-                    <MudSelect T="Guid?" Value="Detail.EditMaskId" ValueChanged="@((Guid? v) => EditMaskChanged.InvokeAsync(v))" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
-                        <MudSelectItem T="Guid?" Value="@((Guid?)null)">@Strings.Get("NoMask")</MudSelectItem>
-                        @foreach (var m in AvailableMasks)
-                        {
-                            <MudSelectItem T="Guid?" Value="@((Guid?)m.Id)">@m.Name</MudSelectItem>
-                        }
-                    </MudSelect>
+                    @if (MaskIsFixed)
+                    {
+                        @* The document wears a mask the user may not CHOOSE (#671) — a typed folder, or one
+                           claimed by a file extension. It is still what this document IS, so the pane says so
+                           by NAME and offers nothing: every alternative is a refusal the containment invariant
+                           would deliver after the save rather than before it (ADR 0655).
+
+                           Without this the mask was simply absent from the list, and MudSelect fell back to
+                           rendering its raw value — a bare GUID where a name belongs, beside a dropdown whose
+                           only offers were the wrong ones. *@
+                        <MudTextField T="string" Value="@(Detail.MaskName ?? string.Empty)" ReadOnly="true"
+                                      Margin="Margin.Dense" Variant="Variant.Outlined" />
+                    }
+                    else
+                    {
+                        <MudSelect T="Guid?" Value="Detail.EditMaskId" ValueChanged="@((Guid? v) => EditMaskChanged.InvokeAsync(v))" Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined">
+                            <MudSelectItem T="Guid?" Value="@((Guid?)null)">@Strings.Get("NoMask")</MudSelectItem>
+                            @foreach (var m in AvailableMasks)
+                            {
+                                <MudSelectItem T="Guid?" Value="@((Guid?)m.Id)">@m.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
                 </div>
                 @* Sensitivity label (ADR "Configurable sensitivity labels + upload defaults"). *@
                 <div class="wb-mask-row">
@@ -340,6 +356,19 @@
     // it does not otherwise care about — and made a pane that merely DISPLAYS a label depend on someone having
     // remembered to pass it.
     private IReadOnlyList<MaskSummary> AvailableMasks => Catalogs.Masks;
+
+    /// <summary>
+    /// Whether the current mask is one the catalogue does not offer — so it can be shown but not changed.
+    /// </summary>
+    /// <remarks>
+    /// The catalogue is already filtered to the freely-assignable masks (#671), so "has a mask that isn't in
+    /// it" is exactly the fixed case: a typed folder (Mailbox, Calendar, Addressbook) or an extension-claimed
+    /// mask. Deliberately keyed on ABSENCE from the list rather than on a second flag — the server's answer
+    /// about what may be chosen is already here, and asking it twice is how the two clients came to disagree
+    /// before ADR 0653.
+    /// </remarks>
+    private bool MaskIsFixed =>
+        Detail.EditMaskId is { } current && !AvailableMasks.Any(m => m.Id == current);
     private IReadOnlyList<OcrLanguageOption> OcrCatalog => Catalogs.Ocr;
     private IReadOnlyList<SensitivityLabel> SensitivityLabels => Catalogs.Sensitivity;
 

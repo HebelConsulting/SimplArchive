@@ -352,6 +352,38 @@ public static class DemoDataSeeder
     // Two extra users (an editor + a clerk) and a shared "Scan Team" group with a seeded group-intray item — so the
     // group-intray feature (ADR 0532) is live on the demo login: the admin (CanManageIntrays) can open the users'
     // intrays and the Scan Team group intray shows an unfiled scan waiting to be picked up.
+    /// <summary>
+    /// Gives the demo logins the SAME known password for WebDAV/CalDAV/CardDAV and IMAP that they use to log in.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Both are APP-SPECIFIC credentials that normally do not exist until a user generates one — deliberately,
+    /// so the real login password is never typed into an OS keychain. That is right for a product and wrong for
+    /// a demo: it means nobody can mount the drive or add the mailbox without first finding two dialogs, which
+    /// is exactly the thing a visitor is least likely to do and most worth showing.
+    /// </para>
+    /// <para>
+    /// Set only when ABSENT. Two reasons, and the second is the one that bites: a visitor who rotated their own
+    /// credential keeps it, and an EXISTING volume is healed rather than skipped — a grow-later seed that only
+    /// touches rows it just created strands every user who was already there (#574's lesson).
+    /// </para>
+    /// <para>
+    /// Demo-only by construction: this whole seeder runs only when <c>Demo:*</c> is configured, so a production
+    /// deployment never reaches it.
+    /// </para>
+    /// </remarks>
+    private static async Task EnableDavAndImapAsync(
+        SimplArchiveDbContext dbContext, PasswordHasher<User> hasher, string demoPassword, Guid[] userIds)
+    {
+        foreach (var user in await dbContext.Users.Where(u => userIds.Contains(u.Id)).ToListAsync())
+        {
+            user.WebDavPasswordHash ??= hasher.HashPassword(user, demoPassword);
+            user.ImapPasswordHash ??= hasher.HashPassword(user, demoPassword);
+        }
+
+        await dbContext.SaveChangesAsync();
+    }
+
     private static async Task<(Guid AnnaId, Guid TomId)> SeedTeamAsync(
         SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
         Guid tenantId, Guid repositoryId, Guid adminId, DateTimeOffset now, string demoPassword, string adminEmail)
@@ -378,6 +410,8 @@ public static class DemoDataSeeder
         var scanTeam = new Group { Id = Guid.NewGuid(), TenantId = tenantId, Name = "Scan Team" };
         dbContext.Groups.Add(scanTeam);
         await dbContext.SaveChangesAsync();
+
+        await EnableDavAndImapAsync(dbContext, hasher, demoPassword, [adminId, anna.Id, tom.Id]);
 
         // Admin + both users are members, so the admin sees the Scan Team group intray on the demo login.
         foreach (var userId in new[] { adminId, anna.Id, tom.Id })

@@ -3,7 +3,8 @@ using static Microsoft.Playwright.Assertions;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// The per-user personal repository (ADR "Per-user personal repository") appears as a "Personal" node pinned in
+// The per-user personal repository (ADR "Per-user personal repository") appears as a node named after its
+// owner (ADR 0671) — pinned in
 // the workbench tree and is browsable/writable like any repository — selecting it and creating a folder into it
 // round-trips.
 [Collection(UiCollection.Name)]
@@ -22,8 +23,8 @@ public class WebPersonalRepositoryTests
         var folder = "e2e-personal-" + Guid.NewGuid().ToString("N")[..8];
         var newFolder = page.Locator(".wb-ribbon [aria-label=\"New folder\"]").First;
 
-        // The "Personal" node is present in the tree and selectable.
-        var personal = tree.GetByText("Personal", new() { Exact = true }).First;
+        // The personal node — named after the signed-in user since ADR 0671 — is present and selectable.
+        var personal = tree.GetByText(SelfHostedAppFixture.AdminDisplayName, new() { Exact = true }).First;
         await Expect(personal).ToBeVisibleAsync();
         await personal.ClickAsync();
 
@@ -50,7 +51,7 @@ public class WebPersonalRepositoryTests
         var list = page.Locator("[data-pane='list']");
         var upload = page.Locator(".wb-ribbon [aria-label=\"Upload\"]").First;
 
-        await tree.GetByText("Personal", new() { Exact = true }).First.ClickAsync();
+        await tree.GetByText(SelfHostedAppFixture.AdminDisplayName, new() { Exact = true }).First.ClickAsync();
 
         // Asserted on the DOM attribute rather than by simulating a drag, because `data-drop-folder` is exactly
         // what dropUpload.js keys on (`closest('[data-drop-folder]')`) — its absence IS the drop target being
@@ -75,7 +76,7 @@ public class WebPersonalRepositoryTests
         var tree = page.Locator("[data-pane='tree']");
 
         // Expanding the Personal node reveals the Intray + Check-out launcher nodes (mirroring /webdav/Personal).
-        var personal = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Personal" }).First;
+        var personal = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = SelfHostedAppFixture.AdminDisplayName }).First;
         await Expect(personal).ToBeVisibleAsync();
         await personal.Locator(".mud-treeview-item-arrow").ClickAsync();
 

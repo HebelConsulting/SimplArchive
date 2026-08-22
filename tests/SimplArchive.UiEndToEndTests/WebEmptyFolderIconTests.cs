@@ -91,7 +91,7 @@ public class WebEmptyFolderIconTests
     {
         var page = await Ui.LoginAsync(_app);
         var tree = page.Locator("[data-pane='tree']");
-        var personal = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = "Personal" }).First;
+        var personal = tree.Locator(".mud-treeview-item-content").Filter(new() { HasText = SelfHostedAppFixture.AdminDisplayName }).First;
         await Expect(personal).ToBeVisibleAsync(new() { Timeout = 15000 });
         await personal.Locator(".mud-treeview-item-arrow").ClickAsync();
 
