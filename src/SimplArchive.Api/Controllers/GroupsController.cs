@@ -512,8 +512,9 @@ public class GroupsController : ControllerBase
         CanViewAuditLog = g.CanViewAuditLog,
         CanExport = g.CanExport,
         CanImport = g.CanImport,
-        CanManageIntrayes = g.CanManageIntrayes,
+        CanManageIntrays = g.CanManageIntrays,
         CanCreateExternalLink = g.CanCreateExternalLink,
+        CanAccessWithoutGrant = g.CanAccessWithoutGrant,
         ClearanceRank = g.ClearanceRank,
     };
 
@@ -532,8 +533,9 @@ public class GroupsController : ControllerBase
         g.CanViewAuditLog = r.CanViewAuditLog;
         g.CanExport = r.CanExport;
         g.CanImport = r.CanImport;
-        g.CanManageIntrayes = r.CanManageIntrayes;
+        g.CanManageIntrays = r.CanManageIntrays;
         g.CanCreateExternalLink = r.CanCreateExternalLink;
+        g.CanAccessWithoutGrant = r.CanAccessWithoutGrant;
         g.ClearanceRank = r.ClearanceRank;
     }
 
@@ -545,7 +547,7 @@ public class GroupsController : ControllerBase
         {
             var sa = await _dbContext.ServiceAccounts
                 .Where(s => s.Id == serviceAccountId)
-                .Select(s => new { s.CanManageRepositories, s.CanManageMasks, s.CanManageServiceAccounts, s.CanManageUsers, s.CanViewAuditLog, s.CanExport, s.CanImport, s.CanManageIntrayes })
+                .Select(s => new { s.CanManageRepositories, s.CanManageMasks, s.CanManageServiceAccounts, s.CanManageUsers, s.CanViewAuditLog, s.CanExport, s.CanImport, s.CanManageIntrays })
                 .SingleAsync(cancellationToken);
 
             return new SystemRights
@@ -557,7 +559,7 @@ public class GroupsController : ControllerBase
                 CanViewAuditLog = sa.CanViewAuditLog,
                 CanExport = sa.CanExport,
                 CanImport = sa.CanImport,
-                CanManageIntrayes = sa.CanManageIntrayes,
+                CanManageIntrays = sa.CanManageIntrays,
                 ClearanceRank = (await _clearanceResolver.GetForServiceAccountAsync(serviceAccountId, cancellationToken)).Rank,
             };
         }
@@ -582,8 +584,9 @@ public class GroupsController : ControllerBase
                 CanViewAuditLog = r.CanViewAuditLog,
                 CanExport = r.CanExport,
                 CanImport = r.CanImport,
-                CanManageIntrayes = r.CanManageIntrayes,
+                CanManageIntrays = r.CanManageIntrays,
                 CanCreateExternalLink = r.CanCreateExternalLink,
+                CanAccessWithoutGrant = r.CanAccessWithoutGrant,
                 ClearanceRank = (await _clearanceResolver.GetForUserAsync(userId, cancellationToken)).Rank,
             };
         }

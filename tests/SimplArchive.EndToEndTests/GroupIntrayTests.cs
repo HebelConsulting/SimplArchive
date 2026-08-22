@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace SimplArchive.EndToEndTests;
 
-// Group intrayes (ADR 0532): a shared, membership-gated staging queue at tenants/{t}/groups/{groupId}/inbox/. Any
+// Group intrays (ADR 0532): a shared, membership-gated staging queue at tenants/{t}/groups/{groupId}/inbox/. Any
 // member can upload / list / file; the item appears in every member's intray labelled with the group; a non-member
 // sees none and is refused; a second file of an already-taken item is 404 (idempotent under contention).
 [Collection(E2ECollection.Name)]

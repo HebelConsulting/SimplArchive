@@ -1128,7 +1128,7 @@
   <data name="IntrayUserTag" xml:space="preserve">
     <value>Utente</value>
   </data>
-  <data name="RightManageIntrayes" xml:space="preserve">
+  <data name="RightManageIntrays" xml:space="preserve">
     <value>Gestisci caselle</value>
   </data>
   <data name="NoMask" xml:space="preserve">

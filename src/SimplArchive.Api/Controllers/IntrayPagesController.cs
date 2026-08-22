@@ -188,7 +188,7 @@ public class IntrayPagesController(
         var names = request.Names ?? [];
 
         // Every source is authorized in its own right, and they all have to resolve to the same intray — joining
-        // across intrayes would let a caller pull a file out of one place and into another as a side effect.
+        // across intrays would let a caller pull a file out of one place and into another as a side effect.
         IntrayScopeResolver.IntrayScope? scope = null;
         foreach (var name in names)
         {

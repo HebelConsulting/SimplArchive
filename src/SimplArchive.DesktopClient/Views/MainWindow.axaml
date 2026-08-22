@@ -878,13 +878,13 @@
                                 <TextBlock Text="{Binding IntrayStatus}" Foreground="{DynamicResource WbFaint}" FontSize="11" />
                             </StackPanel>
                         </Grid>
-                        <!-- View filter (ADR 0532): a CanManageIntrayes holder gets a user-picker to open another
-                             user's intray. Its companion — "show group intrayes" — is an on/off, so it went to the
+                        <!-- View filter (ADR 0532): a CanManageIntrays holder gets a user-picker to open another
+                             user's intray. Its companion — "show group intrays" — is an on/off, so it went to the
                              ribbon as a toggle beside the other sticky toggles (#521, promoted from the web per
                              ADR 0511); a picker cannot follow it, because it chooses a value out of a list as
                              long as the tenant has users. -->
                         <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="12" Margin="0,0,0,6" VerticalAlignment="Center"
-                                    IsVisible="{Binding CanManageIntrayes}">
+                                    IsVisible="{Binding CanManageIntrays}">
                             <ComboBox MinWidth="180"
                                       ItemsSource="{Binding IntrayUsers}" SelectedItem="{Binding SelectedIntrayUser}"
                                       PlaceholderText="{loc:Tr IntrayUserPicker}">

@@ -70,7 +70,7 @@
                         Click="OnIntrayPatchSheet" ToolTip.Tip="{loc:Tr IntrayPatchSheetTip}"><i:Icon Value="mdi-printer" FontSize="18" /></Button>
             </StackPanel>
             <!-- Item group: what to do with the staged file as a whole, and what the list is showing.
-                 "Show group intrayes" was a labelled CheckBox in a filter row under the ribbon; it is an on/off
+                 "Show group intrays" was a labelled CheckBox in a filter row under the ribbon; it is an on/off
                  that changes this view, which is what a held-down toggle says and what its neighbours here
                  already are (#521 — the web arrived at this first, and ADR 0511 says promote it rather than
                  leave the two split). Its companion user-picker stays below: a picker chooses a value out of a

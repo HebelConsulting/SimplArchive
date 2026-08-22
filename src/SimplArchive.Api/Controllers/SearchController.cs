@@ -181,10 +181,14 @@ public partial class SearchController : ControllerBase
 
         // Data-classification clearance (ADR "Sensitivity clearance enforcement"): a restricted caller gets a
         // rank ceiling so the OpenSearch path drops over-clearance hits (the metadata fallback drops them via
-        // the per-hit CanSee post-filter, which the calculator already clearance-enforces). Admins/BypassAcl and
-        // unenforced tenants get no ceiling.
+        // the per-hit CanSee post-filter, which the calculator already clearance-enforces). Unenforced tenants
+        // and admins get no ceiling — the latter because ClearanceScope already resolves Unrestricted for them.
+        //
+        // Deliberately NOT also gated on BypassAcl: since ADR 0670 a non-admin can bypass the ACL filter by
+        // holding CanAccessWithoutGrant, and that right does not bypass clearance. Fused, it would have handed
+        // an auditor a clearance bypass as a side effect of a variable name.
         var clearance = await _clearanceScope.ResolveAsync(cancellationToken);
-        if (!clearance.IsUnrestricted && !access.BypassAcl)
+        if (!clearance.IsUnrestricted)
         {
             access = access with { MaxSensitivityRank = clearance.MaxRank };
         }

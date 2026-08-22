@@ -115,6 +115,20 @@ public class Document : ITenantScoped, IConcurrencyTracked, ISoftDeletable
     // PersonalOfUserId) enforces at most one personal repository per user.
     public Guid? PersonalOfUserId { get; set; }
 
+    // The PersonalOfUserId of this row's ROOT — so "is this inside somebody's personal space?" is one column
+    // read rather than a walk to the root (ADR 0670). Null outside every personal space; on a personal root it
+    // equals that root's own PersonalOfUserId, so the question is asked the same way at every depth.
+    //
+    // Denormalized ON PURPOSE, and the reason is the tenant-admin path: it short-circuits at ZERO queries
+    // today, and the walk it replaces would add one query per tree level to the hottest authorization path in
+    // the product, paid per listing row. A **plain nullable column, not a FK** (the CurrentVersionId
+    // precedent): it mirrors PersonalOfUserId, which already carries the Restrict FK to User, so a second
+    // Document→User key would add a cascade path for integrity guaranteed one column over.
+    //
+    // Never set manually — SimplArchiveDbContext.SaveChanges derives it on insert and rewrites the moved
+    // subtree whenever a ParentId changes.
+    public Guid? PersonalRootOwnerId { get; set; }
+
     // The explicit "current version" pointer (ADR "Version-restore via a current-version pointer"). null = the
     // current version is DERIVED as before (the latest confirmed version, gated per ADR "Workflow status-gating");
     // set = that existing DocumentVersion is current — no blob copy, so its annotations / document date are

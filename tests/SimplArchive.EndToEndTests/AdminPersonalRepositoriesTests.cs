@@ -3,10 +3,14 @@ using System.Text;
 
 namespace SimplArchive.EndToEndTests;
 
-// End-to-end over the real API + Postgres + object storage, exercising the tenant-admin Administration → Users
-// view (ADR "Tenant-admin Administration → Users view"): a tenant admin lists every user's personal repository and
-// can browse into a personal space (via the IsTenantAdmin ACL bypass); the listing is recorded to the audit log;
-// a non-admin is refused.
+// End-to-end over the real API + Postgres + object storage, exercising the Administration → Users view
+// (ADR "Tenant-admin Administration → Users view"): an administrator lists every user's personal repository and
+// can browse into a personal space; the listing is recorded to the audit log; a non-admin is refused.
+//
+// What grants that access changed with ADR 0670. It is NO LONGER the IsTenantAdmin bypass — which now stops at
+// the edge of somebody else's personal space — but CanAccessWithoutGrant, which promotion grants and an
+// administrator can hand back. The second test is the one that says so: same admin, same tenant, right revoked,
+// and the whole surface goes quiet rather than half-working.
 [Collection(E2ECollection.Name)]
 public class AdminPersonalRepositoriesTests
 {
@@ -42,7 +46,7 @@ public class AdminPersonalRepositoriesTests
         Assert.Contains(repos, r => r.GetProperty("repositoryId").GetGuid() == aliceRepo && r.GetProperty("displayName").GetString() == "Alice");
         Assert.Contains(repos, r => r.GetProperty("repositoryId").GetGuid() == bobRepo);
 
-        // The admin can browse into Alice's personal space (IsTenantAdmin ACL bypass) and see her private
+        // The admin can browse into Alice's personal space (CanAccessWithoutGrant) and see her private
         // document — which sits in My Documents, since the first level holds only provisioned folders (#634).
         // The bypass is what this asserts, so it browses with the ADMIN's client all the way down.
         var children = await TestJson.Get(admin, $"/api/documents/{await MyDocumentsAsync(admin, aliceRepo)}/children");
@@ -54,6 +58,49 @@ public class AdminPersonalRepositoriesTests
 
         // A non-admin (Alice) cannot list personal repositories.
         Assert.Equal(HttpStatusCode.Forbidden, (await alice.GetAsync("/api/admin/personal-repositories")).StatusCode);
+    }
+
+    [Fact]
+    public async Task An_admin_who_revoked_their_own_access_loses_the_rel_the_listing_and_the_browse()
+    {
+        var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
+
+        var adminEmail = $"admin-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, adminEmail, "adm-1234", "Admin");
+        await _factory.GrantTenantAdminAsync(adminEmail);
+        using var admin = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(adminEmail, "adm-1234"));
+
+        var carolEmail = $"carol-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, carolEmail, "u-1234", "Carol");
+        using var carol = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(carolEmail, "u-1234"));
+        var carolRepo = (await TestJson.Post(carol, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
+        var carolFolder = await MyDocumentsAsync(carol, carolRepo);
+        var carolDoc = await UploadAsync(carol, carolFolder, "carol-secret");
+
+        // While the admin holds the right, everything works — the control, so the assertions below cannot pass
+        // for the trivial reason that the fixture never granted anything.
+        Assert.Contains(
+            (await TestJson.Get(admin, "/api/admin/personal-repositories")).GetProperty("repositories").EnumerateArray(),
+            r => r.GetProperty("repositoryId").GetGuid() == carolRepo);
+
+        await _factory.RevokeAccessWithoutGrantAsync(adminEmail);
+
+        // The rel goes first: a client is supposed to be able to follow what it is offered (ADR 0543), so an
+        // affordance that would answer 403 must not be advertised at all.
+        Assert.DoesNotContain(
+            (await TestJson.Get(admin, "/api/admin")).GetProperty("links").EnumerateArray(),
+            l => l.GetProperty("rel").GetString() == "personal-repositories");
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/admin/personal-repositories")).StatusCode);
+
+        // ...and the space itself is genuinely closed, not merely unlisted. Still a tenant admin: this is the
+        // narrowed bypass, so the SAME caller keeps full rights outside the personal space.
+        //
+        // 403 rather than 404 is the API's existing answer for "no CanSee" everywhere, not something this
+        // change chose — worth knowing, because it means the refusal admits the id exists. Enumerating ids is
+        // what the listing above no longer allows, so this is a much smaller door than the one just closed.
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync($"/api/documents/{carolDoc}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/repositories")).StatusCode);
     }
 
     private static async Task<Guid> UploadAsync(HttpClient client, Guid folderId, string name)

@@ -16,7 +16,7 @@ public sealed partial class IntrayItemViewModel : ObservableObject
 
     public required string DownloadUrl { get; init; }
 
-    // A non-own item's source queue (ADR 0532): a group intray or — for a CanManageIntrayes admin viewing another
+    // A non-own item's source queue (ADR 0532): a group intray or — for a CanManageIntrays admin viewing another
     // user — that user. Own items leave all four null. MoveUrl is the server-built move action (source query baked
     // in); SourceQuery is appended to the name-based preview/mask/file/delete endpoints.
     public Guid? GroupId { get; init; }

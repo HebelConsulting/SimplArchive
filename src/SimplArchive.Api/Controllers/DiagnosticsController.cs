@@ -126,9 +126,9 @@ public class DiagnosticsController : ControllerBase
 
         public bool CanImport { get; set; }
 
-        // Whether the User caller may manage other users' intrayes (ADR 0532) — gates the clients' intray
-        // user-picker / cross-user triage. True for a User holding CanManageIntrayes (own or via a group).
-        public bool CanManageIntrayes { get; set; }
+        // Whether the User caller may manage other users' intrays (ADR 0532) — gates the clients' intray
+        // user-picker / cross-user triage. True for a User holding CanManageIntrays (own or via a group).
+        public bool CanManageIntrays { get; set; }
 
         // The acting admin's display name when this is an impersonation session (else null) — drives the
         // clients' impersonation banner.
@@ -157,7 +157,7 @@ public class DiagnosticsController : ControllerBase
         var canImpersonate = false;
         var canExport = false;
         var canImport = false;
-        var canManageIntrayes = false;
+        var canManageIntrays = false;
         var hasPhoto = false;
         var mfaEnabled = false;
         if (_currentUserAccessor.UserId is { } userId)
@@ -182,7 +182,7 @@ public class DiagnosticsController : ControllerBase
             canImpersonate = rights.CanImpersonate;
             canExport = rights.CanExport;
             canImport = rights.CanImport;
-            canManageIntrayes = rights.CanManageIntrayes;
+            canManageIntrays = rights.CanManageIntrays;
             hasPhoto = await _dbContext.UserProfilePhotos.AnyAsync(p => p.UserId == userId, cancellationToken);
         }
 
@@ -213,7 +213,7 @@ public class DiagnosticsController : ControllerBase
             CanImpersonate = canImpersonate,
             CanExport = canExport,
             CanImport = canImport,
-            CanManageIntrayes = canManageIntrayes,
+            CanManageIntrays = canManageIntrays,
             ImpersonatedBy = impersonatedBy,
             HasPhoto = hasPhoto,
 

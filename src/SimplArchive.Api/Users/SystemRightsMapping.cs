@@ -34,14 +34,21 @@ public static class SystemRightsMapping
         CanViewAuditLog = u.CanViewAuditLog,
         CanExport = u.CanExport,
         CanImport = u.CanImport,
-        CanManageIntrayes = u.CanManageIntrayes,
+        CanManageIntrays = u.CanManageIntrays,
         CanCreateExternalLink = u.CanCreateExternalLink,
+        CanAccessWithoutGrant = u.CanAccessWithoutGrant,
         ClearanceRank = u.ClearanceRank,
     };
 
     /// <summary>Writes a rights request onto the user — the PUT is a full replacement, so every column is set.</summary>
     public static void Apply(User u, SystemRights r)
     {
+        // Promotion grants CanAccessWithoutGrant (ADR 0670), and ONLY the false→true transition does: read
+        // before the assignment below, so an admin who deliberately revoked their own x-ray keeps it revoked
+        // through every later save. Implied at grant time, never at check time — that distinction is the whole
+        // reason this right can be given up at all.
+        var promoted = r.IsTenantAdmin && !u.IsTenantAdmin;
+
         u.IsTenantAdmin = r.IsTenantAdmin;
         u.CanImpersonate = r.CanImpersonate;
         u.CanOverrideCheckout = r.CanOverrideCheckout;
@@ -55,8 +62,9 @@ public static class SystemRightsMapping
         u.CanViewAuditLog = r.CanViewAuditLog;
         u.CanExport = r.CanExport;
         u.CanImport = r.CanImport;
-        u.CanManageIntrayes = r.CanManageIntrayes;
+        u.CanManageIntrays = r.CanManageIntrays;
         u.CanCreateExternalLink = r.CanCreateExternalLink;
+        u.CanAccessWithoutGrant = r.CanAccessWithoutGrant || promoted;
         u.ClearanceRank = r.ClearanceRank;
     }
 
@@ -77,6 +85,9 @@ public static class SystemRightsMapping
         if (r.CanResetMfa) names.Add("ResetMfa");
         if (r.CanExport) names.Add("Export");
         if (r.CanImport) names.Add("Import");
+        if (r.CanManageIntrays) names.Add("ManageIntrays");
+        if (r.CanCreateExternalLink) names.Add("CreateExternalLink");
+        if (r.CanAccessWithoutGrant) names.Add("AccessWithoutGrant");
         if (r.ClearanceRank > 0) names.Add($"Clearance {r.ClearanceRank}");
         return names.Count == 0 ? "(no rights)" : string.Join(", ", names);
     }

@@ -17,7 +17,7 @@
    the DotNetObjectReference dropUpload.js calls back into, so nothing about it lives in the shell any more.
 
    Two facts arrive as parameters rather than being re-fetched (ADR 0557): whether the caller may triage other
-   people's intrayes, and which folder the Repositories tree has selected, which pre-fills the filing target. *@
+   people's intrays, and which folder the Repositories tree has selected, which pre-fills the filing target. *@
 
 @* Only this tab has a filter row, so its rule lives here rather than in the shell, which may only shrink
    (ADR 0558). Bottom-aligned because the switch and the select have different label geometry and would
@@ -51,7 +51,7 @@
                    title="@Strings.Get("IntrayCopyDav")" aria-label="@Strings.Get("IntrayCopyDav")">
             <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("IntrayCopyDav")</span>
         </MudButton>
-        @* Own-items-only by default; held DOWN it reveals my group intrayes (ADR 0532). A toggle rather than the
+        @* Own-items-only by default; held DOWN it reveals my group intrays (ADR 0532). A toggle rather than the
            switch it used to be: it is a sticky on/off that belongs beside the other actions on this view, and a
            switch with a written label set the height of every button next to it. Disabled while viewing another
            user's intray — the two selectors are mutually exclusive. *@
@@ -175,14 +175,14 @@
         }
     </div>
     <div class="wb-search-status">@_intrayStatus</div>
-    @if (CanManageIntrayes)
+    @if (CanManageIntrays)
     {
         @* The one filter that cannot be a button: it picks a value out of a list, and the list is as long as
            the tenant has users. So it sits BELOW the action bar and directly above the list it filters — where
            the desktop already puts it (ADR 0511) — rather than setting the bar's height for every button beside
-           it. Its companion, "show group intrayes", is an on/off and went to the bar as a toggle.
+           it. Its companion, "show group intrays", is an on/off and went to the bar as a toggle.
 
-           CanManageIntrayes: open any user's intray for triage; "My intray" resets to own. *@
+           CanManageIntrays: open any user's intray for triage; "My intray" resets to own. *@
         <div class="wb-intray-filters">
             <MudSelect T="Guid?" Value="_intrayViewUserId" ValueChanged="ViewUserIntrayAsync" Dense="true"
                        Margin="Margin.Dense" Variant="Variant.Outlined"
@@ -346,9 +346,9 @@
     [Parameter]
     public string? CurrentFolderName { get; set; }
 
-    /// <summary>Whether the caller may open another user's intray for triage (the CanManageIntrayes right).</summary>
+    /// <summary>Whether the caller may open another user's intray for triage (the CanManageIntrays right).</summary>
     [Parameter]
-    public bool CanManageIntrayes { get; set; }
+    public bool CanManageIntrays { get; set; }
 
     /// <summary>
     /// Copies the WebDAV mount URL. Stays in the shell because the Check-out tab offers the same action, and it
@@ -443,11 +443,11 @@
     private string _intrayStatus = "";
     private bool _intrayBusy;
     private IntrayItem? _selectedIntrayItem;
-    // Intray view filters (ADR 0532): own-items-only by default; a toggle reveals my group intrayes, and a
-    // CanManageIntrayes holder can open a specific user's intray via the user-picker (mutually exclusive with groups).
+    // Intray view filters (ADR 0532): own-items-only by default; a toggle reveals my group intrays, and a
+    // CanManageIntrays holder can open a specific user's intray via the user-picker (mutually exclusive with groups).
     private bool _intrayIncludeGroups;
     private Guid? _intrayViewUserId;
-    private List<IntrayUserOption> _intrayUsers = []; // the admin user-picker's choices (CanManageIntrayes only)
+    private List<IntrayUserOption> _intrayUsers = []; // the admin user-picker's choices (CanManageIntrays only)
     private sealed record IntrayUserOption(Guid Id, string Name);
     // Every address this row acts on comes from the listing that drew it (ADR 0555) — including `mask` and
     // `preview`, which the row had been carrying all along while the tab rebuilt them from Name plus a
@@ -487,8 +487,8 @@
         _intrayChecked.Clear();
         try
         {
-            // A CanManageIntrayes holder gets a user-picker; load the tenant's users once for it.
-            if (CanManageIntrayes && _intrayUsers.Count == 0)
+            // A CanManageIntrays holder gets a user-picker; load the tenant's users once for it.
+            if (CanManageIntrays && _intrayUsers.Count == 0)
             {
                 var users = await Http.GetFromJsonAsync<IntrayUsersResponse>(await ApiRoot.RequireAsync("intrayUsers"));
                 _intrayUsers = users?.Users ?? [];
@@ -1312,7 +1312,7 @@
         }
     }
 
-    // The "show group intrayes" filter (ADR 0532) — off by default; clears any admin user-view when toggled.
+    // The "show group intrays" filter (ADR 0532) — off by default; clears any admin user-view when toggled.
     private async Task ToggleIntrayGroupsAsync(bool on)
     {
         _intrayIncludeGroups = on;
@@ -1320,7 +1320,7 @@
         await LoadIntrayAsync();
     }
 
-    // The admin user-picker (CanManageIntrayes) — open a chosen user's intray, or back to my own (null).
+    // The admin user-picker (CanManageIntrays) — open a chosen user's intray, or back to my own (null).
     private async Task ViewUserIntrayAsync(Guid? userId)
     {
         _intrayViewUserId = userId;

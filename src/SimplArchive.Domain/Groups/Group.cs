@@ -32,8 +32,8 @@ public class Group : ITenantScoped
 
     public bool CanManageRepositories { get; set; }
 
-    // Manage other users' intrayes (ADR 0532) — flows to members like every other group system right.
-    public bool CanManageIntrayes { get; set; }
+    // Manage other users' intrays (ADR 0532) — flows to members like every other group system right.
+    public bool CanManageIntrays { get; set; }
 
     public bool CanManageServiceAccounts { get; set; }
 
@@ -57,6 +57,11 @@ public class Group : ITenantScoped
     // Not backfilled for existing admins — it should be granted deliberately.
     public bool CanCreateExternalLink { get; set; }
 
+    // See + read any document the holder holds no CanSee grant on, and nothing else (ADR 0670). Mirrors
+    // User's; a member's effective rights are the union of their own and their groups', so a right held via a
+    // group takes effect. NOT conferred by a group's own IsTenantAdmin — a group flagged admin already confers
+    // the full bypass, which is a different thing.
+    public bool CanAccessWithoutGrant { get; set; }
 
     // Data-classification clearance conferred to members (ADR "Sensitivity clearance enforcement"). A member's
     // effective clearance is the max of their own and every effective group's ClearanceRank. Default 0.

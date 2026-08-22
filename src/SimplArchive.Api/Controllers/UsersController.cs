@@ -877,7 +877,7 @@ public class UsersController : ControllerBase
         {
             var sa = await _dbContext.ServiceAccounts
                 .Where(s => s.Id == serviceAccountId)
-                .Select(s => new { s.CanManageRepositories, s.CanManageMasks, s.CanManageServiceAccounts, s.CanManageUsers, s.CanViewAuditLog, s.CanExport, s.CanImport, s.CanManageIntrayes })
+                .Select(s => new { s.CanManageRepositories, s.CanManageMasks, s.CanManageServiceAccounts, s.CanManageUsers, s.CanViewAuditLog, s.CanExport, s.CanImport, s.CanManageIntrays })
                 .SingleAsync(cancellationToken);
 
             var caller = new SystemRights
@@ -889,7 +889,7 @@ public class UsersController : ControllerBase
                 CanViewAuditLog = sa.CanViewAuditLog,
                 CanExport = sa.CanExport,
                 CanImport = sa.CanImport,
-                CanManageIntrayes = sa.CanManageIntrayes,
+                CanManageIntrays = sa.CanManageIntrays,
             };
             caller.ClearanceRank = (await _clearanceResolver.GetForServiceAccountAsync(serviceAccountId, cancellationToken)).Rank;
             return caller;
@@ -923,7 +923,7 @@ public class UsersController : ControllerBase
         CanViewAuditLog = r.CanViewAuditLog,
         CanExport = r.CanExport,
         CanImport = r.CanImport,
-        CanManageIntrayes = r.CanManageIntrayes,
+        CanManageIntrays = r.CanManageIntrays,
         CanCreateExternalLink = r.CanCreateExternalLink,
     };
 

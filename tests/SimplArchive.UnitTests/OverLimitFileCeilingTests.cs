@@ -82,7 +82,7 @@ public class OverLimitFileCeilingTests
         // siblings out would scatter a family this file already documents as belonging together.
         // 6_987 -> 6_991 for #691 (owner-confirmed): the load call plus two clears. The ~90 lines the feature
         // actually cost went to MainWindowViewModel.TabSelections.cs, which is not on this list.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_991,
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_955,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
@@ -167,7 +167,7 @@ public class OverLimitFileCeilingTests
         // wrapper. Lowered rather than left with headroom — an unlowered ceiling is permission to grow back
         // into it, silently. It also caught this change growing the file by ONE line, which is the entire
         // argument for the entry existing.
-        ["src/SimplArchive.Infrastructure/Persistence/SimplArchiveDbContext.cs"] = 1_015,
+        ["src/SimplArchive.Infrastructure/Persistence/SimplArchiveDbContext.cs"] = 1_016,
     };
 
     public static TheoryData<string> Files => [.. Ceilings.Keys];

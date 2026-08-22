@@ -455,6 +455,7 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
             await EnforceTypedFolderContainmentAsync(document, cancellationToken);
             await EnforceRepositoryMaskLockstepAsync(document, cancellationToken);
             await EnforcePersonalSpaceStructureAsync(document, cancellationToken);
+            await PersonalRootOwner.MaintainAsync(this, document, trackedDocuments, cancellationToken);
         }
     }
 

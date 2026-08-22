@@ -50,7 +50,7 @@ public sealed class IntrayScopeResolver(
     /// <summary>
     /// Resolves + authorizes the storage scope of an intray item addressed by name plus an optional source
     /// selector: own intray (neither set), a group intray the caller is an effective member of, or a specific
-    /// user's intray — the caller's own, or any user's for a <c>CanManageIntrayes</c> holder. A mask sidecar is
+    /// user's intray — the caller's own, or any user's for a <c>CanManageIntrays</c> holder. A mask sidecar is
     /// never addressable as an item.
     /// </summary>
     public async Task<IntrayScope?> ResolveAsync(
@@ -72,8 +72,8 @@ public sealed class IntrayScopeResolver(
 
         if (user is { } userId && userId != callerId)
         {
-            // Another user's intray — admin-gated (CanManageIntrayes).
-            return await CanManageIntrayesAsync(callerId, cancellationToken)
+            // Another user's intray — admin-gated (CanManageIntrays).
+            return await CanManageIntraysAsync(callerId, cancellationToken)
                 ? new IntrayScope(tenantId, callerId, UserPrefix(tenantId, userId))
                 : null;
         }
@@ -82,8 +82,8 @@ public sealed class IntrayScopeResolver(
         return new IntrayScope(tenantId, callerId, UserPrefix(tenantId, callerId));
     }
 
-    public async Task<bool> CanManageIntrayesAsync(Guid userId, CancellationToken cancellationToken) =>
-        (await userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken)).CanManageIntrayes;
+    public async Task<bool> CanManageIntraysAsync(Guid userId, CancellationToken cancellationToken) =>
+        (await userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken)).CanManageIntrays;
 
     public static bool IsMaskSidecar(string name) =>
         name.EndsWith(IntrayPageService.MaskSidecarSuffix, StringComparison.OrdinalIgnoreCase);

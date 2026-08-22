@@ -141,6 +141,10 @@ public sealed class OpenSearchIndexRebuilder
                     // Annotation text — note bodies, stamp captions, text-box content (ADR 0526), searchable.
                     annotations = new { type = "text" },
                     allowedPrincipals = new { type = "keyword" },
+                    // The owner of the personal space this document sits in, absent outside every personal
+                    // space (ADR 0670) — what lets a BYPASSING caller's query still exclude other people's
+                    // personal documents, which allowedPrincipals cannot express (a bypass adds no clause).
+                    personalOf = new { type = "keyword" },
                     // Typed index-field values for filtering (ADR 0043). Nested so a filter matches name +
                     // typed value on the *same* field; text always present, number/date/bool when parseable.
                     fields = new

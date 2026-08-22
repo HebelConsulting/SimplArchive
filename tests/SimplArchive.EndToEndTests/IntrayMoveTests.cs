@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace SimplArchive.EndToEndTests;
 
 // Intray item send/move + admin visibility (ADR 0532): a user can move an own item into a group or another user's
-// intray; a member can claim a group item into their own; a CanManageIntrayes holder can open + drain any user's
+// intray; a member can claim a group item into their own; a CanManageIntrays holder can open + drain any user's
 // intray via ?user=, while a non-admin cannot.
 [Collection(E2ECollection.Name)]
 public class IntrayMoveTests
@@ -23,7 +23,7 @@ public class IntrayMoveTests
         var adminEmail = $"admin-{Guid.NewGuid():N}@e2e.local";
         var bobEmail = $"bob-{Guid.NewGuid():N}@e2e.local";
         var carolEmail = $"carol-{Guid.NewGuid():N}@e2e.local";
-        var adminId = await _factory.SeedUserAsync(tenantId, adminEmail, "u-1234", "Admin", canManageIntrayes: true);
+        var adminId = await _factory.SeedUserAsync(tenantId, adminEmail, "u-1234", "Admin", canManageIntrays: true);
         var bobId = await _factory.SeedUserAsync(tenantId, bobEmail, "u-1234", "Bob");
         var carolId = await _factory.SeedUserAsync(tenantId, carolEmail, "u-1234", "Carol");
 
@@ -63,7 +63,7 @@ public class IntrayMoveTests
         Assert.Contains(toGroup, await NamesAsync(admin, "/api/intray"));                           // now in Admin's own
         Assert.DoesNotContain(toGroup, await NamesAsync(bob, "/api/intray?includeGroups=true"));    // left the group (Bob, a member, no longer sees it)
 
-        // 4) Admin (CanManageIntrayes) opens Carol's intray via ?user= and claims the handed-off item.
+        // 4) Admin (CanManageIntrays) opens Carol's intray via ?user= and claims the handed-off item.
         Assert.Contains(toCarol, await NamesAsync(admin, $"/api/intray?user={carolId}"));
         (await admin.PostAsJsonAsync($"/api/intray/{toCarol}/move?user={carolId}", new { targetUserId = adminId })).EnsureSuccessStatusCode();
         Assert.DoesNotContain(toCarol, await NamesAsync(carol, "/api/intray"));                     // left Carol's

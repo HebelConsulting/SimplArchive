@@ -296,7 +296,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
     }
 
     // Seeds an active User (with a password) into a tenant, for the interactive-login flow. Returns the user id.
-    public async Task<Guid> SeedUserAsync(Guid tenantId, string email, string password, string displayName, bool canViewAuditLog = false, bool canManageUsers = false, bool canResetMfa = false, bool canExport = false, bool canImport = false, bool canManageServiceAccounts = false, bool canManageRepositories = false, bool canManageIntrayes = false, bool canCreateExternalLink = false, bool isTenantAdmin = false)
+    public async Task<Guid> SeedUserAsync(Guid tenantId, string email, string password, string displayName, bool canViewAuditLog = false, bool canManageUsers = false, bool canResetMfa = false, bool canExport = false, bool canImport = false, bool canManageServiceAccounts = false, bool canManageRepositories = false, bool canManageIntrays = false, bool canCreateExternalLink = false, bool isTenantAdmin = false)
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
@@ -314,7 +314,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
             CanImport = canImport,
             CanManageServiceAccounts = canManageServiceAccounts,
             CanManageRepositories = canManageRepositories,
-            CanManageIntrayes = canManageIntrayes,
+            CanManageIntrays = canManageIntrays,
             CanCreateExternalLink = canCreateExternalLink,
             IsTenantAdmin = isTenantAdmin,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -493,6 +493,18 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
     // Grants IsTenantAdmin to a seeded user by email, so a purge test can act as a tenant admin. Also grants
     // CanExport/CanImport (ADR "Dedicated CanExport/CanImport rights") — a real provisioned tenant admin holds
     // every right, and export/import now gate on those specific rights rather than IsTenantAdmin.
+    // Takes the x-ray away from an administrator (ADR 0670) without touching IsTenantAdmin — the state that
+    // proves the right is revocable rather than a relabelled admin check.
+    public async Task RevokeAccessWithoutGrantAsync(string email)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+        var normalized = email.ToUpperInvariant();
+        var user = await db.Users.IgnoreQueryFilters().SingleAsync(u => u.NormalizedEmail == normalized);
+        user.CanAccessWithoutGrant = false;
+        await db.SaveChangesAsync();
+    }
+
     public async Task GrantTenantAdminAsync(string email)
     {
         using var scope = Services.CreateScope();
@@ -504,6 +516,11 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         user.CanImport = true;
         user.CanManageClassification = true;
         user.CanManageMasks = true;
+
+        // Promotion grants the x-ray into personal spaces (ADR 0670) — the bypass no longer reaches there, so
+        // an admin seeded WITHOUT this would be refused the Administration → Users view, and every test that
+        // uses this helper as "make them an admin" would be quietly testing a half-promoted user.
+        user.CanAccessWithoutGrant = true;
         await db.SaveChangesAsync();
     }
 

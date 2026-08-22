@@ -41,7 +41,7 @@ public sealed class IntrayApi(ApiCore core)
     }
 
     // Lists intray items (ADR "S3-backed inbox"). Own-items-only by default; includeGroups also aggregates the
-    // caller's group intrayes, and user opens a specific user's intray for a CanManageIntrayes holder (ADR 0532).
+    // caller's group intrays, and user opens a specific user's intray for a CanManageIntrays holder (ADR 0532).
     public async Task<IntrayListing> ListAsync(bool includeGroups = false, Guid? user = null, CancellationToken cancellationToken = default)
     {
         // One advertised address, three views of it — a filter is a query parameter, not a different route.

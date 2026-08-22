@@ -56,7 +56,7 @@ public sealed class OpenSearchDocumentIndexer : IDocumentIndexer
             // Default query filters apply: a soft-deleted or cross-tenant document reads as null → remove it.
             var doc = await _dbContext.Documents
                 .Where(d => d.Id == documentId)
-                .Select(d => new { d.Id, d.Name, d.TenantId, d.ParentId, d.CreatedAt, d.CreatedByUserId, d.CreatedByServiceAccountId, d.MaskVersionId, d.CurrentVersionId, SensitivityLabelName = d.SensitivityLabelId == null ? null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => l.Name).FirstOrDefault(), SensitivityLabelRank = d.SensitivityLabelId == null ? (int?)null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => (int?)l.Rank).FirstOrDefault() })
+                .Select(d => new { d.Id, d.Name, d.TenantId, d.ParentId, d.CreatedAt, d.CreatedByUserId, d.CreatedByServiceAccountId, d.MaskVersionId, d.CurrentVersionId, d.PersonalRootOwnerId, SensitivityLabelName = d.SensitivityLabelId == null ? null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => l.Name).FirstOrDefault(), SensitivityLabelRank = d.SensitivityLabelId == null ? (int?)null : _dbContext.SensitivityLabelDefinitions.Where(l => l.Id == d.SensitivityLabelId).Select(l => (int?)l.Rank).FirstOrDefault() })
                 .SingleOrDefaultAsync(cancellationToken);
 
             if (doc is null)
@@ -135,6 +135,9 @@ public sealed class OpenSearchDocumentIndexer : IDocumentIndexer
                 content,
                 annotations = annotationText,
                 allowedPrincipals,
+                // Null outside every personal space, so the exclusion clause is a plain "field missing" test
+                // for the overwhelming majority of documents (ADR 0670).
+                personalOf = doc.PersonalRootOwnerId,
                 fields = typedFields,
                 createdAt = doc.CreatedAt,
                 createdBy,

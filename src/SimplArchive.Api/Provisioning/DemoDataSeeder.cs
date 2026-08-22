@@ -350,8 +350,8 @@ public static class DemoDataSeeder
     }
 
     // Two extra users (an editor + a clerk) and a shared "Scan Team" group with a seeded group-intray item — so the
-    // group-intray feature (ADR 0532) is live on the demo login: the admin (CanManageIntrayes) can open the users'
-    // intrayes and the Scan Team group intray shows an unfiled scan waiting to be picked up.
+    // group-intray feature (ADR 0532) is live on the demo login: the admin (CanManageIntrays) can open the users'
+    // intrays and the Scan Team group intray shows an unfiled scan waiting to be picked up.
     private static async Task<(Guid AnnaId, Guid TomId)> SeedTeamAsync(
         SimplArchiveDbContext dbContext, IObjectStorageClient storage, Assembly assembly,
         Guid tenantId, Guid repositoryId, Guid adminId, DateTimeOffset now, string demoPassword, string adminEmail)

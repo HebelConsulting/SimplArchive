@@ -26,9 +26,11 @@ public sealed class AdminClient(ApiCore core)
         bool CanManageClassification, bool CanResetMfa, bool CanManageRepositories, bool CanManageMasks,
         bool CanManageServiceAccounts, bool CanManageUsers, bool CanViewAuditLog, bool CanExport, bool CanImport,
         // Tenant-wide intray triage (ADR 0532). Defaulted so existing 13-bool construction sites keep compiling.
-        bool CanManageIntrayes = false,
+        bool CanManageIntrays = false,
         // Share a document with someone who has no account (ADR 0546). Defaulted for the same reason.
         bool CanCreateExternalLink = false,
+        // See + read where no grant exists, and nothing else (ADR 0670). Defaulted for the same reason.
+        bool CanAccessWithoutGrant = false,
         // Data-classification clearance (ADR "Sensitivity clearance enforcement"). Defaulted so existing
         // construction sites (e.g. a copied-rights bundle) keep compiling.
         int ClearanceRank = 0);
@@ -485,7 +487,7 @@ public sealed class AdminClient(ApiCore core)
             B("isTenantAdmin"), B("canImpersonate"), B("canOverrideCheckout"), B("canLegalHold"),
             B("canManageClassification"), B("canResetMfa"), B("canManageRepositories"), B("canManageMasks"),
             B("canManageServiceAccounts"), B("canManageUsers"), B("canViewAuditLog"), B("canExport"), B("canImport"),
-            B("canManageIntrayes"), B("canCreateExternalLink"),
+            B("canManageIntrays"), B("canCreateExternalLink"), B("canAccessWithoutGrant"),
             r.TryGetProperty("clearanceRank", out var cr) && cr.ValueKind == JsonValueKind.Number ? cr.GetInt32() : 0);
     }
 

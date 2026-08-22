@@ -2269,7 +2269,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             CanImpersonate = me.CanImpersonate;
             HasExportRight = me.CanExport;
             HasImportRight = me.CanImport;
-            CanManageIntrayes = me.CanManageIntrayes;
+            CanManageIntrays = me.CanManageIntrays;
             IsImpersonating = me.ImpersonatedBy is not null;
             ImpersonatedName = me.ImpersonatedBy is not null ? me.UserName : null;
             _currentUserId = me.UserId;
@@ -2312,9 +2312,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty] private bool _hasImportRight;
 
-    // Whether the caller holds CanManageIntrayes (own or via a group) — gates the intray user-picker that opens
+    // Whether the caller holds CanManageIntrays (own or via a group) — gates the intray user-picker that opens
     // another user's intray for triage (ADR 0532); set from whoami on login.
-    [ObservableProperty] private bool _canManageIntrayes;
+    [ObservableProperty] private bool _canManageIntrays;
 
     // User impersonation (ADR "User impersonation"): CanImpersonate gates the "Impersonate" action; while
     // IsImpersonating, a banner shows ImpersonatedName + a Stop button. _adminApi is the pre-impersonation client
@@ -2508,8 +2508,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         ServerIntray.Clear();
         try
         {
-            // The admin user-picker's choices (CanManageIntrayes only) — loaded once, "My intray" first (null id).
-            if (CanManageIntrayes && IntrayUsers.Count == 0)
+            // The admin user-picker's choices (CanManageIntrays only) — loaded once, "My intray" first (null id).
+            if (CanManageIntrays && IntrayUsers.Count == 0)
             {
                 IntrayUsers.Add(new IntrayUserPickerItem(null, Strings.Get("IntrayMine")));
                 foreach (var u in await _api.Intray.GetIntrayUsersAsync())
@@ -2552,13 +2552,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SelectedServerIntrayItem = null;
     }
 
-    // ---- Intray view filters (ADR 0532): own-items-only by default; a toggle reveals group intrayes, and a
-    // CanManageIntrayes holder can open a specific user's intray via the picker (mutually exclusive with groups). ----
+    // ---- Intray view filters (ADR 0532): own-items-only by default; a toggle reveals group intrays, and a
+    // CanManageIntrays holder can open a specific user's intray via the picker (mutually exclusive with groups). ----
 
     [ObservableProperty] private bool _intrayIncludeGroups;
     [ObservableProperty] private Guid? _intrayViewUserId;
 
-    // The user-picker choices (only populated for a CanManageIntrayes holder); the first is "My intray" (null id).
+    // The user-picker choices (only populated for a CanManageIntrays holder); the first is "My intray" (null id).
     public ObservableCollection<IntrayUserPickerItem> IntrayUsers { get; } = [];
 
     [ObservableProperty] private IntrayUserPickerItem? _selectedIntrayUser;
@@ -2566,7 +2566,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // Suppresses the reentrant refresh when one filter handler adjusts the other (the two are mutually exclusive).
     private bool _adjustingIntrayFilters;
 
-    // The "Show group intrayes" checkbox — reveals my group intrayes; clears any admin user-view (they're exclusive).
+    // The "Show group intrays" checkbox — reveals my group intrays; clears any admin user-view (they're exclusive).
     async partial void OnIntrayIncludeGroupsChanged(bool value)
     {
         if (_adjustingIntrayFilters)
@@ -4074,20 +4074,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        for (var i = 0; i < RightLabels.Length; i++)
+        for (var i = 0; i < SystemRightsMatrix.Labels.Length; i++)
         {
-            PrincipalRights.Add(new PrincipalRightViewModel(RightLabels[i], RightAt(value.Rights, i)));
+            PrincipalRights.Add(new PrincipalRightViewModel(SystemRightsMatrix.Labels[i], SystemRightsMatrix.At(value.Rights, i)));
         }
     }
-
-    // The rights matrix labels, in SystemRightsData constructor order (so the checkbox states rebuild it 1:1).
-    private static readonly string[] RightLabels =
-    [
-        "Tenant administrator", "Impersonate", "Override checkout", "Legal hold",
-        "Manage classification", "Reset MFA", "Manage repositories", "Manage masks",
-        "Manage service accounts", "Manage users & groups", "View audit log", "Export", "Import",
-        "Manage intrayes", "Create external links",
-    ];
 
     async partial void OnSelectedPrincipalChanged(PrincipalRowViewModel? value)
     {
@@ -4976,33 +4967,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    private static bool RightAt(AdminClient.SystemRightsData r, int i) => i switch
-    {
-        0 => r.IsTenantAdmin,
-        1 => r.CanImpersonate,
-        2 => r.CanOverrideCheckout,
-        3 => r.CanLegalHold,
-        4 => r.CanManageClassification,
-        5 => r.CanResetMfa,
-        6 => r.CanManageRepositories,
-        7 => r.CanManageMasks,
-        8 => r.CanManageServiceAccounts,
-        9 => r.CanManageUsers,
-        10 => r.CanViewAuditLog,
-        11 => r.CanExport,
-        12 => r.CanImport,
-        13 => r.CanManageIntrayes,
-        _ => r.CanCreateExternalLink,
-    };
-
-    private AdminClient.SystemRightsData CurrentMatrixRights() => new(
-        PrincipalRights[0].IsChecked, PrincipalRights[1].IsChecked, PrincipalRights[2].IsChecked,
-        PrincipalRights[3].IsChecked, PrincipalRights[4].IsChecked, PrincipalRights[5].IsChecked,
-        PrincipalRights[6].IsChecked, PrincipalRights[7].IsChecked, PrincipalRights[8].IsChecked,
-        PrincipalRights[9].IsChecked, PrincipalRights[10].IsChecked, PrincipalRights[11].IsChecked,
-        PrincipalRights[12].IsChecked, PrincipalRights[13].IsChecked, PrincipalRights[14].IsChecked,
-        SelectedPrincipalClearance);
-
     public async Task LoadPrincipalsAsync()
     {
         if (_api is null)
@@ -5106,7 +5070,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         UgBusy = true;
         try
         {
-            var rights = CurrentMatrixRights();
+            var rights = SystemRightsMatrix.From(PrincipalRights, SelectedPrincipalClearance);
             if (p.IsGroup)
             {
                 await _api.Admin.SetRightsAsync(p.Source!, rights);
@@ -6894,12 +6858,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     // Headless exercise of intray send + admin triage (ADR 0532, see DesktopIntraySendTests): the admin uploads an
-    // own item, hands it to a freshly-created user via the send-target list, and — as a CanManageIntrayes holder —
+    // own item, hands it to a freshly-created user via the send-target list, and — as a CanManageIntrays holder —
     // sees it in that user's intray via ?user=. Cleans up the item + the user so the shared demo stays tidy.
     internal async Task<bool> IntraySendSelfTestAsync(string accessToken)
     {
         UseApi(new SimplArchiveApiClient(accessToken));
-        CanManageIntrayes = (await _api!.GetWhoAmIAsync()).CanManageIntrayes;
+        CanManageIntrays = (await _api!.GetWhoAmIAsync()).CanManageIntrays;
 
         var recipient = await _api.Admin.CreateUserAsync($"send-{Guid.NewGuid():N}@e2e.local", "Send Recipient");
 

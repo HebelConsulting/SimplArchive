@@ -1114,7 +1114,7 @@
     <value>Move to my intray</value>
   </data>
   <data name="IntrayShowGroups" xml:space="preserve">
-    <value>Show group intrayes</value>
+    <value>Show group intrays</value>
   </data>
   <data name="IntrayUserPicker" xml:space="preserve">
     <value>Open user's intray</value>
@@ -1128,8 +1128,8 @@
   <data name="IntrayUserTag" xml:space="preserve">
     <value>User</value>
   </data>
-  <data name="RightManageIntrayes" xml:space="preserve">
-    <value>Manage intrayes</value>
+  <data name="RightManageIntrays" xml:space="preserve">
+    <value>Manage intrays</value>
   </data>
   <data name="NoMask" xml:space="preserve">
     <value>(No mask)</value>

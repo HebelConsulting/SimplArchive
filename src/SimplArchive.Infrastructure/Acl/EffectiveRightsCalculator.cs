@@ -42,7 +42,7 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
     {
         var user = await _dbContext.Users
             .Where(u => u.Id == userId)
-            .Select(u => new { u.TenantId, u.IsActive, u.IsTenantAdmin, u.ClearanceRank })
+            .Select(u => new { u.TenantId, u.IsActive, u.IsTenantAdmin, u.ClearanceRank, u.CanAccessWithoutGrant })
             .SingleAsync(cancellationToken);
 
         var tenant = await _dbContext.Tenants
@@ -54,12 +54,22 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
         // "Tenant deactivation cascade to users", ADR "EffectiveRightsCalculator vs deactivated users", ADR
         // "Tenant admin ACL bypass". A tenant admin also bypasses clearance (ADR "Sensitivity clearance
         // enforcement"), which is why the clearance check below only runs on the non-admin path.
+        //
+        // This runs FIRST and must stay first (ADRs 0174/0153): neither the bypass below nor
+        // CanAccessWithoutGrant may resurrect access for a deactivated holder.
         if (tenant.Status == TenantStatus.Deactivated || !user.IsActive)
         {
             return NoRights;
         }
 
-        if (user.IsTenantAdmin)
+        // ...but the bypass is no longer unconditional: inside SOMEBODY ELSE'S personal space an admin is an
+        // ordinary caller in every respect — no ACL bypass and no clearance bypass (ADR 0670). What they keep
+        // there is CanAccessWithoutGrant, which promotion grants and which they can revoke from themselves.
+        // One column read rather than a walk to the root; see Document.PersonalRootOwnerId.
+        var personalRootOwnerId = await PersonalRootOwnerOfAsync(documentId, cancellationToken);
+        var insideForeignPersonalSpace = personalRootOwnerId is { } owner && owner != userId;
+
+        if (user.IsTenantAdmin && !insideForeignPersonalSpace)
         {
             return TenantAdminRights;
         }
@@ -69,8 +79,9 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
         // A group flagged IsTenantAdmin confers the same total ACL bypass (and clearance bypass) on its members
         // as an own IsTenantAdmin — see ADR "Enforce group system rights for members". Checked here (after the
         // own-admin short-circuit) so the expanded group set is computed once and reused for the clearance
-        // ceiling and the AclEntry match below.
-        if (await AnyGroupIsTenantAdminAsync(effectiveGroupIds, cancellationToken))
+        // ceiling and the AclEntry match below. Narrowed identically: a group-conferred admin is no more
+        // entitled to read somebody's personal space than a directly-flagged one.
+        if (!insideForeignPersonalSpace && await AnyGroupIsTenantAdminAsync(effectiveGroupIds, cancellationToken))
         {
             return TenantAdminRights;
         }
@@ -104,8 +115,35 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
                 && (a.UserId == userId || (a.GroupId.HasValue && effectiveGroupIds.Contains(a.GroupId.Value))))
             .ToListAsync(cancellationToken);
 
-        return BuildEffectiveRights(matchingEntries);
+        var rights = BuildEffectiveRights(matchingEntries);
+
+        // CanAccessWithoutGrant (ADR 0670): see + read where no grant exists, and NOTHING else. Applied last, so
+        // it is reached only by a caller who is active, whose tenant is active, and who has passed clearance —
+        // the right widens what a caller may READ, never who they are.
+        return rights.CanSee || !await HoldsAccessWithoutGrantAsync(user.CanAccessWithoutGrant, effectiveGroupIds, cancellationToken)
+            ? rights
+            : rights with { CanSee = true, CanReadContent = true };
     }
+
+    // Deliberately conditioned on "lacks CanSee" rather than topping every right up: a caller granted CanSee
+    // without CanReadContent keeps exactly that. A real grant is somebody's decision, and a blanket right that
+    // quietly widened it would make grants unreadable.
+    private async Task<bool> HoldsAccessWithoutGrantAsync(
+        bool ownRight, HashSet<Guid> effectiveGroupIds, CancellationToken cancellationToken) =>
+        ownRight
+        || (effectiveGroupIds.Count > 0
+            && await _dbContext.Groups.AnyAsync(
+                g => effectiveGroupIds.Contains(g.Id) && g.CanAccessWithoutGrant, cancellationToken));
+
+    // The owner of the personal space this document sits in, or null outside every personal space (ADR 0670).
+    // IgnoreQueryFilters(["SoftDeleteFilter"]) mirrors the other reads here, so a rights check against an
+    // already-soft-deleted document (restore, recycle bin) still resolves where it lives.
+    private async Task<Guid?> PersonalRootOwnerOfAsync(Guid documentId, CancellationToken cancellationToken) =>
+        await _dbContext.Documents
+            .IgnoreQueryFilters(["SoftDeleteFilter"])
+            .Where(d => d.Id == documentId)
+            .Select(d => d.PersonalRootOwnerId)
+            .FirstOrDefaultAsync(cancellationToken);
 
     // Clearance is about the document's OWN sensitivity label (Rank), not the inherited ACL scope — so this
     // reads the target document's label, not the governing document. Unlabelled (SensitivityLabelId == null) ⇒
@@ -170,7 +208,7 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
     {
         var serviceAccount = await _dbContext.ServiceAccounts
             .Where(s => s.Id == serviceAccountId)
-            .Select(s => new { s.TenantId, s.IsActive, s.ClearanceRank })
+            .Select(s => new { s.TenantId, s.IsActive, s.ClearanceRank, s.CanAccessWithoutGrant })
             .SingleAsync(cancellationToken);
 
         var tenant = await _dbContext.Tenants
@@ -195,7 +233,13 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
 
         var matchingEntries = await GetMatchingEntriesForServiceAccountAsync(serviceAccountId, governingDocumentId, cancellationToken);
 
-        return BuildEffectiveRights(matchingEntries);
+        var rights = BuildEffectiveRights(matchingEntries);
+
+        // CanAccessWithoutGrant (ADR 0670), same shape as the User path — no group union, because a
+        // ServiceAccount can't belong to a group, so its own column is the whole answer.
+        return rights.CanSee || !serviceAccount.CanAccessWithoutGrant
+            ? rights
+            : rights with { CanSee = true, CanReadContent = true };
     }
 
     private async Task<List<AclEntry>> GetMatchingEntriesForServiceAccountAsync(
@@ -246,7 +290,7 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
     {
         var user = await _dbContext.Users
             .Where(u => u.Id == userId)
-            .Select(u => new { u.TenantId, u.IsActive, u.IsTenantAdmin })
+            .Select(u => new { u.TenantId, u.IsActive, u.IsTenantAdmin, u.CanAccessWithoutGrant })
             .SingleAsync(cancellationToken);
 
         var tenantStatus = await _dbContext.Tenants
@@ -259,18 +303,21 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
             return SearchAccess.None;
         }
 
-        if (user.IsTenantAdmin)
-        {
-            return new SearchAccess(BypassAcl: true, []);
-        }
-
         var effectiveGroupIds = await GroupMembershipExpansion.GetEffectiveGroupIdsForUserAsync(_dbContext, userId, cancellationToken);
+        var accessWithoutGrant = await HoldsAccessWithoutGrantAsync(user.CanAccessWithoutGrant, effectiveGroupIds, cancellationToken);
 
-        // A group-conferred tenant admin bypasses the search ACL filter too (ADR "Enforce group system
-        // rights for members"), same as an own IsTenantAdmin above.
-        if (await AnyGroupIsTenantAdminAsync(effectiveGroupIds, cancellationToken))
+        // A group-conferred tenant admin bypasses the search ACL filter too (ADR "Enforce group system rights
+        // for members"), same as an own IsTenantAdmin. Both are computed before the branch now, because
+        // CanAccessWithoutGrant can confer the bypass on a caller who is no kind of admin at all (ADR 0670) —
+        // an auditor who may read the archive without being able to touch it.
+        var isAdmin = user.IsTenantAdmin || await AnyGroupIsTenantAdminAsync(effectiveGroupIds, cancellationToken);
+
+        if (isAdmin || accessWithoutGrant)
         {
-            return new SearchAccess(BypassAcl: true, []);
+            // Personal spaces are restricted to the caller's own UNLESS they hold the right — which is what
+            // makes a revoked admin's search honestly quiet rather than quietly complete.
+            return new SearchAccess(
+                BypassAcl: true, [], PersonalSpacesRestrictedTo: accessWithoutGrant ? null : userId);
         }
 
         var tokens = new List<string> { PrincipalToken.User(userId) };
@@ -284,7 +331,7 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
     {
         var serviceAccount = await _dbContext.ServiceAccounts
             .Where(s => s.Id == serviceAccountId)
-            .Select(s => new { s.TenantId, s.IsActive })
+            .Select(s => new { s.TenantId, s.IsActive, s.CanAccessWithoutGrant })
             .SingleAsync(cancellationToken);
 
         var tenantStatus = await _dbContext.Tenants
@@ -297,7 +344,13 @@ public class EffectiveRightsCalculator : IEffectiveRightsCalculator
             return SearchAccess.None;
         }
 
-        return new SearchAccess(BypassAcl: false, [PrincipalToken.ServiceAccount(serviceAccountId)]);
+        // No admin bypass exists here, but CanAccessWithoutGrant does (ADR 0670) — and it reads everywhere the
+        // User path does, personal spaces included, since a ServiceAccount has no personal space of its own to
+        // be "outside" of. Clearance still applies: the controller sets the ceiling from ClearanceScope, which
+        // is unrestricted only for admins.
+        return serviceAccount.CanAccessWithoutGrant
+            ? new SearchAccess(BypassAcl: true, [])
+            : new SearchAccess(BypassAcl: false, [PrincipalToken.ServiceAccount(serviceAccountId)]);
     }
 
     private static EffectiveRights BuildEffectiveRights(List<AclEntry> matchingEntries) => new(

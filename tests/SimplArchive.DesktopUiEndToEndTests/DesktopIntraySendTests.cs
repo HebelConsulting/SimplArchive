@@ -3,7 +3,7 @@ using SimplArchive.DesktopClient.ViewModels;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// Desktop intray send + admin triage (ADR 0532): an own item can be handed to another user, and a CanManageIntrayes
+// Desktop intray send + admin triage (ADR 0532): an own item can be handed to another user, and a CanManageIntrays
 // holder can open that user's intray via ?user=. Exercised at the VM level over the real Api (the dialog gesture is
 // view-only) — IntraySendSelfTestAsync sends a fresh item to a new user and confirms it moved.
 [Collection(UiCollection.Name)]

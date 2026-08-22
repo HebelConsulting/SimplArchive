@@ -119,6 +119,13 @@ public class DocumentConfiguration : IEntityTypeConfiguration<Document>
             .IsUnique()
             .HasFilter("\"PersonalOfUserId\" IS NOT NULL");
 
+        // "Everything in this user's personal space" (ADR 0670). FILTERED to non-null for the reason the
+        // StagedAt index is: almost every document is outside every personal space, so an unfiltered index
+        // would be the size of the table to serve a fraction of it. Not unique — a personal space has many
+        // rows, unlike PersonalOfUserId above, which marks only its root.
+        builder.HasIndex(d => new { d.TenantId, d.PersonalRootOwnerId })
+            .HasFilter("\"PersonalRootOwnerId\" IS NOT NULL");
+
         // The explicit current-version pointer (ADR "Version-restore via a current-version pointer") is a **plain
         // nullable column, NOT a FK**. A real Document→DocumentVersion FK forms a cycle with DocumentVersion→
         // Document (Cascade) that reorders SQLite's delete cascade so a document's versions are deleted before its

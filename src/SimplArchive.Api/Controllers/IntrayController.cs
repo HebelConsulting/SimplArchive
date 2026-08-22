@@ -116,7 +116,7 @@ public class IntrayController : ControllerBase
 
         public string? GroupName { get; set; }
 
-        // The source of another user's intray item (ADR 0532), shown only to a CanManageIntrayes holder viewing a
+        // The source of another user's intray item (ADR 0532), shown only to a CanManageIntrays holder viewing a
         // user's intray: the user's id + name, so the client labels it and its links carry `?user=`. Null otherwise.
         public Guid? UserId { get; set; }
 
@@ -229,8 +229,8 @@ public class IntrayController : ControllerBase
     private async Task<IntrayScope?> ResolveScopeAsync(Guid? group, Guid? user, string name, CancellationToken cancellationToken) =>
         await _scopes.ResolveAsync(group, user, name, cancellationToken);
 
-    private async Task<bool> CanManageIntrayesAsync(Guid userId, CancellationToken cancellationToken) =>
-        await _scopes.CanManageIntrayesAsync(userId, cancellationToken);
+    private async Task<bool> CanManageIntraysAsync(Guid userId, CancellationToken cancellationToken) =>
+        await _scopes.CanManageIntraysAsync(userId, cancellationToken);
 
     // The `?group=`/`?user=` source query for an item's action links, so the client keeps acting on the right
     // prefix; own-intray items carry no query.
@@ -275,7 +275,7 @@ public class IntrayController : ControllerBase
     // The caller's intray. By default shows only the caller's OWN items (ADR 0532's "show own only" filter, on by
     // default). `?includeGroups=true` also aggregates the intray of every group the caller is an effective member of
     // (each item labelled `[GroupName]`, carrying `?group=` on its links). `?user={id}` opens a specific user's
-    // intray instead — the caller's own, or any user's for a CanManageIntrayes holder (else 403).
+    // intray instead — the caller's own, or any user's for a CanManageIntrays holder (else 403).
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] bool includeGroups, [FromQuery] Guid? user, CancellationToken cancellationToken)
     {
@@ -284,10 +284,10 @@ public class IntrayController : ControllerBase
             return Forbid();
         }
 
-        // A CanManageIntrayes holder viewing another user's intray (the user-picker path).
+        // A CanManageIntrays holder viewing another user's intray (the user-picker path).
         if (user is { } targetUserId && targetUserId != callerId)
         {
-            if (!await CanManageIntrayesAsync(callerId, cancellationToken))
+            if (!await CanManageIntraysAsync(callerId, cancellationToken))
             {
                 return Forbid();
             }
@@ -302,7 +302,7 @@ public class IntrayController : ControllerBase
             return Ok(new IntrayResource { Items = userItems, Links = IntrayCollectionLinks() });
         }
 
-        // The caller's own intray, plus — opt-in via the filter — their group intrayes (alphabetical, stable order).
+        // The caller's own intray, plus — opt-in via the filter — their group intrays (alphabetical, stable order).
         var items = await ListPrefixItemsAsync(Prefix(tenantId, callerId), group: null, groupName: null, user: null, userName: null, cancellationToken);
 
         if (includeGroups)
@@ -407,7 +407,7 @@ public class IntrayController : ControllerBase
     [HttpHead("groups")]
     public IActionResult GroupsHead() => Scope() is null ? Forbid() : NoContent();
 
-    // The tenant's other users (id + name) — the "Send to a user" picker choices, and the CanManageIntrayes admin's
+    // The tenant's other users (id + name) — the "Send to a user" picker choices, and the CanManageIntrays admin's
     // user-picker for opening a user's intray (ADR 0532). Any authenticated caller (a hand-off to a colleague);
     // active users only, excluding the caller.
     [HttpGet("users")]

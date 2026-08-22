@@ -282,8 +282,9 @@
         new("View audit log", r => r.CanViewAuditLog, (r, v) => r.CanViewAuditLog = v),
         new("Export", r => r.CanExport, (r, v) => r.CanExport = v),
         new("Import", r => r.CanImport, (r, v) => r.CanImport = v),
-        new("Manage intrayes", r => r.CanManageIntrayes, (r, v) => r.CanManageIntrayes = v),
+        new("Manage intrays", r => r.CanManageIntrays, (r, v) => r.CanManageIntrays = v),
         new("Create external links", r => r.CanCreateExternalLink, (r, v) => r.CanCreateExternalLink = v),
+        new("Access without grant", r => r.CanAccessWithoutGrant, (r, v) => r.CanAccessWithoutGrant = v),
     ];
 
     private async Task LoadPrincipalsAsync()
@@ -860,8 +861,9 @@
         public bool CanViewAuditLog { get; set; }
         public bool CanExport { get; set; }
         public bool CanImport { get; set; }
-        public bool CanManageIntrayes { get; set; }
+        public bool CanManageIntrays { get; set; }
         public bool CanCreateExternalLink { get; set; }
+        public bool CanAccessWithoutGrant { get; set; }
         public int ClearanceRank { get; set; }
     }
 

@@ -132,8 +132,12 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             CanViewAuditLog = true,
             CanExport = true,
             CanImport = true,
-            CanManageIntrayes = true,
+            CanManageIntrays = true,
             CanCreateExternalLink = true,
+            // The tenant's first administrator gets the x-ray into personal spaces (ADR 0670) — implied at
+            // GRANT time, so it is an ordinary revocable column from here on. Without it the founding admin
+            // could not see the Administration → Users branch at all, the bypass no longer reaching there.
+            CanAccessWithoutGrant = true,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

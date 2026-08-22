@@ -4,7 +4,7 @@ using static Microsoft.Playwright.Assertions;
 
 namespace SimplArchive.UiEndToEndTests;
 
-// A UI flow (ADR 0532): the demo admin (a CanManageIntrayes holder) uploads an item to their own intray, hands it
+// A UI flow (ADR 0532): the demo admin (a CanManageIntrays holder) uploads an item to their own intray, hands it
 // to another user via the "Send to…" dialog — it leaves the admin's intray — and then, using the admin user-picker,
 // opens that user's intray and sees the item there.
 [Collection(UiCollection.Name)]
@@ -56,7 +56,7 @@ public class WebIntraySendTests
         // It leaves the admin's own intray...
         await Expect(page.Locator(".wb-list-row").Filter(new() { HasText = name })).Not.ToBeVisibleAsync();
 
-        // ...and the admin (CanManageIntrayes) opens the recipient's intray via the user-picker and sees it there.
+        // ...and the admin (CanManageIntrays) opens the recipient's intray via the user-picker and sees it there.
         // The picker lives in .wb-intray-filters, below the action bar and above the list it filters (#521) —
         // it used to sit in .wb-search-bar, where its height set every button's beside it.
         await page.Locator(".wb-intray-filters .mud-select .mud-input-control").First.ClickAsync();

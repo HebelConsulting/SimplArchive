@@ -158,7 +158,7 @@ public sealed class SimplArchiveApiClient
 
     // The signed-in principal's ids + display names (ADR "S3-backed inbox") — names drive the local folder
     // path. IsTenantAdmin gates admin-only actions (e.g. the searchable-PDF backfill).
-    public sealed record WhoAmIInfo(Guid? UserId, Guid? TenantId, string? TenantName, string? UserName, bool IsTenantAdmin, bool CanManageUsers, bool HasPhoto, bool CanViewAuditLog, bool MfaEnabled, bool CanResetMfa, bool CanLegalHold, bool CanManageClassification, bool CanOverrideCheckout = false, bool CanImpersonate = false, string? ImpersonatedBy = null, bool CanExport = false, bool CanImport = false, bool CanManageIntrayes = false, bool CanManageServiceAccounts = false);
+    public sealed record WhoAmIInfo(Guid? UserId, Guid? TenantId, string? TenantName, string? UserName, bool IsTenantAdmin, bool CanManageUsers, bool HasPhoto, bool CanViewAuditLog, bool MfaEnabled, bool CanResetMfa, bool CanLegalHold, bool CanManageClassification, bool CanOverrideCheckout = false, bool CanImpersonate = false, string? ImpersonatedBy = null, bool CanExport = false, bool CanImport = false, bool CanManageIntrays = false, bool CanManageServiceAccounts = false);
 
 
     /// <summary>The essentials of a document reached by ADDRESS — what a cross-tab open needs in one read.</summary>
@@ -204,7 +204,7 @@ public sealed class SimplArchiveApiClient
             json.TryGetProperty("impersonatedBy", out var ib) && ib.ValueKind == JsonValueKind.String ? ib.GetString() : null,
             json.TryGetProperty("canExport", out var ce) && ce.ValueKind == JsonValueKind.True,
             json.TryGetProperty("canImport", out var cim) && cim.ValueKind == JsonValueKind.True,
-            json.TryGetProperty("canManageIntrayes", out var cmi) && cmi.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("canManageIntrays", out var cmi) && cmi.ValueKind == JsonValueKind.True,
             json.TryGetProperty("canManageServiceAccounts", out var cmsa) && cmsa.ValueKind == JsonValueKind.True);
     }
 

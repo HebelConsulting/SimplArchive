@@ -799,7 +799,7 @@
                 <IntrayTab CurrentFolderId="_selectedFolder?.Id" CurrentFolderName="@(_selectedFolder?.Name)"
                           CurrentDocumentId="@(_selectedItem is { IsFolder: false, IsReference: false } d ? (Guid?)d.Id : null)"
                           CurrentDocumentName="@(_selectedItem?.Name)"
-                          MyUserId="_myUserId" CanManageIntrayes="_canManageIntrayes" />
+                          MyUserId="_myUserId" CanManageIntrays="_canManageIntrays" />
             }
             else if (_activeTab == Tab.Checkout)
             {
@@ -1194,7 +1194,7 @@
             _canImpersonate = me?.CanImpersonate ?? false;
             _canExport = me?.CanExport ?? false;
             _canImport = me?.CanImport ?? false;
-            _canManageIntrayes = me?.CanManageIntrayes ?? false;
+            _canManageIntrays = me?.CanManageIntrays ?? false;
             _myUserId = me?.UserId;
             _viewerName = me?.UserName ?? "";
         }
@@ -1246,7 +1246,7 @@
     private bool _canImpersonate;
     private bool _canExport;
     private bool _canImport;
-    private bool _canManageIntrayes;
+    private bool _canManageIntrays;
     private Guid? _myUserId;
 
     // The shell's half of the shared row actions (ADR 0558): each reports whether anything changed, and the
@@ -1321,7 +1321,7 @@
 
     // The tenant's users and groups as dialog options. Only the external-links dialog needs them, so this is
     // deliberately a fetch-on-open rather than page state — nothing else here would keep it fresh.
-    private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanManageServiceAccounts { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public bool CanManageIntrayes { get; set; } public Guid? UserId { get; set; } public string UserName { get; set; } = ""; }
+    private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanManageServiceAccounts { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public bool CanManageIntrays { get; set; } public Guid? UserId { get; set; } public string UserName { get; set; } = ""; }
     // The logged-in user's display name — used in the sensitivity watermark (ADR "Document watermarking").
     private string _viewerName = "";
     private record BackfillResponse { public int Count { get; set; } }

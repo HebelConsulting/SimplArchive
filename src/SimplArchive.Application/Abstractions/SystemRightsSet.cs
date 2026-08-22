@@ -1,7 +1,7 @@
 namespace SimplArchive.Application.Abstractions;
 
 /// <summary>
-/// A tenant-wide system-level rights bundle — the 10 boolean rights carried by both <c>User</c> and
+/// A tenant-wide system-level rights bundle — the boolean rights carried by both <c>User</c> and
 /// <c>Group</c>. See ADR "Enforce group system rights for members": a user's <em>effective</em> system
 /// rights are the union of their own and every group they effectively belong to.
 /// </summary>
@@ -19,12 +19,15 @@ public sealed record SystemRightsSet(
     bool CanViewAuditLog,
     bool CanExport,
     bool CanImport,
-    bool CanManageIntrayes,
+    bool CanManageIntrays,
 
     // May share a document with someone who has no account (ADR 0546).
-    bool CanCreateExternalLink)
+    bool CanCreateExternalLink,
+
+    // See + read any document the holder holds no CanSee grant on, and nothing else (ADR 0670).
+    bool CanAccessWithoutGrant)
 {
-    public static readonly SystemRightsSet None = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
+    public static readonly SystemRightsSet None = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
 
     // Boolean OR of every right — the union of two bundles.
     public SystemRightsSet Union(SystemRightsSet other) => new(
@@ -41,6 +44,7 @@ public sealed record SystemRightsSet(
         CanViewAuditLog || other.CanViewAuditLog,
         CanExport || other.CanExport,
         CanImport || other.CanImport,
-        CanManageIntrayes || other.CanManageIntrayes,
-        CanCreateExternalLink || other.CanCreateExternalLink);
+        CanManageIntrays || other.CanManageIntrays,
+        CanCreateExternalLink || other.CanCreateExternalLink,
+        CanAccessWithoutGrant || other.CanAccessWithoutGrant);
 }

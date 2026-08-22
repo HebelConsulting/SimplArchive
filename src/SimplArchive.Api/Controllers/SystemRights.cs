@@ -34,13 +34,18 @@ public class SystemRights
 
     public bool CanImport { get; set; }
 
-    // Manage other users' intrayes (ADR 0532): see + move any user's intray items tenant-wide.
-    public bool CanManageIntrayes { get; set; }
+    // Manage other users' intrays (ADR 0532): see + move any user's intray items tenant-wide.
+    public bool CanManageIntrays { get; set; }
 
     // Share a document outside the tenant via an expiring link (ADR 0546). Its own right rather than part of
     // reading: handing a document to someone with no account is a different act from opening it, and the people
     // trusted to do the second are not automatically trusted to do the first.
     public bool CanCreateExternalLink { get; set; }
+
+    // See + read any document the holder holds no CanSee grant on, and nothing else (ADR 0670). What an
+    // administrator keeps once the tenant-admin bypass stops applying inside another user's personal space —
+    // and revocable, so an admin can honestly give up their x-ray.
+    public bool CanAccessWithoutGrant { get; set; }
 
     // Data-classification clearance (ADR "Sensitivity clearance enforcement") — not a boolean right but carried
     // in the same bundle so the Users & groups tab sets it alongside the rights. 0 = lowest (unlabelled only).
@@ -87,8 +92,9 @@ public static class SystemRightsPolicy
             && IsGrantAllowed(caller.CanViewAuditLog, current.CanViewAuditLog, proposed.CanViewAuditLog)
             && IsGrantAllowed(caller.CanExport, current.CanExport, proposed.CanExport)
             && IsGrantAllowed(caller.CanImport, current.CanImport, proposed.CanImport)
-            && IsGrantAllowed(caller.CanManageIntrayes, current.CanManageIntrayes, proposed.CanManageIntrayes)
-            && IsGrantAllowed(caller.CanCreateExternalLink, current.CanCreateExternalLink, proposed.CanCreateExternalLink);
+            && IsGrantAllowed(caller.CanManageIntrays, current.CanManageIntrays, proposed.CanManageIntrays)
+            && IsGrantAllowed(caller.CanCreateExternalLink, current.CanCreateExternalLink, proposed.CanCreateExternalLink)
+            && IsGrantAllowed(caller.CanAccessWithoutGrant, current.CanAccessWithoutGrant, proposed.CanAccessWithoutGrant);
     }
 
     private static bool IsGrantAllowed(bool callerHolds, bool current, bool proposed)

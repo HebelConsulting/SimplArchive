@@ -73,6 +73,24 @@ public sealed class OpenSearchService : ISearchService
         {
             clauses.Add(new { terms = new { allowedPrincipals = access.PrincipalTokens } });
         }
+        else if (access.PersonalSpacesRestrictedTo is { } ownPersonalSpace)
+        {
+            // The narrowed bypass (ADR 0670). A bypass adds NO acl clause, so "everything except other people's
+            // personal spaces" has to be said here instead: a hit qualifies if it carries no personalOf at all
+            // (the overwhelming majority) or if that personalOf is the caller's own.
+            clauses.Add(new
+            {
+                @bool = new
+                {
+                    should = new object[]
+                    {
+                        new { @bool = new { must_not = new { exists = new { field = "personalOf" } } } },
+                        new { term = new { personalOf = ownPersonalSpace.ToString() } },
+                    },
+                    minimum_should_match = 1,
+                },
+            });
+        }
 
         // Data-classification clearance (ADR "Sensitivity clearance enforcement"): drop any hit whose indexed
         // sensitivityRank exceeds the caller's clearance ceiling. Unlabelled documents index as rank 0, so they

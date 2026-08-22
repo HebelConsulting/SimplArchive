@@ -26,7 +26,7 @@ namespace SimplArchive.Infrastructure.Intray;
 /// cover a file dropped over a weekend and finished on Monday, and short enough that history is left alone.
 /// </para>
 /// <para>
-/// Own intrayes only. A group intray has no user whose preference to read (the setting is per-user, #491), and
+/// Own intrays only. A group intray has no user whose preference to read (the setting is per-user, #491), and
 /// guessing whose it is would be worse than leaving those to the client-signalled path, where the person who
 /// uploaded is known.
 /// </para>

@@ -24,8 +24,8 @@ public class ServiceAccount : ITenantScoped
     // (no interactive User login flow exists yet). Not implied by anything else on ServiceAccount.
     public bool CanManageRepositories { get; set; }
 
-    // Manage other users' intrayes (ADR 0532) — mirrors User.CanManageIntrayes for a ServiceAccount caller.
-    public bool CanManageIntrayes { get; set; }
+    // Manage other users' intrays (ADR 0532) — mirrors User.CanManageIntrays for a ServiceAccount caller.
+    public bool CanManageIntrays { get; set; }
 
     // Mirrors User.CanManageMasks — built on both principals from the start this time, learning from
     // CanManageRepositories only getting a ServiceAccount mirror after the fact. See ADR "Mask creation
@@ -53,6 +53,11 @@ public class ServiceAccount : ITenantScoped
     public bool CanExport { get; set; }
 
     public bool CanImport { get; set; }
+
+    // See + read any document it holds no CanSee grant on, and nothing else (ADR 0670) — mirrors User's, for an
+    // automation that must sweep the archive (indexing, export) without being granted edit anywhere. No
+    // IsTenantAdmin equivalent exists here, so nothing implies it: it is always granted deliberately.
+    public bool CanAccessWithoutGrant { get; set; }
 
     // Data-classification clearance (ADR "Sensitivity clearance enforcement"). A ServiceAccount can't belong to
     // a group, so its effective clearance is just this value. Default 0.

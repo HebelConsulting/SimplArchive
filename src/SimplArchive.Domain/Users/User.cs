@@ -67,9 +67,9 @@ public class User : ITenantScoped
 
     public bool CanManageRepositories { get; set; }
 
-    // Manage other users' intrayes (ADR 0532): see + move any user's intray items tenant-wide (a triage right). Not
+    // Manage other users' intrays (ADR 0532): see + move any user's intray items tenant-wide (a triage right). Not
     // implied by IsTenantAdmin, same as every other right here.
-    public bool CanManageIntrayes { get; set; }
+    public bool CanManageIntrays { get; set; }
 
     public bool CanManageServiceAccounts { get; set; }
 
@@ -98,6 +98,16 @@ public class User : ITenantScoped
     // Not backfilled for existing admins — it should be granted deliberately.
     public bool CanCreateExternalLink { get; set; }
 
+    // See + read any document the holder holds no CanSee grant on — and NOTHING else (ADR 0670). This is what
+    // an administrator keeps once the tenant-admin bypass stops applying inside another user's personal space,
+    // and it reads globally, so a non-admin auditor can hold it too. Clearance (ADR 0429) still applies, and
+    // the deactivated-user short-circuit still runs first.
+    //
+    // The ONE right here that IsTenantAdmin implies — at GRANT time only: promotion sets it, and nothing ever
+    // infers it from IsTenantAdmin at check time. Every neighbouring comment asserts the opposite pattern, so
+    // read ADR 0670 before "fixing" the inconsistency: making it implied at check time would make it
+    // unrevokable, which is exactly what it must not be.
+    public bool CanAccessWithoutGrant { get; set; }
 
     // Data-classification clearance (ADR "Sensitivity clearance enforcement"): the highest sensitivity-label
     // Rank this user may access on their own. A user's *effective* clearance is the max of this and every group

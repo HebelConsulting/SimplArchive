@@ -51,7 +51,7 @@ public class Notification : ITenantScoped
 
     public Guid TenantId { get; set; }
 
-    // The User who receives it — in-app intrayes are per-User (a ServiceAccount has none).
+    // The User who receives it — in-app intrays are per-User (a ServiceAccount has none).
     public Guid RecipientUserId { get; set; }
 
     public NotificationType Type { get; set; }
