@@ -1,0 +1,49 @@
+# AWS-installation IaC checks (ADR 0675, issue #712): tofu fmt/validate + tflint over tools/aws-install/.
+# Runs ONLY on the private canonical repo (same gate as manual.yml) — tools/ is withheld from the public
+# mirror, so on the mirror this workflow has nothing to check and must not fail for it.
+# Validate-only by design until a scratch AWS account exists; a plan/apply smoke joins later (ADR 0675).
+name: Infra
+
+on:
+  pull_request:
+    paths:
+      - "tools/aws-install/**"
+      - ".github/workflows/infra.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tools/aws-install/**"
+      - ".github/workflows/infra.yml"
+
+concurrency:
+  group: infra-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: tofu fmt + validate + tflint
+    if: ${{ github.repository == 'HebelConsulting/SimplArchivePrivate' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: tools/aws-install
+    steps:
+      - uses: actions/checkout@v7
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.10.6
+      - name: tofu fmt
+        run: tofu fmt -check -recursive -diff
+      - name: tofu validate
+        run: |
+          tofu init -backend=false -input=false
+          tofu validate
+      - uses: terraform-linters/setup-tflint@v6
+      - name: tflint
+        run: |
+          tflint --init
+          tflint --call-module-type=none
