@@ -19,11 +19,13 @@ public sealed class SearchIndexWorker : BackgroundService
     private const int BatchSize = 100;
 
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly SearchReindexState _reindexState;
     private readonly ILogger<SearchIndexWorker> _logger;
 
-    public SearchIndexWorker(IServiceScopeFactory scopeFactory, ILogger<SearchIndexWorker> logger)
+    public SearchIndexWorker(IServiceScopeFactory scopeFactory, SearchReindexState reindexState, ILogger<SearchIndexWorker> logger)
     {
         _scopeFactory = scopeFactory;
+        _reindexState = reindexState;
         _logger = logger;
     }
 
@@ -52,17 +54,46 @@ public sealed class SearchIndexWorker : BackgroundService
         }
     }
 
-    private async Task<bool> DrainOnceAsync(CancellationToken cancellationToken)
+    /// <summary>One drain pass; public because it IS the unit the #661 race fix is tested at.</summary>
+    public async Task<bool> DrainOnceAsync(CancellationToken cancellationToken)
     {
+        // PAUSED while a rebuild runs (#661, the data-losing race): this worker writes through the alias,
+        // which during a rebuild points at the index the swap is about to DELETE. A row drained in that
+        // window succeeded, so it was removed — and then the swap took the document with the old index,
+        // leaving nothing anywhere that says so. Holding the rows instead means they drain into the NEW
+        // index right after the swap. The boundary is safe without further ceremony: a batch already in
+        // flight when the flag went up holds only rows committed before the rebuild's snapshot read, and
+        // those documents are in the snapshot.
+        //
+        // Deliberately unconditional — the first build pauses too. Its alias exists from the start and the
+        // backfill covers everything committed before its snapshot; rows for anything later simply wait the
+        // few extra seconds. One rule beats two.
+        if (_reindexState.IsRunning)
+        {
+            _logger.LogDebug("A search-index rebuild is running; holding the outbox until it swaps.");
+            return false;
+        }
+
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
         var tenantAccessor = scope.ServiceProvider.GetRequiredService<CurrentTenantAccessor>();
         var indexer = scope.ServiceProvider.GetRequiredService<IDocumentIndexer>();
 
-        var batch = await dbContext.SearchIndexOutbox
+        // Oldest-first, ordered CLIENT-SIDE over a keys-only projection — SQLite cannot translate a
+        // DateTimeOffset ORDER BY (the RepositoryExporter precedent), and this worker's drain pass is now
+        // exercised against SQLite by the #661 pause test. The projection is two columns over a table that
+        // is empty in the steady state; the second query fetches only the chosen batch.
+        var keys = (await dbContext.SearchIndexOutbox
+                .Select(o => new { o.Id, o.EnqueuedAt })
+                .ToListAsync(cancellationToken))
             .OrderBy(o => o.EnqueuedAt)
             .ThenBy(o => o.Id)
             .Take(BatchSize)
+            .Select(o => o.Id)
+            .ToList();
+
+        var batch = await dbContext.SearchIndexOutbox
+            .Where(o => keys.Contains(o.Id))
             .ToListAsync(cancellationToken);
 
         if (batch.Count == 0)

@@ -258,6 +258,40 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         return (clientId, secret, tenantId);
     }
 
+    // Seeds a PlatformAdministrator (+ OpenIddict app) — the tenant-less principal platform maintenance
+    // (tenant onboarding, the search reindex) authorizes against. Same client-credentials flow as a
+    // ServiceAccount; TokenController checks this table when a client_id matches no ServiceAccount.
+    public async Task<(string ClientId, string Secret)> SeedPlatformAdministratorAsync()
+    {
+        var clientId = Guid.NewGuid().ToString();
+        var secret = Guid.NewGuid().ToString("N");
+
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+        db.PlatformAdministrators.Add(new SimplArchive.Domain.PlatformAdministrators.PlatformAdministrator
+        {
+            Id = Guid.NewGuid(),
+            Name = $"platform-{clientId[..8]}",
+            OpenIddictApplicationClientId = clientId,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        await scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>().CreateAsync(new OpenIddictApplicationDescriptor
+        {
+            ClientId = clientId,
+            ClientSecret = secret,
+            Permissions =
+            {
+                OpenIddictConstants.Permissions.Endpoints.Token,
+                OpenIddictConstants.Permissions.GrantTypes.ClientCredentials,
+            },
+        });
+
+        return (clientId, secret);
+    }
+
     // Seeds an additional ServiceAccount (+ OpenIddict app) into an existing tenant — for tests needing a second
     // principal in the same tenant (e.g. a caller with no ACL grant, to prove indexed-ACL search filtering).
     public async Task<(string ClientId, string Secret)> SeedServiceAccountInTenantAsync(Guid tenantId, bool canManageRepositories)
