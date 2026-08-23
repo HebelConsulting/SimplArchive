@@ -2277,6 +2277,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             HasExportRight = me.CanExport;
             HasImportRight = me.CanImport;
             CanManageIntrays = me.CanManageIntrays;
+            CanManageMailRouting = me.CanManageMailRouting;
             IsImpersonating = me.ImpersonatedBy is not null;
             ImpersonatedName = me.ImpersonatedBy is not null ? me.UserName : null;
             _currentUserId = me.UserId;
@@ -2322,6 +2323,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // Whether the caller holds CanManageIntrays (own or via a group) — gates the intray user-picker that opens
     // another user's intray for triage (ADR 0532); set from whoami on login.
     [ObservableProperty] private bool _canManageIntrays;
+
+    // Whether the caller may change mail routing (#703) — without it a Mailbox's address field renders
+    // read-only instead of offering an edit the server would 403; set from whoami on login.
+    [ObservableProperty] private bool _canManageMailRouting;
 
     // User impersonation (ADR "User impersonation"): CanImpersonate gates the "Impersonate" action; while
     // IsImpersonating, a banner shows ImpersonatedName + a Stop button. _adminApi is the pre-impersonation client
@@ -4499,6 +4504,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // user's choice (reference / file / cancel), or null if dismissed.
     public Func<DuplicatePromptRequest, Task<DuplicatePromptResult?>>? DuplicateUploadDialog { get; set; }
 
+    // The duplicate-address-claim question (#703), provided by the view (the AnnotationDialog pattern): the
+    // message names the mailbox already claiming the address; true = deliver to both, and the save retries
+    // with the confirmation.
+    public Func<string, Task<bool>>? ConfirmDuplicateClaimDialog { get; set; }
+
     // Set by the view: shows the name-conflict modal when a dropped file's name is already taken in the target
     // folder, and returns what the user meant (a new version / a new name), or null if dismissed. The decision
     // and the filing that follows live in Services.UploadConflictResolver — only the window is the view's job.
@@ -5788,7 +5798,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         foreach (var field in fields)
         {
             var values = valuesByName.TryGetValue(field.Name, out var v) ? v : [];
-            MaskEditFields.Add(MaskFieldEditViewModel.Create(field, values));
+            MaskEditFields.Add(MaskFieldEditViewModel.Create(field, values, CanManageMailRouting));
         }
     }
 
@@ -5891,7 +5901,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             {
                 // Fill index data first, then (re)assign the mask — assigning re-checks required fields, so
                 // the values must already be in place (ADR "Document metadata (index data) endpoints").
-                await _api.Documents.SetIndexDataAsync(DetailHref("index-data"), MaskEditFields.Select(f => (f.FieldDefinitionId, f.ToValues())));
+                // The duplicate-claim ask-and-retry (#703) is the client's; this only wires the dialog in. A
+                // decline throws, skipping the mask assignment below — its re-check of required fields would
+                // run against index data that never landed.
+                await _api.Documents.SetIndexDataAsync(DetailHref("index-data"), MaskEditFields.Select(f => (f.FieldDefinitionId, f.ToValues())), ConfirmDuplicateClaimDialog);
                 if (newMaskId != _originalMaskId)
                 {
                     await _api.Masks.SetMaskAsync(DetailHref("mask"), newMaskId.Value);
@@ -5900,6 +5913,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
         catch (ApiActionException e) { failures.Add(e.Message); } // required field missing / invalid value
+        catch (DuplicateAddressClaimException e) { failures.Add(e.Message); } // declined the fan-out question
         catch (Exception e) { failures.Add($"mask ({e.Message})"); }
 
         // A folder's contents order commits with everything else, from the same Save (issue #408). Skipped for a

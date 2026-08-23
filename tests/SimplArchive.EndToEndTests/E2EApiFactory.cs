@@ -296,7 +296,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
     }
 
     // Seeds an active User (with a password) into a tenant, for the interactive-login flow. Returns the user id.
-    public async Task<Guid> SeedUserAsync(Guid tenantId, string email, string password, string displayName, bool canViewAuditLog = false, bool canManageUsers = false, bool canResetMfa = false, bool canExport = false, bool canImport = false, bool canManageServiceAccounts = false, bool canManageRepositories = false, bool canManageIntrays = false, bool canCreateExternalLink = false, bool isTenantAdmin = false)
+    public async Task<Guid> SeedUserAsync(Guid tenantId, string email, string password, string displayName, bool canViewAuditLog = false, bool canManageUsers = false, bool canResetMfa = false, bool canExport = false, bool canImport = false, bool canManageServiceAccounts = false, bool canManageRepositories = false, bool canManageIntrays = false, bool canCreateExternalLink = false, bool canManageMailRouting = false, bool isTenantAdmin = false)
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
@@ -316,6 +316,7 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
             CanManageRepositories = canManageRepositories,
             CanManageIntrays = canManageIntrays,
             CanCreateExternalLink = canCreateExternalLink,
+            CanManageMailRouting = canManageMailRouting,
             IsTenantAdmin = isTenantAdmin,
             CreatedAt = DateTimeOffset.UtcNow,
         };
@@ -521,6 +522,10 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         // an admin seeded WITHOUT this would be refused the Administration → Users view, and every test that
         // uses this helper as "make them an admin" would be quietly testing a half-promoted user.
         user.CanAccessWithoutGrant = true;
+
+        // The founding-admin bundle carries the routing right (#703) — this helper stands in for "a fully
+        // provisioned tenant admin", so it mirrors TenantProvisioningService rather than bare promotion.
+        user.CanManageMailRouting = true;
         await db.SaveChangesAsync();
     }
 

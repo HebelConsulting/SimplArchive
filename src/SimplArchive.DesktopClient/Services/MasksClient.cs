@@ -29,7 +29,10 @@ public sealed class MasksClient
     // IsList defaults to false so the designer-preview rows below read as before; it is what tells the editor
     // to be a list rather than a single value (#703), and it comes from the SERVER rather than being inferred
     // from DataType — the two clients inferring a rule separately is how they came to disagree before (#671).
-    public sealed record MaskFieldInfo(Guid Id, string Name, string DataType, bool IsRequired, bool IsList = false);
+    public sealed record MaskFieldInfo(Guid Id, string Name, string DataType, bool IsRequired, bool IsList = false,
+        // Writing this field needs the manage-mail-routing right (#703) — the server marks it; combined with
+        // whoami's flag it renders the editor read-only instead of offering an edit the save would 403.
+        bool RequiresMailRouting = false);
 
     /// <summary>The masks a user may actually CHOOSE for a document.</summary>
     /// <remarks>
@@ -75,7 +78,8 @@ public sealed class MasksClient
                     f.GetProperty("name").GetString() ?? string.Empty,
                     f.TryGetProperty("dataType", out var dataType) ? dataType.GetString() ?? "Text" : "Text",
                     f.TryGetProperty("isRequired", out var required) && required.GetBoolean(),
-                    f.TryGetProperty("isList", out var isList) && isList.GetBoolean()));
+                    f.TryGetProperty("isList", out var isList) && isList.GetBoolean(),
+                    f.TryGetProperty("requiresMailRouting", out var rmr) && rmr.GetBoolean()));
             }
         }
 

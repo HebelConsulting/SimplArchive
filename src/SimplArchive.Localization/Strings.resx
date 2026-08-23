@@ -4566,4 +4566,22 @@
   <data name="StTakenOver" xml:space="preserve">
     <value>You now have full access to &#x27;{0}&#x27;.</value>
   </data>
+  <data name="DupClaimTitle" xml:space="preserve">
+    <value>Address already claimed</value>
+  </data>
+  <data name="DupClaimConfirm" xml:space="preserve">
+    <value>Deliver to both</value>
+  </data>
+  <data name="DupClaimBody" xml:space="preserve">
+    <value>'{0}' already claims this address. Deliver to both mailboxes?</value>
+  </data>
+  <data name="ApiErrMailRoutingRightRequired" xml:space="preserve">
+    <value>This change affects mail routing and needs the manage-mail-routing right.</value>
+  </data>
+  <data name="ApiErrUserAddressClaimNotAllowed" xml:space="preserve">
+    <value>This is a user's personal address and cannot be claimed by a mailbox.</value>
+  </data>
+  <data name="ApiErrPersonalSpaceStructure" xml:space="preserve">
+    <value>This is one of the personal space's standing folders and cannot be changed.</value>
+  </data>
 </root>

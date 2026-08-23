@@ -65,6 +65,21 @@ public static class DemoDataSeeder
 
         if (await dbContext.Tenants.AnyAsync(t => t.Name == demoTenantName && t.Status == TenantStatus.Active))
         {
+            // The one heal that runs on an EXISTING demo volume (#574's lesson): the founding-admin bundle
+            // gains rights over time, and a tenant provisioned before one existed strands its admin without
+            // it — CanManageMailRouting (#703) arrived after every long-lived dev volume did. Grant-if-absent
+            // on the demo admin only; a deliberately revoked right stays revoked... which cannot be told
+            // apart from "never had it" for a bool, so on the DEMO tenant the seed's answer wins.
+            var normalized = demoAdminEmail.ToUpperInvariant();
+            var admin = await dbContext.Users.IgnoreQueryFilters(["TenantFilter"])
+                .Where(u => dbContext.Tenants.Any(t => t.Id == u.TenantId && t.Name == demoTenantName))
+                .SingleOrDefaultAsync(u => u.NormalizedEmail == normalized);
+            if (admin is { CanManageMailRouting: false })
+            {
+                admin.CanManageMailRouting = true;
+                await dbContext.SaveChangesAsync();
+            }
+
             return;
         }
 

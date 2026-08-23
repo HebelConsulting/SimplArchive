@@ -41,6 +41,10 @@ public class ApiExceptionHandler : IExceptionHandler
             Instance = httpContext.Request.Path,
         };
         problemDetails.Extensions["errorCode"] = errorCode;
+        foreach (var (key, value) in (exception as ApiException)?.Extensions ?? new Dictionary<string, object?>())
+        {
+            problemDetails.Extensions[key] = value;
+        }
 
         httpContext.Response.StatusCode = statusCode;
         // RFC 7807's own media type, not plain application/json — see ADR "API versioning and error

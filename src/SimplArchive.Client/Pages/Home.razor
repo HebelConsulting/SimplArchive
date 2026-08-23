@@ -1204,6 +1204,7 @@
             _canExport = me?.CanExport ?? false;
             _canImport = me?.CanImport ?? false;
             _canManageIntrays = me?.CanManageIntrays ?? false;
+            Catalogs.MayRouteMail = me?.CanManageMailRouting ?? false;
             _myUserId = me?.UserId;
             _viewerName = me?.UserName ?? "";
         }
@@ -1330,7 +1331,7 @@
 
     // The tenant's users and groups as dialog options. Only the external-links dialog needs them, so this is
     // deliberately a fetch-on-open rather than page state — nothing else here would keep it fresh.
-    private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanManageServiceAccounts { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public bool CanManageIntrays { get; set; } public Guid? UserId { get; set; } public string UserName { get; set; } = ""; }
+    private record WhoAmIResponse { public bool IsTenantAdmin { get; set; } public bool CanManageUsers { get; set; } public bool CanManageServiceAccounts { get; set; } public bool CanViewAuditLog { get; set; } public bool CanResetMfa { get; set; } public bool CanLegalHold { get; set; } public bool CanManageClassification { get; set; } public bool CanOverrideCheckout { get; set; } public bool CanImpersonate { get; set; } public bool CanExport { get; set; } public bool CanImport { get; set; } public bool CanManageIntrays { get; set; } public bool CanManageMailRouting { get; set; } public Guid? UserId { get; set; } public string UserName { get; set; } = ""; }
     // The logged-in user's display name — used in the sensitivity watermark (ADR "Document watermarking").
     private string _viewerName = "";
     private record BackfillResponse { public int Count { get; set; } }
@@ -2339,6 +2340,27 @@
         }
 
         var outcome = await Editor.SaveAsync();
+
+        // A duplicate address claim is a QUESTION, not a refusal (#703): the message names the mailbox
+        // already claiming the address, and confirming makes delivery fan out to both. On yes, the save
+        // re-runs with the confirmation — fields already committed are skipped by their change detection.
+        if (outcome.DuplicateClaim is { } claim)
+        {
+            var confirmed = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+            {
+                Title = Strings.Get("DupClaimTitle"),
+                Message = claim,
+                YesText = Strings.Get("DupClaimConfirm"),
+                CancelText = Strings.Get("Cancel"),
+            });
+            if (confirmed != true)
+            {
+                return; // the edit stays open, the list unchanged
+            }
+
+            outcome = await Editor.SaveAsync(confirmDuplicateClaims: true);
+        }
+
         if (!outcome.Saved)
         {
             // Named, not spelled: the editor says WHICH fields were refused and the page says it in the reader's

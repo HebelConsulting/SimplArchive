@@ -138,6 +138,9 @@ public sealed class TenantProvisioningService : ITenantProvisioningService
             // GRANT time, so it is an ordinary revocable column from here on. Without it the founding admin
             // could not see the Administration → Users branch at all, the bypass no longer reaching there.
             CanAccessWithoutGrant = true,
+            // Mail routing is part of founding a tenant too: the first administrator must be able to give a
+            // department a mailbox without a second principal existing yet to grant it from (#703).
+            CanManageMailRouting = true,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

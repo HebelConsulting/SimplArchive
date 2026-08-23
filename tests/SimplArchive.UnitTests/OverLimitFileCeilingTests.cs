@@ -82,7 +82,10 @@ public class OverLimitFileCeilingTests
         // siblings out would scatter a family this file already documents as belonging together.
         // 6_987 -> 6_991 for #691 (owner-confirmed): the load call plus two clears. The ~90 lines the feature
         // actually cost went to MainWindowViewModel.TabSelections.cs, which is not on this list.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_982,
+        // 6,982 → 6,996 for #703 (owner-confirmed 2026-08-23): the ConfirmDuplicateClaimDialog view-provided
+        // delegate (the AnnotationDialog pattern) and the declined-question catch. The ask-and-retry
+        // choreography itself went to DocumentsClient — this is only the seam the view plugs a dialog into.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_996,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
@@ -91,7 +94,11 @@ public class OverLimitFileCeilingTests
         // → 1,511 for the section/note creates (#564, owner-confirmed 2026-08-17). Half the raise it would have
         // been: CreateFolderAsync had the same body, so it now shares the new helper instead of sitting beside
         // a near-duplicate — +13 rather than +26.
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_511,
+        // 1,511 -> 1,469 for #703: the index-data PUT and its duplicate-claim choreography left for
+        // IndexDataWrites (an extension file, same call sites). The guard caught the method GROWING here
+        // first — the ask-and-retry had just moved in from the view-model, right direction, wrong room.
+        // Lowered rather than left with headroom, as always.
+        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_469,
 
         // Re-entered 2026-08-17 (ADR 0613): burned down to 967 in an earlier pass, back to 1,156 since — the
         // handlers here are what #519 moves into per-tab UserControls, which is what takes it under again.
@@ -128,7 +135,9 @@ public class OverLimitFileCeilingTests
         // 1_156 -> 1_177 for #691 (owner-confirmed): OnWorkflowTransition reads the pressed rel and routes
         // reject/reassign to the workflow window, which needs this window as the dialog owner and so cannot
         // leave the code-behind.
-        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_194,
+        // 1,194 → 1,199 for #703 (owner-confirmed 2026-08-23): wiring the duplicate-claim ConfirmDialog to
+        // the view-model's delegate — dialogs live in code-behind by standing pattern.
+        ["src/SimplArchive.DesktopClient/Views/MainWindow.axaml.cs"] = 1_199,
 
         // The four that crossed the line AFTER #466's list was written — proof the debt grows invisibly
         // without a guard, which is why they enter it the moment they were noticed (full sweep, 2026-08-13).

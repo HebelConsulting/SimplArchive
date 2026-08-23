@@ -48,6 +48,11 @@ public sealed class DetailCatalogs(
 
     private IReadOnlyDictionary<string, string?> _tagColors = NoColors;
 
+    /// <summary>Whether the caller may change mail routing (#703) — false renders a Mailbox's address field
+    /// read-only instead of offering an edit the server will 403. SET by the shell from the whoami it already
+    /// loads at startup, rather than fetched again here: a value in hand is not re-requested (ADR 0557).</summary>
+    public bool MayRouteMail { get; set; }
+
     /// <summary>A tag's configured chip colour, or <c>null</c> for the default — used in both read and edit mode.</summary>
     public string? TagColor(string name) => _tagColors.TryGetValue(name, out var c) ? c : null;
 

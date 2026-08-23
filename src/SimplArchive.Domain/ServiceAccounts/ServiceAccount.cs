@@ -59,6 +59,10 @@ public class ServiceAccount : ITenantScoped
     // IsTenantAdmin equivalent exists here, so nothing implies it: it is always granted deliberately.
     public bool CanAccessWithoutGrant { get; set; }
 
+    // May write a Mailbox's address list, and delete or restore a mailbox (#703) — mirrors User's, so a
+    // migration automation importing from an external system can create departmental mailboxes with claims.
+    public bool CanManageMailRouting { get; set; }
+
     // Data-classification clearance (ADR "Sensitivity clearance enforcement"). A ServiceAccount can't belong to
     // a group, so its effective clearance is just this value. Default 0.
     public int ClearanceRank { get; set; }

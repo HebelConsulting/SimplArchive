@@ -25,9 +25,12 @@ public sealed record SystemRightsSet(
     bool CanCreateExternalLink,
 
     // See + read any document the holder holds no CanSee grant on, and nothing else (ADR 0670).
-    bool CanAccessWithoutGrant)
+    bool CanAccessWithoutGrant,
+
+    // May write a Mailbox's address list, and delete or restore a mailbox (#703).
+    bool CanManageMailRouting)
 {
-    public static readonly SystemRightsSet None = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
+    public static readonly SystemRightsSet None = new(false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false);
 
     // Boolean OR of every right — the union of two bundles.
     public SystemRightsSet Union(SystemRightsSet other) => new(
@@ -46,5 +49,6 @@ public sealed record SystemRightsSet(
         CanImport || other.CanImport,
         CanManageIntrays || other.CanManageIntrays,
         CanCreateExternalLink || other.CanCreateExternalLink,
-        CanAccessWithoutGrant || other.CanAccessWithoutGrant);
+        CanAccessWithoutGrant || other.CanAccessWithoutGrant,
+        CanManageMailRouting || other.CanManageMailRouting);
 }

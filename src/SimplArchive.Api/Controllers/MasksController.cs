@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Masks;
+using SimplArchive.Infrastructure.Masks;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Controllers;
@@ -97,6 +98,14 @@ public class MasksController : ControllerBase
         /// <summary>Whether the field holds many values of its type rather than one (#703) — what tells a
         /// client to draw a list editor instead of a single-value one.</summary>
         public bool IsList { get; set; }
+
+        /// <summary>Whether writing this field needs the manage-mail-routing right (#703).</summary>
+        /// <remarks>Sent by the server rather than derived per client — combined with whoami's
+        /// <c>canManageMailRouting</c>, it is what makes the address list read-only for a caller the PUT
+        /// would refuse, instead of offering an edit that dies on save. The clients deriving "which field is
+        /// the gated one" from the mask id and name is exactly the both-clients-infer-it-differently shape
+        /// #671 exists to forbid.</remarks>
+        public bool RequiresMailRouting { get; set; }
 
         public string? FormatPattern { get; set; }
 
@@ -314,6 +323,7 @@ public class MasksController : ControllerBase
                 DataType = f.DataType.ToString(),
                 IsRequired = f.IsRequired,
                 IsList = f.IsList,
+                RequiresMailRouting = maskId == WellKnownMaskIds.Mailbox && f.Name == WellKnownMaskSeeder.MailboxAddressesFieldName,
                 FormatPattern = f.FormatPattern,
                 MaxTextLength = f.MaxTextLength,
                 MinValue = f.MinValue,

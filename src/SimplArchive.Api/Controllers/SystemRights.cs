@@ -47,6 +47,10 @@ public class SystemRights
     // and revocable, so an admin can honestly give up their x-ray.
     public bool CanAccessWithoutGrant { get; set; }
 
+    // Write a Mailbox's address list, and delete or restore a mailbox (#703) — mail routing is its own trust,
+    // distinct from editing index data and from administering users.
+    public bool CanManageMailRouting { get; set; }
+
     // Data-classification clearance (ADR "Sensitivity clearance enforcement") — not a boolean right but carried
     // in the same bundle so the Users & groups tab sets it alongside the rights. 0 = lowest (unlabelled only).
     public int ClearanceRank { get; set; }
@@ -94,7 +98,8 @@ public static class SystemRightsPolicy
             && IsGrantAllowed(caller.CanImport, current.CanImport, proposed.CanImport)
             && IsGrantAllowed(caller.CanManageIntrays, current.CanManageIntrays, proposed.CanManageIntrays)
             && IsGrantAllowed(caller.CanCreateExternalLink, current.CanCreateExternalLink, proposed.CanCreateExternalLink)
-            && IsGrantAllowed(caller.CanAccessWithoutGrant, current.CanAccessWithoutGrant, proposed.CanAccessWithoutGrant);
+            && IsGrantAllowed(caller.CanAccessWithoutGrant, current.CanAccessWithoutGrant, proposed.CanAccessWithoutGrant)
+            && IsGrantAllowed(caller.CanManageMailRouting, current.CanManageMailRouting, proposed.CanManageMailRouting);
     }
 
     private static bool IsGrantAllowed(bool callerHolds, bool current, bool proposed)

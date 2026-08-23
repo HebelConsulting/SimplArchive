@@ -35,6 +35,7 @@ public class DocumentMetadataController : ControllerBase
     private readonly IDocumentIndexQueue _queue;
     private readonly ISearchablePdfQueue _searchablePdfQueue;
     private readonly IObjectStorageClient _objectStorage;
+    private readonly Documents.MailboxAddressClaims _mailboxAddressClaims;
 
     public DocumentMetadataController(
         IWormLockService wormLock,
@@ -43,7 +44,8 @@ public class DocumentMetadataController : ControllerBase
         IAuditRecorder audit,
         IDocumentIndexQueue queue,
         ISearchablePdfQueue searchablePdfQueue,
-        IObjectStorageClient objectStorage)
+        IObjectStorageClient objectStorage,
+        Documents.MailboxAddressClaims mailboxAddressClaims)
     {
         _wormLock = wormLock;
         _dbContext = dbContext;
@@ -52,6 +54,7 @@ public class DocumentMetadataController : ControllerBase
         _queue = queue;
         _searchablePdfQueue = searchablePdfQueue;
         _objectStorage = objectStorage;
+        _mailboxAddressClaims = mailboxAddressClaims;
     }
 
     // Plain mutable class, not a record — same XmlSerializer rationale as elsewhere.
@@ -451,6 +454,11 @@ public class DocumentMetadataController : ControllerBase
     public class SetIndexDataRequest
     {
         public List<SetFieldValueGroup> Fields { get; set; } = [];
+
+        // Confirms a duplicate mailbox-address claim (#703): the first attempt answers 409
+        // DUPLICATE_ADDRESS_CLAIM naming the other mailbox, and the retry carries true to make delivery fan
+        // out to both. Meaningless (and ignored) on every other field.
+        public bool ConfirmDuplicateClaims { get; set; }
     }
 
     // Replaces the entire FieldValue set for the document in one request — matches PUT's "here is what
@@ -501,6 +509,10 @@ public class DocumentMetadataController : ControllerBase
                 throw new MultipleValuesNotAllowedException($"Field '{definition.Name}' does not allow multiple values.");
             }
         }
+
+        // The mail-routing rules (#703): who may write a Mailbox's address list, and which claims it may
+        // carry. Before the rewrite below, because it compares the request against the STORED list.
+        await _mailboxAddressClaims.EnforceAsync(documentId, document.Name, fieldDefinitions, request.Fields, request.ConfirmDuplicateClaims, cancellationToken);
 
         var existingValues = await _dbContext.FieldValues.Where(v => v.DocumentId == documentId).ToListAsync(cancellationToken);
         _dbContext.FieldValues.RemoveRange(existingValues);

@@ -37,6 +37,7 @@ public static class SystemRightsMapping
         CanManageIntrays = u.CanManageIntrays,
         CanCreateExternalLink = u.CanCreateExternalLink,
         CanAccessWithoutGrant = u.CanAccessWithoutGrant,
+        CanManageMailRouting = u.CanManageMailRouting,
         ClearanceRank = u.ClearanceRank,
     };
 
@@ -65,6 +66,7 @@ public static class SystemRightsMapping
         u.CanManageIntrays = r.CanManageIntrays;
         u.CanCreateExternalLink = r.CanCreateExternalLink;
         u.CanAccessWithoutGrant = r.CanAccessWithoutGrant || promoted;
+        u.CanManageMailRouting = r.CanManageMailRouting;
         u.ClearanceRank = r.ClearanceRank;
     }
 
@@ -88,6 +90,7 @@ public static class SystemRightsMapping
         if (r.CanManageIntrays) names.Add("ManageIntrays");
         if (r.CanCreateExternalLink) names.Add("CreateExternalLink");
         if (r.CanAccessWithoutGrant) names.Add("AccessWithoutGrant");
+        if (r.CanManageMailRouting) names.Add("ManageMailRouting");
         if (r.ClearanceRank > 0) names.Add($"Clearance {r.ClearanceRank}");
         return names.Count == 0 ? "(no rights)" : string.Join(", ", names);
     }

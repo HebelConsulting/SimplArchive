@@ -58,6 +58,9 @@ public static class SeededServiceAccount
             CanManageMasks = true,
             CanImport = true,
             CanExport = true,
+            // A migration writes departmental mailboxes WITH their address claims (#703), so the seeded
+            // interop principal holds the routing right the way it holds the others it works with.
+            CanManageMailRouting = true,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

@@ -40,6 +40,11 @@ public sealed class DocumentNameTakenException(string fileName)
 // and retries with reassignReviewsTo.
 public sealed class ReviewerHasPendingReviewsException(string message) : Exception(message);
 
+// 409 DUPLICATE_ADDRESS_CLAIM (#703): the address is on another mailbox's list, and the message names it.
+// Its own type because it is a QUESTION, not a failure — the caller asks the admin and retries with
+// confirmDuplicateClaims rather than reporting an error.
+public sealed class DuplicateAddressClaimException(string message) : Exception(message);
+
 // Thin HTTP client over the SimplArchive Api (the same endpoints the Blazor client uses). See ADR
 // "Cross-platform desktop fat client (Avalonia)" and "Desktop workbench UI".
 public sealed class SimplArchiveApiClient
@@ -158,7 +163,7 @@ public sealed class SimplArchiveApiClient
 
     // The signed-in principal's ids + display names (ADR "S3-backed inbox") — names drive the local folder
     // path. IsTenantAdmin gates admin-only actions (e.g. the searchable-PDF backfill).
-    public sealed record WhoAmIInfo(Guid? UserId, Guid? TenantId, string? TenantName, string? UserName, bool IsTenantAdmin, bool CanManageUsers, bool HasPhoto, bool CanViewAuditLog, bool MfaEnabled, bool CanResetMfa, bool CanLegalHold, bool CanManageClassification, bool CanOverrideCheckout = false, bool CanImpersonate = false, string? ImpersonatedBy = null, bool CanExport = false, bool CanImport = false, bool CanManageIntrays = false, bool CanManageServiceAccounts = false);
+    public sealed record WhoAmIInfo(Guid? UserId, Guid? TenantId, string? TenantName, string? UserName, bool IsTenantAdmin, bool CanManageUsers, bool HasPhoto, bool CanViewAuditLog, bool MfaEnabled, bool CanResetMfa, bool CanLegalHold, bool CanManageClassification, bool CanOverrideCheckout = false, bool CanImpersonate = false, string? ImpersonatedBy = null, bool CanExport = false, bool CanImport = false, bool CanManageIntrays = false, bool CanManageServiceAccounts = false, bool CanManageMailRouting = false);
 
 
     /// <summary>The essentials of a document reached by ADDRESS — what a cross-tab open needs in one read.</summary>
@@ -205,7 +210,8 @@ public sealed class SimplArchiveApiClient
             json.TryGetProperty("canExport", out var ce) && ce.ValueKind == JsonValueKind.True,
             json.TryGetProperty("canImport", out var cim) && cim.ValueKind == JsonValueKind.True,
             json.TryGetProperty("canManageIntrays", out var cmi) && cmi.ValueKind == JsonValueKind.True,
-            json.TryGetProperty("canManageServiceAccounts", out var cmsa) && cmsa.ValueKind == JsonValueKind.True);
+            json.TryGetProperty("canManageServiceAccounts", out var cmsa) && cmsa.ValueKind == JsonValueKind.True,
+            json.TryGetProperty("canManageMailRouting", out var cmr) && cmr.ValueKind == JsonValueKind.True);
     }
 
     // The count of existing "current TIFF" documents with no searchable-PDF successor yet (ADR "Backfill

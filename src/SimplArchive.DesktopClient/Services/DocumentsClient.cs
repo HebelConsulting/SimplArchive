@@ -21,6 +21,10 @@ namespace SimplArchive.DesktopClient.Services;
 public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminders)
 {
     private readonly ApiCore _core = core;
+
+    /// <summary>For sibling extension files that carry this client's own wire choreography (the debt-list
+    /// pressure valve — see <c>IndexDataWrites</c>).</summary>
+    internal ApiCore Core => _core;
     private readonly Func<RemindersClient> _reminders = reminders;
 
     // The bulk collection's advertised action links (ADR 0557: a structurally fixed rel set may be cached).
@@ -1147,14 +1151,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
             mask.TryGetProperty("versionNumber", out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : null);
     }
 
-
-    // Replaces the whole index-data set. 400 FIELD_VALUE_INVALID / MULTIPLE_VALUES_NOT_ALLOWED surface as a message.
-    public async Task SetIndexDataAsync(string indexDataHref, IEnumerable<(Guid FieldDefinitionId, IReadOnlyList<string> Values)> fields, CancellationToken cancellationToken = default)
-    {
-        var body = new { fields = fields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.Values }) };
-        var response = await _core.Http.PutAsJsonAsync(indexDataHref, body, cancellationToken);
-        await ApiCore.ThrowIfProblemAsync(response, "Could not save the index data", cancellationToken);
-    }
 
     public async Task<SystemFields?> GetSystemFieldsAsync(string versionsHref, CancellationToken cancellationToken = default)
     {

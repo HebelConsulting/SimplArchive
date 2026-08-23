@@ -210,7 +210,14 @@
                 {
                     <div class="wb-mask-row">
                         <span class="wb-mask-label">@f.Label</span>
-                        @if (f.IsDate)
+                        @if (f.Locked)
+                        {
+                            @* Visible but not editable (#703): a Mailbox's address list for a caller without
+                               the routing right. The server would 403 the change — a control that cannot
+                               succeed is not offered (ADR 0543's spirit at field granularity). *@
+                            <MudTextField T="string" Value="@f.TextValue" ReadOnly="true" Lines="@(f.IsMultiLine ? 3 : 1)" Margin="Margin.Dense" Variant="Variant.Outlined" />
+                        }
+                        else if (f.IsDate)
                         {
                             <MudDatePicker @bind-Date="f.DateValue" DateFormat="yyyy-MM-dd" Margin="Margin.Dense" Variant="Variant.Outlined" />
                         }

@@ -4566,4 +4566,22 @@
   <data name="StTakenOver" xml:space="preserve">
     <value>Ora hai accesso completo a &#x27;{0}&#x27;.</value>
   </data>
+  <data name="DupClaimTitle" xml:space="preserve">
+    <value>Indirizzo già rivendicato</value>
+  </data>
+  <data name="DupClaimConfirm" xml:space="preserve">
+    <value>Consegna a entrambe</value>
+  </data>
+  <data name="DupClaimBody" xml:space="preserve">
+    <value>'{0}' rivendica già questo indirizzo. Consegnare a entrambe le caselle?</value>
+  </data>
+  <data name="ApiErrMailRoutingRightRequired" xml:space="preserve">
+    <value>Questa modifica riguarda l'instradamento della posta e richiede il diritto di gestione dell'instradamento.</value>
+  </data>
+  <data name="ApiErrUserAddressClaimNotAllowed" xml:space="preserve">
+    <value>Questo è l'indirizzo personale di un utente e non può essere rivendicato da una casella.</value>
+  </data>
+  <data name="ApiErrPersonalSpaceStructure" xml:space="preserve">
+    <value>Questa è una delle cartelle fisse dello spazio personale e non può essere modificata.</value>
+  </data>
 </root>

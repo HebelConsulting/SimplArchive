@@ -39,6 +39,7 @@ public class DocumentLifecycleController : ControllerBase
     private readonly Documents.DocumentRestorer _restorer;
     private readonly IDocumentIndexQueue _queue;
     private readonly IWormLockService _wormLock;
+    private readonly Documents.MailboxAddressClaims _mailboxAddressClaims;
 
     public DocumentLifecycleController(
         IObjectStorageClient objectStorage,
@@ -51,7 +52,8 @@ public class DocumentLifecycleController : ControllerBase
         Documents.DocumentPurger purger,
         Documents.DocumentRestorer restorer,
         IDocumentIndexQueue queue,
-        IWormLockService wormLock)
+        IWormLockService wormLock,
+        Documents.MailboxAddressClaims mailboxAddressClaims)
     {
         _objectStorage = objectStorage;
         _userSystemRights = userSystemRights;
@@ -64,6 +66,7 @@ public class DocumentLifecycleController : ControllerBase
         _restorer = restorer;
         _queue = queue;
         _wormLock = wormLock;
+        _mailboxAddressClaims = mailboxAddressClaims;
     }
 
     // Check-out (acquire the exclusive edit lock) — ADR "Document check-out / check-in". User-only (a
@@ -194,6 +197,10 @@ public class DocumentLifecycleController : ControllerBase
             return Forbid();
         }
 
+        // Deleting a subtree containing a mailbox is a routing change — its addresses stop receiving — so it
+        // needs the routing right on top of CanDelete (#703, owner-decided 2026-08-23).
+        await _mailboxAddressClaims.EnforceMayDeleteOrRestoreAsync(documentId, "Deleting a mailbox", cancellationToken);
+
         if (!Request.Headers.TryGetValue("If-Match", out var ifMatchValues) || !TryParseETag(ifMatchValues.ToString(), out var ifMatchToken))
         {
             throw new IfMatchRequiredException();
@@ -227,7 +234,10 @@ public class DocumentLifecycleController : ControllerBase
 
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            // The translated save, not the bare one: deleting a personal space's standing folder ("My
+            // Mailbox", "My Calendar", …) is refused by the #596 invariant, and untranslated that surfaced
+            // here as a bare 500 — found by #703's delete-gate test, live since the invariant shipped.
+            await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -269,6 +279,10 @@ public class DocumentLifecycleController : ControllerBase
         {
             return Forbid();
         }
+
+        // Restore is delete's symmetric moment for routing — the addresses START receiving again — so it
+        // carries the same extra gate (#703).
+        await _mailboxAddressClaims.EnforceMayDeleteOrRestoreAsync(documentId, "Restoring a mailbox", cancellationToken);
 
         // The restore mechanics (reparent-to-Recovered-Items if the original parent is gone, un-delete the whole
         // subtree, re-index) live in the shared DocumentRestorer (ADR "Bulk restore from the recycle bin");

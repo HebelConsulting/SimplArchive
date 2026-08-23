@@ -285,6 +285,7 @@
         new("Manage intrays", r => r.CanManageIntrays, (r, v) => r.CanManageIntrays = v),
         new("Create external links", r => r.CanCreateExternalLink, (r, v) => r.CanCreateExternalLink = v),
         new("Access without grant", r => r.CanAccessWithoutGrant, (r, v) => r.CanAccessWithoutGrant = v),
+        new("Manage mail routing", r => r.CanManageMailRouting, (r, v) => r.CanManageMailRouting = v),
     ];
 
     private async Task LoadPrincipalsAsync()
@@ -864,6 +865,7 @@
         public bool CanManageIntrays { get; set; }
         public bool CanCreateExternalLink { get; set; }
         public bool CanAccessWithoutGrant { get; set; }
+        public bool CanManageMailRouting { get; set; }
         public int ClearanceRank { get; set; }
     }
 

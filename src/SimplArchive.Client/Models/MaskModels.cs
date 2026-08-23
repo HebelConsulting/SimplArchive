@@ -48,6 +48,10 @@ public record MaskFieldInfo
     /// <summary>Whether the field holds many values rather than one (#703) — orthogonal to
     /// <see cref="DataType"/>, and decided by the server rather than inferred from the type.</summary>
     public bool IsList { get; set; }
+
+    /// <summary>Whether writing this field needs the manage-mail-routing right (#703). Sent by the server —
+    /// deriving "which field is the gated one" per client is the shape #671 forbids.</summary>
+    public bool RequiresMailRouting { get; set; }
 }
 
 /// <summary>An OCR language the tenant offers, for the per-item language picker.</summary>
@@ -82,6 +86,10 @@ public sealed class EditField
     /// <summary>Whether this field holds many values (#703).</summary>
     public bool IsList { get; init; }
 
+    /// <summary>The caller may see this field but not change it (#703) — a Mailbox's address list for a
+    /// caller without the routing right. Rendered read-only, so the refusal happens here instead of on save.</summary>
+    public bool Locked { get; init; }
+
     public string TextValue { get; set; } = "";
 
     public DateTime? DateValue { get; set; }
@@ -104,9 +112,9 @@ public sealed class EditField
 
     public bool IsSingleLine => !IsDate && !IsBoolean && !IsMultiLine;
 
-    public static EditField Create(MaskFieldInfo f, List<string> values)
+    public static EditField Create(MaskFieldInfo f, List<string> values, bool mayRouteMail = true)
     {
-        var field = new EditField { FieldDefinitionId = f.Id, Label = f.IsRequired ? $"{f.Name} *" : f.Name, DataType = f.DataType, Required = f.IsRequired, IsList = f.IsList };
+        var field = new EditField { FieldDefinitionId = f.Id, Label = f.IsRequired ? $"{f.Name} *" : f.Name, DataType = f.DataType, Required = f.IsRequired, IsList = f.IsList, Locked = f.RequiresMailRouting && !mayRouteMail };
 
         // Multiplicity is decided BEFORE the type: a list of dates is a list first, so it gets the list
         // editor rather than a date picker that could only ever hold one of them.

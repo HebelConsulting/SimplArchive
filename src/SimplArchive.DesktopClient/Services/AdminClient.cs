@@ -31,6 +31,8 @@ public sealed class AdminClient(ApiCore core)
         bool CanCreateExternalLink = false,
         // See + read where no grant exists, and nothing else (ADR 0670). Defaulted for the same reason.
         bool CanAccessWithoutGrant = false,
+        // Write a Mailbox's address list, delete/restore a mailbox (#703). Defaulted for the same reason.
+        bool CanManageMailRouting = false,
         // Data-classification clearance (ADR "Sensitivity clearance enforcement"). Defaulted so existing
         // construction sites (e.g. a copied-rights bundle) keep compiling.
         int ClearanceRank = 0);
@@ -487,7 +489,7 @@ public sealed class AdminClient(ApiCore core)
             B("isTenantAdmin"), B("canImpersonate"), B("canOverrideCheckout"), B("canLegalHold"),
             B("canManageClassification"), B("canResetMfa"), B("canManageRepositories"), B("canManageMasks"),
             B("canManageServiceAccounts"), B("canManageUsers"), B("canViewAuditLog"), B("canExport"), B("canImport"),
-            B("canManageIntrays"), B("canCreateExternalLink"), B("canAccessWithoutGrant"),
+            B("canManageIntrays"), B("canCreateExternalLink"), B("canAccessWithoutGrant"), B("canManageMailRouting"),
             r.TryGetProperty("clearanceRank", out var cr) && cr.ValueKind == JsonValueKind.Number ? cr.GetInt32() : 0);
     }
 

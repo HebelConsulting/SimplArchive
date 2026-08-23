@@ -515,6 +515,7 @@ public class GroupsController : ControllerBase
         CanManageIntrays = g.CanManageIntrays,
         CanCreateExternalLink = g.CanCreateExternalLink,
         CanAccessWithoutGrant = g.CanAccessWithoutGrant,
+        CanManageMailRouting = g.CanManageMailRouting,
         ClearanceRank = g.ClearanceRank,
     };
 
@@ -536,6 +537,7 @@ public class GroupsController : ControllerBase
         g.CanManageIntrays = r.CanManageIntrays;
         g.CanCreateExternalLink = r.CanCreateExternalLink;
         g.CanAccessWithoutGrant = r.CanAccessWithoutGrant;
+        g.CanManageMailRouting = r.CanManageMailRouting;
         g.ClearanceRank = r.ClearanceRank;
     }
 
@@ -587,6 +589,7 @@ public class GroupsController : ControllerBase
                 CanManageIntrays = r.CanManageIntrays,
                 CanCreateExternalLink = r.CanCreateExternalLink,
                 CanAccessWithoutGrant = r.CanAccessWithoutGrant,
+                CanManageMailRouting = r.CanManageMailRouting,
                 ClearanceRank = (await _clearanceResolver.GetForUserAsync(userId, cancellationToken)).Rank,
             };
         }

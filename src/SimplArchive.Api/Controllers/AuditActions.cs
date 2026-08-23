@@ -148,6 +148,13 @@ public static class AuditActions
     // recorded as its own action rather than folded into Acl.Granted.
     public const string PersonalSpaceTakenOver = "PersonalSpace.TakenOver";
 
+    // Mailbox address claims (#703). Claim + release cover every list edit; the explicit fan-out override is
+    // its own action because "an admin decided two mailboxes receive this address" is the fact an auditor
+    // hunts for — buried inside a generic index-data entry it would be invisible.
+    public const string MailboxAddressClaimed = "Mailbox.AddressClaimed";
+    public const string MailboxAddressReleased = "Mailbox.AddressReleased";
+    public const string MailboxDuplicateClaimConfirmed = "Mailbox.DuplicateClaimConfirmed";
+
     public const string LoggedIn = "Auth.LoggedIn";
     // Impersonation token issued (ADR "User impersonation") — actor = the impersonating admin, target = the user.
     public const string ImpersonationStarted = "Auth.ImpersonationStarted";

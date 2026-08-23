@@ -4566,4 +4566,22 @@
   <data name="StTakenOver" xml:space="preserve">
     <value>Ahora tiene acceso completo a «{0}».</value>
   </data>
+  <data name="DupClaimTitle" xml:space="preserve">
+    <value>Dirección ya reclamada</value>
+  </data>
+  <data name="DupClaimConfirm" xml:space="preserve">
+    <value>Entregar en ambos</value>
+  </data>
+  <data name="DupClaimBody" xml:space="preserve">
+    <value>'{0}' ya reclama esta dirección. ¿Entregar en ambos buzones?</value>
+  </data>
+  <data name="ApiErrMailRoutingRightRequired" xml:space="preserve">
+    <value>Este cambio afecta al enrutamiento de correo y requiere el derecho de gestión de enrutamiento.</value>
+  </data>
+  <data name="ApiErrUserAddressClaimNotAllowed" xml:space="preserve">
+    <value>Esta es la dirección personal de un usuario y no puede ser reclamada por un buzón.</value>
+  </data>
+  <data name="ApiErrPersonalSpaceStructure" xml:space="preserve">
+    <value>Esta es una de las carpetas fijas del espacio personal y no se puede modificar.</value>
+  </data>
 </root>

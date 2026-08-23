@@ -39,7 +39,11 @@ public enum DetailSaveFailure
 public sealed record DetailSaveOutcome(
     IReadOnlyList<DetailSaveFailure> Failures,
     bool NameChanged,
-    bool ContentsSortOrderChanged)
+    bool ContentsSortOrderChanged,
+    // The 409 DUPLICATE_ADDRESS_CLAIM message, verbatim — it names the other mailbox, which is what the
+    // confirm dialog must show (#703). Null on every other outcome; the shell asks and re-saves with
+    // confirmDuplicateClaims. Not a DetailSaveFailure: a failure is reported and left, this is a QUESTION.
+    string? DuplicateClaim = null)
 {
     public bool Saved => Failures.Count == 0;
 }
@@ -178,7 +182,7 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
 
         foreach (var f in fields?.Fields ?? [])
         {
-            detail.EditFields.Add(EditField.Create(f, valuesByName.TryGetValue(f.Name, out var v) ? v : []));
+            detail.EditFields.Add(EditField.Create(f, valuesByName.TryGetValue(f.Name, out var v) ? v : [], catalogs.MayRouteMail));
         }
     }
 
@@ -186,7 +190,7 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
     /// Persists only what changed, one field at a time, collecting refusals rather than stopping at the first
     /// (ADR 0278). A non-empty <see cref="DetailSaveOutcome.Failures"/> leaves the edit OPEN.
     /// </summary>
-    public async Task<DetailSaveOutcome> SaveAsync()
+    public async Task<DetailSaveOutcome> SaveAsync(bool confirmDuplicateClaims = false)
     {
         if (detail.Node is not { } item)
         {
@@ -197,6 +201,7 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
         var failures = new List<DetailSaveFailure>();
         var nameChanged = false;
         var sortOrderChanged = false;
+        string? duplicateClaim = null;
         try
         {
             var newName = detail.EditName.Trim();
@@ -269,11 +274,24 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
                 else
                 {
                     // Fill index data first, then (re)assign the mask (which re-checks required fields).
-                    var body = new { fields = detail.EditFields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.ToValues() }) };
-                    (await http.PutAsJsonAsync(Href("index-data"), body)).EnsureSuccessStatusCode();
-                    if (detail.EditMaskId != detail.OrigMaskId)
+                    var body = new { fields = detail.EditFields.Select(f => new { fieldDefinitionId = f.FieldDefinitionId, values = f.ToValues() }), confirmDuplicateClaims };
+                    var indexResp = await http.PutAsJsonAsync(Href("index-data"), body);
+                    if (indexResp.StatusCode == HttpStatusCode.Conflict
+                        && await ProblemAsync(indexResp) is { ErrorCode: "DUPLICATE_ADDRESS_CLAIM" } problem)
                     {
-                        (await http.PutAsJsonAsync(Href("mask"), new { maskId = detail.EditMaskId })).EnsureSuccessStatusCode();
+                        // Not a refusal — a question, composed HERE from the response's claimedBy extension
+                        // rather than surfacing the server's English prose (issue #424). The shell shows it
+                        // and re-saves with the confirmation; every field already saved above was committed
+                        // and its change detection makes the retry skip it.
+                        duplicateClaim = string.Format(SimplArchive.Localization.Strings.Get("DupClaimBody"), problem.ClaimedBy ?? "?");
+                    }
+                    else
+                    {
+                        indexResp.EnsureSuccessStatusCode();
+                        if (detail.EditMaskId != detail.OrigMaskId)
+                        {
+                            (await http.PutAsJsonAsync(Href("mask"), new { maskId = detail.EditMaskId })).EnsureSuccessStatusCode();
+                        }
                     }
                 }
             }
@@ -300,16 +318,34 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
                 }
             }
 
-            if (failures.Count == 0)
+            // Stays open on a failure (so the rejected field can be fixed) AND on the duplicate-claim
+            // question — the shell asks and re-saves with the confirmation; everything already committed is
+            // skipped by its own change detection on the retry.
+            if (failures.Count == 0 && duplicateClaim is null)
             {
-                detail.IsEditing = false; // stays open otherwise, so the rejected field can be fixed
+                detail.IsEditing = false;
             }
 
-            return new DetailSaveOutcome(failures, nameChanged, sortOrderChanged);
+            return new DetailSaveOutcome(failures, nameChanged, sortOrderChanged, duplicateClaim);
         }
         finally
         {
             detail.Busy = false;
+        }
+    }
+
+    private sealed record ProblemBody(string? ErrorCode, string? ClaimedBy);
+
+    // Reads an RFC 7807 body's errorCode + extensions; null when the body is not problem-shaped.
+    private static async Task<ProblemBody?> ProblemAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            return await response.Content.ReadFromJsonAsync<ProblemBody>();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
         }
     }
 }

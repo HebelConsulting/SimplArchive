@@ -594,7 +594,7 @@
                                                         <Panel Grid.Column="1">
                                                             <DatePicker IsVisible="{Binding IsDate}" HorizontalAlignment="Left" SelectedDate="{Binding DateValue}" />
                                                             <CheckBox IsVisible="{Binding IsBoolean}" IsChecked="{Binding BoolValue}" />
-                                                            <TextBox IsVisible="{Binding IsMultiLine}" Text="{Binding TextValue}" AcceptsReturn="True" Height="60" Watermark="{loc:Tr OneValuePerLine}" />
+                                                            <TextBox IsVisible="{Binding IsMultiLine}" Text="{Binding TextValue}" IsReadOnly="{Binding Locked}" AcceptsReturn="True" Height="60" Watermark="{loc:Tr OneValuePerLine}" />
                                                             <TextBox IsVisible="{Binding IsSingleLine}" Text="{Binding TextValue}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />
                                                         </Panel>
                                                     </Grid>
@@ -986,7 +986,7 @@
                                                         <Panel Grid.Column="1">
                                                             <DatePicker IsVisible="{Binding IsDate}" HorizontalAlignment="Left" SelectedDate="{Binding DateValue}" />
                                                             <CheckBox IsVisible="{Binding IsBoolean}" IsChecked="{Binding BoolValue}" />
-                                                            <TextBox IsVisible="{Binding IsMultiLine}" Text="{Binding TextValue}" AcceptsReturn="True" Height="60" Watermark="{loc:Tr OneValuePerLine}" />
+                                                            <TextBox IsVisible="{Binding IsMultiLine}" Text="{Binding TextValue}" IsReadOnly="{Binding Locked}" AcceptsReturn="True" Height="60" Watermark="{loc:Tr OneValuePerLine}" />
                                                             <TextBox IsVisible="{Binding IsSingleLine}" Text="{Binding TextValue}" Height="28" Padding="4,2" VerticalContentAlignment="Center" />
                                                         </Panel>
                                                     </Grid>

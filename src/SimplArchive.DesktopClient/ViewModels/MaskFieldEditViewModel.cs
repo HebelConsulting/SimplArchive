@@ -30,6 +30,10 @@ public sealed partial class MaskFieldEditViewModel : ObservableObject
     /// <summary>Whether this field holds many values (#703).</summary>
     public bool IsList { get; init; }
 
+    /// <summary>The caller may see this field but not change it (#703) — a Mailbox's address list for a
+    /// caller without the routing right. Rendered read-only, so the refusal happens here instead of on save.</summary>
+    public bool Locked { get; init; }
+
     [ObservableProperty] private string _textValue = "";
     [ObservableProperty] private System.DateTimeOffset? _dateValue;
     [ObservableProperty] private bool _boolValue;
@@ -41,7 +45,7 @@ public sealed partial class MaskFieldEditViewModel : ObservableObject
     public bool IsSingleLine => !IsDate && !IsBoolean && !IsMultiLine;
     public string Label => IsRequired ? $"{Name} *" : Name;
 
-    public static MaskFieldEditViewModel Create(MasksClient.MaskFieldInfo definition, IReadOnlyList<string> values)
+    public static MaskFieldEditViewModel Create(MasksClient.MaskFieldInfo definition, IReadOnlyList<string> values, bool mayRouteMail = true)
     {
         var field = new MaskFieldEditViewModel
         {
@@ -50,6 +54,7 @@ public sealed partial class MaskFieldEditViewModel : ObservableObject
             DataType = definition.DataType,
             IsRequired = definition.IsRequired,
             IsList = definition.IsList,
+            Locked = definition.RequiresMailRouting && !mayRouteMail,
         };
 
         // Multiplicity is decided BEFORE the type: a list of dates is a list first, so it gets the list editor

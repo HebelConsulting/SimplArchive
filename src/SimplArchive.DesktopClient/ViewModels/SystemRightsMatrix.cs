@@ -26,7 +26,7 @@ public static class SystemRightsMatrix
         "Tenant administrator", "Impersonate", "Override checkout", "Legal hold",
         "Manage classification", "Reset MFA", "Manage repositories", "Manage masks",
         "Manage service accounts", "Manage users & groups", "View audit log", "Export", "Import",
-        "Manage intrays", "Create external links", "Access without grant",
+        "Manage intrays", "Create external links", "Access without grant", "Manage mail routing",
     ];
 
     /// <summary>The right at a checkbox position.</summary>
@@ -47,7 +47,8 @@ public static class SystemRightsMatrix
         12 => r.CanImport,
         13 => r.CanManageIntrays,
         14 => r.CanCreateExternalLink,
-        _ => r.CanAccessWithoutGrant,
+        15 => r.CanAccessWithoutGrant,
+        _ => r.CanManageMailRouting,
     };
 
     /// <summary>The checkbox row read back as a rights bundle, with the clearance that rides alongside it.</summary>
@@ -56,5 +57,6 @@ public static class SystemRightsMatrix
         rights[4].IsChecked, rights[5].IsChecked, rights[6].IsChecked, rights[7].IsChecked,
         rights[8].IsChecked, rights[9].IsChecked, rights[10].IsChecked, rights[11].IsChecked,
         rights[12].IsChecked, rights[13].IsChecked, rights[14].IsChecked, rights[15].IsChecked,
+        rights[16].IsChecked,
         clearanceRank);
 }

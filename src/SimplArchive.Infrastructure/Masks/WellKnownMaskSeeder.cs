@@ -27,6 +27,13 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
 
     private static readonly FieldSpec ColourField = new("Colour", FieldDataType.Text, IsRequired: false);
 
+    /// <summary>
+    /// The Mailbox mask's address-claims field (#703). A NAME is a well-known field's identity — the heal
+    /// matches by name — so the one constant is shared with everything that must find the field again: the
+    /// claims enforcement in the metadata controller, and (next slice) LMTP delivery.
+    /// </summary>
+    public const string MailboxAddressesFieldName = "eMail Addresses";
+
     public async Task EnsureWellKnownMasksAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
         await EnsureMaskAsync(tenantId, WellKnownMaskIds.Folder, "Folder", [], cancellationToken);
@@ -102,7 +109,15 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // because we were an IMAP client then, and ADR 0628 made us the destination, so there is no account to
         // log into and the address is derived rather than stored. A personal space admits at most one
         // (WellKnownMaskIds.ChildCardinalityRules), which the DbContext enforces.
-        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Mailbox, "Mailbox", [], cancellationToken);
+        // "eMail Addresses" (#703): the addresses this mailbox receives for — a LIST of e-mail addresses, and
+        // the first well-known list field, so it is also what exercises the IsList carry on the create and heal
+        // paths. OPTIONAL is load-bearing twice: a mailbox without claims is valid (a personal mailbox derives
+        // its address from its owner and needs no list), and the field-heal refuses required fields — optional
+        // means every existing tenant's Mailbox mask gains it at next startup with no migration.
+        await EnsureMaskAsync(tenantId, WellKnownMaskIds.Mailbox, "Mailbox",
+        [
+            new FieldSpec(MailboxAddressesFieldName, FieldDataType.EmailAddress, IsRequired: false, IsList: true),
+        ], cancellationToken);
 
         // Fieldless like the Mailbox it lives in — it types the folder as ephemeral (#596), and what is worth
         // indexing lives on the messages inside it.

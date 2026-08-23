@@ -63,6 +63,10 @@ public class Group : ITenantScoped
     // the full bypass, which is a different thing.
     public bool CanAccessWithoutGrant { get; set; }
 
+    // May write a Mailbox's address list, and delete or restore a mailbox (#703). Mirrors User's; a member's
+    // effective rights are the union of their own and their groups', so a "mail administrators" group works.
+    public bool CanManageMailRouting { get; set; }
+
     // Data-classification clearance conferred to members (ADR "Sensitivity clearance enforcement"). A member's
     // effective clearance is the max of their own and every effective group's ClearanceRank. Default 0.
     public int ClearanceRank { get; set; }

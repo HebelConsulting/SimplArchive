@@ -109,6 +109,13 @@ public class User : ITenantScoped
     // unrevokable, which is exactly what it must not be.
     public bool CanAccessWithoutGrant { get; set; }
 
+    // May write a Mailbox's address list, and delete or restore a mailbox (#703). Its own right rather than a
+    // reuse of CanEditIndexData: the address list decides where the TENANT's mail goes, so anyone with edit
+    // rights on one mailbox could otherwise claim a colleague's address and siphon their mail — detectable only
+    // in the audit log. Deliberately not folded into CanManageUsers either: routing mail and administering
+    // people are different trusts, even when the same person usually holds both. Not implied by IsTenantAdmin.
+    public bool CanManageMailRouting { get; set; }
+
     // Data-classification clearance (ADR "Sensitivity clearance enforcement"): the highest sensitivity-label
     // Rank this user may access on their own. A user's *effective* clearance is the max of this and every group
     // they effectively belong to. Only gates access when the tenant's EnforceClearance is on; a tenant admin

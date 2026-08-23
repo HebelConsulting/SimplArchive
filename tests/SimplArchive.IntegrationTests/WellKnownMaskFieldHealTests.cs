@@ -165,6 +165,58 @@ public class WellKnownMaskFieldHealTests
     }
 
     [Fact]
+    public async Task The_Mailbox_address_list_arrives_with_its_multiplicity_on_both_paths()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var accessor = new CurrentTenantAccessor { TenantId = _tenantId };
+        using (var setup = Ctx(connection, accessor)) await setup.Database.EnsureCreatedAsync();
+        using (var db = Ctx(connection, accessor))
+        {
+            db.Tenants.Add(new Tenant { Id = _tenantId, Name = "Fresh", CreatedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync();
+            await Seeder(db).EnsureWellKnownMasksAsync(_tenantId);
+        }
+
+        // The CREATE path: a fresh tenant's Mailbox mask carries "eMail Addresses" as an EmailAddress LIST.
+        // This is the first well-known list field, so it is also what finally exercises the IsList carry the
+        // seeder gained in #703 PR 1 — two assignment lines no test could reach while no spec declared one.
+        using (var db = Ctx(connection, accessor))
+        {
+            var field = await AddressFieldAsync(db);
+            Assert.Equal(FieldDataType.EmailAddress, field.DataType);
+            Assert.True(field.IsList);
+            Assert.False(field.IsRequired); // load-bearing: the heal refuses required fields (ADR 0616)
+        }
+
+        // The HEAL path: a tenant seeded before the field existed gains it at next startup, multiplicity and
+        // type included — strip it, re-run, and it is back whole.
+        using (var db = Ctx(connection, accessor))
+        {
+            db.FieldDefinitions.Remove(await AddressFieldAsync(db));
+            await db.SaveChangesAsync();
+        }
+
+        using (var db = Ctx(connection, accessor))
+        {
+            await Seeder(db).EnsureWellKnownMasksAsync(_tenantId);
+        }
+
+        using (var db = Ctx(connection, accessor))
+        {
+            var healed = await AddressFieldAsync(db);
+            Assert.Equal(FieldDataType.EmailAddress, healed.DataType);
+            Assert.True(healed.IsList);
+        }
+    }
+
+    private async Task<FieldDefinition> AddressFieldAsync(SimplArchiveDbContext db) =>
+        await db.MaskVersions.IgnoreQueryFilters()
+            .Where(v => v.TenantId == _tenantId && v.MaskId == WellKnownMaskIds.Mailbox && v.IsCurrent)
+            .Join(db.FieldDefinitions.IgnoreQueryFilters(), v => v.Id, f => f.MaskVersionId, (_, f) => f)
+            .SingleAsync(f => f.Name == "eMail Addresses");
+
+    [Fact]
     public async Task A_field_whose_MULTIPLICITY_drifted_is_corrected_in_place()
     {
         using var connection = new SqliteConnection("Filename=:memory:");

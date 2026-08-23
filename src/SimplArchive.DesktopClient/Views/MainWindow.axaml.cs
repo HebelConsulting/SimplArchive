@@ -58,6 +58,11 @@ public partial class MainWindow : Window
                 vm.ExtendRetentionDialog = name => new ExtendRetentionDialog(name).ShowDialog<string?>(this);
                 vm.SaveSearchNamePrompt = () => new NewFolderDialog("Save search", "Name this saved search").ShowDialog<string?>(this);
                 vm.DuplicateUploadDialog = req => new DuplicateUploadDialog(req).ShowDialog<MainWindowViewModel.DuplicatePromptResult?>(this);
+
+                // The duplicate-address-claim question (#703): the client composed it, localized, from the
+                // response's claimedBy — this only puts a window around it.
+                vm.ConfirmDuplicateClaimDialog = question =>
+                    new ConfirmDialog(question, Strings.Get("DupClaimConfirm")).ShowDialog<bool>(this);
                 vm.NameConflictDialog = req => new NameConflictDialog(req).ShowDialog<Services.UploadConflictResolver.NameConflictChoice?>(this);
                 vm.ShowReminderDialog = rvm => new ReminderDialog(rvm).ShowDialog(this);
                 vm.ShowExternalLinksDialog = evm =>

@@ -10,10 +10,22 @@ public class ApiException : Exception
 
     public int StatusCode { get; }
 
-    public ApiException(string errorCode, int statusCode, string message)
+    /// <summary>
+    /// Machine-readable facts riding the Problem Details response as extension members (#703's first use:
+    /// <c>claimedBy</c> names the mailbox already holding an address claim).
+    /// </summary>
+    /// <remarks>
+    /// The alternative is clients fishing data out of <c>detail</c>'s prose — which is English regardless of
+    /// the user's language (issue #424), so a client that needs the FACT and not the sentence must get it as
+    /// data and compose its own localized text.
+    /// </remarks>
+    public IReadOnlyDictionary<string, object?>? Extensions { get; }
+
+    public ApiException(string errorCode, int statusCode, string message, IReadOnlyDictionary<string, object?>? extensions = null)
         : base(message)
     {
         ErrorCode = errorCode;
         StatusCode = statusCode;
+        Extensions = extensions;
     }
 }

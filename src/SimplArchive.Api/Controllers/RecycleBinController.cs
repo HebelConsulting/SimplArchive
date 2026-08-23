@@ -35,6 +35,7 @@ public class RecycleBinController : ControllerBase
     private readonly IAuditRecorder _audit;
     private readonly Documents.DocumentPurger _purger;
     private readonly Documents.DocumentRestorer _restorer;
+    private readonly Documents.MailboxAddressClaims _mailboxAddressClaims;
 
     public RecycleBinController(
         SimplArchiveDbContext dbContext,
@@ -44,7 +45,8 @@ public class RecycleBinController : ControllerBase
         IUserSystemRightsResolver userSystemRights,
         IAuditRecorder audit,
         Documents.DocumentPurger purger,
-        Documents.DocumentRestorer restorer)
+        Documents.DocumentRestorer restorer,
+        Documents.MailboxAddressClaims mailboxAddressClaims)
     {
         _dbContext = dbContext;
         _effectiveRights = effectiveRights;
@@ -54,6 +56,7 @@ public class RecycleBinController : ControllerBase
         _audit = audit;
         _purger = purger;
         _restorer = restorer;
+        _mailboxAddressClaims = mailboxAddressClaims;
     }
 
     public class RecycleBinResource : HypermediaResource
@@ -189,9 +192,14 @@ public class RecycleBinController : ControllerBase
                 .SingleOrDefaultAsync(d => d.Id == id, cancellationToken);
 
             // Skip anything gone, not visible, or not deletable by the caller (restore reuses CanDelete, ADR 0196).
+            // A subtree containing a mailbox additionally needs the routing right (#703) — SKIPPED here rather
+            // than failing the whole call, because skip-and-count is this endpoint's own contract for
+            // everything the caller may not restore.
             if (document is null
                 || (!isTenantAdmin && !await CanSeeAsync(id, cancellationToken))
-                || !await CanDeleteAsync(id, cancellationToken))
+                || !await CanDeleteAsync(id, cancellationToken)
+                || (await _mailboxAddressClaims.SubtreeContainsMailboxAsync(id, cancellationToken)
+                    && !await _mailboxAddressClaims.CallerMayRouteAsync(cancellationToken)))
             {
                 skipped++;
                 continue;

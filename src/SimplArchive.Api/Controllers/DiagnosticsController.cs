@@ -130,6 +130,11 @@ public class DiagnosticsController : ControllerBase
         // user-picker / cross-user triage. True for a User holding CanManageIntrays (own or via a group).
         public bool CanManageIntrays { get; set; }
 
+        // Whether the User caller may change mail routing (#703) — the clients render a Mailbox's
+        // "eMail Addresses" field read-only without it, instead of offering an edit the server will 403.
+        // True for a User holding CanManageMailRouting (own or via a group).
+        public bool CanManageMailRouting { get; set; }
+
         // The acting admin's display name when this is an impersonation session (else null) — drives the
         // clients' impersonation banner.
         public string? ImpersonatedBy { get; set; }
@@ -158,6 +163,7 @@ public class DiagnosticsController : ControllerBase
         var canExport = false;
         var canImport = false;
         var canManageIntrays = false;
+        var canManageMailRouting = false;
         var hasPhoto = false;
         var mfaEnabled = false;
         if (_currentUserAccessor.UserId is { } userId)
@@ -183,6 +189,7 @@ public class DiagnosticsController : ControllerBase
             canExport = rights.CanExport;
             canImport = rights.CanImport;
             canManageIntrays = rights.CanManageIntrays;
+            canManageMailRouting = rights.CanManageMailRouting;
             hasPhoto = await _dbContext.UserProfilePhotos.AnyAsync(p => p.UserId == userId, cancellationToken);
         }
 
@@ -213,6 +220,7 @@ public class DiagnosticsController : ControllerBase
             CanImpersonate = canImpersonate,
             CanExport = canExport,
             CanImport = canImport,
+            CanManageMailRouting = canManageMailRouting,
             CanManageIntrays = canManageIntrays,
             ImpersonatedBy = impersonatedBy,
             HasPhoto = hasPhoto,

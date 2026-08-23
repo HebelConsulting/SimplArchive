@@ -99,7 +99,11 @@ public class WorkbenchShellSizeTests
     // 3_322 -> 3_331 for #702 PR 3, owner-confirmed: the tree context menu gains "Take over…", drawn only where
     // the listing advertised the rel. The action itself lives in DocumentActions — what is here is the menu
     // item and its gate, which is the one part that cannot live anywhere else while the menu does.
-    private const int Ceiling = 3_331;
+    // 3,331 → 3,353 for #703 (owner-confirmed 2026-08-23): the duplicate-address-claim question in
+    // SaveDetailAsync — show the localized MessageBox, on yes re-save with the confirmation — plus the whoami
+    // flag reaching DetailCatalogs. Outcome reporting is explicitly this shell's job (ADR 0558), and the
+    // ask-and-retry it reports on lives in DetailEditor.
+    private const int Ceiling = 3_353;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

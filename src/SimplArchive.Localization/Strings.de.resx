@@ -4566,4 +4566,22 @@
   <data name="StTakenOver" xml:space="preserve">
     <value>Sie haben jetzt vollen Zugriff auf &#x27;{0}&#x27;.</value>
   </data>
+  <data name="DupClaimTitle" xml:space="preserve">
+    <value>Adresse bereits beansprucht</value>
+  </data>
+  <data name="DupClaimConfirm" xml:space="preserve">
+    <value>An beide zustellen</value>
+  </data>
+  <data name="DupClaimBody" xml:space="preserve">
+    <value>'{0}' beansprucht diese Adresse bereits. An beide Postfächer zustellen?</value>
+  </data>
+  <data name="ApiErrMailRoutingRightRequired" xml:space="preserve">
+    <value>Diese Änderung betrifft die Mail-Zustellung und erfordert das Recht zur Mail-Routing-Verwaltung.</value>
+  </data>
+  <data name="ApiErrUserAddressClaimNotAllowed" xml:space="preserve">
+    <value>Dies ist die persönliche Adresse eines Benutzers und kann nicht von einem Postfach beansprucht werden.</value>
+  </data>
+  <data name="ApiErrPersonalSpaceStructure" xml:space="preserve">
+    <value>Dies ist einer der festen Ordner des persönlichen Bereichs und kann nicht geändert werden.</value>
+  </data>
 </root>
