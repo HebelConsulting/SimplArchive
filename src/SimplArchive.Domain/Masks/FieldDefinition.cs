@@ -23,6 +23,26 @@ public class FieldDefinition : ITenantScoped
 
     public bool IsRequired { get; set; }
 
+    /// <summary>
+    /// Whether the field holds MANY values of its <see cref="DataType"/> rather than one (#703).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Multiplicity is <b>orthogonal</b> to type: any basic type may be a list, and each element is validated
+    /// against the type exactly as a single value would be — which the storage already permits, since
+    /// <c>FieldValue</c> rows were never unique per <c>(DocumentId, FieldDefinitionId)</c>.
+    /// </para>
+    /// <para>
+    /// <see cref="FieldDataType.MultiSelect"/> is <b>grandfathered</b> and keeps its own multiplicity: it is
+    /// already a list by virtue of its type, so it accepts many values whether or not this flag is set, and
+    /// setting the flag on one changes nothing. Migrating it to <c>SingleSelect</c> + <c>IsList</c> would be
+    /// the cleaner end state, but it is a data migration across every type-switching surface for no
+    /// user-visible gain. Dedicated <c>*List</c> types were rejected outright — that is one copy of every
+    /// type, which is the shape the standing generic-implementation principle exists to forbid.
+    /// </para>
+    /// </remarks>
+    public bool IsList { get; set; }
+
     public string? FormatPattern { get; set; }
 
     public int? MaxTextLength { get; set; }

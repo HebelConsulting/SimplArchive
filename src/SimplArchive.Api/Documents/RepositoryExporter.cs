@@ -215,6 +215,7 @@ public sealed class RepositoryExporter
                 name = f.Name,
                 dataType = (int)f.DataType,
                 isRequired = f.IsRequired,
+                isList = f.IsList,
                 formatPattern = f.FormatPattern,
                 maxTextLength = f.MaxTextLength,
                 minValue = f.MinValue,
@@ -270,6 +271,7 @@ public sealed class RepositoryExporter
             documentId = f.DocumentId,
             fieldDefinitionId = f.FieldDefinitionId,
             value = f.Value,
+            ordinal = f.Ordinal,
         }), cancellationToken);
 
         // The chat thread (issue #382) — "tree/comments.jsonl" with a "parentCommentId" field before FormatVersion 2.

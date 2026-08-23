@@ -167,7 +167,12 @@ public class OverLimitFileCeilingTests
         // wrapper. Lowered rather than left with headroom — an unlowered ceiling is permission to grow back
         // into it, silently. It also caught this change growing the file by ONE line, which is the entire
         // argument for the entry existing.
-        ["src/SimplArchive.Infrastructure/Persistence/SimplArchiveDbContext.cs"] = 1_018,
+        // 1,018 → 949 for #703, and it is the "direction of travel" paragraph above happening: the e-mail
+        // arm would have taken this file to 1,030, so the whole per-type format/range validator left instead
+        // (FieldValueValidation, 80 lines). It was a pure function over two entities that never touched the
+        // context's state — the DbContext still owns the ENFORCEMENT POINT, which is what it owes; it did not
+        // owe the rules. Guard-prompted, not planned: the failure named the choice and the cheaper half won.
+        ["src/SimplArchive.Infrastructure/Persistence/SimplArchiveDbContext.cs"] = 949,
     };
 
     public static TheoryData<string> Files => [.. Ceilings.Keys];

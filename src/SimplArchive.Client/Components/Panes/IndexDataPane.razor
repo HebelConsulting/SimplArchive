@@ -218,7 +218,7 @@
                         {
                             <MudCheckBox T="bool" @bind-Value="f.BoolValue" />
                         }
-                        else if (f.IsMultiSelect)
+                        else if (f.IsMultiLine)
                         {
                             <MudTextField @bind-Value="f.TextValue" Lines="3" Placeholder="@Strings.Get("OneValuePerLine")" Margin="Margin.Dense" Variant="Variant.Outlined" />
                         }

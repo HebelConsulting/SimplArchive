@@ -20,7 +20,10 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         _logger = logger;
     }
 
-    private record FieldSpec(string Name, FieldDataType DataType, bool IsRequired);
+    // IsList defaults to false so the 37 existing specs read exactly as before; a list field states it
+    // (#703). The heal below carries it, for the same reason it carries DataType — a fact added to a
+    // well-known mask reaches only tenants provisioned afterwards unless the heal does.
+    private record FieldSpec(string Name, FieldDataType DataType, bool IsRequired, bool IsList = false);
 
     private static readonly FieldSpec ColourField = new("Colour", FieldDataType.Text, IsRequired: false);
 
@@ -205,6 +208,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
                 Name = field.Name,
                 DataType = field.DataType,
                 IsRequired = field.IsRequired,
+                IsList = field.IsList,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
         }
@@ -442,10 +446,24 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
         // NARROWING would, and would need a real version.
         foreach (var field in defined)
         {
-            if (fields.FirstOrDefault(f => string.Equals(f.Name, field.Name, StringComparison.OrdinalIgnoreCase)) is { } spec
-                && field.DataType != spec.DataType)
+            if (fields.FirstOrDefault(f => string.Equals(f.Name, field.Name, StringComparison.OrdinalIgnoreCase)) is not { } spec)
+            {
+                continue;
+            }
+
+            if (field.DataType != spec.DataType)
             {
                 field.DataType = spec.DataType;
+            }
+
+            // Multiplicity drifts exactly as the type does, and for the same reason (#703): every field
+            // defined before IsList existed reads "single-valued", so a tenant seeded earlier would keep a
+            // one-line editor for a field the app declares a list — and, worse, the API would refuse the
+            // second value while a freshly provisioned tenant accepted it. Widening single → list cannot
+            // invalidate a stored value; a future NARROWING could, and would need a real version.
+            if (field.IsList != spec.IsList)
+            {
+                field.IsList = spec.IsList;
             }
         }
 
@@ -476,6 +494,7 @@ public class WellKnownMaskSeeder : IWellKnownMaskSeeder
                 Name = field.Name,
                 DataType = field.DataType,
                 IsRequired = false,
+                IsList = field.IsList,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
         }

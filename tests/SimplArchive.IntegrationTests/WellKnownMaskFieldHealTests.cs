@@ -163,4 +163,45 @@ public class WellKnownMaskFieldHealTests
             Assert.Equal(WellKnownMaskIds.EMail, thrown.MaskId);
         }
     }
+
+    [Fact]
+    public async Task A_field_whose_MULTIPLICITY_drifted_is_corrected_in_place()
+    {
+        using var connection = new SqliteConnection("Filename=:memory:");
+        await connection.OpenAsync();
+        var accessor = new CurrentTenantAccessor { TenantId = _tenantId };
+        using (var setup = Ctx(connection, accessor)) await setup.Database.EnsureCreatedAsync();
+        using (var db = Ctx(connection, accessor))
+        {
+            db.Tenants.Add(new Tenant { Id = _tenantId, Name = "Older", CreatedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync();
+            await Seeder(db).EnsureWellKnownMasksAsync(_tenantId);
+        }
+
+        // Multiplicity drifts exactly as the TYPE does, and for exactly the same reason (#703): a field
+        // defined before IsList existed says "single-valued" forever, so a tenant seeded earlier would keep a
+        // one-line editor for a field the app declares a list — and, worse, the API would refuse its second
+        // value while a freshly provisioned tenant accepted it. Both tenants look fine; only they disagree.
+        //
+        // Driven from the `true → false` side because no well-known mask declares a list yet — that arrives
+        // with the Mailbox's address list. It is the same branch either way, and this direction has the
+        // advantage of being a real regression test the moment one does.
+        using (var db = Ctx(connection, accessor))
+        {
+            var subject = await db.FieldDefinitions.IgnoreQueryFilters().SingleAsync(f => f.Name == "Subject");
+            subject.IsList = true;
+            await db.SaveChangesAsync();
+        }
+
+        using (var db = Ctx(connection, accessor))
+        {
+            await Seeder(db).EnsureWellKnownMasksAsync(_tenantId);
+        }
+
+        using (var db = Ctx(connection, accessor))
+        {
+            Assert.False(await db.FieldDefinitions.IgnoreQueryFilters()
+                .Where(f => f.Name == "Subject").Select(f => f.IsList).SingleAsync());
+        }
+    }
 }

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SimplArchive.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using SimplArchive.Infrastructure.Persistence;
 namespace SimplArchive.Infrastructure.Migrations
 {
     [DbContext(typeof(SimplArchiveDbContext))]
-    partial class SimplArchiveDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260823070408_AddFieldDefinitionIsList")]
+    partial class AddFieldDefinitionIsList
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1458,9 +1461,6 @@ namespace SimplArchive.Infrastructure.Migrations
 
                     b.Property<Guid>("FieldDefinitionId")
                         .HasColumnType("uuid");
-
-                    b.Property<int>("Ordinal")
-                        .HasColumnType("integer");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");

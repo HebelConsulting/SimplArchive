@@ -40,10 +40,14 @@ public record MaskFieldInfo
 
     public string Name { get; set; } = "";
 
-    /// <summary>Text / Number / Date / Boolean / SingleSelect / MultiSelect.</summary>
+    /// <summary>Text / Number / Date / DateTime / Boolean / SingleSelect / MultiSelect / EmailAddress.</summary>
     public string DataType { get; set; } = "Text";
 
     public bool IsRequired { get; set; }
+
+    /// <summary>Whether the field holds many values rather than one (#703) — orthogonal to
+    /// <see cref="DataType"/>, and decided by the server rather than inferred from the type.</summary>
+    public bool IsList { get; set; }
 }
 
 /// <summary>An OCR language the tenant offers, for the per-item language picker.</summary>
@@ -75,6 +79,9 @@ public sealed class EditField
 
     public bool Required { get; init; }
 
+    /// <summary>Whether this field holds many values (#703).</summary>
+    public bool IsList { get; init; }
+
     public string TextValue { get; set; } = "";
 
     public DateTime? DateValue { get; set; }
@@ -85,29 +92,46 @@ public sealed class EditField
 
     public bool IsBoolean => DataType == "Boolean";
 
-    public bool IsMultiSelect => DataType == "MultiSelect";
+    /// <summary>
+    /// Whether this field is edited as a LIST — a multi-line box, one value per line.
+    /// </summary>
+    /// <remarks>
+    /// Either because the field says so (<see cref="IsList"/>, #703) or because its type already means it
+    /// (MultiSelect, grandfathered). Asked once, here, so the two clients and the two surfaces that use them
+    /// cannot answer it differently — and so the markup picks an editor without re-deriving the rule.
+    /// </remarks>
+    public bool IsMultiLine => IsList || DataType == "MultiSelect";
 
-    public bool IsSingleLine => !IsDate && !IsBoolean && !IsMultiSelect;
+    public bool IsSingleLine => !IsDate && !IsBoolean && !IsMultiLine;
 
     public static EditField Create(MaskFieldInfo f, List<string> values)
     {
-        var field = new EditField { FieldDefinitionId = f.Id, Label = f.IsRequired ? $"{f.Name} *" : f.Name, DataType = f.DataType, Required = f.IsRequired };
+        var field = new EditField { FieldDefinitionId = f.Id, Label = f.IsRequired ? $"{f.Name} *" : f.Name, DataType = f.DataType, Required = f.IsRequired, IsList = f.IsList };
+
+        // Multiplicity is decided BEFORE the type: a list of dates is a list first, so it gets the list
+        // editor rather than a date picker that could only ever hold one of them.
+        if (field.IsMultiLine)
+        {
+            field.TextValue = string.Join("\n", values);
+            return field;
+        }
+
         switch (f.DataType)
         {
             case "Date": field.DateValue = DateTime.TryParse(values.FirstOrDefault(), out var d) ? d.Date : null; break;
             case "Boolean": field.BoolValue = values.FirstOrDefault() == "true"; break;
-            case "MultiSelect": field.TextValue = string.Join("\n", values); break;
             default: field.TextValue = values.FirstOrDefault() ?? ""; break;
         }
 
         return field;
     }
 
-    public List<string> ToValues() => DataType switch
-    {
-        "Date" => DateValue is { } d ? [d.ToString("yyyy-MM-dd")] : [],
-        "Boolean" => [BoolValue ? "true" : "false"],
-        "MultiSelect" => TextValue.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
-        _ => string.IsNullOrWhiteSpace(TextValue) ? [] : [TextValue.Trim()],
-    };
+    public List<string> ToValues() => IsMultiLine
+        ? TextValue.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
+        : DataType switch
+        {
+            "Date" => DateValue is { } d ? [d.ToString("yyyy-MM-dd")] : [],
+            "Boolean" => [BoolValue ? "true" : "false"],
+            _ => string.IsNullOrWhiteSpace(TextValue) ? [] : [TextValue.Trim()],
+        };
 }

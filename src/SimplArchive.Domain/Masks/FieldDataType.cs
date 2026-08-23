@@ -21,4 +21,23 @@ public enum FieldDataType
     Boolean,
     SingleSelect,
     MultiSelect,
+
+    /// <summary>
+    /// An e-mail address, validated for shape and compared case-insensitively (#703).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Appended last, and every future value must be too.</b> The value is persisted as its integer
+    /// ordinal in <c>FieldDefinitions.DataType</c>, so inserting a value anywhere but the end silently
+    /// re-types every stored field definition in every tenant.
+    /// </para>
+    /// <para>
+    /// Distinct from a <see cref="Text"/> field carrying a <c>FormatPattern</c>, though that would validate
+    /// the same shape today. What the type adds is that the meaning travels with the field rather than with
+    /// a pattern a tenant may edit away: an address is compared case-insensitively (the
+    /// <c>NormalizedEmail</c> precedent, ADR 0150), and a later slice claims addresses for mail delivery —
+    /// both of which have to know an address IS one, not that it happened to match a regex.
+    /// </para>
+    /// </remarks>
+    EmailAddress,
 }

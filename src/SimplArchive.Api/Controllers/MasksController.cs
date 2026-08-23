@@ -53,6 +53,9 @@ public class MasksController : ControllerBase
 
         public bool IsRequired { get; set; }
 
+        /// <summary>Whether the field holds many values of its type rather than one (#703).</summary>
+        public bool IsList { get; set; }
+
         public string? FormatPattern { get; set; }
 
         public int? MaxTextLength { get; set; }
@@ -90,6 +93,10 @@ public class MasksController : ControllerBase
         public string DataType { get; set; } = "";
 
         public bool IsRequired { get; set; }
+
+        /// <summary>Whether the field holds many values of its type rather than one (#703) — what tells a
+        /// client to draw a list editor instead of a single-value one.</summary>
+        public bool IsList { get; set; }
 
         public string? FormatPattern { get; set; }
 
@@ -143,6 +150,7 @@ public class MasksController : ControllerBase
             Name = f.Name,
             DataType = f.DataType,
             IsRequired = f.IsRequired,
+            IsList = f.IsList,
             FormatPattern = f.FormatPattern,
             MaxTextLength = f.MaxTextLength,
             MinValue = f.MinValue,
@@ -305,6 +313,7 @@ public class MasksController : ControllerBase
                 Name = f.Name,
                 DataType = f.DataType.ToString(),
                 IsRequired = f.IsRequired,
+                IsList = f.IsList,
                 FormatPattern = f.FormatPattern,
                 MaxTextLength = f.MaxTextLength,
                 MinValue = f.MinValue,

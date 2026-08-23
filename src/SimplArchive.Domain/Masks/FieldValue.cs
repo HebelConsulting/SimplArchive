@@ -21,4 +21,20 @@ public class FieldValue : ITenantScoped
     public Guid FieldDefinitionId { get; set; }
 
     public required string Value { get; set; }
+
+    /// <summary>This value's position within its field's list, counting from zero (#703).</summary>
+    /// <remarks>
+    /// <para>
+    /// Rows carry no inherent order, so without this a list came back in whatever order the database chose —
+    /// and that order CHANGED between reads. A user who typed three addresses and reopened the pane found
+    /// them rearranged, intermittently, which reads as the application losing track of what they entered.
+    /// </para>
+    /// <para>
+    /// Zero for a single-valued field, and zero for every row that predates this — correct rather than a
+    /// guess, since every one of them is either a lone value or a set nobody ordered. That is also why reads
+    /// tie-break on <c>Id</c>: a MultiSelect field seeded before this has several rows all sharing ordinal 0,
+    /// and an arbitrary-but-STABLE order is the improvement available to them without inventing one.
+    /// </para>
+    /// </remarks>
+    public int Ordinal { get; set; }
 }

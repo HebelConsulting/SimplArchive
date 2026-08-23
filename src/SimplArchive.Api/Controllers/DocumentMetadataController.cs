@@ -492,7 +492,11 @@ public class DocumentMetadataController : ControllerBase
 
             // New validation this endpoint introduces — never had to be enforced before, since FieldValue
             // rows only ever came from direct DbContext seeding in tests/verification scripts.
-            if (definition.DataType != FieldDataType.MultiSelect && field.Values.Count > 1)
+            //
+            // Multiplicity now comes from EITHER the flag or the type (#703): `IsList` says so for any basic
+            // type, and MultiSelect is a list by virtue of being one — grandfathered, so an existing
+            // MultiSelect field keeps accepting many values without anybody having to set the flag on it.
+            if (!definition.IsList && definition.DataType != FieldDataType.MultiSelect && field.Values.Count > 1)
             {
                 throw new MultipleValuesNotAllowedException($"Field '{definition.Name}' does not allow multiple values.");
             }
@@ -503,7 +507,10 @@ public class DocumentMetadataController : ControllerBase
 
         foreach (var field in request.Fields)
         {
-            foreach (var value in field.Values)
+            // Stamped in the order the caller sent them (#703) — a list is what the user typed, so its order
+            // is theirs. Without it the read came back in whatever order the database chose, and that order
+            // changed between reads.
+            for (var ordinal = 0; ordinal < field.Values.Count; ordinal++)
             {
                 _dbContext.FieldValues.Add(new FieldValue
                 {
@@ -511,7 +518,8 @@ public class DocumentMetadataController : ControllerBase
                     TenantId = document.TenantId,
                     DocumentId = documentId,
                     FieldDefinitionId = field.FieldDefinitionId,
-                    Value = value,
+                    Value = field.Values[ordinal],
+                    Ordinal = ordinal,
                 });
             }
         }
@@ -536,9 +544,12 @@ public class DocumentMetadataController : ControllerBase
 
     private async Task<IndexDataResource> BuildIndexDataResourceAsync(Guid documentId, CancellationToken cancellationToken)
     {
+        // Ordered by Ordinal, tie-broken on Id (#703): the tie-break is what gives a STABLE order to rows
+        // written before ordinals existed, which all share 0 — arbitrary, but no longer different each read.
         var rows = await _dbContext.FieldValues
             .Where(v => v.DocumentId == documentId)
-            .Join(_dbContext.FieldDefinitions, v => v.FieldDefinitionId, f => f.Id, (v, f) => new { f.Id, f.Name, v.Value })
+            .Join(_dbContext.FieldDefinitions, v => v.FieldDefinitionId, f => f.Id, (v, f) => new { f.Id, f.Name, v.Value, v.Ordinal, ValueId = v.Id })
+            .OrderBy(r => r.Ordinal).ThenBy(r => r.ValueId)
             .ToListAsync(cancellationToken);
 
         var fields = rows

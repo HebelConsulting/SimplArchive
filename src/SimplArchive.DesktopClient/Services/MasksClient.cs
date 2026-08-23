@@ -26,7 +26,10 @@ public sealed class MasksClient
     public sealed record MaskOptionInfo(Guid Id, string Name, string? SelfHref = null);
 
     /// <summary>A mask's field definition + type, for building the type-aware editor.</summary>
-    public sealed record MaskFieldInfo(Guid Id, string Name, string DataType, bool IsRequired);
+    // IsList defaults to false so the designer-preview rows below read as before; it is what tells the editor
+    // to be a list rather than a single value (#703), and it comes from the SERVER rather than being inferred
+    // from DataType — the two clients inferring a rule separately is how they came to disagree before (#671).
+    public sealed record MaskFieldInfo(Guid Id, string Name, string DataType, bool IsRequired, bool IsList = false);
 
     /// <summary>The masks a user may actually CHOOSE for a document.</summary>
     /// <remarks>
@@ -71,7 +74,8 @@ public sealed class MasksClient
                     f.GetProperty("id").GetGuid(),
                     f.GetProperty("name").GetString() ?? string.Empty,
                     f.TryGetProperty("dataType", out var dataType) ? dataType.GetString() ?? "Text" : "Text",
-                    f.TryGetProperty("isRequired", out var required) && required.GetBoolean()));
+                    f.TryGetProperty("isRequired", out var required) && required.GetBoolean(),
+                    f.TryGetProperty("isList", out var isList) && isList.GetBoolean()));
             }
         }
 

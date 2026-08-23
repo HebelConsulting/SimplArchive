@@ -399,7 +399,7 @@ public sealed class RepositoryImporter
                 && (createdIds.Contains(value.DocumentId) || updatedTargetIdSet.Contains(newDocId))
                 && fieldDefMap.TryGetValue(value.FieldDefinitionId, out var newFieldId))
             {
-                _dbContext.FieldValues.Add(new FieldValue { Id = Guid.NewGuid(), TenantId = tenantId, DocumentId = newDocId, FieldDefinitionId = newFieldId, Value = value.Value });
+                _dbContext.FieldValues.Add(new FieldValue { Id = Guid.NewGuid(), TenantId = tenantId, DocumentId = newDocId, FieldDefinitionId = newFieldId, Value = value.Value, Ordinal = value.Ordinal });
             }
         }
 
@@ -893,6 +893,7 @@ public sealed class RepositoryImporter
                     Name = field.Name,
                     DataType = (FieldDataType)field.DataType,
                     IsRequired = field.IsRequired,
+                    IsList = field.IsList,
                     FormatPattern = field.FormatPattern,
                     MaxTextLength = field.MaxTextLength,
                     MinValue = field.MinValue,
@@ -1022,7 +1023,10 @@ public sealed class RepositoryImporter
     private sealed record ManifestRoot(Guid DocumentId, string Name);
     private sealed record ArchiveMask(Guid MaskId, bool WellKnown, ArchiveMaskVersion Version, List<ArchiveField> Fields);
     private sealed record ArchiveMaskVersion(Guid MaskVersionId, string Name, int VersionNumber, int? ReviewSlaDays, int? RetentionYears, string? DefaultSensitivityLabel);
-    private sealed record ArchiveField(Guid FieldDefinitionId, string Name, int DataType, bool IsRequired, string? FormatPattern, int? MaxTextLength, string? MinValue, string? MaxValue);
+    // `IsList` is ADDITIVE and FormatVersion deliberately stays 2 — the same call issue #383's "mentions" made.
+    // An archive written before #703 simply has no `isList` property, which deserializes to false: exactly
+    // what every field in it was. Bumping the version would refuse those archives to gain nothing (#703).
+    private sealed record ArchiveField(Guid FieldDefinitionId, string Name, int DataType, bool IsRequired, bool IsList, string? FormatPattern, int? MaxTextLength, string? MinValue, string? MaxValue);
     private sealed record ArchivePrincipals(List<ArchiveUser> Users, List<ArchiveServiceAccount> ServiceAccounts, List<ArchiveGroup> Groups, List<ArchiveMembership>? Memberships)
     {
         public List<ArchiveMembership> Memberships { get; init; } = Memberships ?? [];
@@ -1040,5 +1044,7 @@ public sealed class RepositoryImporter
 
     private sealed record ArchiveAnnotation(Guid Id, Guid DocumentId, Guid DocumentVersionId, int PageIndex, int Kind, double PositionX, double PositionY, double? Width, double? Height, string? Points, string Text, string Color, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt);
     private sealed record ArchiveReference(Guid Id, Guid ParentFolderId, Guid TargetDocumentId, Guid? CreatedByUserId, Guid? CreatedByServiceAccountId, DateTimeOffset CreatedAt);
-    private sealed record ArchiveIndexValue(Guid DocumentId, Guid FieldDefinitionId, string Value);
+    // `Ordinal` is additive like `IsList` above: an archive written before #703 carries none, which
+    // deserializes to 0 for every value — exactly the "unordered" state those rows were already in.
+    private sealed record ArchiveIndexValue(Guid DocumentId, Guid FieldDefinitionId, string Value, int Ordinal);
 }
