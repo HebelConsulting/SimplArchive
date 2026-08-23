@@ -1,7 +1,8 @@
-{{- if .Values.deps.postgres.enabled }}
+{{- if or .Values.deps.postgres.enabled .Values.dbInit.external.enabled }}
 # Creates the simplarchive / simplarchive_app / simplarchive_vault Postgres roles (ADR 0358) that OpenBao's
 # database engine + the app's dynamic creds depend on. A post-install/upgrade hook, run before storage-init +
-# migrate. ADR 0485.
+# migrate. ADR 0485. dbInit.external points the SAME SQL at a managed database (ADR 0677, the AWS install),
+# authenticating with the master credentials the installer materialised into dbInit.external.adminSecret.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -36,20 +37,43 @@ spec:
         - name: db-init
           image: {{ .Values.deps.postgres.image | quote }}
           env:
+            {{- if .Values.dbInit.external.enabled }}
+            - name: PGSSLMODE
+              value: require
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.dbInit.external.adminSecret }}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.dbInit.external.adminSecret }}
+                  key: password
+            {{- else }}
+            - name: PGUSER
+              value: postgres
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "simplarchive.statefulSecretName" . }}
                   key: POSTGRES_PASSWORD
+            {{- end }}
           command: ["/bin/sh", "-c"]
           args:
             - |
               set -e
+              {{- if .Values.dbInit.external.enabled }}
+              host="{{ .Values.dbInit.external.host }}"
+              db="{{ .Values.dbInit.external.database }}"
+              {{- else }}
               host="{{ include "simplarchive.fullname" . }}-postgres"
-              until pg_isready -h "$host" -U postgres -d {{ .Values.deps.postgres.database }} >/dev/null 2>&1; do
+              db="{{ .Values.deps.postgres.database }}"
+              {{- end }}
+              until pg_isready -h "$host" -U "$PGUSER" -d "$db" >/dev/null 2>&1; do
                 echo "waiting for postgres..."; sleep 2;
               done
-              psql -h "$host" -U postgres -d {{ .Values.deps.postgres.database }} -v ON_ERROR_STOP=1 -f /db-init.sql
+              psql -h "$host" -U "$PGUSER" -d "$db" -v ON_ERROR_STOP=1 -f /db-init.sql
               echo "db roles ready"
           volumeMounts:
             - name: sql

@@ -122,12 +122,42 @@ deps:
     roleId: "simplarchive-role"
     secretId: "simplarchive-secret"
     bootstrapClientSecret: "dev-bootstrap-secret"
+    # awskms seal (ADR 0677, the AWS install): auto-unseal via a KMS key, the pod authenticating through the
+    # IRSA-annotated service account below. init.json then carries recovery keys + root token for install.sh
+    # to move into Secrets Manager and wipe from the volume. Disabled = the kiosk's persisted-unseal-key mode.
+    seal:
+      awskms:
+        enabled: false
+        kmsKeyId: ""
+        region: ""
+    serviceAccount:
+      create: false
+      annotations: {}
+    # External managed Postgres for the database engine (hostname; TLS is required automatically when set).
+    # Empty = the in-cluster postgres dep.
+    externalDatabaseHost: ""
+    # Secret carrying S3_ACCESS_KEY/S3_SECRET_KEY (+ optional SMTP_USER/SMTP_PASSWORD) when the in-cluster
+    # stateful deps — and their generated secret — are disabled (the AWS install materialises this from
+    # Secrets Manager). Empty = the stateful secret (kiosk).
+    credentialsSecret: ""
+    storageClassName: ""
     resources:
       requests: { cpu: 100m, memory: 128Mi }
       limits: { cpu: 500m, memory: 256Mi }
   # Daily-reset CronJob (phase 5) — wipes tenant data then restarts the app to re-migrate + re-seed.
   reset:
     enabled: false
+
+# Postgres role bootstrap against an EXTERNAL managed database (ADR 0677, the AWS install) — the same
+# db-init.sql the in-cluster path runs with deps.postgres, pointed at a managed host with the master
+# credentials from a Secret (keys: username, password) that the installer materialises from the provider's
+# managed secret at deploy time.
+dbInit:
+  external:
+    enabled: false
+    host: ""
+    database: "simplarchive"
+    adminSecret: ""
     schedule: "0 1 * * *"   # daily 01:00 UTC
     kubectlImage: rancher/kubectl:v1.31.0
 

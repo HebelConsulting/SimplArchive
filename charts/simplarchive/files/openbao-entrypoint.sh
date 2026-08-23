@@ -20,24 +20,41 @@ while true; do
   sleep 1
 done
 
-# Initialize once (persisted), saving the single unseal key + root token to the data volume.
+# Initialize once (persisted). With the awskms seal (ADR 0677) init yields RECOVERY keys — KMS unseals on
+# every start and no unseal key exists; the installer moves init.json into the cloud secret store and wipes
+# it from this volume. Without it (kiosk), the single unseal key + root token stay on the data volume.
 if ! bao operator init -status >/dev/null 2>&1; then
-  bao operator init -key-shares=1 -key-threshold=1 -format=json > "$KEYS"
+  if [ -n "${SEAL_AWSKMS:-}" ]; then
+    bao operator init -recovery-shares=1 -recovery-threshold=1 -format=json > "$KEYS"
+  else
+    bao operator init -key-shares=1 -key-threshold=1 -format=json > "$KEYS"
+  fi
   chmod 644 "$KEYS" 2>/dev/null || true
 fi
 
-# Auto-unseal from the saved key whenever sealed (every restart).
-if bao status >/dev/null 2>&1; then rc=0; else rc=$?; fi
-if [ "$rc" -eq 2 ]; then
-  UNSEAL_KEY=$(sed -n '/"unseal_keys_b64"/{n;p;}' "$KEYS" | tr -d ' ",')
-  bao operator unseal "$UNSEAL_KEY" >/dev/null
+# Unseal: awskms does it itself (wait for it); otherwise unseal from the saved key (every restart).
+if [ -n "${SEAL_AWSKMS:-}" ]; then
+  until bao status >/dev/null 2>&1; do echo 'waiting for KMS auto-unseal...'; sleep 1; done
+else
+  if bao status >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  if [ "$rc" -eq 2 ]; then
+    UNSEAL_KEY=$(sed -n '/"unseal_keys_b64"/{n;p;}' "$KEYS" | tr -d ' ",')
+    bao operator unseal "$UNSEAL_KEY" >/dev/null
+  fi
+fi
+# After the installer has moved init.json off the volume (awskms mode), a restart cannot re-provision — and
+# does not need to: everything below is already provisioned and persisted. Serve and stop here.
+if [ ! -f "$KEYS" ]; then
+  echo 'openbao ready (bootstrap material externalised; skipping provisioning)'
+  wait "$PID"
+  exit 0
 fi
 export BAO_TOKEN=$(sed -n 's/.*"root_token": *"\([^"]*\)".*/\1/p' "$KEYS")
 
 # --- Provision (idempotent) ------------------------------------------------------------------------------------
 bao secrets enable -path=secret -version=2 kv 2>/dev/null || true
 bao kv put secret/simplarchive/objectstorage accessKey="${S3_ACCESS_KEY:-storageadmin}" secretKey="${S3_SECRET_KEY:-storageadmin}"
-bao kv put secret/simplarchive/smtp user= password=
+bao kv put secret/simplarchive/smtp user="${SMTP_USER:-}" password="${SMTP_PASSWORD:-}"
 bao kv put secret/simplarchive/bootstrap clientSecret="${BOOTSTRAP_CLIENT_SECRET:-dev-bootstrap-secret}"
 
 # Postgres credential engine — connects as simplarchive_vault (created by db-init). Retry until that role exists.
@@ -45,7 +62,7 @@ bao secrets enable database 2>/dev/null || true
 until bao write database/config/simplarchive \
   plugin_name=postgresql-database-plugin \
   allowed_roles=simplarchive,simplarchive-owner \
-  connection_url="postgresql://{{username}}:{{password}}@${PG_HOST}:5432/simplarchive?sslmode=disable" \
+  connection_url="postgresql://{{username}}:{{password}}@${PG_HOST}:5432/simplarchive?sslmode=${PG_SSLMODE:-disable}" \
   username=simplarchive_vault password=simplarchive_vault_bootstrap 2>/dev/null; do
   echo 'waiting for the simplarchive_vault role (db-init)...'; sleep 2;
 done

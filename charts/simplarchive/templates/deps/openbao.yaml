@@ -11,6 +11,14 @@ metadata:
 data:
   openbao.hcl: |
 {{ .Files.Get "files/openbao.hcl" | indent 4 }}
+{{- if .Values.deps.openbao.seal.awskms.enabled }}
+    # awskms auto-unseal (ADR 0677): the pod's IRSA identity encrypts/decrypts the root key via KMS, so no
+    # unseal key ever exists on the volume.
+    seal "awskms" {
+      kms_key_id = {{ .Values.deps.openbao.seal.awskms.kmsKeyId | quote }}
+      region     = {{ .Values.deps.openbao.seal.awskms.region | quote }}
+    }
+{{- end }}
   entrypoint.sh: |
 {{ .Files.Get "files/openbao-entrypoint.sh" | indent 4 }}
 ---
@@ -25,6 +33,19 @@ data:
   # The app's AppRole SecretId (fixed for the kiosk; matches what the entrypoint provisions).
   OpenBao__SecretId: {{ .Values.deps.openbao.secretId | b64enc }}
 ---
+{{- if .Values.deps.openbao.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "simplarchive.fullname" . }}-openbao
+  labels:
+    {{- include "simplarchive.labels" . | nindent 4 }}
+  {{- with .Values.deps.openbao.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -61,6 +82,9 @@ spec:
         {{- include "simplarchive.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: openbao
     spec:
+      {{- if .Values.deps.openbao.serviceAccount.create }}
+      serviceAccountName: {{ include "simplarchive.fullname" . }}-openbao
+      {{- end }}
       containers:
         - name: openbao
           image: {{ .Values.deps.openbao.image | quote }}
@@ -70,22 +94,46 @@ spec:
             capabilities:
               add: ["IPC_LOCK"]
           env:
+            {{- if .Values.deps.openbao.externalDatabaseHost }}
+            - name: PG_HOST
+              value: {{ .Values.deps.openbao.externalDatabaseHost | quote }}
+            - name: PG_SSLMODE
+              value: require
+            {{- else }}
             - name: PG_HOST
               value: {{ include "simplarchive.fullname" . }}-postgres
+            {{- end }}
+            {{- if .Values.deps.openbao.seal.awskms.enabled }}
+            - name: SEAL_AWSKMS
+              value: "1"
+            {{- end }}
             - name: APPROLE_ROLE_ID
               value: {{ .Values.deps.openbao.roleId | quote }}
             - name: APPROLE_SECRET_ID
               value: {{ .Values.deps.openbao.secretId | quote }}
+            {{- $credSecret := .Values.deps.openbao.credentialsSecret | default (include "simplarchive.statefulSecretName" .) }}
             - name: S3_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "simplarchive.statefulSecretName" . }}
+                  name: {{ $credSecret }}
                   key: S3_ACCESS_KEY
             - name: S3_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "simplarchive.statefulSecretName" . }}
+                  name: {{ $credSecret }}
                   key: S3_SECRET_KEY
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $credSecret }}
+                  key: SMTP_USER
+                  optional: true
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $credSecret }}
+                  key: SMTP_PASSWORD
+                  optional: true
             - name: BOOTSTRAP_CLIENT_SECRET
               value: {{ .Values.deps.openbao.bootstrapClientSecret | quote }}
           ports:
@@ -121,6 +169,9 @@ spec:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
+        {{- with .Values.deps.openbao.storageClassName }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
         resources:
           requests:
             storage: {{ .Values.deps.openbao.storage | quote }}
