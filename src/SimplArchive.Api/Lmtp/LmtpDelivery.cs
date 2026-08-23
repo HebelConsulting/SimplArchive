@@ -3,6 +3,7 @@ using SimplArchive.Api.Documents;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
 using SimplArchive.Domain.Masks;
+using SimplArchive.Infrastructure.Masks;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Lmtp;
@@ -38,21 +39,31 @@ public class LmtpDelivery
         _logger = logger;
     }
 
-    /// <summary>The tenant and user an envelope recipient names, or null if nobody here answers to it.</summary>
-    public async Task<(Guid TenantId, Guid UserId)?> ResolveAsync(string address, CancellationToken cancellationToken)
+    /// <summary>
+    /// The deliveries an envelope recipient names — empty if nobody here answers to it (#703 PR 3).
+    /// </summary>
+    /// <remarks>
+    /// Two disjoint branches, and their disjointness is enforced upstream: a USER owns the address (their
+    /// personal inbox, the original rule, untouched), or one or more MAILBOXES claim it in their
+    /// "eMail Addresses" list — a claim on an existing user's address is refused at write time (ADR 0679),
+    /// so an address never resolves both ways. Several mailboxes claiming one address is the CONFIRMED
+    /// duplicate an admin explicitly asked for: one RCPT, one copy into each — fan-out is a feature.
+    /// </remarks>
+    public async Task<IReadOnlyList<(Guid TenantId, Guid UserId)>> ResolveAsync(string address, CancellationToken cancellationToken)
     {
         var at = address.LastIndexOf('@');
         if (at <= 0 || at == address.Length - 1)
         {
-            return null;
+            return [];
         }
 
         var localPart = address[..at];
         var domain = address[(at + 1)..].Trim().TrimEnd('.').ToUpperInvariant();
 
-        // Both lookups run BEFORE a tenant is known, so both must ignore the tenant filter — left on, its
-        // TenantId == null predicate matches zero rows and every recipient resolves as unknown. This is the
-        // same rule the login and client-id lookups follow.
+        // Every lookup here runs BEFORE a tenant is known, so each must ignore the tenant filter — left on,
+        // its TenantId == null predicate matches zero rows and every recipient resolves as unknown. This is
+        // the same rule the login and client-id lookups follow. The queries stay tenant-scoped by the
+        // explicit TenantId predicates.
         var tenantId = await _dbContext.TenantMailDomains.IgnoreQueryFilters(["TenantFilter"])
             .Where(d => d.NormalizedDomain == domain)
             .Select(d => (Guid?)d.TenantId)
@@ -60,24 +71,79 @@ public class LmtpDelivery
 
         if (tenantId is not { } tenant)
         {
-            return null;
+            return [];
         }
 
-        // The local part identifies the USER, matched on the same normalized-email key the rest of the
-        // codebase uses — a mail local part is case-insensitive, so the raw column cannot be the key.
+        // The user branch: the local part identifies the USER, matched on the same normalized-email key the
+        // rest of the codebase uses — a mail local part is case-insensitive, so the raw column cannot be the
+        // key.
         var normalizedEmail = $"{localPart}@{domain}".ToUpperInvariant();
         var userId = await _dbContext.Users.IgnoreQueryFilters(["TenantFilter"])
             .Where(u => u.TenantId == tenant && u.NormalizedEmail == normalizedEmail && u.IsActive)
             .Select(u => (Guid?)u.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return userId is { } user ? (tenant, user) : null;
+        if (userId is { } user)
+        {
+            return [(tenant, user)];
+        }
+
+        // The claims branch: every LIVE mailbox whose address list contains the recipient, case-insensitively
+        // (the NormalizedEmail precedent). Only the TENANT filter is bypassed — the soft-delete filter stays
+        // on the Documents join, which is what makes a recycled mailbox stop receiving at the moment of its
+        // deletion (the fact the delete gate's reasoning rests on, ADR 0679).
+        var owners = await _dbContext.FieldValues.IgnoreQueryFilters(["TenantFilter"])
+            .Where(v => v.TenantId == tenant && v.Value.ToUpper() == normalizedEmail)
+            .Join(_dbContext.FieldDefinitions.IgnoreQueryFilters(["TenantFilter"]),
+                v => v.FieldDefinitionId, f => f.Id, (v, f) => new { v.DocumentId, f.Name, f.MaskVersionId })
+            .Where(x => x.Name == WellKnownMaskSeeder.MailboxAddressesFieldName)
+            .Join(_dbContext.MaskVersions.IgnoreQueryFilters(["TenantFilter"]),
+                x => x.MaskVersionId, mv => mv.Id, (x, mv) => new { x.DocumentId, mv.MaskId })
+            .Where(x => x.MaskId == WellKnownMaskIds.Mailbox)
+            .Join(_dbContext.Documents.IgnoreQueryFilters(["TenantFilter"]),
+                x => x.DocumentId, d => d.Id, (_, d) => d.PersonalRootOwnerId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var targets = new List<(Guid, Guid)>();
+        foreach (var owner in owners)
+        {
+            // A mailbox with no personal-root owner is a DEPARTMENT mailbox — #703 PR 4's concern. Skipping
+            // it here silently would be mail that vanishes with a 250, so until PR 4 teaches delivery to file
+            // into an ownerless mailbox the claim simply does not resolve: an address claimed ONLY by such
+            // mailboxes answers 550 at RCPT, and the sender learns (the ADR 0626 test — a refusal someone
+            // finds out about — passes).
+            if (owner is not { } ownerId)
+            {
+                _logger.LogWarning(
+                    "LMTP: a mailbox with no personal-space owner claims {Address}; ownerless delivery arrives with department mailboxes (#703 PR 4)",
+                    address);
+                continue;
+            }
+
+            // The owner must still be able to RECEIVE: a deactivated user's mailbox not accepting mail is the
+            // user branch's own rule, and a claim must not become the way around it. Excluding it here makes
+            // the address answer 550 — a visible failure — rather than filing into a space nobody reads.
+            var active = await _dbContext.Users.IgnoreQueryFilters(["TenantFilter"])
+                .AnyAsync(u => u.Id == ownerId && u.TenantId == tenant && u.IsActive, cancellationToken);
+            if (!active)
+            {
+                _logger.LogWarning(
+                    "LMTP: {Address} is claimed by a deactivated user's mailbox; excluded from delivery", address);
+                continue;
+            }
+
+            targets.Add((tenant, ownerId));
+        }
+
+        return targets;
     }
 
     /// <summary>Files the message and returns the LMTP reply line for THIS recipient.</summary>
     public async Task<string> DeliverAsync(string address, string sender, byte[] payload, CancellationToken cancellationToken)
     {
-        if (await ResolveAsync(address, cancellationToken) is not { } resolved)
+        var targets = await ResolveAsync(address, cancellationToken);
+        if (targets.Count == 0)
         {
             // It resolved at RCPT and does not now — the account was removed mid-transaction. Permanent, so
             // the sender is told rather than the MTA retrying against a user who no longer exists.
@@ -85,79 +151,88 @@ public class LmtpDelivery
             return "550 no such recipient here";
         }
 
-        var (tenantId, userId) = resolved;
-
-        try
+        // One RCPT, one copy into each resolved mailbox, ONE reply (#703 PR 3). Fan-out only exists where an
+        // admin explicitly confirmed a duplicate claim, so several targets is a decision being honoured, not
+        // an accident being amplified. The per-recipient reply discipline concerns multiple RCPTs — several
+        // targets behind one recipient still answer as one.
+        //
+        // A partial failure defers the WHOLE recipient (451): the MTA redelivers, and the copies that already
+        // landed will land again — a duplicate in a mailbox is recoverable by a reader, a message that
+        // silently reached only half its claimants is not. The same trade every maildrop makes.
+        foreach (var (tenantId, userId) in targets)
         {
-            // The DbContext reads the tenant from this accessor, and there is no request to have set it — the
-            // MTA is the caller. Setting it here is what puts every query below inside the right tenant.
-            ((CurrentTenantAccessor)_tenantAccessor).TenantId = tenantId;
-
-            // Lazily rather than eagerly, and shared with the credential trigger: the mailbox exists exactly
-            // when it has something to hold, and whichever of the two demands arrives first creates it (#562).
-            var inboxId = await _mailbox.EnsureInboxAsync(tenantId, userId, cancellationToken);
-
-            var now = DateTimeOffset.UtcNow;
-            var versionId = Guid.NewGuid();
-            var storageFolderId = Guid.NewGuid();
-            // The EPHEMERAL prefix, not an archive key (#633): a delivered message has not been filed, and its
-            // bytes should not sit where the archive's retention and disposition rules apply until it is. It
-            // moves onto an archive key when the user files it out — see DocumentMover.
-            var objectKey = ObjectKeyBuilder.EphemeralMailKey(tenantId, userId, storageFolderId, versionId, ".eml");
-
-            // Object FIRST. A row pointing at bytes that are not there is a document that opens to an error;
-            // bytes with no row are an orphan a sweep can find. Only one of those is recoverable.
-            await _storage.PutObjectAsync(objectKey, new MemoryStream(payload), "message/rfc822");
-
-            var document = new Document
+            try
             {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                ParentId = inboxId,
-                Name = await UniqueNameAsync(inboxId, SubjectOf(payload), cancellationToken),
-                CreatedByUserId = userId,
-                CreatedAt = now,
-                StorageFolderId = storageFolderId,
-                // The retention clock starts here (#640). Delivered, not filed — until the user files it out,
-                // this is staging, and Junk/Trash sweep on this date.
-                StagedAt = now,
-            };
-            _dbContext.Documents.Add(document);
-            await _dbContext.SaveChangesAsync(cancellationToken);
+                // The DbContext reads the tenant from this accessor, and there is no request to have set it — the
+                // MTA is the caller. Setting it here is what puts every query below inside the right tenant.
+                ((CurrentTenantAccessor)_tenantAccessor).TenantId = tenantId;
 
-            // Pending + the shared finalizer, never a hand-written Confirmed version: the status is guarded by
-            // a CHECK constraint, and the finalizer is also what indexes the message and extracts its headers.
-            var version = new DocumentVersion
+                // Lazily rather than eagerly, and shared with the credential trigger: the mailbox exists exactly
+                // when it has something to hold, and whichever of the two demands arrives first creates it (#562).
+                var inboxId = await _mailbox.EnsureInboxAsync(tenantId, userId, cancellationToken);
+
+                var now = DateTimeOffset.UtcNow;
+                var versionId = Guid.NewGuid();
+                var storageFolderId = Guid.NewGuid();
+                // The EPHEMERAL prefix, not an archive key (#633): a delivered message has not been filed, and its
+                // bytes should not sit where the archive's retention and disposition rules apply until it is. It
+                // moves onto an archive key when the user files it out — see DocumentMover.
+                var objectKey = ObjectKeyBuilder.EphemeralMailKey(tenantId, userId, storageFolderId, versionId, ".eml");
+
+                // Object FIRST. A row pointing at bytes that are not there is a document that opens to an error;
+                // bytes with no row are an orphan a sweep can find. Only one of those is recoverable.
+                await _storage.PutObjectAsync(objectKey, new MemoryStream(payload), "message/rfc822");
+
+                var document = new Document
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ParentId = inboxId,
+                    Name = await UniqueNameAsync(inboxId, SubjectOf(payload), cancellationToken),
+                    CreatedByUserId = userId,
+                    CreatedAt = now,
+                    StorageFolderId = storageFolderId,
+                    // The retention clock starts here (#640). Delivered, not filed — until the user files it out,
+                    // this is staging, and Junk/Trash sweep on this date.
+                    StagedAt = now,
+                };
+                _dbContext.Documents.Add(document);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+
+                // Pending + the shared finalizer, never a hand-written Confirmed version: the status is guarded by
+                // a CHECK constraint, and the finalizer is also what indexes the message and extracts its headers.
+                var version = new DocumentVersion
+                {
+                    Id = versionId,
+                    DocumentId = document.Id,
+                    TenantId = tenantId,
+                    Status = DocumentVersionStatus.Pending,
+                    ObjectKey = objectKey,
+                    CreatedByUserId = userId,
+                    CreatedAt = now,
+                    DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
+                };
+                _dbContext.DocumentVersions.Add(version);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                await _finalizer.FinalizeAsync(version, cancellationToken);
+
+                _logger.LogInformation(
+                    "Delivered a message from {Sender} to {Address} as document {DocumentId} ({Bytes} bytes)",
+                    sender, address, document.Id, payload.Length);
+            }
+            catch (Exception e)
             {
-                Id = versionId,
-                DocumentId = document.Id,
-                TenantId = tenantId,
-                Status = DocumentVersionStatus.Pending,
-                ObjectKey = objectKey,
-                CreatedByUserId = userId,
-                CreatedAt = now,
-                DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
-            };
-            _dbContext.DocumentVersions.Add(version);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            await _finalizer.FinalizeAsync(version, cancellationToken);
-
-            _logger.LogInformation(
-                "Delivered a message from {Sender} to {Address} as document {DocumentId} ({Bytes} bytes)",
-                sender, address, document.Id, payload.Length);
-
-            // Only now. Everything above is durable.
-            return "250 delivered";
+                // 4xx, deliberately: the MTA holds the mail and retries, so our being broken DEFERS rather than
+                // loses. A 5xx here would bounce a message that has nothing wrong with it.
+                _logger.LogError(e,
+                    "LMTP: deferring {Address} after a delivery failure — the MTA retains the mail and will retry",
+                    address);
+                return "451 temporary failure storing the message";
+            }
         }
-        catch (Exception e)
-        {
-            // 4xx, deliberately: the MTA holds the mail and retries, so our being broken DEFERS rather than
-            // loses. A 5xx here would bounce a message that has nothing wrong with it.
-            _logger.LogError(e,
-                "LMTP: deferring {Address} after a delivery failure — the MTA retains the mail and will retry",
-                address);
-            return "451 temporary failure storing the message";
-        }
+
+        // Only now. Every copy above is durable.
+        return "250 delivered";
     }
 
     /// <summary>The message's Subject, or a stand-in — the document's name, as an appended message gets.</summary>

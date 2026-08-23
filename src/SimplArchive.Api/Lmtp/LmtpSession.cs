@@ -145,11 +145,11 @@ internal sealed class LmtpSession
 
         // Resolving at RCPT rather than at DATA is what lets the MTA bounce an unknown address without ever
         // transferring the body — and ADR 0628 requires 550 rather than a silent accept, so the sender learns.
-        if (await delivery.ResolveAsync(address, cancellationToken) is null)
+        if ((await delivery.ResolveAsync(address, cancellationToken)).Count == 0)
         {
             _logger.LogWarning(
-                "LMTP: refused recipient {Address} — no tenant claims its domain, or no user owns its local "
-                + "part. The MTA will bounce to the sender. Set "
+                "LMTP: refused recipient {Address} — no tenant claims its domain, no user owns its local "
+                + "part, and no mailbox claims it. The MTA will bounce to the sender. Set "
                 + "Serilog:MinimumLevel:Override:SimplArchive.Api.Lmtp to Trace to see the exchange",
                 address);
             await ReplyAsync("550 no such recipient here");
