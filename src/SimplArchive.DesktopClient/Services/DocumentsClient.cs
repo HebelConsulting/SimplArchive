@@ -25,12 +25,14 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
     /// <summary>For sibling extension files that carry this client's own wire choreography (the debt-list
     /// pressure valve — see <c>IndexDataWrites</c>).</summary>
     internal ApiCore Core => _core;
+
+    /// <summary>A duplicate-probe hit (ADRs 0398/0686); the probe itself lives in <c>IndexDataWrites</c>.</summary>
+    public sealed record DuplicateInfo(Guid Id, string Name, string Path);
     private readonly Func<RemindersClient> _reminders = reminders;
 
     // The bulk collection's advertised action links (ADR 0557: a structurally fixed rel set may be cached).
     private IReadOnlyDictionary<string, string>? _bulkLinks;
     private readonly SemaphoreSlim _bulkGate = new(1, 1);
-
 
     public sealed record GrantablePrincipalInfo(string Type, Guid Id, string Name,
         IReadOnlyDictionary<string, string>? Links = null) : IAdvertisesLinks
@@ -316,7 +318,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
             SimplArchiveApiClient.StrOrNull(json, "assignedToName"), history, links);
     }
 
-
     public async Task<bool> GetSubscriptionAsync(string subscriptionHref, CancellationToken cancellationToken = default) =>
         await _reminders().GetSubscriptionAsync(subscriptionHref, cancellationToken);
 
@@ -598,7 +599,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         response.EnsureSuccessStatusCode();
     }
 
-
     // Moves (reparents) an item into another folder. Requires If-Match (like rename/delete), fetched via a
     // HEAD. 400 = into its own subtree, 403 = no permission (CanMove/CanCreateSubItems), 409 = name clash.
     public async Task MoveAsync(string documentSelfHref, Guid newParentId, CancellationToken cancellationToken = default)
@@ -639,28 +639,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
 
     // Files a reference (shortcut) to an item into a folder. 400 = into its own subtree, 403 = no permission,
     // 409 = already referenced here.
-    // Duplicate detection (ADR "Duplicate document detection") — documents whose latest confirmed version is
-    // byte-identical to the given SHA-256, ACL-filtered. Used to warn before an upload.
-    public sealed record DuplicateInfo(Guid Id, string Name, string Path);
-
-    public async Task<List<DuplicateInfo>> FindDuplicatesAsync(string hash, CancellationToken cancellationToken = default)
-    {
-        var json = await _core.Http.GetFromJsonAsync<JsonElement>(
-            $"{await _core.RootHrefAsync("duplicates", cancellationToken)}?hash={hash}", cancellationToken);
-        var list = new List<DuplicateInfo>();
-        if (json.TryGetProperty("duplicates", out var arr))
-        {
-            foreach (var d in arr.EnumerateArray())
-            {
-                list.Add(new DuplicateInfo(
-                    d.GetProperty("id").GetGuid(),
-                    d.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "",
-                    d.TryGetProperty("path", out var p) ? p.GetString() ?? "" : ""));
-            }
-        }
-
-        return list;
-    }
 
     public async Task CreateReferenceAsync(string referencesHref, Guid targetId, CancellationToken cancellationToken = default)
     {
@@ -977,7 +955,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
             m.TryGetProperty("displayName", out var n) ? n.GetString() ?? "" : ""))];
     }
 
-
     internal static int ReadContentsSortOrder(JsonElement envelope) =>
         envelope.TryGetProperty("contentsSortOrder", out var so) && so.ValueKind == JsonValueKind.Number ? so.GetInt32() : 1;
 
@@ -1082,7 +1059,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         e.GetProperty("canAnnotate").GetBoolean(),
         e.GetProperty("canManagePermissions").GetBoolean());
 
-
     public sealed record MaskInfo(Guid? MaskId, string? Name, int? VersionNumber);
 
     // System-field values shown always (separate from the mask, ADR "System fields + OCR-language mask
@@ -1150,7 +1126,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
             mask.TryGetProperty("name", out var n) ? n.GetString() : null,
             mask.TryGetProperty("versionNumber", out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : null);
     }
-
 
     public async Task<SystemFields?> GetSystemFieldsAsync(string versionsHref, CancellationToken cancellationToken = default)
     {
@@ -1359,9 +1334,7 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         await ApiCore.ThrowIfProblemAsync(response, Strings.Get("MaLoadFailed"), cancellationToken);
     }
 
-
     public sealed record TagCatalog(IReadOnlyList<TagCatalogItem> Items, bool CanManage);
-
 
     public async Task<TagCatalog> GetTagCatalogWithColorsAsync(CancellationToken cancellationToken = default)
     {
@@ -1381,7 +1354,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
 
         return new TagCatalog(items, json.TryGetProperty("canManage", out var cm) && cm.GetBoolean());
     }
-
 
     /// <summary>
     /// A folder's contents AND its persisted contents order, from the one listing that already carries both.
@@ -1404,7 +1376,6 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         return (children, sortOrder);
     }
 
-
     /// <summary>
     /// Every address a document advertises, from ONE read (ADR 0543/0555). For a caller that holds an id and
     /// needs several of the document's sub-resources at once — opening a folder wants children, references and
@@ -1424,10 +1395,8 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         ApiCore.ParseLinks(await _core.Http.GetFromJsonAsync<JsonElement>(documentSelfHref, cancellationToken))
         ?? throw new InvalidOperationException($"'{documentSelfHref}' advertised no links at all (ADR 0543).");
 
-
     public async Task<List<Comment>> GetCommentsAsync(string chatHref, CancellationToken cancellationToken = default) =>
         (await GetChatAsync(chatHref, cancellationToken)).Messages;
-
 
     /// <summary>An inline preview of a check-out's WORKING COPY — what you are about to check in.</summary>
     /// <remarks>

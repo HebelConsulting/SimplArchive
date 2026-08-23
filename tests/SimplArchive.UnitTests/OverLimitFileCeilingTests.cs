@@ -85,7 +85,10 @@ public class OverLimitFileCeilingTests
         // 6,982 → 6,996 for #703 (owner-confirmed 2026-08-23): the ConfirmDuplicateClaimDialog view-provided
         // delegate (the AnnotationDialog pattern) and the declined-question catch. The ask-and-retry
         // choreography itself went to DocumentsClient — this is only the seam the view plugs a dialog into.
-        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 6_996,
+        // 6,996 → 7,002 for #704 (owner-confirmed 2026-08-23): the .eml gate + the shared Message-ID
+        // extraction joining the duplicate probe. The extraction itself lives in Presentation; this is the
+        // upload flow's six-line share until #517's per-tab burn-down reaches it.
+        ["src/SimplArchive.DesktopClient/ViewModels/MainWindowViewModel.cs"] = 7_002,
 
         // SimplArchiveApiClient left the list with #443's ops tranche (4,527 → ~420: nine area clients on one
         // ApiCore). What remains over-limit is the largest single area it produced: the documents area itself —
@@ -98,7 +101,9 @@ public class OverLimitFileCeilingTests
         // IndexDataWrites (an extension file, same call sites). The guard caught the method GROWING here
         // first — the ask-and-retry had just moved in from the view-model, right direction, wrong room.
         // Lowered rather than left with headroom, as always.
-        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_469,
+        // 1,469 → 1,438 for #704: the duplicate probe moved to IndexDataWrites when the guard caught it
+        // growing here — the second method to leave by that door, which is the door working.
+        ["src/SimplArchive.DesktopClient/Services/DocumentsClient.cs"] = 1_438,
 
         // Re-entered 2026-08-17 (ADR 0613): burned down to 967 in an earlier pass, back to 1,156 since — the
         // handlers here are what #519 moves into per-tab UserControls, which is what takes it under again.

@@ -286,7 +286,11 @@ async function uploadFiles(dotNetRef, folderId, files) {
             // an identical document already exists. .NET shows the reference/file-anyway/cancel modal and returns:
             // 'file' → upload normally; 'referenced' → a shortcut was created instead, skip; 'cancel' → skip.
             const hash = await sha256Hex(file);
-            const decision = await dotNetRef.invokeMethodAsync('PrepareUploadAsync', folderId, hash, file.name);
+            // For an .eml, hand .NET the header region too — the shared extractor pulls the Message-ID from
+            // it so byte-different copies of one message still meet in the dialog (#704). The slice is a few
+            // KB; the whole file never crosses the interop boundary.
+            const headerText = file.name.toLowerCase().endsWith('.eml') ? await file.slice(0, 8192).text() : null;
+            const decision = await dotNetRef.invokeMethodAsync('PrepareUploadAsync', folderId, hash, file.name, headerText);
             if (decision !== 'file') {
                 continue;
             }

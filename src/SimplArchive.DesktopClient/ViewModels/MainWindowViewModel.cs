@@ -3768,7 +3768,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 if (DuplicateUploadDialog is { } prompt)
                 {
                     var hash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
-                    var dups = await _api.Documents.FindDuplicatesAsync(hash);
+
+                    // For an .eml the Message-ID joins the probe (#704) — byte-different copies of one
+                    // message still meet in the dialog; .msg degrades to hash-only (ADR 0686).
+                    var entryId = file.Name.EndsWith(".eml", StringComparison.OrdinalIgnoreCase)
+                        ? SimplArchive.Presentation.MessageIdHeader.Extract(bytes)
+                        : null;
+                    var dups = await _api.Documents.FindDuplicatesAsync(hash, entryId);
                     if (dups.Count > 0)
                     {
                         var choice = await prompt(new DuplicatePromptRequest(file.Name, dups));

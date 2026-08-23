@@ -2921,13 +2921,20 @@
     // Checks for an identical existing document; if found, shows the reference/file-anyway/cancel modal. Returns
     // "file" (upload normally), "referenced" (a shortcut was created instead — skip), or "cancel" (skip).
     [JSInvokable]
-    public async Task<string> PrepareUploadAsync(string folderId, string hash, string fileName)
+    public async Task<string> PrepareUploadAsync(string folderId, string hash, string fileName, string? headerText = null)
     {
         try
         {
+            // For an .eml, dropUpload.js hands over the file's first bytes and the Message-ID joins the probe
+            // (#704) — two recipients' copies of one message are never byte-identical, so the hash alone
+            // cannot catch the one class where duplicates are the everyday case. Extracted HERE, in the
+            // shared MessageIdHeader, so the two clients cannot parse the same header differently.
+            var entryId = SimplArchive.Presentation.MessageIdHeader.Extract(headerText);
+
             // A query on an advertised href is following it (ADR 0557) — the root owns the path, the caller
             // owns the filter.
-            var resp = await Http.GetFromJsonAsync<DuplicatesResponse>($"{await ApiRoot.RequireAsync("duplicates")}?hash={hash}");
+            var resp = await Http.GetFromJsonAsync<DuplicatesResponse>(
+                $"{await ApiRoot.RequireAsync("duplicates")}?hash={hash}{(entryId is null ? string.Empty : $"&entryId={Uri.EscapeDataString(entryId)}")}");
             var dups = resp?.Duplicates ?? [];
             if (dups.Count == 0)
             {

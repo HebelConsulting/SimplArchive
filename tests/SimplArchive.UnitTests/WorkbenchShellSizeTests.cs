@@ -103,7 +103,9 @@ public class WorkbenchShellSizeTests
     // SaveDetailAsync — show the localized MessageBox, on yes re-save with the confirmation — plus the whoami
     // flag reaching DetailCatalogs. Outcome reporting is explicitly this shell's job (ADR 0558), and the
     // ask-and-retry it reports on lives in DetailEditor.
-    private const int Ceiling = 3_353;
+    // 3,353 → 3,360 for #704 (owner-confirmed 2026-08-23): PrepareUploadAsync takes the .eml header text
+    // from JS and puts the shared-extracted Message-ID onto the duplicate probe. Seven lines, half comment.
+    private const int Ceiling = 3_360;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

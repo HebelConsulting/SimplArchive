@@ -11,6 +11,33 @@ namespace SimplArchive.DesktopClient.Services;
 /// </summary>
 public static class IndexDataWrites
 {
+    // Duplicate detection (ADRs 0398/0686) — documents whose latest confirmed version is byte-identical to
+    // the SHA-256, plus (for an e-mail) those sharing its Message-ID, ACL-filtered. Warns before an upload.
+    // Here with the index-data choreography because DocumentsClient is on the standing-debt list and this is
+    // the same kind of pre-write wire conversation.
+    public static async Task<List<DocumentsClient.DuplicateInfo>> FindDuplicatesAsync(
+        this DocumentsClient documents, string hash, string? entryId = null, CancellationToken cancellationToken = default)
+    {
+        // entryId (#704): an e-mail's Message-ID, so two byte-different copies of one message still meet in
+        // the dialog. A query on the advertised href is following it (ADR 0557).
+        var query = $"?hash={hash}{(entryId is null ? string.Empty : $"&entryId={Uri.EscapeDataString(entryId)}")}";
+        var json = await documents.Core.Http.GetFromJsonAsync<JsonElement>(
+            $"{await documents.Core.RootHrefAsync("duplicates", cancellationToken)}{query}", cancellationToken);
+        var list = new List<DocumentsClient.DuplicateInfo>();
+        if (json.TryGetProperty("duplicates", out var arr))
+        {
+            foreach (var d in arr.EnumerateArray())
+            {
+                list.Add(new DocumentsClient.DuplicateInfo(
+                    d.GetProperty("id").GetGuid(),
+                    d.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "",
+                    d.TryGetProperty("path", out var p) ? p.GetString() ?? "" : ""));
+            }
+        }
+
+        return list;
+    }
+
     // Replaces the whole index-data set. 400 FIELD_VALUE_INVALID / MULTIPLE_VALUES_NOT_ALLOWED surface as a message.
     //
     // A 409 DUPLICATE_ADDRESS_CLAIM (#703) is a QUESTION, not a failure: the response's `claimedBy` extension

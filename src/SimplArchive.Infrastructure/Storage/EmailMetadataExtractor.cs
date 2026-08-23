@@ -142,7 +142,11 @@ public class EmailMetadataExtractor : IEmailMetadataExtractor
 
     // The "Entry ID" is shown in <...> form (e.g. <C4BD621A…@ISSRVDE>). MimeKit's MessageId strips the angle
     // brackets; a raw header may keep them — normalise to exactly one pair.
-    private static string? NormalizeMessageId(string? raw)
+    //
+    // PUBLIC since #704: the duplicates probe normalizes its incoming entryId with THIS method, so the stored
+    // form and the queried form cannot drift — a second normalizer in the controller is how "matches on my
+    // machine" becomes a probe that silently never fires.
+    public static string? NormalizeMessageId(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
         {

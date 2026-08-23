@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Hypermedia;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Domain.Documents;
+using SimplArchive.Domain.Masks;
 using SimplArchive.Infrastructure.Persistence;
 
 namespace SimplArchive.Api.Controllers;
@@ -54,32 +55,60 @@ public class DuplicatesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> Find([FromQuery] string? hash, CancellationToken cancellationToken)
+    public async Task<IActionResult> Find([FromQuery] string? hash, [FromQuery] string? entryId, CancellationToken cancellationToken)
     {
         var normalized = hash?.Trim().ToLowerInvariant();
-        if (string.IsNullOrEmpty(normalized))
+        // The SAME normalizer that stored the Entry ID at finalize — a second one here is how the stored form
+        // and the queried form drift and the probe silently never fires (#704).
+        var normalizedEntryId = Infrastructure.Storage.EmailMetadataExtractor.NormalizeMessageId(entryId);
+        if (string.IsNullOrEmpty(normalized) && normalizedEntryId is null)
         {
-            return Ok(new DuplicatesResource { Links = SelfLinks(hash) });
+            return Ok(new DuplicatesResource { Links = SelfLinks(hash, entryId) });
         }
 
         // Documents that have ANY confirmed version with this hash (candidates); then keep only those whose
         // *latest* confirmed version matches (current-content duplicates, ADR decision).
-        var candidateIds = await _dbContext.DocumentVersions
-            .Where(v => v.Status == DocumentVersionStatus.Confirmed && v.Sha256Hash == normalized)
-            .Select(v => v.DocumentId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
+        var hashCandidates = string.IsNullOrEmpty(normalized)
+            ? []
+            : await _dbContext.DocumentVersions
+                .Where(v => v.Status == DocumentVersionStatus.Confirmed && v.Sha256Hash == normalized)
+                .Select(v => v.DocumentId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
 
+        // …and, for an e-mail filing, documents whose Entry ID carries the same Message-ID (#704): two
+        // recipients' copies of one message are never byte-identical (every hop prepends Received:), so the
+        // one class where duplicates are the everyday case is the one the hash cannot catch. Identity is the
+        // eMail mask's field by NAME — the same key the seeder and the heal use. No current-version rule
+        // here: the Entry ID is a fact about the DOCUMENT's index data, not about which bytes are current.
+        var entryCandidates = normalizedEntryId is null
+            ? []
+            : await _dbContext.FieldValues
+                .Where(v => v.Value == normalizedEntryId)
+                .Join(_dbContext.FieldDefinitions, v => v.FieldDefinitionId, f => f.Id, (v, f) => new { v.DocumentId, f.Name, f.MaskVersionId })
+                .Where(x => x.Name == "Entry ID")
+                .Join(_dbContext.MaskVersions, x => x.MaskVersionId, mv => mv.Id, (x, mv) => new { x.DocumentId, mv.MaskId })
+                .Where(x => x.MaskId == WellKnownMaskIds.EMail)
+                .Select(x => x.DocumentId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+        var entryCandidateSet = entryCandidates.ToHashSet();
         var results = new List<DuplicateResource>();
-        foreach (var docId in candidateIds)
+        foreach (var docId in hashCandidates.Concat(entryCandidates).Distinct())
         {
-            // The current-content hash honoring the CurrentVersionId pointer (issue #265), else the latest confirmed.
-            var pointer = await _dbContext.Documents.Where(d => d.Id == docId).Select(d => d.CurrentVersionId).FirstOrDefaultAsync(cancellationToken);
-            var currentVersion = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, docId, pointer, cancellationToken);
-
-            if (currentVersion?.Sha256Hash != normalized)
+            // The current-content rule applies to the HASH key only: an Entry-ID hit is a candidate whatever
+            // its current bytes are — the whole point is that the bytes differ.
+            if (!entryCandidateSet.Contains(docId))
             {
-                continue; // an older version matched, but the current content differs — not a current duplicate
+                // The current-content hash honoring the CurrentVersionId pointer (issue #265), else the latest confirmed.
+                var pointer = await _dbContext.Documents.Where(d => d.Id == docId).Select(d => d.CurrentVersionId).FirstOrDefaultAsync(cancellationToken);
+                var currentVersion = await CurrentVersion.ResolveAsync(_dbContext.DocumentVersions, docId, pointer, cancellationToken);
+
+                if (currentVersion?.Sha256Hash != normalized)
+                {
+                    continue; // an older version matched, but the current content differs — not a current duplicate
+                }
             }
 
             if (!await CanSeeAsync(docId, cancellationToken))
@@ -110,14 +139,15 @@ public class DuplicatesController : ControllerBase
             }
         }
 
-        return Ok(new DuplicatesResource { Duplicates = results, Links = SelfLinks(hash) });
+        return Ok(new DuplicatesResource { Duplicates = results, Links = SelfLinks(hash, entryId) });
     }
 
     // Standing convention: every GET action gets a companion HEAD.
     [HttpHead]
     public IActionResult Head() => NoContent();
 
-    private static List<Link> SelfLinks(string? hash) => [new("self", $"/api/duplicates?hash={hash}", "GET")];
+    private static List<Link> SelfLinks(string? hash, string? entryId) =>
+        [new("self", $"/api/duplicates?hash={hash}{(entryId is null ? string.Empty : $"&entryId={Uri.EscapeDataString(entryId)}")}", "GET")];
 
     private async Task<bool> CanSeeAsync(Guid documentId, CancellationToken cancellationToken)
     {
