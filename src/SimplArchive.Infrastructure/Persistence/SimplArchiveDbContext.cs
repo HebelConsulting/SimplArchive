@@ -455,7 +455,7 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
 
             await EnsureUniqueSiblingDocumentNameAsync(document, trackedDocuments.Values, cancellationToken);
             await EnforceTypedFolderContainmentAsync(document, cancellationToken);
-            await EnforceRepositoryMaskLockstepAsync(document, cancellationToken);
+            await DocumentMaskInvariants.EnforceAsync(this, document, cancellationToken);
             await EnforcePersonalSpaceStructureAsync(document, cancellationToken);
             await PersonalRootOwner.MaintainAsync(this, document, trackedDocuments, cancellationToken);
         }
@@ -553,57 +553,6 @@ public class SimplArchiveDbContext : DbContext, IDataProtectionKeyContext
     private async Task<bool> IsPersonalRootAsync(Guid documentId, CancellationToken cancellationToken) =>
         await Documents.IgnoreQueryFilters(["TenantFilter", "SoftDeleteFilter"])
             .AnyAsync(d => d.Id == documentId && d.PersonalOfUserId != null, cancellationToken);
-
-    // A repository is a root document (ADR 0200) AND wears the Repository mask (ADR 0627) — the two are kept in
-    // LOCKSTEP, which is the only thing that makes storing the same fact twice safe. Enforced both ways, here,
-    // for the same reason every other document invariant lives here: every surface writes through SaveChanges.
-    //
-    // The exception is the personal space, which is also a root but wears User Folder — a personal repository is
-    // somebody's, and carries their metadata (ADR 0590). So the rule is: Repository ⇒ root, and root ⇒
-    // Repository OR User Folder.
-    private async Task EnforceRepositoryMaskLockstepAsync(Document document, CancellationToken cancellationToken)
-    {
-        var maskId = document.MaskVersionId is not { } mv
-            ? (Guid?)null
-            : await MaskVersions.IgnoreQueryFilters()
-                .Where(v => v.Id == mv)
-                .Select(v => (Guid?)v.MaskId)
-                .SingleOrDefaultAsync(cancellationToken);
-
-        // A root that acquires a parent has stopped being a repository — which is a LEGITIMATE operation (a
-        // bulk move with the manage-repositories right does exactly this). So lockstep is MAINTAINED here, not
-        // vetoed: refusing the move would block a supported action to protect a fact we can simply keep true.
-        //
-        // Doing it at the single enforcement point rather than in the move endpoint is the whole reason this
-        // lives in SaveChanges: every path — bulk move, WebDAV, import, a future one — inherits it without
-        // having to remember. The same reasoning as the MaskVersion auto-numbering above.
-        if (maskId == Domain.Masks.WellKnownMaskIds.Repository && document.ParentId is not null)
-        {
-            var folderVersionId = await MaskVersions.IgnoreQueryFilters()
-                .Where(v => v.TenantId == document.TenantId
-                    && v.MaskId == Domain.Masks.WellKnownMaskIds.Folder
-                    && v.IsCurrent)
-                .Select(v => (Guid?)v.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (folderVersionId is { } folderVersion)
-            {
-                document.MaskVersionId = folderVersion;
-            }
-        }
-
-        // The other direction is deliberately NOT enforced as a throw. A root is created mask-less by several
-        // paths and stamped afterwards (the upload flow does exactly this, which is why typed-folder
-        // containment exempts a document whose type is not yet determined), so refusing a mask-less root here
-        // would break creation rather than protect anything. The backfill and the creating endpoints put the
-        // mask on; this half stops it being contradicted.
-        if (maskId == Domain.Masks.WellKnownMaskIds.UserFolder && document.ParentId is not null)
-        {
-            throw new InvalidOperationException(
-                $"'{document.Name}' wears the User Folder mask but has a parent. A personal space is a root "
-                + "document (ADR 0590).");
-        }
-    }
 
     // Typed-folder containment (#562 slice 5, generalized for #564's Contact/Calendar folders and its notebook
     // sections): a typed folder admits ONLY children wearing one of its admitted masks, and such a child's

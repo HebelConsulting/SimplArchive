@@ -2,6 +2,7 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SimplArchive.Api.Documents;
 using SimplArchive.Api.Errors;
 using SimplArchive.Api.Errors.Exceptions.Ocr;
 using SimplArchive.Api.Errors.Exceptions.Documents;
@@ -151,7 +152,10 @@ public class DocumentMetadataController : ControllerBase
 
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            // Translating save (#562/#564, and now ADR 0672): the refusals SaveChanges raises for containment,
+            // personal-space structure and an immutable folder type must NOT reach the catch below, which
+            // reports every InvalidOperationException as a missing required field.
+            await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
         }
         catch (InvalidOperationException ex)
         {
@@ -290,7 +294,10 @@ public class DocumentMetadataController : ControllerBase
         await _access.EnsureNotCheckedOutByOtherAsync(documentId, cancellationToken);
 
         document.MaskVersionId = null;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Clearing is a change: an untyped Mailbox breaks the projection exactly as a re-typed one does
+        // (ADR 0672), so this path is refused for the same folders and needs the same translation.
+        await _dbContext.SaveTranslatingContainmentAsync(cancellationToken);
 
         await _queue.EnqueueAsync(documentId, cancellationToken);
         await _wormLock.ReconcileAsync(documentId, cancellationToken); // retention no longer applies

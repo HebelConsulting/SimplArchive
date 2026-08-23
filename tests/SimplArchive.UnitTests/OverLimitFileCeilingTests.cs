@@ -181,7 +181,12 @@ public class OverLimitFileCeilingTests
         // (FieldValueValidation, 80 lines). It was a pure function over two entities that never touched the
         // context's state — the DbContext still owns the ENFORCEMENT POINT, which is what it owes; it did not
         // owe the rules. Guard-prompted, not planned: the failure named the choice and the cheaper half won.
-        ["src/SimplArchive.Infrastructure/Persistence/SimplArchiveDbContext.cs"] = 949,
+        // 949 → 898: the structural-mask immutability rule brought DocumentMaskInvariants with it, taking the
+        // mask-side invariants (immutability + the repository/mask lockstep) the same way the validator left.
+        // Two extractions from two branches, merged: the file is UNDER 1,000 for good now, and the entry stays
+        // (rather than being deleted at the 1,000 threshold) until the ratchet's general rule exists — a file
+        // this central re-crossing the line deserves to fail a build, not a review.
+        ["src/SimplArchive.Infrastructure/Persistence/SimplArchiveDbContext.cs"] = 898,
     };
 
     public static TheoryData<string> Files => [.. Ceilings.Keys];

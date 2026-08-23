@@ -32,6 +32,12 @@ public static class TypedFolderSave
         {
             throw new Errors.Exceptions.Documents.TypedFolderContainmentException(e.Message);
         }
+        catch (Domain.Masks.StructuralMaskImmutableException e)
+        {
+            // Third time, same shape: the mask endpoint's own catch assumes a missing required field, so an
+            // untranslated refusal here would tell the user to fill in a value that is not the problem.
+            throw new Errors.Exceptions.Documents.StructuralMaskImmutableException(e.Message);
+        }
         catch (Domain.Documents.PersonalSpaceStructureException e)
         {
             // Translated here for the same reason as the line above, and it is the same bug twice: a caller

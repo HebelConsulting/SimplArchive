@@ -276,9 +276,11 @@ public class LmtpDeliveryTests
         Assert.True(await IsImapSpecialAsync(db, inbox.MaskVersionId));
 
         // An INBOX created before the mask existed: a grow-only seed never revisits it, so the heal has to
-        // happen on the next delivery.
-        inbox.MaskVersionId = null;
-        await db.SaveChangesAsync();
+        // happen on the next delivery. Via ExecuteUpdate, because the state is HISTORICAL, not a transition —
+        // ADR 0685 now refuses moving a folder OFF a structural mask through SaveChanges, and a pre-mask
+        // folder never made that transition: it simply predates the mask.
+        await db.Documents.IgnoreQueryFilters().Where(d => d.Id == inbox.Id)
+            .ExecuteUpdateAsync(u => u.SetProperty(d => d.MaskVersionId, (Guid?)null));
 
         var second = await DeliverOneAsync(address);
 

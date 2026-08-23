@@ -409,6 +409,39 @@ public static class WellKnownMaskIds
             .Concat(ConstrainedPlacements)
             .ToDictionary(pair => pair.Key, pair => pair.Value);
 
+    /// <summary>
+    /// Folder masks whose type may not be changed once a folder wears one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The PRINCIPLE is what re-typing COSTS, not where the folder may live. Turn a Calendar into a plain
+    /// folder and the only thing lost is subscribability through CalDAV — the appointments inside remain
+    /// perfectly good documents in a perfectly good folder. Turn a Mailbox or a Notebook into one and you break
+    /// what the content depends on: mail has nowhere to arrive, and a notebook's whole purpose is a projection
+    /// that no longer exists. The first is a preference a user may change their mind about; the second destroys
+    /// the meaning of what is already inside.
+    /// </para>
+    /// <para>
+    /// This set DERIVES that from constraint — a folder mask the containment rules will not let live just
+    /// anywhere, by admission or by capacity — because a hand-maintained list of four is exactly what this file
+    /// has been bitten by before. But the derivation is a PROXY for the principle, not the principle itself:
+    /// nothing guarantees a future location-constrained mask is also one whose re-typing breaks its content, or
+    /// the reverse. <c>ImmutableStructuralMaskTests</c> therefore pins today's answer, so a divergence fails
+    /// loudly and someone decides, rather than the rule silently widening or narrowing.
+    /// </para>
+    /// <para>
+    /// Note the direction: the rule forbids changing AWAY from one of these, never having one. Provisioning and
+    /// the personal-space heal assign them to maskless folders, and a restamp moves a folder off plain
+    /// <see cref="Folder"/> — a rule reading "wears a structural mask ⇒ refuse" would break the very paths that
+    /// create them, which is the shape #630 got wrong three times.
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlySet<Guid> ImmutableStructuralMasks =
+        AdmittingFolders.Keys
+            .Concat(ChildCardinalityRules.Select(r => r.ChildMaskId))
+            .Where(FolderMasks.Contains)
+            .ToHashSet();
+
     /// <summary>Folder masks that hold documents only — the fourth fact, one-directional.</summary>
     /// <remarks>
     /// A restatement of <see cref="NoSubfolderMasks"/> without the display name, which the model does not need:
