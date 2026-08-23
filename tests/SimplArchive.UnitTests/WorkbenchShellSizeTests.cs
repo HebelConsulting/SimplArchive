@@ -96,7 +96,10 @@ public class WorkbenchShellSizeTests
     // own advice ("put the new code in the component that owns the responsibility") was cheaper than the
     // exception it offers as the alternative. (The extracted row takes its state as parameters rather than
     // injecting it, which costs five lines here and is what makes it re-render at all — see the component.)
-    private const int Ceiling = 3_322;
+    // 3_322 -> 3_331 for #702 PR 3, owner-confirmed: the tree context menu gains "Take over…", drawn only where
+    // the listing advertised the rel. The action itself lives in DocumentActions — what is here is the menu
+    // item and its gate, which is the one part that cannot live anywhere else while the menu does.
+    private const int Ceiling = 3_331;
 
     [Fact]
     public void The_workbench_shell_does_not_grow()

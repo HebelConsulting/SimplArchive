@@ -4554,4 +4554,16 @@
   <data name="ApptNotEditable" xml:space="preserve">
     <value>This appointment cannot be edited here.</value>
   </data>
+  <data name="CtxTakeOver" xml:space="preserve">
+    <value>Take over…</value>
+  </data>
+  <data name="TakeOverConfirm" xml:space="preserve">
+    <value>Take over the personal space &#x27;{0}&#x27;? You will be granted full rights on it, the action is recorded in the audit log, and the owner is notified.</value>
+  </data>
+  <data name="StTakeOverFailed" xml:space="preserve">
+    <value>The take-over failed.</value>
+  </data>
+  <data name="StTakenOver" xml:space="preserve">
+    <value>You now have full access to &#x27;{0}&#x27;.</value>
+  </data>
 </root>

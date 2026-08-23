@@ -596,6 +596,15 @@
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.Archive" OnClick="OpenExportDialogAsync">@Strings.Get("HomeExport")</MudMenuItem>
                             }
+                            @* Take over a user's personal space (ADR 0672). Drawn ONLY where the listing
+                               advertised the rel — a missing rel means "not available to you, here, now",
+                               so a caller without CanManageUsers sees no item rather than one that 403s. *@
+                            @if (tn.Links?.GetValueOrDefault("take-over") is { } takeOverHref)
+                            {
+                                <MudDivider />
+                                <MudMenuItem Icon="@Icons.Material.Filled.AdminPanelSettings" IconColor="Color.Warning"
+                                             OnClick="() => RunAndRefreshAsync(Actions.TakeOverPersonalSpaceAsync(tn, takeOverHref))">@Strings.Get("CtxTakeOver")</MudMenuItem>
+                            }
                             <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="RefreshAsync">@Strings.Get("RibbonRefresh")</MudMenuItem>
                         </NodeMenu>
                     </TreePane>

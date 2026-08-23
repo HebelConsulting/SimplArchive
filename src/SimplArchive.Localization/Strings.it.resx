@@ -4554,4 +4554,16 @@
   <data name="ApptNotEditable" xml:space="preserve">
     <value>Questo appuntamento non può essere modificato qui.</value>
   </data>
+  <data name="CtxTakeOver" xml:space="preserve">
+    <value>Acquisisci…</value>
+  </data>
+  <data name="TakeOverConfirm" xml:space="preserve">
+    <value>Acquisire lo spazio personale &#x27;{0}&#x27;? Otterrai diritti completi su di esso, l&#x27;operazione viene registrata nel log di controllo e il proprietario viene avvisato.</value>
+  </data>
+  <data name="StTakeOverFailed" xml:space="preserve">
+    <value>Acquisizione non riuscita.</value>
+  </data>
+  <data name="StTakenOver" xml:space="preserve">
+    <value>Ora hai accesso completo a &#x27;{0}&#x27;.</value>
+  </data>
 </root>

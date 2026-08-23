@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Hypermedia;
+using SimplArchive.Domain.Acl;
+using SimplArchive.Domain.Notifications;
 using SimplArchive.Application.Abstractions;
 using SimplArchive.Infrastructure.Persistence;
 
@@ -27,17 +29,20 @@ public class AdminController : ControllerBase
     private readonly ICurrentUserAccessor _currentUserAccessor;
     private readonly IUserSystemRightsResolver _userSystemRights;
     private readonly IAuditRecorder _auditRecorder;
+    private readonly INotificationService _notifications;
 
     public AdminController(
         SimplArchiveDbContext dbContext,
         ICurrentUserAccessor currentUserAccessor,
         IUserSystemRightsResolver userSystemRights,
-        IAuditRecorder auditRecorder)
+        IAuditRecorder auditRecorder,
+        INotificationService notifications)
     {
         _dbContext = dbContext;
         _currentUserAccessor = currentUserAccessor;
         _userSystemRights = userSystemRights;
         _auditRecorder = auditRecorder;
+        _notifications = notifications;
     }
 
     public class PersonalRepositoryItem
@@ -59,6 +64,12 @@ public class AdminController : ControllerBase
     {
         public List<PersonalRepositoryItem> Repositories { get; set; } = [];
     }
+
+    // The lifecycle right, not the browsing one (ADR 0672): taking over a departed person's space is the same
+    // act as deactivating them, and it is audited and announced rather than silent.
+    private async Task<bool> CanManageUsersAsync(CancellationToken cancellationToken) =>
+        _currentUserAccessor.UserId is { } userId
+        && (await _userSystemRights.GetEffectiveSystemRightsAsync(userId, cancellationToken)).CanManageUsers;
 
     private async Task<bool> CanAccessWithoutGrantAsync(CancellationToken cancellationToken) =>
         _currentUserAccessor.UserId is { } userId
@@ -118,6 +129,8 @@ public class AdminController : ControllerBase
             .ThenBy(x => x.Email)
             .ToListAsync(cancellationToken);
 
+        var canTakeOver = await CanManageUsersAsync(cancellationToken);
+
         foreach (var item in items)
         {
             item.Links =
@@ -125,6 +138,15 @@ public class AdminController : ControllerBase
                 new Link("document", $"/api/documents/{item.RepositoryId}", "GET"),
                 new Link("children", $"/api/documents/{item.RepositoryId}/children", "GET"),
             ];
+
+            // Offered only to a caller who may actually do it (ADR 0543): a missing rel means "not available
+            // to you, here, now", so a client without CanManageUsers simply has no button rather than one that
+            // answers 403. Taking over your OWN space is meaningless — you already hold every right on it.
+            if (canTakeOver && item.UserId != _currentUserAccessor.UserId)
+            {
+                item.Links.Add(new Link(
+                    "take-over", $"/api/admin/personal-repositories/{item.UserId}/take-over", "POST"));
+            }
         }
 
         // Record the admin's access to personal spaces (not silent) — after the read succeeds.
@@ -138,6 +160,125 @@ public class AdminController : ControllerBase
             Repositories = items,
             Links = [new Link("self", "/api/admin/personal-repositories", "GET")],
         });
+    }
+
+    /// <summary>
+    /// Grants the calling administrator full rights on one user's personal space (ADR 0672).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Privacy here means no SILENT access, not no access. Offboarding and GDPR both need a way into a space
+    /// nobody else can reach, and the alternatives were worse: deferring it ships a lockout, and letting
+    /// deactivation lift exclusivity makes access appear at the exact moment the owner can no longer see it.
+    /// So the way in is explicit, audited, and announced to the owner.
+    /// </para>
+    /// <para>
+    /// Gated on <b>CanManageUsers</b>, not on CanAccessWithoutGrant: taking over a departed person's space is a
+    /// user-lifecycle act, the same right that deactivates them. An administrator who gave up their own x-ray
+    /// may still do this, and that is not a hole — the act is recorded and the owner is told, which is exactly
+    /// the property the privacy rule protects.
+    /// </para>
+    /// <para>
+    /// A verb in the path, justified against #694 the way <c>/restore</c> is: this is a genuine transition, not
+    /// a create, replace or delete of anything.
+    /// </para>
+    /// </remarks>
+    [HttpPost("personal-repositories/{userId:guid}/take-over")]
+    public async Task<IActionResult> TakeOverPersonalRepository(Guid userId, CancellationToken cancellationToken)
+    {
+        if (!await CanManageUsersAsync(cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (_currentUserAccessor.UserId is not { } actorId)
+        {
+            return Forbid();
+        }
+
+        var root = await _dbContext.Documents
+            .SingleOrDefaultAsync(d => d.PersonalOfUserId == userId, cancellationToken);
+
+        if (root is null)
+        {
+            return NotFound();
+        }
+
+        var owner = await _dbContext.Users
+            .Where(u => u.Id == userId)
+            .Select(u => new { u.DisplayName, u.IsActive })
+            .SingleAsync(cancellationToken);
+
+        // Get-or-update rather than insert: AclEntry carries a partial unique index per principal per document,
+        // so a second take-over of the same space would violate it. Idempotent is also the honest behaviour —
+        // asking twice for access you already hold is not an error.
+        var grant = await _dbContext.AclEntries
+            .SingleOrDefaultAsync(a => a.DocumentId == root.Id && a.UserId == actorId, cancellationToken);
+
+        if (grant is null)
+        {
+            grant = new AclEntry
+            {
+                Id = Guid.NewGuid(),
+                TenantId = root.TenantId,
+                DocumentId = root.Id,
+                UserId = actorId,
+                CreatedAt = DateTimeOffset.UtcNow,
+            };
+            _dbContext.AclEntries.Add(grant);
+        }
+
+        grant.CanSee = true;
+        grant.CanReadContent = true;
+        grant.CanEditContent = true;
+        grant.CanEditIndexData = true;
+        grant.CanDelete = true;
+        grant.CanCreateSubItems = true;
+        grant.CanManagePermissions = true;
+        grant.CanMove = true;
+        grant.CanAnnotate = true;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _auditRecorder.RecordAsync(
+            AuditActions.PersonalSpaceTakenOver,
+            "Document",
+            root.Id,
+            root.Name,
+            $"Took over the personal space of '{owner.DisplayName}'.",
+            cancellationToken: cancellationToken);
+
+        // Told, not merely recorded — and only while there is somebody to tell. A deactivated owner cannot read
+        // notifications, so for them the audit log is the record, which is what offboarding needs anyway.
+        if (owner.IsActive)
+        {
+            await _notifications.NotifyAsync(
+                userId,
+                NotificationType.PersonalSpaceTakenOver,
+                "An administrator took over your personal space",
+                $"Your personal space '{root.Name}' was taken over by an administrator, who now has full "
+                + "access to it.",
+                root.Id,
+                cancellationToken);
+        }
+
+        return Ok(new TakeOverResource
+        {
+            RepositoryId = root.Id,
+            Links =
+            [
+                new Link("document", $"/api/documents/{root.Id}", "GET"),
+                new Link("children", $"/api/documents/{root.Id}/children", "GET"),
+                // The grant is an ordinary ACL entry and is revoked like one, so the way to undo this is the
+                // permissions dialog the caller already knows (ADR 0672).
+                new Link("acl-entries", $"/api/documents/{root.Id}/acl-entries", "GET"),
+            ],
+        });
+    }
+
+    public class TakeOverResource : HypermediaResource
+    {
+        public Guid RepositoryId { get; set; }
     }
 
     [HttpHead("personal-repositories")]

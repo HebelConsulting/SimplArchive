@@ -322,6 +322,41 @@ public sealed class DocumentActions(HttpClient http, IDialogService dialogs, ISn
         await dialogs.ShowAsync<ManageAccessDialog>(Strings.Get("MaManageAccess"), parameters, new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true });
     }
 
+    /// <summary>
+    /// Grants the signed-in administrator full rights on one user's personal space (ADR 0672).
+    /// </summary>
+    /// <remarks>
+    /// Takes the href from the ROW rather than composing it or reading pane state (ADR 0555/0559): the listing
+    /// advertised it, and it is only advertised to a caller who may actually do this. The confirmation is not
+    /// ceremony — the owner is notified the moment this succeeds, so an accidental click is something another
+    /// person sees.
+    /// </remarks>
+    public async Task<bool> TakeOverPersonalSpaceAsync(BrowseNode node, string takeOverHref)
+    {
+        var confirmed = await dialogs.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = Strings.Get("CtxTakeOver"),
+            Message = string.Format(Strings.Get("TakeOverConfirm"), node.Name),
+            YesText = Strings.Get("CtxTakeOver"),
+            CancelText = Strings.Get("Cancel"),
+        });
+
+        if (confirmed != true)
+        {
+            return false;
+        }
+
+        var response = await http.PostAsJsonAsync(takeOverHref, new { });
+        if (!response.IsSuccessStatusCode)
+        {
+            snackbar.Add(Strings.Get("StTakeOverFailed"), Severity.Warning);
+            return false;
+        }
+
+        snackbar.Add(string.Format(Strings.Get("StTakenOver"), node.Name), Severity.Success);
+        return true;
+    }
+
     public async Task<bool> RenameAsync(BrowseNode node)
     {
         var parameters = new DialogParameters<RenameDialog> { { x => x.CurrentName, node.Name } };

@@ -905,6 +905,7 @@ public partial class MainWindow : Window
             // Read from the RIGHT-CLICKED node, not from pane state (ADR 0559): the pane describes whatever
             // last finished loading, which during a load is a different folder than the one under the cursor.
             vm.TreeContextCanCreateChild = node.HasRel("create-child");
+            vm.TreeContextCanTakeOver = node.HasRel("take-over");
 
             // Built from what the node ADMITS rather than from rels the client knows by name (#673): the server
             // sends the label and the address, so this loop needs no case per family and a mask nobody
@@ -1099,6 +1100,22 @@ public partial class MainWindow : Window
         var mvm = new ManageAccessViewModel();
         await mvm.SetupAsync(api, node.DocumentSelfHref, node.Name);
         await new ManageAccessDialog(mvm).ShowDialog(this);
+    });
+
+    // Take over a user's personal space (ADR 0672). The href comes from the RIGHT-CLICKED node, never from
+    // pane state and never composed — the listing advertised it, and only to a caller who may perform it.
+    private void OnTreeTakeOver(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
+    {
+        if (DataContext is not MainWindowViewModel vm || _treeContextNode is not { } node || !node.HasRel("take-over"))
+        {
+            return;
+        }
+
+        var message = string.Format(Strings.Get("TakeOverConfirm"), node.Name);
+        if (await new ConfirmDialog(message, Strings.Get("CtxTakeOver")).ShowDialog<bool>(this))
+        {
+            await vm.TakeOverPersonalSpaceAsync(node.Name, node.Href("take-over"));
+        }
     });
 
     private void OnTreeRefresh(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>

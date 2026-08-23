@@ -217,7 +217,8 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
         catch (Exception) { page = null; }
         return (page?.Repositories ?? []).Select(r => new TreeItemData<BrowseNode>
         {
-            Value = new BrowseNode(r.RepositoryId, r.DisplayName, r.HasChildren, false, r.HasSubfolders, RepositoryId: r.RepositoryId),
+            Value = new BrowseNode(r.RepositoryId, r.DisplayName, r.HasChildren, false, r.HasSubfolders, RepositoryId: r.RepositoryId,
+                Links: r.Links.ToDictionary(l => l.Rel, l => l.Href)),
             Expandable = r.HasSubfolders,
             Text = r.UserIsActive ? r.DisplayName : $"{r.DisplayName} (inactive)",
             Icon = MaskIcon.Filled("person")!,
@@ -259,5 +260,9 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
         public Guid RepositoryId { get; set; }
         public bool HasChildren { get; set; }
         public bool HasSubfolders { get; set; }
+
+        // The row's own addresses, including `take-over` when this caller may perform it (ADR 0672). A missing
+        // rel is the server saying "not available to you, here, now", so the menu item simply is not drawn.
+        public List<LinkResponse> Links { get; set; } = [];
     }
 }

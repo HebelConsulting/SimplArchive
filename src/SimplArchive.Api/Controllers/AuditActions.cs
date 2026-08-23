@@ -143,6 +143,11 @@ public static class AuditActions
     // — admin access to private spaces is recorded, not silent.
     public const string AdminViewedPersonalSpaces = "Admin.ViewedPersonalSpaces";
 
+    // An administrator granted themselves full rights on a user's personal space (ADR 0672). Actor = the
+    // administrator, target = the personal repository. The heaviest thing this surface can do, so it is
+    // recorded as its own action rather than folded into Acl.Granted.
+    public const string PersonalSpaceTakenOver = "PersonalSpace.TakenOver";
+
     public const string LoggedIn = "Auth.LoggedIn";
     // Impersonation token issued (ADR "User impersonation") — actor = the impersonating admin, target = the user.
     public const string ImpersonationStarted = "Auth.ImpersonationStarted";

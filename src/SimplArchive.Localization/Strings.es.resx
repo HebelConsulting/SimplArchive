@@ -4554,4 +4554,16 @@
   <data name="ApptNotEditable" xml:space="preserve">
     <value>Esta cita no se puede editar aquí.</value>
   </data>
+  <data name="CtxTakeOver" xml:space="preserve">
+    <value>Tomar el control…</value>
+  </data>
+  <data name="TakeOverConfirm" xml:space="preserve">
+    <value>¿Tomar el control del espacio personal «{0}»? Obtendrá derechos completos sobre él, la acción se registra en el registro de auditoría y se notifica al propietario.</value>
+  </data>
+  <data name="StTakeOverFailed" xml:space="preserve">
+    <value>No se pudo tomar el control.</value>
+  </data>
+  <data name="StTakenOver" xml:space="preserve">
+    <value>Ahora tiene acceso completo a «{0}».</value>
+  </data>
 </root>

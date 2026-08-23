@@ -8,8 +8,8 @@ namespace SimplArchive.UiEndToEndTests;
 //
 //  1. The selected-node ring (#686) marked a whole SUBTREE. The class is applied to exactly one node, so
 //     counting it proves nothing — the bug was a CSS combinator, and only the computed outline shows it.
-//  2. A document wearing a mask the catalogue does not offer (#671) rendered its mask as a bare GUID, beside a
-//     dropdown whose only offers were the wrong ones.
+//  2. A document wearing a mask the catalogue does not carry (#671) rendered its mask as a bare GUID, because
+//     MudSelect falls back to its raw value when the value is absent from the items.
 [Collection(UiCollection.Name)]
 [Trait("Area", "ui-2")]
 public class WebTreeMarkerAndFixedMaskTests
@@ -68,7 +68,7 @@ public class WebTreeMarkerAndFixedMaskTests
     }
 
     [Fact]
-    public async Task A_mask_the_catalogue_does_not_offer_is_shown_by_name_and_cannot_be_changed()
+    public async Task A_mask_the_catalogue_does_not_carry_is_still_shown_by_name()
     {
         var page = await Ui.LoginAsync(_app);
         var tree = page.Locator("[data-pane='tree']");
@@ -92,10 +92,14 @@ public class WebTreeMarkerAndFixedMaskTests
         // The mask reads as a NAME. A GUID here was the reported symptom: MudSelect renders its raw value when
         // the value is absent from the offered items, and the catalogue is filtered to what may be chosen.
         var maskRow = pane.Locator(".wb-mask-row").First;
-        await Expect(maskRow.Locator("input")).ToHaveValueAsync("Calendar");
+        // On the ROW's rendered text, not on the select's hidden input — that one always carries the raw value
+        // (it is the form field), so asserting there reads a GUID whether the bug is present or not.
+        await Expect(maskRow).ToContainTextAsync("Calendar");
 
-        // ...and nothing else is on offer, because every alternative is a refusal the containment invariant
-        // would deliver after the save instead of before it.
-        await Expect(maskRow.Locator(".mud-select")).ToHaveCountAsync(0);
+        // ...and it is still a PICKER. Replacing it with a read-only field was the first attempt and froze
+        // every folder and extension-claimed document — a rule nobody asked for, since re-typing a Calendar
+        // costs only CalDAV subscribability.
+        await maskRow.Locator(".mud-input-control").First.ClickAsync();
+        await Expect(page.Locator(".mud-list-item").Filter(new() { HasText = "Basic Entry" }).First).ToBeVisibleAsync();
     }
 }

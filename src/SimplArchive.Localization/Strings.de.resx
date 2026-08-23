@@ -4554,4 +4554,16 @@
   <data name="ApptNotEditable" xml:space="preserve">
     <value>Dieser Termin kann hier nicht bearbeitet werden.</value>
   </data>
+  <data name="CtxTakeOver" xml:space="preserve">
+    <value>Übernehmen…</value>
+  </data>
+  <data name="TakeOverConfirm" xml:space="preserve">
+    <value>Den persönlichen Bereich &#x27;{0}&#x27; übernehmen? Sie erhalten volle Rechte darauf, der Vorgang wird im Audit-Log festgehalten, und der Eigentümer wird benachrichtigt.</value>
+  </data>
+  <data name="StTakeOverFailed" xml:space="preserve">
+    <value>Die Übernahme ist fehlgeschlagen.</value>
+  </data>
+  <data name="StTakenOver" xml:space="preserve">
+    <value>Sie haben jetzt vollen Zugriff auf &#x27;{0}&#x27;.</value>
+  </data>
 </root>

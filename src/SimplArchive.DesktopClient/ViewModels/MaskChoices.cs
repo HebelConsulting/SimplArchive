@@ -23,28 +23,31 @@ namespace SimplArchive.DesktopClient.ViewModels;
 /// symptom was visible to any test, because both are what a control does with a value it was never given.
 /// </para>
 /// <para>
-/// So a fixed mask becomes the ONLY choice: named, selectable, and with nothing to change it to — every
-/// alternative is a refusal the containment invariant would deliver after the save rather than before it.
+/// So the document's own mask is ADDED to the picker: named, selected, and sitting alongside the alternatives.
+/// Added rather than replacing them — the catalogue's absence means "you may not CHOOSE this", not "you may
+/// not choose anything". Narrowing the list to the current mask froze every folder and every extension-claimed
+/// document, which is a rule nobody asked for: re-typing a Calendar costs only CalDAV subscribability. The
+/// masks that genuinely cannot be re-typed are a smaller set, and are refused by the server.
 /// Its own type, rather than eight more lines in a 7,000-line view-model that is on the standing-debt list.
 /// </para>
 /// </remarks>
 public static class MaskChoices
 {
-    /// <summary>True when the document's current mask is one the catalogue does not offer.</summary>
+    /// <summary>True when the document's current mask is one the catalogue does not carry.</summary>
     public static bool IsFixed(IEnumerable<MaskChoiceViewModel> catalogue, Guid? currentMaskId) =>
         currentMaskId is { } id && !catalogue.Any(c => c.MaskId == id);
 
     /// <summary>
-    /// Narrows <paramref name="choices"/> to the document's own mask when that mask cannot be chosen freely,
-    /// and answers the choice to select. Leaves the catalogue untouched in the ordinary case.
+    /// Adds the document's own mask to <paramref name="choices"/> when the catalogue does not carry it, and
+    /// answers the choice to select. Leaves the catalogue untouched in the ordinary case.
     /// </summary>
     public static MaskChoiceViewModel Select(
         ObservableCollection<MaskChoiceViewModel> choices, DocumentsClient.MaskInfo current)
     {
-        if (IsFixed(choices, current.MaskId) && current.MaskId is { } fixedId)
+        if (IsFixed(choices, current.MaskId) && current.MaskId is { } ownMaskId)
         {
-            choices.Clear();
-            choices.Add(new MaskChoiceViewModel(fixedId, current.Name ?? string.Empty));
+            // Right after "(No mask)", so the document's own type reads first rather than last in a long list.
+            choices.Insert(Math.Min(1, choices.Count), new MaskChoiceViewModel(ownMaskId, current.Name ?? string.Empty));
         }
 
         return choices.FirstOrDefault(c => c.MaskId == current.MaskId) ?? choices[0];

@@ -39,6 +39,10 @@ public enum NotificationType
     // ChatMessagePosted: being addressed personally is a discrete, actionable thing, and folding it into a
     // "3 new comments" digest is exactly how a direct request gets missed.
     ChatMentioned = 13,
+
+    // An administrator took over this user's personal space (ADR 0672) — a full-rights grant was written on it
+    // for someone else. Privacy here means no SILENT access, so the owner is told rather than merely audited.
+    PersonalSpaceTakenOver = 14,
 }
 
 // A per-User in-app notification (ADR "Notifications (in-app, first slice)"). Written by INotificationService

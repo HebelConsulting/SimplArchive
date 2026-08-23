@@ -802,6 +802,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // here, now" (ADR 0543), which is the whole point of asking the server rather than guessing.
     [ObservableProperty] private bool _treeContextCanCreateChild;
 
+    // Whether the right-clicked node advertised `take-over` (ADR 0672) — only a user's personal space does, and
+    // only for a caller who may perform it. Read from the NODE, so the menu describes what was clicked.
+    [ObservableProperty] private bool _treeContextCanTakeOver;
+
     // Set while a search-hit reveal selects the parent folder's tree node after it has *already* loaded the folder
     // contents + selected the document itself (issue #340) — so the reactive load below doesn't re-fetch the folder
     // and clobber that document selection.
@@ -1163,7 +1167,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             r.HasSubfolders,
             LoadTreeChildrenAsync,
             isPersonal: true,
-            hasChildren: r.HasChildren));
+            hasChildren: r.HasChildren,
+            // Carries `take-over` when this caller may perform it (ADR 0672) — absent otherwise, so the menu
+            // item is simply not drawn rather than offering a button that answers 403.
+            links: r.Links));
     }
 
     // The Personal repository nests the Intray + Check-out launcher nodes above its real subfolders, mirroring
@@ -4375,6 +4382,26 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     // Creates a new matter (optionally covering a document) — the (name, reason) come from the dialog.
+    /// <summary>Grants this administrator full rights on one user's personal space (ADR 0672).</summary>
+    public async Task TakeOverPersonalSpaceAsync(string spaceName, string takeOverHref)
+    {
+        if (_api is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _api.Admin.TakeOverPersonalSpaceAsync(takeOverHref);
+            Status = string.Format(Strings.Get("StTakenOver"), spaceName);
+            await RefreshCommand.ExecuteAsync(null);
+        }
+        catch (Exception)
+        {
+            Status = Strings.Get("StTakeOverFailed");
+        }
+    }
+
     public async Task<bool> CreateLegalHoldAsync(string name, string? reason, Guid? documentId)
     {
         if (_api is null)

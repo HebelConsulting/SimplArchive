@@ -196,6 +196,12 @@
                                     <MenuItem Header="{loc:Tr CtxPlaceLegalHold}" Click="OnTreePlaceLegalHold" IsVisible="{Binding CanLegalHold}">
                                         <MenuItem.Icon><i:Icon Value="mdi-gavel" /></MenuItem.Icon>
                                     </MenuItem>
+                                    <!-- Take over a user's personal space (ADR 0672). Visible only where the
+                                         listing advertised the rel, so a caller without CanManageUsers has no
+                                         item rather than one that answers 403. -->
+                                    <MenuItem Header="{loc:Tr CtxTakeOver}" Click="OnTreeTakeOver" IsVisible="{Binding TreeContextCanTakeOver}">
+                                        <MenuItem.Icon><i:Icon Value="mdi-shield-account" /></MenuItem.Icon>
+                                    </MenuItem>
                                     <Separator />
                                     <MenuItem Header="{loc:Tr CtxPlaceReference}" Click="OnTreePlaceReference">
                                         <MenuItem.Icon><i:Icon Value="mdi-link-variant" /></MenuItem.Icon>

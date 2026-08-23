@@ -548,6 +548,17 @@ public sealed class AdminClient(ApiCore core)
         public string? Href(string rel) => Links is not null && Links.TryGetValue(rel, out var href) ? href : null;
     }
 
+    /// <summary>Follows a row's advertised <c>take-over</c> address (ADR 0672).</summary>
+    /// <remarks>
+    /// Takes the HREF, not a user id: the caller holds the row that advertised it, so there is nothing to
+    /// compose and nothing to look up again.
+    /// </remarks>
+    public async Task TakeOverPersonalSpaceAsync(string takeOverHref, CancellationToken cancellationToken = default)
+    {
+        var response = await _core.Http.PostAsync(takeOverHref, JsonContent.Create(new { }), cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
     // Lists every user's personal repository (ADR "Tenant-admin Administration → Users view") — tenant-admin only.
     public async Task<List<AdminPersonalRepoInfo>> GetAdminPersonalRepositoriesAsync(CancellationToken cancellationToken = default)
     {

@@ -34,6 +34,12 @@ public static class NotificationTypePolicy
             NotificationType.CheckoutExpired => false,
             NotificationType.CheckoutExpiring => false,
             NotificationType.StorageQuotaWarning => false,
+
+            // NOT mutable, and this is the type where that matters most: the entire justification for allowing
+            // an administrator into a private space is that the access is not SILENT (ADR 0672). A mutable
+            // announcement is one the owner can switch off and then never learn of — which would leave the
+            // audit log as the only record, readable by the very people it records.
+            NotificationType.PersonalSpaceTakenOver => false,
         };
 #pragma warning restore CS8524
 

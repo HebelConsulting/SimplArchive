@@ -11,6 +11,10 @@ namespace SimplArchive.UiEndToEndTests;
 // typed folder pre-selected "strip this folder's type" and a save the user believed changed one field would
 // have carried that with it. No test saw either, because both are what a control does with a value it was
 // never given — which is why this one asks the question directly rather than through the UI.
+//
+// The mask is ADDED to the picker, not substituted for it. Narrowing the list to the current mask was a first
+// attempt and was wrong: it froze every folder and every extension-claimed document, and a web test caught it
+// by failing to open a picker that no longer existed.
 public class DesktopFixedMaskChoiceTests
 {
     private static readonly Guid BasicEntryId = Guid.NewGuid();
@@ -23,17 +27,17 @@ public class DesktopFixedMaskChoiceTests
     ];
 
     [Fact]
-    public void A_mask_the_catalogue_does_not_offer_becomes_the_only_choice()
+    public void A_mask_the_catalogue_does_not_carry_is_added_and_selected()
     {
         var choices = Catalogue();
 
         var selected = MaskChoices.Select(choices, new DocumentsClient.MaskInfo(CalendarId, "Calendar", 1));
 
-        // Named, not a GUID and not "(No mask)" — and nothing else on offer, because every alternative is a
-        // refusal the containment invariant would deliver after the save rather than before it.
+        // Named, not a GUID and not "(No mask)" — and the alternatives survive, because "the catalogue does not
+        // offer this" means the user may not CHOOSE it, not that they may not choose anything.
         Assert.Equal(CalendarId, selected.MaskId);
         Assert.Equal("Calendar", selected.Name);
-        Assert.Equal(["Calendar"], choices.Select(c => c.Name));
+        Assert.Equal(["(No mask)", "Calendar", "Basic Entry"], choices.Select(c => c.Name));
     }
 
     [Fact]
