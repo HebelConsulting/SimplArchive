@@ -43,6 +43,18 @@ public static class ObjectKeyBuilder
         return $"tenants/{tenantId}/users/{userId}/mail/{storageFolderId}/{versionId}{suffix}";
     }
 
+    // The department-mailbox counterpart (#703 PR 4): a message delivered to a claimed mailbox with no
+    // personal-space owner has no user to file under, and writing `users/{mailboxId}` would be a path that
+    // lies. Same lifecycle as the personal key — ephemeral until the user files it out.
+    public static string DepartmentMailKey(Guid tenantId, Guid mailboxDocumentId, Guid storageFolderId, Guid versionId, string? extension = null)
+    {
+        var suffix = string.IsNullOrWhiteSpace(extension)
+            ? string.Empty
+            : extension.StartsWith('.') ? extension : $".{extension}";
+
+        return $"tenants/{tenantId}/mailboxes/{mailboxDocumentId}/mail/{storageFolderId}/{versionId}{suffix}";
+    }
+
     // Whether a key names ephemeral mail storage — the question "has this document's content crossed into the
     // archive yet?", asked of the key rather than of the folder, because the folder is what a move is changing.
     //
@@ -50,7 +62,8 @@ public static class ObjectKeyBuilder
     // caller holding only a version's key (the move seam does) can still answer it. `users/` alone would be
     // too loose the day anything else lives under a user.
     public static bool IsEphemeralMailKey(string objectKey) =>
-        objectKey.Contains("/users/", StringComparison.Ordinal)
+        (objectKey.Contains("/users/", StringComparison.Ordinal)
+            || objectKey.Contains("/mailboxes/", StringComparison.Ordinal))
         && objectKey.Contains("/mail/", StringComparison.Ordinal);
 
     // A sibling content key in the SAME document folder as an existing version's key, for a *new version* of that

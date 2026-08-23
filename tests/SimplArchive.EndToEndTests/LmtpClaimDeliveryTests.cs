@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net.Sockets;
@@ -118,6 +120,9 @@ public class LmtpClaimDeliveryTests
         public void Dispose() => _client.Dispose();
     }
 
+    private static async Task<string> ErrorCodeAsync(HttpResponseMessage response) =>
+        (await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty("errorCode").GetString()!;
+
     /// <summary>Delivers one message; returns its subject. Asserts the exchange succeeded.</summary>
     private async Task<string> DeliverAsync(string address)
     {
@@ -237,5 +242,115 @@ public class LmtpClaimDeliveryTests
         await lmtp.ExchangeAsync("LHLO mta.test");
         await lmtp.ExchangeAsync("MAIL FROM:<sender@example.test>");
         Assert.StartsWith("550", await lmtp.ExchangeAsync($"RCPT TO:<orphan@{domain}>"));
+    }
+
+    /// <summary>The full department-mailbox lifecycle (#703 PR 4), driven the way a client drives it.</summary>
+    [Fact]
+    public async Task A_department_mailbox_receives_via_its_claim_into_a_lazily_created_inbox()
+    {
+        var (tenantId, domain, _, _) = await TenantWithUserAsync();
+
+        // A routing user with rights on a shared repository — the DEPARTMENT shape, not the personal one.
+        var adminEmail = $"depadmin-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, adminEmail, "adm-1234", "Dept Admin",
+            canManageRepositories: true, canManageMailRouting: true);
+        using var admin = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(adminEmail, "adm-1234"));
+
+        var repoId = (await TestJson.Post(admin, "/api/repositories", new { name = $"Dept {Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+        var salesId = (await TestJson.Post(admin, $"/api/documents/{repoId}/children", new { name = "Sales" })).GetProperty("id").GetGuid();
+
+        // Created by FOLLOWING the folder's own `admits` entry — the affordance both clients build their New
+        // menu from arrived as pure data (Mailbox became user-creatable, placement became allowed-parents),
+        // so this asserting the entry exists IS asserting the menu lights up.
+        var salesRow = (await TestJson.Get(admin, $"/api/documents/{repoId}/children")).GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("id").GetGuid() == salesId);
+        var admits = salesRow.GetProperty("admits").EnumerateArray()
+            .Single(a => a.GetProperty("name").GetString() == "Mailbox");
+        var mailboxId = (await TestJson.Post(admin, admits.GetProperty("href").GetString()!,
+            new { name = "Mailbox", maskId = admits.GetProperty("maskId").GetGuid() })).GetProperty("id").GetGuid();
+
+        // …and the repository ROOT offers no such entry: it wears Repository, which placement excludes. Its
+        // row lives in the repositories listing, which carries admits the same way a child row does.
+        var repoRow = (await TestJson.Get(admin, "/api/repositories")).GetProperty("repositories").EnumerateArray()
+            .Single(r => r.GetProperty("id").GetGuid() == repoId);
+        Assert.DoesNotContain(repoRow.GetProperty("admits").EnumerateArray(),
+            a => a.GetProperty("name").GetString() == "Mailbox");
+
+        // The claim, through the API this time — the routing right composing with ordinary repo rights.
+        var maskId = (await TestJson.Get(admin, $"/api/documents/{mailboxId}/mask")).GetProperty("maskId").GetGuid();
+        var fieldId = (await TestJson.Get(admin, $"/api/masks/{maskId}")).GetProperty("fields").EnumerateArray()
+            .Single(f => f.GetProperty("name").GetString() == "eMail Addresses").GetProperty("id").GetGuid();
+        await TestJson.Put(admin, $"/api/documents/{mailboxId}/index-data",
+            new { fields = new[] { new { fieldDefinitionId = fieldId, values = new[] { $"sales@{domain}" } } }, confirmDuplicateClaims = false });
+
+        // Delivery: the Inbox does not exist yet — it appears with the first message (owner-decided
+        // 2026-08-23: Inbox only, lazily; no Junk/Trash/Sent/Drafts on a department mailbox).
+        var first = await DeliverAsync($"sales@{domain}");
+        var second = await DeliverAsync($"sales@{domain}");
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SimplArchiveDbContext>();
+        var firstDoc = await db.Documents.IgnoreQueryFilters().SingleAsync(d => d.Name == first);
+        var secondDoc = await db.Documents.IgnoreQueryFilters().SingleAsync(d => d.Name == second);
+
+        var inbox = await db.Documents.IgnoreQueryFilters().SingleAsync(d => d.Id == firstDoc.ParentId);
+        Assert.Equal("Inbox", inbox.Name);
+        Assert.Equal(mailboxId, inbox.ParentId);
+        Assert.Equal(inbox.Id, secondDoc.ParentId); // reused, not a second Inbox beside the first
+
+        // The bytes file under the MAILBOX, not under a user that does not exist — and still read as
+        // ephemeral, so filing them out later moves them onto an archive key exactly like personal mail.
+        var version = await db.DocumentVersions.IgnoreQueryFilters().SingleAsync(v => v.DocumentId == firstDoc.Id);
+        Assert.Contains($"/mailboxes/{mailboxId}/", version.ObjectKey);
+        Assert.True(SimplArchive.Application.Abstractions.ObjectKeyBuilder.IsEphemeralMailKey(version.ObjectKey));
+    }
+
+    /// <summary>ADR 0679's delete/restore gate, on the mailbox kind that made its success arm reachable.</summary>
+    [Fact]
+    public async Task Deleting_and_restoring_a_department_mailbox_needs_the_routing_right_and_works_with_it()
+    {
+        var (tenantId, domain, _, _) = await TenantWithUserAsync();
+
+        var routerEmail = $"router-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, routerEmail, "adm-1234", "Router",
+            canManageRepositories: true, canManageMailRouting: true);
+        using var router = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(routerEmail, "adm-1234"));
+
+        var plainEmail = $"plain-{Guid.NewGuid():N}@e2e.local";
+        var plainId = await _factory.SeedUserAsync(tenantId, plainEmail, "u-1234", "Plain");
+        using var plain = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(plainEmail, "u-1234"));
+
+        var repoId = (await TestJson.Post(router, "/api/repositories", new { name = $"Del {Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+        var folderId = (await TestJson.Post(router, $"/api/documents/{repoId}/children", new { name = "Ops" })).GetProperty("id").GetGuid();
+        var opsRow = (await TestJson.Get(router, $"/api/documents/{repoId}/children")).GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("id").GetGuid() == folderId);
+        var admits = opsRow.GetProperty("admits").EnumerateArray()
+            .Single(a => a.GetProperty("name").GetString() == "Mailbox");
+        var mailboxId = (await TestJson.Post(router, admits.GetProperty("href").GetString()!,
+            new { name = "Mailbox", maskId = admits.GetProperty("maskId").GetGuid() })).GetProperty("id").GetGuid();
+
+        // A caller with FULL ACL rights but no routing right: the ancestor-delete arm — deleting the FOLDER
+        // cascades to the mailbox two levels down, so gating only the direct target would make "delete the
+        // department" the one-step bypass.
+        await TestJson.Put(router, $"/api/documents/{repoId}/acl-entries/users/{plainId}",
+            new { canSee = true, canReadContent = true, canDelete = true });
+        var etag = (await plain.SendAsync(new HttpRequestMessage(HttpMethod.Head, $"/api/documents/{folderId}"))).Headers.ETag!.ToString();
+        var del = new HttpRequestMessage(HttpMethod.Delete, $"/api/documents/{folderId}");
+        del.Headers.TryAddWithoutValidation("If-Match", etag);
+        var refused = await plain.SendAsync(del);
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Equal("MAIL_ROUTING_RIGHT_REQUIRED", await ErrorCodeAsync(refused));
+
+        // The routing holder deletes the mailbox itself — the success arm ADR 0679 recorded as dormant.
+        var mbEtag = (await router.SendAsync(new HttpRequestMessage(HttpMethod.Head, $"/api/documents/{mailboxId}"))).Headers.ETag!.ToString();
+        var mbDel = new HttpRequestMessage(HttpMethod.Delete, $"/api/documents/{mailboxId}");
+        mbDel.Headers.TryAddWithoutValidation("If-Match", mbEtag);
+        (await router.SendAsync(mbDel)).EnsureSuccessStatusCode();
+
+        // Restore is the symmetric moment and carries the same gate — refused without, works with.
+        var restoreRefused = await plain.PostAsJsonAsync($"/api/documents/{mailboxId}/restore", new { });
+        Assert.Equal(HttpStatusCode.Forbidden, restoreRefused.StatusCode);
+        Assert.Equal("MAIL_ROUTING_RIGHT_REQUIRED", await ErrorCodeAsync(restoreRefused));
+        (await router.PostAsJsonAsync($"/api/documents/{mailboxId}/restore", new { })).EnsureSuccessStatusCode();
     }
 }

@@ -143,7 +143,8 @@ internal static class DemoArtistsSeeder
 
     internal static async Task SeedAsync(
         IServiceProvider services, SimplArchiveDbContext dbContext, IObjectStorageClient storage,
-        Guid tenantId, Guid repositoryId, Guid adminId, DateTimeOffset now, DocumentFinalizer finalizer)
+        Guid tenantId, Guid repositoryId, Guid adminId, DateTimeOffset now, DocumentFinalizer finalizer,
+        string mailboxAddress)
     {
         var folderMask = await FolderMask.CurrentVersionIdAsync(dbContext, tenantId, WellKnownMaskIds.Folder, CancellationToken.None);
         var addressbookMask = await FolderMask.CurrentVersionIdAsync(dbContext, tenantId, WellKnownMaskIds.Addressbook, CancellationToken.None);
@@ -156,6 +157,15 @@ internal static class DemoArtistsSeeder
         await FolderAsync(dbContext, tenantId, departments.Id, "Catering", adminId, now, folderMask);
 
         await SeasonAsync(dbContext, storage, services, tenantId, events.Id, adminId, now, finalizer, calendarMask);
+
+        // The department's own mailbox (#703 PR 4): the worked example of what the issue introduces, so a
+        // visitor can SEE a departmental mailbox rather than read that one is possible. The address arrives
+        // derived from the admin's domain (#432's rule), so a local Compose stack claims
+        // events@simplarchive.local while the kiosk claims events@demo.simplarchive.dev — never a hardcoded
+        // domain the local stack cannot receive for.
+        var mailboxMask = await FolderMask.CurrentVersionIdAsync(dbContext, tenantId, WellKnownMaskIds.Mailbox, CancellationToken.None);
+        var mailbox = await FolderAsync(dbContext, tenantId, events.Id, "Mailbox", adminId, now, mailboxMask);
+        await ClaimAsync(dbContext, tenantId, mailbox.Id, mailboxAddress);
 
         var artistsFolder = await FolderAsync(dbContext, tenantId, events.Id, "Artists", adminId, now, folderMask);
         var contactsFolder = await FolderAsync(dbContext, tenantId, artistsFolder.Id, "Contacts", adminId, now, addressbookMask);
@@ -382,6 +392,31 @@ internal static class DemoArtistsSeeder
             DocumentId = folder.Id,
             FieldDefinitionId = field,
             Value = colour,
+        });
+        await dbContext.SaveChangesAsync();
+    }
+
+    /// <summary>The mailbox's address claim, written only when absent (#574's rule, like every step here).</summary>
+    private static async Task ClaimAsync(SimplArchiveDbContext dbContext, Guid tenantId, Guid mailboxId, string address)
+    {
+        var fieldId = await dbContext.MaskVersions
+            .Where(v => v.MaskId == WellKnownMaskIds.Mailbox && v.IsCurrent)
+            .Join(dbContext.FieldDefinitions, v => v.Id, f => f.MaskVersionId, (_, f) => f)
+            .Where(f => f.Name == Infrastructure.Masks.WellKnownMaskSeeder.MailboxAddressesFieldName)
+            .Select(f => (Guid?)f.Id)
+            .FirstOrDefaultAsync();
+        if (fieldId is not { } field || await dbContext.FieldValues.AnyAsync(v => v.DocumentId == mailboxId && v.FieldDefinitionId == field))
+        {
+            return;
+        }
+
+        dbContext.FieldValues.Add(new FieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DocumentId = mailboxId,
+            FieldDefinitionId = field,
+            Value = address,
         });
         await dbContext.SaveChangesAsync();
     }

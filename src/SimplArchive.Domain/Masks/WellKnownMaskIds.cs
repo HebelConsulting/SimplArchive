@@ -160,6 +160,11 @@ public static class WellKnownMaskIds
     [
         new(UserFolder, "Personal space", Mailbox, "Mailbox", 1),
 
+        // One mailbox per plain folder (#703 PR 4): a DEPARTMENT mailbox lives in a named ordinary folder
+        // (`Sales/Mailbox`), and two mailboxes in one folder is not a placement error but one too many — the
+        // same shape as the personal-space rule above, extended rather than forked.
+        new(Folder, "Folder", Mailbox, "Mailbox", 1),
+
         // One notebook per mailbox (#596). Admission above already says a Notebook lives only under a Mailbox;
         // this says how many, and the two are separate questions for the same reason the mailbox rule is: a
         // second notebook is not a placement error, it is one too many. IMAP projects it as `NOTES`, and a
@@ -275,7 +280,9 @@ public static class WellKnownMaskIds
     /// </para>
     /// </remarks>
     public static readonly IReadOnlySet<Guid> NotUserCreatable =
-        new HashSet<Guid> { Repository, UserFolder, MyDocuments, Mailbox, ImapSpecial, Notebook };
+        // Mailbox LEFT this set with #703 PR 4: a department mailbox is created by a person, in a plain
+        // folder — placement and capacity say where and how many, creatability no longer says never.
+        new HashSet<Guid> { Repository, UserFolder, MyDocuments, ImapSpecial, Notebook };
 
     /// <summary>The well-known masks an ITEM wears — the complement of <see cref="FolderMasks"/>.</summary>
     /// <remarks>Stated rather than derived, so the partition guard has two sides to compare instead of one.</remarks>
@@ -369,10 +376,38 @@ public static class WellKnownMaskIds
             .ToDictionary(x => x.FolderMaskId, x => (IReadOnlySet<Guid>)x.Admits.ToHashSet());
 
     /// <summary>Mask → the folder masks it may live directly inside. Absent means anywhere.</summary>
+    /// <summary>
+    /// Masks whose PRIMARY LOCATION is constrained without any folder declaring them (#703 PR 4).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The Mailbox cannot ride <see cref="TypedFolderRules"/>: that table is two-directional, and a row
+    /// "Folder admits Mailbox" would make the plain folder EXCLUSIVE — refusing every ordinary document
+    /// everywhere. This is the one-directional half only: where a Mailbox may be, saying nothing about what
+    /// else its parent may hold.
+    /// </para>
+    /// <para>
+    /// <c>Folder</c> and <c>UserFolder</c>, deliberately short (owner-decided 2026-08-22, refined for roots):
+    /// a repository root wears <c>Repository</c> (ADR 0627), so a mailbox cannot sit directly under a root —
+    /// a department mailbox lives in a named plain folder, which is also where it reads naturally. Typed
+    /// containers (Calendar, Notebook, …) never hold one, keeping mailbox-in-mailbox impossible by
+    /// construction. <c>UserFolder</c> is the standing personal-space admission (#634), restated here because
+    /// allowed-parents is now CONSTRAINED for this mask — omitting it would refuse the provisioner's own
+    /// "My Mailbox".
+    /// </para>
+    /// </remarks>
+    public static readonly IReadOnlyDictionary<Guid, IReadOnlySet<Guid>> ConstrainedPlacements =
+        new Dictionary<Guid, IReadOnlySet<Guid>>
+        {
+            [Mailbox] = new HashSet<Guid> { Folder, UserFolder },
+        };
+
     public static readonly IReadOnlyDictionary<Guid, IReadOnlySet<Guid>> AllowedParentMasks =
         AdmittingFolders.ToDictionary(
             pair => pair.Key,
-            pair => (IReadOnlySet<Guid>)pair.Value.Select(r => r.FolderMaskId).ToHashSet());
+            pair => (IReadOnlySet<Guid>)pair.Value.Select(r => r.FolderMaskId).ToHashSet())
+            .Concat(ConstrainedPlacements)
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
 
     /// <summary>Folder masks that hold documents only — the fourth fact, one-directional.</summary>
     /// <remarks>

@@ -44,7 +44,7 @@ public class MaskUserCreatableSeedTests
     }
 
     [Fact]
-    public async Task The_six_the_application_provisions_are_closed_and_everything_else_is_open()
+    public async Task The_five_the_application_provisions_are_closed_and_everything_else_is_open()
     {
         using var connection = new SqliteConnection("Filename=:memory:");
         await connection.OpenAsync();
@@ -61,7 +61,9 @@ public class MaskUserCreatableSeedTests
         // Named explicitly as well as compared to the table, so the table itself is checked against intent
         // rather than only against itself — the failure mode where a test restates the code it is testing.
         Assert.False(creatable[WellKnownMaskIds.Notebook]);
-        Assert.False(creatable[WellKnownMaskIds.Mailbox]);
+        // Mailbox LEFT the closed set with #703 PR 4: a department mailbox is created by a person, in a
+        // plain folder — placement and capacity say where and how many, creatability no longer says never.
+        Assert.True(creatable[WellKnownMaskIds.Mailbox]);
         Assert.False(creatable[WellKnownMaskIds.Repository]);
         Assert.True(creatable[WellKnownMaskIds.Addressbook]);
         Assert.True(creatable[WellKnownMaskIds.Calendar]);

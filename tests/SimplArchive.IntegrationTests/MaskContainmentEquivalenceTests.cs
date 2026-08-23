@@ -146,8 +146,12 @@ public class MaskContainmentEquivalenceTests
             return false;
         }
 
-        if (WellKnownMaskIds.AdmittingFolders.TryGetValue(childMaskId, out var admitting)
-            && !admitting.Any(r => r.FolderMaskId == parentMaskId))
+        // The DERIVED allowed-parents plus the one-directional ConstrainedPlacements (#703 PR 4) — i.e.
+        // AllowedParentMasks whole, which is what actually seeds the model. Reading only AdmittingFolders
+        // here would leave the baseline blind to a constraint the model enforces, and the sweep would report
+        // every refused Mailbox placement as a mismatch — which is exactly how this line got here.
+        if (WellKnownMaskIds.AllowedParentMasks.TryGetValue(childMaskId, out var allowedParents)
+            && (parentMaskId is not { } pm || !allowedParents.Contains(pm)))
         {
             return false;
         }

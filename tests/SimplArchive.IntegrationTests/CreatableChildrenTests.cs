@@ -58,15 +58,16 @@ public class CreatableChildrenTests
         return CreatableChildren.For(rules, _documentId, folderMaskId, isPersonalRoot);
     }
 
-    // Three since #678, and the plain folder is FIRST: it is what "New subfolder" has always meant, and a
-    // menu that reorders itself per folder is one the user has to read rather than aim at. The other two are
-    // ordered by name, because row order out of a database is not defined.
+    // Four since #703 PR 4 (Mailbox joined the menu — a department mailbox is created by a person, in a
+    // plain folder), and the plain folder is FIRST: it is what "New subfolder" has always meant, and a menu
+    // that reorders itself per folder is one the user has to read rather than aim at. The rest are ordered by
+    // name, because row order out of a database is not defined.
     [Fact]
-    public async Task An_ordinary_folder_offers_the_three_kinds_and_says_how_to_perform_each()
+    public async Task An_ordinary_folder_offers_the_four_kinds_and_says_how_to_perform_each()
     {
         var admits = await AdmitsAsync(WellKnownMaskIds.Folder);
 
-        Assert.Equal(["Folder", "Addressbook", "Calendar"], admits.Select(a => a.Name).ToList());
+        Assert.Equal(["Folder", "Addressbook", "Calendar", "Mailbox"], admits.Select(a => a.Name).ToList());
 
         var entry = admits[0];
         Assert.Equal(WellKnownMaskIds.Folder, entry.MaskId);
@@ -80,11 +81,12 @@ public class CreatableChildrenTests
         Assert.Equal("folder", entry.FolderMask);
         Assert.Equal("name", entry.Prompt);
 
-        // Addressbook and Calendar reach the SAME address — since #678 a folder mask is made through the
-        // children collection carrying its mask id, which is what lets a tenant-authored mask arrive here
-        // without a table entry of its own. The slug rides along only because it exists for these.
+        // Every kind reaches the SAME address — since #678 a folder mask is made through the children
+        // collection carrying its mask id, which is what lets a tenant-authored mask arrive here without a
+        // table entry of its own. The slug rides along only where it predates ids; the Mailbox arrived after
+        // ids were the contract, so it deliberately has none.
         Assert.All(admits, a => Assert.EndsWith("/children", a.Href));
-        Assert.Equal(["folder", "addressbook", "calendar"], admits.Select(a => a.FolderMask).ToList());
+        Assert.Equal(["folder", "addressbook", "calendar", null], admits.Select(a => a.FolderMask).ToList());
         Assert.All(admits, a => Assert.NotEqual(Guid.Empty, a.MaskId));
     }
 

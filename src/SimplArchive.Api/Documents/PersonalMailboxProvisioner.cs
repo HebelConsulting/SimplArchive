@@ -131,6 +131,23 @@ public sealed class PersonalMailboxProvisioner
         }
     }
 
+    /// <summary>
+    /// A DEPARTMENT mailbox's <c>Inbox</c>, created lazily on first delivery (#703 PR 4, owner-decided
+    /// 2026-08-23: Inbox only — no Junk/Trash/Sent/Drafts, the accepted trade being a second mailbox shape).
+    /// </summary>
+    /// <remarks>
+    /// Attribution comes from the mailbox itself: a department mailbox has no owning user, and its creator —
+    /// user or service account, exactly one is set — is the nearest true statement about who caused the
+    /// folder to exist.
+    /// </remarks>
+    public async Task<Guid> EnsureInboxForMailboxAsync(Guid mailboxDocumentId, CancellationToken cancellationToken)
+    {
+        var mailbox = await _dbContext.Documents.SingleAsync(d => d.Id == mailboxDocumentId, cancellationToken);
+        return await EnsureStandingFolderAsync(
+            mailbox, mailbox.TenantId, mailbox.CreatedByUserId, InboxFolderName, WellKnownMaskIds.ImapSpecial,
+            cancellationToken, createdByServiceAccountId: mailbox.CreatedByServiceAccountId);
+    }
+
     /// <summary>The user's <c>INBOX</c>, creating the mailbox around it if need be.</summary>
     public async Task<Guid> EnsureInboxAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken) =>
         await EnsureStandingFolderAsync(
@@ -156,8 +173,8 @@ public sealed class PersonalMailboxProvisioner
     // Takes the mailbox rather than resolving it, so EnsureMailboxAsync can provision the standing set without
     // re-entering itself once per folder.
     private async Task<Guid> EnsureStandingFolderAsync(
-        Document mailbox, Guid tenantId, Guid userId, string name, Guid maskId, CancellationToken cancellationToken,
-        string? legacyName = null)
+        Document mailbox, Guid tenantId, Guid? userId, string name, Guid maskId, CancellationToken cancellationToken,
+        string? legacyName = null, Guid? createdByServiceAccountId = null)
     {
         var maskVersionId = await FolderMask.CurrentVersionIdAsync(_dbContext, tenantId, maskId, cancellationToken);
 
@@ -197,6 +214,7 @@ public sealed class PersonalMailboxProvisioner
             Name = name,
             MaskVersionId = maskVersionId,
             CreatedByUserId = userId,
+            CreatedByServiceAccountId = createdByServiceAccountId,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

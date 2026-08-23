@@ -49,7 +49,17 @@ public class LmtpDelivery
     /// so an address never resolves both ways. Several mailboxes claiming one address is the CONFIRMED
     /// duplicate an admin explicitly asked for: one RCPT, one copy into each — fan-out is a feature.
     /// </remarks>
-    public async Task<IReadOnlyList<(Guid TenantId, Guid UserId)>> ResolveAsync(string address, CancellationToken cancellationToken)
+    /// <summary>
+    /// One filing a recipient resolves to. <see cref="MailboxId"/> null = the user's own personal inbox;
+    /// set = a department mailbox's lazily-created Inbox (#703 PR 4). <see cref="UserId"/> is the
+    /// ATTRIBUTION principal for the personal branch, and null for a department mailbox created by a
+    /// service account.
+    /// </summary>
+    /// <param name="ServiceAccountId">Attribution when a department mailbox was created by a service
+    /// account — a filed message must name exactly one creator, and the mailbox knows which kind it has.</param>
+    public sealed record DeliveryTarget(Guid TenantId, Guid? UserId, Guid? MailboxId, Guid? ServiceAccountId = null);
+
+    public async Task<IReadOnlyList<DeliveryTarget>> ResolveAsync(string address, CancellationToken cancellationToken)
     {
         var at = address.LastIndexOf('@');
         if (at <= 0 || at == address.Length - 1)
@@ -85,7 +95,7 @@ public class LmtpDelivery
 
         if (userId is { } user)
         {
-            return [(tenant, user)];
+            return [new DeliveryTarget(tenant, user, null)];
         }
 
         // The claims branch: every LIVE mailbox whose address list contains the recipient, case-insensitively
@@ -101,23 +111,20 @@ public class LmtpDelivery
                 x => x.MaskVersionId, mv => mv.Id, (x, mv) => new { x.DocumentId, mv.MaskId })
             .Where(x => x.MaskId == WellKnownMaskIds.Mailbox)
             .Join(_dbContext.Documents.IgnoreQueryFilters(["TenantFilter"]),
-                x => x.DocumentId, d => d.Id, (_, d) => d.PersonalRootOwnerId)
+                x => x.DocumentId, d => d.Id, (_, d) => new { d.Id, d.PersonalRootOwnerId, d.CreatedByUserId, d.CreatedByServiceAccountId })
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        var targets = new List<(Guid, Guid)>();
-        foreach (var owner in owners)
+        var targets = new List<DeliveryTarget>();
+        foreach (var mailbox in owners)
         {
-            // A mailbox with no personal-root owner is a DEPARTMENT mailbox — #703 PR 4's concern. Skipping
-            // it here silently would be mail that vanishes with a 250, so until PR 4 teaches delivery to file
-            // into an ownerless mailbox the claim simply does not resolve: an address claimed ONLY by such
-            // mailboxes answers 550 at RCPT, and the sender learns (the ADR 0626 test — a refusal someone
-            // finds out about — passes).
-            if (owner is not { } ownerId)
+            // A mailbox with no personal-root owner is a DEPARTMENT mailbox (#703 PR 4): it delivers into
+            // its own lazily-created Inbox, and deliberately with NO active-owner check — a department box
+            // outlives its creator, and mail to sales@ must not stop because whoever clicked "New mailbox"
+            // later left the company.
+            if (mailbox.PersonalRootOwnerId is not { } ownerId)
             {
-                _logger.LogWarning(
-                    "LMTP: a mailbox with no personal-space owner claims {Address}; ownerless delivery arrives with department mailboxes (#703 PR 4)",
-                    address);
+                targets.Add(new DeliveryTarget(tenant, mailbox.CreatedByUserId, mailbox.Id, mailbox.CreatedByServiceAccountId));
                 continue;
             }
 
@@ -133,7 +140,7 @@ public class LmtpDelivery
                 continue;
             }
 
-            targets.Add((tenant, ownerId));
+            targets.Add(new DeliveryTarget(tenant, ownerId, null));
         }
 
         return targets;
@@ -159,8 +166,9 @@ public class LmtpDelivery
         // A partial failure defers the WHOLE recipient (451): the MTA redelivers, and the copies that already
         // landed will land again — a duplicate in a mailbox is recoverable by a reader, a message that
         // silently reached only half its claimants is not. The same trade every maildrop makes.
-        foreach (var (tenantId, userId) in targets)
+        foreach (var target in targets)
         {
+            var (tenantId, userId, mailboxId, serviceAccountId) = target;
             try
             {
                 // The DbContext reads the tenant from this accessor, and there is no request to have set it — the
@@ -169,15 +177,23 @@ public class LmtpDelivery
 
                 // Lazily rather than eagerly, and shared with the credential trigger: the mailbox exists exactly
                 // when it has something to hold, and whichever of the two demands arrives first creates it (#562).
-                var inboxId = await _mailbox.EnsureInboxAsync(tenantId, userId, cancellationToken);
+                // A DEPARTMENT mailbox's Inbox is the same idea one level in (#703 PR 4): the mailbox exists —
+                // a person created it — and its Inbox appears with the first message.
+                var inboxId = mailboxId is { } mailbox
+                    ? await _mailbox.EnsureInboxForMailboxAsync(mailbox, cancellationToken)
+                    : await _mailbox.EnsureInboxAsync(tenantId, userId!.Value, cancellationToken);
 
                 var now = DateTimeOffset.UtcNow;
                 var versionId = Guid.NewGuid();
                 var storageFolderId = Guid.NewGuid();
                 // The EPHEMERAL prefix, not an archive key (#633): a delivered message has not been filed, and its
                 // bytes should not sit where the archive's retention and disposition rules apply until it is. It
-                // moves onto an archive key when the user files it out — see DocumentMover.
-                var objectKey = ObjectKeyBuilder.EphemeralMailKey(tenantId, userId, storageFolderId, versionId, ".eml");
+                // moves onto an archive key when the user files it out — see DocumentMover. A department
+                // mailbox's key files under the MAILBOX, because there is no user to file under and a path
+                // that lies is a path someone debugs.
+                var objectKey = mailboxId is { } forMailbox
+                    ? ObjectKeyBuilder.DepartmentMailKey(tenantId, forMailbox, storageFolderId, versionId, ".eml")
+                    : ObjectKeyBuilder.EphemeralMailKey(tenantId, userId!.Value, storageFolderId, versionId, ".eml");
 
                 // Object FIRST. A row pointing at bytes that are not there is a document that opens to an error;
                 // bytes with no row are an orphan a sweep can find. Only one of those is recoverable.
@@ -190,6 +206,7 @@ public class LmtpDelivery
                     ParentId = inboxId,
                     Name = await UniqueNameAsync(inboxId, SubjectOf(payload), cancellationToken),
                     CreatedByUserId = userId,
+                    CreatedByServiceAccountId = serviceAccountId,
                     CreatedAt = now,
                     StorageFolderId = storageFolderId,
                     // The retention clock starts here (#640). Delivered, not filed — until the user files it out,
@@ -209,6 +226,7 @@ public class LmtpDelivery
                     Status = DocumentVersionStatus.Pending,
                     ObjectKey = objectKey,
                     CreatedByUserId = userId,
+                    CreatedByServiceAccountId = serviceAccountId,
                     CreatedAt = now,
                     DocumentDate = DateOnly.FromDateTime(now.UtcDateTime),
                 };

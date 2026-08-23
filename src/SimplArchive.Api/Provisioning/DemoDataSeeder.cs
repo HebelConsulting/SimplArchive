@@ -95,7 +95,7 @@ public static class DemoDataSeeder
         // isn't a request). Provisioning above runs before this with no tenant set, like the platform-admin path.
         services.GetRequiredService<CurrentTenantAccessor>().TenantId = provisioned.TenantId;
 
-        await SeedAsync(services, dbContext, clock, provisioned, demoAdminPassword);
+        await SeedAsync(services, dbContext, clock, provisioned, demoAdminPassword, demoAdminEmail);
 
         // The machine principal a migration reads this tenant WITH (ADR 0585). Seeded from configuration for the
         // same reason as the interop tenant's: a service-account secret is shown once and stored hashed, so a
@@ -109,7 +109,7 @@ public static class DemoDataSeeder
 
     private static async Task SeedAsync(
         IServiceProvider services, SimplArchiveDbContext dbContext, TimeProvider clock,
-        ProvisionedTenant provisioned, string demoPassword)
+        ProvisionedTenant provisioned, string demoPassword, string adminEmail)
     {
         var tenantId = provisioned.TenantId;
         var adminId = provisioned.AdministratorId;
@@ -249,7 +249,25 @@ public static class DemoDataSeeder
         // The Events department: an artist-booking tree with real contact cards and real concert schedules
         // (#659). Its own class — a tab's worth of seed data belongs beside the tab it fills, and this file is
         // on the standing size list.
-        await DemoArtistsSeeder.SeedAsync(services, dbContext, objectStorage, tenantId, repositoryId, adminId, now, finalizer);
+        // The demo domain becomes a REGISTERED mail domain (#703 PR 4, owner-decided 2026-08-23): without a
+        // TenantMailDomain, ingress answers 550 for every demo address and the seeded department mailbox
+        // could never demonstrate receiving. Derived from the admin's email (#432's rule) and written only
+        // when absent; #667 — the real admin surface for domains — stays open, this is the demo's shortcut.
+        var demoDomain = adminEmail.Split('@') is [_, var dd] && !string.IsNullOrWhiteSpace(dd) ? dd : "simplarchive.local";
+        if (!await dbContext.TenantMailDomains.IgnoreQueryFilters(["TenantFilter"])
+                .AnyAsync(m => m.TenantId == tenantId && m.NormalizedDomain == demoDomain.ToUpperInvariant()))
+        {
+            dbContext.TenantMailDomains.Add(new TenantMailDomain
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                Domain = demoDomain,
+                CreatedAt = now,
+            });
+            await dbContext.SaveChangesAsync();
+        }
+
+        await DemoArtistsSeeder.SeedAsync(services, dbContext, objectStorage, tenantId, repositoryId, adminId, now, finalizer, $"events@{demoDomain}");
 
         await SeedPersonalContactsAsync(services, dbContext, objectStorage, assembly, tenantId, adminId, now, finalizer);
 
