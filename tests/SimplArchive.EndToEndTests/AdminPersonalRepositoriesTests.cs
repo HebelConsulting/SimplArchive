@@ -124,4 +124,44 @@ public class AdminPersonalRepositoriesTests
             .Single(c => c.GetProperty("name").GetString() == "My Documents")
             .GetProperty("id").GetGuid();
 
+
+    [Fact]
+    public async Task A_listed_personal_space_advertises_everything_browsing_it_needs()
+    {
+        var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
+        var adminEmail = $"admin-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, adminEmail, "adm-1234", "Admin");
+        await _factory.GrantTenantAdminAsync(adminEmail);
+        using var admin = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(adminEmail, "adm-1234"));
+
+        var userEmail = $"carol-{Guid.NewGuid():N}@e2e.local";
+        await _factory.SeedUserAsync(tenantId, userEmail, "u-1234", "Carol");
+        using var carol = _factory.CreateAuthedClient(await _factory.GetUserTokenAsync(userEmail, "u-1234"));
+        var repo = (await TestJson.Post(carol, "/api/me/personal-repository", new { })).GetProperty("id").GetGuid();
+
+        var row = (await TestJson.Get(admin, "/api/admin/personal-repositories"))
+            .GetProperty("repositories").EnumerateArray()
+            .Single(r => r.GetProperty("repositoryId").GetGuid() == repo);
+        var rels = row.GetProperty("links").EnumerateArray()
+            .ToDictionary(l => l.GetProperty("rel").GetString()!, l => l.GetProperty("href").GetString()!);
+
+        // Opening a folder lists its children AND the shortcuts filed in it, so a row a client opens FROM must
+        // carry both (#735). It carried only `children`, and the desktop tree — which follows both — died on
+        // the one that was never advertised, on a path with no handler above it.
+        //
+        // Asserted here rather than in the client, because the client now degrades when a rel is missing: it
+        // no longer crashes, so nothing over there can notice this rel disappearing again, and the symptom
+        // would be shortcuts silently absent from every admin-browsed space.
+        Assert.Contains("children", rels.Keys);
+        Assert.Contains("references", rels.Keys);
+        Assert.Contains("document", rels.Keys);
+
+        // Followed, not merely present: a rel that 404s is worse than an absent one.
+        foreach (var rel in new[] { "children", "references", "document" })
+        {
+            Assert.True(
+                (await admin.GetAsync(rels[rel])).IsSuccessStatusCode,
+                $"the '{rel}' rel the admin listing advertised did not answer");
+        }
+    }
 }

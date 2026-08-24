@@ -137,6 +137,12 @@ public class AdminController : ControllerBase
             [
                 new Link("document", $"/api/documents/{item.RepositoryId}", "GET"),
                 new Link("children", $"/api/documents/{item.RepositoryId}/children", "GET"),
+
+                // Opening a personal space lists its children AND the shortcuts filed in it, exactly as opening
+                // any other folder does — the same pair, for the same reason, the repositories listing carries
+                // (#735). Without it the desktop tree CRASHED on expanding a user here: its loader follows both
+                // rels, and the one that was never advertised threw on a path with no handler above it.
+                new Link("references", $"/api/documents/{item.RepositoryId}/references", "GET"),
             ];
 
             // Offered only to a caller who may actually do it (ADR 0543): a missing rel means "not available

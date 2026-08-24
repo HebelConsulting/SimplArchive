@@ -1199,11 +1199,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
             .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
             .Select(c => new TreeNodeViewModel(c.Id, c.Name, c.HasSubfolders, LoadTreeChildrenAsync, links: c.Links, hasReferences: c.HasReferences, hasChildren: c.HasChildren, admits: c.Admits, icon: c.Icon));
 
-        var references = await _api.Documents.GetReferencesAsync(node.Href("references"));
-        var referenceNodes = references
-            .Where(r => !r.HasVersions)
-            .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(r => new TreeNodeViewModel(r.TargetId, r.Name, r.HasSubfolders, LoadTreeChildrenAsync, isReference: true, hasReferences: r.HasReferences, hasChildren: r.HasChildren));
+        // Shortcuts, or none where the folder advertises none — see TreeReferenceNodes for why that is not the
+        // same question as `children` above, and for the crash it stopped being (#735).
+        var referenceNodes = await TreeReferenceNodes.ForAsync(node, _api.Documents, LoadTreeChildrenAsync);
 
         return folderNodes.Concat(referenceNodes);
     }
