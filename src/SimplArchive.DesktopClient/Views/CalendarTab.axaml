@@ -3,6 +3,7 @@
              xmlns:i="using:Projektanker.Icons.Avalonia"
              xmlns:loc="using:SimplArchive.DesktopClient.Localization"
              xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
+             xmlns:p="using:SimplArchive.Presentation"
              xmlns:v="using:SimplArchive.DesktopClient.Views"
              x:Class="SimplArchive.DesktopClient.Views.CalendarTab"
              x:DataType="vm:CalendarTabViewModel">
@@ -231,20 +232,78 @@
         <StackPanel Spacing="8" Margin="8,0,0,0" IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
           <TextBlock Text="{Binding Selected.Title}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
           <TextBlock Text="{Binding Selected.CollectionName}" Foreground="{DynamicResource WbMuted}" />
-          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr CalendarWhen}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,4" />
-            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Selected.TimeRange}" TextWrapping="Wrap" Margin="0,0,0,4" />
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr CalendarStarts}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,4" />
-            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.StartsOn}" TextWrapping="Wrap" Margin="0,0,0,4" />
-            <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr CalendarWhere}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,4" />
-            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Selected.Location}" TextWrapping="Wrap" Margin="0,0,0,4" />
-            <!-- The rule verbatim, where there is room for it: a mark answers "does this repeat" but not "how",
-                 which is the next thing a reader asks. Not prettified into prose — inventing wording for a rule
-                 we deliberately do not interpret would state more than we know. -->
-            <TextBlock Grid.Row="3" Grid.Column="0" Text="{loc:Tr CalendarRepeats}" Foreground="{DynamicResource WbMuted}"
-                       Margin="0,0,8,4" IsVisible="{Binding Selected.Recurring}" />
-            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Selected.Repeats}" TextWrapping="Wrap"
-                       Margin="0,0,0,4" IsVisible="{Binding Selected.Recurring}" FontFamily="monospace" />
+          <!-- One instant, three readings (ADR 0690). UTC first because it is what anything else can be
+               compared against; then what the organiser actually wrote, with the zone each endpoint names —
+               two lines when they differ, which is a real appointment (a flight) and not an edge case; then
+               the reader's own zone, and ONLY when it would say something the recorded block did not.
+               Every row draws only when it has a value: this pane must not spend a line reporting an absence
+               (ADR 0550). -->
+          <StackPanel Spacing="6" IsVisible="{Binding Detail.HasTimes, FallbackValue=False}">
+            <Grid ColumnDefinitions="Auto,*">
+              <TextBlock Grid.Column="0" Text="{loc:Tr CalendarUtc}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,0" />
+              <TextBlock Grid.Column="1" Text="{Binding Detail.UtcRange}" TextWrapping="Wrap" />
+            </Grid>
+
+            <Grid ColumnDefinitions="Auto,*">
+              <TextBlock Grid.Column="0" Text="{loc:Tr CalendarRecorded}" Foreground="{DynamicResource WbMuted}"
+                         Margin="0,0,8,0" VerticalAlignment="Top" />
+              <ItemsControl Grid.Column="1" ItemsSource="{Binding Detail.RecordedLines}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="p:AppointmentTimeLine">
+                    <!-- A WrapPanel, not a horizontal StackPanel: the pane is narrow and resizable, and a zone
+                         name that does not fit was CLIPPED mid-word rather than moving to the next line —
+                         seen by capturing the pane, not by reading the markup. -->
+                    <WrapPanel>
+                      <TextBlock Text="{Binding Range}" Margin="0,0,6,0" />
+                      <!-- A floating time names no zone, and saying so in words is not the same as leaving the
+                           label blank: it means "this time, wherever you are". -->
+                      <TextBlock Text="{Binding Zone, TargetNullValue={loc:Tr CalendarNoZone}}"
+                                 Foreground="{DynamicResource WbMuted}" FontSize="11" VerticalAlignment="Center" />
+                    </WrapPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Grid>
+
+            <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding Detail.HasViewerTime, FallbackValue=False}">
+              <TextBlock Grid.Column="0" Text="{loc:Tr CalendarYourZone}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,0" />
+              <WrapPanel Grid.Column="1">
+                <TextBlock Text="{Binding Detail.ViewerRange}" Margin="0,0,6,0" />
+                <TextBlock Text="{Binding Detail.ViewerZone}" Foreground="{DynamicResource WbMuted}"
+                           FontSize="11" VerticalAlignment="Center" />
+              </WrapPanel>
+            </Grid>
+          </StackPanel>
+
+          <!-- An all-day entry has no instant to place and none may be invented (ADR 0647), so it keeps the
+               single row it always had. -->
+          <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding !Detail.HasTimes, FallbackValue=True}">
+            <TextBlock Grid.Column="0" Text="{loc:Tr CalendarWhen}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,0" />
+            <TextBlock Grid.Column="1" Text="{Binding Selected.TimeRange}" TextWrapping="Wrap" />
+          </Grid>
+
+          <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding Detail.HasLocation, FallbackValue=False}">
+            <TextBlock Grid.Column="0" Text="{loc:Tr CalendarWhere}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,0" />
+            <TextBlock Grid.Column="1" Text="{Binding Detail.Location}" TextWrapping="Wrap" />
+          </Grid>
+
+          <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding Detail.HasUrl, FallbackValue=False}">
+            <TextBlock Grid.Column="0" Text="{loc:Tr CalendarLink}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,0" />
+            <TextBlock Grid.Column="1" Text="{Binding Detail.Url}" TextWrapping="Wrap" />
+          </Grid>
+
+          <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding Detail.HasNotes, FallbackValue=False}">
+            <TextBlock Grid.Column="0" Text="{loc:Tr CalendarNotes}" Foreground="{DynamicResource WbMuted}"
+                       Margin="0,0,8,0" VerticalAlignment="Top" />
+            <TextBlock Grid.Column="1" Text="{Binding Detail.Notes}" TextWrapping="Wrap" />
+          </Grid>
+
+          <!-- The rule verbatim, where there is room for it: a mark answers "does this repeat" but not "how",
+               which is the next thing a reader asks. Not prettified into prose — inventing wording for a rule
+               we deliberately do not interpret would state more than we know. -->
+          <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding Selected.Recurring}">
+            <TextBlock Grid.Column="0" Text="{loc:Tr CalendarRepeats}" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,0" />
+            <TextBlock Grid.Column="1" Text="{Binding Selected.Repeats}" TextWrapping="Wrap" FontFamily="monospace" />
           </Grid>
         </StackPanel>
       </ScrollViewer>

@@ -307,7 +307,10 @@ public static class WindowShots
                     StartTime = new TimeSpan(14, 0, 0),
                     EndDate = new DateTimeOffset(new DateTime(2026, 9, 1), TimeSpan.Zero),
                     EndTime = new TimeSpan(15, 0, 0),
-                    TimeZoneId = "Europe/Zurich",
+                    // Two DIFFERENT zones, so the capture shows what one field could never express (ADR 0690).
+                    StartTimeZoneId = "Europe/Zurich",
+                    EndTimeZoneId = "America/New_York",
+                    Url = "https://meet.example.test/weekly",
                     RecurrenceRule = "FREQ=WEEKLY",
                     ReminderCount = 2,
                 };

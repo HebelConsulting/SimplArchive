@@ -37,11 +37,24 @@ public sealed class AppointmentForm
     public TimeSpan? EndTime { get; set; }
 
     /// <summary>
-    /// The appointment's own zone, carried through a save untouched. Null means a floating time, which stays
-    /// floating — nothing on this path converts one, which is what keeps a weekly meeting from drifting across
-    /// a daylight-saving change.
+    /// The zone the START is written in, chosen here rather than only carried (ADR 0690). Nothing on this path
+    /// CONVERTS a time — changing the zone re-labels the same wall clock, which is what keeps a weekly meeting
+    /// from drifting across a daylight-saving change. Empty means a floating time, which stays floating.
     /// </summary>
-    public string? TimeZoneId { get; set; }
+    public string StartTimeZoneId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The zone the END is written in, which iCalendar allows to DIFFER from the start's — a flight leaving
+    /// Zurich at 09:00 and landing in Boston at 11:30 is one appointment with two zones.
+    /// </summary>
+    public string EndTimeZoneId { get; set; } = string.Empty;
+
+    /// <summary>The event's web address. Absolute, or the server refuses the save.</summary>
+    public string Url { get; set; } = string.Empty;
+
+    /// <summary>The zones the two pickers offer, shared with the desktop so both name them the same way.</summary>
+    public static IReadOnlyList<string> ZoneChoices { get; } =
+        [string.Empty, .. SimplArchive.Presentation.TimeZoneChoices.All()];
 
     /// <summary>
     /// The RRULE as stored, shown but not edited: editing recurrence properly means choosing between this
@@ -69,6 +82,20 @@ public sealed class AppointmentForm
     public bool StructuredEnabled => CanEdit && !Raw.IsDirty;
 
 
+    /// <summary>The first of the named properties that carries a value — how a newer field falls back.</summary>
+    private static string First(JsonElement body, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (ContactCardForm.Text(body, name) is { Length: > 0 } value)
+            {
+                return value;
+            }
+        }
+
+        return string.Empty;
+    }
+
     /// <summary>Reads the API's appointment resource into the form.</summary>
     public static AppointmentForm From(JsonElement body)
     {
@@ -78,7 +105,10 @@ public sealed class AppointmentForm
             Location = ContactCardForm.Text(body, "location"),
             Description = ContactCardForm.Text(body, "description"),
             IsAllDay = body.TryGetProperty("isAllDay", out var allDay) && allDay.ValueKind == JsonValueKind.True,
-            TimeZoneId = ContactCardForm.Text(body, "timeZoneId") is { Length: > 0 } tz ? tz : null,
+            // The per-endpoint zones, falling back to the single one a server predating them would send.
+            StartTimeZoneId = First(body, "startTimeZoneId", "timeZoneId"),
+            EndTimeZoneId = First(body, "endTimeZoneId", "startTimeZoneId", "timeZoneId"),
+            Url = ContactCardForm.Text(body, "url"),
             RecurrenceRule = ContactCardForm.Text(body, "recurrenceRule") is { Length: > 0 } rule ? rule : null,
             ReminderCount = body.TryGetProperty("reminderCount", out var count) && count.TryGetInt32(out var n) ? n : 0,
         };
@@ -134,9 +164,11 @@ public sealed class AppointmentForm
         start = Combine(StartDate, StartTime),
         end = Combine(EndDate, EndTime),
         isAllDay = IsAllDay,
-        timeZoneId = TimeZoneId,
+        startTimeZoneId = Null(StartTimeZoneId),
+        endTimeZoneId = Null(EndTimeZoneId),
         location = Null(Location),
         description = Null(Description),
+        url = Null(Url),
 
         // Sent back unchanged. The field is not editable here, and the merge clears a rule handed to it as
         // null — so omitting it would silently un-repeat every recurring appointment anyone opened.

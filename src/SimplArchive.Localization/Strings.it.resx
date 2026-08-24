@@ -4356,6 +4356,33 @@
   <data name="CalendarWhere" xml:space="preserve">
     <value>Dove</value>
   </data>
+  <data name="CalendarUtc" xml:space="preserve">
+    <value>UTC</value>
+  </data>
+  <data name="CalendarRecorded" xml:space="preserve">
+    <value>Come registrato</value>
+  </data>
+  <data name="CalendarYourZone" xml:space="preserve">
+    <value>Ora locale</value>
+  </data>
+  <data name="CalendarNoZone" xml:space="preserve">
+    <value>nessun fuso orario</value>
+  </data>
+  <data name="CalendarLink" xml:space="preserve">
+    <value>Link</value>
+  </data>
+  <data name="CalendarNotes" xml:space="preserve">
+    <value>Note</value>
+  </data>
+  <data name="ApptStartZone" xml:space="preserve">
+    <value>Fuso orario inizio</value>
+  </data>
+  <data name="ApptEndZone" xml:space="preserve">
+    <value>Fuso orario fine</value>
+  </data>
+  <data name="ApptUrl" xml:space="preserve">
+    <value>Link</value>
+  </data>
   <data name="StErrLoadCalendars" xml:space="preserve">
     <value>Impossibile caricare i calendari: {0}</value>
   </data>

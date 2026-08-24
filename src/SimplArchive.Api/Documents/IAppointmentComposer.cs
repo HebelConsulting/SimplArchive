@@ -13,12 +13,18 @@ namespace SimplArchive.Api.Documents;
 /// </param>
 /// <param name="End">The end, on the same terms as <paramref name="Start"/>.</param>
 /// <param name="IsAllDay">True when the stored value is a DATE rather than a DATE-TIME.</param>
-/// <param name="TimeZoneId">
-/// The appointment's own zone (ADR 0631 decision 5): a TZID like <c>Europe/Zurich</c>, <c>"UTC"</c> for a
-/// Z-suffixed value, or <see langword="null"/> for a floating time — which stays floating.
+/// <param name="StartTimeZoneId">
+/// The zone <paramref name="Start"/> is written in (ADR 0631 decision 5): a TZID like <c>Europe/Zurich</c>,
+/// <c>"UTC"</c> for a Z-suffixed value, or <see langword="null"/> for a floating time — which stays floating.
+/// </param>
+/// <param name="EndTimeZoneId">
+/// The zone <paramref name="End"/> is written in, which iCalendar allows to DIFFER from the start's — a flight
+/// that leaves Zurich at 09:00 and lands in Boston at 11:30 is one appointment with two zones, and collapsing
+/// them into one is how it comes to read as two and a half hours in the wrong place (ADR 0690).
 /// </param>
 /// <param name="Location">The location.</param>
 /// <param name="Description">The notes.</param>
+/// <param name="Url">The <c>URL</c> property — where the event lives online (a meeting link, a ticket page).</param>
 /// <param name="RecurrenceRule">
 /// The RRULE as raw text (<c>FREQ=WEEKLY;BYDAY=TU</c>), kept opaque — the server never expands a recurrence
 /// set, so this travels through the form unparsed.
@@ -28,12 +34,14 @@ public sealed record Appointment(
     DateTime? Start,
     DateTime? End,
     bool IsAllDay,
-    string? TimeZoneId,
+    string? StartTimeZoneId,
+    string? EndTimeZoneId,
     string? Location,
     string? Description,
-    string? RecurrenceRule)
+    string? RecurrenceRule,
+    string? Url = null)
 {
-    public static Appointment Empty { get; } = new(null, null, null, false, null, null, null, null);
+    public static Appointment Empty { get; } = new(null, null, null, false, null, null, null, null, null);
 }
 
 /// <summary>

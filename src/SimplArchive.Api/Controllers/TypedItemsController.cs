@@ -340,6 +340,15 @@ public class TypedItemsController : ControllerBase
             {
                 entry.Links.Add(new Link("photo", DocumentContactCardController.PhotoHref(row.Id), "GET"));
             }
+
+            // The structured appointment, on the ROW (ADR 0690): the detail pane shows the recorded zones, the
+            // notes and the URL, none of which are index fields, so it must read the entry itself. Advertised
+            // here rather than discovered through `self` because that would cost TWO requests per selection —
+            // one to resolve the row, one to follow the rel — on the tab's most-used interaction (ADR 0557).
+            if (entry is AppointmentEntryResource)
+            {
+                entry.Links.Add(new Link("appointment", $"/api/documents/{row.Id}/appointment", "GET"));
+            }
             entries.Add(entry);
         }
 

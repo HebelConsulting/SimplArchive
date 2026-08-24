@@ -38,13 +38,14 @@ public class StructuredEditorViewModelTests
     [Fact]
     public void An_appointment_sends_its_own_wall_clock_without_an_offset()
     {
-        // The zone travels in timeZoneId, so the time itself must carry no offset: an offset would assert a
+        // The zone travels in its own field, so the time itself must carry no offset: an offset would assert a
         // zone of its own, and attaching one is how a floating time stops floating (ADR 0631 decision 5).
         var model = AppointmentEditViewModel.From(Json("""
             {"summary":"Floating","start":"2026-09-01T14:00:00","end":"2026-09-01T15:00:00","isAllDay":false}
             """));
 
-        Assert.Null(model.TimeZoneId);
+        Assert.Equal(string.Empty, model.StartTimeZoneId);
+        Assert.Equal(string.Empty, model.EndTimeZoneId);
 
         var payload = JsonSerializer.Serialize(model.ToPayload());
 
@@ -143,5 +144,32 @@ public class StructuredEditorViewModelTests
         Assert.Equal("1990-02-15", payload.GetProperty("birthday").GetString());
         Assert.Equal("https://contoso.example", payload.GetProperty("url").GetString());
         Assert.Equal("Met at the trade fair.", payload.GetProperty("note").GetString());
+    }
+
+    [Fact]
+    public void An_appointment_keeps_a_zone_per_endpoint_and_falls_back_to_the_single_one()
+    {
+        // A flight: the two endpoints name different zones (ADR 0690), and both must survive the round trip.
+        var flight = AppointmentEditViewModel.From(Json("""
+            {"summary":"LX 54","start":"2026-09-01T09:00:00","end":"2026-09-01T11:30:00","isAllDay":false,
+             "startTimeZoneId":"Europe/Zurich","endTimeZoneId":"America/New_York","url":"https://x.test/f"}
+            """));
+
+        Assert.Equal("Europe/Zurich", flight.StartTimeZoneId);
+        Assert.Equal("America/New_York", flight.EndTimeZoneId);
+
+        var payload = JsonSerializer.Serialize(flight.ToPayload());
+        Assert.Contains("Europe/Zurich", payload);
+        Assert.Contains("America/New_York", payload);
+        Assert.Contains("https://x.test/f", payload);
+
+        // And a server that predates the two fields still fills BOTH from the one it sends — otherwise every
+        // appointment read from an older build would silently lose its zone on the next save.
+        var older = AppointmentEditViewModel.From(Json("""
+            {"summary":"Weekly","start":"2026-09-01T14:00:00","isAllDay":false,"timeZoneId":"Europe/Zurich"}
+            """));
+
+        Assert.Equal("Europe/Zurich", older.StartTimeZoneId);
+        Assert.Equal("Europe/Zurich", older.EndTimeZoneId);
     }
 }

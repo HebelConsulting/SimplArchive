@@ -45,8 +45,21 @@ public class AppointmentEndpointTests
         + "END:VEVENT\r\n"
         + "END:VCALENDAR\r\n";
 
+    // The flight (ADR 0690): DTSTART and DTEND name DIFFERENT zones, and the entry carries a URL. Both are
+    // things iCalendar has always allowed and this editor could not express until #733.
+    private static string Flight(string uid) =>
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Some Phone//Calendar 1.0//EN\r\nBEGIN:VEVENT\r\n"
+        + $"UID:{uid}\r\n"
+        + "DTSTAMP:20260801T090000Z\r\n"
+        + "DTSTART;TZID=Europe/Zurich:20260901T090000\r\n"
+        + "DTEND;TZID=America/New_York:20260901T113000\r\n"
+        + "SUMMARY:Weekly sync\r\n"
+        + "URL:https://airline.example.test/lx54\r\n"
+        + "END:VEVENT\r\nEND:VCALENDAR\r\n";
+
     /// <summary>A user, an appointment filed by a CalDAV PUT, and the document id it landed as.</summary>
-    private async Task<(HttpClient Api, HttpClient Dav, AuthenticationHeaderValue Auth, Guid DocumentId, string ItemHref)> AppointmentAsync()
+    private async Task<(HttpClient Api, HttpClient Dav, AuthenticationHeaderValue Auth, Guid DocumentId, string ItemHref)> AppointmentAsync(
+        Func<string, string>? entry = null)
     {
         var (_, _, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: false);
         var email = $"appt-{Guid.NewGuid():N}@e2e.local";
@@ -75,7 +88,7 @@ public class AppointmentEndpointTests
         var uid = $"uid-{Guid.NewGuid():N}";
         using var put = new HttpRequestMessage(HttpMethod.Put, $"{collectionHref}{uid}.ics")
         {
-            Content = new StringContent(Entry(uid), Encoding.UTF8, "text/calendar"),
+            Content = new StringContent((entry ?? Entry)(uid), Encoding.UTF8, "text/calendar"),
             Headers = { Authorization = auth },
         };
         var response = await dav.SendAsync(put);
@@ -312,4 +325,98 @@ public class AppointmentEndpointTests
             .Single(c => c.GetProperty("name").GetString() == "My Documents")
             .GetProperty("id").GetGuid();
 
+
+    [Fact]
+    public async Task An_entry_whose_endpoints_name_different_zones_keeps_both_and_carries_its_url()
+    {
+        var (api, _, _, documentId, _) = await AppointmentAsync(Flight);
+        using var _a = api;
+
+        var appointment = await TestJson.Get(api, $"/api/documents/{documentId}/appointment");
+
+        // Both zones, as written. Reading the end through the START's zone — which this endpoint did until
+        // #733 — turns an eight-and-a-half-hour flight into two and a half hours, in the wrong place.
+        Assert.Equal("Europe/Zurich", appointment.GetProperty("startTimeZoneId").GetString());
+        Assert.Equal("America/New_York", appointment.GetProperty("endTimeZoneId").GetString());
+        Assert.Equal("https://airline.example.test/lx54", appointment.GetProperty("url").GetString());
+
+        // The superseded single field still answers, as the START's zone, so a client built before the two
+        // fields existed round-trips an ordinary appointment rather than stripping its zone (ADR 0690).
+        Assert.Equal("Europe/Zurich", appointment.GetProperty("timeZoneId").GetString());
+
+        // A save keeps them apart rather than collapsing the end into the start's zone.
+        var etag = (await api.GetAsync($"/api/documents/{documentId}/appointment")).Headers.ETag!.Tag;
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/documents/{documentId}/appointment")
+        {
+            Content = JsonContent.Create(new
+            {
+                summary = "Weekly sync",
+                start = "2026-09-01T09:00:00",
+                end = "2026-09-01T11:30:00",
+                isAllDay = false,
+                startTimeZoneId = "Europe/Zurich",
+                endTimeZoneId = "America/New_York",
+                url = "https://airline.example.test/lx54-rebooked",
+            }),
+        };
+        request.Headers.TryAddWithoutValidation("If-Match", etag);
+        (await api.SendAsync(request)).EnsureSuccessStatusCode();
+
+        var saved = await TestJson.Get(api, $"/api/documents/{documentId}/appointment");
+        Assert.Equal("Europe/Zurich", saved.GetProperty("startTimeZoneId").GetString());
+        Assert.Equal("America/New_York", saved.GetProperty("endTimeZoneId").GetString());
+        Assert.Equal("https://airline.example.test/lx54-rebooked", saved.GetProperty("url").GetString());
+    }
+
+    [Fact]
+    public async Task A_url_that_is_not_a_complete_address_is_refused_rather_than_dropped()
+    {
+        var (api, _, _, documentId, _) = await AppointmentAsync();
+        using var _a = api;
+
+        var etag = (await api.GetAsync($"/api/documents/{documentId}/appointment")).Headers.ETag!.Tag;
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/documents/{documentId}/appointment")
+        {
+            Content = JsonContent.Create(new
+            {
+                summary = "Weekly sync",
+                start = "2026-09-01T14:00:00",
+                isAllDay = false,
+                url = "meet.example.test/room",
+            }),
+        };
+        request.Headers.TryAddWithoutValidation("If-Match", etag);
+
+        // Refused, not silently dropped: a save that reports success and discards what was typed is the
+        // degradation ADR 0626 forbids, and the user would find out only by reopening the form.
+        var response = await api.SendAsync(request);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("INVALID_APPOINTMENT_URL",
+            (await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty("errorCode").GetString());
+    }
+
+    [Fact]
+    public async Task A_listed_appointment_advertises_its_own_entry()
+    {
+        var (api, _, _, documentId, _) = await AppointmentAsync();
+        using var _a = api;
+
+        // The listing the Calendar tab reads. The row must carry the address of its structured entry, or the
+        // detail pane has to resolve the document first and every selection costs two requests (ADR 0557).
+        var personal = await TestJson.Post(api, "/api/me/personal-repository", new { });
+        var calendar = (await TestJson.Get(api, $"/api/documents/{personal.GetProperty("id").GetGuid()}/children?limit=200"))
+            .GetProperty("children").EnumerateArray()
+            .Single(c => c.GetProperty("name").GetString() == "My Calendar")
+            .GetProperty("id").GetGuid();
+        var listing = await TestJson.Get(api, $"/api/documents/{calendar}/appointments");
+
+        var row = listing.GetProperty("appointments").EnumerateArray()
+            .Single(a => a.GetProperty("id").GetGuid() == documentId);
+        var href = row.GetProperty("links").EnumerateArray()
+            .Single(l => l.GetProperty("rel").GetString() == "appointment")
+            .GetProperty("href").GetString();
+
+        // Followed, not merely present: a rel that 404s is worse than an absent one.
+        Assert.Equal("Weekly sync", (await TestJson.Get(api, href!)).GetProperty("summary").GetString());
+    }
 }

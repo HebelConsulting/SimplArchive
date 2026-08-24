@@ -85,6 +85,32 @@ public sealed class StructuredEditorClient(ApiCore core, DocumentsClient documen
     }
 
     /// <summary>
+    /// Reads a structured item at an address the caller ALREADY HOLDS — one request, no resolution step.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ReadAsync"/> resolves a document first and then follows a rel off it, which is right when all
+    /// the caller has is the document's own address. A listing row that advertises the rel itself has already
+    /// paid for that, and re-resolving would make the calendar's most-used interaction — clicking a row — cost
+    /// two requests instead of one (ADR 0557). Null on any failure: a detail pane that cannot read its subject
+    /// shows nothing, which is what an absent rel means anyway (ADR 0543).
+    /// </remarks>
+    public async Task<T?> ReadAtAsync<T>(string href, Func<JsonElement, T> parse, CancellationToken cancellationToken = default)
+        where T : class
+    {
+        try
+        {
+            using var response = await core.Http.GetAsync(href, cancellationToken);
+            return response.IsSuccessStatusCode
+                ? parse(await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken))
+                : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Reads the RAW text behind a structured item, following the <c>source</c> rel the structured resource
     /// advertised (#648). Null when it advertises none — which is the server saying there is nothing to show.
     /// </summary>

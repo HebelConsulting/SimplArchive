@@ -27,9 +27,14 @@ public sealed class AppointmentComposer : IAppointmentComposer
             end?.Value,
             start is { HasTime: false },
             ZoneOf(start),
+            // The END's own zone, which iCalendar allows to differ from the start's (ADR 0690). Falls back to
+            // the start's only when there is no end at all — an end written in no zone is FLOATING, and saying
+            // "the start's" for it would silently move it.
+            end is null ? ZoneOf(start) : ZoneOf(end),
             Nonempty(master.Location),
             Nonempty(master.Description),
-            Nonempty(master.RecurrenceRule?.ToString()));
+            Nonempty(master.RecurrenceRule?.ToString()),
+            Nonempty(master.Url?.ToString()));
     }
 
     public string Merge(string? existingBlob, Appointment appointment, string uid)
@@ -54,6 +59,7 @@ public sealed class AppointmentComposer : IAppointmentComposer
         master.Summary = Nonempty(appointment.Summary);
         master.Location = Nonempty(appointment.Location);
         master.Description = Nonempty(appointment.Description);
+        master.Url = ParseUrl(appointment.Url);
 
         ApplyTiming(master, appointment);
         ApplyRecurrence(master, appointment.RecurrenceRule);
@@ -78,7 +84,7 @@ public sealed class AppointmentComposer : IAppointmentComposer
             return;
         }
 
-        master.DtStart = ToCalDateTime(start, appointment.IsAllDay, appointment.TimeZoneId);
+        master.DtStart = ToCalDateTime(start, appointment.IsAllDay, appointment.StartTimeZoneId);
 
         // An event carries either DTEND or DURATION, never both, and Ical.Net enforces that on both setters:
         // it refuses a DURATION while DTEND is set. So a component that expresses its length as a DURATION has
@@ -91,7 +97,7 @@ public sealed class AppointmentComposer : IAppointmentComposer
                 master.Duration = null;
             }
 
-            master.DtEnd = ToCalDateTime(end, appointment.IsAllDay, appointment.TimeZoneId);
+            master.DtEnd = ToCalDateTime(end, appointment.IsAllDay, appointment.EndTimeZoneId);
         }
     }
 
@@ -104,6 +110,19 @@ public sealed class AppointmentComposer : IAppointmentComposer
     {
         // The rule stays opaque — parsed only so it round-trips as a real RRULE, never expanded here.
         master.RecurrenceRule = Nonempty(rule) is { } text ? new RecurrencePattern(text) : null;
+    }
+
+    // iCalendar's URL is a URI, and Ical.Net models it as one — so a value that is not an absolute URI cannot
+    // be stored at all. Refused rather than dropped: silently discarding what someone typed is the degradation
+    // ADR 0626 forbids, and the user would only find out by reopening the form.
+    private static Uri? ParseUrl(string? value)
+    {
+        if (Nonempty(value) is not { } text)
+        {
+            return null;
+        }
+
+        return Uri.TryCreate(text, UriKind.Absolute, out var uri) ? uri : throw new InvalidAppointmentUrlException(text);
     }
 
     // null for a floating value, "UTC" for a Z-suffixed one, else the TZID as written.

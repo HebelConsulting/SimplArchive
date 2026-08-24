@@ -110,7 +110,8 @@ public class AppointmentComposerTests
         // The wall-clock as written — 14:00, NOT converted to the reader's zone (ADR 0631 decision 5).
         Assert.Equal(new DateTime(2026, 9, 1, 14, 0, 0), appointment.Start);
         Assert.Equal(new DateTime(2026, 9, 1, 15, 0, 0), appointment.End);
-        Assert.Equal("Europe/Zurich", appointment.TimeZoneId);
+        Assert.Equal("Europe/Zurich", appointment.StartTimeZoneId);
+        Assert.Equal("Europe/Zurich", appointment.EndTimeZoneId);
         Assert.False(appointment.IsAllDay);
     }
 
@@ -152,7 +153,8 @@ public class AppointmentComposerTests
             + "SUMMARY:Floating\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
 
         var read = _composer.Read(floating);
-        Assert.Null(read.TimeZoneId);
+        Assert.Null(read.StartTimeZoneId);
+        Assert.Null(read.EndTimeZoneId);
 
         var merged = Unfold(_composer.Merge(floating, read with { Summary = "Still floating" }, "u3"));
 
@@ -188,7 +190,8 @@ public class AppointmentComposerTests
             Summary = "Kickoff",
             Start = new DateTime(2026, 10, 1, 9, 0, 0),
             End = new DateTime(2026, 10, 1, 10, 0, 0),
-            TimeZoneId = "Europe/Zurich",
+            StartTimeZoneId = "Europe/Zurich",
+            EndTimeZoneId = "Europe/Zurich",
             Location = "Room 1",
         }, "new-uid-1"));
 
@@ -257,7 +260,8 @@ public class AppointmentComposerTests
             + "SUMMARY:In UTC\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
 
         var read = _composer.Read(utc);
-        Assert.Equal("UTC", read.TimeZoneId);
+        Assert.Equal("UTC", read.StartTimeZoneId);
+        Assert.Equal("UTC", read.EndTimeZoneId);
 
         var merged = Unfold(_composer.Merge(utc, read with { Summary = "Still UTC" }, "u6"));
 
@@ -305,5 +309,45 @@ public class AppointmentComposerTests
 
         // New Appointment still works — there is no stored content to lose.
         Assert.Contains("SUMMARY:Fresh", _composer.Merge(null, Appointment.Empty with { Summary = "Fresh" }, "u5"));
+    }
+    [Fact]
+    public void The_two_endpoints_keep_their_own_zones()
+    {
+        // A flight: leaves Zurich at 09:00, lands in Boston at 11:30. iCalendar allows DTSTART and DTEND to
+        // name different TZIDs, and reading both through ONE zone — which this composer did until #733 — makes
+        // the same entry read as two and a half hours instead of eight and a half.
+        var flight =
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//P//EN\r\nBEGIN:VEVENT\r\nUID:u7\r\n"
+            + "DTSTAMP:20260801T090000Z\r\nDTSTART;TZID=Europe/Zurich:20260901T090000\r\n"
+            + "DTEND;TZID=America/New_York:20260901T113000\r\nSUMMARY:LX 54\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+
+        var read = _composer.Read(flight);
+        Assert.Equal("Europe/Zurich", read.StartTimeZoneId);
+        Assert.Equal("America/New_York", read.EndTimeZoneId);
+
+        // And a save keeps them apart rather than collapsing the end into the start's zone.
+        var merged = Unfold(_composer.Merge(flight, read with { Summary = "LX 54 (rebooked)" }, "u7"));
+        Assert.Contains("DTSTART;TZID=Europe/Zurich:20260901T090000", merged);
+        Assert.Contains("DTEND;TZID=America/New_York:20260901T113000", merged);
+    }
+
+    [Fact]
+    public void The_url_round_trips_and_an_incomplete_one_is_refused()
+    {
+        var merged = Unfold(_composer.Merge(null, Appointment.Empty with
+        {
+            Summary = "Standup",
+            Start = new DateTime(2026, 10, 1, 9, 0, 0),
+            Url = "https://meet.example.test/standup",
+        }, "u8"));
+
+        Assert.Contains("URL:https://meet.example.test/standup", merged);
+        Assert.Equal("https://meet.example.test/standup", _composer.Read(merged).Url);
+
+        // iCalendar's URL is a URI, so a bare host cannot be stored at all. Refused rather than dropped: a save
+        // that reports success and discards what was typed is the silent degradation ADR 0626 forbids, and the
+        // user would only find out by reopening the form.
+        Assert.Throws<InvalidAppointmentUrlException>(
+            () => _composer.Merge(null, Appointment.Empty with { Summary = "x", Url = "meet.example.test" }, "u9"));
     }
 }

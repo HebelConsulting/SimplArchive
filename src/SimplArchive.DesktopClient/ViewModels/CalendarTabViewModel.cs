@@ -183,6 +183,73 @@ public sealed partial class CalendarCollectionViewModel : ObservableObject
 }
 
 /// <summary>
+/// What the detail pane says about the selected appointment beyond what its row already carries (ADR 0690).
+/// </summary>
+/// <remarks>
+/// Its own object rather than a dozen properties on the tab, so that clearing it on a selection change is one
+/// assignment and cannot half-happen — the pane must never show one appointment's notes beside another's title
+/// (ADR 0559).
+/// </remarks>
+public sealed partial class AppointmentDetailViewModel : ObservableObject
+{
+    /// <summary>The three readings of the time, or null for an all-day entry, which has no instant to place.</summary>
+    public AppointmentTimeBlocks? Times { get; init; }
+
+    public string Location { get; init; } = string.Empty;
+
+    public string Url { get; init; } = string.Empty;
+
+    public string Notes { get; init; } = string.Empty;
+
+    public bool HasTimes => Times is not null;
+
+    public bool HasViewerTime => Times?.Viewer is not null;
+
+    public string UtcRange => Times?.Utc.Range ?? string.Empty;
+
+    public IReadOnlyList<AppointmentTimeLine> RecordedLines => Times?.Recorded ?? [];
+
+    public string ViewerRange => Times?.Viewer?.Range ?? string.Empty;
+
+    /// <summary>The reader's own zone, named — the block exists precisely because it is not the recorded one.</summary>
+    public string ViewerZone => Times?.Viewer?.Zone ?? string.Empty;
+
+    // Each row is drawn only when it has something to say: on the Repositories tab the preview is what the
+    // space is for, and an empty labelled row spends a line to report an absence (ADR 0550).
+    public bool HasLocation => Location.Length > 0;
+
+    public bool HasUrl => Url.Length > 0;
+
+    public bool HasNotes => Notes.Length > 0;
+
+    /// <summary>Reads the structured appointment resource into the pane's shape.</summary>
+    public static AppointmentDetailViewModel From(System.Text.Json.JsonElement body)
+    {
+        var form = AppointmentEditViewModel.From(body);
+        var times = AppointmentTimes.For(
+            Combine(form.StartDate, form.StartTime),
+            Combine(form.EndDate, form.EndTime),
+            form.IsAllDay,
+            form.StartTimeZoneId is { Length: > 0 } startZone ? startZone : null,
+            form.EndTimeZoneId is { Length: > 0 } endZone ? endZone : null,
+            TimeZoneInfo.Local);
+
+        return new AppointmentDetailViewModel
+        {
+            Times = times is null ? null : AppointmentTimeBlocks.From(times, CultureInfo.CurrentCulture),
+            Location = form.Location,
+            Url = form.Url,
+            Notes = form.Description,
+        };
+    }
+
+    // The form holds the date and the time apart so an all-day entry can drop the time without inventing one;
+    // the arithmetic wants them back together as the wall clock the file records.
+    private static DateTime? Combine(DateTimeOffset? date, TimeSpan? time) =>
+        date is { } d ? d.Date + (time ?? TimeSpan.Zero) : null;
+}
+
+/// <summary>
 /// Backs the desktop Calendar tab (#564): a FLAT checkbox list of calendars, the appointments of the checked
 /// ones merged into one chronological list, and a detail pane. The twin of the Contacts tab (ADR 0511 keeps
 /// the pair one surface), differing only where a calendar genuinely differs from an addressbook — the list is
@@ -224,6 +291,16 @@ public sealed partial class CalendarTabViewModel : ObservableObject
         Selected = cell.Row;
     }
 
+    /// <summary>
+    /// What the pane says about the selected appointment beyond its row — the zones, the link, the notes.
+    /// </summary>
+    /// <remarks>
+    /// Null while nothing is selected AND for the whole window between a click and the read landing: the pane
+    /// shows the row's own values immediately and fills the rest when it arrives, rather than leaving the
+    /// PREVIOUS appointment's notes on screen, which is a claim about the wrong object (ADR 0559).
+    /// </remarks>
+    [ObservableProperty] private AppointmentDetailViewModel? _detail;
+
     // Every chip of the selected appointment lights up, not just the one clicked — a multi-day entry occupies
     // several cells, and highlighting one of them would say the others are a different entry.
     partial void OnSelectedChanged(AppointmentRowViewModel? value)
@@ -231,6 +308,38 @@ public sealed partial class CalendarTabViewModel : ObservableObject
         foreach (var cell in _monthCells)
         {
             cell.IsSelected = ReferenceEquals(cell.Row, value);
+        }
+
+        // Cleared FIRST, synchronously, so nothing of the previous appointment survives the load.
+        Detail = null;
+        if (value is not null)
+        {
+            Safe.Fire(() => LoadDetailAsync(value));
+        }
+    }
+
+    /// <summary>
+    /// Reads the selected appointment's own entry — one request, at the address its ROW advertised (ADR 0557).
+    /// </summary>
+    /// <remarks>
+    /// Addressed from the row rather than from pane state: the pane describes whatever last finished loading,
+    /// which during a load is a different appointment (ADR 0559). A row that advertises no <c>appointment</c>
+    /// rel simply gets no extra detail — the server saying "not available here" (ADR 0543).
+    /// </remarks>
+    private async Task LoadDetailAsync(AppointmentRowViewModel row)
+    {
+        if (_api is null || !row.Links.TryGetValue("appointment", out var href))
+        {
+            return;
+        }
+
+        var detail = await _api.StructuredEditors.ReadAtAsync(href, AppointmentDetailViewModel.From);
+
+        // The selection may have moved on while this was in flight — a superseded load stands down rather than
+        // repainting the pane under a different subject.
+        if (ReferenceEquals(Selected, row))
+        {
+            Detail = detail;
         }
     }
     [ObservableProperty] private bool _busy;
@@ -727,6 +836,24 @@ public sealed partial class CalendarTabViewModel : ObservableObject
         }
 
         Selected = Appointments[0];
+
+        // The detail the pane would have FETCHED, injected — a screenshot run reaches no server, and without
+        // this the three time blocks (ADR 0690) simply would not be in the frame. Synthetic, like the tree
+        // menu's admits: it checks how the pane RENDERS, not what the server sends. Two different zones
+        // deliberately, since that is the case one field could never express and the case the viewer's own
+        // block exists for.
+        Detail = new AppointmentDetailViewModel
+        {
+            Times = AppointmentTimeBlocks.From(
+                AppointmentTimes.For(
+                    new DateTime(2026, 9, 1, 9, 0, 0), new DateTime(2026, 9, 1, 10, 0, 0),
+                    isAllDay: false, "Europe/Zurich", "America/New_York", TimeZoneInfo.Local)!,
+                CultureInfo.CurrentCulture),
+            Location = "Room 2.14",
+            Url = "https://meet.example.test/sprint",
+            Notes = "Bring the backlog printout.",
+        };
+
         Refresh();
         OnPropertyChanged(nameof(CanCreate));
         OnPropertyChanged(nameof(EmptyMessage));

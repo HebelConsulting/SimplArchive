@@ -29,9 +29,10 @@
             <MudCheckBox T="bool" @bind-Value="Form.IsAllDay" Label="@Strings.Get("ApptAllDay")"
                          Dense="true" Class="mt-1" Disabled="@(!Form.StructuredEnabled)" />
 
-            @* Start and end in the APPOINTMENT'S own zone, labelled with it below. Nothing here converts
-               between zones (ADR 0631 decision 5) — the label is what makes an unconverted time honest rather
-               than ambiguous to a reader somewhere else. *@
+            @* Start and end in the APPOINTMENT'S own zone, each with its OWN picker (ADR 0690): iCalendar lets
+               DTSTART and DTEND name different TZIDs, and a flight leaving Zurich at 09:00 and landing in Boston
+               at 11:30 is exactly that. Nothing here converts between zones (ADR 0631 decision 5) — choosing one
+               re-labels the same wall clock. The empty entry means a floating time, which stays floating. *@
             <div class="d-flex align-center" style="gap:8px;">
                 <MudDatePicker @bind-Date="Form.StartDate" Label="@Strings.Get("ApptStart")" Variant="Variant.Outlined"
                                Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
@@ -39,6 +40,10 @@
                 {
                     <MudTimePicker @bind-Time="Form.StartTime" Variant="Variant.Outlined" Margin="Margin.Dense"
                                    Style="max-width:140px;" Disabled="@(!Form.StructuredEnabled)" />
+                    <MudAutocomplete T="string" @bind-Value="Form.StartTimeZoneId" SearchFunc="SearchZones"
+                                     Label="@Strings.Get("ApptStartZone")" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                     Placeholder="@Strings.Get("ApptTimesAreFloating")" CoerceValue="true" Clearable="true"
+                                     Disabled="@(!Form.StructuredEnabled)" />
                 }
             </div>
             <div class="d-flex align-center mt-2" style="gap:8px;">
@@ -48,17 +53,16 @@
                 {
                     <MudTimePicker @bind-Time="Form.EndTime" Variant="Variant.Outlined" Margin="Margin.Dense"
                                    Style="max-width:140px;" Disabled="@(!Form.StructuredEnabled)" />
+                    <MudAutocomplete T="string" @bind-Value="Form.EndTimeZoneId" SearchFunc="SearchZones"
+                                     Label="@Strings.Get("ApptEndZone")" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                     Placeholder="@Strings.Get("ApptTimesAreFloating")" CoerceValue="true" Clearable="true"
+                                     Disabled="@(!Form.StructuredEnabled)" />
                 }
             </div>
 
-            @* A floating time says so instead of naming a zone it does not have — that is a different promise. *@
-            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">
-                @(Form.TimeZoneId is { Length: > 0 } zone
-                    ? string.Format(Strings.Get("ApptTimesAreIn"), zone)
-                    : Strings.Get("ApptTimesAreFloating"))
-            </MudText>
-
             <MudTextField @bind-Value="Form.Location" Label="@Strings.Get("ApptLocation")" Class="mt-3"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
+            <MudTextField @bind-Value="Form.Url" Label="@Strings.Get("ApptUrl")" Placeholder="https://" Class="mt-2"
                           Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
             <MudTextField @bind-Value="Form.Description" Label="@Strings.Get("ApptDescription")" Lines="3" Class="mt-2"
                           Variant="Variant.Outlined" Margin="Margin.Dense" Disabled="@(!Form.StructuredEnabled)" />
@@ -133,6 +137,18 @@
 </MudDialog>
 
 @code {
+    /// <summary>
+    /// The zone list, narrowed by what has been typed — six hundred entries is a list nobody scrolls.
+    /// </summary>
+    /// <remarks>
+    /// The choices come from the shared <c>TimeZoneChoices</c> rather than from this browser, so both clients
+    /// offer the same names in the same (IANA) spelling that an .ics actually carries.
+    /// </remarks>
+    private Task<IEnumerable<string>> SearchZones(string? typed, CancellationToken token) =>
+        Task.FromResult(string.IsNullOrWhiteSpace(typed)
+            ? AppointmentForm.ZoneChoices.Take(30)
+            : AppointmentForm.ZoneChoices.Where(z => z.Contains(typed.Trim(), StringComparison.OrdinalIgnoreCase)));
+
     [CascadingParameter]
     private IMudDialogInstance Dialog { get; set; } = null!;
 

@@ -77,11 +77,30 @@ public class DocumentAppointmentController : ControllerBase
         /// with it and sends it back unchanged; nothing on this path converts between zones (ADR 0631
         /// decision 5), which is what keeps a weekly meeting from drifting across a daylight-saving change.
         /// </summary>
+        /// <remarks>
+        /// Superseded by <see cref="StartTimeZoneId"/>/<see cref="EndTimeZoneId"/> (ADR 0690) and kept as the
+        /// START's zone for a client that predates them: on a PUT it is used only when neither of the two is
+        /// sent, so an older desktop build still round-trips an ordinary single-zone appointment rather than
+        /// stripping the zone off it. It cannot express an entry whose endpoints differ — which is exactly what
+        /// it did before, silently.
+        /// </remarks>
         public string? TimeZoneId { get; set; }
+
+        /// <summary>The zone <see cref="Start"/> is written in (ADR 0690).</summary>
+        public string? StartTimeZoneId { get; set; }
+
+        /// <summary>
+        /// The zone <see cref="End"/> is written in, which iCalendar allows to DIFFER from the start's — a
+        /// flight leaving Zurich at 09:00 and landing in Boston at 11:30 is one appointment with two zones.
+        /// </summary>
+        public string? EndTimeZoneId { get; set; }
 
         public string? Location { get; set; }
 
         public string? Description { get; set; }
+
+        /// <summary>The <c>URL</c> property — where the event lives online. Absolute, or the save is refused.</summary>
+        public string? Url { get; set; }
 
         /// <summary>The RRULE as raw text. Opaque — the server never expands a recurrence set.</summary>
         public string? RecurrenceRule { get; set; }
@@ -242,9 +261,12 @@ public class DocumentAppointmentController : ControllerBase
         Start = appointment.Start,
         End = appointment.End,
         IsAllDay = appointment.IsAllDay,
-        TimeZoneId = appointment.TimeZoneId,
+        TimeZoneId = appointment.StartTimeZoneId,
+        StartTimeZoneId = appointment.StartTimeZoneId,
+        EndTimeZoneId = appointment.EndTimeZoneId,
         Location = appointment.Location,
         Description = appointment.Description,
+        Url = appointment.Url,
         RecurrenceRule = appointment.RecurrenceRule,
         Attendees = [.. AppointmentDisplay.Attendees(blob)
             .Select(a => new AttendeeResource { Name = a.Name, Address = a.Address, Status = a.Status })],
@@ -257,8 +279,13 @@ public class DocumentAppointmentController : ControllerBase
         r.Start,
         r.End,
         r.IsAllDay,
-        r.TimeZoneId,
+        // The per-endpoint zones win; the single TimeZoneId is the fallback for a client that predates them
+        // (ADR 0690). Falling back the other way would let a new client's explicit "floating" be overridden by
+        // a field it never set.
+        r.StartTimeZoneId ?? r.TimeZoneId,
+        r.EndTimeZoneId ?? r.StartTimeZoneId ?? r.TimeZoneId,
         r.Location,
         r.Description,
-        r.RecurrenceRule);
+        r.RecurrenceRule,
+        r.Url);
 }

@@ -65,8 +65,8 @@
             @if (_monthView)
             {
                 <CalendarMonth Entries="Visible.ToList()" Selected="_selected"
-                               OnSelected="@(row => _selected = row)"
-                               OnActivated="@(async row => { _selected = row; await EditAppointmentAsync(); })"
+                               OnSelected="@(async row => await SelectAsync(row))"
+                               OnActivated="@(async row => { await SelectAsync(row); await EditAppointmentAsync(); })"
                                OnDayOverflowed="ShowDay" />
             }
             else
@@ -82,7 +82,7 @@
                 else
                 {
                     <MudTable Items="Visible" Dense="true" Hover="true" Bordered="false" Elevation="0" T="AppointmentRow"
-                              OnRowClick="@((TableRowClickEventArgs<AppointmentRow> e) => _selected = e.Item)"
+                              OnRowClick="@(async (TableRowClickEventArgs<AppointmentRow> e) => await SelectAsync(e.Item))"
                               RowClassFunc="@((row, _) => row == _selected ? "wb-list-row-selected" : "")">
                         <HeaderContent>
                             <MudTh Style="width:1px;"></MudTh>
@@ -116,12 +116,64 @@
             {
                 <MudText Typo="Typo.h6">@selected.Title</MudText>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">@selected.CollectionName</MudText>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("CalendarWhen")</MudText>
-                <MudText Typo="Typo.body2" Class="mb-2">@selected.TimeRange</MudText>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("CalendarStarts")</MudText>
-                <MudText Typo="Typo.body2" Class="mb-2">@selected.StartsOn</MudText>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("CalendarWhere")</MudText>
-                <MudText Typo="Typo.body2">@selected.Location</MudText>
+                @* One instant, three readings (ADR 0690). UTC first because it is what anything else can be
+                   compared against; then what the organiser wrote, with the zone each endpoint names — two
+                   lines when they differ, which is a real appointment (a flight) and not an edge case; then
+                   the reader's own zone, and ONLY when it would say something the recorded block did not.
+                   Every row draws only when it has a value (ADR 0550). *@
+                @if (_detail?.Times is { } times)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("CalendarUtc")</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-2">@times.Utc.Range</MudText>
+
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("CalendarRecorded")</MudText>
+                    @foreach (var line in times.Recorded)
+                    {
+                        <MudText Typo="Typo.body2">
+                            @line.Range
+                            @* A floating time names no zone, and saying so in words is not the same as leaving
+                               the label off: it means "this time, wherever you are". *@
+                            <span class="mud-text-secondary" style="font-size:.78rem;">@(line.Zone ?? Strings.Get("CalendarNoZone"))</span>
+                        </MudText>
+                    }
+
+                    @if (times.Viewer is { } viewer)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">@Strings.Get("CalendarYourZone")</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            @viewer.Range <span class="mud-text-secondary" style="font-size:.78rem;">@viewer.Zone</span>
+                        </MudText>
+                    }
+                }
+                else
+                {
+                    @* An all-day entry has no instant to place and none may be invented (ADR 0647), so it keeps
+                       the single row it always had. Also what shows while the read is still in flight. *@
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("CalendarWhen")</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-2">@selected.TimeRange</MudText>
+                }
+
+                @if (_detail?.Location is { Length: > 0 } location)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("CalendarWhere")</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-2">@location</MudText>
+                }
+
+                @if (_detail?.Url is { Length: > 0 } url)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("CalendarLink")</MudText>
+                    @* Target is REQUIRED: Blazor swallows a same-origin-looking link otherwise, and an external
+                       address opened inside the SPA loses the workbench. rel keeps the referrer off it. *@
+                    <MudText Typo="Typo.body2" Class="mb-2">
+                        <MudLink Href="@url" Target="_blank" rel="noopener noreferrer">@url</MudLink>
+                    </MudText>
+                }
+
+                @if (_detail?.Notes is { Length: > 0 } notes)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Strings.Get("CalendarNotes")</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-2" Style="white-space:pre-wrap;">@notes</MudText>
+                }
                 @if (selected.Recurring)
                 {
                     @* The rule verbatim, where there is room for it. The grid has space only for a mark, and a
@@ -141,6 +193,64 @@
     private readonly HashSet<Guid> _checked = [];
     private List<AppointmentRow> _appointments = [];
     private AppointmentRow? _selected;
+
+    /// <summary>
+    /// What the pane says about the selected appointment beyond its row — the zones, the link, the notes.
+    /// </summary>
+    /// <remarks>
+    /// Null while nothing is selected AND for the whole window between a click and the read landing: the pane
+    /// shows the row's own values immediately and fills the rest when it arrives, rather than leaving the
+    /// PREVIOUS appointment's notes on screen, which is a claim about the wrong object (ADR 0559).
+    /// </remarks>
+    private AppointmentDetail? _detail;
+
+    /// <summary>What the structured entry adds to a row: the three time readings, the link and the notes.</summary>
+    private sealed record AppointmentDetail(AppointmentTimeBlocks? Times, string Location, string Url, string Notes);
+
+    /// <summary>
+    /// Selects a row and reads its entry — one request, at the address the ROW advertised (ADRs 0555/0557).
+    /// </summary>
+    /// <remarks>
+    /// The detail is cleared FIRST and synchronously, so nothing of the previous appointment survives the load;
+    /// and a load that is overtaken stands down rather than repainting the pane under a different subject
+    /// (ADR 0559).
+    /// </remarks>
+    private async Task SelectAsync(AppointmentRow? row)
+    {
+        _selected = row;
+        _detail = null;
+        if (row?.AppointmentHref is not { } href)
+        {
+            return;
+        }
+
+        // Null on failure: a pane that cannot read its subject shows the row's own values and nothing more,
+        // which is the same reading as a rel that was never advertised (ADR 0543).
+        var form = await StructuredEditors.ReadAtAsync(href, AppointmentForm.From);
+        var times = form is null
+            ? null
+            : AppointmentTimes.For(
+                Combine(form.StartDate, form.StartTime), Combine(form.EndDate, form.EndTime), form.IsAllDay,
+                form.StartTimeZoneId is { Length: > 0 } startZone ? startZone : null,
+                form.EndTimeZoneId is { Length: > 0 } endZone ? endZone : null,
+                TimeZoneInfo.Local);
+
+        var detail = form is null
+            ? null
+            : new AppointmentDetail(
+                times is null ? null : AppointmentTimeBlocks.From(times, System.Globalization.CultureInfo.CurrentCulture),
+                form.Location, form.Url, form.Description);
+
+        if (ReferenceEquals(_selected, row))
+        {
+            _detail = detail;
+        }
+    }
+
+    // The form holds the date and the time apart so an all-day entry can drop the time without inventing one;
+    // the arithmetic wants them back together as the wall clock the file records.
+    private static DateTime? Combine(DateTime? date, TimeSpan? time) =>
+        date is { } d ? d.Date + (time ?? TimeSpan.Zero) : null;
     private string _filter = string.Empty;
 
     /// <summary>Month grid or flat list. Opens on the month, which is what the tab is for.</summary>
@@ -177,7 +287,10 @@
     public sealed record AppointmentRow(
         Guid Id, string CollectionColor, string CollectionName, string Title,
         DateTimeOffset? Start, DateTimeOffset? End, string Location, string? SelfHref,
-        DateOnly? Day = null, bool AllDay = false, DateOnly? EndDay = null, string? Repeats = null)
+        DateOnly? Day = null, bool AllDay = false, DateOnly? EndDay = null, string? Repeats = null,
+        // The structured entry's OWN address, advertised on the row (ADR 0690) — the detail pane follows it
+        // directly, so selecting a row costs ONE request rather than resolving the document first (ADR 0557).
+        string? AppointmentHref = null)
     {
         /// <summary>
         /// Whether this entry repeats — and therefore whether the grid is showing less than the month holds.
@@ -303,7 +416,7 @@
                     rows.Add(new AppointmentRow(
                         entry.Id, collection.Color ?? "#8a8a8a", collection.DisplayName, entry.Name,
                         entry.StartsAt, entry.EndsAt, entry.Location ?? string.Empty, entry.Href("self"),
-                        entry.Day, entry.AllDay, entry.EndDay, entry.Repeats));
+                        entry.Day, entry.AllDay, entry.EndDay, entry.Repeats, entry.Href("appointment")));
                 }
             }
             catch (Exception e)

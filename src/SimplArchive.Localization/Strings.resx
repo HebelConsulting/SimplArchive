@@ -4356,6 +4356,33 @@
   <data name="CalendarWhere" xml:space="preserve">
     <value>Where</value>
   </data>
+  <data name="CalendarUtc" xml:space="preserve">
+    <value>UTC</value>
+  </data>
+  <data name="CalendarRecorded" xml:space="preserve">
+    <value>As recorded</value>
+  </data>
+  <data name="CalendarYourZone" xml:space="preserve">
+    <value>Your time</value>
+  </data>
+  <data name="CalendarNoZone" xml:space="preserve">
+    <value>no time zone</value>
+  </data>
+  <data name="CalendarLink" xml:space="preserve">
+    <value>Link</value>
+  </data>
+  <data name="CalendarNotes" xml:space="preserve">
+    <value>Notes</value>
+  </data>
+  <data name="ApptStartZone" xml:space="preserve">
+    <value>Start time zone</value>
+  </data>
+  <data name="ApptEndZone" xml:space="preserve">
+    <value>End time zone</value>
+  </data>
+  <data name="ApptUrl" xml:space="preserve">
+    <value>Link</value>
+  </data>
   <data name="StErrLoadCalendars" xml:space="preserve">
     <value>Could not load calendars: {0}</value>
   </data>

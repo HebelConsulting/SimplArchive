@@ -33,12 +33,32 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
     [ObservableProperty] private TimeSpan? _endTime;
 
     /// <summary>
-    /// The appointment's own zone, carried through a save untouched. Shown beside the times as a label, because
-    /// a time without its zone is a different time to a reader somewhere else — and nothing on this path
-    /// converts one, which is what keeps a weekly meeting from drifting across a daylight-saving change.
-    /// Null means a floating time, which stays floating.
+    /// The zone the START is written in, chosen here rather than only displayed (ADR 0690). Nothing on this
+    /// path CONVERTS a time — changing the zone re-labels the same wall clock, which is what keeps a weekly
+    /// meeting from drifting across a daylight-saving change. The empty entry means a floating time, which
+    /// stays floating.
     /// </summary>
-    public string? TimeZoneId { get; set; }
+    [ObservableProperty] private string _startTimeZoneId = "";
+
+    /// <summary>
+    /// The zone the END is written in, which iCalendar allows to DIFFER from the start's — a flight leaving
+    /// Zurich at 09:00 and landing in Boston at 11:30 is one appointment with two zones, and one field for
+    /// both makes it read as two and a half hours.
+    /// </summary>
+    [ObservableProperty] private string _endTimeZoneId = "";
+
+    /// <summary>The event's web address (a meeting link, a ticket page). Absolute, or the save is refused.</summary>
+    [ObservableProperty] private string _url = "";
+
+    /// <summary>
+    /// The zones the two pickers offer: IANA ids, with an empty first entry meaning "floating".
+    /// </summary>
+    /// <remarks>
+    /// Shared with the web client (<c>TimeZoneChoices</c>) rather than built here, because a Windows host
+    /// names its zones differently from the .ics format — offering the machine's own spelling would write a
+    /// TZID no other calendar client can resolve.
+    /// </remarks>
+    public IReadOnlyList<string> ZoneChoices { get; } = [string.Empty, .. SimplArchive.Presentation.TimeZoneChoices.All()];
 
     /// <summary>
     /// The RRULE as stored. READ-ONLY this round: editing recurrence properly means choosing between this
@@ -71,7 +91,10 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
             Location = Text(body, "location"),
             Description = Text(body, "description"),
             IsAllDay = body.TryGetProperty("isAllDay", out var allDay) && allDay.ValueKind == JsonValueKind.True,
-            TimeZoneId = Text(body, "timeZoneId") is { Length: > 0 } tz ? tz : null,
+            // The per-endpoint zones, falling back to the single one a server predating them would send.
+            StartTimeZoneId = First(Text(body, "startTimeZoneId"), Text(body, "timeZoneId")),
+            EndTimeZoneId = First(Text(body, "endTimeZoneId"), Text(body, "startTimeZoneId"), Text(body, "timeZoneId")),
+            Url = Text(body, "url"),
             RecurrenceRule = Text(body, "recurrenceRule") is { Length: > 0 } rule ? rule : null,
             ReminderCount = body.TryGetProperty("reminderCount", out var count) && count.TryGetInt32(out var n) ? n : 0,
         };
@@ -132,9 +155,11 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
         start = Combine(StartDate, StartTime),
         end = Combine(EndDate, EndTime),
         isAllDay = IsAllDay,
-        timeZoneId = TimeZoneId,
+        startTimeZoneId = Null(StartTimeZoneId),
+        endTimeZoneId = Null(EndTimeZoneId),
         location = Null(Location),
         description = Null(Description),
+        url = Null(Url),
 
         // Sent back unchanged. The field is not editable here, and the merge clears a rule handed to it as
         // null — so omitting it would silently un-repeat every recurring appointment anyone opened.
@@ -152,6 +177,10 @@ public sealed partial class AppointmentEditViewModel : StructuredEditFormViewMod
                 .ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture);
 
     private static bool IsAllDayLike(TimeSpan? time) => time is null;
+
+    /// <summary>The first non-empty of the candidates — how a newer field falls back to the one it supersedes.</summary>
+    private static string First(params string[] candidates) =>
+        Array.Find(candidates, c => !string.IsNullOrEmpty(c)) ?? string.Empty;
 
     private static DateTime? Parse(string value) =>
         DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed) ? parsed : null;

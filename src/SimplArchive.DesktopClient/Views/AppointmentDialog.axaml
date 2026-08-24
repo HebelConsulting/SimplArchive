@@ -4,7 +4,7 @@
         xmlns:vm="using:SimplArchive.DesktopClient.ViewModels"
         x:Class="SimplArchive.DesktopClient.Views.AppointmentDialog"
         x:DataType="vm:AppointmentEditViewModel"
-        Title="{loc:Tr ApptEditTitle}" Width="680" Height="580" MinWidth="640" MinHeight="400"
+        Title="{loc:Tr ApptEditTitle}" Width="680" Height="660" MinWidth="640" MinHeight="400"
         WindowStartupLocation="CenterOwner">
 
   <!-- The structured appointment editor (#564, ADR 0631). Everything the form does not show — VALARM above
@@ -39,30 +39,47 @@
 
         <CheckBox Content="{loc:Tr ApptAllDay}" IsChecked="{Binding IsAllDay}" Margin="110,0,0,0" />
 
-        <!-- Start and end in the APPOINTMENT'S own zone, labelled with it. Nothing here converts between
-             zones (ADR 0631 decision 5) — the label is what makes an unconverted time honest rather than
-             ambiguous to a reader somewhere else. -->
+        <!-- Start and end in the APPOINTMENT'S own zone, each with its OWN zone picker (ADR 0690): iCalendar
+             lets DTSTART and DTEND name different TZIDs, and a flight leaving Zurich at 09:00 and landing in
+             Boston at 11:30 is exactly that. Nothing here converts between zones (ADR 0631 decision 5) —
+             choosing one re-labels the same wall clock, which is what keeps a weekly meeting from drifting
+             across a daylight-saving change. The empty entry means a floating time, which stays floating. -->
         <!-- Explicit widths, not Auto: a DatePicker's natural width varies with the locale's date format and
              a TimePicker's with whether the culture uses a 12-hour clock (which adds an AM/PM column), so Auto
              let the time run off the right edge. Both were clipped mid-value before this was LOOKED at. -->
-        <Grid ColumnDefinitions="110,270,8,210,*" RowDefinitions="Auto,Auto">
+        <!-- The zone sits UNDER its endpoint rather than beside it: the date and time pickers already fill the
+             dialog's width (their own widths vary with the locale, which is why those are explicit), so a
+             fourth column got none and the picker rendered as a two-pixel sliver. Found by capturing it. -->
+        <Grid ColumnDefinitions="110,270,8,210,*" RowDefinitions="Auto,Auto,Auto,Auto">
           <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr ApptStart}" VerticalAlignment="Center" />
-          <DatePicker Grid.Row="0" Grid.Column="1" SelectedDate="{Binding StartDate}" Margin="0,0,0,6" />
-          <TimePicker Grid.Row="0" Grid.Column="3" SelectedTime="{Binding StartTime}" Margin="0,0,0,6"
+          <DatePicker Grid.Row="0" Grid.Column="1" SelectedDate="{Binding StartDate}" />
+          <TimePicker Grid.Row="0" Grid.Column="3" SelectedTime="{Binding StartTime}"
                       IsVisible="{Binding !IsAllDay}" />
+          <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" ItemsSource="{Binding ZoneChoices}"
+                    SelectedItem="{Binding StartTimeZoneId}" Margin="0,4,0,8"
+                    HorizontalAlignment="Stretch" IsVisible="{Binding !IsAllDay}"
+                    PlaceholderText="{loc:Tr ApptTimesAreFloating}"
+                    AutomationProperties.Name="{loc:Tr ApptStartZone}" />
 
-          <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr ApptEnd}" VerticalAlignment="Center" />
-          <DatePicker Grid.Row="1" Grid.Column="1" SelectedDate="{Binding EndDate}" />
-          <TimePicker Grid.Row="1" Grid.Column="3" SelectedTime="{Binding EndTime}"
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Tr ApptEnd}" VerticalAlignment="Center" />
+          <DatePicker Grid.Row="2" Grid.Column="1" SelectedDate="{Binding EndDate}" />
+          <TimePicker Grid.Row="2" Grid.Column="3" SelectedTime="{Binding EndTime}"
                       IsVisible="{Binding !IsAllDay}" />
+          <ComboBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="4" ItemsSource="{Binding ZoneChoices}"
+                    SelectedItem="{Binding EndTimeZoneId}" Margin="0,4,0,0"
+                    HorizontalAlignment="Stretch" IsVisible="{Binding !IsAllDay}"
+                    PlaceholderText="{loc:Tr ApptTimesAreFloating}"
+                    AutomationProperties.Name="{loc:Tr ApptEndZone}" />
         </Grid>
-
-        <TextBlock x:Name="ZoneText" Foreground="{DynamicResource WbMuted}" FontSize="11" Margin="110,0,0,0"
-                   TextWrapping="Wrap" />
 
         <Grid ColumnDefinitions="110,*">
           <TextBlock Grid.Column="0" Text="{loc:Tr ApptLocation}" VerticalAlignment="Center" />
           <TextBox Grid.Column="1" Text="{Binding Location}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="110,*">
+          <TextBlock Grid.Column="0" Text="{loc:Tr ApptUrl}" VerticalAlignment="Center" />
+          <TextBox Grid.Column="1" Text="{Binding Url}" Watermark="https://" />
         </Grid>
 
         <Grid ColumnDefinitions="110,*">

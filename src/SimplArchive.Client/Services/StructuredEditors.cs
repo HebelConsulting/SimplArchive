@@ -43,6 +43,29 @@ public sealed class StructuredEditors
     public sealed record RawSource(string Text, string Format, string ETag, bool CanEdit);
 
     /// <summary>
+    /// Reads a structured item at an address the caller ALREADY HOLDS — one request, no resolution step.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ReadAsync"/> resolves a document first and then follows a rel off it, which is right when all
+    /// the caller has is the document's address. A listing row that advertises the rel itself has already paid
+    /// for that, and re-resolving would make the calendar's most-used interaction — clicking a row — cost two
+    /// requests instead of one (ADR 0557). Null on failure: a pane that cannot read its subject shows nothing,
+    /// which is what an absent rel means anyway (ADR 0543).
+    /// </remarks>
+    public async Task<T?> ReadAtAsync<T>(string href, Func<JsonElement, T> parse, CancellationToken cancellationToken = default)
+        where T : class
+    {
+        try
+        {
+            return parse(await _http.GetFromJsonAsync<JsonElement>(href, cancellationToken));
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Follows <paramref name="rel"/> off the document at <paramref name="documentHref"/> and reads it. Null
     /// when the document does not advertise the rel — the server saying "not available to you, here, now"
     /// (ADR 0543), which disables the affordance rather than producing a failed request.

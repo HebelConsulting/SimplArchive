@@ -236,7 +236,8 @@ internal static class DemoArtistsSeeder
                     Start: start,
                     End: allDay ? start : start.AddHours(2),
                     IsAllDay: allDay,
-                    TimeZoneId: null,
+                    StartTimeZoneId: null,
+                    EndTimeZoneId: null,
                     Location: concert.Place,
                     Description: allDay ? null : "End time not published — shown as a nominal two hours.",
                     RecurrenceRule: null);
@@ -292,7 +293,8 @@ internal static class DemoArtistsSeeder
                 // would look entirely reasonable in the file.
                 End: start.AddDays(days),
                 IsAllDay: true,
-                TimeZoneId: null,
+                StartTimeZoneId: null,
+                EndTimeZoneId: null,
                 Location: place,
                 Description: "Illustrative: the department's own run-of-show, not a published date.",
                 RecurrenceRule: null);
