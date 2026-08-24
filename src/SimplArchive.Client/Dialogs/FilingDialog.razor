@@ -1,4 +1,6 @@
+@using SimplArchive.Presentation
 @inject SimplArchive.Client.Services.ApiRoot ApiRoot
+@inject SimplArchive.Client.Services.BrowseService Browse
 @inject HttpClient Http
 
 @* Context-aware intray filing dialog (ADRs 0286/0287/0288) — file as a new version of the selected document,
@@ -38,7 +40,9 @@
                 {
                     <MudTreeView T="PickNode" Items="_roots" ServerData="LoadChildrenAsync" Hover="true" Dense="true">
                         <ItemTemplate Context="item">
+                            @* A root that is not itself a target is dimmed (ADR 0689). *@
                             <MudTreeViewItem Value="@item.Value" Text="@item.Text" Icon="@Icons.Material.Filled.Folder"
+                                             Style="@(item.Value is { Selectable: false } ? "opacity:.55;" : null)"
                                              CanExpand="@item.Expandable" Items="@item.Children"
                                              OnClick="@(() => _picked = item.Value)" />
                         </ItemTemplate>
@@ -78,7 +82,7 @@
     private IReadOnlyCollection<TreeItemData<PickNode>> _roots = [];
     private bool _loading = true;
 
-    private bool CanFile => _mode switch { 0 => ShowAsVersion, 1 => ShowInFolder, _ => _picked is not null };
+    private bool CanFile => _mode switch { 0 => ShowAsVersion, 1 => ShowInFolder, _ => _picked is not (null or { Selectable: false }) };
 
     protected override void OnInitialized()
     {
@@ -87,18 +91,27 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var nodes = new List<TreeItemData<PickNode>>();
+        var shared = new List<PickNode>();
         var url = await ApiRoot.RequireAsync("repositories");
         while (url is not null)
         {
             var page = await Http.GetFromJsonAsync<ListResponse>(url);
             foreach (var r in page?.Repositories ?? [])
             {
-                nodes.Add(ToItem(new PickNode(r.Id, r.Name, r.HasSubfolders, Rel(r.Links, "children"))));
+                shared.Add(new PickNode(r.Id, r.Name, r.HasSubfolders, Rel(r.Links, "children")));
             }
             url = Next(page?.Links);
         }
-        _roots = nodes;
+
+        // The personal space, which GET /repositories excludes — filing an inbox item into your own space was
+        // therefore impossible from here, the same omission the Move picker had (ADR 0689).
+        var personal = await Browse.EnsurePersonalRepositoryAsync();
+        var personalNode = personal is null
+            ? null
+            : new PickNode(personal.Id, personal.Name, true, Rel(personal.Links, "children"));
+
+        _roots = [.. FilingRoots.Compose(personalNode, shared, n => n.Name)
+            .Select(root => ToItem(root.Node with { Selectable = root.Selectable }))];
         _loading = false;
     }
 
@@ -138,6 +151,13 @@
 
     private static TreeItemData<PickNode> ToItem(PickNode n) => new() { Value = n, Text = n.Name, Expandable = n.HasSubfolders };
 
+    /// <summary>The same normalisation for the shared link shape the personal-repository resource uses.</summary>
+    private static string? Rel(List<SimplArchive.Client.Hypermedia.LinkResponse>? links, string rel)
+    {
+        var href = SimplArchive.Client.Hypermedia.Links.Href(links, rel);
+        return href is null ? null : (href.StartsWith("http") ? href : href.TrimStart('/'));
+    }
+
     private static string? Rel(List<Link>? links, string rel)
     {
         var href = links?.FirstOrDefault(l => l.Rel == rel)?.Href;
@@ -152,7 +172,7 @@
 
     // ChildrenHref is the row's own `children` rel — the tree walks by following it, so no level of this
     // picker composes /documents/{id}/children from an id (ADR 0543, issue #416).
-    private record PickNode(Guid Id, string Name, bool HasSubfolders, string? ChildrenHref = null);
+    private record PickNode(Guid Id, string Name, bool HasSubfolders, string? ChildrenHref = null, bool Selectable = true);
     private record Link { public string Rel { get; set; } = ""; public string Href { get; set; } = ""; }
     private record ListResponse { public List<Repo> Repositories { get; set; } = []; public List<Link> Links { get; set; } = []; }
     private record Repo { public Guid Id { get; set; } public string Name { get; set; } = ""; public bool HasSubfolders { get; set; } public List<Link> Links { get; set; } = []; }

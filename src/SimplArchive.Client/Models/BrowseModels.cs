@@ -82,6 +82,10 @@ public record PersonalRepositoryResponse
     public string Name { get; set; } = "";
     public bool HasChildren { get; set; }
     public bool HasSubfolders { get; set; }
+
+    /// <summary>Its own advertised addresses — `children` above all, which is how a picker walks into it
+    /// without composing a path from the id beside it (ADR 0543).</summary>
+    public List<LinkResponse> Links { get; set; } = [];
 }
 
 /// <summary>

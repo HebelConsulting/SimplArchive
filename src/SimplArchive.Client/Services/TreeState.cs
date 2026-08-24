@@ -38,10 +38,6 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
             // The user's personal repository, pinned at the top of the tree (ADR "Per-user personal repository").
             // POST is get-or-create; it's excluded from the shared GET /repositories list below.
             var personal = await browse.EnsurePersonalRepositoryAsync();
-            if (personal is not null)
-            {
-                nodes.Add(PersonalTreeItem(personal));
-            }
 
             var shared = new List<TreeItemData<BrowseNode>>();
             var url = await apiRoot.RequireAsync("repositories");
@@ -56,8 +52,12 @@ public sealed class TreeState(HttpClient http, ApiRoot apiRoot, BrowseService br
                 url = Links.Href(page?.Links, "next");
             }
 
-            // Shared repositories sorted alphabetically (issue #339); Personal stays pinned above them.
-            nodes.AddRange(shared.OrderBy(n => n.Value!.DisplayName, StringComparer.OrdinalIgnoreCase));
+            // Personal pinned above the shared ones, which are alphabetical (issue #339) — composed by the
+            // SHARED rule (ADR 0689) rather than spelled out here, because every target picker must offer
+            // exactly these roots and each was building its own list from GET /repositories alone.
+            nodes.AddRange(SimplArchive.Presentation.FilingRoots
+                .Compose(personal is null ? null : PersonalTreeItem(personal), shared, n => n.Value!.DisplayName)
+                .Select(root => root.Node));
 
             // Tenant admins get a synthetic "Administration → Users" branch (ADR "Tenant-admin Administration →
             // Users view") to browse every user's personal space; its children load from the admin endpoint.

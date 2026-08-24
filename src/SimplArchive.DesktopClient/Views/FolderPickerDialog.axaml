@@ -35,7 +35,10 @@
             <TextBox Text="{Binding Comment}" Watermark="{loc:Tr FilingCommentBlankHint}" AcceptsReturn="True" MinHeight="46" />
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,6,0,0">
                 <Button Content="{loc:Tr Cancel}" Click="OnCancel" IsCancel="True" />
-                <Button Content="{loc:Tr FpFile}" Click="OnOk" IsDefault="True" />
+                <!-- Disabled until the selection is a real target: choosing a personal space's ROOT is not one
+                     (ADR 0689), and a File button that closes the dialog doing nothing is worse than one that
+                     says so by being unavailable. -->
+                <Button Content="{loc:Tr FpFile}" Click="OnOk" IsDefault="True" IsEnabled="{Binding CanCommit}" />
             </StackPanel>
         </StackPanel>
         <TreeView ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedNode}" IsEnabled="{Binding ModePicked}">
@@ -46,7 +49,12 @@
             </TreeView.Styles>
             <TreeView.DataTemplates>
                 <TreeDataTemplate DataType="vm:TreeNodeViewModel" ItemsSource="{Binding Children}">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
+                    <!-- The personal space's root is shown and expands, but is not itself a target — dimmed so
+                         that reads before the click rather than after it (ADR 0689). -->
+                    <StackPanel Orientation="Horizontal" Spacing="6" Classes.notarget="{Binding IsPersonal}">
+                        <StackPanel.Styles>
+                            <Style Selector="StackPanel.notarget"><Setter Property="Opacity" Value="0.55" /></Style>
+                        </StackPanel.Styles>
                         <i:Icon Value="{Binding IconValue}" Foreground="#d9a400" />
                         <TextBlock Text="{Binding Name}" />
                     </StackPanel>

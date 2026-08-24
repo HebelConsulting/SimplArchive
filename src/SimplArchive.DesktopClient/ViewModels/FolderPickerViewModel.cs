@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using SimplArchive.DesktopClient.Services;
+using SimplArchive.Presentation;
 
 namespace SimplArchive.DesktopClient.ViewModels;
 
@@ -61,9 +62,9 @@ public sealed partial class FolderPickerViewModel : ObservableObject
     public string FolderPath => _context?.FolderPath ?? "";
 
     // Radio selection — one of three modes (a shared GroupName keeps them mutually exclusive).
-    [ObservableProperty] private bool _modeAsVersion;
-    [ObservableProperty] private bool _modeInFolder;
-    [ObservableProperty] private bool _modePicked;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(CanCommit))] private bool _modeAsVersion;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(CanCommit))] private bool _modeInFolder;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(CanCommit))] private bool _modePicked;
 
     // Optional feed comment posted on the filed document(s) (ADR "Filing posts a feed comment").
     [ObservableProperty] private string _comment = "";
@@ -83,19 +84,37 @@ public sealed partial class FolderPickerViewModel : ObservableObject
             return new FilingResult(FilingMode.InFolder, _context.FolderId, comment, _context.FolderLinks);
         }
 
-        return SelectedNode is { } node ? new FilingResult(FilingMode.PickedFolder, node.Id, comment, node.Links) : null;
+        // A personal space's ROOT is shown and expands, but is not a target: its first level is provisioned,
+        // not user-filled (#634), so the server would refuse. Returning null here is what leaves the dialog's
+        // commit disabled rather than offering a click that cannot succeed (ADR 0543's spirit).
+        return SelectedNode is { IsPersonal: false } node ? new FilingResult(FilingMode.PickedFolder, node.Id, comment, node.Links) : null;
     }
 
     public ObservableCollection<TreeNodeViewModel> Roots { get; } = [];
 
-    [ObservableProperty] private TreeNodeViewModel? _selectedNode;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(CanCommit))] private TreeNodeViewModel? _selectedNode;
+
+    /// <summary>Whether the dialog has a target to commit — asked of <see cref="BuildResult"/> so the button
+    /// and the outcome cannot disagree about what counts as one.</summary>
+    public bool CanCommit => BuildResult() is not null;
 
     public async Task LoadAsync()
     {
         Roots.Clear();
-        foreach (var repository in await _api.Documents.GetRepositoriesAsync())
+
+        // The SAME roots the workbench tree shows (ADR 0689): the personal space is excluded from
+        // GET /repositories on purpose — it is fetched from the `me` resource — so a picker built on that
+        // listing alone silently omitted the one place a person is most likely to be filing into.
+        var personal = await _api.Profile.GetPersonalRepositoryAsync();
+        var shared = await _api.Documents.GetRepositoriesAsync();
+
+        foreach (var root in FilingRoots.Compose(personal, shared, r => r.Name))
         {
-            Roots.Add(new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadChildrenAsync));
+            // Always expandable for the personal space: what a user wants is one of the folders inside it, and
+            // it holds at least the provisioned ones even when HasSubfolders has not caught up.
+            Roots.Add(new TreeNodeViewModel(
+                root.Node.Id, root.Node.Name, root.Node.HasSubfolders || !root.Selectable, LoadChildrenAsync,
+                isPersonal: !root.Selectable, links: root.Node.Links));
         }
     }
 

@@ -1085,20 +1085,20 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var repositories = await _api.Documents.GetRepositoriesAsync();
         Tree.Clear();
 
-        // The user's personal repository, pinned at the top (ADR "Per-user personal repository"). It's excluded
-        // from GetRepositoriesAsync, so it never appears twice.
+        // The user's personal repository pinned above the shared ones, which are alphabetical (issue #339).
+        // Composed by the SHARED rule (ADR 0689) rather than spelled out here, because the target pickers must
+        // offer exactly these roots and were building their own list from GET /repositories alone — which
+        // excludes the personal space, so it silently was not offerable.
         var personal = await _api.Profile.GetPersonalRepositoryAsync();
-        if (personal is not null)
+        foreach (var root in SimplArchive.Presentation.FilingRoots.Compose(personal, repositories, r => r.Name))
         {
-            // Always expandable — it holds at least the Intray + Check-out launcher nodes (ADR "GUI-tree Personal
-            // space grouping"), even before any real subfolder exists.
-            Tree.Add(new TreeNodeViewModel(personal.Id, personal.Name, hasSubfolders: true, LoadPersonalChildrenAsync, links: personal.Links, isPersonal: true));
-        }
-
-        // Shared repositories sorted alphabetically (issue #339); Personal stays pinned above them.
-        foreach (var repository in repositories.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase))
-        {
-            Tree.Add(new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync, links: repository.Links, hasReferences: repository.HasReferences, hasChildren: repository.HasChildren, admits: repository.Admits, icon: repository.Icon));
+            var repository = root.Node;
+            // The personal space is always expandable — it holds at least the Intray + Check-out launcher nodes
+            // (ADR "GUI-tree Personal space grouping"), even before any real subfolder exists — and its children
+            // load through the loader that adds them.
+            Tree.Add(root.Selectable
+                ? new TreeNodeViewModel(repository.Id, repository.Name, repository.HasSubfolders, LoadTreeChildrenAsync, links: repository.Links, hasReferences: repository.HasReferences, hasChildren: repository.HasChildren, admits: repository.Admits, icon: repository.Icon)
+                : new TreeNodeViewModel(repository.Id, repository.Name, hasSubfolders: true, LoadPersonalChildrenAsync, links: repository.Links, isPersonal: true));
         }
 
         // Tenant admins get a synthetic "Administration → Users" branch (ADR "Tenant-admin Administration → Users
