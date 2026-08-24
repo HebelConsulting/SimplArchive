@@ -131,6 +131,29 @@ public sealed class DetailState
 
     public string? MaskName { get; set; }
     public Guid? MaskId { get; set; }
+
+    /// <summary>
+    /// Where this document's own mask keeps its FIELD DEFINITIONS — the <c>definition</c> rel on the mask
+    /// resource (#729, ADR 0688).
+    /// </summary>
+    /// <remarks>
+    /// The editor used to find them by looking the mask id up in the catalogue, which carries only the masks a
+    /// user may freely CHOOSE (#671) — so a typed folder's editor opened with no fields at all and a Mailbox's
+    /// address list could not be set. Captured here because the mask resource is already read when the pane
+    /// loads: following the rel therefore costs nothing (ADR 0557).
+    /// </remarks>
+    public string? MaskDefinitionHref { get; set; }
+
+    /// <summary>Takes everything the mask resource said, so the shell does not spell out four assignments.</summary>
+    public void ApplyMask(MaskResponse? mask)
+    {
+        MaskName = mask?.Name;
+        MaskId = mask?.MaskId;
+        // Qualified: this class has a Links PROPERTY of its own, which shadows the helper's name here.
+        MaskDefinitionHref = Hypermedia.Links.Href(mask?.Links, "definition");
+        VersionNumber = mask?.VersionNumber;
+    }
+
     public int? VersionNumber { get; set; }
     public int VersionCount { get; set; }
     public List<FieldGroup>? IndexData { get; set; }

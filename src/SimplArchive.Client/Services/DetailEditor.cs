@@ -169,8 +169,16 @@ public sealed class DetailEditor(HttpClient http, DetailState detail, DetailCata
         }
 
         // The mask id came from the picker, and the picker's rows are the catalogue listing — whose rows carry
-        // their own address (ADR 0555). A mask not in the catalogue has no address and no fields to offer.
-        if (Links.Href(catalogs.Masks.FirstOrDefault(m => m.Id == id)?.Links, "self") is not { } maskHref)
+        // their own address (ADR 0555).
+        //
+        // The catalogue carries only the masks a user may freely CHOOSE (#671), so for the document's OWN mask
+        // it may have nothing — a Mailbox, a Calendar, an Addressbook, a repository. That is not "no fields to
+        // offer": it is a different question, answered by the document itself, whose mask resource advertises
+        // where its definitions live (#729, ADR 0688). Without this the editor opened on a typed folder with no
+        // boxes at all, which is how a Mailbox's address list became unsettable from the UI.
+        var maskHref = Links.Href(catalogs.Masks.FirstOrDefault(m => m.Id == id)?.Links, "self")
+                       ?? (id == detail.MaskId ? detail.MaskDefinitionHref : null);
+        if (maskHref is null)
         {
             return;
         }

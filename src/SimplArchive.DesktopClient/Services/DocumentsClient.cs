@@ -1059,7 +1059,7 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         e.GetProperty("canAnnotate").GetBoolean(),
         e.GetProperty("canManagePermissions").GetBoolean());
 
-    public sealed record MaskInfo(Guid? MaskId, string? Name, int? VersionNumber);
+    public sealed record MaskInfo(Guid? MaskId, string? Name, int? VersionNumber, string? DefinitionHref = null); // DefinitionHref: this mask's field definitions, which the catalogue never carries for a typed folder (#729, ADR 0688)
 
     // System-field values shown always (separate from the mask, ADR "System fields + OCR-language mask
     // field"). Created/CreatedBy/DocumentDate are the currently-shown version's; the OCR-language override +
@@ -1124,7 +1124,7 @@ public sealed class DocumentsClient(ApiCore core, Func<RemindersClient> reminder
         return new MaskInfo(
             mask.TryGetProperty("maskId", out var mid) && mid.ValueKind == JsonValueKind.String ? mid.GetGuid() : null,
             mask.TryGetProperty("name", out var n) ? n.GetString() : null,
-            mask.TryGetProperty("versionNumber", out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : null);
+            mask.TryGetProperty("versionNumber", out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : null, ApiCore.RelHref(mask, "definition"));
     }
 
     public async Task<SystemFields?> GetSystemFieldsAsync(string versionsHref, CancellationToken cancellationToken = default)

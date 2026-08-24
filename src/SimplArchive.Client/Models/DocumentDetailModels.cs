@@ -17,6 +17,10 @@ public record MaskResponse
     public string? Name { get; set; }
 
     public int? VersionNumber { get; set; }
+
+    /// <summary>This assignment's addresses — its <c>definition</c> is where the mask's field definitions
+    /// live, which is what the index editor needs before it can offer a box (#729).</summary>
+    public List<LinkResponse> Links { get; set; } = [];
 }
 
 public record IndexDataResponse

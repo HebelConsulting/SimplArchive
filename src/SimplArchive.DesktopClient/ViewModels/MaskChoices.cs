@@ -30,6 +30,12 @@ namespace SimplArchive.DesktopClient.ViewModels;
 /// masks that genuinely cannot be re-typed are a smaller set, and are refused by the server.
 /// Its own type, rather than eight more lines in a 7,000-line view-model that is on the standing-debt list.
 /// </para>
+/// <para>
+/// <b>And it carries the mask's ADDRESS, not only its name (#729).</b> The first version inserted a bare
+/// name, which fixed what the picker displayed and left the editor beside it empty: field definitions were
+/// still resolved through the catalogue, so the very masks this method exists for had none. The address comes
+/// from the document's own <c>definition</c> rel — see ADR 0688.
+/// </para>
 /// </remarks>
 public static class MaskChoices
 {
@@ -46,8 +52,16 @@ public static class MaskChoices
     {
         if (IsFixed(choices, current.MaskId) && current.MaskId is { } ownMaskId)
         {
+            // WITH its address, not just its name (#729). A choice carrying no MaskOptionInfo names the mask and
+            // can say nothing else about it — so the editor that asks it for field definitions gets none, and a
+            // Mailbox's address list could not be filled in from either client. The address is the document's
+            // own `definition` rel, which is the only place that knows which mask this document wears.
+            var own = current.DefinitionHref is { } href
+                ? new MasksClient.MaskOptionInfo(ownMaskId, current.Name ?? string.Empty, href)
+                : null;
+
             // Right after "(No mask)", so the document's own type reads first rather than last in a long list.
-            choices.Insert(Math.Min(1, choices.Count), new MaskChoiceViewModel(ownMaskId, current.Name ?? string.Empty));
+            choices.Insert(Math.Min(1, choices.Count), new MaskChoiceViewModel(ownMaskId, current.Name ?? string.Empty, own));
         }
 
         return choices.FirstOrDefault(c => c.MaskId == current.MaskId) ?? choices[0];

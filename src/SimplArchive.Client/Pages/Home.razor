@@ -2025,10 +2025,7 @@
 
             Detail.MaskId = null;
             // mask + index-data come from the ROW's own rels — the listing advertises them, so no second fetch.
-            var mask = await Http.GetFromJsonAsync<MaskResponse>(RowOrDetailHref(item, "mask"));
-            Detail.MaskName = mask?.Name;
-            Detail.MaskId = mask?.MaskId;
-            Detail.VersionNumber = mask?.VersionNumber;
+            Detail.ApplyMask(await Http.GetFromJsonAsync<MaskResponse>(RowOrDetailHref(item, "mask")));
 
             var index = await Http.GetFromJsonAsync<IndexDataResponse>(RowOrDetailHref(item, "index-data"));
             Detail.IndexData = index?.Fields ?? [];
@@ -2138,6 +2135,7 @@
         Detail.CanManagePermissions = false;
         Detail.BreaksInheritance = false;
         Detail.ExternalLinksHref = null;
+        Detail.MaskDefinitionHref = null;
         Detail.WorkflowLinks = null;
     }
 

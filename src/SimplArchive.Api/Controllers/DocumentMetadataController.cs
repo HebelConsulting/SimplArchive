@@ -396,6 +396,17 @@ public class DocumentMetadataController : ControllerBase
         resource.Name = version.Name;
         resource.VersionNumber = version.VersionNumber;
 
+        // The mask DEFINITION — where this assignment's field definitions live, and therefore what an index
+        // editor needs before it can offer a single box (#729, ADR 0688).
+        //
+        // Advertised here because this is the only place that knows which mask a document wears. Both clients
+        // used to answer it by looking the id up in the mask CATALOGUE and following that row's `self`, which
+        // works for every mask the catalogue carries — and the catalogue is filtered to the freely-assignable
+        // ones (#671), so a typed folder (Mailbox, Calendar, Addressbook, a repository) had no row, no address,
+        // and its editor opened with no fields at all. A missing rel means "not available" (ADR 0543); the
+        // absence here meant "not addressable", which is a different thing and was never true.
+        resource.Links.Add(new Link("definition", $"/api/masks/{version.MaskId}", "GET"));
+
         return resource;
     }
 
