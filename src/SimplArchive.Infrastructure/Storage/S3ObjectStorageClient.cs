@@ -381,6 +381,17 @@ public class S3ObjectStorageClient : IObjectStorageClient
 
     public async Task<ObjectLockStatus> GetLockStatusAsync(string objectKey, CancellationToken cancellationToken = default)
     {
+        // "No lock configuration" and "no such object" arrive as the SAME 404, and answering the second one
+        // "unlocked" is the most consequential sentence this class can get wrong (ADR 0702). The stores disagree
+        // about which shape they use — some send NoSuchObjectLockConfiguration, some a bare 404 — so the status
+        // alone cannot separate them and NARROWING the predicate would turn genuinely unlocked objects into
+        // failures on the stores that use the bare form. Asking whether the object exists is the only thing that
+        // actually distinguishes the two.
+        //
+        // The cost lands only on the 404 path, which is already the exceptional one; a locked or configured
+        // object never pays it.
+        var seenNotFound = false;
+
         DateTimeOffset? retainUntil = null;
         try
         {
@@ -397,6 +408,7 @@ public class S3ObjectStorageClient : IObjectStorageClient
         catch (AmazonS3Exception e) when (IsNoLockConfiguration(e))
         {
             // No retention configuration on this object — leave retainUntil null.
+            seenNotFound |= e.StatusCode == System.Net.HttpStatusCode.NotFound;
             WarnLockLookupSwallowed(objectKey, "retention", e);
         }
 
@@ -413,7 +425,15 @@ public class S3ObjectStorageClient : IObjectStorageClient
         catch (AmazonS3Exception e) when (IsNoLockConfiguration(e))
         {
             // No legal hold on this object.
+            seenNotFound |= e.StatusCode == System.Net.HttpStatusCode.NotFound;
             WarnLockLookupSwallowed(objectKey, "legal hold", e);
+        }
+
+        // Only when a 404 was actually seen: if the object is gone, say so rather than describing it as an
+        // object that exists and happens to carry nothing.
+        if (seenNotFound && !await ExistsAsync(objectKey, cancellationToken))
+        {
+            throw new StorageObjectNotFoundException(objectKey);
         }
 
         return new ObjectLockStatus(retainUntil, legalHold);
@@ -429,9 +449,9 @@ public class S3ObjectStorageClient : IObjectStorageClient
     // "swallowed" still has to guess which knob shows them the exchange.
     private void WarnLockLookupSwallowed(string objectKey, string lookup, AmazonS3Exception e) =>
         _logger.LogWarning(
-            "Object storage answered {StatusCode}/{ErrorCode} to the {Lookup} lookup for {ObjectKey}; reporting it "
-            + "as \"not set\". This is also what a MISSING object looks like, so the two are not distinguished "
-            + "here. Enable Trace on {TraceSource} to see the exchange.",
+            "Object storage answered {StatusCode}/{ErrorCode} to the {Lookup} lookup for {ObjectKey}; treating it "
+            + "as \"not set\" unless the object turns out to be absent, which this status cannot distinguish on "
+            + "its own. Enable Trace on {TraceSource} to see the exchange.",
             (int)e.StatusCode,
             e.ErrorCode ?? "(none)",
             lookup,

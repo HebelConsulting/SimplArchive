@@ -97,6 +97,40 @@ public class WormObjectLockTests
             .FirstAsync();
     }
 
+    [Fact]
+    public async Task Asking_for_the_lock_status_of_an_object_that_is_not_there_says_so()
+    {
+        // "No lock configuration" and "no such object" arrive as the same 404, and the old code answered the
+        // second one ObjectLockStatus(null, false) — stating that an object nobody can find carries no legal
+        // hold. Against a real store, because the whole difficulty is that the STORES disagree about which
+        // shape they send, so a fake proves nothing here (ADR 0702).
+        var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+
+        // A real, tenant-scoped key shape so the bucket resolves — but nothing was ever stored under it.
+        var absent = $"tenants/{tenantId:D}/2026/{Guid.NewGuid():D}/content.pdf";
+
+        await Assert.ThrowsAsync<StorageObjectNotFoundException>(() => GetLockStatusAsync(absent));
+    }
+
+    [Fact]
+    public async Task An_object_that_exists_without_any_lock_still_answers_unlocked()
+    {
+        // The counterpart, and the one that keeps the change honest: turning every 404 into "not found" would
+        // pass the test above and break every genuinely unlocked object on stores that signal no-lock that way.
+        var (clientId, secret, tenantId) = await _factory.SeedServiceAccountAsync(canManageRepositories: true);
+        using var owner = _factory.CreateAuthedClient(await _factory.GetTokenAsync(clientId, secret));
+
+        var repoId = (await TestJson.Post(owner, "/api/repositories", new { name = $"WORM {Guid.NewGuid():N}" })).GetProperty("id").GetGuid();
+        var docId = (await TestJson.Post(owner, $"/api/documents/{repoId}/children", new { name = "worm-unlocked-doc" })).GetProperty("id").GetGuid();
+        await UploadConfirmedVersionAsync(owner, docId, "unlocked content");
+
+        var status = await GetLockStatusAsync(await GetConfirmedObjectKeyAsync(tenantId, docId));
+
+        Assert.False(status.LegalHold);
+        Assert.Null(status.RetainUntil);
+    }
+
     private async Task<ObjectLockStatus> GetLockStatusAsync(string objectKey)
     {
         using var scope = _factory.Services.CreateScope();

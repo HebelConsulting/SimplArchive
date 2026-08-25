@@ -1,3 +1,4 @@
+using Amazon.S3;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using SimplArchive.Api.Errors;
@@ -101,7 +102,14 @@ public sealed class DocumentPurger
 
         // WORM: refuse the purge if any blob is still immutable — a retention lock not yet expired, or an object
         // legal hold — so storage-enforced immutability outlives the soft-delete (ADR "WORM / immutable document
-        // versions"). A read failure (e.g. a non-object-lock bucket) doesn't block: WORM isn't active there.
+        // versions").
+        //
+        // Two failures are tolerated here and NO OTHERS, because the direction matters (ADR 0702). A bucket with
+        // no Object Lock configuration answers with an S3 error: WORM is not active there, there is nothing to
+        // protect, and blocking would make the feature's absence look like a fault. A blob that has VANISHED is
+        // likewise nothing to protect. But a store we cannot REACH tells us nothing at all — and a blanket catch
+        // turned that silence into "not locked", which is precisely the answer that lets a purge destroy blobs a
+        // legal hold was holding. When immutability cannot be verified, the safe answer is to refuse.
         var now = DateTimeOffset.UtcNow;
         foreach (var key in objectKeys.Where(k => k is not null))
         {
@@ -110,8 +118,14 @@ public sealed class DocumentPurger
             {
                 status = await _objectStorage.GetLockStatusAsync(key!, cancellationToken);
             }
-            catch (Exception)
+            catch (StorageObjectNotFoundException)
             {
+                // The blob is gone; there is no immutability left for it to breach.
+                continue;
+            }
+            catch (AmazonS3Exception)
+            {
+                // The store answered, and its answer was that this bucket does not do Object Lock.
                 continue;
             }
 
