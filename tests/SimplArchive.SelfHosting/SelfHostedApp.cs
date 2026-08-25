@@ -35,62 +35,80 @@ public sealed class SelfHostedApp : IAsyncDisposable
     private const string SeaweedS3Config =
         """{"identities":[{"name":"storageadmin","credentials":[{"accessKey":"storageadmin","secretKey":"storageadmin"}],"actions":["Admin","Read","Write","List","Tagging"]}]}""";
 
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder().WithImage("postgres:16-alpine").Build();
+    // The containers are built LAZILY, and that is load-bearing rather than tidiness (#753).
+    //
+    // A field initialiser runs in the CONSTRUCTOR, whereas RemoteTarget is an object-initialiser property set by
+    // the caller — `new SelfHostedApp { RemoteTarget = … }` — which runs AFTER it. So an eager field is built
+    // before this object can possibly know it will never boot anything, and the remote guards in StartAsync and
+    // DisposeAsync are unreachable no matter how correct they read. That is not a wasted allocation either:
+    // `PostgreSqlBuilder.Build()` VALIDATES the Docker endpoint, so constructing it THROWS on a machine with no
+    // Docker running — which made every remote --target run (the load harness's whole purpose, #705) require a
+    // local Docker daemon, and reported it as a Testcontainers misconfiguration.
+    //
+    // Deferring construction is what makes DisposeAsync's claim — "the containers below were never constructed
+    // against a remote target" — true rather than aspirational. Touching `.Value` outside the non-remote path
+    // reintroduces the bug, so read them only where a container is actually being started or torn down.
+    private readonly Lazy<PostgreSqlContainer> _postgres =
+        new(() => new PostgreSqlBuilder().WithImage("postgres:16-alpine").Build());
 
     // SeaweedFS via the generic container builder (ADR 0360, replacing the EOL MinIO).
-    private readonly IContainer _storage = new ContainerBuilder()
-        .WithImage("chrislusf/seaweedfs@sha256:c7d6c721b30ae711db766bbbfd40192776e263d4e51e22f57baef7bef93c12c6")
-        .WithResourceMapping(Encoding.UTF8.GetBytes(SeaweedS3Config), "/s3.json")
-        // -volume.max: SeaweedFS defaults to only 8 volume slots, but per-tenant buckets make every tenant's
-        // bucket its own collection consuming volumes; when the cap is hit an upload PUT gets a 500 ("no writable
-        // volume"). Each bucket takes several volumes and the old cap of 500 sat right at the suite's peak — raised
-        // well above it for headroom. Volumes are created on demand, so a high slot cap costs nothing. (Same fix
-        // as E2EApiFactory.)
-        .WithCommand("server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/s3.json", "-volume.max=5000")
-        .WithPortBinding(8333, true)
-        .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("S3 API Server"))
-        .Build();
+    private readonly Lazy<IContainer> _storage =
+        new(() => new ContainerBuilder()
+            .WithImage("chrislusf/seaweedfs@sha256:c7d6c721b30ae711db766bbbfd40192776e263d4e51e22f57baef7bef93c12c6")
+            .WithResourceMapping(Encoding.UTF8.GetBytes(SeaweedS3Config), "/s3.json")
+            // -volume.max: SeaweedFS defaults to only 8 volume slots, but per-tenant buckets make every tenant's
+            // bucket its own collection consuming volumes; when the cap is hit an upload PUT gets a 500 ("no writable
+            // volume"). Each bucket takes several volumes and the old cap of 500 sat right at the suite's peak — raised
+            // well above it for headroom. Volumes are created on demand, so a high slot cap costs nothing. (Same fix
+            // as E2EApiFactory.)
+            .WithCommand("server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/s3.json", "-volume.max=5000")
+            .WithPortBinding(8333, true)
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("S3 API Server"))
+            .Build());
 
     // OpenSearch + Tika so the real full-text path is active (the Postgres fallback ignores field/date filters).
-    private readonly IContainer _openSearch = new ContainerBuilder()
-        // Pinned to the version Compose, the kiosk and the Helm chart all run, so the suite tests what ships and
-        // an image change arrives as a deliberate bump rather than overnight (#663).
-        .WithImage("opensearchproject/opensearch:2.19.6")
-        .WithEnvironment("discovery.type", "single-node")
-        .WithEnvironment("DISABLE_SECURITY_PLUGIN", "true")
-        .WithEnvironment("DISABLE_INSTALL_DEMO_CONFIG", "true")
-        // Disk watermarks off — THIS is what made CI refuse every index with a 403. A node above the HIGH
-        // watermark makes OpenSearch set `cluster.blocks.create_index` on the cluster, and a hosted runner sits
-        // at 93% full before the fleet even starts (4.6 GB free of 71.6 GB). The cluster it is protecting holds
-        // 111 KB of indices in a container discarded at the end of the run, so the watermark is guarding nothing
-        // and costing the whole suite.
-        .WithEnvironment("cluster.routing.allocation.disk.threshold_enabled", "false")
-        // Index State Management off. Nothing here uses it, and its start-up template migration sets
-        // `cluster.blocks.create_index` too — at t≈50-60s, LONG after /_cluster/health answers at t≈1s. That
-        // was a real second route to the same 403, just not the one that was firing.
-        // Kept in step with E2EApiFactory by OpenSearchContainerParityTests.
-        .WithEnvironment("plugins.index_state_management.enabled", "false")
-        .WithEnvironment("OPENSEARCH_JAVA_OPTS", "-Xms512m -Xmx512m")
-        .WithPortBinding(9200, true)
-        .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(9200).ForPath("/_cluster/health").ForStatusCode(HttpStatusCode.OK)))
-        .Build();
+    private readonly Lazy<IContainer> _openSearch =
+        new(() => new ContainerBuilder()
+            // Pinned to the version Compose, the kiosk and the Helm chart all run, so the suite tests what ships and
+            // an image change arrives as a deliberate bump rather than overnight (#663).
+            .WithImage("opensearchproject/opensearch:2.19.6")
+            .WithEnvironment("discovery.type", "single-node")
+            .WithEnvironment("DISABLE_SECURITY_PLUGIN", "true")
+            .WithEnvironment("DISABLE_INSTALL_DEMO_CONFIG", "true")
+            // Disk watermarks off — THIS is what made CI refuse every index with a 403. A node above the HIGH
+            // watermark makes OpenSearch set `cluster.blocks.create_index` on the cluster, and a hosted runner sits
+            // at 93% full before the fleet even starts (4.6 GB free of 71.6 GB). The cluster it is protecting holds
+            // 111 KB of indices in a container discarded at the end of the run, so the watermark is guarding nothing
+            // and costing the whole suite.
+            .WithEnvironment("cluster.routing.allocation.disk.threshold_enabled", "false")
+            // Index State Management off. Nothing here uses it, and its start-up template migration sets
+            // `cluster.blocks.create_index` too — at t≈50-60s, LONG after /_cluster/health answers at t≈1s. That
+            // was a real second route to the same 403, just not the one that was firing.
+            // Kept in step with E2EApiFactory by OpenSearchContainerParityTests.
+            .WithEnvironment("plugins.index_state_management.enabled", "false")
+            .WithEnvironment("OPENSEARCH_JAVA_OPTS", "-Xms512m -Xmx512m")
+            .WithPortBinding(9200, true)
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(9200).ForPath("/_cluster/health").ForStatusCode(HttpStatusCode.OK)))
+            .Build());
 
-    private readonly IContainer _tika = new ContainerBuilder()
-        .WithImage("apache/tika:latest-full")
-        // Cap the Tika JVM heap so the fleet fits a memory-constrained runner. JAVA_TOOL_OPTIONS, not JAVA_OPTS —
-        // the image entrypoint runs `exec java …` and never references JAVA_OPTS, whereas the JVM auto-reads
-        // JAVA_TOOL_OPTIONS at startup.
-        .WithEnvironment("JAVA_TOOL_OPTIONS", "-Xmx512m")
-        .WithPortBinding(9998, true)
-        .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(9998).ForPath("/version").ForStatusCode(HttpStatusCode.OK)))
-        .Build();
+    private readonly Lazy<IContainer> _tika =
+        new(() => new ContainerBuilder()
+            .WithImage("apache/tika:latest-full")
+            // Cap the Tika JVM heap so the fleet fits a memory-constrained runner. JAVA_TOOL_OPTIONS, not JAVA_OPTS —
+            // the image entrypoint runs `exec java …` and never references JAVA_OPTS, whereas the JVM auto-reads
+            // JAVA_TOOL_OPTIONS at startup.
+            .WithEnvironment("JAVA_TOOL_OPTIONS", "-Xmx512m")
+            .WithPortBinding(9998, true)
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(9998).ForPath("/version").ForStatusCode(HttpStatusCode.OK)))
+            .Build());
 
     // Gotenberg — office/markdown/html → PDF renditions.
-    private readonly IContainer _gotenberg = new ContainerBuilder()
-        .WithImage("gotenberg/gotenberg:8")
-        .WithPortBinding(3000, true)
-        .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(3000).ForPath("/health").ForStatusCode(HttpStatusCode.OK)))
-        .Build();
+    private readonly Lazy<IContainer> _gotenberg =
+        new(() => new ContainerBuilder()
+            .WithImage("gotenberg/gotenberg:8")
+            .WithPortBinding(3000, true)
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(3000).ForPath("/health").ForStatusCode(HttpStatusCode.OK)))
+            .Build());
 
     // Generous on purpose. Draining the seed's index backlog is serial and Tika-bound, so it scales with the
     // demo seed, and a hosted runner is far slower at it than a developer machine — measured at ~2 s locally
@@ -124,7 +142,15 @@ public sealed class SelfHostedApp : IAsyncDisposable
     public bool WithOcrSidecar { get; set; }
 
     // The self-hosted app's Postgres — exposed so a caller can clean up data it seeded.
-    public string PostgresConnectionString => _postgres.GetConnectionString();
+    public string PostgresConnectionString => RemoteTarget is { Length: > 0 }
+        // The last public route to .Value, and so the last way to build a container on a remote run (#753).
+        // Said plainly here because the alternative is a Testcontainers Docker-endpoint error, which sends the
+        // reader to their Docker install rather than to the caller that asked a self-hosting question of a
+        // deployment this process does not own.
+        ? throw new InvalidOperationException(
+            "PostgresConnectionString is the self-hosted Postgres container's. This app targets "
+            + $"'{RemoteTarget}', whose database is not this process's to reach.")
+        : _postgres.Value.GetConnectionString();
 
     /// <summary>
     /// An EXTERNAL instance to run against instead of booting one — the load harness's whole seam (#705).
@@ -166,16 +192,16 @@ public sealed class SelfHostedApp : IAsyncDisposable
                 .Build();
         }
 
-        await Task.WhenAll(_postgres.StartAsync(), _storage.StartAsync(), _openSearch.StartAsync(), _tika.StartAsync(), _gotenberg.StartAsync());
+        await Task.WhenAll(_postgres.Value.StartAsync(), _storage.Value.StartAsync(), _openSearch.Value.StartAsync(), _tika.Value.StartAsync(), _gotenberg.Value.StartAsync());
         if (_ocr is not null)
         {
             await _ocr.StartAsync();
             _ocrUrl = $"http://{_ocr.Hostname}:{_ocr.GetMappedPublicPort(8080)}";
         }
-        var storageUrl = $"http://{_storage.Hostname}:{_storage.GetMappedPublicPort(8333)}";
-        _openSearchUrl = $"http://{_openSearch.Hostname}:{_openSearch.GetMappedPublicPort(9200)}";
-        _tikaUrl = $"http://{_tika.Hostname}:{_tika.GetMappedPublicPort(9998)}";
-        _gotenbergUrl = $"http://{_gotenberg.Hostname}:{_gotenberg.GetMappedPublicPort(3000)}";
+        var storageUrl = $"http://{_storage.Value.Hostname}:{_storage.Value.GetMappedPublicPort(8333)}";
+        _openSearchUrl = $"http://{_openSearch.Value.Hostname}:{_openSearch.Value.GetMappedPublicPort(9200)}";
+        _tikaUrl = $"http://{_tika.Value.Hostname}:{_tika.Value.GetMappedPublicPort(9998)}";
+        _gotenbergUrl = $"http://{_gotenberg.Value.Hostname}:{_gotenberg.Value.GetMappedPublicPort(3000)}";
 
         using (var s3 = new AmazonS3Client(
             new BasicAWSCredentials(StorageUser, StoragePassword),
@@ -227,7 +253,7 @@ public sealed class SelfHostedApp : IAsyncDisposable
         var env = new Dictionary<string, string>
         {
             ["ASPNETCORE_ENVIRONMENT"] = "Development",
-            ["ConnectionStrings__Default"] = _postgres.GetConnectionString(),
+            ["ConnectionStrings__Default"] = _postgres.Value.GetConnectionString(),
             ["App__ApplyMigrationsAtStartup"] = "true",
             // The retention sweep's first run must land beyond any test leg's lifetime. Its default
             // app-start+3min fired mid-leg on CI (a leg runs ~5–6 min there) and silently disposed a test's
@@ -348,7 +374,7 @@ public sealed class SelfHostedApp : IAsyncDisposable
         }
 
         using var http = new HttpClient { BaseAddress = new Uri(_openSearchUrl) };
-        await using var db = new NpgsqlConnection(_postgres.GetConnectionString());
+        await using var db = new NpgsqlConnection(_postgres.Value.GetConnectionString());
         await db.OpenAsync();
 
         var started = DateTime.UtcNow;
@@ -511,14 +537,29 @@ public sealed class SelfHostedApp : IAsyncDisposable
         }
 
         _api?.Dispose();
-        await _gotenberg.DisposeAsync();
+        // IsValueCreated, not Value: reading Value here would BUILD the container in order to dispose it —
+        // the same ordering bug as #753 arriving from the teardown end, and on a Docker-less machine it would
+        // throw out of DisposeAsync.
+        await DisposeIfCreatedAsync(_gotenberg);
         if (_ocr is not null)
         {
             await _ocr.DisposeAsync();
         }
-        await _tika.DisposeAsync();
-        await _openSearch.DisposeAsync();
-        await _storage.DisposeAsync();
-        await _postgres.DisposeAsync();
+        await DisposeIfCreatedAsync(_tika);
+        await DisposeIfCreatedAsync(_openSearch);
+        await DisposeIfCreatedAsync(_storage);
+        await DisposeIfCreatedAsync(_postgres);
+    }
+
+    // One implementation for every deferred container rather than a null-check per field: PostgreSqlContainer and
+    // IContainer differ only in type, and five copies of the same two lines is where the fourth one keeps a fix
+    // the first three never get.
+    private static async Task DisposeIfCreatedAsync<T>(Lazy<T> container)
+        where T : IAsyncDisposable
+    {
+        if (container.IsValueCreated)
+        {
+            await container.Value.DisposeAsync();
+        }
     }
 }
