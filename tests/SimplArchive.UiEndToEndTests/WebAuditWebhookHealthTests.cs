@@ -9,6 +9,7 @@ namespace SimplArchive.UiEndToEndTests;
 // test), the Tenant tab shows the "Delivery: failing" status with the consecutive-failure count + last error.
 // Cleans the webhook columns off the shared demo tenant afterwards.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebAuditWebhookHealthTests
 {
     private readonly SelfHostedAppFixture _app;

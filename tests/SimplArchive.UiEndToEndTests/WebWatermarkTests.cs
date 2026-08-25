@@ -10,6 +10,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The web watermark (ADR "Document watermarking"): previewing a Confidential document overlays a sensitivity
 // watermark; a Public/unclassified document does not.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebWatermarkTests
 {
     private readonly SelfHostedAppFixture _app;

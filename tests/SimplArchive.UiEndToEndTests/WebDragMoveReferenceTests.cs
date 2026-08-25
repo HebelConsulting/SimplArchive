@@ -12,6 +12,7 @@ namespace SimplArchive.UiEndToEndTests;
 // simulated with a synthetic DataTransfer carrying our custom node MIME (the same technique as the file-drop
 // filing test), which exercises the real dropUpload.js → PerformNodeDropAsync path.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebDragMoveReferenceTests
 {
     private readonly SelfHostedAppFixture _app;

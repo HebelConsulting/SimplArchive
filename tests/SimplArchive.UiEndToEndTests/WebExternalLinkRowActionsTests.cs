@@ -10,6 +10,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The assertion is VISIBILITY, not presence. The existing tests drive behaviour, which is exactly why a
 // clipped-but-working button passed them: it was in the DOM, it was bound, it simply could not be seen.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebExternalLinkRowActionsTests
 {
     private readonly SelfHostedAppFixture _app;

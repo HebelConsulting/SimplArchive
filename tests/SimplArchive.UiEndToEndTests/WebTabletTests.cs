@@ -10,6 +10,7 @@ namespace SimplArchive.UiEndToEndTests;
 // instead, which is why every test here needs HasTouch: without it the same viewport is just a small desktop
 // window, and these assertions would silently be testing the wrong tier.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebTabletTests
 {
     private readonly SelfHostedAppFixture _app;

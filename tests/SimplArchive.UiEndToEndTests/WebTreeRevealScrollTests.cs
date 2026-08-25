@@ -13,6 +13,7 @@ namespace SimplArchive.UiEndToEndTests;
 // a test on demo data would pass whether or not anything scrolled, which is the definition of a vacuous guard.
 // Fifteen levels puts the target well below the fold of a normal tree pane.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebTreeRevealScrollTests
 {
     private readonly SelfHostedAppFixture _app;

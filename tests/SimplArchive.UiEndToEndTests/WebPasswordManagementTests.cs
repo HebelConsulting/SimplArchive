@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // shows the generated password once. The admin's own password is never changed (the change dialog is only
 // opened + cancelled), so the fixture login stays intact.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebPasswordManagementTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -9,6 +9,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The web half of the "My work" dashboard (ADR "My work dashboard"): the tab shows the caller's due-soon
 // reminders + followed documents, and an item navigates to its document.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebMyWorkTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow (ADRs 0265/0279): an intray item is previewed inline (a .txt renders as text in the intray preview
 // pane), then deleted via the row's ⋮ menu → confirm → it leaves the intray.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebIntrayPreviewDeleteTests
 {
     private readonly SelfHostedAppFixture _app;

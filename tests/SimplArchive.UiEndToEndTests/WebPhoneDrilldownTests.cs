@@ -11,6 +11,7 @@ namespace SimplArchive.UiEndToEndTests;
 // contents list is the default view, and tapping a document opens a full-screen detail overlay with
 // Preview/Details/Comments sub-tabs. Verifies the drawer → drill-in → detail overlay → sub-tab → back flow.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebPhoneDrilldownTests
 {
     private readonly SelfHostedAppFixture _app;

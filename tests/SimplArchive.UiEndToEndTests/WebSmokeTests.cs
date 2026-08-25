@@ -3,6 +3,7 @@ namespace SimplArchive.UiEndToEndTests;
 // Foundation check: the self-hosted real app serves the Blazor WASM client, the interactive OIDC login works
 // in a real browser, and the workbench renders. Proves the harness before the behavior tests build on it.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebSmokeTests
 {
     private readonly SelfHostedAppFixture _app;

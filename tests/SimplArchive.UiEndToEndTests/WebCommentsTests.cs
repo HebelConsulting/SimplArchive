@@ -6,6 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow (ADR 0222): the chat pane sends a message on the selected node and a threaded reply — both appear
 // with the author. Chatting on the repository folder keeps it independent of the document-focused tests.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebCommentsTests
 {
     private readonly SelfHostedAppFixture _app;

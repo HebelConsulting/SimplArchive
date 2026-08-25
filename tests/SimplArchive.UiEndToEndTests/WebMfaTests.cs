@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // the shared demo admin is never actually given MFA (enrollment only stages a pending secret; login is
 // unaffected until a code confirms it) — the full enable/login loop is covered by the container E2E MfaTests.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebMfaTests
 {
     private readonly SelfHostedAppFixture _app;

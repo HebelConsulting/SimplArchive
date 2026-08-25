@@ -14,6 +14,7 @@ namespace SimplArchive.UiEndToEndTests;
 // stopPropagation). Target .mud-treeview-item-content so the filter hits the node's own label row, not an
 // ancestor whose expanded subtree also contains the text.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebTreeContextMenuTests
 {
     private readonly SelfHostedAppFixture _app;

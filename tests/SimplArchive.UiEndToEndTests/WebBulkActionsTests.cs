@@ -9,6 +9,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The web half of bulk actions (ADR "Bulk actions on selected documents"): Ctrl-clicking rows builds a
 // multi-selection (no checkboxes) that reveals a bulk-action bar; Delete moves them all to the recycle bin.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebBulkActionsTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -12,6 +12,7 @@ namespace SimplArchive.UiEndToEndTests;
 // AND select the document (its reference/shortcut row) for viewing — previously it only opened the folder. Drives
 // the real dialog → NavigateToFolderAsync path in the browser.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebReferencesOpenSelectsTests
 {
     private readonly SelfHostedAppFixture _app;

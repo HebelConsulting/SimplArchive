@@ -12,6 +12,7 @@ namespace SimplArchive.UiEndToEndTests;
 // uploaded document's blob, so hard-deleting it is correctly refused — that path is covered by the API-level
 // WORM/purge E2E tests. A folder has no blob, so it purges cleanly, exercising the recycle-bin UI flow.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebRecycleBinTabTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // clickable at every size. Playwright's IsVisible can't see an off-screen-overflow element, so we assert the
 // avatar's bounding box stays inside the viewport, then that clicking it opens the account menu.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebSelfServiceMenuResponsiveTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -6,6 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The post-logon desktop-client promo (ADR 0505): a one-time notice modal appears after login on a fresh
 // browser, and "Don't show this again" (persisted in localStorage) suppresses it on the next load.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebDesktopPromoTests
 {
     private readonly SelfHostedAppFixture _app;

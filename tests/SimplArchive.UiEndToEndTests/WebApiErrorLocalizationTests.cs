@@ -27,6 +27,7 @@ namespace SimplArchive.UiEndToEndTests;
 // Asserts the German sentence itself rather than "different from the English one": an inequality assertion
 // passes just as happily on an empty message or on the generic fallback, the two most likely ways this breaks.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebApiErrorLocalizationTests
 {
     private readonly SelfHostedAppFixture _app;

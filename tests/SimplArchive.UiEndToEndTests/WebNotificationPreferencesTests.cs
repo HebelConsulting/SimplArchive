@@ -11,6 +11,7 @@ namespace SimplArchive.UiEndToEndTests;
 // result is asserted (and the shared demo admin restored) over the API for robustness. The escalation types
 // aren't listed — only the mutable ones (7 now, incl. SubscribedActivity).
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebNotificationPreferencesTests
 {
     private readonly SelfHostedAppFixture _app;

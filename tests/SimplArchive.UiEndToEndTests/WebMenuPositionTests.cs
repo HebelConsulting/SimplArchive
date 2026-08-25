@@ -10,6 +10,7 @@ namespace SimplArchive.UiEndToEndTests;
 // (top-left) instead of under its trigger on the right. These assert each opened menu lands in the right half
 // of the window (where its trigger is) and stays fully within the viewport horizontally.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebMenuPositionTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -12,6 +12,7 @@ namespace SimplArchive.UiEndToEndTests;
 // filed here") vs HasSubfolders (the expander caret) — a folder holding only DOCUMENTS is a leaf in the
 // folders-only tree but is NOT empty, and neither is one holding only REFERENCES, which is what #376 fixed.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebEmptyFolderIconTests
 {
     // .wb-tree-folder — the gold a folder with contents gets. Asserted exactly because it is a value the app

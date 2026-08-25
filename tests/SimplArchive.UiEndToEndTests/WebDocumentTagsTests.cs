@@ -10,6 +10,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The web half of document tags (ADR "Document tags"): the demo admin adds a free-form tag on the detail-pane
 // Edit → Save, and the read-only tag chip appears.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebDocumentTagsTests
 {
     private readonly SelfHostedAppFixture _app;

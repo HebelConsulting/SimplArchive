@@ -13,6 +13,7 @@ namespace SimplArchive.UiEndToEndTests;
 // PrepareUploadAsync/UploadConflictResolver path, and a real drag-and-drop of an OS file is not something
 // Playwright can produce faithfully — the conflict, not the gesture, is what is under test.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebNameConflictTests
 {
     private readonly SelfHostedAppFixture _app;

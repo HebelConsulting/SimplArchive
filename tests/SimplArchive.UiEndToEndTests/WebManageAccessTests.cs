@@ -12,6 +12,7 @@ namespace SimplArchive.UiEndToEndTests;
 // role; the new grant row (name + role) then shows in the dialog. A throwaway document + user keep the shared
 // demo tenant untouched.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-2")]
 public class WebManageAccessTests
 {
     private readonly SelfHostedAppFixture _app;

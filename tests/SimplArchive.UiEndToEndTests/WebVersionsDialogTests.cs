@@ -11,6 +11,7 @@ namespace SimplArchive.UiEndToEndTests;
 // UI opens the ribbon "Versions" dialog, sees both versions with the latest marked Current, makes the older one
 // current (a new version), and confirms the Compare launcher opens.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebVersionsDialogTests
 {
     private readonly SelfHostedAppFixture _app;

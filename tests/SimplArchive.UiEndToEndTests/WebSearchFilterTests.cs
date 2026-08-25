@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // doesn't-match toggles the seeded document in/out of the results. Indexing is async (startup reindex), so the
 // initial search polls.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebSearchFilterTests
 {
     private const string Doc = "Invoice 2026-003";

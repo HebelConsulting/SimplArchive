@@ -9,6 +9,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The tab used to be a bare table. To see what you had actually edited you left it, found the document in
 // Repositories, and looked at the ARCHIVED version — the one thing that is definitely not your edit.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebCheckoutDetailTests
 {
     private readonly SelfHostedAppFixture _app;

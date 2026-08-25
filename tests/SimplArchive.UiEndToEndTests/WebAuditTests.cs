@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // The interactive login itself is a recorded event (Auth.LoggedIn); the action filter narrows to it, and
 // "Verify integrity" confirms the tenant's tamper-evidence hash chain is intact.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-3")]
 public class WebAuditTests
 {
     private readonly SelfHostedAppFixture _app;

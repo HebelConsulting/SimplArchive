@@ -6,6 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // UI flows: the preview full-screen toggle (ADR 0295) maximizes/restores the preview pane, and the app-bar
 // dark-mode toggle applies + persists a dark theme.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebUiTogglesTests
 {
     private readonly SelfHostedAppFixture _app;

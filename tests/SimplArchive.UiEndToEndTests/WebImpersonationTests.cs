@@ -7,6 +7,7 @@ namespace SimplArchive.UiEndToEndTests;
 // impersonates them from the Users & groups tab (a banner appears + the app acts as that user), then stops
 // impersonating and returns to their own session.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebImpersonationTests
 {
     private readonly SelfHostedAppFixture _app;

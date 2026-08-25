@@ -11,6 +11,7 @@ namespace SimplArchive.UiEndToEndTests;
 // folder's metadata without losing the listing they are standing in. Asserting only the highlight would pass
 // just as well if selecting had NAVIGATED, which is the outcome these have to rule out.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebPaneSelectionTests
 {
     private readonly SelfHostedAppFixture _app;

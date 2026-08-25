@@ -13,6 +13,7 @@ namespace SimplArchive.UiEndToEndTests;
 // them unconditionally, and the feature would still look right on the folder it was built for — so the test
 // that matters is the one asserting they are NOT on an ordinary folder.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebNotebookAffordanceTests
 {
     private readonly SelfHostedAppFixture _app;

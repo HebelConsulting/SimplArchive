@@ -19,6 +19,7 @@ namespace SimplArchive.UiEndToEndTests;
 // aimed at. Anchors and `data-tour-*` values are language-independent, which is why the tour was written to
 // assert only those.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public partial class WebGuidedTourTests
 {
     private readonly SelfHostedAppFixture _app;

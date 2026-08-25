@@ -17,6 +17,7 @@ namespace SimplArchive.UiEndToEndTests;
 // the first attempted fix for #410 did nothing because the CONTAINER was the clipping box, which a visibility
 // assertion cannot tell you. So: every toolbar control's right edge must lie within the preview pane's own box.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebPreviewToolbarOverflowTests
 {
     private readonly SelfHostedAppFixture _app;

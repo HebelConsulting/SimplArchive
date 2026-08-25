@@ -15,6 +15,7 @@ namespace SimplArchive.UiEndToEndTests;
 // to the web client, this fails and sends them to the ADR, where the trigger that WOULD justify it is written
 // down: federation (#545) putting an external IdP in the path, which is when same-origin stops holding.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebSilentRenewTests
 {
     private readonly SelfHostedAppFixture _app;

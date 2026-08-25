@@ -6,6 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // A UI flow (ADR 0224): collapsing a workbench pane via its gutter caret marks it collapsed and persists across
 // a page reload (localStorage).
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebPaneLayoutTests
 {
     private readonly SelfHostedAppFixture _app;

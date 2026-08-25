@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // intray-style filing dialog; choosing "file as a new version" adds a version to that document. Simulates the
 // drop with a synthetic DataTransfer carrying a File (Playwright's real DnD can't originate an OS file).
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebListPaneDropFilingTests
 {
     private readonly SelfHostedAppFixture _app;

@@ -8,6 +8,7 @@ namespace SimplArchive.UiEndToEndTests;
 // asserted alongside the folder's system fields, and revealed by the header PENCIL rather than a bottom Edit
 // button (issue #407).
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebFolderSortTests
 {
     private readonly SelfHostedAppFixture _app;

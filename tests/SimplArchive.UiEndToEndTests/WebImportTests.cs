@@ -6,6 +6,7 @@ namespace SimplArchive.UiEndToEndTests;
 // imports that same .zip back (grafted under the selected repository) and sees the success confirmation. A full
 // browser round-trip over the real stack.
 [Collection(UiCollection.Name)]
+[Trait("Area", "ui-4")]
 public class WebImportTests
 {
     private readonly SelfHostedAppFixture _app;
