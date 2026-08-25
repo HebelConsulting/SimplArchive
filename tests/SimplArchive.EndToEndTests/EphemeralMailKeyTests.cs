@@ -43,6 +43,11 @@ public class EphemeralMailKeyTests
             TenantId = tenantId,
             Domain = domain,
             CreatedAt = DateTimeOffset.UtcNow,
+            // Delivery accepts only a VERIFIED domain (#667). These fixtures stand in for a
+            // domain the operator declared, which arrives verified — the DNS challenge is the
+            // route for one an administrator adds in the UI, and is exercised by
+            // TenantMailDomainsTests rather than by every delivery test.
+            VerifiedAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync();
 

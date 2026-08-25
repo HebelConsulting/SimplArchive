@@ -50,6 +50,13 @@ public static class InteropTenantSeeder
             configuration["Interop:RepositoryName"] ?? tenantName,
             adminPassword);
 
+        // The tenant's mail domain, declared the way everything else about this tenant is (#667). Optional:
+        // an interop stack that does not receive mail simply omits it, and no domain is invented from the
+        // administrator's address — guessing one would claim a domain on an operator's behalf.
+        await DeclaredMailDomain.EnsureAsync(
+            dbContext, provisioned.TenantId, configuration["Interop:MailDomain"], DateTimeOffset.UtcNow,
+            services.GetService<ILoggerFactory>()?.CreateLogger(typeof(InteropTenantSeeder)));
+
         // No sample tree — see the class comment.
         if (await SeededServiceAccount.AddIfConfiguredAsync(services, dbContext, configuration, "Interop", provisioned))
         {

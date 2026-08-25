@@ -50,4 +50,43 @@ public class TenantMailDomain : ITenantScoped
     public string NormalizedDomain { get; set; } = string.Empty;
 
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>
+    /// The value the administrator publishes as a <c>TXT</c> record to prove they control the domain (#667).
+    /// </summary>
+    /// <remarks>
+    /// Stored rather than minted per request, and that is the whole mechanism: a challenge the verifier
+    /// regenerates is not a challenge, because what the administrator was shown and what the lookup expects
+    /// would differ every time. Null on a domain that never needed one — see <see cref="VerifiedAt"/>.
+    /// </remarks>
+    public string? VerificationToken { get; set; }
+
+    /// <summary>
+    /// When ownership was established, or <see langword="null"/> while it has not been.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Delivery accepts only a verified domain</b>, and so does the MTA's own virtual-domain query — both,
+    /// deliberately. If only the app checked, Postfix would accept an unverified recipient at <c>RCPT</c> and
+    /// the refusal would arrive later as a bounce; refusing up front is what ADR 0628 asks for.
+    /// </para>
+    /// <para>
+    /// A domain declared by the stack's own CONFIGURATION arrives verified with no token and no lookup. An
+    /// operator writing it into the configuration that also creates the tenant and its administrator is the
+    /// assertion of ownership — and it is the only workable answer for the demo and kiosk stacks, which have
+    /// no zone to publish a record into.
+    /// </para>
+    /// </remarks>
+    public DateTimeOffset? VerifiedAt { get; set; }
+
+    /// <summary>When a verification check last ran, successful or not — so the UI can say how fresh it is.</summary>
+    public DateTimeOffset? LastCheckedAt { get; set; }
+
+    /// <summary>The DNS name the <see cref="VerificationToken"/> is published at.</summary>
+    /// <remarks>
+    /// A dedicated sub-name rather than the apex: publishing at the apex mixes this record in with SPF, DMARC
+    /// and everything else an organisation already keeps there, and a domain being verified by us is not a
+    /// fact its apex should have to carry.
+    /// </remarks>
+    public string ChallengeName => $"_simplarchive-challenge.{Domain.Trim().TrimEnd('.')}";
 }

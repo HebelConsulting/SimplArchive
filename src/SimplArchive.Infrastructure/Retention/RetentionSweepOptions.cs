@@ -6,6 +6,11 @@ namespace SimplArchive.Infrastructure.Retention;
 // and its first UI assertion — a "flaky" test that was really a fixed-clock race (it failed 4/4 on CI and
 // 0/5 locally, because only CI's slower leg put the test inside the strike zone). The self-hosted test
 // fixture now pushes InitialDelay out past any leg's lifetime; production keeps these defaults.
+//
+// BOTH fixtures do, since #744: that sentence was true of SelfHostedApp and silently untrue of E2EApiFactory,
+// which runs the longest leg of all (~12 min on CI) and therefore had the widest strike zone. It resurfaced
+// exactly as before — one retention test, CI only, never locally — and the second time it cost a release
+// candidate's CI cycle. A guard applied to one of two callers is the shape that comes back.
 public sealed class RetentionSweepOptions
 {
     public TimeSpan InitialDelay { get; set; } = TimeSpan.FromMinutes(3);

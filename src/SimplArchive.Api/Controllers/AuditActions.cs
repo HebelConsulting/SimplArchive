@@ -155,6 +155,13 @@ public static class AuditActions
     public const string MailboxAddressReleased = "Mailbox.AddressReleased";
     public const string MailboxDuplicateClaimConfirmed = "Mailbox.DuplicateClaimConfirmed";
 
+    // Mail-domain registration (#667). All three are recorded, and the REMOVAL most of all: it stops mail
+    // arriving for everyone at that domain, immediately and silently, which is a change whose effect is only
+    // ever noticed by its absence.
+    public const string MailDomainClaimed = "MailDomain.Claimed";
+    public const string MailDomainVerified = "MailDomain.Verified";
+    public const string MailDomainRemoved = "MailDomain.Removed";
+
     public const string LoggedIn = "Auth.LoggedIn";
     // Impersonation token issued (ADR "User impersonation") — actor = the impersonating admin, target = the user.
     public const string ImpersonationStarted = "Auth.ImpersonationStarted";

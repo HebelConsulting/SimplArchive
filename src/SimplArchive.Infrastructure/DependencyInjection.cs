@@ -125,6 +125,10 @@ public static class DependencyInjection
         // Default no-op real-time notifier (ADR "Real-time notifications (SignalR)"); the Api overrides this with
         // a SignalR hub-context broadcaster after AddInfrastructure.
         services.AddSingleton<IRealtimeNotifier, Notifications.NullRealtimeNotifier>();
+
+        // Mail-domain verification (#667). Singleton: the lookup client keeps its own sockets and resolver
+        // list, and building one per request would re-read the host's DNS configuration on every check.
+        services.AddSingleton<IDnsTxtLookup, Dns.DnsTxtLookup>();
         services.AddScoped<IWorkflowEscalationService, Workflow.WorkflowEscalationService>();
         services.AddHostedService<Workflow.WorkflowEscalationWorker>();
 

@@ -74,15 +74,40 @@ public class LmtpDelivery
         // its TenantId == null predicate matches zero rows and every recipient resolves as unknown. This is
         // the same rule the login and client-id lookups follow. The queries stay tenant-scoped by the
         // explicit TenantId predicates.
-        var tenantId = await _dbContext.TenantMailDomains.IgnoreQueryFilters(["TenantFilter"])
+        // VERIFIED domains only (#667). An unverified claim is a statement someone typed, not a fact — and
+        // accepting mail on it would let a tenant receive another organisation's mail by claiming its domain
+        // first. The MTA's own virtual-domain query carries the same condition, so an unverified recipient is
+        // refused at RCPT rather than accepted and bounced afterwards.
+        //
+        // The two rejections are read APART, deliberately. "No such domain" and "the domain is registered but
+        // unverified" produce the same 550 to the sender and are the same empty result here — and the second
+        // one is an administrator's unfinished task, visible to nobody: the person who added the domain sees a
+        // list entry, the sender sees a bounce, and the logs of a healthy and a half-configured install are
+        // byte-identical. That is exactly the shape ADR 0626 exists to forbid.
+        var claim = await _dbContext.TenantMailDomains.IgnoreQueryFilters(["TenantFilter"])
             .Where(d => d.NormalizedDomain == domain)
-            .Select(d => (Guid?)d.TenantId)
+            .Select(d => new { d.TenantId, d.VerifiedAt })
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (tenantId is not { } tenant)
+        if (claim is null)
         {
+            _logger.LogTrace("LMTP: {Address} is not for any registered domain; refusing", address);
             return [];
         }
+
+        if (claim.VerifiedAt is null)
+        {
+            // Warning, and it names the remedy: this is the one refusal here that an administrator can fix and
+            // would otherwise never learn about.
+            _logger.LogWarning(
+                "LMTP: refusing {Address} — the domain {Domain} is registered but NOT VERIFIED, so no mail is "
+                + "accepted for it. Publish its DNS challenge and verify it under the tenant's mail domains. "
+                + "Set the LMTP log level to Trace for the full exchange.",
+                address, domain);
+            return [];
+        }
+
+        var tenant = claim.TenantId;
 
         // The user branch: the local part identifies the USER, matched on the same normalized-email key the
         // rest of the codebase uses — a mail local part is case-insensitive, so the raw column cannot be the

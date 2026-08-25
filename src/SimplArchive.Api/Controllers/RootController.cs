@@ -61,6 +61,12 @@ public class RootController : ControllerBase
                 // its href belongs here rather than being composed by each client.
                 new Link("externalLinks", "/api/external-links", "GET"),
                 new Link("tenantSettings", "/api/tenant-settings", "GET"),
+
+                // The tenant's mail domains (#667). Advertised unconditionally, like tenantSettings beside it:
+                // the LIST is readable by anyone in the tenant — which domains your own organisation receives
+                // on is not privileged — and what may be CHANGED is said by the collection's own `add` rel and
+                // its canManage flag, where the right is actually known (ADR 0543).
+                new Link("mailDomains", "/api/tenant/mail-domains", "GET"),
                 new Link("retentionSchedule", "/api/retention/schedule", "GET"),
                 // The searchable-PDF backfill (issue #416): GET reports how many versions still need one, POST
                 // starts the sweep. Unlike the maintenance actions on tenant-settings, this hangs off no

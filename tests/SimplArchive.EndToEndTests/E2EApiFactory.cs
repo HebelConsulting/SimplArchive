@@ -10,6 +10,8 @@ using Amazon.S3.Model;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.WebUtilities;
@@ -129,6 +131,19 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         // Single object-store endpoint: both the in-process Api and the test process reach it at the mapped host port.
         Environment.SetEnvironmentVariable("ConnectionStrings__Default", _postgres.GetConnectionString());
         Environment.SetEnvironmentVariable("App__ApplyMigrationsAtStartup", "true");
+
+        // The retention sweep's first run must land beyond this leg's lifetime — the same override
+        // SelfHostedApp already applies for the UI fixtures, which this factory never got (#744).
+        //
+        // Its default is app-start+3min and this leg runs ~12 min on CI, so the sweep fires INSIDE it and
+        // disposes any overdue-at-birth document a test created. That is not hypothetical: it took
+        // RetentionDispositionReviewTests down with `Conflict` → `NotFound`, the document having been disposed
+        // between the test creating it and the legal hold being asked to block it. It reads as a flake — it is
+        // a fixed-clock race that only a slow enough leg enters, which is why it never reproduces locally.
+        //
+        // A test that WANTS the sweep calls RunRetentionSweepAsync; no test wants it firing on a wall clock it
+        // cannot see.
+        Environment.SetEnvironmentVariable("Retention__InitialDelay", "02:00:00");
         // The startup blazor-client seed builds its redirect URIs from App:BaseUrl; use the in-process host so
         // the interactive-login redirect_uri (below) matches a registered URI.
         Environment.SetEnvironmentVariable("App__BaseUrl", "http://localhost");
@@ -224,12 +239,41 @@ public sealed class E2EApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
 
     public static string BucketForTenant(Guid tenantId) => $"{Bucket}-{tenantId:D}";
 
+    /// <summary>
+    /// The DNS the mail-domain challenge is checked against (#667) — a stub, so tests can publish a record.
+    /// </summary>
+    /// <remarks>
+    /// The real lookup asks the host's resolvers, which CI has no way to answer for a domain a test invented.
+    /// Shared across the collection like everything else here, so a test must use a domain of its own; they all
+    /// build one from a GUID.
+    /// </remarks>
+    public TestDnsTxtLookup Dns { get; } = new();
+
+    public sealed class TestDnsTxtLookup : SimplArchive.Application.Abstractions.IDnsTxtLookup
+    {
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<string>> _records =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Publishes a TXT value at a name, as an administrator would in their zone.</summary>
+        public void Publish(string name, string value) =>
+            _records.AddOrUpdate(name, _ => [value], (_, existing) => [.. existing, value]);
+
+        public Task<IReadOnlyList<string>> GetTxtRecordsAsync(string name, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(_records.TryGetValue(name, out var values) ? values : []);
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         // Development so OpenIddict allows token requests over the in-process HTTP test server (its transport
         // security requirement is disabled only in Development). Ocr stays unset → searchable-PDF no-op (not
         // exercised here); OpenSearch/Tika (search) and Gotenberg (preview) are configured via env vars above.
         builder.UseEnvironment("Development");
+
+        builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<SimplArchive.Application.Abstractions.IDnsTxtLookup>();
+            services.AddSingleton<SimplArchive.Application.Abstractions.IDnsTxtLookup>(Dns);
+        });
     }
 
     // Seeds a Tenant + a ServiceAccount + its client-credentials OpenIddict app, returning the credentials —

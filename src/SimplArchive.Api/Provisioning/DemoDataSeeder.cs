@@ -254,18 +254,9 @@ public static class DemoDataSeeder
         // could never demonstrate receiving. Derived from the admin's email (#432's rule) and written only
         // when absent; #667 — the real admin surface for domains — stays open, this is the demo's shortcut.
         var demoDomain = adminEmail.Split('@') is [_, var dd] && !string.IsNullOrWhiteSpace(dd) ? dd : "simplarchive.local";
-        if (!await dbContext.TenantMailDomains.IgnoreQueryFilters(["TenantFilter"])
-                .AnyAsync(m => m.TenantId == tenantId && m.NormalizedDomain == demoDomain.ToUpperInvariant()))
-        {
-            dbContext.TenantMailDomains.Add(new TenantMailDomain
-            {
-                Id = Guid.NewGuid(),
-                TenantId = tenantId,
-                Domain = demoDomain,
-                CreatedAt = now,
-            });
-            await dbContext.SaveChangesAsync();
-        }
+        await DeclaredMailDomain.EnsureAsync(
+            dbContext, tenantId, demoDomain, now,
+            services.GetService<ILoggerFactory>()?.CreateLogger(typeof(DemoDataSeeder)));
 
         await DemoArtistsSeeder.SeedAsync(services, dbContext, objectStorage, tenantId, repositoryId, adminId, now, finalizer, $"events@{demoDomain}");
 

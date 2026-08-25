@@ -7,6 +7,9 @@
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="4.0.100.3" />
     <PackageReference Include="DiffPlex" Version="1.9.0" />
+    <!-- The BCL cannot ask for a TXT record — System.Net.Dns resolves names to addresses and nothing else — and
+         mail-domain verification (#667) is a TXT challenge. Apache-2.0, so within the licence allowlist. -->
+    <PackageReference Include="DnsClient" Version="1.8.0" />
     <!-- Server-side preview renditions (TIFF -> PNG). NetVips is MIT; the native packages bundle libvips
          (LGPL-2.1+, dynamically linked) — both Apache-2.0-compatible. Both musl arches so the Alpine
          runtime image works whether built for x64 or arm64. See ADR "Server-side preview renditions". -->
