@@ -133,6 +133,11 @@ deps:
     serviceAccount:
       create: false
       annotations: {}
+    # A Secret created OUTSIDE the chart carrying OpenBao__SecretId and BOOTSTRAP_CLIENT_SECRET (ADR 0696).
+    # When set, the chart does not render its own AppRole Secret and takes both values from this one, so
+    # neither ever appears in a --set flag, a values file, or an operator's shell. Empty = the kiosk's
+    # chart-created secret from the two literals above.
+    existingApproleSecret: ""
     # External managed Postgres for the database engine (hostname; TLS is required automatically when set).
     # Empty = the in-cluster postgres dep.
     externalDatabaseHost: ""

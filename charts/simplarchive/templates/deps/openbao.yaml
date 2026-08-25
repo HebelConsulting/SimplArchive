@@ -22,6 +22,7 @@ data:
   entrypoint.sh: |
 {{ .Files.Get "files/openbao-entrypoint.sh" | indent 4 }}
 ---
+{{- if not .Values.deps.openbao.existingApproleSecret }}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -32,6 +33,7 @@ type: Opaque
 data:
   # The app's AppRole SecretId (fixed for the kiosk; matches what the entrypoint provisions).
   OpenBao__SecretId: {{ .Values.deps.openbao.secretId | b64enc }}
+{{- end }}
 ---
 {{- if .Values.deps.openbao.serviceAccount.create }}
 apiVersion: v1
@@ -109,8 +111,16 @@ spec:
             {{- end }}
             - name: APPROLE_ROLE_ID
               value: {{ .Values.deps.openbao.roleId | quote }}
+            {{- if .Values.deps.openbao.existingApproleSecret }}
+            - name: APPROLE_SECRET_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.deps.openbao.existingApproleSecret }}
+                  key: OpenBao__SecretId
+            {{- else }}
             - name: APPROLE_SECRET_ID
               value: {{ .Values.deps.openbao.secretId | quote }}
+            {{- end }}
             {{- $credSecret := .Values.deps.openbao.credentialsSecret | default (include "simplarchive.statefulSecretName" .) }}
             - name: S3_ACCESS_KEY
               valueFrom:
@@ -134,8 +144,16 @@ spec:
                   name: {{ $credSecret }}
                   key: SMTP_PASSWORD
                   optional: true
+            {{- if .Values.deps.openbao.existingApproleSecret }}
+            - name: BOOTSTRAP_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.deps.openbao.existingApproleSecret }}
+                  key: BOOTSTRAP_CLIENT_SECRET
+            {{- else }}
             - name: BOOTSTRAP_CLIENT_SECRET
               value: {{ .Values.deps.openbao.bootstrapClientSecret | quote }}
+            {{- end }}
           ports:
             - name: http
               containerPort: 8200
