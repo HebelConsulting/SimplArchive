@@ -101,6 +101,12 @@ rolls the Deployment automatically (the pod template changes). Secrets come from
   value: {{ .Values.config.app.baseUrl | quote }}
 - name: App__ApplyMigrationsAtStartup
   value: {{ .Values.config.app.applyMigrationsAtStartup | quote }}
+{{- /* poolOverride lets the migration Job ask for a smaller pool than the serving pods (#750). */}}
+{{- $pool := .poolOverride | default .Values.config.database.maxPoolSize }}
+{{- if $pool }}
+- name: Database__MaxPoolSize
+  value: {{ $pool | quote }}
+{{- end }}
 {{- if .Values.imap.enabled }}
 - name: Imap__Enabled
   value: "true"

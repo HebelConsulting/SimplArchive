@@ -36,7 +36,17 @@ spec:
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           env:
-            {{- include "simplarchive.appConfigEnv" . | nindent 12 }}
+            {{- /*
+              A pool of its own, and a tiny one (#750). This Job runs CONCURRENTLY with the still-serving old
+              replicas during an upgrade, so whatever it takes comes out of the same max_connections they are
+              already sized against — inheriting their per-pod pool would push the total back over the limit
+              (at 6 replicas × 34 that is 238 against ~222 usable: the original defect in miniature).
+              Migrations are sequential DDL on one connection, so a handful is plentiful.
+
+              Passed INTO the helper rather than appended after it: a second `Database__MaxPoolSize` entry would
+              rely on the kubelet preferring the later duplicate, which is not a rule worth depending on.
+            */}}
+            {{- include "simplarchive.appConfigEnv" (merge (dict "poolOverride" 5) .) | nindent 12 }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

@@ -22,6 +22,23 @@ config:
     # Leave false in production and run migrations as a one-off step; with multiple replicas, startup migration
     # would race. See docs/deploy/README.md.
     applyMigrationsAtStartup: false
+  database:
+    # Maximum PostgreSQL connections THIS POD may open. Empty = the application's own conservative default (40),
+    # which is deliberately far below Npgsql's built-in 100.
+    #
+    # SET THIS whenever replicaCount or autoscaling.maxReplicas is raised. The pool is per pod, so what the
+    # database sees is the pool MULTIPLIED by the replica count, and the budget must satisfy:
+    #
+    #   maxPoolSize × maxReplicas + migration Job + OpenBao  <  max_connections − superuser_reserved_connections
+    #
+    # A PostgreSQL server that runs out answers `53300: remaining connection slots are reserved…` and the API
+    # returns 500s — it does NOT queue and slow down. Below the limit, Npgsql waits for a free connector instead,
+    # so the same overload degrades gracefully. This is not hypothetical: an uncapped pool took the public demo
+    # down for eight minutes under load (issue #750).
+    #
+    # Worked example — a 2 GiB managed instance (max_connections ≈ 225, reserved 3) with maxReplicas 6:
+    #   (225 − 3 − 10 for the migration Job and OpenBao) / 6 ≈ 35  →  maxPoolSize: 30
+    maxPoolSize: ""
   objectStorage:
     serviceUrl: ""        # server-side S3 endpoint (e.g. https://s3.eu-central-1.amazonaws.com)
     publicServiceUrl: ""  # browser-facing endpoint for presigned URLs (often the same)

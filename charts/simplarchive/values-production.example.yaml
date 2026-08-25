@@ -16,6 +16,23 @@ config:
   app:
     baseUrl: "https://dms.example.com"
     applyMigrationsAtStartup: false   # run migrations as a one-off job/step instead
+  database:
+    # SIZE THIS AGAINST autoscaling.maxReplicas BELOW (#750). The pool is per POD, so your PostgreSQL server
+    # sees maxPoolSize × maxReplicas. At 10 replicas the application default (40) would ask for 400 connections;
+    # a server that runs out answers `53300: remaining connection slots are reserved…` and the API returns 500s
+    # rather than slowing down. Below the limit Npgsql waits for a free connector instead, so the same overload
+    # merely gets slower. Size it so that:
+    #
+    #   maxPoolSize × maxReplicas + 5 (migration Job) + OpenBao  <  max_connections − superuser_reserved
+    #
+    # Read both limits from your own server — they are not guessable from the instance size alone:
+    #
+    #   psql -c 'SHOW max_connections'                 -- e.g. 200
+    #   psql -c 'SHOW superuser_reserved_connections'  -- usually 3
+    #
+    # (200 − 3 − 15) / 10 ≈ 18. The startup log states what a running pod actually got:
+    # "Database connection pool capped at N connections per replica".
+    maxPoolSize: 18
   objectStorage:
     serviceUrl: "https://s3.eu-central-1.amazonaws.com"
     publicServiceUrl: "https://s3.eu-central-1.amazonaws.com"
@@ -55,6 +72,9 @@ autoscaling:
   minReplicas: 3
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
+
+# NOTE: raising maxReplicas above also raises the database connection demand — see config.database.maxPoolSize
+# near the top of this file, which must be sized against it (#750).
 
 # Spread replicas across zones for HA.
 topologySpreadConstraints:

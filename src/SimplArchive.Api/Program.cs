@@ -758,7 +758,18 @@ app.MapFallbackToFile("index.html");
 // Lifecycle logging (ADR "Enterprise-grade structured logging with Serilog") + a graceful final flush so
 // buffered events are written on a clean shutdown.
 app.Lifetime.ApplicationStarted.Register(() =>
-    Log.Information("SimplArchive API started in the {Environment} environment", app.Environment.EnvironmentName));
+{
+    Log.Information("SimplArchive API started in the {Environment} environment", app.Environment.EnvironmentName);
+
+    // State the connection-pool ceiling (#750). It is otherwise invisible — it lives inside a connection string
+    // nobody may print, because that string carries the password — and it is the first number an operator needs
+    // when diagnosing connection saturation. The ceiling is PER PROCESS, so the message says so: the budget that
+    // matters is this number multiplied by the replica count.
+    var pool = app.Services.GetRequiredService<DatabasePoolInfo>();
+    Log.Information(
+        "Database connection pool capped at {MaxPoolSize} connections per replica (source: {Source})",
+        pool.MaxPoolSize, pool.Source);
+});
 app.Lifetime.ApplicationStopping.Register(() => Log.Information("SimplArchive API is shutting down"));
 app.Lifetime.ApplicationStopped.Register(Log.CloseAndFlush);
 

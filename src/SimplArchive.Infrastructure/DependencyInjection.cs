@@ -26,8 +26,15 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("Default")
+        var configuredConnectionString = configuration.GetConnectionString("Default")
             ?? throw new InvalidOperationException("Missing required 'ConnectionStrings:Default' configuration value.");
+
+        // Applied HERE rather than where the connection string is configured, because there are two sources: an
+        // operator's own value, and one OpenBaoSecretsReader rebuilds at runtime from a template plus a dynamic
+        // credential. This is the single point both pass through. See DatabasePoolCeiling for why an uncapped
+        // pool takes the whole deployment down rather than merely being untidy (#750).
+        var (connectionString, maxPoolSize, poolSource) = DatabasePoolCeiling.Apply(
+            configuredConnectionString, configuration.GetValue<int?>("Database:MaxPoolSize"));
 
         // The app-wide clock is the real system clock for EVERYONE — including OpenIddict/auth, which must track
         // real time: a frozen past instant makes issued tokens/cookies look already-expired to a real-time browser
@@ -45,6 +52,10 @@ public static class DependencyInjection
         services.AddKeyedSingleton("demo-clock", demoClock);
 
         services.AddDbContext<SimplArchiveDbContext>(options => options.UseNpgsql(connectionString));
+
+        // Startup states the effective ceiling (Program.cs). The number is otherwise invisible — it lives inside
+        // a connection string nobody may print, because that string carries the password.
+        services.AddSingleton(new DatabasePoolInfo(maxPoolSize, poolSource));
 
         // Registered as their own concrete type too, in addition to the read-only interface, so Api
         // middleware/Worker's job-processing loop can depend on the concrete settable class while every

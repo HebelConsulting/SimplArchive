@@ -78,9 +78,11 @@ jobs:
         working-directory: .
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          # Every script here, INCLUDING the sourced ones: a file left off this list is both unchecked itself
+          # and the cause of an SC1091 on whoever sources it, which reads as a problem in the wrong file.
           shellcheck tools/aws-install/install.sh tools/aws-install-single/install.sh \
                      tools/aws-modules/preflight.sh tools/aws-modules/verify-generated.sh \
-                     tools/aws-modules/destroy.sh
+                     tools/aws-modules/destroy.sh tools/aws-modules/db-pool.sh
 
       - name: Verify the generated Helm values and manifests
         working-directory: .
