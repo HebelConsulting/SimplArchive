@@ -54,6 +54,23 @@ jobs:
           tofu validate
       - uses: terraform-linters/setup-tflint@v6
       - name: tflint
+        # tflint --init downloads its AWS ruleset (and that release's attestations) from the GitHub API.
+        # Unauthenticated, it shares the runner IP's anonymous quota with every other job on that host, so
+        # it fails with "API rate limit exceeded" at random — an infrastructure flake that reads exactly
+        # like a lint error. The token makes the request authenticated, which is its own quota.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tflint --init
           tflint --call-module-type=none
+
+      # What install.sh GENERATES is Kubernetes, and nothing else type-checks it: a renamed chart value
+      # would otherwise fail at 3 a.m. on a customer's install rather than here (ADR 0695).
+      - uses: azure/setup-helm@v4
+      - name: Install kubeconform
+        run: |
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz \
+            | sudo tar -xz -C /usr/local/bin kubeconform
+      - name: Verify the generated Helm values and manifests
+        working-directory: .
+        run: tools/aws-modules/verify-generated.sh tools/${{ matrix.root }}
