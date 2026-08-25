@@ -1,4 +1,5 @@
-# AWS-installation IaC checks (ADR 0675, issue #712): tofu fmt/validate + tflint over tools/aws-install/.
+# AWS-installation IaC checks (ADRs 0675/0693, issue #712): tofu fmt/validate + tflint over both
+# installation roots and the modules they share.
 # Runs ONLY on the private canonical repo (same gate as manual.yml) — tools/ is withheld from the public
 # mirror, so on the mirror this workflow has nothing to check and must not fail for it.
 # Validate-only by design until a scratch AWS account exists; a plan/apply smoke joins later (ADR 0675).
@@ -8,11 +9,15 @@ on:
   pull_request:
     paths:
       - "tools/aws-install/**"
+      - "tools/aws-install-single/**"
+      - "tools/aws-modules/**"
       - ".github/workflows/infra.yml"
   push:
     branches: [main]
     paths:
       - "tools/aws-install/**"
+      - "tools/aws-install-single/**"
+      - "tools/aws-modules/**"
       - ".github/workflows/infra.yml"
 
 concurrency:
@@ -24,13 +29,18 @@ permissions:
 
 jobs:
   lint:
-    name: tofu fmt + validate + tflint
+    # Both installation shapes (ADR 0693), each its own job so a failure names the shape it broke.
+    name: tofu fmt + validate + tflint (${{ matrix.root }})
     if: ${{ github.repository == 'HebelConsulting/SimplArchivePrivate' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        root: [aws-install, aws-install-single]
     defaults:
       run:
-        working-directory: tools/aws-install
+        working-directory: tools/${{ matrix.root }}
     steps:
       - uses: actions/checkout@v7
       - uses: opentofu/setup-opentofu@v1
