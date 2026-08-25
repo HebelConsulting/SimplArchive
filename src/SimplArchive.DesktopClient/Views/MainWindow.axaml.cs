@@ -658,17 +658,13 @@ public partial class MainWindow : Window
         await vm.PerformWorkflowTransitionAsync(transition.Href);
     });
 
-    internal void OnManageSensitivityLabels(object? sender, RoutedEventArgs e) => Safe.Fire(async () =>
-    {
-        if (DataContext is not MainWindowViewModel vm || vm.CreateSensitivityLabelsViewModel() is not { } labels)
-        {
-            return;
-        }
+    // The Tenant tab's two administration dialogs — bodies in TenantDialogs, which is where they belong and
+    // what keeps this file shrinking rather than growing by one open-a-dialog block per feature (ADR 0558).
+    internal void OnManageMailDomains(object? sender, RoutedEventArgs e) =>
+        Safe.Fire(() => TenantDialogs.OpenMailDomainsAsync(this, DataContext as MainWindowViewModel));
 
-        await labels.LoadAsync();
-        await new SensitivityLabelsDialog(labels).ShowDialog(this);
-        await vm.LoadSensitivityCatalogAsync(); // pick up any changes for the picker
-    });
+    internal void OnManageSensitivityLabels(object? sender, RoutedEventArgs e) =>
+        Safe.Fire(() => TenantDialogs.OpenSensitivityLabelsAsync(this, DataContext as MainWindowViewModel));
 
     private async Task RenameSelectedAsync(MainWindowViewModel vm)
     {

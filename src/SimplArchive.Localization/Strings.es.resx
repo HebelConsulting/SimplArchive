@@ -4356,6 +4356,57 @@
   <data name="CalendarWhere" xml:space="preserve">
     <value>Dónde</value>
   </data>
+  <data name="MdTitle" xml:space="preserve">
+    <value>Dominios de correo</value>
+  </data>
+  <data name="MdInfo" xml:space="preserve">
+    <value>El correo dirigido a un dominio de esta lista se entrega en este inquilino. Un dominio debe verificarse antes de que se acepte correo para él.</value>
+  </data>
+  <data name="MdDomain" xml:space="preserve">
+    <value>Dominio</value>
+  </data>
+  <data name="MdStatus" xml:space="preserve">
+    <value>Estado</value>
+  </data>
+  <data name="MdVerified" xml:space="preserve">
+    <value>Verificado</value>
+  </data>
+  <data name="MdUnverified" xml:space="preserve">
+    <value>Sin verificar</value>
+  </data>
+  <data name="MdVerify" xml:space="preserve">
+    <value>Comprobar ahora el registro DNS</value>
+  </data>
+  <data name="MdRemove" xml:space="preserve">
+    <value>Quitar</value>
+  </data>
+  <data name="MdNone" xml:space="preserve">
+    <value>Aún no hay dominios de correo.</value>
+  </data>
+  <data name="MdChallengeHint" xml:space="preserve">
+    <value>Publique este registro TXT en la zona DNS del dominio y vuelva a comprobar.</value>
+  </data>
+  <data name="MdChallengeName" xml:space="preserve">
+    <value>Registro</value>
+  </data>
+  <data name="MdChallengeValue" xml:space="preserve">
+    <value>Valor</value>
+  </data>
+  <data name="MdVerifiedToast" xml:space="preserve">
+    <value>{0} está verificado: ya se acepta correo para él.</value>
+  </data>
+  <data name="MdRemovedToast" xml:space="preserve">
+    <value>{0} quitado. El correo dirigido a él ya no se acepta.</value>
+  </data>
+  <data name="ApiErrInvalidMailDomain" xml:space="preserve">
+    <value>Eso no es un dominio de correo. Introduzca solo la parte del dominio, por ejemplo example.com.</value>
+  </data>
+  <data name="ApiErrMailDomainAlreadyClaimed" xml:space="preserve">
+    <value>Ese dominio ya está registrado. Si pertenece a su organización, contacte con el operador de esta instalación.</value>
+  </data>
+  <data name="ApiErrMailDomainNotVerified" xml:space="preserve">
+    <value>Todavía no se ha encontrado el registro TXT. Publíquelo en la zona DNS del dominio y vuelva a comprobar: un registro nuevo puede tardar.</value>
+  </data>
   <data name="CalendarUtc" xml:space="preserve">
     <value>UTC</value>
   </data>

@@ -1,0 +1,248 @@
+@using SimplArchive.Client.Hypermedia
+@inject SimplArchive.Client.Services.ApiRoot ApiRoot
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+@* The tenant's mail domains (#667, ADR 0692): which domains this tenant receives mail for, and the DNS
+   challenge that proves it owns them. Launched from the Tenant tab's toolbar, like the sensitivity labels
+   beside it — a small tenant-wide collection with its own add/verify/remove, which is a dialog's shape rather
+   than a settings group's.
+
+   Every address is FOLLOWED, never composed (ADR 0543): the collection from the api root's `mailDomains` rel,
+   the create from the collection's own `add`, and verify/remove from each row's. A row that advertises no
+   `verify` has nothing left to prove, and a caller who may not manage simply gets no rels — so the buttons are
+   absent rather than present-and-403. *@
+
+<MudDialog>
+    <DialogContent>
+        <div style="min-width: 620px; max-width: 720px;">
+            <MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">@Strings.Get("MdInfo")</MudText>
+
+            @* Gated on the advertised `add` rel, not on canManage: the two agree by construction and the rel
+               is the one that keeps agreeing (ADR 0543). *@
+            @if (_addHref is not null)
+            {
+                <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+                    <MudTextField T="string" @bind-Value="_newDomain" Placeholder="example.com"
+                                  Label="@Strings.Get("MdDomain")" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  Style="max-width:260px;" Immediate="true" OnKeyUp="OnNewKeyUp" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                               Disabled="@(_busy || string.IsNullOrWhiteSpace(_newDomain))" OnClick="AddAsync">
+                        @Strings.Get("Add")
+                    </MudButton>
+                </div>
+            }
+
+            <MudSimpleTable Dense="true" Hover="true">
+                <thead>
+                    <tr>
+                        <th>@Strings.Get("MdDomain")</th>
+                        <th style="width:150px;">@Strings.Get("MdStatus")</th>
+                        <th style="width:120px;">@Strings.Get("VerColActions")</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var d in _domains)
+                    {
+                        <tr>
+                            <td>@d.Domain</td>
+                            <td>
+                                @if (d.Verified)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text"
+                                             Icon="@Icons.Material.Filled.CheckCircle">@Strings.Get("MdVerified")</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text"
+                                             Icon="@Icons.Material.Filled.HourglassEmpty">@Strings.Get("MdUnverified")</MudChip>
+                                }
+                            </td>
+                            <td>
+                                @if (Links.Href(d.Links, "verify") is { } verifyHref)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.DomainVerification" Size="Size.Small"
+                                                   title="@Strings.Get("MdVerify")" aria-label="@Strings.Get("MdVerify")"
+                                                   Disabled="_busy" OnClick="@(() => VerifyAsync(d, verifyHref))" />
+                                }
+                                @if (Links.Href(d.Links, "remove") is { } removeHref)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                   title="@Strings.Get("MdRemove")" aria-label="@Strings.Get("MdRemove")"
+                                                   Disabled="_busy" OnClick="@(() => RemoveAsync(d, removeHref))" />
+                                }
+                            </td>
+                        </tr>
+
+                        @* The challenge, under the row it belongs to and only while it is still the thing to do.
+                           Selectable text rather than a label: the whole point is that it gets copied into a
+                           DNS zone, and a value the reader has to retype is one they will retype wrongly. *@
+                        @if (!d.Verified && d.ChallengeValue is { Length: > 0 })
+                        {
+                            <tr>
+                                <td colspan="3" style="padding-bottom:14px;">
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-1">
+                                        @Strings.Get("MdChallengeHint")
+                                    </MudText>
+                                    <div class="wb-md-challenge" style="display:grid; grid-template-columns:auto 1fr; gap:2px 10px; font-family:monospace; font-size:.8rem;">
+                                        <span class="mud-text-secondary">@Strings.Get("MdChallengeName")</span>
+                                        <span style="user-select:all; word-break:break-all;">@d.ChallengeName</span>
+                                        <span class="mud-text-secondary">@Strings.Get("MdChallengeValue")</span>
+                                        <span style="user-select:all; word-break:break-all;">@d.ChallengeValue</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    @if (_domains.Count == 0 && !_loading)
+                    {
+                        <tr><td colspan="3" class="mud-text-secondary">@Strings.Get("MdNone")</td></tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => Dialog.Close())">@Strings.Get("Close")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance Dialog { get; set; } = null!;
+
+    private List<MailDomainRow> _domains = [];
+    private bool _canManage;
+    private bool _loading = true;
+    private bool _busy;
+    private string _newDomain = string.Empty;
+
+    /// <summary>The collection's own address, and its `add` — captured on the read that already happened.</summary>
+    private string? _selfHref;
+    private string? _addHref;
+
+    private sealed record MailDomainRow(
+        Guid Id, string Domain, bool Verified, string? ChallengeName, string? ChallengeValue, List<LinkResponse> Links);
+
+    private sealed record MailDomainsResponse
+    {
+        public List<MailDomainRow> Domains { get; set; } = [];
+        public bool CanManage { get; set; }
+        public List<LinkResponse> Links { get; set; } = [];
+    }
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _selfHref ??= await ApiRoot.RequireAsync("mailDomains");
+            var page = await Http.GetFromJsonAsync<MailDomainsResponse>(_selfHref);
+            _domains = page?.Domains ?? [];
+            _canManage = page?.CanManage ?? false;
+            _addHref = Links.Href(page?.Links, "add");
+        }
+        catch (HttpRequestException e)
+        {
+            Snackbar.Add(e.Message, Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnNewKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_newDomain))
+        {
+            await AddAsync();
+        }
+    }
+
+    private async Task AddAsync()
+    {
+        if (_addHref is not { } href)
+        {
+            return; // no rel, no affordance — the button is not rendered either
+        }
+
+        _busy = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync(href, new { domain = _newDomain.Trim() });
+            if (!await ReportProblemAsync(response))
+            {
+                _newDomain = string.Empty;
+                await ReloadAsync();
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task VerifyAsync(MailDomainRow row, string href)
+    {
+        _busy = true;
+        try
+        {
+            var response = await Http.PostAsync(href, null);
+            if (!await ReportProblemAsync(response))
+            {
+                Snackbar.Add(string.Format(Strings.Get("MdVerifiedToast"), row.Domain), Severity.Success);
+            }
+
+            await ReloadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RemoveAsync(MailDomainRow row, string href)
+    {
+        _busy = true;
+        try
+        {
+            var response = await Http.DeleteAsync(href);
+            if (!await ReportProblemAsync(response))
+            {
+                // Says what it COST, not that a row went away: removing a domain stops mail arriving for
+                // everyone at it, immediately, and that is the part worth putting in front of the person.
+                Snackbar.Add(string.Format(Strings.Get("MdRemovedToast"), row.Domain), Severity.Warning);
+            }
+
+            await ReloadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>Reports a refusal in the reader's language, and answers whether there was one.</summary>
+    /// <remarks>
+    /// The CODE crosses the wire and the client owns the words (#423/#424): the API's `detail` is English by
+    /// construction, and a client that displayed it would give a German user German until something went wrong
+    /// and English exactly when it mattered. Read once — probing the body and then passing the response on
+    /// consumes the stream, which is how every OTHER refusal once fell to the generic fallback.
+    /// </remarks>
+    private async Task<bool> ReportProblemAsync(HttpResponseMessage response)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return false;
+        }
+
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDto>();
+        Snackbar.Add(ApiErrorText.For(problem?.ErrorCode), Severity.Warning);
+        return true;
+    }
+
+    private sealed class ProblemDto { public string? ErrorCode { get; set; } }
+}

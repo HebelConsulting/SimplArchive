@@ -1,0 +1,77 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:SimplArchive.DesktopClient.Localization"
+        xmlns:vm="clr-namespace:SimplArchive.DesktopClient.ViewModels"
+        x:Class="SimplArchive.DesktopClient.Views.MailDomainsDialog"
+        x:DataType="vm:MailDomainsViewModel"
+        Title="{loc:Tr MdTitle}" Width="700" Height="500" CanResize="True"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="16">
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource WbMuted}" Margin="0,0,0,12"
+                   Text="{loc:Tr MdInfo}" />
+
+        <!-- The add row is drawn only for a caller the server said may add — a missing rel means the affordance
+             is not available here, not that it should be offered and refused (ADR 0543). -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,12"
+                    IsVisible="{Binding CanAdd}">
+            <TextBox Text="{Binding NewDomain}" Watermark="example.com" Width="280"
+                     AutomationProperties.Name="{loc:Tr MdDomain}" />
+            <Button Content="{loc:Tr Add}" Command="{Binding AddCommand}" />
+        </StackPanel>
+
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Foreground="{DynamicResource WbMuted}"
+                   TextWrapping="Wrap" Margin="0,8,0,0" />
+        <Button DockPanel.Dock="Bottom" Content="{loc:Tr Close}" Click="OnClose"
+                HorizontalAlignment="Right" Margin="0,8,0,0" />
+
+        <ScrollViewer>
+            <StackPanel Spacing="4">
+                <TextBlock Text="{loc:Tr MdNone}" Foreground="{DynamicResource WbMuted}"
+                           IsVisible="{Binding IsEmpty}" />
+
+                <ItemsControl ItemsSource="{Binding Domains}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:MailDomainRowViewModel">
+                            <Border BorderBrush="{DynamicResource WbBorder}" BorderThickness="0,0,0,1" Padding="0,6">
+                                <StackPanel Spacing="4">
+                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                        <TextBlock Grid.Column="0" Text="{Binding Domain}" VerticalAlignment="Center"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Grid.Column="1" Text="{Binding StatusText}" VerticalAlignment="Center"
+                                                   Margin="8,0" Foreground="{DynamicResource WbMuted}" FontSize="12" />
+                                        <Button Grid.Column="2" Content="{loc:Tr MdVerify}" Margin="0,0,6,0"
+                                                IsVisible="{Binding CanVerify}"
+                                                Command="{Binding $parent[ItemsControl].((vm:MailDomainsViewModel)DataContext).VerifyCommand}"
+                                                CommandParameter="{Binding}" />
+                                        <Button Grid.Column="3" Content="{loc:Tr MdRemove}"
+                                                IsVisible="{Binding CanRemove}"
+                                                Command="{Binding $parent[ItemsControl].((vm:MailDomainsViewModel)DataContext).RemoveCommand}"
+                                                CommandParameter="{Binding}" />
+                                    </Grid>
+
+                                    <!-- The challenge, under the row it belongs to. SELECTABLE, because its whole
+                                         purpose is to be copied into a DNS zone — a value the reader has to
+                                         retype is one they will retype wrongly. -->
+                                    <StackPanel Spacing="2" IsVisible="{Binding ShowsChallenge}" Margin="0,2,0,4">
+                                        <TextBlock Text="{loc:Tr MdChallengeHint}" FontSize="11"
+                                                   Foreground="{DynamicResource WbMuted}" TextWrapping="Wrap" />
+                                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Tr MdChallengeName}"
+                                                       FontSize="11" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,0" />
+                                            <SelectableTextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ChallengeName}"
+                                                                 FontFamily="monospace" FontSize="11" TextWrapping="Wrap" />
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Tr MdChallengeValue}"
+                                                       FontSize="11" Foreground="{DynamicResource WbMuted}" Margin="0,0,8,0" />
+                                            <SelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding ChallengeValue}"
+                                                                 FontFamily="monospace" FontSize="11" TextWrapping="Wrap" />
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

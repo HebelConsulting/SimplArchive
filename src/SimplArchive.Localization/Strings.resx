@@ -4356,6 +4356,57 @@
   <data name="CalendarWhere" xml:space="preserve">
     <value>Where</value>
   </data>
+  <data name="MdTitle" xml:space="preserve">
+    <value>Mail domains</value>
+  </data>
+  <data name="MdInfo" xml:space="preserve">
+    <value>Mail addressed to a domain listed here is delivered into this tenant. A domain must be verified before any mail is accepted for it.</value>
+  </data>
+  <data name="MdDomain" xml:space="preserve">
+    <value>Domain</value>
+  </data>
+  <data name="MdStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="MdVerified" xml:space="preserve">
+    <value>Verified</value>
+  </data>
+  <data name="MdUnverified" xml:space="preserve">
+    <value>Not verified</value>
+  </data>
+  <data name="MdVerify" xml:space="preserve">
+    <value>Check the DNS record now</value>
+  </data>
+  <data name="MdRemove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="MdNone" xml:space="preserve">
+    <value>No mail domains yet.</value>
+  </data>
+  <data name="MdChallengeHint" xml:space="preserve">
+    <value>Publish this TXT record in the domain's DNS zone, then check again.</value>
+  </data>
+  <data name="MdChallengeName" xml:space="preserve">
+    <value>Record</value>
+  </data>
+  <data name="MdChallengeValue" xml:space="preserve">
+    <value>Value</value>
+  </data>
+  <data name="MdVerifiedToast" xml:space="preserve">
+    <value>{0} is verified — mail for it is now accepted.</value>
+  </data>
+  <data name="MdRemovedToast" xml:space="preserve">
+    <value>{0} removed. Mail addressed to it is no longer accepted.</value>
+  </data>
+  <data name="ApiErrInvalidMailDomain" xml:space="preserve">
+    <value>That is not a mail domain. Enter the domain part on its own, for example example.com.</value>
+  </data>
+  <data name="ApiErrMailDomainAlreadyClaimed" xml:space="preserve">
+    <value>That domain is already registered. If your organisation owns it, contact the operator of this installation.</value>
+  </data>
+  <data name="ApiErrMailDomainNotVerified" xml:space="preserve">
+    <value>The TXT record was not found yet. Publish it in the domain's DNS zone and check again — a new record can take a while to appear.</value>
+  </data>
   <data name="CalendarUtc" xml:space="preserve">
     <value>UTC</value>
   </data>

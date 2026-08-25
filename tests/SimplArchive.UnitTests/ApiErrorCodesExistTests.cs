@@ -23,8 +23,17 @@ public partial class ApiErrorCodesExistTests
     [GeneratedRegex(@"""(?<code>[A-Z_0-9]+)""\s*=>\s*Strings\.Get")]
     private static partial Regex MappedCode();
 
-    // How every ApiException subclass declares its code: `: base("SOME_CODE", StatusCodes...`.
-    [GeneratedRegex(@"base\(\s*""(?<code>[A-Z_0-9]+)""")]
+    // How an ApiException subclass declares its code — in EITHER of the two shapes the codebase uses:
+    //
+    //     : base("SOME_CODE", StatusCodes...)            an explicit constructor body
+    //     : SomeAreaException("SOME_CODE", StatusCodes…) a primary constructor's base list
+    //
+    // Only the first was matched until #667, so every primary-constructor exception was invisible here and the
+    // test would report its code as one "the API never emits". That is a FALSE NEGATIVE in the guard, and the
+    // dangerous kind: it fires on correct code and names the wrong culprit, so the obvious fix is to change the
+    // exception rather than the scanner. The newer exceptions in this codebase are overwhelmingly the second
+    // shape, so the blind spot was growing.
+    [GeneratedRegex(@"(?:base|:\s*\w*Exception)\(\s*""(?<code>[A-Z_0-9]+)""")]
     private static partial Regex EmittedCode();
 
     [Fact]

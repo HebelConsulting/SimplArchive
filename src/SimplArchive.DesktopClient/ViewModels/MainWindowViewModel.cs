@@ -510,10 +510,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty] private bool _canManageSensitivity;
 
-    // Builds the management dialog's VM (ADR "Configurable sensitivity labels + upload defaults"); null when not
-    // signed in. The caller reloads the catalog when the dialog closes.
-    public SensitivityLabelsViewModel? CreateSensitivityLabelsViewModel() =>
-        _api is { } api ? new SensitivityLabelsViewModel(api) : null;
+    // The tenant-administration dialogs' view-models; null when not signed in. The labels' caller reloads the
+    // catalog on close (it feeds a picker); the domains' does not, because nothing caches them (#667).
+    public SensitivityLabelsViewModel? CreateSensitivityLabelsViewModel() => _api is { } api ? new SensitivityLabelsViewModel(api) : null;
+    public MailDomainsViewModel? CreateMailDomainsViewModel() => _api is { } api ? new MailDomainsViewModel(api) : null;
 
     // Free-form tags (ADR "Document tags"): the selected document's tags (read-only chips), the edit working
     // copy (chips with a remove + an add box over the tenant catalog), and the pending new-tag value.

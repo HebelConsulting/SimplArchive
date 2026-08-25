@@ -21,6 +21,10 @@
                    title="@Strings.Get("TenantSensitivityLabels")" aria-label="@Strings.Get("TenantSensitivityLabels")">
             <MudIcon Icon="@Icons.Material.Filled.Shield" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("TenantSensitivityLabels")</span>
         </MudButton>
+        <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="OpenMailDomainsAsync"
+                   title="@Strings.Get("MdTitle")" aria-label="@Strings.Get("MdTitle")">
+            <MudIcon Icon="@Icons.Material.Filled.AlternateEmail" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("MdTitle")</span>
+        </MudButton>
         <MudButton Class="wb-rib-btn" Size="Size.Small" OnClick="@(() => NewRepository.InvokeAsync())"
                    title="@Strings.Get("TenantNewRepository")" aria-label="@Strings.Get("TenantNewRepository")">
             <MudIcon Icon="@Icons.Material.Filled.CreateNewFolder" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("TenantNewRepository")</span>
@@ -230,6 +234,19 @@
     /// <summary>Create a repository — the shell owns the tree this adds a root to.</summary>
     [Parameter]
     public EventCallback NewRepository { get; set; }
+
+    /// <summary>
+    /// Opens the mail-domains editor (#667) — from HERE, not via the shell.
+    /// </summary>
+    /// <remarks>
+    /// Its siblings are shell callbacks because each reaches state the shell caches and must refresh: the
+    /// sensitivity picker, the repository tree. Mail domains are cached nowhere, so routing this through the
+    /// shell would add a parameter, a method and a hop to arrive at the same dialog — and would grow the file
+    /// ADR 0558 is decomposing, for a reason that does not apply.
+    /// </remarks>
+    private async Task OpenMailDomainsAsync() =>
+        await (await DialogService.ShowAsync<MailDomainsDialog>(
+            Strings.Get("MdTitle"), new DialogOptions { MaxWidth = MaxWidth.Medium })).Result;
 
     /// <summary>Open the sensitivity-labels editor — the shell refreshes its picker afterwards.</summary>
     [Parameter]

@@ -64,6 +64,72 @@ public sealed class AdminClient(ApiCore core)
 
     // SelfHref / RetireHref / UnretireHref are the addresses the catalog row advertised. Exactly one of the last
     // two is present, and which one it is expresses the label's state (ADR 0543, issue #416).
+    // ---- Mail domains (#667, ADR 0692) ----------------------------------------------------------------
+
+    /// <param name="ChallengeName">Where to publish the TXT record; null once there is nothing left to prove.</param>
+    /// <param name="ChallengeValue">What to publish there. Null for a domain the configuration declared.</param>
+    /// <param name="VerifyHref">Advertised only while unverified — its absence IS "nothing to verify".</param>
+    public sealed record MailDomainInfo(
+        Guid Id, string Domain, bool Verified, string? ChallengeName, string? ChallengeValue,
+        string? VerifyHref = null, string? RemoveHref = null);
+
+    /// <param name="AddHref">Advertised only to a caller who may add one — absent means no button.</param>
+    public sealed record MailDomainList(IReadOnlyList<MailDomainInfo> Domains, bool CanManage, string? AddHref);
+
+    /// <summary>The tenant's mail domains, with what each one still needs.</summary>
+    public async Task<MailDomainList> GetMailDomainsAsync(CancellationToken cancellationToken = default)
+    {
+        var json = await _core.Http.GetFromJsonAsync<JsonElement>(
+            await _core.RootHrefAsync("mailDomains", cancellationToken), cancellationToken);
+
+        var items = new List<MailDomainInfo>();
+        if (json.TryGetProperty("domains", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var d in arr.EnumerateArray())
+            {
+                var links = ApiCore.ParseLinks(d) ?? new Dictionary<string, string>();
+                items.Add(new MailDomainInfo(
+                    d.GetProperty("id").GetGuid(),
+                    d.GetProperty("domain").GetString() ?? string.Empty,
+                    d.TryGetProperty("verified", out var v) && v.ValueKind == JsonValueKind.True,
+                    Text(d, "challengeName"),
+                    Text(d, "challengeValue"),
+                    links.GetValueOrDefault("verify"),
+                    links.GetValueOrDefault("remove")));
+            }
+        }
+
+        return new MailDomainList(
+            items,
+            json.TryGetProperty("canManage", out var cm) && cm.GetBoolean(),
+            (ApiCore.ParseLinks(json) ?? new Dictionary<string, string>()).GetValueOrDefault("add"));
+    }
+
+    /// <summary>Claims a domain at the address the collection advertised. Unverified until it is proven.</summary>
+    public async Task AddMailDomainAsync(string addHref, string domain, CancellationToken cancellationToken = default)
+    {
+        using var response = await _core.Http.PostAsJsonAsync(addHref, new { domain }, cancellationToken);
+        await ApiCore.ThrowIfProblemAsync(response, "The mail domain could not be added.", cancellationToken);
+    }
+
+    /// <summary>Asks the server to look for the challenge now. Repeatable — DNS takes its time.</summary>
+    public async Task VerifyMailDomainAsync(string verifyHref, CancellationToken cancellationToken = default)
+    {
+        using var response = await _core.Http.PostAsync(verifyHref, null, cancellationToken);
+        await ApiCore.ThrowIfProblemAsync(response, "The mail domain could not be verified.", cancellationToken);
+    }
+
+    public async Task RemoveMailDomainAsync(string removeHref, CancellationToken cancellationToken = default)
+    {
+        using var response = await _core.Http.DeleteAsync(removeHref, cancellationToken);
+        await ApiCore.ThrowIfProblemAsync(response, "The mail domain could not be removed.", cancellationToken);
+    }
+
+    private static string? Text(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
     public sealed record SensitivityLabelInfo(Guid Id, string Name, int Rank, string? Color, bool Watermark, bool Retired,
         string? SelfHref = null, string? RetireHref = null, string? UnretireHref = null);
     public sealed record SensitivityLabelCatalog(IReadOnlyList<SensitivityLabelInfo> Items, bool CanManage);

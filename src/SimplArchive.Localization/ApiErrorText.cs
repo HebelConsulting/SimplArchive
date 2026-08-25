@@ -34,6 +34,12 @@ public static class ApiErrorText
 {
     public static string For(string? errorCode) => errorCode switch
     {
+        // Mail-domain registration (#667). The not-verified one is the interesting case: it is the EXPECTED
+        // answer between publishing a record and DNS carrying it, so the sentence says what to do next rather
+        // than reporting a fault.
+        "INVALID_MAIL_DOMAIN" => Strings.Get("ApiErrInvalidMailDomain"),
+        "MAIL_DOMAIN_ALREADY_CLAIMED" => Strings.Get("ApiErrMailDomainAlreadyClaimed"),
+        "MAIL_DOMAIN_NOT_VERIFIED" => Strings.Get("ApiErrMailDomainNotVerified"),
         "EXTERNAL_LINKS_DISABLED" => Strings.Get("ApiErrExternalLinksDisabled"),
         "EXTERNAL_LINK_URL_NOT_SHOWN" => Strings.Get("ApiErrExternalLinkUrlNotShown"),
         "INSUFFICIENT_RIGHTS_TO_GRANT" => Strings.Get("ApiErrInsufficientRightsToGrant"),

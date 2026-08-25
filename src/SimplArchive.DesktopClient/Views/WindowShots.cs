@@ -66,6 +66,28 @@ public static class WindowShots
             return true;
         }
 
+        // Headless render of the mail-domains dialog (#667, ADR 0692): `--maildomains-screenshot <out.png>`.
+        // Synthetic rows, because a screenshot run reaches no server — so this checks how the dialog RENDERS,
+        // not what the API returns. Both states are present deliberately: an unverified domain with its
+        // challenge, which is the case an administrator has to act on, and a verified one with no verify
+        // button, which is the rel-driven affordance the whole surface turns on.
+        var mailDomainsShotIndex = Array.IndexOf(args, "--maildomains-screenshot");
+        if (mailDomainsShotIndex >= 0 && mailDomainsShotIndex + 1 < args.Length)
+        {
+            AppBuilder.Configure<App>()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia()
+                .WithInterFont()
+                .SetupWithoutStarting();
+
+            var domains = ViewModels.MailDomainsViewModel.ForScreenshot();
+            var mailDialog = new MailDomainsDialog(domains);
+            mailDialog.Show();
+            Dispatcher.UIThread.RunJobs();
+            mailDialog.CaptureRenderedFrame()?.Save(args[mailDomainsShotIndex + 1]);
+            return true;
+        }
+
         // Headless render of the move/reference drop dialog — catches XAML/icon load crashes:
         // `--dropdialog-screenshot <out.png>`.
         var dropShotIndex = Array.IndexOf(args, "--dropdialog-screenshot");

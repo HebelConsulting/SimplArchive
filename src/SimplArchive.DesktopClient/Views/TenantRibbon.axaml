@@ -13,6 +13,8 @@
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,4">
                 <Button AutomationProperties.AutomationId="tenant-labels" Click="OnManageSensitivityLabels"
                         ToolTip.Tip="{loc:Tr TenantSensitivityLabels}"><i:Icon Value="mdi-shield-outline" FontSize="18" /></Button>
+                <Button AutomationProperties.AutomationId="tenant-mail-domains" Click="OnManageMailDomains"
+                        ToolTip.Tip="{loc:Tr MdTitle}"><i:Icon Value="mdi-at" FontSize="18" /></Button>
                 <Button AutomationProperties.AutomationId="tenant-new-repo" Click="OnNewRepository"
                         ToolTip.Tip="{loc:Tr TenantNewRepository}"><i:Icon Value="mdi-folder-plus-outline" FontSize="18" /></Button>
             </StackPanel>
