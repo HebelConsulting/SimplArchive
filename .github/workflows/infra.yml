@@ -71,6 +71,17 @@ jobs:
         run: |
           curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz \
             | sudo tar -xz -C /usr/local/bin kubeconform
+      # These scripts have never been executed against a real account, which is exactly when static
+      # analysis earns its place: SC2015 (`A && B || C` is not if-then-else) had two sites in the
+      # preflight where a printf failure would have aborted an install claiming a tool was missing.
+      - name: shellcheck the installers
+        working-directory: .
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck tools/aws-install/install.sh tools/aws-install-single/install.sh \
+                     tools/aws-modules/preflight.sh tools/aws-modules/verify-generated.sh \
+                     tools/aws-modules/destroy.sh
+
       - name: Verify the generated Helm values and manifests
         working-directory: .
         run: tools/aws-modules/verify-generated.sh tools/${{ matrix.root }}
