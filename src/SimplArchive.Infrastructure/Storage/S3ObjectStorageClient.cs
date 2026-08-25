@@ -1,4 +1,6 @@
+using System.Linq;
 using Amazon.Runtime;
+using Amazon.Runtime.Internal;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.Logging;
@@ -35,10 +37,10 @@ public class S3ObjectStorageClient : IObjectStorageClient
         var publicServiceUrl = string.IsNullOrWhiteSpace(value.PublicServiceUrl) ? value.ServiceUrl : value.PublicServiceUrl;
         _presignUseHttp = publicServiceUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
 
-        _internalClient = CreateClient(value.ServiceUrl, value);
+        _internalClient = CreateClient(value.ServiceUrl, value, logger);
         _presignClient = ReferenceEquals(publicServiceUrl, value.ServiceUrl) || publicServiceUrl == value.ServiceUrl
             ? _internalClient
-            : CreateClient(publicServiceUrl, value);
+            : CreateClient(publicServiceUrl, value, logger);
     }
 
     // The bucket an object key/prefix belongs to (ADR "Per-tenant object-storage bucket"). Every key/prefix is
@@ -143,9 +145,9 @@ public class S3ObjectStorageClient : IObjectStorageClient
         }, cancellationToken);
     }
 
-    private static IAmazonS3 CreateClient(string serviceUrl, ObjectStorageOptions options)
+    private static IAmazonS3 CreateClient(string serviceUrl, ObjectStorageOptions options, ILogger logger)
     {
-        return new AmazonS3Client(
+        return new TracedAmazonS3Client(
             new BasicAWSCredentials(options.AccessKey, options.SecretKey),
             new AmazonS3Config
             {
@@ -153,7 +155,34 @@ public class S3ObjectStorageClient : IObjectStorageClient
                 AuthenticationRegion = options.Region,
                 ForcePathStyle = true,
                 UseHttp = serviceUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase),
-            });
+            },
+            logger);
+    }
+
+    // Installs the wire trace in the SDK's own pipeline (ADR 0626). Subclassing is the supported seam for this —
+    // CustomizeRuntimePipeline is the only place a handler can be added to a client the SDK builds for us.
+    private sealed class TracedAmazonS3Client : AmazonS3Client
+    {
+        private readonly ILogger _logger;
+
+        public TracedAmazonS3Client(AWSCredentials credentials, AmazonS3Config config, ILogger logger)
+            : base(credentials, config)
+            => _logger = logger;
+
+        protected override void CustomizeRuntimePipeline(RuntimePipeline pipeline)
+        {
+            base.CustomizeRuntimePipeline(pipeline);
+
+            // After the SIGNER, which is the last handler before the request goes out. Anchoring earlier was
+            // tried and measured: after the marshaller the endpoint is still unresolved and the resource path is
+            // the TEMPLATE ("/{Key+}"), so the trace named neither the host nor the object — it described our
+            // intent again, which is the one thing this handler exists not to do.
+            //
+            // The consequence is that the Authorization header IS present by the time we see the request. That
+            // is precisely why the header list is a whitelist: at this position, a blacklist would be one SDK
+            // release away from writing a signed credential into the log.
+            pipeline.AddHandlerAfter<Signer>(new S3WireTraceHandler(() => _logger));
+        }
     }
 
     public Task<Uri> GetPresignedUploadUrlAsync(string objectKey, TimeSpan expiry, CancellationToken cancellationToken = default)
@@ -197,8 +226,33 @@ public class S3ObjectStorageClient : IObjectStorageClient
         }
 
         var url = await _presignClient.GetPreSignedURLAsync(request);
+        var uri = new Uri(url);
 
-        return new Uri(url);
+        // The one seam whose far side we NEVER see. Every other storage call goes through this process, so the
+        // pipeline trace records both halves; here we hand the caller an address and the transfer happens
+        // browser↔store, invisible to us (ADR 0006 — the Api never proxies file bytes). If that transfer stalls,
+        // this line is the only record that we ever issued the address at all, so it carries what identifies the
+        // exchange: which object, which verb, which host, and until when the address is valid.
+        //
+        // The QUERY STRING IS NEVER LOGGED, and that is not a detail — a presigned URL's signature IS the
+        // credential. Anyone holding this line's output must be unable to fetch the object with it. So the parts
+        // are whitelisted individually rather than the URL being stripped of the parameters we happen to know
+        // about, which would leak the day the SDK adds one.
+        _logger.LogTrace(
+            "Issued a presigned {Verb} address for {ObjectKey} in {Bucket} via {Scheme}://{Host}{Path}, valid until "
+            + "{ExpiresAt:O} ({ExpirySeconds}s); disposition {HasDisposition}, content type {HasContentType}",
+            verb,
+            objectKey,
+            request.BucketName,
+            uri.Scheme,
+            uri.Authority,
+            uri.AbsolutePath,
+            request.Expires,
+            (long)expiry.TotalSeconds,
+            contentDisposition is null ? "none" : "set",
+            contentType ?? "none");
+
+        return uri;
     }
 
     public async Task<Stream> GetObjectAsync(string objectKey, CancellationToken cancellationToken = default)
@@ -343,6 +397,7 @@ public class S3ObjectStorageClient : IObjectStorageClient
         catch (AmazonS3Exception e) when (IsNoLockConfiguration(e))
         {
             // No retention configuration on this object — leave retainUntil null.
+            WarnLockLookupSwallowed(objectKey, "retention", e);
         }
 
         var legalHold = false;
@@ -358,10 +413,30 @@ public class S3ObjectStorageClient : IObjectStorageClient
         catch (AmazonS3Exception e) when (IsNoLockConfiguration(e))
         {
             // No legal hold on this object.
+            WarnLockLookupSwallowed(objectKey, "legal hold", e);
         }
 
         return new ObjectLockStatus(retainUntil, legalHold);
     }
+
+    // A fall-through that the caller cannot see the reason for (ADR 0626). The answer we return —"no retention",
+    // "no legal hold" — is indistinguishable from the answer for an object that genuinely has neither, and the
+    // predicate below treats a bare 404 as "no lock configuration", which a MISSING OBJECT also produces. So a
+    // lock question asked about an object that is not there is answered "unlocked", confidently and wrongly.
+    //
+    // Warning rather than Debug because nothing else surfaces it: the caller receives a well-formed answer and
+    // has no way to tell it apart from the truth. The line names the switch, because an administrator who reads
+    // "swallowed" still has to guess which knob shows them the exchange.
+    private void WarnLockLookupSwallowed(string objectKey, string lookup, AmazonS3Exception e) =>
+        _logger.LogWarning(
+            "Object storage answered {StatusCode}/{ErrorCode} to the {Lookup} lookup for {ObjectKey}; reporting it "
+            + "as \"not set\". This is also what a MISSING object looks like, so the two are not distinguished "
+            + "here. Enable Trace on {TraceSource} to see the exchange.",
+            (int)e.StatusCode,
+            e.ErrorCode ?? "(none)",
+            lookup,
+            objectKey,
+            typeof(S3ObjectStorageClient).FullName);
 
     // A "does this object have a lock?" GET returns an error when the object has no such configuration yet.
     // S3/MinIO signal it inconsistently — a 404, or a 4xx with ErrorCode NoSuchObjectLockConfiguration, or a
