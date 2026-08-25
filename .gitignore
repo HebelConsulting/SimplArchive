@@ -110,3 +110,4 @@ tools/.local/
 
 # Migration-run logs written by the private interop tooling (rolling JSON, ADR 0586)
 logs/
+loadtest-results/

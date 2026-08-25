@@ -11,6 +11,12 @@
        files still match the tokens, and that the shipped palette clears the same contrast bar every custom
        theme is held to. -->
   <ItemGroup>
+    <!-- The load harness (#705) is a console app, so its rules are not otherwise covered by anything: a verdict
+         that has only ever been seen to say PASS is not a verdict anyone should act on. -->
+    <ProjectReference Include="..\SimplArchive.LoadTest\SimplArchive.LoadTest.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\SimplArchive.Theming\SimplArchive.Theming.csproj" />
     <ProjectReference Include="..\..\tests\SimplArchive.ThemeGen\SimplArchive.ThemeGen.csproj" />
   </ItemGroup>

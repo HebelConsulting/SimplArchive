@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- The kiosk load harness (#705, ADR 0700). A CONSOLE app, deliberately, not a test project: a load test in
+       a PR gate is cost with no verdict value, and anything under xunit would eventually be swept up by a
+       `dotnet test` somewhere. It is invoked only by scripts/load-test.sh.
+
+       Lives under tests/ beside the manual-capture harness, which is the same kind of thing — a build/dev tool
+       that drives the real app and ships in nothing. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Playwright" Version="1.49.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The shared boot engine, purely for its remote-target seam: pointed at a running deployment it starts
+         nothing at all, and BaseUrl is the one property everything downstream consumes. -->
+    <ProjectReference Include="..\SimplArchive.SelfHosting\SimplArchive.SelfHosting.csproj" />
+    <!-- Built, not linked: proving the harness against a locally self-hosted instance needs the Api to run. -->
+    <ProjectReference Include="..\..\src\SimplArchive.Api\SimplArchive.Api.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>

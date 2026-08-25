@@ -126,8 +126,27 @@ public sealed class SelfHostedApp : IAsyncDisposable
     // The self-hosted app's Postgres — exposed so a caller can clean up data it seeded.
     public string PostgresConnectionString => _postgres.GetConnectionString();
 
+    /// <summary>
+    /// An EXTERNAL instance to run against instead of booting one — the load harness's whole seam (#705).
+    /// </summary>
+    /// <remarks>
+    /// Everything downstream of this engine consumes exactly one property, <see cref="BaseUrl"/>, so pointing
+    /// it at a running deployment is the entire remote-target mode: the login helpers, the workload and the
+    /// page objects work unchanged, because a kiosk runs the same <c>Demo:*</c> seed the fixture assumes.
+    /// Must be set before <see cref="StartAsync"/>.
+    /// </remarks>
+    public string? RemoteTarget { get; set; }
+
     public async Task StartAsync()
     {
+        // Remote target: boot NOTHING. No containers, no Api subprocess, no migrations — the instance under
+        // test is somebody else's, already running, and starting a second one here would measure this machine.
+        if (RemoteTarget is { Length: > 0 } remote)
+        {
+            BaseUrl = remote.TrimEnd('/');
+            return;
+        }
+
         if (WithOcrSidecar)
         {
             // Built from the repo's own ocr/ Dockerfile rather than pulled: the thumbnail route is ours, so
@@ -470,6 +489,14 @@ public sealed class SelfHostedApp : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Nothing was started, so there is nothing to tear down — and the containers below were never
+        // constructed against a remote target. Disposing them anyway would try to stop containers this process
+        // does not own, which on a shared machine is somebody else's outage.
+        if (RemoteTarget is { Length: > 0 })
+        {
+            return;
+        }
+
         if (_api is { HasExited: false })
         {
             try
