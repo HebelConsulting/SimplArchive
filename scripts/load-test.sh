@@ -31,6 +31,7 @@ SCENARIO="steady10"
 TARGET="$KIOSK_URL"
 LOCAL=0
 OVERRIDE=0
+AGGRESSIVE=0
 EXTRA=()
 
 while [ $# -gt 0 ]; do
@@ -39,7 +40,10 @@ while [ $# -gt 0 ]; do
     --target) TARGET="$2"; shift 2 ;;
     --local) LOCAL=1; shift ;;
     --i-know-what-im-doing) OVERRIDE=1; shift ;;
-    --users|--minutes|--out) EXTRA+=("$1" "$2"); shift 2 ;;
+    --users|--minutes|--out|--think-ms|--think-max-ms) EXTRA+=("$1" "$2"); shift 2 ;;
+    # Deliberately drive the target to saturation. Announced here as well as in the report, because against the
+    # KIOSK this is a decision to make a public demo slow on purpose, not a tuning detail.
+    --aggressive) EXTRA+=("$1"); AGGRESSIVE=1; shift ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -94,6 +98,12 @@ if [ "$HOUR" -lt 1 ] || [ "$HOUR" -gt 3 ]; then
   # it knows. Silence here would let the habit erode without anyone deciding to erode it.
   echo "NOTE: it is ${HOUR}:xx — outside the 01:00-03:30 window this run is meant for." >&2
   echo "      Visitors will feel this, and the 04:00 reset is further away than usual." >&2
+fi
+
+if [ "$AGGRESSIVE" = 1 ]; then
+  echo "AGGRESSIVE pacing: this drives $TARGET to saturation ON PURPOSE. Visitors will see it struggle." >&2
+  echo "      Use it to reproduce a failure or to prove a fix changed the failure mode — not to measure" >&2
+  echo "      what users experience, which is what the default pacing is for." >&2
 fi
 
 echo "Load-testing $TARGET as $EMAIL — scenario $SCENARIO"

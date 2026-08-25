@@ -10,6 +10,11 @@ using SimplArchive.SelfHosting;
 //   --users N             overrides the scenario's user count (for calibrating on a small machine).
 //   --minutes M           steady-state duration after warm-up.
 //   --out <dir>           where the report and CSV land (default loadtest-results/).
+//   --aggressive          pace far harder than any real user, to drive the target to SATURATION on purpose —
+//                         how a connection-exhaustion defect was found (#750), and how to confirm afterwards
+//                         that the failure mode changed. Saturation comes from shortening the pause, not from
+//                         adding browsers: the generator would run out of CPU first. See Pacing.
+//   --think-ms / --think-max-ms   an explicit pause range instead (default 3000-8000).
 //   --email / --password  the account the simulated users sign in as. Defaults to the SELF-HOSTED seed's
 //                         admin — which is not the kiosk's: the kiosk overrides Demo__Administrator__Email, so
 //                         its address carries the deployment's own domain. A remote run that used the default
@@ -24,6 +29,20 @@ var minutes = double.TryParse(Arg("--minutes"), out var m) ? m : 15;
 var outDir = Arg("--out") ?? "loadtest-results";
 var email = Arg("--email") ?? SelfHostedApp.AdminEmail;
 var password = Arg("--password") ?? SelfHostedApp.AdminPassword;
+
+// Pacing: realistic by default, `--aggressive` to deliberately drive the target to saturation, or an explicit
+// range. Saturation is reached by shortening the PAUSE rather than adding browsers — see Pacing.
+var pacing = Flag("--aggressive")
+    ? Pacing.Aggressive
+    : new Pacing(
+        int.TryParse(Arg("--think-ms"), out var thinkMin) ? thinkMin : Pacing.Realistic.MinMs,
+        int.TryParse(Arg("--think-max-ms"), out var thinkMax) ? thinkMax : Pacing.Realistic.MaxMs);
+
+if (pacing.MinMs < 0 || pacing.MaxMs < pacing.MinMs)
+{
+    Console.Error.WriteLine($"--think-ms {pacing.MinMs} / --think-max-ms {pacing.MaxMs}: need 0 <= min <= max.");
+    return 2;
+}
 
 if (target is not null && (Arg("--email") is null || Arg("--password") is null))
 {
@@ -77,7 +96,7 @@ Console.WriteLine("Measuring single-user baseline…");
 var baselineLog = new ActionLog();
 await using (var baselineContext = await browser.NewContextAsync())
 {
-    var solo = new BrowserUser(baselineContext, app.BaseUrl, baselineLog, email, password, user: 0);
+    var solo = new BrowserUser(baselineContext, app.BaseUrl, baselineLog, email, password, user: 0, pacing);
     if (await solo.LoginAsync())
     {
         for (var i = 0; i < 4; i++)
@@ -103,7 +122,7 @@ for (var i = 0; i < users; i++)
 {
     var context = await browser.NewContextAsync();
     contexts.Add(context);
-    var user = new BrowserUser(context, app.BaseUrl, log, email, password, user: i + 1);
+    var user = new BrowserUser(context, app.BaseUrl, log, email, password, user: i + 1, pacing);
 
     loops.Add(Task.Run(async () =>
     {
@@ -162,7 +181,7 @@ var steady = log.Actions()
     .Where(x => x.P95 is not null)
     .ToDictionary(x => x.Action, x => x.P95!.Value);
 var result = new ScenarioResult(
-    scenario, app.BaseUrl, users, startedAt, runClock.Elapsed, baseline, steady,
+    scenario, app.BaseUrl, users, startedAt, runClock.Elapsed, baseline, steady, pacing,
     log.Failures(steadyFrom), log.FailuresByAction(steadyFrom), log.UsersAffected(steadyFrom),
     [.. log.Samples.Where(s => s.Failed && s.StartedAt >= steadyFrom).Select(s => $"{s.Action}: {s.Error}").Distinct()],
     generator.PeakPercent, generator.RunIsValid);
@@ -187,3 +206,7 @@ string? Arg(string name)
     var index = Array.IndexOf(args, name);
     return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
 }
+
+// A switch with no value. Asked separately from Arg, which returns whatever FOLLOWS a name and would happily
+// report the next flag as this one's value.
+bool Flag(string name) => Array.IndexOf(Environment.GetCommandLineArgs(), name) >= 0;

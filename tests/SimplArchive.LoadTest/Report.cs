@@ -17,6 +17,7 @@ public sealed record ScenarioResult(
     TimeSpan Duration,
     IReadOnlyDictionary<string, TimeSpan> Baseline,
     IReadOnlyDictionary<string, TimeSpan> Steady,
+    Pacing Pacing,
     int Failures,
     IReadOnlyDictionary<string, int> FailuresByAction,
     int UsersAffected,
@@ -68,6 +69,8 @@ public static class Report
         sb.AppendLine();
         sb.AppendLine(CultureInfo.InvariantCulture, $"- **Target**: {r.Target}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"- **Users**: {r.Users}");
+        // Without this line two runs are not comparable and nothing on the page says so.
+        sb.AppendLine(CultureInfo.InvariantCulture, $"- **Pacing**: {r.Pacing.Describe()}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"- **Started**: {r.StartedAt:u}");
         sb.AppendLine(CultureInfo.InvariantCulture, $"- **Duration**: {r.Duration:hh\\:mm\\:ss}");
         sb.AppendLine(CultureInfo.InvariantCulture,

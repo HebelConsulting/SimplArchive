@@ -19,7 +19,8 @@ namespace SimplArchive.LoadTest;
 /// </para>
 /// </remarks>
 public sealed class BrowserUser(
-    IBrowserContext context, string baseUrl, ActionLog log, string email, string password, int user)
+    IBrowserContext context, string baseUrl, ActionLog log, string email, string password, int user,
+    Pacing pacing)
 {
     private IPage? _page;
     private readonly Random _think = new(user * 7919);
@@ -42,7 +43,7 @@ public sealed class BrowserUser(
     /// </para>
     /// </remarks>
     private async Task ThinkAsync(CancellationToken cancellationToken) =>
-        await Task.Delay(TimeSpan.FromSeconds(3 + _think.NextDouble() * 5), cancellationToken);
+        await Task.Delay(pacing.Next(_think), cancellationToken);
 
     /// <summary>
     /// Wide, on purpose: this must survive the degradation it exists to measure.

@@ -18,7 +18,8 @@ public class LoadTestVerdictTests
         double generatorCpu = 10,
         bool generatorValid = true) =>
         new("steady10", "http://target", 10, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(16),
-            baseline, steady, failures, failuresByAction ?? [], usersAffected, [], generatorCpu, generatorValid);
+            baseline, steady, Pacing.Realistic, failures, failuresByAction ?? [], usersAffected, [],
+            generatorCpu, generatorValid);
 
     private static TimeSpan Ms(double ms) => TimeSpan.FromMilliseconds(ms);
 
