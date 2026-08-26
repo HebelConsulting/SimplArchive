@@ -47,7 +47,7 @@
                 <div class="pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">@Strings.Get("TagsCatalogDesc")</MudText>
                 </div>
-                <div style="flex:1 1 auto; overflow:auto;">
+                <div style="flex:1 1 auto; min-height:0; overflow:auto;">
                     <MudTable Items="_catalogTags" Dense="true" Hover="true" Bordered="false" Elevation="0" T="TagCatalogEntry"
                               Style="max-width:680px;"
                               OnRowClick="@((TableRowClickEventArgs<TagCatalogEntry> e) => _selected = e.Item)"

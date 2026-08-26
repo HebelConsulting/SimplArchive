@@ -34,7 +34,7 @@
             <MudIcon Icon="@Icons.Material.Filled.PictureAsPdf" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonConvertScans")</span>
         </MudButton>
     </div>
-    <div class="wb-tenant pa-4" style="flex:1 1 auto; overflow:auto; max-width:720px;">
+    <div class="wb-tenant pa-4" style="flex:1 1 auto; min-height:0; overflow:auto; max-width:720px;">
     @if (_tenant is not null)
     {
         @* The tenant's detail information first, by decision — the reference card. *@

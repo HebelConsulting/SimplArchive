@@ -46,7 +46,7 @@
                 <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
             </MudButton>
         </div>
-        <div style="flex:1 1 auto; overflow:auto;">
+        <div style="flex:1 1 auto; min-height:0; overflow:auto;">
             <MudTable Items="_recycleBinItems" Dense="true" Hover="true" Bordered="false" Elevation="0" T="RecycleBinItem" OnRowClick="@((TableRowClickEventArgs<RecycleBinItem> e) => e.Item is { } item ? OnRowClickAsync(item, e.MouseEventArgs) : Task.CompletedTask)">
                 <HeaderContent>
                     @* The checkbox column is the TOUCH affordance only (#530): a hover-capable pointer device

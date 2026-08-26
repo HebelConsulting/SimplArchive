@@ -41,7 +41,7 @@
             <div class="pa-2" style="border-bottom:1px solid var(--mud-palette-lines-default);">
                 <SearchField @bind-Value="_filter" Placeholder="@Strings.Get("FilterHint")" />
             </div>
-            <div style="flex:1 1 auto; overflow:auto;">
+            <div style="flex:1 1 auto; min-height:0; overflow:auto;">
                 @if (_contacts.Count == 0)
                 {
                     @* Two different empty states, deliberately: telling someone to tick an addressbook when

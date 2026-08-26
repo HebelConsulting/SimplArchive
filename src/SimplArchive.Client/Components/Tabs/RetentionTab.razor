@@ -11,7 +11,12 @@
    Self-contained: it takes no parameters, because everything it shows it reads for itself, and every action
    it offers is a rel the schedule advertised per row rather than a right this client re-derives. *@
 
-            <div class="wb-retention" style="height:100%; display:flex; flex-direction:column;">
+            @* flex:1 1 auto, NOT height:100%. This root is a direct child of the workbench, which also holds the
+               bottom tab bar — so 100% claims the whole thing and leaves the bar nothing, pushing it below the
+               fold once the content is tall enough that nothing else absorbs the difference. Measured: the
+               workbench was 664px with a scrollHeight of 701, the 37px being exactly the bar. Taking the
+               REMAINING space is the same shape .wb-audit already uses. *@
+            <div class="wb-retention" style="flex:1 1 auto; min-height:0; display:flex; flex-direction:column;">
                 @* The toolbar in the Repositories shape (#530 tranche 2): extend first, dispose SEPARATED
                    (the destructive one), refresh last — icon-only, acting on THE selected row. Single-select
                    by decision: disposition is a records call made document-by-document. Dispose is greyed
@@ -45,7 +50,7 @@
                         }
                     </MudText>
                 </div>
-                <div style="flex:1 1 auto; overflow:auto;">
+                <div style="flex:1 1 auto; min-height:0; overflow:auto;">
                     <MudTable Items="_retentionItems" Dense="true" Hover="true" Bordered="false" Elevation="0" T="RetentionItemDto"
                               OnRowClick="@((TableRowClickEventArgs<RetentionItemDto> e) => _retSelected = e.Item)"
                               RowClassFunc="@((row, _) => row == _retSelected ? "wb-list-row-selected" : "")">

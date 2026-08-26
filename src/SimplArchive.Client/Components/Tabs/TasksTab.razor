@@ -20,7 +20,7 @@
             <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" /><span class="wb-rib-label">@Strings.Get("RibbonRefresh")</span>
         </MudButton>
     </div>
-    <div style="flex:1 1 auto; overflow:auto;">
+    <div style="flex:1 1 auto; min-height:0; overflow:auto;">
         @if (Tasks.Count == 0)
         {
             <MudText Typo="Typo.body2" Class="pa-3 mud-text-secondary">@Strings.Get("TasksEmpty")</MudText>

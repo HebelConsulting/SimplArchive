@@ -62,7 +62,7 @@
                             <MudText Typo="Typo.body2" Class="pa-3 mud-text-secondary">@Strings.Get("LhNone")</MudText>
                         }
                     </div>
-                    <div style="flex:1 1 auto; overflow:auto;" class="pa-3">
+                    <div style="flex:1 1 auto; min-height:0; overflow:auto;" class="pa-3">
                         @if (_selectedHold is { } sel)
                         {
                             <MudText Typo="Typo.h6">@sel.Name</MudText>
