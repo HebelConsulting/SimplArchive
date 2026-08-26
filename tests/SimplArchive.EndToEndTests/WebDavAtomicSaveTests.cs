@@ -53,6 +53,58 @@ public class WebDavAtomicSaveTests
 
     // ---- shared per-test-method context (one tenant / user / webdav password / repo) ----------------------
 
+    // macOS safe-save: a word processor replaces a file atomically by creating a SIBLING COLLECTION named
+    // `<file>.sb-<hex>-<rand>`, working inside it, then swapping (#764).
+    //
+    // Both obvious answers to that MKCOL are wrong, and this pins the one that is not. Materialising it leaves a
+    // version-less Document, which the workbench draws as a FOLDER — three saves, three phantom folders. And
+    // REFUSING it is worse: the editor concludes the volume cannot replace atomically, rolls back, and DELETES
+    // the original. Observed on the kiosk destroying an Intray file that a GET had served two seconds earlier —
+    // unrecoverably, because Intray items are storage keys with no soft-delete.
+    [Fact]
+    public async Task A_word_processors_safe_save_collection_is_accepted_and_leaves_nothing_behind()
+    {
+        var ctx = await SetupAsync();
+
+        Task<HttpResponseMessage> Dav(string method, string path, byte[]? body = null)
+        {
+            var req = new HttpRequestMessage(new HttpMethod(method), path) { Headers = { Authorization = ctx.Basic } };
+            if (body is not null) req.Content = new ByteArrayContent(body);
+            return ctx.Dav.SendAsync(req);
+        }
+
+        var id = Guid.NewGuid().ToString("N")[..8];
+
+        // THE INTRAY, where refusing this cost a file. Stage one, then run the editor's opening move against it.
+        var intrayName = $"safe{id}.docx";
+        (await Dav("PUT", $"/webdav/{Personal}/Intray/{intrayName}", Encoding.UTF8.GetBytes("original"))).EnsureSuccessStatusCode();
+
+        var intrayMkcol = await Dav("MKCOL", $"/webdav/{Personal}/Intray/{intrayName}.sb-dea8d513-{id}");
+        Assert.Equal(HttpStatusCode.Created, intrayMkcol.StatusCode);
+
+        // The file the editor was replacing is STILL THERE. This is the assertion the bug was about: it is what
+        // fails if the MKCOL is refused and the editor rolls back over it.
+        var stillThere = await Dav("GET", $"/webdav/{Personal}/Intray/{intrayName}");
+        Assert.Equal(HttpStatusCode.OK, stillThere.StatusCode);
+        Assert.Equal("original", await stillThere.Content.ReadAsStringAsync());
+
+        // A REPOSITORY folder, where the same MKCOL used to materialise a phantom folder.
+        var folder = $"sf{id}";
+        (await Dav("MKCOL", $"/webdav/{await RepoNameAsync(ctx)}/{folder}")).EnsureSuccessStatusCode();
+
+        var repoMkcol = await Dav("MKCOL", $"/webdav/{await RepoNameAsync(ctx)}/{folder}/doc{id}.docx.sb-dea8d513-{id}");
+        Assert.Equal(HttpStatusCode.Created, repoMkcol.StatusCode);
+
+        // Accepted, and NOT materialised — the folder the editor is saving into is still empty. Asserted by
+        // listing rather than by probing the temp's own name: what matters is that nothing was left behind.
+        var listing = await Dav("PROPFIND", $"/webdav/{await RepoNameAsync(ctx)}/{folder}/");
+        var body = await listing.Content.ReadAsStringAsync();
+        Assert.DoesNotContain(".sb-dea8d513-", body, StringComparison.Ordinal);
+    }
+
+    private async Task<string> RepoNameAsync(Context ctx)
+        => (await TestJson.Get(ctx.Owner, $"/api/documents/{ctx.RepoId}")).GetProperty("name").GetString()!;
+
     private sealed record Context(HttpClient Owner, HttpClient Api, Guid RepoId, AuthenticationHeaderValue Basic, HttpClient Dav);
 
     private async Task<Context> SetupAsync()

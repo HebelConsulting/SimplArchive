@@ -569,6 +569,16 @@ public sealed class WebDavMiddleware
     // ---- MKCOL (create folder) ----------------------------------------------------------------------------
     private async Task HandleMkColAsync(HttpContext context, SimplArchiveDbContext db, User user, List<string> segments)
     {
+        // BEFORE the special-path refusal, and that ordering is the fix (#764). A word processor's atomic replace
+        // creates a `<file>.sb-<hex>-<rand>` collection; refusing it made the editor roll back and DELETE THE
+        // ORIGINAL — in the Intray, where items have no soft-delete, unrecoverably. Accepted and discarded, like
+        // any other junk directory: the editor gets its "yes", and nothing is materialised.
+        if (segments.Count >= 2 && WebDavClutter.IsSafeSaveTemp(segments[^1]))
+        {
+            context.Response.StatusCode = StatusCodes.Status201Created;
+            return;
+        }
+
         if (segments.Count < 2 || IsSpecialPath(context, segments))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden; // can't create folders at the root, on the virtual Intray/Check-out folders, or inside them
