@@ -174,6 +174,33 @@ internal static partial class Ui
         return entry;
     }
 
+    /// <summary>Log out through the account menu and wait for BOTH halves of it to finish.</summary>
+    /// <remarks>
+    /// Logging out is two navigations, not one: RemoteAuthenticatorView clears this client's tokens and renders
+    /// "You are logged out", and its callback then sends the whole page to /Account/Logout to end the SERVER
+    /// session. A test that acts the instant that text appears is standing in the middle of the second one —
+    /// script evaluated there dies with "Execution context was destroyed", and a navigation issued there ABORTS
+    /// the sign-out request, leaving the cookie alive so the next login is silent. Both shapes turned main red
+    /// the day the server half landed, and neither says "race" when you read the failure.
+    /// <para>
+    /// The wait is armed BEFORE the click, so the request cannot slip past between the two.
+    /// </para>
+    /// </remarks>
+    public static async Task LogOutAsync(IPage page)
+    {
+        var serverSignOut = page.WaitForRequestFinishedAsync(new()
+        {
+            Predicate = r => r.Url.Contains("/Account/Logout", StringComparison.OrdinalIgnoreCase),
+        });
+
+        await page.Locator(".wb-userbox").ClickAsync();
+        await page.GetByText("Log out").First.ClickAsync();
+        await Assertions.Expect(page.GetByText("You are logged out")).ToBeVisibleAsync();
+
+        await serverSignOut;
+        await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+    }
+
     private static string Base64Url(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 }

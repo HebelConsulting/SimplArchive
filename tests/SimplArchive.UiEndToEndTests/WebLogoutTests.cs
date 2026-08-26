@@ -22,9 +22,9 @@ public partial class WebLogoutTests
         var page = await Ui.LoginAsync(_app);
         await Expect(page.Locator(".wb-appbar").GetByText(SelfHostedAppFixture.AdminDisplayName)).ToBeVisibleAsync();
 
-        // Log out lives in the corner account menu now.
-        await page.Locator(".wb-userbox").ClickAsync();
-        await page.GetByText("Log out").ClickAsync();
+        // Log out lives in the corner account menu now. The helper also waits for the server half, so this
+        // asserts the finished state rather than the moment the text first appears.
+        await Ui.LogOutAsync(page);
 
         // Logout completes (RemoteAuthenticatorView's logout succeeds instead of the "not initiated from within
         // the page" error the plain-link navigation used to produce). Still the landing page now that logout
@@ -44,9 +44,9 @@ public partial class WebLogoutTests
     public async Task Logging_in_after_a_logout_asks_who_you_are()
     {
         var page = await Ui.LoginAsync(_app);
-        await page.Locator(".wb-userbox").ClickAsync();
-        await page.GetByText("Log out").ClickAsync();
-        await Expect(page.GetByText("You are logged out")).ToBeVisibleAsync();
+        // Waits for the server sign-out to land — navigating while it is in flight would abort it and leave
+        // the cookie this test is about still alive, which would look like the bug being back.
+        await Ui.LogOutAsync(page);
 
         // A fresh navigation, which is the move that used to restore the session: the SPA's silent sign-in ran
         // against a cookie logout had never touched, and the workbench came straight back.

@@ -54,10 +54,10 @@ public class WebPasswordlessPasskeyTests
             // tenant-settings tests; here we exercise the login).
             await SetAllowPasskeyLoginAsync(true);
 
-            // Sign out + clear the server cookie and cached OIDC token so a fresh interactive login is forced.
-            await page.Locator(".wb-userbox").ClickAsync();
-            await page.GetByText("Log out").First.ClickAsync();
-            await Expect(page.GetByText("You are logged out")).ToBeVisibleAsync();
+            // Sign out, then clear the cookie and cached OIDC token so a fresh interactive login is forced.
+            // Both are cleared by logout itself now; the clearing here only has to wait for that round trip
+            // rather than race it. See Ui.LogOutAsync.
+            await Ui.LogOutAsync(page);
             await page.Context.ClearCookiesAsync();
             await page.EvaluateAsync("() => { window.sessionStorage.clear(); window.localStorage.clear(); }");
 

@@ -53,14 +53,11 @@ public class WebPasskeyTests
             await dialog.GetByRole(AriaRole.Button, new() { Name = "Close" }).ClickAsync();
 
             // Sign out (lands on the RemoteAuthenticatorView "You are logged out" page).
-            await page.Locator(".wb-userbox").ClickAsync();
-            await page.GetByText("Log out").First.ClickAsync();
-            await Expect(page.GetByText("You are logged out")).ToBeVisibleAsync();
+            await Ui.LogOutAsync(page);
 
-            // Client-side logout leaves both the server OpenIddict cookie alive (ADR 0211 has no end-session
-            // endpoint) and the SPA's cached OIDC token in web storage — either would let the app silently
-            // re-authenticate and skip the login page. Clear both to force a fresh interactive login that
-            // actually reaches the second-factor challenge.
+            // Logout now ends both halves itself (the server cookie and the cached OIDC token), so this is
+            // belt-and-braces rather than the workaround it used to be — but it has to happen AFTER the
+            // sign-out round trip, not in the middle of it. See Ui.LogOutAsync.
             await page.Context.ClearCookiesAsync();
             await page.EvaluateAsync("() => { window.sessionStorage.clear(); window.localStorage.clear(); }");
 
